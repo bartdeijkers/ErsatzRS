@@ -987,6 +987,23 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Supplied-program DRCS replay now independently collects the actual main/catalog under the
+original primary and explicit bounds, checks exact referenced operations and validates all
+DRCS dependencies, even when intent omits a reference. Normal/Global links and bitmaps remain
+original service authority; added carrier IDs and shifted main ordinals resolve against actual
+sources. The service API shares preflight/source/lookup helpers and retains original behavior.
+Seven added regressions cover equality, both resource scopes and losing references, shifted/stale
+ordinals, stale/missing carriers, foreign exact subcodes, whole-program missing glyphs and raw/exact
+budget boundaries without mutation. All15 DRCS execution tests pass
+(6eb5800d-bd64-4468-a534-b024f922f1ad); all52 FFmpeg main composition/raster consumers pass
+(2af82618-62f5-4d77-b269-5d3c8a83ae5d). Strict domain/FFmpeg all-target Clippy and workspace
+formatting pass; independent source/failure-path review is clean. Existing native packet/pixel
+evidence remains applicable and is reused. This supplies resource diagnostics, not complete service,
+object-page selection/default-owner, placement/instance or publication admission. Shared complete
+physical projection, final-word evidence and whole-page equivalence remain required; the correct
+Unicode/Active wire oracle still fails. No milestone contract/status/dependency change.
+Earlier evidence follows unchanged:
+
 The supplied-program spatial seam reuses the existing counting/emitting walker. Exact host
 program/catalog replay retains physical Local main ordinals, full targets/body ordinals and
 actual instances, without composing or inserting Base glyphs. Existing service replay keeps

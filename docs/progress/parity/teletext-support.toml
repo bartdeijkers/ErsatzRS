@@ -17,7 +17,7 @@ v1 lifting retains bytes; resources preserve geometry, lifecycle,
 pointers/metadata/fresh definition state. Local definitions share bounded
 X26 with forward references. Decoders prove selected
 DRCS/object/main cells; recorded local/G1 font gaps do not establish rendering.
-AP/fallback and supplied spatial replay retain exact sources.
+Spatial/DRCS replay checks sources/dependencies against original bitmaps.
 C3 retains private/shared fragments and deferred writers.
 Packed C2 resolves within emitters; other order/size/extent stays pending.
 G1 mode/fallback and Latin decoder gaps survive.
@@ -36,10 +36,10 @@ Enhanced G1 uses D5 only; native later-spacing discrepancy stays open.
 Unicode/Active wire priority fails; full A7/A8/C3/client proof stays open.
 X27/MOT retain masks, S1, banks/defaults/raw fields/IDs and derivation provenance/conflicts.
 Compiled-header fence rejects exact physical/logical-owner collisions.
-Final defaults/selection/compiler/editor remain open.
+Defaults/selection/compiler/editor remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua remain preparatory.
-Shared app controls compose isolated channel drafts; native encoding retains the
+App controls compose isolated channel drafts; native encoding retains the
 same pages; guide bounds pass. Acquisition, activation, regions, link CRC,
 UI/Lua and publication remain open.
 

@@ -322,6 +322,25 @@ from this actual trace, bind evidence to final packed words and compare the whol
 page with the immutable original through the generated-source mapping. Reusing
 ordinary main composition would add Base fallback again and is inappropriate.
 
+`resolve_teletext_drcs_program` adds resource replay for an actual augmented
+program/catalog. Raw candidate/reference budgets precede fresh complete-program
+collection under the original selected primary; an explicit collection budget
+bounds that traversal. Source checks retain exact main/body ordinals and reject
+stale operations. All collected DRCS dependencies are validated, including a
+reference omitted from the supplied intent. Original service display links,
+resource identities and bitmaps supply both Normal and Global glyphs; newly
+generated carrier objects are checked in the actual catalog instead of being
+required in the original catalog. The original service resolver retains its
+behavior through shared preflight/source/lookup helpers.
+
+Typed errors preserve collection, dependency and original execution failures
+with page and available command locations. Missing exact subcodes, missing
+targets/bitmaps, changed operations and exhausted budgets fail without mutation
+or partial output. This is diagnostic resource resolution: matching operations
+and IDs do not certify intent generation, positions or instances. Full spatial
+correspondence, object/default-owner authorization, geometry, physical evidence
+and whole-page equivalence remain separate required gates.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

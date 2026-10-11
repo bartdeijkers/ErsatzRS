@@ -132,6 +132,8 @@ release section when tagging a release.
   defaults, nested calls and independent subcodes; physical replay must reuse it.
   Trace a supplied physical program with the shared bounded spatial executor,
   preserving augmented command ordinals and original service default tags.
+  Resolve augmented-program DRCS sources with fresh bounded dependency checks
+  while retaining original service links and bitmap authority.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

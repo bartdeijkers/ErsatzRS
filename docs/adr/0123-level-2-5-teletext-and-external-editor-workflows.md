@@ -101,6 +101,16 @@ body identities/instances; the service entry retains its original sparse default
 tags. Keep original provenance in a separate mapping, and bind transmission
 evidence to the actual final words. Complete reference/resource admission and
 whole-page equivalence remain required; the replay trace grants no readiness.
+Supplied-program DRCS replay now collects the actual main/catalog afresh under
+the original service's selected primary repertoire and explicit collection
+budget. It validates all DRCS dependencies, including references absent from the
+glyph intent, and checks each retained DRCS operation against actual main/body
+ordinals. Original display links and service bitmaps remain authoritative;
+generated carrier IDs need not exist in the original catalog. Candidate/reference
+preflight, source checks and bitmap lookup share the original resolver's paths.
+This diagnostic does not certify placements, instances, complete object selection,
+geometry or publication. Physical projection and whole-page equivalence remain
+required before accepting generated carriers.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

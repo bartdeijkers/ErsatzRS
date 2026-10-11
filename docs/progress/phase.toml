@@ -1131,7 +1131,9 @@ Whole-display A8 type limits already include nested/default calls; three new
 service-boundary regressions prove shared counts and independent subcodes.
 Supplied-program replay now shares the bounded spatial walker and retains
 physical ordinals while original services keep their default-slot tags.
-Next reuse full glyph/attribute/charset/DRCS and display/colour execution on that
+Supplied DRCS replay now rechecks actual program/catalog sources and every DRCS
+dependency against original service links/bitmaps with explicit budgets.
+Next reuse full glyph/attribute/charset and display/colour execution on that
 actual trace, preserving source mappings and final packed-word evidence.
 Then realize Unicode/Active physical priority with the existing collector;
 full engine/client/editor/publication acceptance remains open.

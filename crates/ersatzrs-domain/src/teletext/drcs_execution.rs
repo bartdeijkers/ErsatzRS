@@ -7,8 +7,11 @@
 use std::mem::size_of;
 
 use super::{
+    TeletextCharsetValueError, TeletextCollectedDrcsError, TeletextCollectedEnhancementReferences,
     TeletextColumnOperation, TeletextDrcsBitmap, TeletextDrcsGlyphReference, TeletextDrcsGlyphSlot,
-    TeletextDrcsTableScope, TeletextEnhancementCommand, TeletextEnhancementSource,
+    TeletextDrcsPageLinks, TeletextDrcsTableScope, TeletextEnhancementCollectionBudget,
+    TeletextEnhancementCollectionError, TeletextEnhancementCommand,
+    TeletextEnhancementObjectCatalog, TeletextEnhancementProgram, TeletextEnhancementSource,
     TeletextGlyphCandidate, TeletextGlyphIdentity, TeletextGlyphIntent, TeletextPageAddress,
     TeletextResourceIdentity, TeletextResourceKind, TeletextResourceSubpageIndex,
     TeletextSemanticService, TeletextSpatialInvocationId, TeletextSpatialRootSource,
@@ -133,6 +136,132 @@ pub fn resolve_teletext_drcs_execution(
     intent: &TeletextGlyphIntent,
     budget: TeletextDrcsExecutionBudget,
 ) -> Result<TeletextDrcsExecution, TeletextDrcsExecutionError> {
+    let count = preflight(service, intent, budget, 1)?;
+    let owner = intent.owner();
+    let (_, collected) = service
+        .collected(owner)
+        .ok_or_else(|| execution_error(owner, None, TeletextDrcsExecutionFailure::MissingPage))?;
+    let sources = SourceContext {
+        program: service
+            .page_enhancements()
+            .get(&owner)
+            .and_then(|page| page.local_program.as_ref()),
+        catalog: service.objects(),
+        collected,
+    };
+    resolve_sources(service, intent, sources, count)
+}
+
+/// Additive replay errors retain existing typed collection and lookup evidence.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum TeletextDrcsProgramExecutionError {
+    #[error(transparent)]
+    Execution(#[from] TeletextDrcsExecutionError),
+    #[error(transparent)]
+    Collection(Box<TeletextEnhancementCollectionError>),
+    #[error("DRCS replay dependencies for {owner:?}: {error}")]
+    Dependencies {
+        owner: TeletextPageAddress,
+        #[source]
+        error: Box<TeletextCollectedDrcsError>,
+    },
+    #[error("DRCS replay primary designation for {owner:?}: {error}")]
+    Primary {
+        owner: TeletextPageAddress,
+        #[source]
+        error: TeletextCharsetValueError,
+    },
+}
+impl TeletextDrcsProgramExecutionError {
+    #[must_use]
+    pub fn owner(&self) -> TeletextPageAddress {
+        match self {
+            Self::Execution(error) => error.owner,
+            Self::Collection(error) => error.display,
+            Self::Dependencies { owner, .. } | Self::Primary { owner, .. } => *owner,
+        }
+    }
+    #[must_use]
+    pub fn location(&self) -> Option<TeletextEnhancementSource> {
+        match self {
+            Self::Execution(error) => error.location,
+            Self::Collection(error) => Some(error.source_location),
+            Self::Dependencies { error, .. } => error.source_location,
+            Self::Primary { .. } => None,
+        }
+    }
+}
+
+/// Resolve a supplied physical main/catalog against the original service pixels.
+///
+/// Raw intent/reference budgets precede collection. The existing collector walks
+/// the entire supplied program under the original service primary, then validates
+/// all its DRCS dependencies, including occurrences absent from the intent. No
+/// externally supplied collected-reference registry is treated as authority.
+/// Exact referenced operations are checked against the supplied main/catalog;
+/// aliases, placements, instances and matching IDs are not a generation proof.
+/// Original service links, resource identities and bitmaps remain authoritative.
+/// This does not compose base glyphs or certify geometry, raster or publication.
+/// # Errors
+/// Returns existing located budget/source/lookup errors, the actual collection or
+/// dependency failure, or a missing exact owner/invalid selected primary. Inputs
+/// are immutable; no partial execution escapes.
+pub fn resolve_teletext_drcs_program(
+    service: &TeletextSemanticService,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    intent: &TeletextGlyphIntent,
+    collection_budget: TeletextEnhancementCollectionBudget,
+    budget: TeletextDrcsExecutionBudget,
+) -> Result<TeletextDrcsExecution, TeletextDrcsProgramExecutionError> {
+    let count = preflight(service, intent, budget, 2)?;
+    let owner = intent.owner();
+    let primary = service
+        .effective_presentation(owner)
+        .ok_or_else(|| execution_error(owner, None, TeletextDrcsExecutionFailure::MissingPage))?
+        .primary_designation()
+        .map_err(|error| TeletextDrcsProgramExecutionError::Primary { owner, error })?;
+    let collected = catalog
+        .collect_display_references(owner, program, primary.pair(), collection_budget)
+        .map_err(|error| TeletextDrcsProgramExecutionError::Collection(Box::new(error)))?;
+    let sources = SourceContext {
+        program: Some(program),
+        catalog,
+        collected: &collected,
+    };
+    // Reject contradicted original operations before consulting dependencies.
+    // This is the same source guard as the service entry, using actual replay IDs.
+    for record in intent.records() {
+        if let Some(TeletextGlyphIdentity::Drcs { reference }) = record.glyph() {
+            validate_source(sources, owner, *record.context().candidate(), reference)?;
+        }
+    }
+    let links = service
+        .page_enhancements()
+        .get(&owner)
+        .map_or_else(TeletextDrcsPageLinks::unlinked, |page| page.resources.drcs);
+    collected
+        .validate_drcs(service.drcs(), links)
+        .map_err(|error| TeletextDrcsProgramExecutionError::Dependencies {
+            owner,
+            error: Box::new(error),
+        })?;
+    resolve_sources(service, intent, sources, count).map_err(Into::into)
+}
+
+#[derive(Clone, Copy)]
+struct SourceContext<'a> {
+    program: Option<&'a TeletextEnhancementProgram>,
+    catalog: &'a TeletextEnhancementObjectCatalog,
+    collected: &'a TeletextCollectedEnhancementReferences,
+}
+
+fn preflight(
+    service: &TeletextSemanticService,
+    intent: &TeletextGlyphIntent,
+    budget: TeletextDrcsExecutionBudget,
+    source_checks: usize,
+) -> Result<usize, TeletextDrcsExecutionError> {
     let owner = intent.owner();
     let count = intent.records().len();
     if count > budget.max_candidates {
@@ -189,18 +318,28 @@ pub fn resolve_teletext_drcs_execution(
     // Per occurrence: bounded catalog scan, glyph scan, and invoked-target scan.
     // Indexed source-command lookup and the bounded candidate passes add linear
     // work; no growing per-reference registry is constructed.
-    if count.checked_mul(1024 + 48 + 381).is_none() {
+    if count.checked_mul(1024 + 48 + 381 * source_checks).is_none() {
         return Err(execution_error(
             owner,
             None,
             TeletextDrcsExecutionFailure::WorkSize,
         ));
     }
+    Ok(count)
+}
+
+fn resolve_sources(
+    service: &TeletextSemanticService,
+    intent: &TeletextGlyphIntent,
+    sources: SourceContext<'_>,
+    count: usize,
+) -> Result<TeletextDrcsExecution, TeletextDrcsExecutionError> {
+    let owner = intent.owner();
     let mut records = Vec::with_capacity(count);
     for (candidate_index, record) in intent.records().iter().enumerate() {
         if let Some(TeletextGlyphIdentity::Drcs { reference }) = record.glyph() {
             let candidate = *record.context().candidate();
-            validate_source(service, owner, candidate, reference)?;
+            validate_source(sources, owner, candidate, reference)?;
             let (resource, bitmap) = lookup(service, owner, candidate, reference)?;
             records.push(TeletextExecutedDrcsGlyph {
                 candidate_index,
@@ -215,7 +354,7 @@ pub fn resolve_teletext_drcs_execution(
 }
 
 fn validate_source(
-    service: &TeletextSemanticService,
+    sources: SourceContext<'_>,
     owner: TeletextPageAddress,
     candidate: TeletextGlyphCandidate,
     reference: TeletextDrcsGlyphReference,
@@ -229,25 +368,17 @@ fn validate_source(
     };
     let source = candidate.source().ok_or_else(fail)?;
     let program = if let Some(target) = source.object {
-        let (_, collected) = service.collected(owner).ok_or_else(fail)?;
-        if !collected
+        if !sources
+            .collected
             .object_references()
             .iter()
             .any(|invocation| invocation.target == target)
         {
             return Err(fail());
         }
-        &service
-            .objects()
-            .definition(target)
-            .ok_or_else(fail)?
-            .program
+        &sources.catalog.definition(target).ok_or_else(fail)?.program
     } else {
-        service
-            .page_enhancements()
-            .get(&owner)
-            .and_then(|page| page.local_program.as_ref())
-            .ok_or_else(fail)?
+        sources.program.ok_or_else(fail)?
     };
     let operation = TeletextColumnOperation::Drcs { reference };
     if candidate.operation() != Some(operation)

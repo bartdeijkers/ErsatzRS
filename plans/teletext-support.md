@@ -194,9 +194,15 @@ exact page/subcode. Validate the actual augmented catalogue/program, preserving
 default ownership and physical/source ordinals. Then settle remaining
 glyph/attribute/charset/DRCS and whole-page display/colour equivalence from the
 new supplied-program spatial replay, which shares the existing bounded walker
-without composing Base fallback again. Preserve original-source mapping and
-bind C.2 evidence to final physical words. Complete remaining physical-order,
-A.7/A.8 and glyph evidence before normalizing both receiver views. Fragment tests alone
+without composing Base fallback again. Use supplied-program DRCS replay with
+fresh bounded collection and complete DRCS dependency validation, checking
+actual main/body sources while retaining the
+original service's links and pixels. This covers new carrier IDs and shifted
+main ordinals without treating detached collected references as authority;
+placement, instance and full object/default-owner validation remain separate.
+Preserve original-source mapping and bind C.2 evidence to final physical words.
+Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
+both receiver views. Fragment tests alone
 cannot accept the engine, client, editor or publication workflow.
 The final main/local packer supplies actual word positions for known same-emitter
 C.2 ties; compiled composition maps original sources/instances and rebuilds the
