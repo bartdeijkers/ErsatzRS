@@ -87,10 +87,13 @@ remains open. Default roots retain their original owner instead of rebinding.
 Checked Level 2.5 MOT declarations and independently decoded body coding now
 retain explicit owners, full banks, extents, original default slots and ignored
 fields. Supplied physical selectors are checked without truncating semantic IDs;
-this does not prove object allocation or header/carousel lifecycle.
+this does not prove object allocation or carousel lifecycle.
 Native monochrome DRCS bodies preserve slot/pixel geometry and sparse undefined
-glyphs; X28/3 declares modes explicitly. Actual decoder/client and resource
-header proof remain open.
+glyphs; X28/3 declares modes explicitly. Checked resource-header metadata retains
+all six lifecycle states and exact physical subcodes. Complete MOT/DRCS writers
+derive actual last rows, emit bounded DVB sequences and handle empty DRCS without
+defining glyphs. Body/history consistency, service ordering/repetition and actual
+decoder/client proof remain open.
 Bounded per-display MOT/X27 derivation now preserves role provenance, exact
 masks, original defaults/fallback and unresolved candidates for audited conflicts.
 It does not decide effective defaults or presentation.

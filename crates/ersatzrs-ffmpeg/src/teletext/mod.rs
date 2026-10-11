@@ -23,6 +23,7 @@ mod presentation;
 mod psi;
 mod psi_framing;
 mod psi_monitor;
+mod resource_pages;
 mod signalling;
 pub mod source_assembly;
 pub mod source_header;
@@ -52,6 +53,11 @@ pub use packets::{
 pub use pmt_install::{TeletextPmtInstallError, TeletextPmtInstallReport, TeletextPmtInstaller};
 pub use psi::{TeletextPsiDiscovery, TeletextPsiError};
 pub use psi_monitor::TeletextPsiMonitor;
+pub use resource_pages::{
+    encode_teletext_drcs_page, encode_teletext_mot_page, encode_teletext_resource_header,
+    EncodedTeletextResourcePage, TeletextResourceFullUpdate, TeletextResourcePageEncodingError,
+    TeletextResourceTransmissionMode,
+};
 pub use signalling::{TeletextMultiplexError, TeletextPmtPlan, TeletextServiceDescriptor};
 pub use transport::{TeletextPacketizer, TeletextTimestamp, TeletextTransportError};
 
@@ -141,6 +147,8 @@ mod presentation_tests;
 mod psi_monitor_tests;
 #[cfg(test)]
 mod psi_tests;
+#[cfg(test)]
+mod resource_pages_tests;
 #[cfg(test)]
 mod signalling_runtime_tests;
 #[cfg(test)]

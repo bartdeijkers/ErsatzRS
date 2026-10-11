@@ -34,8 +34,11 @@ Checked Level 2.5 MOT declarations now retain explicit ownership, associations,
 full link banks, original defaults and ignored raw fields. Native MOT body coding
 checks supplied default allocations before emitting any of its seventeen rows.
 Native monochrome DRCS bodies preserve exact slots/pixels and sparse undefined
-glyphs, with an explicit X28/3 mode declaration. Resource headers, physical
-realization and actual decoder/client proof remain separate.
+glyphs, with an explicit X28/3 mode declaration. Checked resource-header metadata
+preserves all six lifecycle states, exact physical subcodes and kind-specific
+packet bounds. Full MOT/DRCS writers derive actual last rows and emit bounded DVB
+sequences, including a legal SPACE-only empty DRCS. Previous-content/update
+consistency, service carousel ordering and actual decoder/client proof remain open.
 A bounded per-display MOT/X27 derivation now preserves selected context, exact
 mask/provenance and original default sources. Audited conflicting declarations
 remain explicit unresolved candidates. Effective default/presentation derivation,
@@ -165,6 +168,17 @@ diagnostics. No derivation without local-X26/X28/M29 presence may claim effectiv
 default application or presentation. These intermediate diagnostics do not declare
 legal authored inputs permanently unsupported.
 The mixed-default/X27 nested-call policy still requires authored resolution proof.
+
+Keep stable logical S1 separate from physical last-packet `nn` and modulo-eight
+S2. Preserve all six Annex B lifecycle declarations without confusing C12/C13
+with display national-option bits. Actual compiled content determines `nn`; X27
+and X28 precede content and do not inflate it. Header metadata alone cannot
+prove previous content/counter or fragment continuity. Keep service-wide C11
+and opaque imported controls/text separately owned. Canonical writer suppression
+flags are not import restrictions. Empty authored DRCS can use a SPACE-only row
+with undefined modes without creating glyph definitions. Complete compilation
+and scheduling must enforce resource update order, repetition/packet gaps and
+closing headers before publication; full-page assembly is preparatory evidence.
 
 Collect DRCS references and charset-pair designations over all invoked programs
 under caller-owned work/output budgets and per-type invocation limits. Preserve

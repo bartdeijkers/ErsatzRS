@@ -214,6 +214,60 @@ The official pinned editor AppImage was downloaded and extracted for later GUI
 verification (SHA256 `d2d77e8285fbb8147fe5014fb7f592f333dfd6bdcbad4b831197f1ad7a3a04a7`);
 this preparation does not prove an operational editor or display workflow.
 
+## Resource headers and complete MOT/DRCS sequences
+
+EN 300 706 Annex A.1 represents physical resource subcodes as
+`(nn << 8) | (S2 << 4) | S1`. Logical S1 remains the authored resource identity;
+S2 is an explicit modulo-eight update indicator. `nn` names the last data packet
+in required transmission order: rows 1–25 or X26 designation 0–15 as values
+26–41. X27/X28 precede these and do not increase `nn`. POP/GPOP permit 1–41;
+DRCS/GDRCS/MOT/MIP use rows 1–24. A partial update declares its own final packet;
+continuations retain that declaration. MIP requires S1 zero; MOT zero is advisory.
+Checked metadata preserves all six Annex B table B.1 states:
+
+| Transmission | C4 | C8 | C12 | C13 |
+| --- | --- | --- | --- | --- |
+| Unchanged full first | 0 | 0 | 0 | 0 |
+| Unchanged continuation | 0 | 0 | 1 | 0 |
+| Changed full first | 1 | 1 | 0 | 0 |
+| Changed continuation | 0 | 1 | 1 | 0 |
+| Partial first | 0 | 1 | 0 | 1 |
+| Partial continuation | 0 | 1 | 1 | 1 |
+
+C14 is reserved here; C12/C13 are not national-option bits. First changed/partial
+transmissions advance S2; continuation fragments retain it. Metadata construction
+alone cannot validate previous content/counter, fragment continuity or actual body
+extent. Service C11 and other controls/text remain outside this domain type.
+
+The native full-page writers derive actual `nn`, preserve exact raw identities
+and emit bounded immutable DVB-unit sequences. MOT emits its header, optional
+X28/0 and seventeen rows ending in row 21. X28/0 declares function 6/coding 3 and
+Table 6 compatibility bits 8–18 as `0x0ff80`; the descending bit notation in
+[ETSI TR 100 287 V1.2.1 section 10.6.3.1](https://www.etsi.org/deliver/etsi_TR/100200_100299/100287/01.02.01_60/tr_100287v010201p.pdf)
+clarifies their order. DRCS emits header, X28/3, then ascending defined rows.
+An empty authored subtable deliberately emits one SPACE-only row and all-F modes,
+giving legal `nn=1` without inventing a blank glyph. At most 19 MOT or 26 DRCS
+units are allocated. Supplied default-allocation failures return no encoded page.
+The writer uses C5=C6=0, C7=C9=C10=1 and blank header text as suppression policy;
+these are not universal import restrictions. Serial/parallel C11 is explicit.
+A literal changed DRCS 8A0:S1=F, `nn=24`, S2=0, serial header has wire bytes
+`A8 31 57 0B 0B 40 57 40`, physical subcode `180F` and raw controls `F9`.
+
+Sequences exclude the closing next-page/FF header and carry no publication
+capability. Complete service compilation must enforce one service-wide C11,
+content/counter transitions, resource allocation and Annex B update ordering:
+MOT, DRCS, objects, then display. Full enhancement/M29 repetition is at most
+20 seconds; successive packets within a page are at most 100 ms apart. MIP's
+20 ms erasure spacing is separate. Fragment assembly retransmits X27/X28 before
+remaining ascending content. Current writers assemble full MOT/monochrome DRCS;
+partial/fragment scheduling remains open, without declaring legal states unsupported.
+
+Static inspection of libzvbi 0.2.45 identified full-subcode partial-update lookup
+and decimal-looking resource cache behavior that need exact-version calibration.
+This is not runtime proof about installed 0.2.42 and does not justify restricting
+legal resource addresses. Actual independent decoding, suitable-client display,
+full enhanced compiler/carousel/transport and editor/publication acceptance remain open.
+
 ## MOT/X27 preservation audit
 
 EN 300 706 sections 9.6.2, 10.6 and 13.8 require distinct source declarations

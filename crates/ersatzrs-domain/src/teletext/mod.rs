@@ -21,6 +21,7 @@ mod objects;
 mod pages;
 mod presentation;
 mod profiles;
+mod resource_header;
 mod resource_identity;
 mod service;
 mod source;
@@ -39,6 +40,7 @@ pub use objects::*;
 pub use pages::*;
 pub use presentation::*;
 pub use profiles::*;
+pub use resource_header::*;
 pub use resource_identity::*;
 pub use service::*;
 pub use source::*;
@@ -49,6 +51,8 @@ mod tests;
 #[cfg(test)]
 mod enhancements_tests;
 
+#[cfg(test)]
+mod resource_header_tests;
 #[cfg(test)]
 mod resource_identity_tests;
 

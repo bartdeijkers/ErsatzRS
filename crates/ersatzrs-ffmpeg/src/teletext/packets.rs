@@ -279,7 +279,7 @@ fn page_crc(rows: &[[u8; 40]; TELETEXT_ROWS]) -> u16 {
     register
 }
 
-fn data_unit(magazine: u8, packet: u8, body: &[u8; 40], subtitle: bool) -> [u8; 46] {
+pub(super) fn data_unit(magazine: u8, packet: u8, body: &[u8; 40], subtitle: bool) -> [u8; 46] {
     let mut unit = [0; 46];
     unit[..4].copy_from_slice(&[if subtitle { 3 } else { 2 }, 44, 0xe0, 0xe4]);
     let address = magazine | (packet << 3);

@@ -137,6 +137,9 @@ release section when tagging a release.
   ownership, full link banks/defaults, ignored fields and raw counts, with checked
   supplied selectors and located failures. Monochrome DRCS body coding preserves
   exact slots/pixels and sparse undefined glyphs with explicit X28/3 modes.
+  Checked resource headers preserve exact physical identities/lifecycle states;
+  complete bounded MOT/DRCS sequences derive actual last rows and keep empty
+  DRCS undefined. Service scheduling and actual decoder proof remain open.
   Bounded MOT/X27 derivation preserves provenance,
   original defaults and conflicting candidates. Effective defaults/presentation,
   complete enhanced-service compilation, editor

@@ -987,6 +987,31 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 resource-header/full-page checkpoint: checked physical nn/S2/S1
+metadata preserves all six Annex B lifecycle states, strict nested map-only JSON,
+kind-specific last-packet bounds and explicit modulo-eight counter advance.
+The native full MOT/monochrome DRCS writers derive nn from actual final body rows
+and emit immutable bounded DVB sequences. MOT function/coding uses the independently
+calibrated Table 6 compatibility prefix; DRCS preserves sparse modes/rows and an
+empty authored subtable gets SPACE-only row one with all-F modes, no invented
+glyph. Canonical suppressed header controls remain writer policy; service C11 is
+explicit. Initial tests exposed logical magazine eight being passed to the raw
+packet helper; all five new callsites now use wire_magazine(), verified against
+literal bytes and exhaustive physical geometry. Existing v1 helper behavior is
+unchanged apart from sibling-module visibility.
+426 focused domain/FFmpeg teletext tests pass in Nextest b8b0820c-6fa0-4116-9bdf-d823df891adc
+(177 skipped), including fourteen new regressions. Coverage includes scalar/JSON
+bounds, literal six-state flags, exact physical subcodes, all magazines/S1/counters/
+last-packet values, every DRCS slot, sparse/empty/full rows, MOT function/padding,
+ascending sequence bounds and atomic located allocation rejection. Strict affected
+all-target Clippy, formatting, architecture-lint and progress validation pass;
+independent normative and ownership/verification reviews found no remaining defect.
+Immutable encoded pages carry no output/publication capability. Previous-content/
+counter consistency, partial/fragment assembly, closing headers, service ordering/
+repetition, complete enhanced compiler, exact-version decoder/client calibration,
+TTI/editor/draft/publication/preview/admin/Lua/source/platform acceptance remain open.
+No milestone status/dependency/acceptance change, push or publication.
+
 2026-10-11 MOT/X27 derivation checkpoint: an immutable bounded per-display
 result preserves explicit selected MOT identity/S1, exact display/subcode,
 actual optional BCD association, copied complete original bank and raw X27.
