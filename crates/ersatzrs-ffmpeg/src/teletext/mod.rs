@@ -25,6 +25,7 @@ mod main_composition;
 mod mot;
 mod object_allocation;
 mod object_pages;
+mod origin_carrier;
 mod output;
 mod packets;
 mod physical_comparison;
@@ -44,6 +45,7 @@ mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 
+pub use origin_carrier::*;
 pub use physical_comparison::*;
 pub use raster::*;
 
@@ -218,6 +220,8 @@ mod local_object_program_tests;
 mod main_composition_runtime_tests;
 #[cfg(test)]
 mod main_composition_tests;
+#[cfg(test)]
+mod origin_carrier_runtime_tests;
 // Portable opt-in imager calibration; the libzvbi diagnostic guards its own ABI.
 #[cfg(test)]
 mod local_object_runtime_tests;

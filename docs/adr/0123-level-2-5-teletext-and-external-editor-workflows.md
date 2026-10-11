@@ -150,6 +150,14 @@ fragment. Retain full pending histories separately from selected uncertainties.
 Equal masks cannot certify authored identities or producer lineage; a generated
 carrier must retain an exact original display-origin mapping before equivalence
 can be accepted. Same-owner pairing alone cannot certify a service generation.
+One-origin Passive recipes now derive typed glyph/context, effective attributes
+and private command-role lineage from the exact borrowed display-origin, including
+repaint origins. Allocate the lowest free full Local ID for the exact owner under
+bounded scans. Check original owned-fragment C.1 dependencies before making
+backgrounds explicit. Unproven national conversion, temporal phase and undefined
+spacing remain located derivation gaps; they are not permanent authoring limits.
+Recipes alone do not prove augmented source correspondence, unchanged-anchor/DAG
+placement, whole-program admission, receiver equivalence or publication.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

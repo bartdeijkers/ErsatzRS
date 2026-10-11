@@ -8,7 +8,7 @@ ADR 0120 requires synthetic p9a-04 engine acceptance before one ErsatzRS-Addons
 TV-guide add-on at p9b-01, inspired only by NOS pages 200–299.
 Add-ons own content; host owns validation/publication/delivery/read-only guides.
 Subtitle gates remain. ADR 0123
-reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMaker
+reopens P9A-01 for authored Level 2.5, base fallback and pinned QTeletextMaker
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
 display/navigation are required; Kodi is optional. P9A-02 In progress; four milestones Not started.
 
@@ -17,7 +17,7 @@ v1 lifting retains bytes; resources preserve geometry, lifecycle,
 pointers/metadata/fresh definition state. Local definitions share bounded
 X26 with forward references. Decoders prove selected
 DRCS/object/main cells; recorded local/G1 font gaps do not establish rendering.
-Physical replay/raster/comparison retain fallback and uncertainty.
+Physical replay/raster/comparison retain fallback; origin recipes retain lineage.
 C3 retains private/shared fragments and deferred writers.
 Actual C2 uses packed words within emitters; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.
@@ -26,7 +26,7 @@ exact resources/bitmaps, losers and defined blanks. Lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
 Intervals reject sixteen simultaneous opens; unknown ones survive.
-Collector caps each type at 127 per display, including nesting/default roots.
+Collector caps each type at 127 per display, including nested/default roots.
 Call/write runs and size provenance remain.
 Pinned MIT masks/C1 rasterize fragments/DRCS; Unicode
 keeps Base priority. Headers use receiver markers; invert precedes flash; bottom

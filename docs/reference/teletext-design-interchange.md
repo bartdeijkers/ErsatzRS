@@ -426,6 +426,34 @@ Validate original colour-writer dependencies before materializing explicit carri
 backgrounds. These are remaining derivation/verification tasks, not accepted
 authoring restrictions.
 
+`build_teletext_origin_carrier` borrows a composition, exact display-origin index
+and allocation catalog. It returns one private Passive recipe with that original
+origin/candidate/source/root/instance and aligned body-command roles; callers
+cannot supply its lineage map. Relative column zero awaits separately proven main
+anchor/offset placement. Candidate/origin/catalog/ID-scan/output bounds precede
+allocation; deterministic lowest-free Local IDs use the full `u16` namespace for
+the exact owner, including subcode, with no reserved range.
+
+The recipe materializes known pre-invert foreground/background, complete flash
+mode/rate, effective size axes, boxing/conceal/invert and correct D5. Typed enhanced
+glyph operations preserve resolved charset or complete DRCS context. Fixed glyphs
+do not invent charset dependencies; special `@` remains independent of pending
+G0 selection. Checked authored Base replacements use Latin enhancement context;
+national-subset conversion remains an explicit gap. Base G1 materializes D5 OR
+spacing while enhanced G1 uses D5 only. Unproven undefined G3/DRCS spacing and
+incremental/decremental timing yield located gaps. Original owned fragments use
+shared masks/C.3 coordinates and all actual pixels in both reveal/flash states to
+validate C.1 before explicit background replacement. Uncertainty is never replaced
+by guessed glyphs, colours or geometry.
+
+The representative derived Active-`A` recipe at the retained `£` collision has
+actual factory packing, an actual replay anchor and complete selected-model
+comparison. Pinned teletextimager checks unchanged literal Level 1.5 `£` and
+Level 2.5 `A`, adjacent `Z` and calibration `B`. This manually placed representative
+component is not automatic normalization, a global lineage proof, full receiver
+equivalence, display/navigation or publication acceptance. The original automatic
+composition path's correct Unicode/Active conformance oracle remains failing.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

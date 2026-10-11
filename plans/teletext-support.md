@@ -224,6 +224,12 @@ Carrier derivation still needs identity-preserving Base national-subset conversi
 unchanged-anchor placement and temporal flash context. Preserve original colour
 dependencies before explicit carrier backgrounds; no permanent exclusions are
 accepted for these remaining tasks.
+One-origin Passive recipes now retain exact borrowed origin/source lineage,
+effective typed attributes/glyph context and bounded full-ID allocation, validating
+original C.1 before explicit backgrounds. A representative retained-AP placement
+passes complete selected-model comparison and pinned dual-level literal decoding.
+Next produce the bounded augmented-program source map, DAG and unchanged-anchor
+placement; this component does not correct the automatic composition path yet.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone

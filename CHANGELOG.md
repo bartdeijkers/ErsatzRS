@@ -144,6 +144,10 @@ release section when tagging a release.
   Compare full original/physical visual planes under host budgets, retaining
   fragment/colour/flash/glyph differences and separate uncertainty histories;
   equal host masks do not certify authored identity or receiver equivalence.
+  Derive bounded Passive recipes from exact original display origins and typed
+  context while preserving original colour dependencies. A representative
+  retained-anchor placement passes dual-level independent decoding; automatic
+  full-page normalization remains open.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

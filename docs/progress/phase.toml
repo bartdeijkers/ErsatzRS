@@ -1142,8 +1142,11 @@ Physical raster shares the renderer but uses raw transmitted Base fallback;
 missing Unicode instructions and the Active/Local discrepancy stay visible.
 Bounded whole-page comparison now observes fragments, logical colours, masks and
 both reveal/flash responses while retaining histories and per-origin uncertainty.
-Next bind generated carriers to exact original display origins, then realize
-Unicode/Active physical priority with the existing collector. Explicit
+One-origin Passive recipes now retain exact original lineage, effective context
+and original C1 dependencies. A representative retained-AP placement passes both
+native receiver levels and complete selected-model comparison. Next build bounded
+augmented source mapping/DAG/unchanged-anchor placement and realize Unicode/Active
+physical priority with the existing collector. Explicit
 resource calls lack page addresses; default-owner preservation needs a proven
 encoding strategy rather than relaxing selected-page checks;
 full engine/client/editor/publication acceptance remains open.
