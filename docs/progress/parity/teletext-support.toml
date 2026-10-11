@@ -30,7 +30,8 @@ Call/write runs reject overflow; agreeing size flags keep provenance.
 Pinned MIT masks and C1 planes now rasterize known fragments/DRCS; Unicode
 keeps Base priority. Headers use receiver markers; invert precedes flash; bottom
 parts retain origin-row planes. Eight opaque DRCS rectangles match libzvbi RGBA.
-Known composites fit actual masks; definite BBS parameters retain writers. Arabic, full A7/A8/C3/background and client proof stay open.
+Known composites fit masks; definite BBS parameters retain writers.
+Unicode/Active wire priority fails; full A7/A8/C3/client proof stays open.
 X27/MOT retain masks, S1, banks/defaults/raw fields/IDs and derivation provenance/conflicts.
 Compiled-header fence rejects exact physical/logical-owner collisions.
 Final defaults/selection/semantics/compilation and editor interfaces remain open.
@@ -65,6 +66,14 @@ localized management and full source/client/browser/smoke/TSDuck matrix remain
 open. Milestones own proof; UCU waives no gates. Content waits for p9a-04;
 Phase 10 waits for p9b-02.
 '''
+
+[[debt]]
+id          = 'teletext-generated-unicode-base-priority-is-not-preserved-on-wire'
+adr         = '0123'
+description = 'Generated Unicode fallback currently becomes Local X26 glyph data and outranks an original Active glyph, although the retained semantic/raster result correctly keeps Unicode at Base priority. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. No permanent authoring restriction is accepted.'
+discovered  = '2026-10-11'
+evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The bounded realization intermediate retains affected final origins/fragments and unresolved evidence; it does not correct the encoder or grant publication readiness. Actual lowering, generated-resource accounting and independent dual-receiver proof remain open.'
+resolved    = false
 
 [[debt]]
 id          = 'teletext-product-and-standards-contract-is-undecided'

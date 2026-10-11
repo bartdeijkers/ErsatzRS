@@ -207,6 +207,10 @@ release section when tagging a release.
   and inactive panels, retaining permitted object types and separate size fragments.
   Actual packed command positions now resolve known same-emitter attribute ties
   in the shared display/colour result; uncertain cross-instance order stays visible.
+  Record a production-wire Unicode/Active priority regression with its unchanged
+  Level 1.5/2.5 oracle. Bounded realization planning retains actual fallback
+  overlaps, whole origin footprints and final fragments; wire correction remains
+  required before acceptance.
   Complete rendering, physical equivalence, client/editor workflows and
   publication acceptance stay open.
   Known inclusive raw object intervals now reject sixteen simultaneous opens

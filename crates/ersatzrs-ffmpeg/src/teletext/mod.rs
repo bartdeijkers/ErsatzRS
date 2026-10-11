@@ -7,6 +7,7 @@
 //! publication: carousel timing, PES/PSI/PID capacity,
 //! output ownership and client acceptance remain separate transport obligations.
 
+mod base_compatibility_realization;
 mod base_display;
 mod buffer;
 mod carousel;
@@ -44,6 +45,7 @@ use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 
 pub use raster::*;
 
+pub use base_compatibility_realization::*;
 pub use base_display::{TeletextBaseDisplayError, TeletextBaseDisplayFailure};
 pub use buffer::{TeletextBufferError, TeletextPacketBuffer};
 pub use carousel::{TeletextCarousel, TeletextCarouselBatch, TeletextCarouselBatchKind};

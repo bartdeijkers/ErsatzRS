@@ -228,6 +228,63 @@ decoder; its same-cell designation handling selects the restored repertoire for
 an earlier glyph. That observation neither changes the required engine scope nor
 establishes correctness of the final wire compiler.
 
+### Unresolved Unicode/Active wire priority
+
+The opt-in `base_unicode_active_override_decodes_with_pinned_imager` regression
+uses the actual `compile_teletext_composed_main_program` output, including final
+local definitions and retained DVB units. German national option one forces the
+authored pound at page 200/subcode zero, row 1, column 8 into derived G2 fallback.
+An original full-ID `ffff` Active object writes G0 `A` there; adjacent `Z` must
+remain unchanged. The correct tuples are pound/G2 at Level 1.5 and `A`/G0 at
+Level 2.5, both white on black. The expected tuples are independent literals.
+
+Pinned teletextimager 0.2.0 at `2b0125b778c45ffdfa2df0b196870c093361f317`
+passes the fallback check but reports Level 2.5 `[35,7,0,7,0]` instead of
+`[65,0,0,7,0]`. Nextest `4a620ac7-13ef-469e-ae09-ee707435676c` fails; it is
+defect evidence, not successful decoder acceptance. The production request SHA256
+is `6ad7b72e9d33b3d339fb7f4b61bb3c0b708fd805b1f9f68f7324425048a83d7b`.
+The existing main-composition decoder helper and earlier positive oracles are
+unchanged. Export or replay the regression with:
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR=<pinned-checkout> \
+ERSATZRS_TELETEXT_TEST_UNICODE_ACTIVE_IMAGER_FIXTURE=<request.json> \
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(base_unicode_active_override_decodes_with_pinned_imager)'
+```
+
+[EN 300 706 section 13.2](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf#page=92)
+places Local glyphs above Active glyphs. Reordering the same generated Local
+fallback therefore cannot fix the priority. Physical realization must preserve
+fallback and original final fragments, without promoting a semantic Base glyph
+or editing the authored catalogue. A transient bounded plan retains affected
+origin footprints, final owners and original source identities. It is not a wire
+compiler or readiness certificate: unresolved geometry/ownership and whole-glyph
+precedence cycles need explicit evidence; actual generated calls, open intervals,
+words, pointers, resources and two receiver views still require validation.
+
+`plan_teletext_base_compatibility_realization` borrows the exact immutable
+`TeletextMainComposition`. Its host budget bounds command/candidate/origin input
+and seed/edge/update work. Seeds use actually generated BaseCell glyph provenance,
+not retained replacements already suppressed by an authored compatible glyph.
+Known final Active owners initiate closure over their whole effective rectangles;
+each covered final owner contributes its whole rectangle in turn. Final fragments,
+origin and candidate identities remain associated with the original composition,
+including its charset, glyph, DRCS, attribute and colour evidence. Precedence
+constraints retain overlapping whole-origin dependencies; cycles remain pending.
+Original display pending survives even with no seeds: an unpainted unresolved
+Active origin can otherwise leave Base as the apparent final owner. The plan
+neither generates synthetic objects nor establishes their placement, historical
+paint order, budgets or wire equivalence. Those are the next lowering gates.
+Nine planning tests cover exact original sources, a double-height bottom seed,
+higher partial ownership, closure extending outside the initial origin, selected
+and disabled left panels, unresolved unpainted Active content, noncollision,
+budget cutoffs and cycle-blocked graph nodes. They and the existing semantic
+Unicode/Active raster test pass in `9c2240d4-3d42-412e-be0a-117d9ef0e761`;
+all nine affected tests pass after equivalent lint corrections in
+`c9ec93bc-985b-4ab7-b82d-5a2aa6c3524a`. Strict FFmpeg all-target Clippy and
+formatting pass. This does not turn the failing independent wire oracle green.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

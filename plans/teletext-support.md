@@ -210,6 +210,17 @@ located failures while explicit backgrounds remain valid. No whole-service
 admission follows. Next consume this raster in the localized preview and prove
 physical equivalence and independent client display/navigation. Engine,
 external-editor and add-on acceptance stay open.
+The production-wire Unicode/Active regression currently fails: page 200 with
+German national option one displays pound instead of the original Active `A` at Level
+2.5, while Level 1.5 remains correct. Correct this before engine acceptance.
+First retain a bounded physical-realization plan from final fragment owners and
+whole effective origin footprints, with original candidate/source identities and
+explicit unresolved evidence. Then lower a proven realization without changing
+authored packages or losing Level 1.5 fallback. Preserve higher partial overlays,
+all glyph families, charset lifetimes, background provenance and origin-row planes;
+packet or candidate order alone cannot establish equivalent output. Revalidate
+actual generated invocation/open/word/resource limits and independently decode
+both receiver views. An empty or successful plan does not certify the wire.
 The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
 selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
 alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.

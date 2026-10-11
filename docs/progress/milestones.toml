@@ -987,6 +987,31 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+The Unicode/Active realization checkpoint retains the correct positive production-wire oracle:
+Page 200/subcode 0 uses German national option one; row 1/column 8 must show pound/G2 at Level
+1.5 and original Active A/G0 at Level 2.5, with adjacent Z unchanged. Pinned imager 0.2.0/2b0125b7 passes
+fallback but returns pound at Level 2.5. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails;
+unchanged helper replay independently reports actual [35,7,0,7,0] versus expected [65,0,0,7,0].
+The interchange reference owns the request hash and opt-in replay. Section 13.2 prevents correction by
+packet order alone. A bounded transient realization plan borrows the exact immutable semantic
+composition, seeds actually generated BaseCell glyphs under final Active owners, closes over
+whole effective rectangles/final fragment owners and retains original provenance and pending
+evidence. Empty closure cannot certify safety; historical repaint order is not invented.
+Nine new planning tests and the existing semantic Unicode/Active raster test pass together
+(9c2240d4-3d42-412e-be0a-117d9ef0e761). Following equivalent documentation/method-reference/
+pointer-conversion lint corrections, all nine affected tests pass again
+(c9ec93bc-985b-4ab7-b82d-5a2aa6c3524a). They cover exact borrowed sources/full IDs/instances,
+double-height bottom seeds, higher partial owners, closure extending outside the first origin,
+enabled/disabled left-panel offsets, unpainted Active/global pending, absent collision, all
+count/work/seed/edge fences and private cycle/downstream graph calibration. Strict FFmpeg
+all-target Clippy, workspace formatting and architecture/progress checks pass; independent
+source/test review is clean.
+Unchanged production/compiler/decoder evidence is reused. Actual lowering,
+all glyph/charset/attribute/resource contexts, partial higher overlays, generated invocation/
+open/word/resource accounting and independent dual-receiver proof remain open. No encoder
+correction, suitable-client/editor/publication or milestone acceptance is claimed. Earlier
+evidence follows unchanged:
+
 The original addressed-cell and physical-C2 checkpoint checks known own raw AP addresses under
 A4, including position/charset setup and disabled panels, while keeping child areas separate. A7
 uses the same direct-address membership with whole-instance four-type masks; compound Display,

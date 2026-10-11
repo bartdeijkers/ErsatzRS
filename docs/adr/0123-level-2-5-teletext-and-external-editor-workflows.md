@@ -100,6 +100,16 @@ spacing-attribute sources remain distinct, with separate raw and remapped colour
 and double-height origins. This supports the shared semantic resolver; it does
 not settle object priority, full footprints or browser rendering. Base-derived
 Unicode must still retain base priority in final semantic and physical views.
+A production-wire regression now confirms that generated Local G2 fallback can
+obscure an original Active glyph, despite correct semantic Base priority. EN
+300 706 section 13.2 makes packet reordering insufficient. Physical normalization
+must preserve the Level 1.5 fallback and the original final fragment ownership,
+repertoire, attributes and resource references. Its transient plan must retain
+original provenance and unresolved geometry, including partially obscured enlarged
+origins; it cannot silently mutate authored objects or claim publication readiness.
+Actual lowering must separately prove precedence and charge generated objects,
+invocations, open intervals, words and resources against existing limits. The
+interchange reference records the unchanged positive oracle and observed failure.
 A pure-domain original spatial trace now preserves exact command sources and
 repeated invocation identities, origins, offsets and caller AP under two-pass
 work/allocation limits. Main composition retains it from the same immutable

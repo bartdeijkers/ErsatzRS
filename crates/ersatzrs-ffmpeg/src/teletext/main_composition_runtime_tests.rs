@@ -1,5 +1,6 @@
 //! Opt-in fixed-cell evidence for the production composition/lowering path.
-//! This does not settle Active overlap, header context or full client acceptance.
+//! The opt-in Unicode/Active conformance oracle currently reproduces a wire
+//! priority failure. This does not settle header context or full client acceptance.
 
 use ersatzrs_domain::*;
 
@@ -458,6 +459,64 @@ fn anchored_case() -> serde_json::Value {
             cell(2, 10, [b'T', 15, 0, 7, 0], [b'T', 15, 0, 7, 0]),
         ],
     )
+}
+
+#[tokio::test]
+#[ignore = "Known Unicode/Active wire priority regression; requires pinned teletextimager"]
+async fn base_unicode_active_override_decodes_with_pinned_imager() {
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let identity = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xffff));
+    let case = encoded_case_with_context(
+        "base_unicode_active_override",
+        vec![text(1, 8, "£Z"), text(2, 1, "B")],
+        vec![
+            position(1, 8),
+            TeletextEnhancementCommand::InvokeObject {
+                target: identity,
+                object_type: TeletextObjectType::Active,
+                offset: None,
+            },
+        ],
+        vec![TeletextEnhancementObjectDefinition {
+            identity,
+            object_type: TeletextObjectType::Active,
+            program: TeletextEnhancementProgram::new(vec![at(
+                0,
+                TeletextColumnOperation::G0 {
+                    code: TeletextGlyphCode::new(b'A').unwrap(),
+                },
+            )])
+            .unwrap(),
+        }],
+        &[
+            cell(1, 8, [0x23, 7, 0, 7, 0], [b'A', 0, 0, 7, 0]),
+            cell(1, 9, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, 7, 0]),
+        ],
+        true,
+    );
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.0", "cases":[case],
+    }))
+    .unwrap();
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_UNICODE_ACTIVE_IMAGER_FIXTURE",
+    ]) {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
+        "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317","cases_passed":1,"levels":["1.5","2.5"]})
+    );
 }
 
 fn cases() -> Vec<serde_json::Value> {
