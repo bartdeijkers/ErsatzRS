@@ -30,7 +30,10 @@ body encoder preserves those fields with independently checked packet coding.
 Same-target effective explicit calls and glyph references now require announced
 S1 values, with source-located failures. This does not derive MOT/X27 selection.
 Default roots retain their original MOT resource independently of explicit links.
-MOT declarations/resolution, resolved display semantics, physical allocation, complete
+Checked Level 2.5 MOT declarations now retain explicit ownership, associations,
+full link banks, original defaults and ignored raw fields. Native MOT body coding
+checks supplied default allocations before emitting any of its seventeen rows.
+MOT resolution, resolved display semantics, physical allocation, complete
 enhanced-service compilation and editor/publication workflows remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are
 reusable baseline evidence, not Level 2.5 acceptance.
@@ -135,6 +138,17 @@ Default-object roots keep their independently declared original MOT resource,
 checked catalog identity, scope and type. Do not rebind them to another X27-selected
 page. Only synthesized default roots bypass explicit-invocation link matching;
 local and nested calls retain their supplied-selection checks and shared budgets.
+Preserve the explicitly selected MOT identity, including nonzero logical S1.
+Retain all 256 raw association slots; reserved FF is not a usable association.
+Keep one global and seven public/normal links per object/DRCS bank, contiguous
+maximum-S1 extents, supersedable flags and independently owned default slots.
+Inactive pointer bytes and reserved GPOP fallback bits remain raw metadata.
+Coverage masks and page totals declare accounting, not resource availability
+or cross-magazine inheritance. Actual default definition existence/type and
+physical pointer realization require separate catalog/compiler proof.
+Canonical reserved padding in generated packet bodies is a writer convention;
+lossless raw import must preserve ignored bytes externally rather than normalize
+them silently.
 The mixed-default/X27 nested-call policy still requires authored resolution proof.
 
 Collect DRCS references and charset-pair designations over all invoked programs

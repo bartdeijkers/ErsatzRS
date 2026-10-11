@@ -987,6 +987,39 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 authored MOT checkpoint: checked Level 2.5 declarations preserve the
+explicit MOT identity/magazine and nonzero logical S1, all 256 raw association
+slots with FF retained reserved, one global plus seven public/normal links for
+each resource bank, contiguous maximum-S1 extents, supersedable flags, original
+default owners/types and full semantic IDs. Dormant/type-zero pointer bytes,
+raw POP fallback and reserved GPOP fallback, coverage and totals remain intact.
+Strict nested map-only JSON checks required nullable selectors, fixed bank sizes,
+scalars, exact default scope/kind/page/S1, duplicate/count bounds and owner forms.
+This is not resource selection, catalog availability or raw parsing/RSS proof.
+The native encoder returns seventeen complete protected bodies (rows 1–14,
+19,20,21), preserving corrected Figure 20 eighteen-pair hexadecimal rows,
+absolute magazine addressing and every table 21/23 field. Complete allocation
+preflight rejects missing/unexpected/wrong target/type/S1 before returning bodies;
+errors carry MOT identity, link ordinal and default slot. No host ID truncation.
+Canonical zero padding/sparse associations are writer policy; lossless raw import
+needs external ignored-byte preservation. Headers/updates/partial lifecycle and
+optional MOT X28 coding are not emitted by this body-only API.
+All 395 focused domain/FFmpeg teletext tests pass (153 domain, 242 FFmpeg;
+17 new MOT regressions, 177 skipped) in Nextest
+afa9dae1-1655-486c-a213-9fb4e1008854. All 17 affected MOT tests pass again after
+literal/row-constant lint cleanup; the varied-bank-slot regression passes again
+after equivalent fixture extraction. Independent fixed Hamming codewords,
+Figure 20 row-list inverses/literal offsets, all 256 associations/selectors,
+distinct banks, ignored bytes, raw counts and located failure cases are covered.
+Strict affected all-target Clippy, formatting and architecture-lint pass;
+independent declaration/serde and normative packet/allocation reviews are clean.
+Existing v1 packet/presentation/lifting and used-S1 regressions pass unchanged.
+MOT/X27 selection and audited edge policies, declaration-to-selection consistency,
+actual catalog/default type and physical pointer/program realization, empty
+resource representation, complete enhanced compiler/editor/preview/publication
+and actual client/browser/source/platform acceptance remain open. No engine
+acceptance, milestone status/dependency/acceptance change, push or publication.
+
 2026-10-11 used-S1 checkpoint: applicable real X27 declarations matching the
 supplied selected owner now require every effective explicit object invocation
 and DRCS reference to use an announced S1. Failures retain display/subcode, role,

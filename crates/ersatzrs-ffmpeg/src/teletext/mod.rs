@@ -14,6 +14,7 @@ mod clock;
 mod compositional;
 mod layout;
 mod lift;
+mod mot;
 mod output;
 mod packets;
 mod pmt_install;
@@ -36,6 +37,10 @@ pub use clock::{
 };
 pub use compositional::encode_teletext_compositional_links;
 pub use lift::lift_teletext_v1_page_set;
+pub use mot::{
+    encode_teletext_mot_bodies, TeletextMotAllocationFailure, TeletextMotDefaultAllocation,
+    TeletextMotDefaultAllocations, TeletextMotEncodingError, TeletextMotPacketBody,
+};
 pub use output::{
     TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
 };
@@ -122,6 +127,8 @@ mod clock_tests;
 mod compositional_tests;
 #[cfg(test)]
 mod lift_tests;
+#[cfg(test)]
+mod mot_tests;
 #[cfg(test)]
 mod pmt_install_tests;
 #[cfg(test)]

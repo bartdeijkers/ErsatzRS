@@ -14,33 +14,31 @@ independent decoding and actual suitable-client display/navigation are required;
 Kodi is optional. P9A-02 remains In progress; four milestones are Not started.
 No engine/content/editor/client acceptance.
 
-Checked Level 2.5 palette/DRCS values, raw resource identities and supplied-reference
-DRCS dependency validation, ordered programs and bounded object-derived reference
-collection, presentation declarations and a supplied-selection semantic service
-are preparatory. Presentation packet-body encoding and bounded v1 lifting retain
-explicit page/X26 presence with unchanged v1 bytes; they do not establish mixed
-producer convergence. Checked X27/4 declarations/body coding retain masks and
-required inventory; default roots retain their original resource owner. Authored
-Same-target explicit calls and glyphs require announced S1 values with located
-failures; only synthesized original default roots are exempt. MOT resolution,
-declaration-to-selection consistency, final object/display semantics,
-physical allocation, native enhanced encoding and editor interfaces remain open.
+Checked palette/DRCS values, resource identities, ordered programs and bounded
+object/DRCS traversal underpin the supplied-selection semantic service.
+Presentation bodies and bounded v1 lifting preserve page/X26 presence and v1
+bytes; mixed-producer convergence remains open. X27 declarations/body coding
+retain masks and required inventory; matching selected owners require announced
+used S1 with located failures. Only original synthesized MOT roots are exempt;
+nested calls and glyphs remain checked. MOT declarations/body coding retain
+explicit owners, full banks/extents/defaults, ignored selectors/fallback and
+raw counts. Supplied allocations preserve full semantic IDs. MOT/X27 resolution,
+selection consistency, final semantics, physical realization, complete enhanced
+compilation and editor interfaces remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua controls remain preparatory.
 Shared app controls compose isolated channel drafts; native encoding retains the
 same pages. Guide/page bounds have proof. Acquisition, service activation, other
 regions, link CRC, UI/Lua and publication remain open.
 
-Supplied metadata and report-only SQLite observations preserve ordinary tracks,
-exact stream/file/version association, raw descriptor/membership states and
-actual scan-lease checks. Missing records do not establish absence; reported
-revisions do not certify bytes and observed pages remain NotAcquired. Bounds
-apply after JSON decoding, not to child/input RSS. Pure selected-PID TS/PES/
-header parsing preserves raw flags, subcodes, missing PTS and explicit strict
-profiles; it establishes no source-byte identity, page readiness or complete
-inventory. Scanner acquisition, cross-open revisions and page selection remain
-open. Auxiliary failure must preserve ordinary metadata; uncertain cleanup is
-fatal. P9A-03 owns detailed evidence and remaining work.
+Report-only metadata/SQLite observations preserve ordinary tracks, exact
+stream/file/version ownership, raw descriptors/memberships and scan
+leases. Missing records prove no absence; reported revisions certify no bytes;
+observed pages remain NotAcquired. Pure explicit-PID TS/PES/header parsing retains
+flags/subcodes/missing PTS under strict profiles; no source identity, readiness
+or complete inventory. Bounds follow JSON decoding, not child/input RSS.
+Acquisition, cross-open revisions and page selection remain open. Auxiliary
+failure preserves ordinary metadata; uncertain cleanup is fatal. P9A-03 owns proof.
 
 Carousel/PES/TS, all-program PSI/PMT monitoring, PCR/CBR checks and bounded
 retention preserve AV, packet timing and epoch-bound acknowledgement. Finite EOF

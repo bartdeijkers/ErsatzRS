@@ -133,7 +133,10 @@ release section when tagging a release.
   inventory validation retain exact masks and original default-object ownership.
   Effective same-target object/glyph references require announced S1 values with
   source-located diagnostics; original default roots retain their exemption.
-  Authored resource selection, complete enhanced-service compilation, editor
+  Checked MOT declarations and packet-body coding preserve original resource
+  ownership, full link banks/defaults, ignored fields and raw counts, with checked
+  supplied selectors and located failures. Authored resource selection, complete
+  enhanced-service compilation, editor
   workflows and client acceptance remain open.
 - Extend Phase 9 acceptance with per-channel teletext add-on bindings and named
   profiles, add-on-owned themes/overrides/custom zones, and shared admin/Lua

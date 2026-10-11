@@ -84,8 +84,12 @@ and used-S1 membership when the applicable target matches the supplied selection
 Source-located checks cover explicit calls and glyphs inside default programs;
 only original synthesized MOT roots are exempt. Different-owner/null resolution
 remains open. Default roots retain their original owner instead of rebinding.
-Next implement authored MOT declarations and resource selection, resolve audited
-edge policies and prove declaration-to-selection consistency, then final display/object
+Checked Level 2.5 MOT declarations and independently decoded body coding now
+retain explicit owners, full banks, extents, original default slots and ignored
+fields. Supplied physical selectors are checked without truncating semantic IDs;
+this does not prove object allocation or header/carousel lifecycle.
+Next implement resource selection, resolve audited edge policies and prove
+declaration-to-selection consistency, then final display/object
 semantics, physical service allocation and the native compiler.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export

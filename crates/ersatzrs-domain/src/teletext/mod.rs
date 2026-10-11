@@ -15,6 +15,7 @@ mod enhancement_program;
 mod enhancement_values;
 mod enhancements;
 mod identity;
+mod mot;
 mod objects;
 mod pages;
 mod presentation;
@@ -31,6 +32,7 @@ pub use enhancement_program::*;
 pub use enhancement_values::*;
 pub use enhancements::*;
 pub use identity::*;
+pub use mot::*;
 pub use objects::*;
 pub use pages::*;
 pub use presentation::*;
@@ -56,6 +58,9 @@ mod charset_values_tests;
 
 #[cfg(test)]
 mod compositional_links_tests;
+
+#[cfg(test)]
+mod mot_tests;
 
 #[cfg(test)]
 mod enhancement_values_tests;

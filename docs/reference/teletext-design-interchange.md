@@ -152,7 +152,7 @@ one resource record; different kinds cannot hide an exact raw-page/S1 collision.
 Input bytes remain bounded before parsing. Constructors return no partial service,
 and the checked result has no mutable/deserialization/publication bypass.
 
-MOT/X27 declaration mapping and default selection, final display semantics,
+MOT/X27 selection and default derivation, final display semantics,
 physical headers/pointers/collisions and enhanced encoding remain required later
 steps. A display subcode is not a resource logical S1. The existing base encoder
 must not be used to silently discard this aggregate's resources or override its
@@ -218,6 +218,45 @@ and triplet 13 are zero by writer convention. The two additional Level 3.5 slots
 use pinned-QTeletextMaker-calibrated null GPOP/POP declarations; this encodes no
 authored Level 3.5 extension. Body coding is not carousel integration, resource
 allocation, transport conformity or actual display/navigation proof.
+
+`TeletextMotLevel25Declaration` preserves the explicitly selected MOT resource
+identity, including nonzero S1, ordered unique raw associations and the complete
+Level 2.5 link bank. Up to 256 raw slots are checked before map construction;
+FF remains preserved reserved metadata and `association(0xff)` returns none.
+This validated-record bound is not a raw JSON parsing/RSS bound. Each object and
+DRCS bank has one global and seven public/normal links. `TeletextMotSubpageExtent`
+retains a contiguous zero-to-maximum range, separately from arbitrary X27 masks.
+Selectors retain independent global-use bits, describing enhancement resource
+use rather than defaults alone. The declaration performs no resource selection.
+Coverage bit zero denotes magazine eight;
+other bits denote magazines one through seven and affect accounting, not inheritance.
+
+Default slots distinguish active semantic identities from dormant FF-link
+selectors and type-zero ignored pointer bytes. Active targets must match the
+original linked scope/kind/page and extent; semantic IDs retain their full 16
+bits. Ignored selector bytes, raw POP protocol/panel/substitution bits and
+reserved GPOP fallback bits are preserved, as are explicit coverage/page totals.
+Nested map-only JSON requires every declared field and nullable selector;
+unknown, duplicate, positional, malformed or ownership-breaking input is rejected.
+No default definition existence/type, inventory or computed-count proof is implied.
+
+`encode_teletext_mot_bodies` emits seventeen complete pre-bit-reversal,
+Hamming8/4-protected bodies: rows 1–14, 19, 20 and 21. Figure 20 uses twenty
+association pairs in rows 1–8, eighteen in rows 9–13 and six in row 14; the FF
+pair remains reserved metadata. Tables 21/23 fix absolute magazine addresses,
+original default types/selectors, extents, flags and counts. Supplied active
+allocations must match exact semantic identity/type and logical S1 before any
+body is returned. Missing, unexpected and mismatched allocations report the
+MOT identity, link ordinal and default slot. Selectors never truncate host IDs.
+All 256 selector bytes are physically assigned; their lower four bits are S1.
+Actual emitted POP pointer/program realization is a separate compiler obligation.
+
+Missing sparse associations and reserved padding use canonical zero nibbles.
+This authoring output is not a byte-lossless raw importer; ignored padding needs
+an explicit external preservation format during interchange. Level 3.5 banks
+and optional MOT X28 function-six/coding-three declarations are not emitted here.
+Header/update/partial lifecycle, MOT selection, transport/carousel and actual
+client proof remain open. A body-only API carries no publication authority.
 
 Null-X27 fallback, conflicting MOT supersedable flags and global-default
 association and mixed-default nested-call edge cases still need a documented,
