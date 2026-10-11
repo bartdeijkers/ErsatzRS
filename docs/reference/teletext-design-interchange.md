@@ -127,8 +127,14 @@ retain a checked X27/4 declaration on the exact display metadata owner, independ
 of that selection. Every set mask bit on a real, Level-2.5-applicable target requires
 the matching catalog kind/page/S1, including unused records. Null and zero masks
 do not invent inventory; Level-3.5-only metadata is retained without requiring
-Level 3.5 resources. This does not derive MOT/X27 selection or prove that every
-used S1 is announced. Default slots retain GPOP1,
+Level 3.5 resources. For an applicable real declaration matching the supplied
+selected owner, every effective explicit object invocation and DRCS reference
+must use an announced S1. Failures retain the exact display, role, resource S1
+and source object/command. Only synthesized direct MOT default-object roots
+are exempt; their nested calls and glyph references are checked. Different
+selected owners and null links still require MOT/X27 resolution and provenance.
+These checks do not derive that selection or establish encoding readiness.
+Default slots retain GPOP1,
 GPOP2, POP1, POP2 order and sparse ordinals. A present local program, including an
 empty one, suppresses every default. Local definitions require an actual base
 owner and explicit local declaration. Declared links/default targets are checked
@@ -194,9 +200,9 @@ Semantic object IDs are not limited to physical default pointer indices.
 
 Do not erase masks, automatically rebind defaults to an overridden resource or
 select the first/S1-zero MOT record implicitly. Supplied explicit object calls
-currently check selected page equality; authored resolution must also derive the
-binding and validate used-S1 mask membership while retaining independently sourced
-default provenance. Any local
+check selected page equality and, when the applicable real X27 target matches,
+used-S1 mask membership. Authored resolution must still derive and prove the
+binding while retaining independently sourced default provenance. Any local
 X26 presence suppresses MOT defaults.
 
 The implemented `TeletextX27Level25Links` has four required named links. Each

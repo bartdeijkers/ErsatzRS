@@ -27,6 +27,8 @@ retains explicit page presentation and empty local-X26 presence before compositi
 Checked X27/4 declarations retain fixed roles, exact targets, validity and masks;
 the semantic service checks their required Level 2.5 resource inventory. A native
 body encoder preserves those fields with independently checked packet coding.
+Same-target effective explicit calls and glyph references now require announced
+S1 values, with source-located failures. This does not derive MOT/X27 selection.
 Default roots retain their original MOT resource independently of explicit links.
 MOT declarations/resolution, resolved display semantics, physical allocation, complete
 enhanced-service compilation and editor/publication workflows remain unimplemented. Existing
@@ -120,7 +122,13 @@ Preserve a complete X27/4 declaration separately from packet absence and resolve
 selection. An explicit FF/FFFF target retains its magazine; a real target's zero
 mask requires no subpages. Keep assigned level applicability and fixed GPOP/POP/
 GDRCS/DRCS roles. Check required Level 2.5 resource kind/page/S1 even when no
-effective command currently uses it. Encoder-reserved fields use a documented
+effective command currently uses it. When the applicable declaration matches
+the supplied selected owner, check used-S1 membership for every effective
+explicit invocation and DRCS reference, including dependencies inside defaults.
+Only synthesized direct default-object roots retain their independent exemption.
+A different selected owner or null declaration requires separate authored
+resolution/provenance; these checks cannot infer a missing MOT policy.
+Encoder-reserved fields use a documented
 writer convention, not an invented universal input validity rule.
 
 Default-object roots keep their independently declared original MOT resource,

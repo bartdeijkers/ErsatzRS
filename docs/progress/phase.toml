@@ -1135,7 +1135,10 @@ encoding and bounded v1 lifting preserve explicit page/X26 presence and unchange
 v1 bytes. Mixed-producer compiler convergence remains open. Checked X27/4 declarations
 and body coding retain masks, null/absent distinctions and required inventory.
 Default roots retain their independently declared original resource owner.
-Authored MOT declarations/selection, used-mask membership and audited edge policies,
+Same-target applicable declarations now check effective used-S1 membership with
+source locations; nested calls and glyphs inside defaults remain checked, while
+only original synthesized roots are exempt. Authored MOT declarations/selection,
+declaration-to-selection consistency and audited edge policies,
 final display/object semantics, physical service allocation, the enhanced compiler
 and operational draft/publication workflow remain open.
 The editor normalizes

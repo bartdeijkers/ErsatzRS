@@ -176,6 +176,13 @@ impl From<TeletextResourceSubpageIndex> for u8 {
     }
 }
 
+impl From<super::TeletextDrcsSubtableIndex> for TeletextResourceSubpageIndex {
+    /// Both checked values represent logical S1, without physical header bits.
+    fn from(value: super::TeletextDrcsSubtableIndex) -> Self {
+        Self(value.get())
+    }
+}
+
 /// Page purpose; this declaration supplies no resource payload implementation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]

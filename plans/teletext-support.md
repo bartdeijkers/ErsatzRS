@@ -79,10 +79,13 @@ presence, panels and default suppression while checking aggregate dependencies.
 The presentation packet-body encoder and bounded v1 lift preserve explicit
 page/X26 presence and unchanged v1 bytes. Full mixed-v1/v2 compiler convergence
 remains open. Checked X27/4 declarations and body coding preserve masks,
-null/absent distinctions and applicability; the service checks required inventory.
-Default roots retain their original owner instead of rebinding to explicit links.
-Next implement authored MOT declarations, resource selection and used-mask
-membership, resolve audited edge policies, then final display/object
+null/absent distinctions and applicability; the service checks required inventory
+and used-S1 membership when the applicable target matches the supplied selection.
+Source-located checks cover explicit calls and glyphs inside default programs;
+only original synthesized MOT roots are exempt. Different-owner/null resolution
+remains open. Default roots retain their original owner instead of rebinding.
+Next implement authored MOT declarations and resource selection, resolve audited
+edge policies and prove declaration-to-selection consistency, then final display/object
 semantics, physical service allocation and the native compiler.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export

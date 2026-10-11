@@ -987,6 +987,25 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 used-S1 checkpoint: applicable real X27 declarations matching the
+supplied selected owner now require every effective explicit object invocation
+and DRCS reference to use an announced S1. Failures retain display/subcode, role,
+resource/S1 and original source object/command. Only synthesized direct MOT
+default-object roots are exempt; nested calls and glyphs inside defaults remain
+checked. Level-3.5-only, null or different-owner declarations do not invent a
+resolution policy. No new allocations, traversal or budget resets.
+All 378 focused domain/FFmpeg teletext tests pass (141 domain, 237 FFmpeg;
+three new regressions and 177 skipped) in Nextest
+c4e85faf-c860-4305-8638-c701fd4de2b5. Tests cover all four roles, all sixteen S1
+values, all three validities, announced/zero masks, default/nested source
+locations and the explicitly partial different-owner boundary. Strict domain
+all-target Clippy, workspace formatting and architecture-lint pass; independent
+correctness/budget/location review is clean. Existing v1 packet and presentation/
+lifting evidence is unchanged and passes. MOT declarations/resolution,
+declaration-to-selection consistency, final semantics, physical allocation,
+complete compiler/editor/preview/publication and actual client/browser/platform
+acceptance remain open. No milestone status/dependency/acceptance change.
+
 2026-10-11 authored X27/inventory checkpoint: private checked X27/4 declarations
 preserve four fixed roles, explicit real/null targets and null magazine, assigned
 validities and every 16-bit S1 requirement mask. Strict map-only JSON rejects

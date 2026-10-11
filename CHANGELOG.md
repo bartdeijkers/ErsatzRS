@@ -130,8 +130,10 @@ release section when tagging a release.
   panel metadata, default suppression and aggregate dependency budgets. Native
   presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
-  inventory validation retain exact masks and original default-object ownership;
-  complete enhanced-service compilation, editor
+  inventory validation retain exact masks and original default-object ownership.
+  Effective same-target object/glyph references require announced S1 values with
+  source-located diagnostics; original default roots retain their exemption.
+  Authored resource selection, complete enhanced-service compilation, editor
   workflows and client acceptance remain open.
 - Extend Phase 9 acceptance with per-channel teletext add-on bindings and named
   profiles, add-on-owned themes/overrides/custom zones, and shared admin/Lua

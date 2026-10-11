@@ -450,6 +450,170 @@ fn compositional_links(
 }
 
 #[test]
+fn effective_resource_usage_requires_announced_s1_for_all_four_roles() {
+    let display = address(200, 0x10);
+    for role in TeletextX27LinkRole::ALL {
+        for subpage in 0..16 {
+            let mut input = draft(&[display]);
+            let identity = resource(role.kind(), 0xa0, subpage);
+            let command = match role {
+                TeletextX27LinkRole::Pop | TeletextX27LinkRole::Gpop => {
+                    let target = if role == TeletextX27LinkRole::Pop {
+                        TeletextObjectIdentity::public(identity, TeletextObjectId::new(600))
+                            .unwrap()
+                    } else {
+                        TeletextObjectIdentity::global(identity, TeletextObjectId::new(600))
+                            .unwrap()
+                    };
+                    input
+                        .objects
+                        .push(definition(target, TeletextObjectType::Passive, vec![]));
+                    if role == TeletextX27LinkRole::Pop {
+                        input.pages[0].resources.objects.public = Some(raw(0xa0));
+                    } else {
+                        input.pages[0].resources.objects.global = Some(raw(0xa0));
+                    }
+                    invoke(target, TeletextObjectType::Passive)
+                }
+                TeletextX27LinkRole::Drcs | TeletextX27LinkRole::Gdrcs => {
+                    input.drcs.push(
+                        TeletextDrcsSubtable::new(
+                            identity,
+                            vec![TeletextDrcsGlyphDefinition {
+                                slot: TeletextDrcsGlyphSlot::new(0).unwrap(),
+                                bitmap: TeletextDrcsBitmap::new([0; 10]).unwrap(),
+                            }],
+                        )
+                        .unwrap(),
+                    );
+                    let scope = if role == TeletextX27LinkRole::Drcs {
+                        input.pages[0].resources.drcs =
+                            TeletextDrcsPageLinks::new(Some(raw(0xa0)), None).unwrap();
+                        TeletextDrcsTableScope::Normal
+                    } else {
+                        input.pages[0].resources.drcs =
+                            TeletextDrcsPageLinks::new(None, Some(raw(0xa0))).unwrap();
+                        TeletextDrcsTableScope::Global
+                    };
+                    TeletextEnhancementCommand::AtColumn {
+                        column: 0,
+                        operation: TeletextColumnOperation::Drcs {
+                            reference: TeletextDrcsGlyphReference {
+                                table: scope,
+                                subtable: TeletextDrcsSubtableIndex::new(subpage).unwrap(),
+                                slot: TeletextDrcsGlyphSlot::new(0).unwrap(),
+                            },
+                        },
+                    }
+                }
+            };
+            input.pages[0].local_program = Some(program(vec![command]));
+            for validity in [
+                TeletextX27LinkValidity::Level25Only,
+                TeletextX27LinkValidity::Level25And35,
+                TeletextX27LinkValidity::Level35Only,
+            ] {
+                for mask in [0, 1 << subpage] {
+                    input.pages[0].compositional_links = Some(compositional_links(
+                        role,
+                        compositional_link(
+                            TeletextX27LinkTarget::Page { page: raw(0xa0) },
+                            mask,
+                            validity,
+                        ),
+                    ));
+                    let result = TeletextSemanticService::new(input.clone(), budget());
+                    if mask == 0 && validity.applies_at_level25() {
+                        assert!(
+                            matches!(result, Err(TeletextServiceError::CompositionalUsage {
+                            display: owner, role: actual_role, page, subpage: actual_s1,
+                            source_location: TeletextEnhancementSource { object: None, command: 0 },
+                        }) if owner == display && actual_role == role && page == raw(0xa0) && actual_s1.get() == subpage)
+                        );
+                    } else {
+                        result.unwrap();
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn default_root_mask_exception_does_not_exempt_nested_calls_or_glyphs() {
+    let display = address(200, 1);
+    let root = global(0xa0, 900);
+    let mut input = draft(&[display]);
+    input.pages[0].resources.defaults[0] = Some(selection(root, TeletextObjectType::Active));
+    input.pages[0].resources.objects.global = Some(raw(0xa0));
+    input.pages[0].compositional_links = Some(compositional_links(
+        TeletextX27LinkRole::Gpop,
+        compositional_link(
+            TeletextX27LinkTarget::Page { page: raw(0xa0) },
+            0,
+            TeletextX27LinkValidity::Level25Only,
+        ),
+    ));
+    input
+        .objects
+        .push(definition(root, TeletextObjectType::Active, vec![]));
+    TeletextSemanticService::new(input.clone(), budget()).unwrap();
+    let child = global(0xa0, 901);
+    input
+        .objects
+        .push(definition(child, TeletextObjectType::Passive, vec![]));
+    input.objects[0].program = program(vec![invoke(child, TeletextObjectType::Passive)]);
+    assert!(
+        matches!(TeletextSemanticService::new(input.clone(), budget()), Err(TeletextServiceError::CompositionalUsage {
+        role: TeletextX27LinkRole::Gpop,
+        source_location: TeletextEnhancementSource { object: Some(owner), command: 0 }, ..
+    }) if owner == root)
+    );
+
+    input.objects[0].program = program(vec![drcs(0)]);
+    input.pages[0].resources.drcs = TeletextDrcsPageLinks::new(Some(raw(0xb0)), None).unwrap();
+    input.drcs.push(table(0xb0, 0, 0));
+    input.pages[0].compositional_links = Some(compositional_links(
+        TeletextX27LinkRole::Drcs,
+        compositional_link(
+            TeletextX27LinkTarget::Page { page: raw(0xb0) },
+            0,
+            TeletextX27LinkValidity::Level25Only,
+        ),
+    ));
+    assert!(
+        matches!(TeletextSemanticService::new(input, budget()), Err(TeletextServiceError::CompositionalUsage {
+        role: TeletextX27LinkRole::Drcs,
+        source_location: TeletextEnhancementSource { object: Some(owner), command: 0 }, ..
+    }) if owner == root)
+    );
+}
+
+#[test]
+fn declaration_mask_does_not_invent_a_resolution_for_a_different_selected_owner() {
+    let display = address(200, 0);
+    let selected = public(0xa0, 0, 600);
+    let mut input = draft(&[display]);
+    input.pages[0].resources.objects.public = Some(raw(0xa0));
+    input.pages[0].local_program =
+        Some(program(vec![invoke(selected, TeletextObjectType::Passive)]));
+    input
+        .objects
+        .push(definition(selected, TeletextObjectType::Passive, vec![]));
+    input.pages[0].compositional_links = Some(compositional_links(
+        TeletextX27LinkRole::Pop,
+        compositional_link(
+            TeletextX27LinkTarget::Page { page: raw(0xb0) },
+            0,
+            TeletextX27LinkValidity::Level25Only,
+        ),
+    ));
+    // This semantic input already supplies selection. A future resolver must
+    // prove why it differs; this validator cannot infer a missing MOT flag.
+    TeletextSemanticService::new(input, budget()).unwrap();
+}
+
+#[test]
 fn authored_x27_required_inventory_is_checked_even_without_effective_references() {
     let display = address(200, 0x10);
     for role in TeletextX27LinkRole::ALL {

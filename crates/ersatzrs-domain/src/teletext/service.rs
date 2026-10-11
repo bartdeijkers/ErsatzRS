@@ -12,10 +12,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{
     TeletextCharsetValueError, TeletextCollectedDrcsError, TeletextCollectedEnhancementReferences,
     TeletextDrcsCatalog, TeletextDrcsPageLinks, TeletextDrcsResourceError, TeletextDrcsSubtable,
-    TeletextEnhancementCollectionBudget, TeletextEnhancementCollectionError,
-    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
-    TeletextEnhancementObjectDefinition, TeletextEnhancementProgram,
-    TeletextEnhancementProgramError, TeletextEnhancementSource,
+    TeletextDrcsTableScope, TeletextEnhancementCollectionBudget,
+    TeletextEnhancementCollectionError, TeletextEnhancementCommand,
+    TeletextEnhancementObjectCatalog, TeletextEnhancementObjectDefinition,
+    TeletextEnhancementProgram, TeletextEnhancementProgramError, TeletextEnhancementSource,
     TeletextLevel25PresentationDefaults, TeletextNationalOption, TeletextObjectCatalogBudget,
     TeletextObjectCatalogError, TeletextObjectIdentity, TeletextObjectScope, TeletextObjectType,
     TeletextPageAddress, TeletextPageCharsetDesignation, TeletextPageDraft, TeletextPageSetDraft,
@@ -213,6 +213,14 @@ pub enum TeletextServiceError {
         page: TeletextRawDataPageNumber,
         subpage: TeletextResourceSubpageIndex,
     },
+    #[error("teletext display {display:?}, source {source_location:?}, X27 {role:?} does not announce used resource {page}/{subpage:?}")]
+    CompositionalUsage {
+        display: TeletextPageAddress,
+        role: TeletextX27LinkRole,
+        page: TeletextRawDataPageNumber,
+        subpage: TeletextResourceSubpageIndex,
+        source_location: TeletextEnhancementSource,
+    },
     #[error(
         "teletext display {display:?}, default slot {slot}: target {target:?} has wrong scope"
     )]
@@ -365,6 +373,7 @@ impl TeletextSemanticService {
                         program_source: program_source.clone(),
                         error,
                     })?;
+                validate_compositional_usage(enhancement, &program_source, &refs)?;
             }
             remaining_work -= refs.command_count();
             remaining_references -= refs.references().len();
@@ -557,6 +566,70 @@ fn validate_compositional_inventory(
                     subpage,
                 });
             }
+        }
+    }
+    Ok(())
+}
+
+/// Check only an applicable declaration for the same supplied selected owner.
+/// A different owner or null still requires the separate MOT/X27 resolver.
+fn validate_compositional_usage(
+    page: &TeletextResolvedPageEnhancementDraft,
+    program_source: &TeletextEffectiveProgramSource,
+    refs: &TeletextCollectedEnhancementReferences,
+) -> Result<(), TeletextServiceError> {
+    let Some(links) = page.compositional_links else {
+        return Ok(());
+    };
+    let check = |role: TeletextX27LinkRole,
+                 target: TeletextRawDataPageNumber,
+                 subpage: TeletextResourceSubpageIndex,
+                 source_location: TeletextEnhancementSource| {
+        let link = links.link(role);
+        if link.validity().applies_at_level25()
+            && link.target() == (TeletextX27LinkTarget::Page { page: target })
+            && !link.required_subpages().requires(subpage)
+        {
+            return Err(TeletextServiceError::CompositionalUsage {
+                display: page.address,
+                role,
+                page: target,
+                subpage,
+                source_location,
+            });
+        }
+        Ok(())
+    };
+    for invocation in refs.object_references() {
+        if matches!(
+            program_source,
+            TeletextEffectiveProgramSource::Defaults { .. }
+        ) && invocation.source_location.object.is_none()
+        {
+            // Original MOT defaults are not explicit X27-selected root calls.
+            continue;
+        }
+        if let Some(resource) = invocation.target.resource() {
+            let role = match invocation.target.scope() {
+                TeletextObjectScope::Public => TeletextX27LinkRole::Pop,
+                TeletextObjectScope::Global => TeletextX27LinkRole::Gpop,
+                TeletextObjectScope::Local => continue,
+            };
+            check(
+                role,
+                resource.page(),
+                resource.logical_subpage(),
+                invocation.source_location,
+            )?;
+        }
+    }
+    for (reference, source_location) in refs.references().iter().zip(refs.sources()) {
+        if let Some(target) = page.resources.drcs.page(reference.table) {
+            let role = match reference.table {
+                TeletextDrcsTableScope::Normal => TeletextX27LinkRole::Drcs,
+                TeletextDrcsTableScope::Global => TeletextX27LinkRole::Gdrcs,
+            };
+            check(role, target, reference.subtable.into(), *source_location)?;
         }
     }
     Ok(())
