@@ -331,6 +331,63 @@ attribute bundle. Level 1.5 interpretation and physical equivalence still need
 separate proof. Full per-attribute inheritance/arbitration, geometry and both
 receiver views remain required before encoding/publication acceptance.
 
+### G1 alphabet positions and independent decoding
+
+EN 300 706 tables 29 and 47 distinguish G1 alphabetic positions `0x40..0x5F`
+from six-bit mosaics. `TeletextG1AlphaCode` checks that complete assigned range;
+`G1Alpha` preserves the original mode `0x01`. It is ignored at Level 1.5, uses
+the current G0 without national substitution at Level 2.5 and uses D5 for
+underline. It must not become a compatible G0/diacritic operation. Existing
+`G1 { mosaic }` payloads and their six-bit meaning remain unchanged.
+
+Glyph layers and Passive attribute execution retain the original alphabet
+contender, source and invocation. Main composition keeps the existing Base
+Unicode replacement before this enhanced-only glyph. These primitives do not
+resolve current G0/G2 lifetimes, rasterize non-Latin alphabets or prove D5
+underline. Those requirements remain open without restricting the engine target.
+
+The production-composed fixture uses a German national subset, Base `é£Z` and
+original G1 `0x40`/`0x5F`. The unchanged Linux x64 libzvbi 0.2.42 object oracle
+returns exact Latin `@`/`_`, their colours and unchanged `Z`. Its public ABI and
+version guards remain in effect; this is selected-cell decoding, not client
+navigation, pixels, non-Latin repertoire or underline acceptance.
+
+Pinned teletextimager 0.2.0 routes mode `0x01` to font 24/25 even at alphabetic
+positions; both G1 font files have zero glyph metrics throughout `0x40..0x5F`.
+Its renderer therefore cannot display these alphabet characters. The original
+positive oracle failed (Nextest `54866d6e-6df0-42be-992d-78c28f73b090`); accepting
+font 24 as an equivalent alphabet would hide that defect. The separate named
+limitation test exports the unchanged conformant expectations, then reproduces
+exact observed font-24 cells with **identical production units**. Level 1.5 still
+checks Base `é£Z`. That diagnostic pass proves no Level 2.5 alphabet rendering.
+
+Native replay passes five tests (Nextest
+`b080b056-cccc-4fad-8a1e-a478583f49bb`): the new libzvbi positive case, the named
+imager limitation diagnostic and all three existing base/composition tests.
+Their original fixture hashes remain unchanged. New request SHA256 values are:
+
+| Request | SHA256 |
+| --- | --- |
+| Correct imager conformance oracle | `9c45fb44798ae6c1331e53f2b496ac03fe4bdd3be7322f86a918eb1ed0f147e1` |
+| Imager limitation diagnostic | `6d900b0f584628a8d4948e9c2f1a13e7b5742f7d7cab66cf1e5fc946b9cb76f9` |
+| libzvbi positive oracle | `d4fd38a296113767068525a162678d5bd2e515d8f044d76a30b4ac73f6d3843d` |
+
+Use the existing pinned imager checkout and a chosen temporary evidence directory
+with the existing composed-page replay command, adding these optional exports:
+
+```sh
+export ERSATZRS_TELETEXT_TEST_G1_ALPHA_CONFORMANCE_FIXTURE="$TELETEXT_EVIDENCE_DIR/g1-conformance.json"
+export ERSATZRS_TELETEXT_TEST_G1_ALPHA_IMAGER_DIAGNOSTIC_FIXTURE="$TELETEXT_EVIDENCE_DIR/g1-imager-diagnostic.json"
+export ERSATZRS_TELETEXT_TEST_G1_ALPHA_LIBZVBI_FIXTURE="$TELETEXT_EVIDENCE_DIR/g1-libzvbi.json"
+```
+
+The unmodified main-composition helper can replay either imager request; only
+the diagnostic is expected to pass on that pinned version. The unmodified
+object helper replays the libzvbi request. All three requests carry identical
+production packet bytes and exact owner identities. Neither decoder is a runtime
+dependency or mandatory acceptance client. Full versioned suitable-client
+rendering/navigation and transport checks remain separate required evidence.
+
 ### Original attribute execution
 
 `resolve_teletext_attribute_execution` keeps character precedence separate from

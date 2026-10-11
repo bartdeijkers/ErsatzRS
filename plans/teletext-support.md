@@ -173,6 +173,12 @@ defaults and located pending C2/Adaptive-extent diagnostics. Next settle pending
 transmission and endpoint rules, execute character-set lifetimes, validate object
 overlap/areas and size footprints, and normalize the physical instructions against
 both receiver views. Full display/publication acceptance remains open.
+The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
+selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
+alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.
+Next execute current G0/G2 designation lifetimes for every original contender,
+including shared spatial Local/Active state and fresh private object state. Prove
+non-Latin G1 and D5 underline separately; do not rewrite G1 as a compatible glyph.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

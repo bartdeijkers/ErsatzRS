@@ -10,21 +10,20 @@ guide pages 200–299. Add-ons own content; the host owns validation/publication
 delivery and read-only guides. Source subtitle gates remain. ADR 0123
 reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMaker
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
-display/navigation are required; Kodi is optional. P9A-02 is In progress; four
-milestones are Not started. Acceptance remains open.
+display/navigation are required; Kodi is optional. P9A-02 is In progress; four milestones remain Not started.
 
 Checked values/programs and bounded object/DRCS traversal underpin the service.
 v1 lifting retains presence/bytes; DRCS retains geometry/lifecycle/last rows.
 POP/GPOP writers preserve pointers, metadata, fresh object state and companions.
 Local definitions share one bounded X26 sequence with exact forward references.
-Eight libzvbi 0.2.42 object cases
-decode all scope/type combinations and nested origins; nine DRCS cases retain
-identical bytes. Local types fail .42 rendering; a same-byte diagnostic retains the oracle.
+Eight libzvbi object cases cover types/nested origins; nine DRCS cases retain
+bytes. Local .42 rendering fails; a diagnostic retains the correct oracle.
 Pinned teletextimager decodes direct types, high designations and nested origins
 with source guards. Main composition preserves AP/charset/provenance;
 same-service packing restores rows with exact pointers/capacity. Base/spatial/glyph traces retain fallback, intent, spacing, instances and sources.
-The consumed attribute executor separates four-group inheritance and panel
-defaults; C2/Adaptive endpoint diagnostics remain pending. Charset execution,
+The attribute executor separates four-group inheritance/panel defaults;
+C2/Adaptive endpoints remain pending. G1 alphabets preserve mode/base fallback;
+Latin cells pass libzvbi, with a separate imager font-gap diagnostic. Charset execution,
 overlap/geometry, header normalization, physical equivalence, X27 and scheduling
 remain open.
 X27 preserves masks/used S1; MOT retains full banks/defaults/raw fields and IDs.
@@ -38,8 +37,7 @@ Shared app controls compose isolated channel drafts; native encoding retains the
 same pages. Guide bounds pass. Acquisition, activation, other
 regions, link CRC, UI/Lua and publication remain open.
 
-Report-only metadata/SQLite preserves tracks, exact source ownership, raw data
-and scan leases. Missing records prove no absence; revisions certify no bytes;
+Report-only SQLite retains tracks, exact ownership/raw data and scan leases. Missing records prove no absence; revisions certify no bytes;
 pages remain NotAcquired. Explicit-PID TS/PES/header parsing retains flags/subcodes/
 missing PTS, not source identity, readiness or inventory. Bounds follow JSON decode,
 not input/child RSS. Acquisition/revisions/selection remain open; auxiliary failure

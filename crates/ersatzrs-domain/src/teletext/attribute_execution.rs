@@ -584,6 +584,7 @@ fn is_glyph(operation: TeletextColumnOperation) -> bool {
         operation,
         TeletextColumnOperation::G0 { .. }
             | TeletextColumnOperation::G1 { .. }
+            | TeletextColumnOperation::G1Alpha { .. }
             | TeletextColumnOperation::G2 { .. }
             | TeletextColumnOperation::G3 { .. }
             | TeletextColumnOperation::G0Diacritic { .. }

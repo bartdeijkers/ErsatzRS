@@ -329,6 +329,117 @@ async fn composed_main_program_decodes_with_pinned_independent_teletextimager() 
     );
 }
 
+fn g1_alphabet_case() -> serde_json::Value {
+    encoded_case_with_context(
+        "g1_alphabet_mode_one",
+        vec![text(1, 8, "é£Z"), text(2, 1, "B")],
+        vec![
+            position(1, 8),
+            at(
+                8,
+                TeletextColumnOperation::G1Alpha {
+                    code: TeletextG1AlphaCode::new(0x40).unwrap(),
+                },
+            ),
+            at(
+                9,
+                TeletextColumnOperation::G1Alpha {
+                    code: TeletextG1AlphaCode::new(0x5f).unwrap(),
+                },
+            ),
+        ],
+        vec![],
+        &[
+            cell(1, 8, [b'e', 0, 2, 7, 0], [0x40, 0, 0, 7, 0]),
+            cell(1, 9, [0x23, 7, 0, 7, 0], [0x5f, 0, 0, 7, 0]),
+            cell(1, 10, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, 7, 0]),
+        ],
+        true,
+    )
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn pinned_imager_g1_alphabet_limitation_preserves_level15_fallback() {
+    let mut case = g1_alphabet_case();
+    // Preserve the correct conformance oracle. The pinned decoder routes all
+    // G1 codes to its mosaic font; its alphabetic entries have no glyph metrics.
+    // Observed set 24 below reproduces that failure, not G1 rendering support.
+    let conformance = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.0", "cases":[case.clone()],
+    }))
+    .unwrap();
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_G1_ALPHA_CONFORMANCE_FIXTURE",
+    ]) {
+        std::fs::write(path, &conformance).unwrap();
+    }
+    case["cells"][0]["l25"][1] = serde_json::json!(24);
+    case["cells"][1]["l25"][1] = serde_json::json!(24);
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.0", "cases":[case],
+    }))
+    .unwrap();
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_G1_ALPHA_IMAGER_DIAGNOSTIC_FIXTURE",
+    ]) {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
+        "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317","cases_passed":1,"levels":["1.5","2.5"]})
+    );
+    println!(
+        "Pinned G1 alphabet decoder limitation reproduced; Level 1.5 fallback retained: {report}"
+    );
+}
+
+// Intentional Linux x64 exception: the frozen public ctypes ABI oracle is
+// calibrated only for that native layout, as in the existing object proof.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly calibrated native libzvbi decoder"]
+async fn g1_alphabet_decodes_without_national_substitutions_with_libzvbi() {
+    let mut case = g1_alphabet_case();
+    case["cells"] = serde_json::json!([
+        {"row":1,"column":8,"unicode":64,"foreground":7,"background":0},
+        {"row":1,"column":9,"unicode":95,"foreground":7,"background":0},
+        {"row":1,"column":10,"unicode":90,"foreground":7,"background":0},
+    ]);
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.42", "cases":[case],
+    }))
+    .unwrap();
+    if let Some(path) =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_G1_ALPHA_LIBZVBI_FIXTURE"])
+    {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({"decoder_version":"0.2.42","cases_passed":1})
+    );
+}
+
 fn contextual_cases() -> Vec<serde_json::Value> {
     let pound = [0x23, 7, 0, 7, 0];
     let white = [b'Z', 15, 0, 7, 0];

@@ -1205,3 +1205,43 @@ fn new_background_keeps_raw_base_foreground_when_nonspacing_colour_changes_displ
     ));
     assert_eq!(service, before);
 }
+
+#[test]
+fn enhanced_g1_alphabet_preserves_unicode_base_replacement_before_original_mode_one() {
+    let alpha = at(
+        8,
+        TeletextColumnOperation::G1Alpha {
+            code: TeletextG1AlphaCode::new(0x40).unwrap(),
+        },
+    );
+    let service = Fixture::new(vec![text(1, 8, "é")], Some(vec![position(1, 8), alpha])).build();
+    let before = service.clone();
+    let plan = compose(&service);
+    assert_eq!(
+        plan.program().commands(),
+        &[position(1, 8), accent(8), alpha]
+    );
+    assert_eq!(originals(&plan), &[position(1, 8), alpha]);
+    let candidates = plan.glyph_layers().candidates_at(1, 8);
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(candidates[0].priority(), TeletextGlyphPriority::Base);
+    assert_eq!(
+        candidates[0].base().unwrap().authored().unwrap().content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    assert_eq!(candidates[1].priority(), TeletextGlyphPriority::Local);
+    assert_eq!(
+        candidates[1].operation(),
+        Some(TeletextColumnOperation::G1Alpha {
+            code: TeletextG1AlphaCode::new(0x40).unwrap(),
+        })
+    );
+    assert_eq!(
+        candidates[1].source(),
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 1
+        })
+    );
+    assert_eq!(service, before);
+}

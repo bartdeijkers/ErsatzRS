@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     TeletextColourReference, TeletextDiacriticIndex, TeletextDrcsGlyphReference,
-    TeletextEnhancementCharsetDesignation, TeletextEnhancementPosition, TeletextGlyphCode,
-    TeletextMosaic, TeletextObjectIdentity, TeletextObjectOffset, TeletextObjectType,
+    TeletextEnhancementCharsetDesignation, TeletextEnhancementPosition, TeletextG1AlphaCode,
+    TeletextGlyphCode, TeletextMosaic, TeletextObjectIdentity, TeletextObjectOffset,
+    TeletextObjectType,
 };
 
 /// A command has an out-of-range row or column; ordinal is zero-based.
@@ -84,6 +85,10 @@ pub enum TeletextColumnOperation {
     },
     G1 {
         mosaic: TeletextMosaic,
+    },
+    /// Level 2.5 G1 alphabetic position, using current G0 and nonspacing D5.
+    G1Alpha {
+        code: TeletextG1AlphaCode,
     },
     G2 {
         code: TeletextGlyphCode,

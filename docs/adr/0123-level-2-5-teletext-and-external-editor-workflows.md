@@ -120,6 +120,14 @@ uncertain Adaptive endpoints remain typed pending diagnostics. Potential panel
 areas use independent standard defaults. This is a bounded semantic intermediate,
 not character-set execution, geometry/overlap acceptance, physical normalization
 or publication authority; see the interchange reference and milestone evidence.
+G1 alphabetic positions now have a separate checked operation, preserving mode
+0x01 rather than promoting them to a Level 1.5-compatible character command.
+Original glyph/Passive attribute execution retains this intent; composition keeps
+base Unicode fallback. Independent libzvbi 0.2.42 proves selected Latin positions
+without national substitution. A separate teletextimager 0.2.0 diagnostic records
+its empty-G1-font limitation while proving unchanged Level 1.5 fallback. Current
+G0 selection, non-Latin alphabets and D5 underline still require full execution
+and receiver proof; the interchange reference records the distinct evidence.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

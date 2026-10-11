@@ -801,3 +801,61 @@ fn header_panel_coordinate_is_retained_but_not_logically_addressable() {
     );
     assert_eq!(layers.candidates_at(0, 71)[0].position(), (0, 71));
 }
+
+#[test]
+fn g1_alpha_candidate_keeps_original_priority_source_and_distinct_mosaic_operation() {
+    let target = local(0xffff);
+    let alpha = TeletextColumnOperation::G1Alpha {
+        code: TeletextG1AlphaCode::new(0x41).unwrap(),
+    };
+    let mosaic = TeletextColumnOperation::G1 {
+        mosaic: TeletextMosaic::new(0x21).unwrap(),
+    };
+    let service = service(
+        Some(vec![
+            set(1, 8),
+            at(8, alpha),
+            at(9, mosaic),
+            invoke(target, TeletextObjectType::Passive, Some((0, 1))),
+        ]),
+        vec![definition(
+            target,
+            TeletextObjectType::Passive,
+            vec![at(0, alpha)],
+        )],
+        [None; 4],
+        false,
+    );
+    let before = service.clone();
+    let layers = layers(&service);
+    let local = layers.highest_priority_candidate(1, 8).unwrap();
+    assert_eq!(local.operation(), Some(alpha));
+    assert_eq!(local.priority(), TeletextGlyphPriority::Local);
+    assert_eq!(
+        local.source(),
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 1
+        })
+    );
+    assert_eq!(
+        layers.highest_priority_candidate(1, 9).unwrap().operation(),
+        Some(mosaic)
+    );
+    let passive = layers.highest_priority_candidate(1, 10).unwrap();
+    assert_eq!(passive.operation(), Some(alpha));
+    assert_eq!(passive.priority(), TeletextGlyphPriority::Passive);
+    assert_eq!(
+        passive.source(),
+        Some(TeletextEnhancementSource {
+            object: Some(target),
+            command: 0
+        })
+    );
+    assert_eq!(
+        passive.root_source(),
+        Some(TeletextSpatialRootSource::Local { command: 3 })
+    );
+    assert_eq!(passive.invocation().unwrap().get(), 0);
+    assert_eq!(service, before);
+}

@@ -590,6 +590,7 @@ impl LoweringState {
                 let blocks = mosaic.blocks();
                 (1, 0x20 | (blocks & 31) | ((blocks & 32) << 1))
             }
+            TeletextColumnOperation::G1Alpha { code } => (1, code.get()),
             TeletextColumnOperation::G2 { code } => (15, code.get()),
             TeletextColumnOperation::G3 {
                 code,

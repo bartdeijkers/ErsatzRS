@@ -1413,3 +1413,48 @@ fn adaptive_uncertain_tail_retains_original_override_transmission_tie_chain() {
     );
     assert_eq!(tie.invocation().unwrap().get(), 0);
 }
+
+#[test]
+fn passive_g1_alpha_glyph_uses_private_colours_without_inheriting_local_attributes() {
+    let target = local(0xffff);
+    let alpha = TeletextColumnOperation::G1Alpha {
+        code: TeletextG1AlphaCode::new(0x40).unwrap(),
+    };
+    let service = service(
+        vec![
+            set(1, 5),
+            foreground(5, 13),
+            at(
+                5,
+                TeletextColumnOperation::Background {
+                    colour: TeletextColourReference::new(6).unwrap(),
+                },
+            ),
+            invoke(target, TeletextObjectType::Passive, None),
+        ],
+        vec![definition(
+            target,
+            TeletextObjectType::Passive,
+            vec![at(0, alpha), foreground(1, 3), at(1, alpha)],
+        )],
+    );
+    let execution = execute(&service, &base(), 128).unwrap();
+    let first = execution.cell(1, 5).unwrap();
+    assert_eq!(first.foreground().value().unwrap().get(), 7);
+    assert_eq!(first.background().value().unwrap().get(), 0);
+    assert!(
+        matches!(first.foreground().source(), Some(TeletextAttributeSource::PassiveDefault { invocation }) if invocation.get() == 0)
+    );
+    let second = execution.cell(1, 6).unwrap();
+    assert_eq!(second.foreground().value().unwrap().get(), 3);
+    assert_eq!(second.background().value().unwrap().get(), 0);
+    assert!(
+        matches!(second.foreground().source(), Some(TeletextAttributeSource::Enhancement {
+        location: TeletextEnhancementSource { object: Some(object), command: 1 },
+        invocation: Some(id), ..
+    }) if object == target && id.get() == 0)
+    );
+    let gap = execution.cell(1, 7).unwrap();
+    assert_eq!(gap.foreground().value().unwrap().get(), 13);
+    assert_eq!(gap.background().value().unwrap().get(), 6);
+}

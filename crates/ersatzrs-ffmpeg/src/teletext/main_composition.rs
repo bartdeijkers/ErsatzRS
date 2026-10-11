@@ -513,6 +513,7 @@ fn enhanced_glyph(operation: TeletextColumnOperation) -> bool {
         operation,
         TeletextColumnOperation::G0 { .. }
             | TeletextColumnOperation::G1 { .. }
+            | TeletextColumnOperation::G1Alpha { .. }
             | TeletextColumnOperation::Drcs { .. }
             | TeletextColumnOperation::G3 {
                 compatibility: TeletextG3Compatibility::Level25,

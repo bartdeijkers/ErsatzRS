@@ -312,6 +312,7 @@ fn glyph_operation(event: TeletextSpatialEvent) -> Option<TeletextColumnOperatio
             operation:
                 operation @ (TeletextColumnOperation::G0 { .. }
                 | TeletextColumnOperation::G1 { .. }
+                | TeletextColumnOperation::G1Alpha { .. }
                 | TeletextColumnOperation::G2 { .. }
                 | TeletextColumnOperation::G3 { .. }
                 | TeletextColumnOperation::G0Diacritic { .. }

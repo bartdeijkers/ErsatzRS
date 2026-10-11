@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use super::{
     TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
     TeletextEnhancementPosition, TeletextEnhancementProgram, TeletextEnhancementProgramError,
+    TeletextG1AlphaCode,
 };
 
 fn operation_fixtures() -> Vec<Value> {
@@ -313,4 +314,33 @@ fn empty_and_large_programs_leave_resource_budget_to_the_caller() {
     };
     let program = TeletextEnhancementProgram::new(vec![command; 2048]).unwrap();
     assert_eq!(program.commands().len(), 2048);
+}
+
+#[test]
+fn g1_alpha_program_preserves_distinct_closed_operation_and_checked_code() {
+    let raw = operation_program(&json!({"kind": "g1_alpha", "code": 95}));
+    let program: TeletextEnhancementProgram = serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!(
+        program.commands(),
+        &[TeletextEnhancementCommand::AtColumn {
+            column: 7,
+            operation: TeletextColumnOperation::G1Alpha {
+                code: TeletextG1AlphaCode::new(0x5f).unwrap()
+            },
+        }]
+    );
+    assert_eq!(serde_json::to_value(program).unwrap(), raw);
+    for invalid in [
+        json!({"kind": "g1_alpha", "code": 63}),
+        json!({"kind": "g1_alpha", "code": 96}),
+        json!({"kind": "g1_alpha", "code": 192}),
+        json!({"kind": "g1_alpha", "code": [64]}),
+        json!({"kind": "g1_alpha", "code": 64, "mosaic": 0}),
+        json!({"kind": "g1_alpha", "mosaic": 0}),
+    ] {
+        assert!(
+            serde_json::from_value::<TeletextEnhancementProgram>(operation_program(&invalid))
+                .is_err()
+        );
+    }
 }

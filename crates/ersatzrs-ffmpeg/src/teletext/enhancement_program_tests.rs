@@ -196,6 +196,23 @@ fn all_column_operation_families_preserve_modes_and_reserved_bits() {
 }
 
 #[test]
+fn g1_alphabet_boundaries_preserve_mode_one_without_a_compatible_diacritic_rewrite() {
+    for value in [0x40, 0x5f] {
+        let actual = encoded(vec![
+            position(1, 8),
+            at(
+                8,
+                TeletextColumnOperation::G1Alpha {
+                    code: TeletextG1AlphaCode::new(value).unwrap(),
+                },
+            ),
+        ]);
+        assert_eq!(&actual[..2], &[(41, 4, 8), (8, 1, value)]);
+        assert!(actual[2..].iter().all(|word| *word == (63, 31, 7)));
+    }
+}
+
+#[test]
 fn every_flash_combination_and_diacritic_index_is_preserved() {
     let modes = [
         TeletextFlashMode::Steady,

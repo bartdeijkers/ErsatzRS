@@ -4,8 +4,8 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::{
-    TeletextEnhancementGeometryError, TeletextEnhancementPosition, TeletextGlyphCode,
-    TeletextObjectOffset,
+    TeletextEnhancementGeometryError, TeletextEnhancementPosition, TeletextG1AlphaCode,
+    TeletextGlyphCode, TeletextObjectOffset,
 };
 
 #[test]
@@ -203,4 +203,48 @@ fn geometry_errors_retain_numeric_positions_without_clipping() {
         TeletextGlyphCode::new(0xa0).unwrap_err().to_string(),
         "teletext glyph code A0 must be between 20 and 7F hexadecimal"
     );
+}
+
+#[test]
+fn g1_alpha_codes_accept_exact_alphanumeric_columns_without_masking() {
+    for code in 0..=u8::MAX {
+        let result = TeletextG1AlphaCode::new(code);
+        if (0x40..=0x5f).contains(&code) {
+            let checked = result.unwrap();
+            assert_eq!(checked.get(), code);
+            assert_eq!(u8::from(checked), code);
+            assert_eq!(
+                serde_json::from_value::<TeletextG1AlphaCode>(json!(code)).unwrap(),
+                checked
+            );
+            assert_eq!(serde_json::to_value(checked).unwrap(), json!(code));
+        } else {
+            assert_eq!(
+                result,
+                Err(TeletextEnhancementGeometryError::G1AlphaCode { code })
+            );
+            assert!(serde_json::from_value::<TeletextG1AlphaCode>(json!(code)).is_err());
+        }
+    }
+}
+
+#[test]
+fn g1_alpha_json_requires_a_checked_integer_scalar_without_truncation() {
+    for raw in [
+        "-1",
+        "256",
+        "64.5",
+        "null",
+        "false",
+        "\"64\"",
+        "[]",
+        "[64]",
+        "{}",
+        "{\"code\":64}",
+    ] {
+        assert!(
+            serde_json::from_str::<TeletextG1AlphaCode>(raw).is_err(),
+            "{raw}"
+        );
+    }
 }

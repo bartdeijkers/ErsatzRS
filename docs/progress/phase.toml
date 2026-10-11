@@ -1200,6 +1200,13 @@ defaults. Pending C2 transmission ties and Adaptive AP-only endpoints remain
 explicit; settle these, then execute character-set lifetimes, validate overlap,
 areas and footprints, and normalize physical instructions for both receiver
 views. This does not close rendering, publication or engine acceptance.
+Checked G1 alphabet positions now preserve original mode 0x01, source/invocation
+and Base fallback. Selected Latin @/_ cells pass independent libzvbi 0.2.42;
+pinned imager's empty alphabet-font limitation is a separate diagnostic, with
+unchanged Level 1.5 fallback. Next execute G0/G2 lifetimes for all contenders,
+including shared spatial Local/Active designation state and fresh private object
+state, then prove non-Latin alphabets and D5 underline. No engine restriction or
+rendering/publication acceptance is implied.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

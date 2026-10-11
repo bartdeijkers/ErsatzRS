@@ -22,6 +22,9 @@ pub enum TeletextEnhancementGeometryError {
     /// A glyph code is not a Unicode scalar or a character-set designation.
     #[error("teletext glyph code {code:02X} must be between 20 and 7F hexadecimal")]
     GlyphCode { code: u8 },
+    /// Alphabetic G1 positions use current G0 without national substitution.
+    #[error("teletext G1 alphabetic code {code:02X} must be between 40 and 5F hexadecimal")]
+    G1AlphaCode { code: u8 },
 }
 
 /// Relative main-area enhancement position; object origin is resolved later.
@@ -165,6 +168,46 @@ impl TryFrom<u8> for TeletextGlyphCode {
 
 impl From<TeletextGlyphCode> for u8 {
     fn from(value: TeletextGlyphCode) -> Self {
+        value.get()
+    }
+}
+
+/// Alphabetic positions 0x40–0x5f within the Level 2.5 G1 mode (table 47).
+///
+/// These select the current G0 without national substitution; D5 supplies
+/// underline. This scalar does not resolve a repertoire, glyph or raster, and
+/// must not be normalized to a Level 1.5 G0/diacritic operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct TeletextG1AlphaCode(u8);
+
+impl TeletextG1AlphaCode {
+    /// Preserve a checked alphabetic G1 position without masking high bits.
+    /// # Errors
+    /// Returns `G1AlphaCode` outside 0x40–0x5f.
+    pub fn new(code: u8) -> Result<Self, TeletextEnhancementGeometryError> {
+        if (0x40..=0x5f).contains(&code) {
+            Ok(Self(code))
+        } else {
+            Err(TeletextEnhancementGeometryError::G1AlphaCode { code })
+        }
+    }
+
+    /// Exact transmitted alphabetic position, not a Unicode character.
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
+
+impl TryFrom<u8> for TeletextG1AlphaCode {
+    type Error = TeletextEnhancementGeometryError;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<TeletextG1AlphaCode> for u8 {
+    fn from(value: TeletextG1AlphaCode) -> Self {
         value.get()
     }
 }
