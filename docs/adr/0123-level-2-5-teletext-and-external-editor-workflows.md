@@ -17,8 +17,12 @@ subtable/glyph limits. Ordered enhancement programs, checked charset designation
 and local/public/global object identities now support checked definition closure
 and bounded transitive reference collection. Per-display primary/X26 pair and
 per-type invocation limits are enforced; collected DRCS failures retain their
-source command. Resolved display semantics, complete service allocation, enhanced
-encoding and editor/publication workflows remain unimplemented. Existing
+source command. Checked presentation declarations retain page/magazine presence,
+colour remapping and raw panel metadata. A semantic service composes the unchanged
+base set with explicitly supplied resolved resource selections and validates their
+aggregate ownership, budgets and effective dependencies. MOT/X27 resolution,
+resolved display semantics, physical allocation, enhanced encoding and
+editor/publication workflows remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are
 reusable baseline evidence, not Level 2.5 acceptance.
 The standards/editor source audits do not establish real editor or client proof.
@@ -109,6 +113,47 @@ page designation changes G0 only and contributes no new G2 or X/26 pair. Count t
 primary default plus transitively designated X/26 pairs, preserving raw aliases.
 Complete reference collection does not establish resolved geometry, side-panel
 placement, attribute inheritance/overlap, glyph composition or encoding readiness.
+
+Keep a complete checked presentation declaration shared by page X/28/0 and
+magazine M/29/0, but retain their presence separately. Page presence overrides
+magazine presence; absent both, use Annex D region-zero header selection rather
+than choosing a repertoire from language metadata. Header option seven alone is
+reserved; an explicit assigned primary alias ending in seven remains valid.
+Preserve all raw panel flag/width/status combinations, including disabled panels
+and a zero-width side of a two-panel declaration. Level 3.5-only panel applicability
+is valid metadata suppressed at Level 2.5, not a claim of Level 3.5 rendering.
+
+The preparatory semantic service receives explicitly resolved page resource
+selections. This is a compilation boundary, not the authored v2 wire contract or
+an implementation of MOT/X27 parsing/precedence. Retain future source declarations
+and resolve them explicitly before this boundary. Keep local X26 presence distinct
+from an empty program: any local declaration suppresses supplied default slots.
+Local definitions destined for carriage require that declaration. Defaults retain
+ordered GPOP1/GPOP2/POP1/POP2 slots and semantic identities; the compiler later
+allocates their physical selectors. Validate declared links and default targets
+even when suppressed, but charge only effective traversal against per-display
+character, glyph and invocation limits. Check every effective transitive resource
+object against the display's selected POP/GPOP and each glyph against selected
+DRCS links. Repeated calls and separate display subpages consume aggregate work.
+
+Host input, unique resource-record, object, structural-item, content-byte, authored
+command and expanded-work/output budgets are independent of serialized producer
+content. A successful semantic aggregate is immutable and exposes no publication
+receipt. Display raw subcodes and resource logical S1 remain distinct: physical
+header collisions are checked after compiler synthesis, not by fabricating a
+resource subcode or banning all shared page numbers. The legacy Latin encoder
+cannot compile this aggregate or replace its effective presentation with its own
+X/28 packet; add a complete enhanced compilation result rather than discarding
+resources into the existing base-only result.
+
+Resolve inheritable presentation/resource selections within each producer's
+owned contribution before channel composition. One addon's magazine declaration
+must not restyle another addon's pages. When producer defaults differ within the
+same magazine, materialize equivalent page overrides in the composed service;
+retain original declarations in design/export metadata. Package/profile receipts,
+ownership and stale-selection fences still belong to the application boundary.
+This composition step remains unimplemented; a standalone semantic service does
+not establish multi-producer publication or profile acceptance.
 
 Introduce `teletext.pages.v2`, retaining the existing `pages` operation. Its request
 uses `schema_version = 2` with the same guide input fields and limits as v1;

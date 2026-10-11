@@ -125,7 +125,9 @@ release section when tagging a release.
   separate drafts and explicit publication. Require independent decoding,
   TSDuck and real display/navigation in a suitable client; Kodi is optional.
   Checked colour/resource values, ordered enhancement programs and bounded
-  object-derived DRCS/charset dependency checks provide the model foundation;
+  object-derived DRCS/charset dependency checks provide the model foundation.
+  Page/magazine presentation and supplied-selection service validation now retain
+  panel metadata, default suppression and aggregate dependency budgets;
   enhanced encoding, editor workflows and client acceptance remain open.
 - Extend Phase 9 acceptance with per-channel teletext add-on bindings and named
   profiles, add-on-owned themes/overrides/custom zones, and shared admin/Lua

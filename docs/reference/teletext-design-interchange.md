@@ -15,7 +15,9 @@ Checked raw resource identities and a DRCS catalog now validate definitions and
 supplied display references. Ordered enhancement programs and checked object
 closure now collect transitive DRCS and charset references from the supplied
 effective page program. Resolved display semantics, complete service allocation
-and enhanced carriage remain open.
+and enhanced carriage remain open. Presentation declarations and an explicitly
+resolved semantic service now compose those values with the unchanged base set;
+they are not operational v2 payloads or readiness/publication tokens.
 
 ## Resource identity and DRCS lookup
 
@@ -88,6 +90,60 @@ or validate spatial overlap/open-object limits. They neither allocate physical
 resources nor establish an encoded or publishable generation. The two 15-object
 spatial limits in annex A are distinct from the strictly descending invocation
 type graph and remain compiler work.
+
+## Presentation and supplied service selection
+
+`TeletextLevel25PresentationDefaults` carries an assigned primary designation,
+required nullable secondary G0, CLUT2/3, default screen/row colours, black-background
+substitution, spacing-colour remapping and panel metadata. All fields are required;
+JSON preserves disabled fields and rejects unknown/duplicate/positional shapes.
+There is no implicit receiver palette or second-language default.
+
+The eight foreground/background CLUT pairs are 0/0, 0/1, 0/2, 1/1, 1/2, 2/1,
+2/2 and 2/3. The raw panel width N is 0–15. For enabled-level panels:
+
+| Left flag | Right flag | Left width | Right width |
+|---|---|---|---|
+| Off | Off | 0 | 0 |
+| On | Off | 16 when N=0, otherwise N | 0 |
+| Off | On | 0 | 16−N |
+| On | On | N | 16−N |
+
+No flag/width combination is reserved. A right-only panel with N>0 or two enabled
+flags with N=0 remains valid. `Level35Only` status suppresses both at Level 2.5;
+raw width/status remains available. This supports the metadata, not Level 3.5
+rendering. Actual object placement, size and area boundaries remain unresolved.
+
+`TeletextSemanticService::new` receives `TeletextResolvedServiceDraft` and trusted
+`TeletextServiceBudget`. It embeds the base pages unchanged, with exact page/raw
+subcode metadata, present magazine defaults, object definitions and DRCS subtables.
+Page presentation precedes magazine presentation. With neither, header national
+options 0–6 select primary codes 0x00–0x06; reserved fallback 0x07 is diagnosed.
+Explicit assigned aliases ending in seven are accepted. Language codes do not
+silently select another repertoire. Unknown page lookups return no presentation.
+
+The supplied resource selection is already resolved; it does not preserve or
+parse MOT/X27 declarations or requirement masks. Default slots retain GPOP1,
+GPOP2, POP1, POP2 order and sparse ordinals. A present local program, including an
+empty one, suppresses every default. Local definitions require an actual base
+owner and explicit local declaration. Declared links/default targets are checked
+even when suppressed; their unused glyphs/charset designations do not count as
+part of the effective page. Collected transitive POP/GPOP references must match
+the selected links, and DRCS uses the existing complete-reference validator.
+
+Service budgets cover unique resource records, definitions, structural items,
+base content bytes, authored commands and aggregate expanded commands/glyph
+references across all display subpages. Multiple objects in one resource consume
+one resource record; different kinds cannot hide an exact raw-page/S1 collision.
+Input bytes remain bounded before parsing. Constructors return no partial service,
+and the checked result has no mutable/deserialization/publication bypass.
+
+MOT/X27 declaration mapping and default selection, final display semantics,
+physical headers/pointers/collisions and enhanced encoding remain required later
+steps. A display subcode is not a resource logical S1. The existing base encoder
+must not be used to silently discard this aggregate's resources or override its
+non-Latin presentation. Operational v2 input, editor, preview and publication
+interfaces remain open.
 
 ## Standards audit
 

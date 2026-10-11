@@ -987,6 +987,33 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 presentation/service checkpoint: checked complete X28/M29 presentation
+values retain assigned primary/secondary designations, editable palettes, all
+spacing-colour remappings and every raw panel flag/width/status combination.
+Packet absence remains separate from explicit values. Page presence precedes
+magazine; absent-extension header fallback uses Latin region zero and diagnoses
+reserved option seven without rejecting assigned explicit aliases ending in seven.
+An immutable semantic service embeds unchanged base pages and explicitly supplied
+resolved resource selections. Exact page/raw-subcode ownership, local-X26 presence
+and sparse default slots are retained. Some(empty) suppresses defaults; declared
+links/targets are still checked without charging suppressed display dependencies.
+Complete repeated/transitive object and DRCS references are checked against each
+display selection. Shared object tables consume one unique resource record;
+exact raw-page/S1 kind collisions fail without inventing display subcodes.
+Trusted aggregate input/content/record/object/command and expanded-work/reference
+budgets are enforced, including across subpages. Independent services retain
+different presentation/resources without shared mutable state.
+All 125 focused teletext tests pass (23 new, 102 existing). The 15 affected service
+tests pass again after equivalent lint-helper extraction and a test-helper cleanup;
+strict final domain all-target Clippy, workspace formatting and architecture-lint
+pass. Independent presentation, production, integration-test and final refactor
+reviews are clean. Existing v1 consumer/wire/encoder/runtime paths are unchanged.
+MOT/X27 source declarations/masks and default resolution, owned multi-producer
+inheritance/composition, final geometry/attributes/glyphs, physical allocation,
+enhanced encoding and operational v2/editor/draft/publication/client/browser proof
+remain open. This supplied-selection boundary is not full authored acceptance.
+No milestone is closed and no runtime publication occurs.
+
 2026-10-11 enhancement/object checkpoint: checked page/X26 designations preserve
 raw aliases and distinct assigned code sets; secondary G0 does not designate G2.
 Relative positions, origin offsets and glyph-code envelopes are checked without

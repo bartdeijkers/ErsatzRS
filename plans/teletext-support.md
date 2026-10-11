@@ -73,8 +73,11 @@ selection snapshot. Both versions converge on one domain model; v1 contributes
 its unchanged base content. Checked palette/monochrome DRCS values, raw resource
 identities, ordered enhancement programs and checked object closure form the
 model foundation. Bounded effective-program traversal collects transitive DRCS
-references and checks primary/X26 pair and invocation limits. Next implement
-resolved display/object semantics, full service allocation and the native compiler.
+references and checks primary/X26 pair and invocation limits. Presentation
+declarations and the explicitly resolved semantic service retain page/magazine
+presence, panels and default suppression while checking aggregate dependencies.
+Next implement authored MOT/X27 declaration resolution, final display/object
+semantics, physical service allocation and the native compiler.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export
 receipts; pending/publication state belongs to the eventual promotion owner.

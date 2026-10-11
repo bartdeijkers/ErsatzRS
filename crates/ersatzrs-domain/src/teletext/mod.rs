@@ -16,8 +16,10 @@ mod enhancements;
 mod identity;
 mod objects;
 mod pages;
+mod presentation;
 mod profiles;
 mod resource_identity;
+mod service;
 mod source;
 
 pub use charset_values::*;
@@ -29,8 +31,10 @@ pub use enhancements::*;
 pub use identity::*;
 pub use objects::*;
 pub use pages::*;
+pub use presentation::*;
 pub use profiles::*;
 pub use resource_identity::*;
+pub use service::*;
 pub use source::*;
 
 #[cfg(test)]
@@ -59,3 +63,9 @@ mod enhancement_program_tests;
 
 #[cfg(test)]
 mod enhancement_objects_tests;
+
+#[cfg(test)]
+mod presentation_tests;
+
+#[cfg(test)]
+mod service_tests;

@@ -33,6 +33,13 @@ pub struct TeletextEnhancementSource {
     pub command: usize,
 }
 
+/// One expanded invocation, including repeated uses and its caller location.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextCollectedObjectInvocation {
+    pub target: TeletextObjectIdentity,
+    pub source_location: TeletextEnhancementSource,
+}
+
 /// Definition closure failure, including unused definitions with broken links.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextObjectCatalogError {
@@ -155,6 +162,17 @@ impl TeletextEnhancementObjectCatalog {
         &self.definitions
     }
 
+    /// Lookup one exact semantic definition without scanning other objects.
+    #[must_use]
+    pub fn definition(
+        &self,
+        identity: TeletextObjectIdentity,
+    ) -> Option<&TeletextEnhancementObjectDefinition> {
+        self.index
+            .get(&identity)
+            .map(|&ordinal| &self.definitions[ordinal])
+    }
+
     fn validate_invocation(
         &self,
         target: TeletextObjectIdentity,
@@ -162,9 +180,7 @@ impl TeletextEnhancementObjectCatalog {
         caller: Option<&TeletextEnhancementObjectDefinition>,
     ) -> Result<&TeletextEnhancementObjectDefinition, TeletextObjectInvocationError> {
         let definition = self
-            .index
-            .get(&target)
-            .map(|&ordinal| &self.definitions[ordinal])
+            .definition(target)
             .ok_or(TeletextObjectInvocationError::Missing { target })?;
         if definition.object_type != expected {
             return Err(TeletextObjectInvocationError::Type {
@@ -217,6 +233,7 @@ impl TeletextEnhancementObjectCatalog {
             pairs: BTreeSet::from([primary_pair]),
             references: Vec::new(),
             sources: Vec::new(),
+            object_references: Vec::new(),
         };
         self.collect_program(program, None, &mut state)?;
         Ok(TeletextCollectedEnhancementReferences {
@@ -226,6 +243,7 @@ impl TeletextEnhancementObjectCatalog {
             pairs: state.pairs,
             commands: state.commands,
             invocations: state.invocations,
+            object_references: state.object_references,
         })
     }
 
@@ -281,6 +299,12 @@ impl TeletextEnhancementObjectCatalog {
                         ));
                     }
                     state.invocations[type_index] += 1;
+                    state
+                        .object_references
+                        .push(TeletextCollectedObjectInvocation {
+                            target: *target,
+                            source_location: source,
+                        });
                     self.collect_program(&definition.program, Some(*target), state)?;
                 }
                 TeletextEnhancementCommand::AtColumn { operation, .. } => match operation {
@@ -358,6 +382,7 @@ struct CollectionState {
     pairs: BTreeSet<TeletextCharsetPair>,
     references: Vec<TeletextDrcsGlyphReference>,
     sources: Vec<TeletextEnhancementSource>,
+    object_references: Vec<TeletextCollectedObjectInvocation>,
 }
 
 /// References from one successful traversal; not an encoded/ready generation.
@@ -369,9 +394,15 @@ pub struct TeletextCollectedEnhancementReferences {
     pairs: BTreeSet<TeletextCharsetPair>,
     commands: usize,
     invocations: [usize; 3],
+    object_references: Vec<TeletextCollectedObjectInvocation>,
 }
 
 impl TeletextCollectedEnhancementReferences {
+    /// Expanded calls remain bounded by command work and 127 calls per type.
+    #[must_use]
+    pub fn object_references(&self) -> &[TeletextCollectedObjectInvocation] {
+        &self.object_references
+    }
     #[must_use]
     pub fn references(&self) -> &[TeletextDrcsGlyphReference] {
         &self.references
