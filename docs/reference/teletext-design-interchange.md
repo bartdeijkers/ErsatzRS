@@ -959,9 +959,26 @@ initial/subtitle display roles, addresses and languages. MOT/DRCS/object pages
 and M29 do not create navigation entries. `TeletextOutputGate::new_authored`
 and `new_authored_retained` pair this same candidate's descriptor and carousel,
 then reuse source PSI/PCR admission, null-slot capacity, packet pacing, retention,
-explicit delivery start, sink acknowledgements and EOF fences. The web host
-still needs version2 service admission/publication; these constructors grant no
-package, profile or live-stream capability by themselves.
+explicit delivery start, sink acknowledgements and EOF fences. Their shared
+constructors take `Arc<EncodedTeletextAuthoredService>` and start independent
+carousel cursors, transport admission and delivery epochs over the same immutable
+content. Completed history moves resources when uniquely owned; shared history
+copies only encoded resources, never whole services or display compositions.
+
+The web binding retains either a base `EncodedTeletextPageSet` or that complete
+authored service. `TeletextOutputBinding::new_authored` preflights the complete
+carousel and asynchronous timing policy before admission. `pages()` returns only
+base content; `authored_service()` exposes the complete authored candidate.
+`forward_teletext_output_with_content` and retained forwarding use the matching
+gate while retaining their existing pacing, capacity, deadline and EOF checks.
+The original base-only constructor and forwarding function remain available.
+Bindings are still restricted to final direct/wrapper MPEG-TS roles. Internal
+items, HLS workers and capacity slates cannot carry them.
+
+This connects authored content to the existing forwarding seam. The normal stream
+route still supplies no published binding. Reviewed revision/digest publication,
+fresh selection checks and admitted-generation lookup remain separate required
+steps; these constructors grant no package/profile activation or publication.
 
 ### Consecutive full-resource updates
 
@@ -3436,6 +3453,37 @@ This is an unpublished cold candidate. A later promotion needs its own fresh
 selection check, admitted generation ownership and safe output boundary. Warm
 M29/MOT/page-X28 replacement, durable drafts, editor interchange, localized UI,
 Lua scheduling controls, suitable-client proof and publication remain required.
+
+### Installed stream-client candidate (not acceptance)
+
+The 2026-10-11 read-only audit identifies installed VLC `3.0.20-3build6`, its
+Qt interface and Ubuntu libzvbi `0.2.42-2` as a candidate for the synthetic
+video-bearing MPEG-TS trial. Exact official
+[decoder source](https://github.com/videolan/vlc/blob/3.0.20/modules/codec/zvbi.c)
+maps `vbi-level=2` to Level 2.5 and supports RGBA output with `vbi-text=false`
+and opaque backgrounds. The versioned
+[Qt controls](https://github.com/videolan/vlc/blob/3.0.20/modules/gui/qt/components/controller.cpp)
+provide activation, page selection, index and four FLOF buttons. Decoder numeric
+keys select pages; `+/-` covers BCD subpages 01–99, while FLOF retains the exact
+linked subcode. These source mechanisms still need headed confirmation.
+
+Audited local SHA256 identities:
+
+- VLC executable: `1fbb0287954bfb1669927eb8542e82af01508b1fd96cce0cf1ada05a6980bb43`.
+- zvbi plugin: `b87f42fb841588fe68c0845f4cd56dd1062b287eb92faa5f9a086e5ce5fefd00`.
+- Linked libzvbi: `134705a7ef4d982eb57bf71a9378f3eb0d95237c8dcb686d684e35471ae834b0`.
+
+The [pinned original libzvbi 0.2.42 formatter](https://github.com/zapping-vbi/zvbi/blob/3785481f51f41a49e28f2b7f6fd5bd9187d24ae1/src/teletext.c)
+fixes output at 41 columns and
+explicitly leaves panels unfinished (`src/teletext.c`, lines 1426 and 2473).
+Selecting Level 2.5 therefore does not establish side-panel display support.
+The installed library differs from the pinned original decoder-test artifact;
+its actual client results need their own receipt. Palettes, DRCS, objects, page
+selection and linked subpage navigation are useful next trial subjects, but no
+client launch or display/navigation trial has been performed by this audit.
+Side panels and remaining full-client coverage stay open without a waiver.
+PCR-only fixtures, TSDuck checks and editor/decoder rendering cannot substitute
+for the actual published video-bearing stream-client workflow.
 
 ## Planned validation and evidence sequence
 

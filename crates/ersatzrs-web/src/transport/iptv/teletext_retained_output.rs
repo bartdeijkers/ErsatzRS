@@ -74,7 +74,7 @@ impl ForwardState {
         let processing_packets = validate_policy(policy, config)?;
         let epoch = Instant::now();
         Ok(Self {
-            gate: TeletextOutputGate::new_retained(config, binding.pages().clone())?,
+            gate: binding.new_gate(true)?,
             config,
             policy,
             epoch,

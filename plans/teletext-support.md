@@ -521,6 +521,9 @@ It is required Phase 9 work, with implementation and independent acceptance open
   encoding under the original deadline and rechecks whole-channel selection.
   Retain selected-producer language and exact entry subcodes; ambiguity requires
   an explicit original address. Off has no native output and still rechecks.
+  Complete authored bindings now feed the existing paced/retained final MPEG-TS
+  forwarding seam, sharing immutable content with independent output epochs.
+  Normal-route lookup of explicitly published revisions is still missing.
   Next prove mixed output with independent decoding. Warm magazine/resource
   replacement, client/editor workflows and explicit publication remain required.
 - The TV-guide add-on declares named colour/layout themes, permitted overrides

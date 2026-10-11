@@ -437,7 +437,7 @@ async fn a_ready_first_read_cannot_erase_the_first_byte_deadline_after_poll_over
     assert!(sink.writes.lock().unwrap().bytes.is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn an_empty_drained_reserve_still_bounds_waiting_for_the_next_physical_packet() {
     let policy = ReservePolicy::new(5_000_000, None).unwrap();
     let binding = binding(policy);
@@ -460,8 +460,12 @@ async fn an_empty_drained_reserve_still_bounds_waiting_for_the_next_physical_pac
     )
     .await
     .expect("a live source stall after reserve drainage must have its own deadline");
-    assert!(matches!(result, Err(RetainedTeletextError::Gate(_))));
+    assert!(matches!(
+        result,
+        Err(RetainedTeletextError::Gate(TeletextOutputError::Deadline))
+    ));
     assert_eq!(sink.writes.lock().unwrap().bytes.len(), input_bytes);
+    assert_eq!(source.probe.lock().unwrap().received, input_bytes);
     assert!(started.elapsed() < Duration::from_secs(10));
     assert_eq!(source.probe.lock().unwrap().eof_polls, 0);
 }

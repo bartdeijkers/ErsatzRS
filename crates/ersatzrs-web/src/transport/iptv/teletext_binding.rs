@@ -4,7 +4,10 @@ use std::{sync::Arc, time::Duration};
 
 use ersatzrs_ffmpeg::{
     pipeline::OutputFormat,
-    teletext::{EncodedTeletextPageSet, TeletextOutputConfig, TeletextOutputGate},
+    teletext::{
+        EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextOutputConfig,
+        TeletextOutputError, TeletextOutputGate,
+    },
 };
 use tokio::time::Instant;
 
@@ -27,13 +30,39 @@ pub enum TeletextOutputRole {
     CapacitySlate,
 }
 
-/// Immutable authored pages and explicit policy for one final-output admission.
+/// Exact typed service content retained by one final-output admission.
 ///
 /// This does not establish source PSI/PCR ownership, sink delivery or a durable
 /// publication generation. The forwarding gate verifies the actual stream.
+#[derive(Clone)]
+pub enum TeletextOutputContent {
+    Base(EncodedTeletextPageSet),
+    Authored(Arc<EncodedTeletextAuthoredService>),
+}
+
+impl TeletextOutputContent {
+    pub(super) fn new_gate(
+        self,
+        config: TeletextOutputConfig,
+        retained: bool,
+    ) -> Result<TeletextOutputGate, TeletextOutputError> {
+        match (self, retained) {
+            (Self::Base(pages), false) => TeletextOutputGate::new(config, pages),
+            (Self::Base(pages), true) => TeletextOutputGate::new_retained(config, pages),
+            (Self::Authored(service), false) => {
+                TeletextOutputGate::new_authored_shared(config, service)
+            }
+            (Self::Authored(service), true) => {
+                TeletextOutputGate::new_authored_retained_shared(config, service)
+            }
+        }
+    }
+}
+
+/// Immutable complete input, shared without relabelling resources as base pages.
 pub struct TeletextOutputBinding {
     config: TeletextOutputConfig,
-    pages: EncodedTeletextPageSet,
+    content: TeletextOutputContent,
     first_byte_timeout: Duration,
 }
 
@@ -46,6 +75,33 @@ impl TeletextOutputBinding {
         pages: EncodedTeletextPageSet,
         first_byte_timeout: Duration,
     ) -> Result<Self, TeletextPumpError> {
+        Self::new_inner(
+            config,
+            TeletextOutputContent::Base(pages),
+            first_byte_timeout,
+        )
+    }
+
+    /// Bind all actual authored displays, M29 packets and resources together.
+    /// # Errors
+    /// Rejects the same timing and gate policy, plus authored cycle bounds.
+    pub fn new_authored(
+        config: TeletextOutputConfig,
+        service: EncodedTeletextAuthoredService,
+        first_byte_timeout: Duration,
+    ) -> Result<Self, TeletextPumpError> {
+        Self::new_inner(
+            config,
+            TeletextOutputContent::Authored(Arc::new(service)),
+            first_byte_timeout,
+        )
+    }
+
+    fn new_inner(
+        config: TeletextOutputConfig,
+        content: TeletextOutputContent,
+        first_byte_timeout: Duration,
+    ) -> Result<Self, TeletextPumpError> {
         let now = Instant::now();
         if first_byte_timeout.is_zero()
             || now.checked_add(first_byte_timeout).is_none()
@@ -53,10 +109,10 @@ impl TeletextOutputBinding {
         {
             return Err(TeletextPumpError::Configuration);
         }
-        drop(TeletextOutputGate::new(config, pages.clone())?);
+        drop(content.clone().new_gate(config, false)?);
         Ok(Self {
             config,
-            pages,
+            content,
             first_byte_timeout,
         })
     }
@@ -67,10 +123,35 @@ impl TeletextOutputBinding {
         self.config
     }
 
-    /// Completely encoded authored content admitted for this output.
+    /// Base-only encoded pages; complete authored bindings return `None`.
     #[must_use]
-    pub const fn pages(&self) -> &EncodedTeletextPageSet {
-        &self.pages
+    pub fn pages(&self) -> Option<&EncodedTeletextPageSet> {
+        match &self.content {
+            TeletextOutputContent::Base(pages) => Some(pages),
+            TeletextOutputContent::Authored(_) => None,
+        }
+    }
+
+    /// Complete authored service; base-only bindings return no authored service.
+    #[must_use]
+    pub fn authored_service(&self) -> Option<&EncodedTeletextAuthoredService> {
+        match &self.content {
+            TeletextOutputContent::Authored(service) => Some(service),
+            TeletextOutputContent::Base(_) => None,
+        }
+    }
+
+    /// Exact typed immutable input for a fresh output epoch.
+    #[must_use]
+    pub const fn content(&self) -> &TeletextOutputContent {
+        &self.content
+    }
+
+    pub(super) fn new_gate(
+        &self,
+        retained: bool,
+    ) -> Result<TeletextOutputGate, TeletextOutputError> {
+        self.content.clone().new_gate(self.config, retained)
     }
 
     /// Caller-supplied bound on the producer's first output byte.
@@ -156,3 +237,7 @@ impl TeletextOutputAdmission {
 #[cfg(test)]
 #[path = "teletext_binding_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "teletext_authored_output_tests.rs"]
+mod authored_tests;

@@ -11,6 +11,8 @@ use tokio::{
     time::{timeout_at, Instant},
 };
 
+use super::teletext_binding::TeletextOutputContent;
+
 const READ_BYTES: usize = 256 * 188;
 
 // Read the same borrowed stdout while delivery waits, without another task or
@@ -136,13 +138,34 @@ pub async fn forward_teletext_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin
     set: EncodedTeletextPageSet,
     first_byte_timeout: Duration,
 ) -> Result<u64, TeletextPumpError> {
+    forward_teletext_output_with_content(
+        source,
+        sink,
+        config,
+        TeletextOutputContent::Base(set),
+        first_byte_timeout,
+    )
+    .await
+}
+
+/// Forward a complete typed service through the same paced output algorithm.
+/// This grants no publication or receiver readiness authority.
+/// # Errors
+/// Preserves terminal source, sink, clock, capacity and complete-cycle failures.
+pub async fn forward_teletext_output_with_content<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    config: TeletextOutputConfig,
+    content: TeletextOutputContent,
+    first_byte_timeout: Duration,
+) -> Result<u64, TeletextPumpError> {
     let epoch = Instant::now();
     if first_byte_timeout.is_zero() {
         return Err(TeletextPumpError::Configuration);
     }
     let first_deadline = absolute(epoch, first_byte_timeout)?;
     absolute(epoch, config.max_hold)?;
-    let mut gate = TeletextOutputGate::new(config, set)?;
+    let mut gate = content.new_gate(config, false)?;
     let mut prefetch = SourcePrefetch::new(source, config)?;
     let mut started = false;
     let mut emitted = 0_u64;

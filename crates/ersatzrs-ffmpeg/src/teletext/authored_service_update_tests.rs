@@ -6,6 +6,40 @@ use crate::teletext::service_update::tests::{candidate, spec};
 use crate::teletext::transport_tests::{draft, set};
 use crate::teletext::TeletextResourceFullUpdate::{Changed, Unchanged};
 
+#[test]
+fn shared_completed_candidate_keeps_counter_and_removal_history_without_retaining_service() {
+    let service = Arc::new(candidate(spec(7, Changed)));
+    let original_units = service.pages()[0].data_units().to_vec();
+    let mut carousel = TeletextCarousel::new_authored_shared(Arc::clone(&service)).unwrap();
+    cycle(&mut carousel);
+    assert_eq!(Arc::strong_count(&service), 2);
+    carousel
+        .replace_authored_at_boundary(candidate(spec(7, Unchanged)))
+        .unwrap();
+    // Another owner survives: replacement took the shared resource-only path.
+    assert_eq!(Arc::strong_count(&service), 1);
+    assert_eq!(service.pages()[0].data_units(), original_units);
+    assert!(matches!(
+        carousel.replace_authored_at_boundary(candidate(spec(6, Unchanged))),
+        Err(TeletextTransportError::ResourceUpdate { .. })
+    ));
+    cycle(&mut carousel);
+    let mut absent = spec(0, Unchanged);
+    absent.kind = None;
+    carousel
+        .replace_authored_at_boundary(candidate(absent))
+        .unwrap();
+    cycle(&mut carousel);
+    assert!(matches!(
+        carousel.replace_authored_at_boundary(candidate(spec(7, Unchanged))),
+        Err(TeletextTransportError::ResourceUpdate { .. })
+    ));
+    carousel
+        .replace_authored_at_boundary(candidate(spec(0, Changed)))
+        .unwrap();
+    assert_eq!(service.pages()[0].data_units(), original_units);
+}
+
 fn changed_body(counter: u8) -> EncodedTeletextAuthoredService {
     let mut value = spec(counter, Changed);
     value.glyph = Some((0, 2));

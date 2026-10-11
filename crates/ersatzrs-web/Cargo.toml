@@ -106,6 +106,10 @@ bin-default-features = false
 insta = "1"
 serde_urlencoded = "0.7"
 
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# Virtual deadline regressions are native tests, not hydration runtime features.
+tokio = { version = "1", features = ["test-util"] }
+
 [features]
 default = ["ssr"]
 hydrate = ["leptos/hydrate"]

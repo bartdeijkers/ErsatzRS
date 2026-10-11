@@ -68,7 +68,7 @@ fn authored_pages_are_admitted_only_on_final_direct_or_wrapper_transport_outputs
 #[test]
 fn cloning_admission_preserves_the_same_immutable_binding_and_caller_policy() {
     let binding = binding();
-    let pages = binding.pages().clone();
+    let pages = binding.pages().unwrap().clone();
     let admission = TeletextOutputAdmission::with_binding(
         TeletextOutputRole::FinalDirectMpegTs,
         Arc::clone(&binding),
@@ -78,7 +78,7 @@ fn cloning_admission_preserves_the_same_immutable_binding_and_caller_policy() {
     let original = admission.binding().unwrap();
     assert!(std::ptr::eq(original, cloned.binding().unwrap()));
     assert!(std::ptr::eq(original, binding.as_ref()));
-    assert_eq!(original.pages(), &pages);
+    assert_eq!(original.pages(), Some(&pages));
     assert_eq!(original.config().program, policy().program);
     assert_eq!(original.config().elementary_pid, policy().elementary_pid);
     assert_eq!(original.config().max_hold, policy().max_hold);

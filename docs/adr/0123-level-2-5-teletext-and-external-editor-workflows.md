@@ -724,6 +724,13 @@ language comes from the selected original producer; ambiguous initial-page
 subcodes require an explicit original address. Off remains empty and freshly
 fenced. This prepares cold candidates without generation/publication authority.
 
+Final MPEG-TS bindings and both paced/retained forwarding paths now accept complete
+authored services through the existing engine gate. Immutable content may be
+shared, but each output keeps its own cursor, source admission, delivery epoch and
+completed resource history. This seam does not promote prepared content or supply
+the normal route with a published generation; reviewed revision publication and
+its fresh complete-channel fence remain required.
+
 A preparatory strict v2 response DTO and direct application conversion now retain
 the mandatory base fallback and original enhanced declarations. The application
 authenticates supplied resolved assertions through the existing bounded semantic

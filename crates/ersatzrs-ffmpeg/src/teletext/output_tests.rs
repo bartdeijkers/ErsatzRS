@@ -37,6 +37,32 @@ fn gate() -> TeletextOutputGate {
     TeletextOutputGate::new(config(), set()).unwrap()
 }
 
+#[test]
+fn shared_authored_gates_have_independent_epochs_clocks_and_carousel_cursors() {
+    let service = Arc::new(crate::teletext::authored_service_tests::candidate());
+    let original = service.pages()[0].data_units().to_vec();
+    let mut first =
+        TeletextOutputGate::new_authored_shared(config(), Arc::clone(&service)).unwrap();
+    let mut second =
+        TeletextOutputGate::new_authored_shared(config(), Arc::clone(&service)).unwrap();
+    assert!(!Arc::ptr_eq(&first.epoch, &second.epoch));
+    let first_batch = first.carousel.next_batch().unwrap();
+    first.carousel.next_batch().unwrap();
+    let second_batch = second.carousel.next_batch().unwrap();
+    assert_eq!(
+        first_batch.presentation_ticks(),
+        second_batch.presentation_ticks()
+    );
+    assert_eq!(first_batch.data_units(), second_batch.data_units());
+    assert_eq!(first.batch_ticks, second.batch_ticks);
+    // Moving one physical cursor does not move the other output's clock.
+    assert_ne!(
+        first.carousel.next_batch().unwrap().presentation_ticks(),
+        second.carousel.next_batch().unwrap().presentation_ticks()
+    );
+    assert_eq!(service.pages()[0].data_units(), original);
+}
+
 pub(super) fn pcr(ticks: u64) -> [u8; 188] {
     let base = ticks / 300;
     let extension = ticks % 300;

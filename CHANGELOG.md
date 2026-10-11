@@ -160,8 +160,13 @@ release section when tagging a release.
   producer composition with complete derived page themes, preserved originals,
   shared resource authentication and unchanged preview. Prepare complete native
   channel candidates with original entry/language, one worker/deadline and fresh
-  whole-channel selection checks. Warm replacement, live publication, durable
-  restart and client acceptance remain open.
+  whole-channel selection checks. Complete authored bindings now retain M29,
+  displays and resources through existing paced/retained final MPEG-TS forwarding,
+  sharing immutable content with independent output epochs. Normal-route generation
+  lookup, warm replacement, live publication, durable restart and client acceptance
+  remain open.
+  Breaking Rust API: `TeletextOutputBinding::pages()` now returns optional base
+  content; use `content()` for complete authored bindings.
   Add a pinned persistent-decoder diagnostic confirming that M29 palette defaults
   survive omission despite page erasure; safe replacement remains required.
   Final resource command spans now settle same-instance attributes

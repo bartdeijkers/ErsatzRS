@@ -271,9 +271,7 @@ impl TeletextOutputGate {
         config: TeletextOutputConfig,
         service: EncodedTeletextAuthoredService,
     ) -> Result<Self, TeletextOutputError> {
-        let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
-        let carousel = TeletextCarousel::new_authored(service)?;
-        Self::new_inner(config, carousel, descriptor, DeliveryStart::OnArrival)
+        Self::new_authored_shared(config, Arc::new(service))
     }
 
     /// Retain a complete authored candidate until its owner starts delivery.
@@ -284,8 +282,30 @@ impl TeletextOutputGate {
         config: TeletextOutputConfig,
         service: EncodedTeletextAuthoredService,
     ) -> Result<Self, TeletextOutputError> {
+        Self::new_authored_retained_shared(config, Arc::new(service))
+    }
+
+    /// Fresh paced epoch borrowing the same immutable complete authored service.
+    /// # Errors
+    /// Enforces the existing carousel, source identity and timing bounds.
+    pub fn new_authored_shared(
+        config: TeletextOutputConfig,
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<Self, TeletextOutputError> {
         let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
-        let carousel = TeletextCarousel::new_authored(service)?;
+        let carousel = TeletextCarousel::new_authored_shared(service)?;
+        Self::new_inner(config, carousel, descriptor, DeliveryStart::OnArrival)
+    }
+
+    /// Fresh retained epoch sharing content while preserving separate holding age.
+    /// # Errors
+    /// Enforces the same bounds as the owned retained constructor.
+    pub fn new_authored_retained_shared(
+        config: TeletextOutputConfig,
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<Self, TeletextOutputError> {
+        let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
+        let carousel = TeletextCarousel::new_authored_shared(service)?;
         Self::new_inner(config, carousel, descriptor, DeliveryStart::Deferred)
     }
 

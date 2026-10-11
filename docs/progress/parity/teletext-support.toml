@@ -42,7 +42,7 @@ Profiles pin v2 before v1 through request/env/receipt/manifest fences.
 Base prep rejects v2; encoding keeps model/deadline/fences.
 Original defaults/unknown secondary/channel fences remain.
 Cold composition isolates M29, coalesces full resources and rechecks MOT effects.
-Cold host prepared; warm replacement/publication open.
+Cold host/binding; warm publication open.
 ADR0122 profiles/themes/zones/admin/Lua stay preparatory.
 App keeps drafts/guide bounds; acquisition,
 activation, regions, link CRC,
@@ -71,6 +71,14 @@ localized management and source/client/browser/smoke/TSDuck matrix remain
 open. UCU waives no gates. Content waits for p9a-04;
 Phase10 waits for p9b-02.
 '''
+
+[[debt]]
+id          = 'teletext-side-panel-plane-colour-admission'
+adr         = '0123'
+description = 'EN 300 706 V1.2.1 section 12.5.3 excludes full-screen and full-row colour selection from side-panel data. Reject these operations in Active objects placed in either raw panel region, retaining original command/invocation diagnostics. Preserve legal main-area plane colours, independent child regions and panel foreground/background attributes. No permanent authoring restriction or acceptance waiver is accepted.'
+discovered  = '2026-10-11'
+evidence    = 'Two independent read-only source audits locate a credible admission gap: an Active object invoked at raw column40 can remain wholly within the right panel while SetScreenColour or SetRowColour reaches the shared global colour prepass. Existing type/range/own-area checks and object encoders do not reject it. This is source-audit evidence, not a new runtime reproduction. Existing panel glyph composition/raster tests remain valid; complete encoded panel/native-decoder/client proof remains open. P9A-01 owns the correction evidence; P9A-04 owns the userflow gap map.'
+resolved    = false
 
 [[debt]]
 id          = 'teletext-default-secondary-materialization-is-unproven'

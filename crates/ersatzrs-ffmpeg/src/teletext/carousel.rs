@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ersatzrs_domain::{TeletextResourceHeaderMetadata, TeletextResourceKind};
 
 use super::{
@@ -92,13 +94,15 @@ pub struct TeletextCarousel {
 enum CarouselContent {
     Legacy(EncodedTeletextPageSet),
     Authored {
-        service: Box<EncodedTeletextAuthoredService>,
+        service: Arc<EncodedTeletextAuthoredService>,
         resource_order: Vec<usize>,
     },
 }
 
 impl CarouselContent {
-    fn authored(service: EncodedTeletextAuthoredService) -> Result<Self, TeletextTransportError> {
+    fn authored(
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<Self, TeletextTransportError> {
         let magazine_batch = usize::from(!service.magazine_units().is_empty());
         let displays = service.declared().semantic().base().pages.len();
         let resources = &service.pages()[displays..];
@@ -135,7 +139,7 @@ impl CarouselContent {
             (rank, index)
         });
         Ok(Self::Authored {
-            service: Box::new(service),
+            service,
             resource_order,
         })
     }
@@ -239,6 +243,16 @@ impl TeletextCarousel {
     pub fn new_authored(
         service: EncodedTeletextAuthoredService,
     ) -> Result<Self, TeletextTransportError> {
+        Self::new_authored_shared(Arc::new(service))
+    }
+
+    /// Start a fresh cursor over the same immutable complete authored service.
+    /// No display composition or encoded resource body is cloned.
+    /// # Errors
+    /// Enforces the same complete acquisition cadence as the owned constructor.
+    pub fn new_authored_shared(
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<Self, TeletextTransportError> {
         let content = CarouselContent::authored(service)?;
         let magazine_pending = !content.magazines().is_empty();
         Ok(Self {
@@ -290,7 +304,7 @@ impl TeletextCarousel {
         if !self.boundary {
             return Err(TeletextTransportError::MidCycleReplacement);
         }
-        let content = CarouselContent::authored(service)?;
+        let content = CarouselContent::authored(Arc::new(service))?;
         let completed = match &self.content {
             CarouselContent::Authored { service, .. } if !self.first_cycle => {
                 Some(service.as_ref())
@@ -309,7 +323,10 @@ impl TeletextCarousel {
         let previous = std::mem::replace(&mut self.content, content);
         if !self.first_cycle {
             if let CarouselContent::Authored { service, .. } = previous {
-                self.resource_history.record_completed(*service);
+                match Arc::try_unwrap(service) {
+                    Ok(service) => self.resource_history.record_completed(service),
+                    Err(service) => self.resource_history.record_completed_shared(&service),
+                }
             }
         }
         self.page = 0;

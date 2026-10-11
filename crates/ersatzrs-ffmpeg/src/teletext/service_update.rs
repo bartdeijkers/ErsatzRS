@@ -96,6 +96,35 @@ impl ResourceUpdateHistory {
         }
     }
 
+    /// Retain only completed resource bodies when another epoch shares content.
+    /// Native/compiled displays and their semantic projections are never cloned.
+    pub(super) fn record_completed_shared(&mut self, service: &EncodedTeletextAuthoredService) {
+        for previous in self.resources.values_mut() {
+            previous.page = None;
+        }
+        for page in service.pages() {
+            let resource = match page {
+                EncodedTeletextAuthoredPage::Object(page) => {
+                    EncodedTeletextAuthoredPage::Object(page.clone())
+                }
+                EncodedTeletextAuthoredPage::Resource(page) => {
+                    EncodedTeletextAuthoredPage::Resource(page.clone())
+                }
+                EncodedTeletextAuthoredPage::NativeDisplay(_)
+                | EncodedTeletextAuthoredPage::CompiledDisplay(_) => continue,
+            };
+            if let Some(header) = resource.resource_header() {
+                self.resources.insert(
+                    owner(header.identity()),
+                    CompletedResource {
+                        counter: header.update_counter(),
+                        page: Some(resource),
+                    },
+                );
+            }
+        }
+    }
+
     /// A completed legacy display may overwrite a retained resource raw page.
     /// Keep every known S1 counter but discard matching cached bodies only.
     pub(super) fn retire_display_owners(&mut self, set: &EncodedTeletextPageSet) {
