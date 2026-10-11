@@ -129,7 +129,8 @@ fn encoded_case_with_encoding(
     let mut page = super::transport_tests::draft(200, 0, false);
     // In English, pound is a direct national character. German forces the
     // intended G2 replacement and gives unchanged ASCII repertoire 15.
-    page.national_option = TeletextNationalOption::new(1).unwrap();
+    page.national_option =
+        TeletextNationalOption::new(u8::from(name != "english_national_enlarged_overlap")).unwrap();
     page.rows = rows;
     let owner = page.address;
     let service = service(&page, main, definitions);
@@ -188,7 +189,10 @@ fn encode_fixture_main(
         },
     };
     let packing_budget = TeletextObjectCatalogBudget {
-        max_objects: if name == "national_base_enlarged_overlap" {
+        max_objects: if matches!(
+            name,
+            "national_base_enlarged_overlap" | "english_national_enlarged_overlap"
+        ) {
             8
         } else {
             4
@@ -635,9 +639,7 @@ async fn base_unicode_active_override_decodes_with_pinned_imager() {
     );
 }
 
-#[tokio::test]
-#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
-async fn national_base_enlarged_overlap_decodes_with_pinned_imager() {
+fn national_overlap_case(english: bool) -> serde_json::Value {
     let owner = super::transport_tests::draft(200, 0, false).address;
     let active = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xffff));
     let adaptive = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xfffe));
@@ -667,9 +669,17 @@ async fn national_base_enlarged_overlap_decodes_with_pinned_imager() {
             },
         )
     };
-    let case = encoded_case_with_encoding(
-        "national_base_enlarged_overlap",
-        vec![text(1, 7, "§"), text(2, 8, "£"), text(3, 1, "B")],
+    encoded_case_with_encoding(
+        if english {
+            "english_national_enlarged_overlap"
+        } else {
+            "national_base_enlarged_overlap"
+        },
+        if english {
+            vec![text(1, 7, "‖"), text(2, 8, "é"), text(3, 1, "B")]
+        } else {
+            vec![text(1, 7, "§"), text(2, 8, "£"), text(3, 1, "B")]
+        },
         vec![
             position(1, 7),
             TeletextEnhancementCommand::InvokeObject {
@@ -701,26 +711,58 @@ async fn national_base_enlarged_overlap_decodes_with_pinned_imager() {
                 .unwrap(),
             },
         ],
-        &[
-            cell(1, 7, [0x40, 15, 0, 7, 0], [0x27, 7, 0, 7, 0]),
-            cell(1, 8, [b' ', 15, 0, 7, 0], [0x27, 7, 0, 7, 0]),
-            cell(1, 9, [b' ', 15, 0, 7, 0], [b'X', 0, 0, 7, 0]),
-            cell(2, 8, [0x23, 7, 0, 7, 0], [b'A', 0, 0, 7, 0]),
-            cell(2, 9, [b' ', 15, 0, 7, 0], [b'A', 0, 0, 7, 0]),
-            cell(3, 1, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
-        ],
+        &if english {
+            [
+                cell(1, 7, [0x7c, 12, 0, 7, 0], [0x7c, 6, 0, 7, 0]),
+                cell(1, 8, [b' ', 12, 0, 7, 0], [0x7c, 6, 0, 7, 0]),
+                cell(1, 9, [b' ', 12, 0, 7, 0], [b'X', 0, 0, 7, 0]),
+                cell(2, 8, [b'e', 0, 2, 7, 0], [b'A', 0, 0, 7, 0]),
+                cell(2, 9, [b' ', 12, 0, 7, 0], [b'A', 0, 0, 7, 0]),
+                cell(3, 1, [b'B', 12, 0, 7, 0], [b'B', 12, 0, 7, 0]),
+            ]
+        } else {
+            [
+                cell(1, 7, [0x40, 15, 0, 7, 0], [0x27, 7, 0, 7, 0]),
+                cell(1, 8, [b' ', 15, 0, 7, 0], [0x27, 7, 0, 7, 0]),
+                cell(1, 9, [b' ', 15, 0, 7, 0], [b'X', 0, 0, 7, 0]),
+                cell(2, 8, [0x23, 7, 0, 7, 0], [b'A', 0, 0, 7, 0]),
+                cell(2, 9, [b' ', 15, 0, 7, 0], [b'A', 0, 0, 7, 0]),
+                cell(3, 1, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
+            ]
+        },
         MainEncoding::Normalized,
-    );
+    )
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn national_base_enlarged_overlap_decodes_with_pinned_imager() {
+    assert_national_overlap_decoding(false).await;
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn english_national_overlap_records_pinned_imager_private_charset_gap() {
+    assert_national_overlap_decoding(true).await;
+}
+
+async fn assert_national_overlap_decoding(english: bool) {
+    let case = national_overlap_case(english);
     let request =
         serde_json::to_vec(&serde_json::json!({"expected_version":"0.2.0", "cases":[case]}))
             .unwrap();
-    if let Some(path) = crate::locator::first_non_empty_env(&[
-        "ERSATZRS_TELETEXT_TEST_NATIONAL_OVERLAP_IMAGER_FIXTURE",
-    ]) {
+    if let Some(path) = crate::locator::first_non_empty_env(&[if english {
+        "ERSATZRS_TELETEXT_TEST_ENGLISH_NATIONAL_OVERLAP_IMAGER_FIXTURE"
+    } else {
+        "ERSATZRS_TELETEXT_TEST_NATIONAL_OVERLAP_IMAGER_FIXTURE"
+    }]) {
         std::fs::write(path, &request).unwrap();
     }
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(if english {
+        "../../scripts/e2e/teletext-national-carrier-calibration.py"
+    } else {
+        "../../scripts/e2e/teletext-main-composition-decoder.py"
+    });
     let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
         .unwrap_or_else(|| "python3".into());
     let output =
@@ -728,11 +770,25 @@ async fn national_base_enlarged_overlap_decodes_with_pinned_imager() {
             .await
             .unwrap();
     let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
-    assert_eq!(
-        report,
-        serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
-        "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317","cases_passed":1,"levels":["1.5","2.5"]})
-    );
+    if english {
+        assert_eq!(
+            report,
+            serde_json::json!({
+                "decoder": "teletextimager", "decoder_version": "0.2.0",
+                "decoder_commit": "2b0125b778c45ffdfa2df0b196870c093361f317",
+                "conformance": false,
+                "known_failure": "english_national_enlarged_overlap Level 2.5 cell 1,7: actual [124, 0, 0, 7, 0], expected [124, 6, 0, 7, 0]",
+                "level_1_5_selected_cells_passed": 6,
+            })
+        );
+    } else {
+        assert_eq!(
+            report,
+            serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
+            "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317",
+            "cases_passed":1,"levels":["1.5","2.5"]})
+        );
+    }
 }
 
 fn cases() -> Vec<serde_json::Value> {

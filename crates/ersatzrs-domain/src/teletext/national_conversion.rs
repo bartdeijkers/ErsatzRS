@@ -1,4 +1,4 @@
-//! Finite identity-preserving national-option conversions, EN 300 706 tables 35–37.
+//! Finite identity-preserving national-option conversions, EN 300 706 tables 35–37/46.
 //! Operands are literal primary-table identities, not Unicode/font comparisons.
 
 use super::{
@@ -14,7 +14,7 @@ pub enum TeletextNationalConversionError {
     NonNationalIdentity { identity: TeletextGlyphIdentity },
     #[error("national-option glyph has an invalid repertoire or position: {glyph:?}")]
     InvalidNationalIdentity { glyph: TeletextG0Glyph },
-    /// Table 36 English 7/C, Polish 5/B and Turkish 2/3 have no proven operand.
+    /// Table 36 Polish 5/B and Turkish 2/3 have no proven operand.
     #[error("no proven national conversion for {subset:?} at {code:02X}")]
     UnsupportedIdentity {
         subset: TeletextNationalSubset,
@@ -60,10 +60,11 @@ impl TeletextNationalConversion {
 }
 
 /// Resolve one Table 36 identity without national substitution of the result.
-/// All proven operands explicitly select Table 34's Latin G0/Latin G2 pair 0.
+/// Operands explicitly select Latin G0/Latin G2 pair 0, except English 7/C,
+/// which selects Hebrew G0/Arabic G2 pair 55. Both count toward pair admission.
 /// # Errors
 /// Rejects non-national identities, non-Latin/malformed national positions, and
-/// the three glyphs without proven operands and two ambiguous Romanian marks.
+/// the two glyphs without proven operands and two ambiguous Romanian marks.
 pub fn resolve_teletext_national_conversion(
     original: TeletextGlyphIdentity,
 ) -> Result<TeletextNationalConversion, TeletextNationalConversionError> {
@@ -91,7 +92,12 @@ pub fn resolve_teletext_national_conversion(
         });
     }
     let (operation, result) = operand(recipe)?;
-    let designation = TeletextEnhancementCharsetDesignation::new(0)
+    let designation =
+        TeletextEnhancementCharsetDesignation::new(if matches!(recipe, Recipe::H(_)) {
+            0x55
+        } else {
+            0
+        })
         .map_err(|_| TeletextNationalConversionError::InvalidRecipe)?;
     Ok(TeletextNationalConversion {
         original,
@@ -110,6 +116,7 @@ enum Recipe {
     G(u8),
     S(u8),
     D(u8, u8),
+    H(u8),
     U,
     P,
 }
@@ -118,18 +125,22 @@ fn operand(
     recipe: Recipe,
 ) -> Result<(TeletextColumnOperation, TeletextGlyphIdentity), TeletextNationalConversionError> {
     let raw_code = match recipe {
-        Recipe::G(code) | Recipe::S(code) | Recipe::D(_, code) => code,
+        Recipe::G(code) | Recipe::S(code) | Recipe::D(_, code) | Recipe::H(code) => code,
         Recipe::U | Recipe::P => return Err(TeletextNationalConversionError::InvalidRecipe),
     };
     let code = TeletextGlyphCode::new(raw_code)
         .map_err(|_| TeletextNationalConversionError::InvalidRecipe)?;
     let base = TeletextG0Glyph {
-        repertoire: TeletextG0Repertoire::Latin,
+        repertoire: if matches!(recipe, Recipe::H(_)) {
+            TeletextG0Repertoire::Hebrew
+        } else {
+            TeletextG0Repertoire::Latin
+        },
         code: raw_code,
         national_subset: None,
     };
     Ok(match recipe {
-        Recipe::G(_) => (
+        Recipe::G(_) | Recipe::H(_) => (
             TeletextColumnOperation::G0 { code },
             TeletextGlyphIdentity::G0 { glyph: base },
         ),
@@ -165,9 +176,10 @@ fn operand(
 
 // Printed Table 36 p107, read against Latin G0 Table 35 p106 and G2 Table 37
 // p108. Romanian 5/E is I+circumflex, not a cached decoder's acute mapping.
-// U retains English double vertical, Polish stroked capital Z and Turkish TL
-// as unsupported; no approximate symbol or resource is silently substituted.
-use Recipe::{D, G, P, S, U};
+// Table 46 p117 assigns the same double vertical line at Hebrew G0 7/C.
+// U retains Polish stroked capital Z and Turkish TL as unsupported; no
+// approximate symbol or resource is silently substituted.
+use Recipe::{D, G, H, P, S, U};
 
 const RECIPES: [[Recipe; 13]; 13] = [
     [
@@ -181,7 +193,7 @@ const RECIPES: [[Recipe; 13]; 13] = [
         G(0x23),
         S(0x50),
         S(0x3c),
-        U,
+        H(0x7c),
         S(0x3e),
         S(0x38),
     ],

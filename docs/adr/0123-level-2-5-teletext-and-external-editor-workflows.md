@@ -156,6 +156,13 @@ repaint origins. Allocate the lowest free full Local ID for the exact owner unde
 bounded scans. Check original owned-fragment C.1 dependencies before making
 backgrounds explicit. Unproven national conversion, temporal phase and undefined
 spacing remain located derivation gaps; they are not permanent authoring limits.
+National carriers share an explicit standard-table identity relation with the
+exact mapped-carrier comparator. English double vertical uses Hebrew G0 `0x7C`
+with designation `0x55` (Tables 34/46); preserve original national Base identity
+and require the same two-pair admission as authored designations. Equal masks
+never substitute for identity. Four national operands/mark recipes remain open.
+Pinned imager Adaptive/Passive private charset handling fails the unchanged
+Hebrew oracle; exact negative calibration grants no independent conformance.
 Recipes alone do not prove augmented source correspondence, unchanged-anchor/DAG
 placement, whole-program admission, receiver equivalence or publication.
 Carrier candidate placement now borrows the exact compatibility plan/catalog,

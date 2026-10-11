@@ -144,6 +144,7 @@ struct Fixture {
     main: Option<Vec<TeletextEnhancementCommand>>,
     objects: Vec<TeletextEnhancementObjectDefinition>,
     defaults: [Option<TeletextDefaultObjectSelection>; 4],
+    national: u8,
     primary: Option<u8>,
     presentation: Option<TeletextLevel25PresentationDefaults>,
     drcs_links: TeletextDrcsPageLinks,
@@ -156,6 +157,7 @@ impl Fixture {
             main,
             objects: vec![],
             defaults: [None; 4],
+            national: 1,
             primary: None,
             presentation: None,
             drcs_links: TeletextDrcsPageLinks::unlinked(),
@@ -167,7 +169,7 @@ impl Fixture {
         let presentation = self.presentation.or_else(|| {
             self.primary.map(|primary| {
                 let mut result = super::presentation::western_latin_v1_presentation(
-                    TeletextNationalOption::new(1).unwrap(),
+                    TeletextNationalOption::new(self.national).unwrap(),
                 )
                 .unwrap();
                 result.primary = TeletextPageCharsetDesignation::new(primary).unwrap();
@@ -189,7 +191,7 @@ impl Fixture {
                         address: owner(),
                         kind: TeletextPageKind::FullPage,
                         language,
-                        national_option: TeletextNationalOption::new(1).unwrap(),
+                        national_option: TeletextNationalOption::new(self.national).unwrap(),
                         rows: self.rows,
                         navigation: vec![],
                     }],

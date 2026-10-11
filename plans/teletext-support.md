@@ -277,10 +277,14 @@ build still reproduces the defect. This independent C-decoder evidence does not
 certify whole-service generation or actual client display/navigation.
 National Base carrier realization now uses one explicit Table 36 relation shared
 with typed comparison. Retain national identity/provenance and require exact carrier
-correspondence plus separate full-page visual equality. Five national positions
-remain unresolved (three physical operands and two ambiguous Romanian marks); these
+correspondence plus separate full-page visual equality. Four national positions
+remain unresolved (two physical operands and two ambiguous Romanian marks); these
 are required follow-up work, not waived authoring requirements. Prove all font,
 charset-pair and resource budgets before claiming complete national realization.
+English double vertical now has exact Hebrew G0/designation0x55 realization with
+full model equality and real pair-budget rejection. Pinned imager private-object
+charset handling still fails the unchanged Level2.5 oracle; negative calibration
+is evidence of that limitation, not independent decoding acceptance.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone

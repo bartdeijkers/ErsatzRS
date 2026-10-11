@@ -746,17 +746,19 @@ QTeletextMaker/editor/admin/publication acceptance. Those requirements remain op
 ### National-option carrier conversion
 
 `resolve_teletext_national_conversion` is a finite Table 36 identity relation,
-read against Tables 35 and 37. It retains the exact original national G0 identity
-and returns an explicit Latin designation, G0/G2/diacritic operation and resulting
+read against Tables 35/37 and the Hebrew G0 Table 46. It retains the exact original
+national G0 identity and returns an explicit designation, G0/G2/diacritic operation and resulting
 enhanced identity. It does not infer meaning from Unicode or equal font masks.
 German `§` at Base `0x40` becomes Latin G2 `0x27`; German `#` becomes enhanced
 G0 `0x23`; English `$` becomes G2 `0x24`, because enhanced G0 `0x24` is currency
 sign, not dollar. Designation aliases resolve through the existing charset and
 intent pipeline; graphics-mode alphabetic positions remain distinct from mosaics.
 
-The audited table has 164 established recipes and five explicit pending positions.
-English `0x7C` (double vertical), Polish `0x5B` (stroked capital Z) and Turkish
-`0x23` (TL) still need proven physical representations. Romanian `0x5D/0x7D`
+The audited table has 165 established recipes and four explicit pending positions.
+English `0x7C` (double vertical) has the exact Hebrew G0 `0x7C` identity in
+[EN 300 706 Tables 34/46](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf),
+using explicit designation `0x55` (Hebrew G0/Arabic G2). Polish `0x5B` (stroked
+capital Z) and Turkish `0x23` (TL) still need proven physical representations. Romanian `0x5D/0x7D`
 have ambiguous breve/caron marks in the primary table's tiny glyphs and remain
 unresolved; do not choose by language expectation or a decoder's Unicode table.
 Romanian `0x5E` is the primary table's I-circumflex, not the cached decoder's
@@ -769,7 +771,7 @@ and a private generated `CarrierBody/Glyph` mapping. Retained Base and other
 commands keep their literal identities. The original service, Base glyph record,
 source, repaint origin and fallback bytes remain immutable. Full selected-page
 font/fragment/colour comparison stays independently required, so a semantic mapping
-cannot hide a font discrepancy. Explicit Latin designation still consumes the
+cannot hide a font discrepancy. Explicit Latin and Hebrew designations consume the
 normal charset-pair budget; it does not bypass allocation or packing limits.
 
 Six focused domain tests pass (`b9694f9c-2dac-406d-b1ac-68e5b721ba4d`): all
@@ -815,6 +817,51 @@ ERSATZRS_TELETEXT_TEST_NATIONAL_OVERLAP_IMAGER_FIXTURE="$fixture_dir/national-ov
 ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
   python3 scripts/e2e/teletext-main-composition-decoder.py \
   < "$fixture_dir/national-overlap.json"
+```
+
+The Hebrew extension has eight passing domain tests
+(`99c39153-383d-4c17-9694-068afa88dc57`), including all 169 literal entries,
+165 real charset/intent executions, 29 aliases and explicit rejection of a third
+Latin/Greek/Hebrew pair. Ten normalization regressions pass
+(`d5fbd8fd-952f-499d-a5e3-5110a84a0eb3`). The enlarged English double vertical
+keeps its original Base national identity/repaint origin; its actual generated
+carrier is Hebrew G0. Both complete 1,000-cell comparisons have zero findings.
+The immutable service and ordinary fallback bytes remain unchanged.
+
+Independent decoding of this new fixture **fails** in pinned teletextimager 0.2.0:
+Level 2.5 `(1,7)` is `[124,0,0,7,0]`, expected `[124,6,0,7,0]`.
+The reader correctly parses mode08/data55 before mode09/data7C. Its Adaptive and
+Passive overlays omit private modified-G0/G2 designation handling, even though
+Table 29 and Annex C.4(2) require it. Do not replace the expected Hebrew identity
+with Latin or accept equal masks. `teletext-national-carrier-calibration.py`
+uses the unchanged guarded oracle and records this exact known mismatch with
+`conformance: false`; unexpected failures and unexpected success reject.
+Its six selected Level 1.5 cells pass. Three opt-in tests pass
+(`1bf0c600-7d9c-430e-a5f0-089827c902c9`): the new **negative calibration**,
+the unchanged German positive (request hash unchanged), and existing G1 calibration.
+The first new strict positive attempt failed as expected by the later diagnosis
+(`f1cec664-cc2a-47f3-b541-8fcd68f09338`). This does not establish independent
+Level 2.5 success for the Hebrew carrier. Strict domain/FFmpeg all-target Clippy
+and formatting pass; complete decoder/client/service acceptance remains open.
+
+English request SHA256:
+`61230e6bdd4e31a059e85aea4632939b908eced0f4d4435073630007b113fe6c`.
+Negative calibration helper SHA256:
+`6bae3b93ac33d70f02061d024ea6cd488b0fc77e1c6e8b1fedc3f88c730c7a6a`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_ENGLISH_NATIONAL_OVERLAP_IMAGER_FIXTURE="$fixture_dir/english-overlap.json" \
+  ./run.sh test -p ersatzrs-ffmpeg english_national_overlap_records \
+  --lib --run-ignored ignored-only
+# Strict positive oracle: reproduces the documented failure, exits nonzero.
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-main-composition-decoder.py \
+  < "$fixture_dir/english-overlap.json"
+# Negative calibration: explicit conformance:false, exits zero only for this gap.
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-national-carrier-calibration.py \
+  < "$fixture_dir/english-overlap.json"
 ```
 
 ### Shared base display trace

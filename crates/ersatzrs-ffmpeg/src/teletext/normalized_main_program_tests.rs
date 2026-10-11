@@ -280,6 +280,68 @@ fn enlarged_overlap_carries_german_national_base_without_changing_original_ident
     );
 }
 #[test]
+fn enlarged_overlap_carries_english_double_vertical_in_hebrew_without_changing_base() {
+    use crate::teletext::compare_teletext_physical_display;
+    let mut fixture = enlarged_national_base();
+    fixture.national = 0;
+    fixture.rows = vec![text(1, 7, "‖"), text(2, 8, "é"), text(3, 1, "B")];
+    let service = fixture.build();
+    let before = service.clone();
+    let fallback = encode_teletext_page(
+        &service.base().pages[0],
+        TeletextEncodingRegion::WesternLatin,
+    )
+    .unwrap();
+    let normalized = compile_teletext_normalized_main_program(&service, owner(), limits()).unwrap();
+    let original = normalized.original();
+    let display = original.display_resolution();
+    let origin = display.cell(1, 7).unwrap().origin().unwrap();
+    assert_eq!(display.cell(1, 8).unwrap().origin(), Some(origin));
+    assert!(origin >= original.glyph_layers().candidates().len());
+    let candidate_index = display.origins()[origin].candidate_index();
+    let candidate = original.glyph_layers().candidates()[candidate_index];
+    assert_eq!(candidate.priority(), TeletextGlyphPriority::Base);
+    assert_eq!(candidate.base().unwrap().code(), 0x7c);
+    assert_eq!(candidate.source(), None);
+    assert_eq!(candidate.invocation(), None);
+    assert!(
+        matches!(original.glyph_intent().records()[candidate_index].glyph(),
+        Some(TeletextGlyphIdentity::G0 { glyph })
+        if glyph.repertoire() == TeletextG0Repertoire::Latin
+            && glyph.code() == 0x7c
+            && glyph.national_subset() == Some(TeletextNationalSubset::English))
+    );
+    assert_eq!(original.base_replacement(1, 7), None);
+    let actual = normalized.physical().replay();
+    let record = actual.glyph_intent().records()[selected(actual.display_resolution(), 1, 7)];
+    assert!(
+        matches!(record.glyph(), Some(TeletextGlyphIdentity::G0 { glyph })
+        if glyph.repertoire() == TeletextG0Repertoire::Hebrew
+            && glyph.code() == 0x7c && glyph.national_subset().is_none())
+    );
+    let comparison =
+        compare_teletext_physical_display(original, actual, limits().display_comparison).unwrap();
+    assert_eq!(comparison.compared_cells(), 1000);
+    assert!(
+        comparison.diagnostics().is_empty(),
+        "{:?}",
+        comparison.diagnostics()
+    );
+    assert_eq!(
+        normalized.original().base_display(),
+        original.base_display()
+    );
+    assert_eq!(
+        encode_teletext_page(
+            &service.base().pages[0],
+            TeletextEncodingRegion::WesternLatin
+        )
+        .unwrap(),
+        fallback
+    );
+    assert_eq!(service, before);
+}
+#[test]
 fn active_unicode_candidate_owns_original_and_actual_after_inputs_leave_scope() {
     let result: EncodedTeletextNormalizedMainProgram = {
         let service = active().build();

@@ -721,7 +721,13 @@ checks both receiver levels, with literal national/G2 identities and adjacent
 and run `national_base_enlarged_overlap_decodes_with_pinned_imager`; see the
 [exact command, fixture hash and limits](../../docs/reference/teletext-design-interchange.md#national-option-carrier-conversion).
 This selected-cell proof does not establish all national glyph pixels or actual
-client navigation. Five national conversion positions remain explicitly pending.
+client navigation. Four national conversion positions remain explicitly pending.
+The English Hebrew-G0 carrier has full model equality but fails the unchanged
+pinned imager oracle because private object charset designation is omitted.
+`english_national_overlap_records_pinned_imager_private_charset_gap` and
+`teletext-national-carrier-calibration.py` record this exact negative result with
+`conformance:false`; they do not certify Level2.5 decoding. The linked reference
+contains both strict-failure and negative-calibration replay commands and hashes.
 
 ## Teletext base display calibration
 

@@ -4,12 +4,12 @@ use super::*;
 const CODES: [u8; 13] = [
     0x23, 0x24, 0x40, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x7b, 0x7c, 0x7d, 0x7e,
 ];
-// Literal Table29 mode/data words, Tables35–37; 0=no operand, FFFF=ambiguous mark.
+// Literal Table29 mode/data words, Tables35–37/46; 0=no operand, FFFF=ambiguous mark.
 const EXPECTED: [(TeletextNationalSubset, [u16; 13]); 13] = [
     (
         TeletextNationalSubset::English,
         [
-            0x0f23, 0x0f24, 0x0940, 0x0f2c, 0x0f3d, 0x0f2e, 0x0f2d, 0x0923, 0x0f50, 0x0f3c, 0x0000,
+            0x0f23, 0x0f24, 0x0940, 0x0f2c, 0x0f3d, 0x0f2e, 0x0f2d, 0x0923, 0x0f50, 0x0f3c, 0x097c,
             0x0f3e, 0x0f38,
         ],
     ),
@@ -152,8 +152,16 @@ fn all_169_primary_operands_preserve_exact_identity_and_evidence() {
                 _ => {
                     let result = result.unwrap();
                     assert_eq!(result.original(), identity);
-                    assert_eq!(result.designation().get(), 0);
-                    assert_eq!(result.designation().pair(), TeletextCharsetPair::LatinLatin);
+                    if subset == TeletextNationalSubset::English && code == 0x7c {
+                        assert_eq!(result.designation().get(), 0x55);
+                        assert_eq!(
+                            result.designation().pair(),
+                            TeletextCharsetPair::HebrewArabic
+                        );
+                    } else {
+                        assert_eq!(result.designation().get(), 0);
+                        assert_eq!(result.designation().pair(), TeletextCharsetPair::LatinLatin);
+                    }
                     assert_eq!(
                         operand_word(result.operation()),
                         expected,
@@ -164,7 +172,7 @@ fn all_169_primary_operands_preserve_exact_identity_and_evidence() {
             }
         }
     }
-    assert_eq!(counts, [164, 3, 2]);
+    assert_eq!(counts, [165, 2, 2]);
 }
 #[test]
 fn all_supported_results_follow_real_charset_and_intent_execution() {
@@ -193,15 +201,15 @@ fn all_supported_results_follow_real_charset_and_intent_execution() {
         },
     )
     .unwrap();
-    let layers = build_teletext_glyph_layers(&base, &trace, 164).unwrap();
+    let layers = build_teletext_glyph_layers(&base, &trace, 165).unwrap();
     let charset = resolve_teletext_charset_execution(&base, &trace, &layers, 512).unwrap();
-    let intent = resolve_teletext_glyph_intent(&charset, 1156).unwrap();
+    let intent = resolve_teletext_glyph_intent(&charset, 1157).unwrap();
     let enhanced: Vec<_> = intent
         .records()
         .iter()
         .filter(|record| record.context().candidate().operation().is_some())
         .collect();
-    assert_eq!(enhanced.len(), 164);
+    assert_eq!(enhanced.len(), 165);
     for (record, conversion) in enhanced.into_iter().zip(conversions) {
         assert_eq!(record.disposition(), TeletextGlyphDisposition::Assigned);
         assert_eq!(record.glyph(), Some(conversion.result()));
@@ -441,4 +449,154 @@ fn all_29_page_aliases_retain_exact_national_identity_before_conversion() {
         }
     }
     assert_eq!(alias_count, 29);
+}
+
+fn single_conversion_intent(designation: u8) -> TeletextExecutedGlyphIntent {
+    let conversion =
+        resolve_teletext_national_conversion(original(TeletextNationalSubset::English, 0x7c))
+            .unwrap();
+    let service = service(
+        vec![
+            set(1, 8),
+            at(
+                8,
+                TeletextColumnOperation::DesignateCharset {
+                    designation: TeletextEnhancementCharsetDesignation::new(designation).unwrap(),
+                },
+            ),
+            at(8, conversion.operation()),
+        ],
+        vec![],
+    );
+    let base = base();
+    let trace = resolve_teletext_spatial_trace(
+        &service,
+        owner(),
+        TeletextSpatialTraceBudget {
+            max_events: 3,
+            max_invocations: 0,
+        },
+    )
+    .unwrap();
+    let layers = build_teletext_glyph_layers(&base, &trace, 1).unwrap();
+    let charset = resolve_teletext_charset_execution(&base, &trace, &layers, 3).unwrap();
+    let intent = resolve_teletext_glyph_intent(&charset, 993).unwrap();
+    *intent
+        .records()
+        .iter()
+        .find(|record| record.context().candidate().operation().is_some())
+        .unwrap()
+}
+
+#[test]
+fn english_double_vertical_requires_explicit_hebrew_context_not_latin_alias() {
+    // Primary Table36 English7/C and Table46 Hebrew7/C identify the double line.
+    let identity = original(TeletextNationalSubset::English, 0x7c);
+    let conversion = resolve_teletext_national_conversion(identity).unwrap();
+    assert_eq!(conversion.original(), identity);
+    assert_eq!(conversion.designation().get(), 0x55);
+    assert_eq!(
+        conversion.operation(),
+        TeletextColumnOperation::G0 {
+            code: TeletextGlyphCode::new(0x7c).unwrap(),
+        }
+    );
+    assert_eq!(
+        conversion.result(),
+        TeletextGlyphIdentity::G0 {
+            glyph: TeletextG0Glyph {
+                repertoire: TeletextG0Repertoire::Hebrew,
+                code: 0x7c,
+                national_subset: None
+            },
+        }
+    );
+    let actual = single_conversion_intent(0x55);
+    assert_eq!(actual.disposition(), TeletextGlyphDisposition::Assigned);
+    assert_eq!(actual.glyph(), Some(conversion.result()));
+    let wrong = single_conversion_intent(0);
+    assert_eq!(
+        wrong.glyph(),
+        Some(TeletextGlyphIdentity::G0 {
+            glyph: TeletextG0Glyph {
+                repertoire: TeletextG0Repertoire::Latin,
+                code: 0x7c,
+                national_subset: None
+            },
+        })
+    );
+    assert_ne!(wrong.glyph(), actual.glyph());
+}
+
+#[test]
+fn generated_hebrew_designation_cannot_bypass_full_display_pair_limit() {
+    let greek = at(
+        8,
+        TeletextColumnOperation::DesignateCharset {
+            designation: TeletextEnhancementCharsetDesignation::new(0x37).unwrap(),
+        },
+    );
+    let original_commands = vec![
+        set(1, 8),
+        greek,
+        at(
+            9,
+            TeletextColumnOperation::G0 {
+                code: TeletextGlyphCode::new(b'A').unwrap(),
+            },
+        ),
+    ];
+    let service = service(original_commands.clone(), vec![]);
+    let original_program = TeletextEnhancementProgram::new(original_commands.clone()).unwrap();
+    let budget = TeletextEnhancementCollectionBudget {
+        max_commands: 6,
+        max_drcs_references: 0,
+    };
+    let collected = service
+        .objects()
+        .collect_display_references(
+            owner(),
+            &original_program,
+            TeletextCharsetPair::LatinLatin,
+            budget,
+        )
+        .unwrap();
+    assert_eq!(collected.charset_pairs().len(), 2);
+    let conversion =
+        resolve_teletext_national_conversion(original(TeletextNationalSubset::English, 0x7c))
+            .unwrap();
+    let mut actual_commands = original_commands;
+    actual_commands.extend([
+        set(1, 10),
+        at(
+            10,
+            TeletextColumnOperation::DesignateCharset {
+                designation: conversion.designation(),
+            },
+        ),
+        at(10, conversion.operation()),
+    ]);
+    let actual = TeletextEnhancementProgram::new(actual_commands).unwrap();
+    assert_eq!(
+        service.objects().collect_display_references(
+            owner(),
+            &actual,
+            TeletextCharsetPair::LatinLatin,
+            budget
+        ),
+        Err(TeletextEnhancementCollectionError {
+            display: owner(),
+            source_location: TeletextEnhancementSource {
+                object: None,
+                command: 4
+            },
+            reason: TeletextEnhancementCollectionFailure::CharsetPairs {
+                pair: TeletextCharsetPair::HebrewArabic,
+            },
+        })
+    );
+    assert_eq!(
+        service.effective_program(owner()).unwrap().1.commands(),
+        original_program.commands()
+    );
 }
