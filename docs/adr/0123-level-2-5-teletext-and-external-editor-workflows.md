@@ -147,6 +147,13 @@ The zero-diacritic 2/A exception is always @, even when charset order is pending
 This assignment boundary establishes no Unicode/font/raster, DRCS resolution,
 geometry, preview or publication authority. Temporary missing evidence is not a
 permanent engine restriction; full authored Level 2.5 acceptance remains open.
+Original DRCS execution now resolves each explicit logical scope/S1/slot against
+the same service's supplied display links and checked catalog, preserving exact
+bitmap/resource identities, losing candidates and invocation provenance. Authored
+references already contain selector choices; the existing lowerer emits private
+Normal/Global selections with fresh definition state. The interchange reference
+owns this boundary. Bitmap resolution cannot certify placement, size/colour,
+overlap, receiver-equivalent rendering or preview/publication readiness.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

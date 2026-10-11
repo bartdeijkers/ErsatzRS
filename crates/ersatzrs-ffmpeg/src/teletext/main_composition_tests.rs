@@ -115,6 +115,8 @@ struct Fixture {
     defaults: [Option<TeletextDefaultObjectSelection>; 4],
     primary: Option<u8>,
     presentation: Option<TeletextLevel25PresentationDefaults>,
+    drcs_links: TeletextDrcsPageLinks,
+    drcs: Vec<TeletextDrcsSubtable>,
 }
 impl Fixture {
     fn new(rows: Vec<TeletextRow>, main: Option<Vec<TeletextEnhancementCommand>>) -> Self {
@@ -125,6 +127,8 @@ impl Fixture {
             defaults: [None; 4],
             primary: None,
             presentation: None,
+            drcs_links: TeletextDrcsPageLinks::unlinked(),
+            drcs: vec![],
         }
     }
     fn build(self) -> TeletextSemanticService {
@@ -169,13 +173,13 @@ impl Fixture {
                             public,
                             global: None,
                         },
-                        drcs: TeletextDrcsPageLinks::unlinked(),
+                        drcs: self.drcs_links,
                         defaults: self.defaults,
                     },
                 }],
                 magazines: vec![],
                 objects: self.objects,
-                drcs: vec![],
+                drcs: self.drcs,
             },
             TeletextServiceBudget {
                 max_records: 64,
@@ -184,7 +188,7 @@ impl Fixture {
                 max_base_content_bytes: 8192,
                 max_commands: 8192,
                 max_collected_commands: 16384,
-                max_collected_drcs_references: 0,
+                max_collected_drcs_references: 8192,
             },
         )
         .unwrap()
@@ -1527,4 +1531,141 @@ fn actual_base_layout_uses_full_national_alias_instead_of_low_three_bits() {
         TeletextBaseAuthoredContent::Text { character: '#' }
     );
     assert_eq!(service, before);
+}
+
+fn drcs_fixture(normal_bitmap: [u16; 10]) -> Fixture {
+    let target = local(0xffff);
+    let normal = TeletextDrcsGlyphReference {
+        table: TeletextDrcsTableScope::Normal,
+        subtable: TeletextDrcsSubtableIndex::new(15).unwrap(),
+        slot: TeletextDrcsGlyphSlot::new(47).unwrap(),
+    };
+    let global = TeletextDrcsGlyphReference {
+        table: TeletextDrcsTableScope::Global,
+        subtable: TeletextDrcsSubtableIndex::new(0).unwrap(),
+        slot: TeletextDrcsGlyphSlot::new(3).unwrap(),
+    };
+    let normal_page = TeletextRawDataPageNumber::new(2, 0xa0).unwrap();
+    let global_page = TeletextRawDataPageNumber::new(2, 0xa1).unwrap();
+    let mut fixture = Fixture::new(
+        vec![text(1, 8, "T")],
+        Some(vec![
+            position(1, 8),
+            at(8, TeletextColumnOperation::Drcs { reference: normal }),
+            invoke(target, TeletextObjectType::Passive),
+            invoke(target, TeletextObjectType::Passive),
+        ]),
+    );
+    fixture.objects.push(definition(
+        target,
+        TeletextObjectType::Passive,
+        vec![
+            position(0, 0),
+            at(0, TeletextColumnOperation::Drcs { reference: global }),
+        ],
+    ));
+    fixture.drcs_links = TeletextDrcsPageLinks::new(Some(normal_page), Some(global_page)).unwrap();
+    for (kind, page, reference, bitmap) in [
+        (
+            TeletextResourceKind::Drcs,
+            normal_page,
+            normal,
+            normal_bitmap,
+        ),
+        (TeletextResourceKind::Gdrcs, global_page, global, [1; 10]),
+    ] {
+        fixture.drcs.push(
+            TeletextDrcsSubtable::new(
+                TeletextResourceIdentity::new(
+                    kind,
+                    page,
+                    TeletextResourceSubpageIndex::new(reference.subtable.get()).unwrap(),
+                )
+                .unwrap(),
+                vec![TeletextDrcsGlyphDefinition {
+                    slot: reference.slot,
+                    bitmap: TeletextDrcsBitmap::new(bitmap).unwrap(),
+                }],
+            )
+            .unwrap(),
+        );
+    }
+    fixture
+}
+
+fn compose_drcs(service: &TeletextSemanticService) -> TeletextMainComposition {
+    let mut limits = budget();
+    limits.collection.max_drcs_references = 3;
+    compose_teletext_main_program(service, owner(), limits).unwrap()
+}
+
+#[test]
+fn same_service_drcs_execution_retains_losing_original_instances_and_exact_bitmaps() {
+    let pixels = [0x800, 0x400, 0x200, 0x100, 0x80, 0x40, 0x20, 0x10, 0x8, 0x1];
+    let service = drcs_fixture(pixels).build();
+    let before = service.clone();
+    let plan = compose_drcs(&service);
+    let execution = plan.drcs_execution();
+    assert_eq!(execution.owner(), owner());
+    let records = execution.records();
+    assert_eq!(records.len(), 3);
+    for record in records {
+        assert_eq!(
+            record.candidate(),
+            plan.glyph_intent().records()[record.candidate_index()]
+                .context()
+                .candidate()
+        );
+        assert_eq!(record.candidate().position(), (1, 8));
+        assert!(
+            matches!(plan.glyph_intent().records()[record.candidate_index()].glyph(),
+            Some(TeletextGlyphIdentity::Drcs { reference }) if reference == record.reference())
+        );
+    }
+    assert_eq!(records[0].resource().kind(), TeletextResourceKind::Drcs);
+    assert_eq!(records[0].resource().logical_subpage().get(), 15);
+    assert_eq!(records[0].bitmap().get(), pixels);
+    assert_eq!(
+        records[0].candidate().source(),
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 1
+        })
+    );
+    for record in &records[1..] {
+        assert_eq!(record.resource().kind(), TeletextResourceKind::Gdrcs);
+        assert_eq!(record.bitmap().get(), [1; 10]);
+        assert_eq!(
+            record.candidate().source(),
+            Some(TeletextEnhancementSource {
+                object: Some(local(0xffff)),
+                command: 1
+            })
+        );
+    }
+    assert_ne!(
+        records[1].candidate().invocation(),
+        records[2].candidate().invocation()
+    );
+    assert_eq!(service, before);
+}
+
+#[test]
+fn drcs_execution_is_bound_to_current_immutable_service_even_when_ids_match() {
+    let first = drcs_fixture([0x800; 10]).build();
+    let second = drcs_fixture([0; 10]).build();
+    let plan = compose_drcs(&first);
+    let changed = compose_drcs(&second);
+    let a = &plan.drcs_execution().records()[0];
+    let b = &changed.drcs_execution().records()[0];
+    assert_eq!(a.resource(), b.resource());
+    assert_eq!(a.reference(), b.reference());
+    assert_eq!(a.candidate(), b.candidate());
+    assert_eq!(a.bitmap().get(), [0x800; 10]);
+    assert_eq!(b.bitmap().get(), [0; 10]);
+    assert_eq!(
+        plan.drcs_execution().records()[0].bitmap().get(),
+        [0x800; 10]
+    );
+    assert_ne!(plan, changed);
 }

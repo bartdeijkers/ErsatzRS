@@ -181,6 +181,9 @@ release section when tagging a release.
   Finite glyph lookup now preserves original repertoire positions and national
   subsets, distinguishing prohibited codes and uncertain cells/compositions.
   Glyph shapes, complete preview and publication acceptance remain open.
+  Original DRCS glyphs now retain exact resource identities and checked bitmaps
+  from the selected display's service, including losing object candidates.
+  Full placement, rendering and publication acceptance remain open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

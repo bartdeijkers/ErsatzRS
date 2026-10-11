@@ -1219,6 +1219,12 @@ Explicit bans and unmarked cells remain distinct; non-Latin/mixed composition
 stays pending with the actual current pair. Next establish glyph shapes/Unicode
 projection and non-Latin composition, DRCS selectors and full geometry before
 physical normalization and receiver/client/editor/publication acceptance.
+Original DRCS candidates now retain exact resource identities and checked bitmaps
+from the same immutable service's supplied display links/catalog. Defined zero
+pixels remain distinct from missing slots; losing sources/instances survive.
+Reuse existing explicit references and private selector lowering. Next apply
+colour/size and full glyph/DRCS footprint/panel geometry, resolve physical order
+and prove both receiver views before preview/client/editor/publication acceptance.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

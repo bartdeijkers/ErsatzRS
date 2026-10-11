@@ -558,6 +558,63 @@ ERSATZRS_TELETEXT_TEST_G0_ASSIGNMENTS_LIBZVBI_FIXTURE=/tmp/teletext-g0-assignmen
   -E 'test(original_non_latin_g0_assignments_decode_with_libzvbi)'
 ```
 
+### Original DRCS resource execution
+
+`resolve_teletext_drcs_execution` consumes the original glyph intent and the same
+immutable semantic service. A sparse result preserves every DRCS candidate,
+including losers, repeated invocations and raw out-of-area coordinates, with its
+unchanged candidate index/provenance, explicit scope/S1/slot, exact logical
+resource identity and checked twelve-by-ten monochrome bitmap. Defined all-zero
+bitmaps remain defined glyphs; they are not missing resources.
+
+The trusted budget fences all intent records before scanning and exact DRCS
+reference count before output allocation. The checked service already validates
+resolved display links, catalog identity uniqueness, slots, at most two subtables
+and 24 distinct glyphs. Resolution uses the selected display's supplied Normal/
+Global links and that service's current catalog; it never guesses MOT/X27
+precedence, another display's links or a different S1. Missing resources reject
+the complete result with original page/position/source/root/instance diagnostics.
+Original source-operation correspondence is checked without re-expanding the
+program; it does not certify original AP/position or invocation generation.
+Matching identifiers and commands are not a generation certificate: the owning
+composition supplies and retains all projections from one immutable service.
+Equal resource identities in a different service can carry different pixels.
+
+The authored `Drcs { reference }` operation already carries resolved Normal/
+Global scope, subtable and glyph slot. There is no separate authored raw selector
+command to interpret. EN 300 706 Table 28/Table 29 and Annex C.4 require independent
+private Normal/Global selector state: both start at S1 zero in main and every
+actual object invocation, including Active; children start fresh, returning does
+not modify their caller, and state persists across rows. Selectors do not move AP.
+The existing lowerer synthesizes each required explicit selector from the logical
+reference and starts each definition fresh. Existing literal selector and object
+reset regressions cover that path; the resource projection does not introduce
+charset-style shared row state or new transmission-order ambiguity.
+
+Resolved pixels are input to the remaining renderer, not completed display
+semantics. Colour/size application, glyph footprints, panels, overlap, physical
+receiver equivalence and the operational preview/client/editor/publication gates
+remain open. No successful bitmap lookup authorizes publication or establishes
+full Level 2.5 acceptance.
+
+Eight new domain and two consumer tests pass in the final 37-test selection
+(`a11961bb-4d4d-41dc-86d0-f1678573e762`). They prove asymmetric Normal/Global
+pixels, nested/repeated identity/provenance, losing and wide-coordinate retention,
+service-specific pixel changes behind identical resource IDs, defined blank
+versus missing slots, exact budgets and foreign owner/program isolation. The
+initial 60-test selection passed 59 (`72201132-af47-4d3d-b537-9ed00cd46656`);
+a fixture's reserved subcode bit (`0x4321`) was corrected to legal `0x2321`,
+without changing production behavior. The final selection includes the corrected
+test; unchanged additional catalog/glyph/selector reset evidence remains valid.
+
+Six native checks pass (`1b9a5ece-33be-4127-a87d-b70e9d8faade`); all seven prior
+positive/conformant/diagnostic requests are byte-identical to the glyph-intent
+checkpoint's recorded hashes. Frozen helpers and renderer/encoder/lowerer bytes
+are unchanged. This replay checks that the extended factory preserves existing
+fixed-cell proofs; it is no new DRCS placement or full rendering proof. Existing
+independent DRCS resource decoding remains applicable. Strict affected all-target
+Clippy, formatting, architecture and independent reviews pass.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

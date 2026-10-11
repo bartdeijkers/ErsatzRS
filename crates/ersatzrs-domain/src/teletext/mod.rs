@@ -14,6 +14,7 @@ mod charset_execution;
 mod charset_execution_values;
 mod charset_values;
 mod compositional_links;
+mod drcs_execution;
 mod drcs_resources;
 mod enhancement_objects;
 mod enhancement_program;
@@ -42,6 +43,7 @@ pub use charset_execution::*;
 pub use charset_execution_values::*;
 pub use charset_values::*;
 pub use compositional_links::*;
+pub use drcs_execution::*;
 pub use drcs_resources::*;
 pub use enhancement_objects::*;
 pub use enhancement_program::*;
@@ -76,6 +78,9 @@ mod resource_identity_tests;
 
 #[cfg(test)]
 mod drcs_resources_tests;
+
+#[cfg(test)]
+mod drcs_execution_tests;
 
 #[cfg(test)]
 mod charset_values_tests;

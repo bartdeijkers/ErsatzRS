@@ -192,6 +192,12 @@ remain distinct. Next implement verified glyph shapes/Unicode projection and
 non-Latin composition, then DRCS selectors, size/object/panel geometry and final
 receiver-equivalent normalization. This lookup cannot authorize preview or
 publication; the interchange reference owns exact table exceptions and proof.
+Original logical DRCS references now resolve to exact resource identities and
+bitmaps from the same immutable service, preserving losers and original sources.
+Reuse the existing explicit-reference lowerer and fresh private selectors; do not
+invent a second authored selector interpreter. Next apply validated glyph shapes
+and DRCS pixels under complete colour/size/footprint/panel rules, then normalize
+physical order against both receiver views. Preview and publication remain gated.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.
