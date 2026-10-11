@@ -233,6 +233,13 @@ the mixed foreign-default/nested-selected case: its known shifted X27/4 parser
 misreads the correct link and rolls back the whole enhancement. Preserve that
 case's normative bytes and positive oracle; decoder-specific wire changes do
 not establish standards conformance or acceptance.
+A separately receipted test decoder may correct the independent implementation:
+the pinned 0.2.42 source now has a three-line Table 15 field-shift correction,
+with original and corrected builds compared against unchanged producer fixtures.
+Label it test-only, retain source/licenses/configuration and verify the actually
+loaded library. This proves the representative mixed case through an independent
+C implementation; it is neither an official fixed release nor client navigation,
+complete Level 2.5 or runtime-dependency acceptance.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

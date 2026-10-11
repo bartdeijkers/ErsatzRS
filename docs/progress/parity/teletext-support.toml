@@ -4,7 +4,7 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
-ADR 0120 requires synthetic p9a-04 engine acceptance before one ErsatzRS-Addons
+ADR 0120 requires p9a-04 engine acceptance before one ErsatzRS-Addons
 TV-guide add-on at p9b-01, inspired only by NOS pages 200–299.
 Add-ons own content; host validates/publishes/delivers. Subtitle gates remain. ADR 0123
 reopens P9A-01 for authored Level 2.5, fallback and pinned QTeletextMaker
@@ -16,7 +16,7 @@ metadata/fresh definition state. Local X26 retains forward references.
 Replay/raster retain fallback; recipes/placement retain lineage/DAG/AP.
 Assembly retains originals/IDs/maps; encoding checks unique call ancestry.
 AP00 retains pointers/C2; native pages retain no-X26/default owners/X27/X28/M29.
-Mixed nested X27 decoding stays open.
+Test-corrected X27 mixed decoding passes; client proof stays open.
 C2 uses packed words; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.
 Charset/glyph/DRCS facts retain national aliases, bans, unresolved composition,

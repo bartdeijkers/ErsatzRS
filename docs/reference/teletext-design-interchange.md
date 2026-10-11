@@ -657,8 +657,9 @@ still expects `A/C/D`, but the known shifted X27/4 parser reads correct triplets
 restores the whole fallback page. Keep its normative bytes and positive oracle:
 neither a shifted-wire workaround nor a passing root-only case proves this case.
 Pinned teletextimager 0.2.0 has no MOT-default activation or selected X27 resource
-handling and cannot supply this proof unchanged. Suitable independent mixed-case
-decoding and actual client display/navigation remain open.
+handling and cannot supply this proof unchanged. The test-corrected independent
+C-decoder proof below now covers this mixed case; actual client display/navigation
+remains open.
 
 Production root-only request SHA256:
 `2759c8a3b45f0df2fe6beab77a39b5af432369b4f89ebdf2b93a72add762c9cd`.
@@ -688,6 +689,59 @@ implicit/explicit cases and normalized Unicode/Active oracle. Final strict FFmpe
 all-target Clippy, workspace formatting and independent delta review pass.
 No crate boundary, dependency, application or admin source changed; prior
 architecture-lint evidence remains applicable. All milestones remain open.
+
+### Test-corrected X27 independent decoder
+
+The maintained [offline build and replay workflow](../../scripts/e2e/README.md#teletext-x27-test-decoder-comparison)
+compares unmodified official libzvbi 0.2.42 source at
+`3785481f51f41a49e28f2b7f6fd5bd9187d24ae1` with a **test-only corrected**
+build. Only three `parse_27` lines change: Table 15 magazine shift 12→11,
+masked page-tens shift 11→10, units shift 7→6 and subcode-mask shift 3→2.
+Neither production wire bytes, expected cells nor the frozen Python/ABI helpers
+change. Retain the complete source archive, license notices, both parser files,
+configuration/build logs, tool versions and schema-1 `proof-build.json` receipt.
+The recipe builds both variants with identical options; `-D_GNU_SOURCE` and
+`LIBS=-lm` make configure detect `sincos` using the actual compiler prototype.
+It applies no additional source patch or forced configure-cache result.
+
+The 2026-10-11 replay used Docker Desktop 4.94.0 (241994), engine 29.8.2,
+Linux amd64, with existing image
+`sha256:c0aee3f2c9c722c2afe67dff563609b63cbbe09f79e97ce8d5debdddbfab302e`.
+The image ID is verified by the outer Docker invocation, not self-attested by
+the receipt. Builds run offline with a read-only root and temporary output;
+replay mounts every input read-only. No host library or runtime dependency changes.
+
+| Decoder | Root and local-X26 suppression | Nested selection and local-X26 suppression |
+|---|---|---|
+| Original 0.2.42 | Two cases pass | Positive oracle fails at 1,8: fallback T instead of A |
+| Test-only X27 correction | Two cases pass | Two cases pass: A/C/D, then suppressed T/T/SPACE |
+
+The replay wrapper exits successfully only for these exact recorded outcomes.
+The original nested record explicitly has `conformance_passed: false`; a green
+comparison command must never be reported as four conformant runs. Each fresh
+process verifies exactly one actually mapped libzvbi path and its receipted hash
+through `/proc/self/maps`. Selecting corrected/root while loading original rejects
+with `Unexpected mapped decoder path`, even though root cells alone would pass.
+This Linux-x64-only manual harness is not a portable product requirement.
+
+Source archive SHA256:
+`4ecc6b129d6b8191db86953efec5f50afb6f1d9db1a706bb903ebde0d489df4c`
+(1,267,984 bytes; 267 members). Original/corrected `packet.c` hashes:
+`e41fa3c60308599ab6a008da21b793f18e86a5011fac32fe6f84befc9dd6db18` /
+`9547e54ff9f72999289423d5a85a3ee4cceea93e1858034a82b62e10370d70bd`.
+This build's original/corrected loaded-library hashes:
+`2991c13dcd1f8c2b694bcce57b5edd2e68ba5bfab1c3cada55f6e088463e9bf9` /
+`4b2f8b97bb3847c14b33b80eed70441b6e5607046026cd4b32861cca1af2ea9b`.
+Receipt SHA256:
+`911f441bcad8e1abf0beee4d6556f61b21ff76655f9586bc838091c7cf4738e6`.
+Future builds record their own library/configuration hashes; source, parser,
+fixture and helper pins remain fixed. The unchanged request/helper hashes are
+listed in the preceding section.
+
+This establishes representative independent decoding with an explicitly corrected
+C implementation. It does not establish an official fixed release, complete
+Level 2.5 support, transport integrity, suitable-client display/navigation or
+QTeletextMaker/editor/admin/publication acceptance. Those requirements remain open.
 
 ### Shared base display trace
 

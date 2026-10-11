@@ -529,6 +529,69 @@ the limitation and cannot establish local-object rendering or Level 2.5 acceptan
 The [local-decoder reference](../../docs/reference/teletext-design-interchange.md#local-object-decoder-limitation)
 records hashes, source findings and the still-required decoder/client evidence.
 
+## Teletext X27 test-decoder comparison
+
+This manual Linux-x64 calibration compares official libzvbi 0.2.42 with a
+**test-only three-line X27 parser correction**. It does not install a runtime
+dependency or replace client acceptance. See the
+[scope, exact hashes and recorded outcomes](../../docs/reference/teletext-design-interchange.md#test-corrected-x27-independent-decoder).
+The original nested conformance case must still fail; the comparison records that
+failure separately from successful corrected decoding.
+
+Use an existing Linux-amd64 build image with Python 3.12+, a C toolchain,
+autoconf/automake/libtool/gettext and pkg-config. The pinned image below is the
+locally available image used for the recorded proof, not a publicly distributed
+image or an automatic download. Another image needs its own recorded build and
+outer image identity; do not relabel its receipt as the pinned proof. Save the
+official source archive from the receipt URL as `source.tar.gz` in a temporary
+input directory. The builder enforces its exact size, SHA256 and member count
+before extraction. Capture `root.json` and `nested.json` using the
+[production fixture export instructions](../../docs/reference/teletext-design-interchange.md#native-default-display-packets).
+Exporting nested on unmodified libzvbi intentionally fails its normative test;
+keep that failure and the unchanged emitted request. Do not edit its expected cells.
+
+From the repository root, after setting `proof_input` to that absolute temporary
+input directory:
+
+```bash
+proof_image=sha256:c0aee3f2c9c722c2afe67dff563609b63cbbe09f79e97ce8d5debdddbfab302e
+proof_output=$(mktemp -d)
+proof_scripts="$PWD/scripts/e2e"
+docker image inspect "$proof_image" --format '{{.Id}} {{.Architecture}} {{.Os}}'
+docker run --rm --pull=never --network none --read-only --cpus=2 --memory=2g \
+  --tmpfs /tmp:rw,exec,size=1536m \
+  --mount "type=bind,src=$proof_input/source.tar.gz,dst=/proof/source.tar.gz,readonly" \
+  --mount "type=bind,src=$proof_scripts/teletext-zvbi-x27-build.sh,dst=/proof/build.sh,readonly" \
+  --mount "type=bind,src=$proof_output,dst=/out" \
+  --entrypoint /bin/sh "$proof_image" /proof/build.sh
+
+docker run --rm --pull=never --network none --read-only --cpus=1 --memory=512m \
+  --tmpfs /tmp:rw,exec,size=64m \
+  --mount "type=bind,src=$proof_output,dst=/out,readonly" \
+  --mount "type=bind,src=$proof_scripts,dst=/proof/scripts,readonly" \
+  --mount "type=bind,src=$proof_input/root.json,dst=/proof/root.json,readonly" \
+  --mount "type=bind,src=$proof_input/nested.json,dst=/proof/nested.json,readonly" \
+  --entrypoint /bin/sh "$proof_image" -c '
+    set -eu
+    for variant in original corrected; do
+      for fixture in root nested; do
+        LD_LIBRARY_PATH=/out/$variant python3 \
+          /proof/scripts/teletext-zvbi-x27-proof.py "$variant" "$fixture"
+      done
+    done' > "$proof_input/results.ndjson"
+```
+
+`proof_output` must initially be empty. Retain it, the outer image-inspection
+result and all four NDJSON records together. `proof-build.json` records source,
+configuration, tool and library hashes; the replay verifies unchanged helpers and
+fixtures and the actual mapped decoder path/hash. Fresh processes prevent library
+selection from leaking between cases. The original/nested record must explicitly
+report `conformance_passed: false`; the other three report two passing cases each.
+As a negative check, request `corrected root` with
+`LD_LIBRARY_PATH=/out/original`: the same replay must exit nonzero with
+`Unexpected mapped decoder path`. No Docker socket, host library installation,
+network access, source modification or publication occurs inside these containers.
+
 ## Teletext second local-object decoder calibration
 
 The separate opt-in cell oracle uses unmodified teletextimager 0.2.0 at

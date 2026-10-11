@@ -1316,9 +1316,11 @@ Native display packet encoding now preserves absent local X26 and exact sparse
 MOT-default owners, actual X27/X28 presence and separately returned original M29.
 Any present local program or base replacement requiring X26 rejects before output;
 legacy bytes remain unchanged. Prove native root activation separately from the
-mixed foreign-root/nested-selected positive case blocked by the known libzvbi
-0.2.42 X27/4 parser defect. Keep normative bytes/oracles; next supply complete
-service inventory/generation and foreign realization when X26 is required.
+mixed foreign-root/nested-selected case: unmodified libzvbi 0.2.42 reproduces
+its X27/4 parser defect, while a receipted test-only three-line correction passes
+the unchanged positive and suppression oracles. This is independent decoding,
+not actual client acceptance. Next supply complete service inventory/generation
+and foreign realization when X26 is required.
 Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
 invocations and prove exact pixels/native
 offscreen rendering and isolated invalid-glyph fallback. X27 decoding limitations

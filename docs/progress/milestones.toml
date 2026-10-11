@@ -987,7 +987,7 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
-Native display packets now preserve absent X26, sparse original defaults, actual X27/X28
+The X27 decoder calibration now has an offline maintained Docker build/replay recipe. Exact official libzvbi 0.2.42 source at 3785481f51f41a49e28f2b7f6fd5bd9187d24ae1 is built unmodified and with only three Table 15 parser lines corrected. Both use identical configuration; complete source/license notices, parser files, tool/configuration/build logs and schema-1 hash receipts are retained. The four unchanged-fixture replays reproduce original root success and original nested failure, then corrected root and nested success (two cases each, including empty-X26 suppression). A wrong actual mapped library rejects even when root glyphs match. The corrected decoder is explicitly test-only, not an official fixed release. The interchange reference and scripts/e2e/README.md record the pinned image, source/parser/library/fixture/helper hashes and reproducible commands. Production Rust and all prior wire/golden bytes remain unchanged; valid focused Rust/native evidence is reused. Full engine, transport, client navigation, editor and publication acceptance remain open; no milestone is closed. Earlier evidence follows unchanged: Native display packets now preserve absent X26, sparse original defaults, actual X27/X28
 presence and separately returned M29 through the existing packet writer. Unknown owners,
 present local programs and X26-dependent base replacements reject before output. Eight new
 tests pass (280e1ba1-d5e9-40ae-9330-baf82a0ea4ff); all534 unchanged teletext baseline tests

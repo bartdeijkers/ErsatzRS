@@ -271,8 +271,10 @@ with original root/instance provenance and prove attribute-only/charset/row/scre
 plane effects as well as all selected glyphs, rather than cloning semantic owners.
 Collision-only carrier closure is insufficient; all contributions remain required.
 Keep the mixed foreign-root/nested-selected positive oracle intact despite the
-known libzvbi 0.2.42 X27/4 parsing defect. Native root activation and suppression
-evidence cannot certify this mixed case or whole-service/client acceptance.
+known libzvbi 0.2.42 X27/4 parsing defect. A receipted test-only three-line
+correction now passes the unchanged mixed case and X26 suppression. The original
+build still reproduces the defect. This independent C-decoder evidence does not
+certify whole-service generation or actual client display/navigation.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone
