@@ -2,9 +2,9 @@
 """Opt-in independent local-object cells from unmodified teletextimager 0.2.0.
 
 The external checkout must be supplied explicitly; nothing is downloaded or
-installed. This checks three authored local-object goldens, not resource routing,
+installed. This checks bounded authored local-object goldens, not resource routing,
 font pixels, navigation, complete Level 2.5 or client acceptance. Input version
-0.2.42 retains the original fixture provenance; output identifies this decoder.
+0.2.42 retains the original fixture-family provenance; output identifies this decoder.
 """
 import hashlib
 import importlib.util

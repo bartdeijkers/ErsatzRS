@@ -1,5 +1,12 @@
+//! Western Latin fallback rows and exact positioned replacement glyphs.
+//!
+//! Derived G0/G2 intent uses the existing Latin region-zero tables. A later
+//! composer must establish/restore repertoire and header-row colour context;
+//! the legacy selector stream is not a context-free program to prepend.
+
 use ersatzrs_domain::{
-    TeletextColour, TeletextHeight, TeletextPageDraft, TeletextPageKind, TeletextRunContent,
+    TeletextColour, TeletextColumnOperation, TeletextDiacriticIndex, TeletextEnhancementPosition,
+    TeletextGlyphCode, TeletextHeight, TeletextPageDraft, TeletextPageKind, TeletextRunContent,
     TeletextStyle, TELETEXT_COLUMNS, TELETEXT_ROWS,
 };
 
@@ -7,7 +14,104 @@ use super::{charset, TeletextEncodingError};
 
 pub(super) struct Layout {
     pub rows: [[u8; TELETEXT_COLUMNS]; TELETEXT_ROWS],
-    pub enhancements: Vec<u32>,
+    base_glyphs: Vec<PositionedBaseGlyph>,
+}
+
+/// One exact Western Latin replacement for a fallback cell, before composition.
+/// These are derived glyphs, not an authored enhancement program or readiness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct PositionedBaseGlyph {
+    position: TeletextEnhancementPosition,
+    glyph: BaseGlyph,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BaseGlyph {
+    G2(TeletextGlyphCode),
+    G0Diacritic {
+        code: TeletextGlyphCode,
+        diacritic: TeletextDiacriticIndex,
+    },
+}
+
+impl PositionedBaseGlyph {
+    pub(super) const fn position(self) -> TeletextEnhancementPosition {
+        self.position
+    }
+
+    fn new(row: u8, column: u8, mode: u8, data: u8) -> Option<Self> {
+        let position = TeletextEnhancementPosition::new(row, column).ok()?;
+        let code = TeletextGlyphCode::new(data).ok()?;
+        let glyph = match mode {
+            0x0f => BaseGlyph::G2(code),
+            0x10..=0x1f => BaseGlyph::G0Diacritic {
+                code,
+                diacritic: TeletextDiacriticIndex::new(mode & 15).ok()?,
+            },
+            _ => return None,
+        };
+        Some(Self { position, glyph })
+    }
+
+    fn legacy_triplet(self) -> u32 {
+        // Exhaustive private glyph variants prevent unrelated authored modes
+        // from being silently accepted or dropped by the legacy builder.
+        let (mode, data) = match self.glyph {
+            BaseGlyph::G2(code) => (0x0f, code.get()),
+            BaseGlyph::G0Diacritic { code, diacritic } => (0x10 | diacritic.get(), code.get()),
+        };
+        triplet(self.position().column(), mode, data)
+    }
+}
+
+impl From<&PositionedBaseGlyph> for TeletextColumnOperation {
+    fn from(value: &PositionedBaseGlyph) -> Self {
+        match value.glyph {
+            BaseGlyph::G2(code) => Self::G2 { code },
+            BaseGlyph::G0Diacritic { code, diacritic } => Self::G0Diacritic { code, diacritic },
+        }
+    }
+}
+
+impl Layout {
+    /// Sorted exact row/column replacements; unchanged fallback cells remain in rows.
+    pub(super) fn base_glyphs(&self) -> &[PositionedBaseGlyph] {
+        &self.base_glyphs
+    }
+
+    /// Legacy selectors and glyphs derived from the sole positioned glyph stream.
+    /// The packet encoder separately appends its unchanged data-zero terminator.
+    pub(super) fn legacy_enhancements(&self) -> Vec<u32> {
+        let mut words = Vec::with_capacity(self.legacy_word_count());
+        let mut previous_row = None;
+        for glyph in self.base_glyphs() {
+            let row = glyph.position().row();
+            if previous_row != Some(row) {
+                let (address, mode) = match row {
+                    0 => (63, 7),
+                    24 => (40, 4),
+                    _ => (row + 40, 4),
+                };
+                words.push(triplet(address, mode, 0));
+                previous_row = Some(row);
+            }
+            words.push(glyph.legacy_triplet());
+        }
+        words
+    }
+
+    fn legacy_word_count(&self) -> usize {
+        let mut count = self.base_glyphs.len();
+        let mut previous_row = None;
+        for glyph in self.base_glyphs() {
+            let row = glyph.position().row();
+            if previous_row != Some(row) {
+                count += 1;
+                previous_row = Some(row);
+            }
+        }
+        count
+    }
 }
 
 pub(super) fn compile(page: &TeletextPageDraft) -> Result<Layout, TeletextEncodingError> {
@@ -19,7 +123,7 @@ pub(super) fn compile(page: &TeletextPageDraft) -> Result<Layout, TeletextEncodi
     }
     let mut layout = Layout {
         rows: [[b' '; TELETEXT_COLUMNS]; TELETEXT_ROWS],
-        enhancements: Vec::new(),
+        base_glyphs: Vec::new(),
     };
     let mut rows: Vec<_> = page.rows.iter().collect();
     rows.sort_by_key(|row| row.row);
@@ -28,7 +132,6 @@ pub(super) fn compile(page: &TeletextPageDraft) -> Result<Layout, TeletextEncodi
         runs.sort_by_key(|run| run.column);
         let mut state = State::default();
         let mut end = if row.row == 0 { 8 } else { 0 };
-        let mut active = false;
         for run in runs {
             let error = || TeletextEncodingError::ControlCells {
                 address: page.address,
@@ -77,18 +180,16 @@ pub(super) fn compile(page: &TeletextPageDraft) -> Result<Layout, TeletextEncodi
                             })?;
                         layout.rows[usize::from(row.row)][usize::from(column)] = encoded.fallback;
                         if let Some((mode, data)) = encoded.enhancement {
-                            if !active {
-                                let (address, row_mode) = if row.row == 0 {
-                                    (63, 7)
-                                } else if row.row == 24 {
-                                    (40, 4)
-                                } else {
-                                    (row.row + 40, 4)
-                                };
-                                layout.enhancements.push(triplet(address, row_mode, 0));
-                                active = true;
-                            }
-                            layout.enhancements.push(triplet(column, mode, data));
+                            layout.base_glyphs.push(
+                                PositionedBaseGlyph::new(row.row, column, mode, data).ok_or(
+                                    TeletextEncodingError::Character {
+                                        address: page.address,
+                                        row: row.row,
+                                        column,
+                                        codepoint: u32::from(character),
+                                    },
+                                )?,
+                            );
                         }
                         end = usize::from(column) + 1;
                     }
@@ -105,7 +206,7 @@ pub(super) fn compile(page: &TeletextPageDraft) -> Result<Layout, TeletextEncodi
         }
     }
     // Sixteen designation codes, thirteen triplets each, including termination.
-    if layout.enhancements.len() >= 16 * 13 {
+    if layout.legacy_word_count() >= 16 * 13 {
         return Err(TeletextEncodingError::Enhancements {
             address: page.address,
         });

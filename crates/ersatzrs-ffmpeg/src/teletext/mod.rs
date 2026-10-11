@@ -166,6 +166,8 @@ mod drcs_tests;
 #[cfg(test)]
 mod enhancement_program_tests;
 #[cfg(test)]
+mod layout_tests;
+#[cfg(test)]
 mod lift_tests;
 #[cfg(test)]
 mod local_object_program_tests;

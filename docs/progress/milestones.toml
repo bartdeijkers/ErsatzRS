@@ -987,6 +987,35 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 positioned base-glyph and extended local-decoder checkpoint:
+Private positioned G2/G0-diacritic events retain exact checked row/column and
+unchanged fallback rows. Legacy words derive from this sole immutable stream,
+including original row0/24 selectors, termination/padding and late capacity/error
+priority. No public wire schema, runtime activation or presentation changes.
+Eighteen focused layout/legacy tests pass (2db3a9ea-8fa8-43f1-9cfa-5fc70c29fbd2;
+458 skipped), including seven new literal byte/fallback/capacity/diagnostic tests
+and the unchanged whole-page wire snapshot. Seven affected tests pass again after
+cosmetic Copy-receiver/closure Clippy fixes (dfcbd80a-90d2-4d55-8a68-154da07c64f5).
+Actual Unicode/subtitle/seven-national-subset decoding passes against the exact
+Linux-x64 FFmpeg v2.0.6 package (3741753a-f7f7-4a28-8034-9d2c79809a4a), executable
+SHA256 e878341202c96f7c061099f87369a5dde63baa4c9c1c8aa93f1c919e525823a9.
+Three further independent teletextimager cases prove local markers104/195 and a
+full-ID Active/Adaptive/Passive chain, exact relative origins and Latin glyph/
+colour/diacritic behavior with unaffected base cells
+(initial Nextest 0cbb0963-1f04-481f-b1d0-ce0c3125d5d4).
+Final five native checks pass after cosmetic fixes in
+2d8a3c1f-4435-4fc2-a543-993d864d1d8a (471 skipped): 23 calibrated cases plus the
+unchanged three-case .42 fault diagnostic. Four original fixture hashes and both
+frozen libzvbi helpers remain identical. Advanced fixture/replay is in the reference.
+Strict final FFmpeg all-target Clippy, formatting, architecture/progress checks
+and independent source/oracle reviews pass. Context-aware composition must still
+preserve authored AP/charset/header colour/defaults and pair/work budgets before
+final definition sizing. These events/decoding cases do not establish composition,
+full semantics/lifecycle, transport, interactive client/editor or publication.
+Milestones, acceptance and dependencies remain open and unchanged.
+
+Earlier physical inventory checkpoint follows:
+
 2026-10-11 compiled physical page inventory checkpoint:
 validate_teletext_physical_page_inventory checks a supplied list of unique compiled
 display addresses and resource header metadata. Raw record count is fenced before

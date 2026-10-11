@@ -128,6 +128,34 @@ bodies are not safe to append blindly to existing encoded pages. Synthetic nativ
 resource calibration replaces the known empty base X26 body explicitly; it does
 not establish general base/enhancement composition or complete Level 2.5 readiness.
 
+### Positioned base glyphs
+
+The private base layout now retains a single immutable stream of positioned
+Western Latin glyph replacements alongside its unchanged fallback rows. Each
+event carries its exact checked row/column and a closed G2 or G0-with-diacritic
+operation. Diacritic zero retains ambiguous national-subset positions, including
+the special `*` code for authored `@`. Direct national characters and mosaics
+do not invent replacement events. No Unicode normalization or cell shifting occurs.
+
+The legacy packet builder derives its original words from that stream: one
+selector per populated row, unchanged row-zero/row-24 coding and unchanged
+data-zero termination/padding. Capacity still counts selectors plus glyphs and
+reserves termination; aggregate rejection remains after located character/control
+failures. Seven new tests cover literal word vectors, exact fallback cells,
+207/208 payload boundaries and preserved diagnostics. The existing complete
+wire snapshot and actual pinned FFmpeg Unicode/subtitle/national-subset proof pass.
+
+These positioned events are a composition prerequisite, not a second independent
+glyph source or a ready enhanced page. The composer must preserve authored order,
+AP and invocation origins, explicit offsets and DRCS latches; restore charset
+context with row-end resets; include injected Latin pairs/work in existing budgets;
+and resolve header-row colour before neutral positioning. Compatible authored
+glyph overrides should replace redundant derived Level 1.5 glyph triplets, while
+Level 2.5-only replacements retain their compatible fallback. Generating X26 must
+also realize original default-object behavior when the local program was absent;
+`Some(empty)` continues suppressing defaults. Definition allocation follows final
+merged sizing. Blind prefixing or copying the legacy black header selector is unsafe.
+
 ## Resource object allocation and invocation
 
 `allocate_teletext_resource_objects` uses the checked object catalog, separately
@@ -584,11 +612,21 @@ Python's standard library; no Pillow renderer is used in this proof. The existin
 bounded subprocess runner retains its ten-second deadline and output limits.
 Wrong glyph/colour expectations and changed decoder sources must fail.
 
+Three additional production-generated cases now decode a passive definition at
+absolute marker 104 (designation 8/slot 0), marker 195 (designation 15/slot 0),
+and a local Active-to-Adaptive-to-Passive chain with full IDs `FFFF/0100/0000`.
+The chain's relative origins place A/red/blue at row 4, column 8 while the adjacent
+T and separate B retain base attributes. High-marker fixtures use AP-neutral screen
+commands before the original invocation; no encoded selectors or definition bytes
+are patched by the test. The advanced fixture SHA256 is
+`57bf567c2dd894bf884d2435a9932738ca972c7fb3cfd16a77509801eceaece3`.
+The original three-case conformance fixture and both libzvbi helpers remain unchanged.
+
 This is representative independent local-object decoding, not interactive client
 or font-pixel evidence. The upstream README documents missing non-Latin adaptive/
 passive G0/G2 support; inspected code also leaves side-panel sizing work and uses
 explicitly supplied external resources rather than automatic MOT/X27 routing.
-Higher designations, nested local calls, resource pointer extensions, all required
+Complete local coverage, resource pointer extensions, all required
 repertoires, base/enhancement composition, transport and actual suitable-client
 display/navigation remain separate acceptance work. The libzvbi fault diagnostic
 retains its original meaning. See the

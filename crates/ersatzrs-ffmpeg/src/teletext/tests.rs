@@ -201,12 +201,9 @@ fn unicode_requires_exact_tables_and_never_silently_normalizes() {
         runs: vec![text(0, "éöĉŁ →", TeletextStyle::default())],
     }];
     let result = layout::compile(&value).unwrap();
-    assert!(result
-        .enhancements
-        .contains(&layout::triplet(0, 0x12, b'e')));
-    assert!(result
-        .enhancements
-        .contains(&layout::triplet(2, 0x13, b'c')));
+    let enhancements = result.legacy_enhancements();
+    assert!(enhancements.contains(&layout::triplet(0, 0x12, b'e')));
+    assert!(enhancements.contains(&layout::triplet(2, 0x13, b'c')));
     for invalid in ["📺", "e\u{301}", "\u{212b}", "|", "€"] {
         value.rows[0].runs[0].content = TeletextRunContent::Text {
             text: invalid.into(),

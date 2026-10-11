@@ -1159,6 +1159,11 @@ pinned teletextimager 0.2.0 with guarded sources, exact type-specific glyph/colo
 behavior and unchanged base cells. It is an opt-in oracle, not a runtime dependency
 or client/navigation proof. Extended local/pointer decoding, row-zero lowering and base/enhancement
 composition remain required work.
+Three further independent cases prove high local designations and nested local
+origins. Private positioned base-glyph events preserve fallback/legacy bytes and
+located diagnostics; seven new tests, the existing wire snapshot and actual
+pinned Unicode/subtitle/national-subset decoding pass. The next composer must
+resolve authored AP/charset/header colour/defaults before merged definition sizing.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

@@ -119,6 +119,12 @@ interchange reference. Its own T42 reader and formatter verify glyphs, colours,
 type-specific inheritance and unaffected base cells. Imported source hashes are
 guarded; it is an opt-in proof tool, not a runtime dependency or navigation client.
 Full external feature decoding and suitable-client display/navigation remain due.
+Three further independent cases cover designation 8/15 and nested local origins.
+Private positioned base-glyph events now support the upcoming context-aware main
+composer while retaining exact legacy fallback/packet bytes and diagnostics.
+Seven new regressions, the unchanged wire snapshot and actual pinned Unicode/
+subtitle/national-subset decoding pass. Merge authored AP/charset/header-colour/
+default context before final local-definition sizing; do not concatenate bodies.
 Row-zero position lowering and base/enhancement composition remain required work,
 without permanent scope restrictions.
 A bounded physical inventory fence now compares exact compiled display/resource

@@ -563,6 +563,27 @@ or modified upstream sources fail rather than relaxing the oracle.
 This proves representative direct local-object decoding. It is neither full
 Level 2.5 acceptance nor actual interactive client/navigation or bitmap evidence.
 Non-Latin adaptive/passive G0/G2, side-panel edges, automatic MOT/X27 selection,
-higher local designations/nesting and resource pointer extensions remain separate
+complete local coverage and resource pointer extensions remain separate
 proof obligations. See the
 [pinned source and acceptance boundaries](../../docs/reference/teletext-design-interchange.md#second-independent-local-object-decoder).
+
+The advanced opt-in case group adds production-encoded local definitions at
+designation 8/slot 0 and designation 15/slot 0, plus a full-ID nested
+Active-to-Adaptive-to-Passive chain. Reuse the same detached decoder checkout:
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_ADVANCED_LOCAL_OBJECT_FIXTURE="$fixture_dir/advanced.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  advanced_local_objects_decode_with_pinned_independent_teletextimager --lib \
+  --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-imager-decoder.py < "$fixture_dir/advanced.json"
+```
+
+The advanced fixture SHA256 is
+`57bf567c2dd894bf884d2435a9932738ca972c7fb3cfd16a77509801eceaece3`.
+This is additional independent local formatting/origin proof, with unchanged
+original fixtures. It does not certify all object interactions, pixels, transport
+or client navigation. The only replaced base X26 in these synthetic ASCII cases
+is its known empty sequence; generic base/enhancement composition remains open.

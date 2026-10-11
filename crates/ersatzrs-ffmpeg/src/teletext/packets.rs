@@ -160,7 +160,7 @@ pub fn encode_teletext_page(
         &presentation::encode_presentation(&presentation),
         subtitle,
     ));
-    let mut enhancements = compiled.enhancements;
+    let mut enhancements = compiled.legacy_enhancements();
     enhancements.push(layout::triplet(63, 31, 0));
     for (designation, triplets) in (0_u8..16).zip(enhancements.chunks(13)) {
         let mut bytes = [0; 40];

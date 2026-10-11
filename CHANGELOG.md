@@ -149,7 +149,8 @@ release section when tagging a release.
   and independent definition state. A bounded compiled-page inventory check now
   rejects exact display/resource header collisions and repeated logical resource
   owners while preserving distinct-S1 identities. Complete service compilation
-  remains open.
+  remains open. Private positioned base glyphs now prepare context-aware
+  composition while preserving existing fallback rows and packet bytes.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and
@@ -158,6 +159,7 @@ release section when tagging a release.
   correct three-case oracle also passes a second pinned independent decoder,
   with guarded sources and exact local glyph/colour inheritance. This is an
   opt-in verification tool, with no production dependency or client acceptance.
+  Additional cases prove high local designations and nested local object origins.
   X27 decoder limits,
   full feature/client proof and service scheduling remain open.
   Bounded MOT/X27 derivation preserves provenance,

@@ -69,7 +69,14 @@ three-case oracle now passes independent local decoding through pinned
 teletextimager 0.2.0, with exact glyph/colour inheritance and unchanged base cells.
 The opt-in adapter verifies imported source hashes and uses the decoder's own
 packet reader; it adds no production dependency. This establishes representative
-direct local decoding, not full feature or interactive-client acceptance.
+direct local decoding, not full feature or interactive-client acceptance. Three
+additional cases now prove high local designations and nested full-ID local
+origins with exact glyph/colour behavior. Private positioned base-glyph events
+now retain checked operations and fallback cells for the future composer; original
+legacy packet bytes, termination and error priority remain unchanged. Seven new
+regressions, the existing wire snapshot and pinned runtime Unicode/subtitle/
+national-subset proof pass. Charset/header-colour/default context and final merged
+definition sizing remain required; events alone do not constitute composition.
 Context-dependent row-zero positioning and base/enhancement composition remain
 required work. A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
