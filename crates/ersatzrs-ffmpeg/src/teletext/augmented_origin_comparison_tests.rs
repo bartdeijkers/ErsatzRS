@@ -76,6 +76,44 @@ fn unicode_replacements_and_active_carrier_match_exact_typed_origin() {
     });
 }
 #[test]
+fn retained_national_base_keeps_literal_identity_without_a_carrier() {
+    for text_value in ["§", "$", "#", "Ä"] {
+        with_candidate(
+            Fixture::new(vec![text(1, 8, text_value)], Some(vec![])),
+            None,
+            |service, original, augmented| {
+                assert!(original.base_replacement(1, 8).is_none());
+                assert!(augmented.carriers().is_empty());
+                let result = compiled(service, augmented, ancestry()).unwrap();
+                let comparison =
+                    compare_teletext_augmented_origin_glyphs(&result, limits()).unwrap();
+                assert_eq!(comparison.compared_cells(), 1000);
+                assert!(
+                    comparison.diagnostics().is_empty(),
+                    "{:?}",
+                    comparison.diagnostics()
+                );
+                for (display, intent) in [
+                    (original.display_resolution(), original.glyph_intent()),
+                    (
+                        result.physical().replay().display_resolution(),
+                        result.physical().replay().glyph_intent(),
+                    ),
+                ] {
+                    let origin = display.cell(1, 8).unwrap().origin().unwrap();
+                    let record = intent.records()[display.origins()[origin].candidate_index()];
+                    assert!(
+                        matches!(record.glyph(), Some(TeletextGlyphIdentity::G0 { glyph })
+                        if glyph.national_subset() == Some(TeletextNationalSubset::German))
+                    );
+                    assert!(record.context().candidate().base().is_some());
+                }
+            },
+        );
+    }
+}
+
+#[test]
 fn same_mask_latin_and_cyrillic_is_a_typed_identity_failure() {
     let target = local(0xffff);
     let mut fixture = Fixture::new(

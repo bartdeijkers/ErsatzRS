@@ -714,6 +714,15 @@ exact physical capacity. This is partial wire/decoder evidence; complex header
 normalization, original default realization, final geometry/priority and suitable
 client navigation remain open. No successful result activates or publishes pages.
 
+The national-overlap fixture exercises actual normalization of an enlarged German
+Base `§` over an Active double-size object. The same frozen composition helper
+checks both receiver levels, with literal national/G2 identities and adjacent
+`A/X/B` cells. Export with `ERSATZRS_TELETEXT_TEST_NATIONAL_OVERLAP_IMAGER_FIXTURE`
+and run `national_base_enlarged_overlap_decodes_with_pinned_imager`; see the
+[exact command, fixture hash and limits](../../docs/reference/teletext-design-interchange.md#national-option-carrier-conversion).
+This selected-cell proof does not establish all national glyph pixels or actual
+client navigation. Five national conversion positions remain explicitly pending.
+
 ## Teletext base display calibration
 
 Four additional synthetic cases use actual page and presentation encoders with

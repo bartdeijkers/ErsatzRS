@@ -6,10 +6,10 @@ use super::{
     TeletextBaseCellCommandKind, TeletextMainCompositionSource, TeletextOriginCarrierCommandRole,
 };
 use ersatzrs_domain::{
-    resolve_teletext_latin_replacement_identity, TeletextDisplayPending, TeletextEnhancementSource,
-    TeletextExecutedGlyphIntent, TeletextGlyphCandidate, TeletextGlyphDisposition,
-    TeletextGlyphIdentity, TeletextPageAddress, TeletextSpatialInvocationId,
-    TeletextSpatialRootSource,
+    resolve_teletext_latin_replacement_identity, resolve_teletext_national_conversion,
+    TeletextDisplayPending, TeletextEnhancementSource, TeletextExecutedGlyphIntent,
+    TeletextGlyphCandidate, TeletextGlyphDisposition, TeletextGlyphIdentity, TeletextPageAddress,
+    TeletextSpatialInvocationId, TeletextSpatialRootSource,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -423,6 +423,7 @@ impl Builder<'_> {
                 identity = resolve_teletext_latin_replacement_identity(operation).ok();
             }
         }
+        identity = self.carrier_national_identity(expected, found, position, identity)?;
         // A carrier's explicit SPACE preserves a blank/control's visible glyph role;
         // original coded controls remain in the immutable Base and full comparison.
         if matches!(
@@ -465,6 +466,46 @@ impl Builder<'_> {
             }
         }
         Ok(())
+    }
+    fn carrier_national_identity(
+        &mut self,
+        expected: &TeletextExecutedGlyphIntent,
+        found: &TeletextExecutedGlyphIntent,
+        position: (u8, u8),
+        mut identity: Option<TeletextGlyphIdentity>,
+    ) -> Result<Option<TeletextGlyphIdentity>, Error> {
+        let compiled = self.result.compiled;
+        // Only a producer-mapped carrier glyph may realize the original national
+        // identity through Table 36. `corresponds` already proved its exact origin
+        // and invocation. Retained Base/other commands keep literal identities.
+        if expected.context().candidate().base().is_some() {
+            if let (Some(conversion), Some(location)) = (
+                identity.and_then(|value| resolve_teletext_national_conversion(value).ok()),
+                found.context().candidate().source(),
+            ) {
+                self.charge(
+                    compiled.augmented().carriers().len()
+                        + compiled
+                            .augmented()
+                            .placement()
+                            .catalog()
+                            .definitions()
+                            .len()
+                        + 1,
+                    position,
+                )?;
+                if matches!(
+                    compiled.augmented().emitter_source(location),
+                    Some(TeletextAugmentedOriginSource::CarrierBody {
+                        role: TeletextOriginCarrierCommandRole::Glyph,
+                        ..
+                    })
+                ) {
+                    identity = Some(conversion.result());
+                }
+            }
+        }
+        Ok(identity)
     }
     fn corresponds(
         &mut self,

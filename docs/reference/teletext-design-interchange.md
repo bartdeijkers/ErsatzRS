@@ -743,6 +743,80 @@ C implementation. It does not establish an official fixed release, complete
 Level 2.5 support, transport integrity, suitable-client display/navigation or
 QTeletextMaker/editor/admin/publication acceptance. Those requirements remain open.
 
+### National-option carrier conversion
+
+`resolve_teletext_national_conversion` is a finite Table 36 identity relation,
+read against Tables 35 and 37. It retains the exact original national G0 identity
+and returns an explicit Latin designation, G0/G2/diacritic operation and resulting
+enhanced identity. It does not infer meaning from Unicode or equal font masks.
+German `§` at Base `0x40` becomes Latin G2 `0x27`; German `#` becomes enhanced
+G0 `0x23`; English `$` becomes G2 `0x24`, because enhanced G0 `0x24` is currency
+sign, not dollar. Designation aliases resolve through the existing charset and
+intent pipeline; graphics-mode alphabetic positions remain distinct from mosaics.
+
+The audited table has 164 established recipes and five explicit pending positions.
+English `0x7C` (double vertical), Polish `0x5B` (stroked capital Z) and Turkish
+`0x23` (TL) still need proven physical representations. Romanian `0x5D/0x7D`
+have ambiguous breve/caron marks in the primary table's tiny glyphs and remain
+unresolved; do not choose by language expectation or a decoder's Unicode table.
+Romanian `0x5E` is the primary table's I-circumflex, not the cached decoder's
+I-acute. These are remaining implementation/evidence gaps, not approved authoring
+restrictions. Resource-backed realization must respect actual DRCS and pair budgets.
+
+Carrier construction and typed comparison share this same checked relation.
+Comparison permits it only after exact original-origin and invocation correspondence
+and a private generated `CarrierBody/Glyph` mapping. Retained Base and other
+commands keep their literal identities. The original service, Base glyph record,
+source, repaint origin and fallback bytes remain immutable. Full selected-page
+font/fragment/colour comparison stays independently required, so a semantic mapping
+cannot hide a font discrepancy. Explicit Latin designation still consumes the
+normal charset-pair budget; it does not bypass allocation or packing limits.
+
+Six focused domain tests pass (`b9694f9c-2dac-406d-b1ac-68e5b721ba4d`): all
+169 literal operands/pending cells, all 164 results through real charset/intent
+execution, all 29 page aliases, invalid codes/repertoires and non-national roles.
+The combined teletext run (`db7ad83d-8f0c-4e68-b1b4-ecd917a35ff6`) passed
+949 of 950 tests; the new overlap fixture alone initially violated the existing
+forward-only main-position rule. Using a legal Active call offset `(0,1)` from
+main AP `(1,7)` preserves its intended absolute geometry without a backward move.
+The corrected focused test passes (`7a3843ae-4fcf-41bd-b67e-473010acd16e`).
+The unchanged tests remain valid evidence; this is not a claimed all-green first run.
+
+The overlap has German Base `§` enlarged by Adaptive repaint over columns 7–8,
+Active double-size `A` behind it, explicit normal `X` at column 9 and an unaffected
+`B` sentinel. A derived pound at row 2 triggers the actual normalization closure.
+The recipe preserves the distinct repaint origin and original national Base
+candidate. Both typed and full selected-display comparisons inspect all 1,000
+cells with zero findings; the original service and ordinary fallback encoder
+remain unchanged. Four retained national Base cases separately prove that no
+carrier means no canonicalization of their literal identities.
+
+The production-normalized DVB fixture also passes pinned teletextimager 0.2.0
+at `2b0125b778c45ffdfa2df0b196870c093361f317`
+(`5e8a34ee-1a3f-474b-9c3a-b116a41b58c5`). Literal Level 1.5/2.5 code,
+repertoire, diacritic and colour tuples cover both `§` halves, `X`, both bottom
+`A` halves and the `B` sentinel. German Base `§` is raw `0x40`/font 15;
+the generated enhanced glyph is `0x27`/Latin G2 font 7. Expected tuples came from
+the pinned decoder's table identities, not from overwriting observed failures.
+This is selected-cell independent decoding, not actual client navigation or pixel
+acceptance of every converted national glyph. The helper and its source guards
+remain unchanged.
+
+Request SHA256:
+`3717dd013e81515fdf3bdcc17c479eeb61d210bd802caf12e70764697791f184`.
+Helper SHA256:
+`e1cb2ad2b16e78a0f56baaae14434aa6d78f146d7e0173c7ade9f19db97228eb`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_NATIONAL_OVERLAP_IMAGER_FIXTURE="$fixture_dir/national-overlap.json" \
+  ./run.sh test -p ersatzrs-ffmpeg national_base_enlarged_overlap_decodes \
+  --lib --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-main-composition-decoder.py \
+  < "$fixture_dir/national-overlap.json"
+```
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

@@ -95,6 +95,190 @@ fn active() -> Fixture {
 fn selected(display: &TeletextDisplayResolution, row: u8, column: u8) -> usize {
     display.origins()[display.cell(row, column).unwrap().origin().unwrap()].candidate_index()
 }
+
+fn display_attributes(column: u8, wide: bool, high: bool) -> TeletextEnhancementCommand {
+    at(
+        column,
+        TeletextColumnOperation::Attributes {
+            double_width: wide,
+            double_height: high,
+            boxed: false,
+            conceal: false,
+            invert: false,
+            underline_or_separated_mosaics: false,
+        },
+    )
+}
+
+fn enlarged_national_base() -> Fixture {
+    let mut fixture = Fixture::new(
+        vec![text(1, 7, "§"), text(2, 8, "£"), text(3, 1, "B")],
+        Some(vec![
+            position(1, 7),
+            TeletextEnhancementCommand::InvokeObject {
+                target: local(0xffff),
+                object_type: TeletextObjectType::Active,
+                offset: Some(TeletextObjectOffset::new(0, 1).unwrap()),
+            },
+            invoke(local(0xfffe), TeletextObjectType::Adaptive),
+        ]),
+    );
+    fixture.objects = vec![
+        definition(
+            local(0xffff),
+            TeletextObjectType::Active,
+            vec![
+                display_attributes(0, true, true),
+                g0(0),
+                display_attributes(2, false, false),
+            ],
+        ),
+        definition(
+            local(0xfffe),
+            TeletextObjectType::Adaptive,
+            vec![
+                display_attributes(0, true, false),
+                display_attributes(2, false, false),
+                at(2, TeletextColumnOperation::G0 { code: code(b'X') }),
+            ],
+        ),
+    ];
+    fixture
+}
+
+fn assert_national_base_original(original: &TeletextMainComposition) -> usize {
+    let display = original.display_resolution();
+    let origin = display.cell(1, 7).unwrap().origin().unwrap();
+    assert_eq!(display.cell(1, 8).unwrap().origin(), Some(origin));
+    assert_eq!(
+        display.origins()[origin].effective_size(),
+        Some(TeletextDisplaySize::DoubleWidth)
+    );
+    // Adaptive repaint retains the Base candidate but creates a distinct origin.
+    assert!(origin >= original.glyph_layers().candidates().len());
+    let candidate =
+        original.glyph_layers().candidates()[display.origins()[origin].candidate_index()];
+    assert_eq!(candidate.priority(), TeletextGlyphPriority::Base);
+    let base = candidate.base().unwrap();
+    assert_eq!((base.position().row(), base.position().column()), (1, 7));
+    assert_eq!(base.code(), 0x40);
+    assert_eq!(candidate.source(), None);
+    assert_eq!(candidate.root_source(), None);
+    assert_eq!(candidate.invocation(), None);
+    assert!(matches!(
+        original.glyph_intent().records()[display.origins()[origin].candidate_index()].glyph(),
+        Some(TeletextGlyphIdentity::G0 { glyph })
+            if glyph.repertoire() == TeletextG0Repertoire::Latin
+                && glyph.code() == 0x40
+                && glyph.national_subset() == Some(TeletextNationalSubset::German)
+    ));
+    assert_eq!(original.base_replacement(1, 7), None);
+    assert!(!original.provenance().iter().any(|source| matches!(
+        source,
+        TeletextMainCompositionSource::BaseCell { position, kind: TeletextBaseCellCommandKind::Glyph }
+            if (position.row(), position.column()) == (1, 7)
+    )));
+    origin
+}
+
+#[test]
+fn enlarged_overlap_carries_german_national_base_without_changing_original_identity() {
+    use crate::teletext::{
+        compare_teletext_augmented_origin_glyphs, compare_teletext_physical_display,
+        TeletextAugmentedOriginSource, TeletextOriginCarrierCommandRole,
+    };
+    super::augmented_origin_compilation_tests::with_candidate(
+        enlarged_national_base(),
+        None,
+        |service, original, augmented| {
+            let before = service.clone();
+            let fallback = encode_teletext_page(
+                &service.base().pages[0],
+                TeletextEncodingRegion::WesternLatin,
+            )
+            .unwrap();
+            let origin = assert_national_base_original(original);
+            assert_eq!(augmented.carriers().len(), 3);
+            let carrier_index = augmented
+                .carriers()
+                .iter()
+                .position(|carrier| carrier.original_origin_index() == origin)
+                .unwrap();
+            let carrier = &augmented.carriers()[carrier_index];
+            assert_eq!(carrier.original_source(), None);
+            assert_eq!(carrier.original_root_source(), None);
+            assert_eq!(carrier.original_invocation(), None);
+            let body = &augmented
+                .catalog()
+                .definition(carrier.identity())
+                .unwrap()
+                .program;
+            assert_eq!(
+                body.commands()[4],
+                at(
+                    0,
+                    TeletextColumnOperation::DesignateCharset {
+                        designation: TeletextEnhancementCharsetDesignation::new(0).unwrap()
+                    }
+                )
+            );
+            assert_eq!(
+                body.commands()[5],
+                at(0, TeletextColumnOperation::G2 { code: code(0x27) })
+            );
+            let compiled = super::augmented_origin_compilation_tests::compiled(
+                service,
+                augmented,
+                limits().ancestry,
+            )
+            .unwrap();
+            let actual = compiled.physical().replay();
+            let record =
+                actual.glyph_intent().records()[selected(actual.display_resolution(), 1, 7)];
+            assert!(
+                matches!(record.glyph(), Some(TeletextGlyphIdentity::G2 { glyph })
+                if glyph.repertoire() == TeletextG2Repertoire::Latin && glyph.code() == 0x27)
+            );
+            assert_eq!(
+                augmented.emitter_source(record.context().candidate().source().unwrap()),
+                Some(TeletextAugmentedOriginSource::CarrierBody {
+                    carrier: carrier_index,
+                    role: TeletextOriginCarrierCommandRole::Glyph
+                })
+            );
+            let typed =
+                compare_teletext_augmented_origin_glyphs(&compiled, limits().glyph_comparison)
+                    .unwrap();
+            assert_eq!(typed.compared_cells(), 1000);
+            assert!(typed.diagnostics().is_empty(), "{:?}", typed.diagnostics());
+            let display =
+                compare_teletext_physical_display(original, actual, limits().display_comparison)
+                    .unwrap();
+            assert_eq!(display.compared_cells(), 1000);
+            assert!(
+                display.diagnostics().is_empty(),
+                "{:?}",
+                display.diagnostics()
+            );
+            let normalized =
+                compile_teletext_normalized_main_program(service, owner(), limits()).unwrap();
+            assert_national_base_original(normalized.original());
+            assert_eq!(
+                normalized.original().base_display(),
+                original.base_display()
+            );
+            assert_eq!(
+                encode_teletext_page(
+                    &service.base().pages[0],
+                    TeletextEncodingRegion::WesternLatin
+                )
+                .unwrap(),
+                fallback
+            );
+            assert_eq!(service, &before);
+        },
+    );
+}
 #[test]
 fn active_unicode_candidate_owns_original_and_actual_after_inputs_leave_scope() {
     let result: EncodedTeletextNormalizedMainProgram = {

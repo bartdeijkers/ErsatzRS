@@ -33,6 +33,7 @@ mod glyph_layers;
 mod identity;
 mod mot;
 mod mot_resolution;
+mod national_conversion;
 mod objects;
 mod pages;
 mod presentation;
@@ -69,6 +70,7 @@ pub use glyph_layers::*;
 pub use identity::*;
 pub use mot::*;
 pub use mot_resolution::*;
+pub use national_conversion::*;
 pub use objects::*;
 pub use pages::*;
 pub use presentation::*;
@@ -119,6 +121,9 @@ mod mot_tests;
 
 #[cfg(test)]
 mod mot_resolution_tests;
+
+#[cfg(test)]
+mod national_conversion_tests;
 
 #[cfg(test)]
 mod enhancement_values_tests;

@@ -164,6 +164,10 @@ release section when tagging a release.
   side effects, preserving raw budgets, pointers, source ordinals and both DRCS
   latches. Other row-zero lowering remains required. Document native MOT versus
   X26 foreign-default realization obligations without weakening owner checks.
+  Realize proven national-option glyphs through explicit standard-table carrier
+  operations while preserving original identities, provenance and fallback bytes.
+  Validate an enlarged German section-sign overlap through complete model checks
+  and independent dual-level decoding; five national positions remain pending.
   Add an offline, versioned comparison of original and test-corrected libzvbi
   decoding against unchanged native-default fixtures, with source/build receipts
   and actual loaded-library verification; client acceptance remains separate.

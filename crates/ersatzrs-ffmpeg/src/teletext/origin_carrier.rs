@@ -6,13 +6,14 @@
 
 use super::TeletextMainComposition;
 use ersatzrs_domain::{
-    TeletextCharsetSelection, TeletextColourCompositionError, TeletextColourPixelOptions,
-    TeletextColumnOperation, TeletextDisplayAttributes, TeletextDisplayOrigin, TeletextDisplaySize,
-    TeletextEnhancementCharsetDesignation, TeletextEnhancementCommand,
-    TeletextEnhancementObjectCatalog, TeletextEnhancementObjectDefinition,
-    TeletextEnhancementProgram, TeletextEnhancementProgramError, TeletextEnhancementSource,
-    TeletextExecutedGlyphIntent, TeletextFlashMode, TeletextFlashPhase, TeletextFlashRate,
-    TeletextGlyphCandidate, TeletextGlyphCode, TeletextGlyphDisposition, TeletextGlyphIdentity,
+    resolve_teletext_national_conversion, TeletextCharsetSelection, TeletextColourCompositionError,
+    TeletextColourPixelOptions, TeletextColumnOperation, TeletextDisplayAttributes,
+    TeletextDisplayOrigin, TeletextDisplaySize, TeletextEnhancementCharsetDesignation,
+    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
+    TeletextEnhancementObjectDefinition, TeletextEnhancementProgram,
+    TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextExecutedGlyphIntent,
+    TeletextFlashMode, TeletextFlashPhase, TeletextFlashRate, TeletextGlyphCandidate,
+    TeletextGlyphCode, TeletextGlyphDisposition, TeletextGlyphIdentity,
     TeletextObjectCatalogBudget, TeletextObjectId, TeletextObjectIdentity, TeletextObjectType,
     TeletextPageAddress, TeletextSpatialInvocationId, TeletextSpatialRootSource,
 };
@@ -467,7 +468,9 @@ fn glyph_recipe(
     let identity = intent.glyph().ok_or(Failure::Glyph)?;
     if matches!(identity, TeletextGlyphIdentity::G0 { glyph } if glyph.national_subset().is_some())
     {
-        return Err(Failure::NationalConversion);
+        let conversion = resolve_teletext_national_conversion(identity)
+            .map_err(|_| Failure::NationalConversion)?;
+        return Ok((conversion.operation(), Some(conversion.designation())));
     }
     // Mode 10 / code2A is @ independently of even unresolved current G0.
     if identity == TeletextGlyphIdentity::AtSymbol {

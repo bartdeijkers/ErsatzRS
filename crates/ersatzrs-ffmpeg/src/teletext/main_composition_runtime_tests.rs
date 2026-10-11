@@ -188,7 +188,11 @@ fn encode_fixture_main(
         },
     };
     let packing_budget = TeletextObjectCatalogBudget {
-        max_objects: 4,
+        max_objects: if name == "national_base_enlarged_overlap" {
+            8
+        } else {
+            4
+        },
         max_commands: 128,
     };
     if matches!(encoding, MainEncoding::Normalized) {
@@ -250,7 +254,7 @@ fn normalization_budget(
         composition,
         packing,
         replay: composition.collection,
-        max_resource_objects: 4,
+        max_resource_objects: packing.max_objects,
         realization: TeletextBaseCompatibilityRealizationBudget {
             max_commands: 128,
             max_candidates: 2048,
@@ -612,6 +616,106 @@ async fn base_unicode_active_override_decodes_with_pinned_imager() {
     .unwrap();
     if let Some(path) = crate::locator::first_non_empty_env(&[
         "ERSATZRS_TELETEXT_TEST_UNICODE_ACTIVE_IMAGER_FIXTURE",
+    ]) {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
+        "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317","cases_passed":1,"levels":["1.5","2.5"]})
+    );
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn national_base_enlarged_overlap_decodes_with_pinned_imager() {
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let active = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xffff));
+    let adaptive = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xfffe));
+    let attributes = |column, double_width, double_height| {
+        at(
+            column,
+            TeletextColumnOperation::Attributes {
+                double_width,
+                double_height,
+                boxed: false,
+                conceal: false,
+                invert: false,
+                underline_or_separated_mosaics: false,
+            },
+        )
+    };
+    let invoke = |target, object_type| TeletextEnhancementCommand::InvokeObject {
+        target,
+        object_type,
+        offset: None,
+    };
+    let glyph = |column, value| {
+        at(
+            column,
+            TeletextColumnOperation::G0 {
+                code: TeletextGlyphCode::new(value).unwrap(),
+            },
+        )
+    };
+    let case = encoded_case_with_encoding(
+        "national_base_enlarged_overlap",
+        vec![text(1, 7, "§"), text(2, 8, "£"), text(3, 1, "B")],
+        vec![
+            position(1, 7),
+            TeletextEnhancementCommand::InvokeObject {
+                target: active,
+                object_type: TeletextObjectType::Active,
+                offset: Some(TeletextObjectOffset::new(0, 1).unwrap()),
+            },
+            invoke(adaptive, TeletextObjectType::Adaptive),
+        ],
+        vec![
+            TeletextEnhancementObjectDefinition {
+                identity: active,
+                object_type: TeletextObjectType::Active,
+                program: TeletextEnhancementProgram::new(vec![
+                    attributes(0, true, true),
+                    glyph(0, b'A'),
+                    attributes(2, false, false),
+                ])
+                .unwrap(),
+            },
+            TeletextEnhancementObjectDefinition {
+                identity: adaptive,
+                object_type: TeletextObjectType::Adaptive,
+                program: TeletextEnhancementProgram::new(vec![
+                    attributes(0, true, false),
+                    attributes(2, false, false),
+                    glyph(2, b'X'),
+                ])
+                .unwrap(),
+            },
+        ],
+        &[
+            cell(1, 7, [0x40, 15, 0, 7, 0], [0x27, 7, 0, 7, 0]),
+            cell(1, 8, [b' ', 15, 0, 7, 0], [0x27, 7, 0, 7, 0]),
+            cell(1, 9, [b' ', 15, 0, 7, 0], [b'X', 0, 0, 7, 0]),
+            cell(2, 8, [0x23, 7, 0, 7, 0], [b'A', 0, 0, 7, 0]),
+            cell(2, 9, [b' ', 15, 0, 7, 0], [b'A', 0, 0, 7, 0]),
+            cell(3, 1, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
+        ],
+        MainEncoding::Normalized,
+    );
+    let request =
+        serde_json::to_vec(&serde_json::json!({"expected_version":"0.2.0", "cases":[case]}))
+            .unwrap();
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_NATIONAL_OVERLAP_IMAGER_FIXTURE",
     ]) {
         std::fs::write(path, &request).unwrap();
     }

@@ -19,8 +19,8 @@ AP00 retains pointers/C2; native pages retain no-X26/default owners/X27/X28/M29.
 Test-corrected X27 mixed decoding passes; client proof stays open.
 C2 uses packed words; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.
-Charset/glyph/DRCS facts retain national aliases, bans, unresolved composition,
-exact resources/bitmaps, losers and defined blanks. Lowering owns selectors.
+164 national recipes retain identities; five positions pending.
+Charset/glyph/DRCS keep aliases/bans/resources/losers/blanks. Lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
 Intervals reject sixteen simultaneous opens; unknown ones survive.

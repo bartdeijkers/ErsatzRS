@@ -350,7 +350,7 @@ fn complete_drcs_reference_and_original_instance_are_retained_without_charset_su
 }
 
 #[test]
-fn authored_replacements_use_explicit_latin_while_national_base_needs_identity_conversion() {
+fn authored_replacements_and_national_base_use_explicit_latin_conversion() {
     let service = Fixture::new(
         vec![text(1, 8, "£"), text(2, 8, "é"), text(3, 8, "§")],
         Some(vec![]),
@@ -359,6 +359,7 @@ fn authored_replacements_use_explicit_latin_while_national_base_needs_identity_c
     let composition = compose(&service);
     for (row, operation) in [
         (1, TeletextColumnOperation::G2 { code: code(0x23) }),
+        (3, TeletextColumnOperation::G2 { code: code(0x27) }),
         (
             2,
             TeletextColumnOperation::G0Diacritic {
@@ -385,14 +386,13 @@ fn authored_replacements_use_explicit_latin_while_national_base_needs_identity_c
         assert_eq!(recipe.candidate().priority(), TeletextGlyphPriority::Base);
         assert_eq!(recipe.location(), None);
     }
-    let error = build_teletext_origin_carrier(
-        &composition,
-        origin(&composition, 3, 8),
-        service.objects(),
-        limits(),
-    )
-    .unwrap_err();
-    assert_eq!(error.reason, Failure::NationalConversion);
+    let original = composition.glyph_intent().records()
+        [composition.display_resolution().origins()[origin(&composition, 3, 8)].candidate_index()];
+    assert!(
+        matches!(original.glyph(), Some(TeletextGlyphIdentity::G0 { glyph })
+        if glyph.code() == 0x40 && glyph.national_subset() == Some(TeletextNationalSubset::German))
+    );
+    assert!(composition.base_replacement(3, 8).is_none());
 }
 
 #[test]
