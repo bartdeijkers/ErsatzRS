@@ -1,5 +1,77 @@
 # TSDuck playback gate (E2E)
 
+## QTeletextMaker headed synthetic calibration
+
+This opt-in Linux/X11 probe uses an unchanged external editor and disposable
+synthetic files. It proves one editor edit/navigation/save trial; it is not the
+ErsatzRS export/import/preview/publication gate. See the canonical
+[source audit and recorded identities](../../docs/reference/teletext-design-interchange.md#actual-synthetic-editsave-calibration).
+The editor's ordinal subcode rewriting and unknown-record loss are deliberate
+observations, not accepted host data loss. Do not point the probe at production
+designs or an existing output file.
+
+Prerequisites: the pinned QTeletextMaker checkout, a visible X11 display and a
+local Linux amd64 Qt tool image. The recorded image derives from build-base
+`sha256:c0aee3f2c9c722c2afe67dff563609b63cbbe09f79e97ce8d5debdddbfab302e`
+with `qt6-base-dev`, `fonts-dejavu-core`, `xdotool`, `x11-utils` and `imagemagick`
+installed using `apt-get install --no-install-recommends`. The recorded Qt package
+is 6.10.2+dfsg-7. Pin/record actual packages and image identity on replay; a moving
+package repository cannot recreate the recorded image identity by assumption.
+Keep dependencies and artifacts outside the Rust target directory.
+
+```bash
+qtm_src=/path/to/pinned-qteletextmaker-checkout
+qtm_tools=/path/to/disposable-tool-output
+qtm_work=/path/to/new-disposable-audit-workspace
+qtm_image=ersatzrs-phase9-qtm-tools:local
+qtm_xsocket=/path/to/visible-x11-socket-directory
+test "$(git -C "$qtm_src" rev-parse HEAD)" = cac2167bac933a6160cca45a45d5d4ee95355898
+test -z "$(git -C "$qtm_src" status --porcelain)"
+mkdir -p "$qtm_tools" "$qtm_work"
+python3 scripts/e2e/teletext-qtm-calibration.py fixture "$qtm_work/synthetic-editor-audit.tti"
+docker run --rm --network none --cpus 2 --memory 1536m --tmpfs /tmp:rw,size=768m \
+  --mount "type=bind,src=$qtm_src,dst=/src,readonly" \
+  --mount "type=bind,src=$qtm_tools,dst=/out" "$qtm_image" sh -eu -c '
+  CC=/usr/bin/cc CXX=/usr/bin/c++ cmake -S /src -B /tmp/build -DCMAKE_BUILD_TYPE=Release
+  cmake --build /tmp/build --parallel 2
+  cp /tmp/build/qteletextmaker /out/qteletextmaker
+  sha256sum /out/qteletextmaker
+  QT_QPA_PLATFORM=offscreen /out/qteletextmaker --version'
+docker run --rm --network none --cpus 2 --memory 768m \
+  --mount "type=bind,src=$PWD/scripts/e2e,dst=/proof,readonly" \
+  --mount "type=bind,src=$qtm_tools,dst=/out" "$qtm_image" sh -eu -c '
+  export PKG_CONFIG_LIBDIR=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig PKG_CONFIG_SYSROOT_DIR=/
+  /usr/bin/c++ -std=c++17 -O2 -fPIC -shared /proof/teletext-qtm-widget-driver.cpp \
+    -o /out/maintained-gui-driver.so $(/usr/bin/pkg-config --cflags --libs Qt6Widgets Qt6Test) -ldl
+  sha256sum /out/maintained-gui-driver.so'
+docker run --rm --network none --cpus 1 --memory 768m --tmpfs /tmp:rw,size=128m \
+  --mount "type=bind,src=$qtm_tools,dst=/tool,readonly" \
+  --mount "type=bind,src=$qtm_work,dst=/work" \
+  --mount "type=bind,src=$qtm_xsocket,dst=/tmp/.X11-unix,readonly" \
+  -e DISPLAY -e QT_QPA_PLATFORM=xcb -e QT_X11_NO_MITSHM=1 -e LANG=C.UTF-8 \
+  -e XDG_CONFIG_HOME=/tmp/qtm-config "$qtm_image" sh -eu -c '
+  install -d -m 700 /tmp/qtm-runtime
+  export XDG_RUNTIME_DIR=/tmp/qtm-runtime LD_PRELOAD=/tool/maintained-gui-driver.so
+  exec /tool/qteletextmaker /work/synthetic-editor-audit.tti'
+python3 scripts/e2e/teletext-qtm-calibration.py verify \
+  "$qtm_work/synthetic-editor-audit.tti" "$qtm_work/edited-editor-audit.tti"
+```
+
+The native compiler/pkg-config overrides are necessary when the base image has
+FFmpeg cross-build defaults. Offscreen `--version` is only identity evidence.
+The actual probe requires `xcb` and exposed windows; it uses QtTest input rather
+than OS-wide keyboard injection. Retain and visually inspect all six captures,
+including both subpages and the actual Save As dialog. Its completion requires
+the saved document path and cleared modified state; the Python verifier checks
+the bounded literal bytes and reports `engine_roundtrip_proven: false`.
+
+Separately start the same binary against `/work/edited-editor-audit.tti` with the
+same visible-display mounts, a read-only work mount and **without LD_PRELOAD**.
+Inspect that owned window to prove reopening retains the text and selected
+Level 2.5 enhancement. This does not prove every subpage enhancement or resource
+function. Stop only the owned test containers after retaining evidence. Shared
+X11 access is a local manual-test exception and is never a server dependency.
+
 ## Next copy-mode transport acceptance
 
 Use the existing calibration playout with the accepted Next executable and

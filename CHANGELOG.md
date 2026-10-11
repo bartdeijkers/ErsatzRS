@@ -143,7 +143,9 @@ release section when tagging a release.
   applicable charset aliases share one exact repertoire pair, retaining raw
   source uncertainty and prior history. Complete encoding/raster and independent
   decoding pass; different repertoires still reject. Cross-instance uncertainty,
-  hosted transport, update history and full acceptance remain open. Verify
+  hosted transport, update history and full acceptance remain open. Headed
+  pinned-QTeletextMaker edit/save/reopen calibration records actual identity
+  normalization and unknown-record loss; full host interchange remains open. Verify
   the existing whole-display 127-invocations-per-type admission across sparse
   defaults, nested calls and independent subcodes; physical replay must reuse it.
   Trace a supplied physical program with the shared bounded spatial executor,

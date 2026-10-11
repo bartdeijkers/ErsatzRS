@@ -689,6 +689,14 @@ The full enhanced aggregate and encoder implementation remain separate work.
 
 ### External editing, drafts and publication
 
+The pinned 1.0 source now has a bounded actual headed synthetic edit/navigation/
+Save As/reopen calibration, with an unchanged editor binary and recorded Qt/image
+identities in the [interchange reference](../reference/teletext-design-interchange.md#actual-synthetic-editsave-calibration).
+Both subcodes are renumbered and unknown records disappear; the selected first
+subpage enhancement survives. This supports the existing explicit mapping and
+external-sidecar decision. It is not ErsatzRS export/import/preview/publication
+acceptance, or full enhanced client conformance; those requirements remain open.
+
 Support selection/export of a page, its subpages or a supported page set as TTI
 plus `ersatzrs-teletext-project.json`, an explicitly versioned external sidecar.
 Keep the sidecar outside TTI because QTeletextMaker does not preserve custom

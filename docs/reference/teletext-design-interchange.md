@@ -2791,8 +2791,9 @@ cases. A report that FFmpeg contains libzvbi does not prove this matrix.
 ## Pinned QTeletextMaker source audit
 
 Audit target: [QTeletextMaker 1.0](https://github.com/gkthemac/QTeletextMaker/releases/tag/1.0),
-commit `cac2167bac933a6160cca45a45d5d4ee95355898`. This is source inspection,
-not a downloaded-artifact check or actual editor roundtrip.
+commit `cac2167bac933a6160cca45a45d5d4ee95355898`. Source inspection is now
+supplemented by the bounded, actual editor calibration below. Full ErsatzRS
+export/draft import/preview/publication acceptance remains open.
 
 The [loader](https://github.com/gkthemac/QTeletextMaker/blob/cac2167bac933a6160cca45a45d5d4ee95355898/src/qteletextmaker/loadformats.cpp)
 interprets DE/PN/PS/RE/CT/FL/OL. SC handling is disabled. It uses the first page
@@ -2814,6 +2815,63 @@ include skipped POP/GPOP invocations. The
 loads dependencies separately and does not provide bitmap editing. Resource-page
 classification and unsupported editor transformations must be checked explicitly.
 QTeletextMaker alone cannot establish the full enhanced broadcast-client gate.
+
+### Actual synthetic edit/save calibration
+
+The pinned source was built unchanged with native GCC 15.2.0, CMake 4.2.3 and
+Qt 6.10.2 (`qt6-base-dev` 6.10.2+dfsg-7) in a local Ubuntu 26.04.1 container.
+The editor reports `QTeletextMaker 1.0`; its binary SHA256 is
+`567a669fd0edef20215967a08fe679a6c011fd0d7ca85ebd15f14393540177ee`.
+Local tool-image identity is
+`sha256:6064a1cfba3673ce1530dd5ea4c98249a5540666e3feea3160f43c122fd81c01`.
+Docker Desktop 4.94.0 (241994), engine 29.8.2, Linux amd64, displayed actual
+`xcb` windows through WSLg; offscreen version checks are not display evidence.
+
+[The calibration helper](../../scripts/e2e/teletext-qtm-calibration.py) creates
+one synthetic two-subpage TTI input and verifies only its recorded edit/save
+result. The [test-only widget driver](../../scripts/e2e/teletext-qtm-widget-driver.cpp)
+uses the original Qt event loop, real editor input, subpage navigation and the
+actual Save As dialog. It leaves the editor decoder and writer unchanged, requires
+an exposed X11 window and the exact synthetic file, refuses existing/symlink
+destinations, checks the saved path/modified state and exits. It writes no TTI
+bytes itself. Input routing through QtTest is recorded explicitly; this is not
+an OS keyboard-routing test or an ErsatzRS admin browser test.
+
+The final headed run exited successfully, produced six checked captures and
+passed the literal byte/semantic oracle. Input SHA256 is
+`261ec4c6a90c5467cf497802c58f577563ff0b42db4ca61485dcd8dd5ba625b0` (619 bytes);
+saved SHA256 is
+`1cfa16ca74a88898fef95593858d3acedcc6c118db752414b2e33da7b35209db` (563 bytes).
+Driver source/library SHA256 are
+`ec18ed217de15b1bf981d0fb9d939f612d6c724b5dd56ee75b7ec480c329566b` /
+`023d257ada686c82827e24817fd433aca02d84ff622d508aeab9b9e12f2e9d84`;
+helper SHA256 is
+`d3d9a3637f2f30859176701988778ee5c3cb02bd7ab8e1cd61ed257912881850`.
+
+Observed outcomes:
+
+- The first subpage's row 2 becomes `SAVED QTM ROW!`; navigating to the second
+  subpage and back retains the edit. The second row 2 remains unchanged.
+- Page 200 subcodes `0007`/`0030` become ordinal `0001`/`0002` in PN and SC.
+  Both exact X/26 payloads, padded rows, header/title and FL links survive;
+  unknown XX records disappear and the writer uses CRLF.
+- The selected first-subpage G0 mode 9 enhancement displays `A` at row 1,
+  column 5 in Level 2.5. A separately reopened, unmodified editor instance
+  visibly retains both that enhancement and the saved text. This is selected-cell
+  evidence, not all-subpage glyph, palette, DRCS, object or side-panel conformance.
+
+The helper rejects an existing fixture destination, oversized files, non-CRLF
+input and changed enhancement payloads. The final driver has an independent
+review of destination and save-completion fences. Reproduce using the
+[opt-in local recipe](../../scripts/e2e/README.md#qteletextmaker-headed-synthetic-calibration).
+Screenshots/logs are local test artifacts, not bundled product assets.
+
+This input is hand-authored synthetic calibration, not an ErsatzRS export.
+There is no Rust TTI draft import, shared browser preview or explicit publication
+proof here (`engine_roundtrip_proven: false`). Identity normalization and unknown
+record loss strengthen the existing external-sidecar and strict import contract;
+they do not waive supported content/navigation preservation. Engine-first order,
+full editor roundtrip and suitable-client acceptance remain required.
 
 ## Planned project bundle
 

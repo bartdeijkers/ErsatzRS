@@ -6,12 +6,12 @@ adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
 ADR 0120 requires p9a-04 engine acceptance before one ErsatzRS-Addons
 TV-guide add-on at p9b-01, inspired only by NOS pages 200–299.
-Host validates add-on content; subtitles remain. ADR 0123 requires authored
+Host validates content; subtitles remain. ADR 0123 requires authored
 Level2.5/fallback, pinned QTeletextMaker TTI/sidecar, TSDuck/independent decoding
-and client display/navigation; Kodi optional. P9A-02 In progress; others Not started.
+and client display/navigation; Kodi optional. P9A-02 In progress; four Not started.
 
 v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
-metadata/fresh definition state. Local X26 retains forward references.
+metadata/fresh state. Local X26 retains forward references.
 Replay/raster retain fallback; recipes/placement retain lineage/DAG/AP.
 Assembly retains originals/IDs/maps; encoding checks unique call ancestry.
 AP00 retains pointers/C2; native pages retain no-X26/default owners/X27/X28/M29.
@@ -37,10 +37,11 @@ X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
 Headers reject physical/logical-owner collisions.
 Declarations check roles/defaults/extents/empty owners, one MOT/magazine.
 Compiler keeps resources/M29; carousel/output reuse timing/fences.
-TSDuck/root/corrected nested pass; host/update/client/editor open.
+TSDuck/root/corrected nested pass.
+Pinned QTM headed edit/save/reopen proves renumber/loss; host roundtrip open.
 
 ADR 0122 profiles/themes/zones and admin/Lua remain preparatory.
-App keeps isolated encoded drafts and guide bounds; acquisition,
+App keeps isolated drafts/guide bounds; acquisition,
 activation, regions, link CRC,
 UI/Lua and publication remain open.
 
@@ -62,7 +63,7 @@ routed source captions/alternate audio remain open.
 
 P9A-02 owns decoder Health/six-RID packaging/licensing.
 P9A-03/04 retain source persistence/rescans, exact page/language/forced/default
-selection, native/Next Burn/Convert/copy, carriage/passthrough and HLS/browser
+selection, native/Next Burn/Convert/copy, carriage and HLS/browser
 gates. Slate handover, activation/publication/refresh/restart,
 localized management and full source/client/browser/smoke/TSDuck matrix remain
 open. UCU waives no gates. Content waits for p9a-04;

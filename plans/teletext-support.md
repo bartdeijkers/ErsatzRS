@@ -411,6 +411,15 @@ These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export
 receipts; pending/publication state belongs to the eventual promotion owner.
 
+An unchanged pinned QTeletextMaker 1.0 binary now passes a bounded actual headed
+synthetic edit/subpage navigation/Save As trial. Separate reopening retains the
+edited text and selected Level 2.5 enhancement. Actual PN/SC renumbering and
+unknown-record loss confirm the required explicit identity mapping and external
+metadata. The [canonical calibration](../docs/reference/teletext-design-interchange.md#actual-synthetic-editsave-calibration)
+records versions, hashes, replay and limitations. Full ErsatzRS TTI export,
+concept import, shared preview and explicit publication remain required and open;
+this preparatory editor evidence cannot close the engine or client gate.
+
 - Extend the typed model, versioned addon payloads, native packets/resources and
   browser renderer through Level 2.5: palettes, extended characters/mosaics,
   non-spacing attributes, DRCS, local/public/global objects and side panels.
