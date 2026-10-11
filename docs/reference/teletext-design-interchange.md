@@ -3197,8 +3197,8 @@ bounded by the trusted declaration display limit. Its private result retains
 immutable `producer_presentations()` beside the compiler-owned original model;
 capturing defaults does not insert X28, M29 or Local X26 declarations.
 
-This supports one explicit output-channel/addon binding. Channel-wide mixed
-producer composition, durable drafts and TTI import/export, localized
+This supports one explicit output-channel/addon binding. The separate channel
+bridge below prepares mixed cold candidates. Durable drafts and TTI import/export, localized
 admin/browser workflows, source acquisition, refresh/restart, hosted transport
 and explicit publication remain open. Base-only preparation continues to reject
 v2; it cannot silently discard authored content. P9A-01 owns current evidence.
@@ -3281,8 +3281,8 @@ MOT conflicts, unchanged sparse defaults and raw/output bounds. Complete encodin
 of two synthetic themes preserves each original shared-model raster exactly,
 including different palette/panel output, without adding Local X26. A logically
 valid shared raw page is rejected by the final physical header collision check.
-This is cold, unpublished model/encoder evidence. Host channel integration,
-independent decoding of the mixed result, suitable-client display/navigation,
+This is cold, unpublished model/encoder evidence. Independent decoding of the
+mixed result, suitable-client display/navigation,
 safe warm replacement and explicit publication remain required.
 
 ### Warm magazine-default cache diagnostic
@@ -3396,9 +3396,46 @@ numeric binding ordinal and no raw producer text. Prepared values retain the
 whole selection, generation, entry, deadline and document correspondence; empty
 documents remain Off. `recheck_channel_teletext_document_selection` observes the
 complete snapshot again after CPU/native work without resetting the deadline.
-Mixed native composition, aggregate semantic/encoding budgets, generation
-ownership and explicit publication remain separate required steps. The existing
-base-only channel API still rejects v2 before starting any producer.
+The native channel bridge below applies aggregate semantic/encoding bounds.
+Generation ownership and explicit publication remain separate required steps.
+The existing base-only channel API still rejects v2 before starting any producer.
+
+### Selection-bound native channel documents
+
+`prepare_channel_teletext_document_candidate` invokes the complete enabled
+selection through the original application path, then joins one blocking worker
+for document validation, lossless v1 lifting or moved v2 declarations, producer
+snapshots, checked cold composition and complete encoding. Every stage retains
+the original deadline. After CPU work the application rechecks complete channel
+membership/settings/contract/installation selection and the host checks expiry
+again. Failure returns no partial candidate; preparation writes no configuration
+and issues no playout notification. Caller abandonment does not interrupt already
+running bounded synchronous work.
+
+`TeletextChannelDocumentEncodingPolicy` keeps cumulative raw response limits,
+per-document validation, v1 region, aggregate cold composition, complete encoding
+and explicit resource lifecycle inputs separate. Producer count and producer-vector
+storage are checked before lifting. The host never infers counters, Changed state
+or last-subpage flags from original content or a prior encoded service.
+
+The selected entry addon's original service supplies the language. An optional
+exact `entry` must identify one of that original producer's initial-page subcodes;
+it cannot select another producer or a different initial page. Without an explicit
+address, a unique initial-page member is used with its actual subcode. Multiple
+members yield a located `EntryRequired` error rather than choosing subcode zero.
+
+`EncodedChannelTeletextDocumentCandidate` privately retains the observed selection,
+opaque generation, entry addon, deadline, ordered original producer contexts,
+page provenance and metadata beside the complete encoded service and descriptor.
+Producer ordinal still matches binding ordinal. The composed declaration moves
+into encoding without cloning originals. Explicit Off retains no producers,
+provenance, metadata, encoding or descriptor, ignores unused entry/lifecycle
+policy and still receives the final complete-channel fence.
+
+This is an unpublished cold candidate. A later promotion needs its own fresh
+selection check, admitted generation ownership and safe output boundary. Warm
+M29/MOT/page-X28 replacement, durable drafts, editor interchange, localized UI,
+Lua scheduling controls, suitable-client proof and publication remain required.
 
 ## Planned validation and evidence sequence
 

@@ -158,8 +158,10 @@ release section when tagging a release.
   under one membership snapshot/deadline with cumulative raw response bounds;
   retain explicit Off without interpreting an unused guide. Add bounded cold
   producer composition with complete derived page themes, preserved originals,
-  shared resource authentication and unchanged preview. Host integration, warm
-  replacement, live publication, durable restart and client acceptance remain open.
+  shared resource authentication and unchanged preview. Prepare complete native
+  channel candidates with original entry/language, one worker/deadline and fresh
+  whole-channel selection checks. Warm replacement, live publication, durable
+  restart and client acceptance remain open.
   Add a pinned persistent-decoder diagnostic confirming that M29 palette defaults
   survive omission despite page erasure; safe replacement remains required.
   Final resource command spans now settle same-instance attributes

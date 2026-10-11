@@ -173,7 +173,7 @@ fn encode_document(
     })
 }
 
-fn lift_base(
+pub(super) fn lift_base(
     base: TeletextPageSetDraft,
     region: TeletextEncodingRegion,
     service_budget: TeletextServiceBudget,

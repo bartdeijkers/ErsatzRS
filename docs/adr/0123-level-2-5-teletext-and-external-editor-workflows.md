@@ -716,8 +716,13 @@ Coalesce only identical complete resource banks; validate one actual MOT per
 magazine and recheck every original default/role/conditional fallback effect.
 Raw input/copy/work bounds precede final coalesced semantic/declaration budgets.
 Actual physical headers still require complete encoding. This unpublished cold
-candidate does not establish warm replacement, host channel integration,
-multi-producer publication or profile acceptance.
+candidate does not establish warm replacement, multi-producer publication or
+profile acceptance. The separate native channel bridge now retains ordered
+originals through one joined validation/lift/composition/encoding worker under
+the original app deadline, then rechecks complete channel selection. Entry
+language comes from the selected original producer; ambiguous initial-page
+subcodes require an explicit original address. Off remains empty and freshly
+fenced. This prepares cold candidates without generation/publication authority.
 
 A preparatory strict v2 response DTO and direct application conversion now retain
 the mandatory base fallback and original enhanced declarations. The application

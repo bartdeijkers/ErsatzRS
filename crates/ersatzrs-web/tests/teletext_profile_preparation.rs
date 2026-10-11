@@ -42,6 +42,8 @@ const ADDON: &str = "org.ersatzrs.teletext.native-profile-fixture";
 const SECONDARY: &str = "org.ersatzrs.teletext.native-profile-fixture.secondary";
 const GENERATION: &str = "native-profile-generation";
 
+#[path = "teletext_profile_preparation/channel_documents.rs"]
+mod channel_documents;
 #[path = "teletext_profile_preparation/documents.rs"]
 mod documents;
 const SCRIPT: &str = r#"case "$1" in

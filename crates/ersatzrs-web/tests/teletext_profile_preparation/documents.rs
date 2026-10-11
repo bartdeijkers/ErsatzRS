@@ -26,13 +26,13 @@ cat "../document-response-$theme.json"
 "#;
 
 #[derive(Clone, Copy)]
-enum DocumentFixture {
+pub(super) enum DocumentFixture {
     Base,
     Authored,
     Companion,
 }
 
-fn validation_budget() -> TeletextProfileDocumentBudget {
+pub(super) fn validation_budget() -> TeletextProfileDocumentBudget {
     TeletextProfileDocumentBudget {
         service: TeletextServiceBudget {
             max_records: 16,
@@ -53,7 +53,7 @@ fn validation_budget() -> TeletextProfileDocumentBudget {
     }
 }
 
-fn policy() -> TeletextDocumentEncodingPolicy {
+pub(super) fn policy() -> TeletextDocumentEncodingPolicy {
     let catalog = TeletextObjectCatalogBudget {
         max_objects: 64,
         max_commands: 8192,
@@ -136,7 +136,7 @@ fn policy() -> TeletextDocumentEncodingPolicy {
     }
 }
 
-fn document(kind: DocumentFixture, theme: &str) -> Value {
+pub(super) fn document(kind: DocumentFixture, theme: &str) -> Value {
     let mut value = json!({"schema_version":1,"generation":GENERATION,
         "language":"nld","initial_page":123,"pages":[{
             "address":{"page":123,"subcode":16},"kind":"full_page","language":"nld",
@@ -188,7 +188,7 @@ fn document(kind: DocumentFixture, theme: &str) -> Value {
     value
 }
 
-async fn configure(fixture: &Fixture, kind: DocumentFixture) {
+pub(super) async fn configure(fixture: &Fixture, kind: DocumentFixture) {
     let mut current = manifest();
     let capability = if matches!(kind, DocumentFixture::Base) {
         "teletext.pages.v1"
@@ -241,7 +241,7 @@ async fn candidate(
     .await
 }
 
-fn packet_numbers(units: &[[u8; 46]]) -> Vec<u8> {
+pub(super) fn packet_numbers(units: &[[u8; 46]]) -> Vec<u8> {
     units
         .iter()
         .map(|unit| match observe_dvb_teletext_header(unit).unwrap() {
@@ -484,7 +484,7 @@ async fn wrong_contract_malformed_and_budget_rejections_do_not_return_partial_ca
     fixture.state.pool.close().await;
 }
 
-fn companion_transmission() -> TeletextServiceResourceTransmission {
+pub(super) fn companion_transmission() -> TeletextServiceResourceTransmission {
     TeletextServiceResourceTransmission {
         resource: TeletextResourceIdentity::new(
             TeletextResourceKind::Pop,
