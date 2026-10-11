@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Add an opt-in synthetic teletext capture and bounded client replay workflow,
+  verifying unchanged video/audio plus enhanced pages and numeric navigation.
+  Live generation promotion and full Level 2.5 acceptance remain open.
 - Preserve the exact complete teletext service when transferring a pending
   publication request to shared stream output; live promotion remains open.
 - Add bounded native teletext previews for exact page/subpage addresses, keeping

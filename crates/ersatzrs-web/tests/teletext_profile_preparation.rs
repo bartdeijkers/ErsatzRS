@@ -44,6 +44,8 @@ const GENERATION: &str = "native-profile-generation";
 
 #[path = "teletext_profile_preparation/channel_documents.rs"]
 mod channel_documents;
+#[path = "teletext_profile_preparation/client_capture.rs"]
+mod client_capture;
 #[path = "teletext_profile_preparation/designs.rs"]
 mod designs;
 #[path = "teletext_profile_preparation/documents.rs"]

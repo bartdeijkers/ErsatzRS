@@ -3662,3 +3662,76 @@ admission, an actual safe replacement boundary, accepted generation persistence,
 withdrawal and warm decoder/resource reconciliation remain required. A synthetic
 caller using the direct final MPEG-TS route must be labelled as an explicit cold
 candidate trial, never as accepted normal-route publication or full engine proof.
+
+### Synthetic requested-service client trial
+
+This opt-in test composes installed synthetic day/night profiles, validates and
+saves the exact originals, previews exact pages, explicitly requests a pending
+revision and captures the existing final direct MPEG-TS route with its complete
+shared service. It does not install an accepted generation or make normal routes
+consume pending intent. The Unix integration fixture is intentionally skipped on
+Windows; six-platform acceptance remains separate.
+
+Select verified FFmpeg 9/ffprobe and TSDuck executables through the existing
+runtime overrides. Use a new capture destination; the test refuses to overwrite.
+
+```bash
+export FFMPEG_PATH="$VERIFIED_FFMPEG"
+export FFPROBE_PATH="$VERIFIED_FFPROBE"
+export ERSATZRS_TELETEXT_TEST_FFMPEG="$VERIFIED_FFMPEG"
+export ERSATZRS_TELETEXT_TEST_TSANALYZE="$VERIFIED_TSANALYZE"
+export ERSATZRS_TELETEXT_CLIENT_CAPTURE="$NEW_SYNTHETIC_CAPTURE"
+./run.sh test -p ersatzrs-web --lib --test teletext_profile_preparation \
+  -E 'test(client_capture::installed_)' --run-ignored ignored-only \
+  --test-threads 1 --success-output immediate
+```
+
+The response and generated source are bounded at 8 MiB; the complete response
+must finish within 35 seconds. Native probes join bounded input/stdout/stderr and
+child completion, with deadline failure followed by bounded kill/reap. Only a
+successful nonempty ffprobe stream probe may finish before consuming its input;
+all decode/TSDuck commands require complete input. TSDuck checks exact total
+packet count, PID/language inventory and clock/transport errors; full source video
+hashes and 440 Hz audio compare ordinary playback. Only successful validation
+creates the capture. Main pages 200 and 201 contain enhanced `AZ` over fallback
+`ZZ`, with red/day and blue/night profiles; this fixture deliberately has no side
+panels. Existing resource/panel fixtures and their acceptance requirements remain.
+
+A finite file can be prefetched before track selection/navigation. The test-only
+helper sends its bytes sequentially over one ephemeral loopback connection,
+without changing packet order, PIDs, CC, PCR or PTS, and never loops the capture:
+
+```bash
+python3 scripts/e2e/teletext-client-replay.py "$NEW_SYNTHETIC_CAPTURE" \
+  --muxrate 4953600 --rate 0.25
+```
+
+Use its printed URL in a separate headed client while it waits for one request.
+The helper bounds input before allocation, verifies TS alignment/sync, caps
+accept at 120 seconds, request headers and individual writes at five seconds,
+and delivery at 60 seconds. Its completion line reports delivered bytes; client
+disconnect is not complete proof. It is portable Python test tooling, not a
+runtime transport or publication endpoint.
+
+The receipted VLC candidate uses the installed versions/hashes audited above.
+Keep a separate configuration/cache directory for the trial. The installed
+3.0.20 command supports these options:
+
+```bash
+QT_QPA_PLATFORM=xcb XDG_CONFIG_HOME="$CLIENT_TRIAL_CONFIG" \
+XDG_CACHE_HOME="$CLIENT_TRIAL_CACHE" \
+vlc --ignore-config --no-one-instance --no-qt-privacy-ask \
+  --no-metadata-network-access --no-media-library --no-video-title-show \
+  --no-qt-video-autoresize --aout=adummy --vout=xcb_x11 \
+  --network-caching=100 --rate=0.25 \
+  --vbi-level=2 --no-vbi-text --vbi-opaque --vbi-page=200 "$REPLAY_URL"
+```
+
+In the native Subtitle menu, choose the Dutch teletext track. Check the rendered
+`200.00` header and red `AZ`; focus the video and enter `201`, then check the
+rendered `201.00` header and blue `AZ`, rather than merely the page-number widget.
+Capture only that test window. This proves real RGBA enhanced glyph/palette
+rendering and numeric navigation for the cold representative pages. It does not
+prove link/subpage navigation, full resources/panels, warm cache replacement,
+localized admin/browser, accepted generation or full Level 2.5 support. P9A-01
+owns the exact successful capture/client receipt and P9A-04 retains the flow gaps.
