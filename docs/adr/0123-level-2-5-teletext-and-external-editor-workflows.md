@@ -82,6 +82,12 @@ required work. The compiler now reuses exact-owner effective program selection
 and a bounded original-colour prepass, preserving local empty overrides, sparse
 MOT roots, main/Active priority and explicit-screen versus default-row fallback.
 These prerequisites do not establish merged glyph/object semantics or readiness.
+An ordered, bounded main-program intermediate now preserves original commands,
+invocation anchors and source locations while merging compatible base glyphs
+and restoring row-scoped repertoire. It retains original effective-program and
+colour context. Final dual-receiver positioning, base/object priority, geometry,
+default-resource realization and shared packet sizing remain required; the
+intermediate does not authorize publication or redefine display semantics.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

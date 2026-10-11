@@ -130,8 +130,13 @@ without permanent scope restrictions.
 The compiler now reuses exact-owner effective program selection, retaining local
 empty overrides and sparse original MOT roots. Original colour context is resolved
 before insertion, with main/Active priority, exact row origins and bounded repeated
-work. The interchange reference specifies this prerequisite; ordered glyph merge,
-repertoire restoration and full final service composition remain required.
+work. An ordered main-program intermediate now merges positioned replacements
+with unchanged original commands, preserves invocation anchors and source
+provenance, suppresses duplicate base/compatible glyphs and restores row-scoped
+charset context under input/output/expanded budgets. It carries original colour
+context but does not grant readiness. Final dual-receiver wire positions,
+Active/base priority, geometry/default ownership and shared definition sizing
+remain required before complete service composition.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

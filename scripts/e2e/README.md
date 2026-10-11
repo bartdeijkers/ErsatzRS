@@ -587,3 +587,38 @@ This is additional independent local formatting/origin proof, with unchanged
 original fixtures. It does not certify all object interactions, pixels, transport
 or client navigation. The only replaced base X26 in these synthetic ASCII cases
 is its known empty sequence; generic base/enhancement composition remains open.
+
+## Teletext ordered-main composition decoder calibration
+
+The opt-in composition oracle reuses the unchanged pinned teletextimager loader
+and its eight source guards. It checks literal code/repertoire/diacritic/colour
+tuples at both Level 1.5 and 2.5 from production-composed and lowered DVB units.
+Reuse the explicit detached `decoder_dir` and temporary `fixture_dir` above:
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_MAIN_COMPOSITION_FIXTURE="$fixture_dir/main.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  composed_main_program_decodes_with_pinned_independent_teletextimager --lib \
+  --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-main-composition-decoder.py < "$fixture_dir/main.json"
+```
+
+The fixed cases cover derived pound/acute glyphs, compatible authored replacement,
+Level-2.5 G0/G1 with Level-1.5 fallback, and an anchored full-ID local Passive
+invocation with its definition pointer shifted by inserted base commands. All
+original base X26 bodies are replaced by the one compiled sequence; header,
+presentation and fallback bytes remain unchanged. The separate schema reports
+the decoder's own 0.2.0 version and rejects duplicate/unknown fields and unbounded
+units/cells. It adds no runtime dependency or source download. Non-Latin restore
+decoding, Active overlap, header/dual-row lowering, complete display geometry,
+transport and actual client navigation remain separate acceptance obligations.
+
+The four-case fixture SHA256 is
+`bf4584486120137270f3a5ed62a7830ee5b1af81923445c0b87013b8ae91c603`;
+the dedicated helper SHA256 is
+`e1cb2ad2b16e78a0f56baaae14434aa6d78f146d7e0173c7ade9f19db97228eb`.
+The pages explicitly select German national option one: pound therefore requires
+the intended derived G2 replacement, while ordinary ASCII retains repertoire 15
+in the pinned decoder. The original local/resource fixture hashes stay unchanged.

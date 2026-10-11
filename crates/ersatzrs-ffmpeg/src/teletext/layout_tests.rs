@@ -236,6 +236,42 @@ fn capacity_counts_row_selectors_and_zero_termination_without_changing_error_pri
 }
 
 #[test]
+fn enhanced_layout_defers_only_legacy_capacity_until_after_glyph_composition() {
+    let mut input = page();
+    input.rows = (1..=5)
+        .map(|number| row(number, 0, &"é".repeat(40)))
+        .collect();
+    input.rows.push(row(6, 0, "éé"));
+    let original = input.clone();
+    assert_eq!(
+        layout::compile(&input).err(),
+        Some(TeletextEncodingError::Enhancements {
+            address: input.address,
+        })
+    );
+    let enhanced = layout::compile_for_composition(&input).unwrap();
+    assert_eq!(enhanced.base_glyphs().len(), 202);
+    assert_eq!(enhanced.legacy_enhancements().len(), 208);
+    assert_eq!(
+        &enhanced.rows[1],
+        b"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    );
+    assert_eq!(&enhanced.rows[6][..3], b"ee ");
+    assert_eq!(input, original);
+    // Deferring final physical sizing never weakens located representability.
+    input.rows.push(row(7, 0, "📺"));
+    assert_eq!(
+        layout::compile_for_composition(&input).err(),
+        Some(TeletextEncodingError::Character {
+            address: input.address,
+            row: 7,
+            column: 0,
+            codepoint: 0x1f4fa,
+        })
+    );
+}
+
+#[test]
 fn located_character_control_cell_and_reserved_national_diagnostics_are_preserved() {
     let mut input = page();
     input.rows = vec![row(1, 7, "é📺")];

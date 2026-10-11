@@ -1167,7 +1167,10 @@ resolve authored AP/charset/header colour/defaults before merged definition sizi
 Exact-owner effective program access now reuses the existing selection policy.
 A bounded original-colour prepass preserves main/Active priority, exact row origins,
 real spans and explicit-screen/default-row precedence before synthetic insertion.
-Ordered glyph merge and complete service composition remain open.
+An ordered main-program intermediate now preserves commands, invocation anchors,
+compatible fallback and source locations with bounded charset restoration.
+Final dual-receiver wire positions, Active/base priority, geometry/default
+ownership, shared definition sizing and complete service composition remain open.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

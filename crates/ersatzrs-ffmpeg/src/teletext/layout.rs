@@ -115,6 +115,22 @@ impl Layout {
 }
 
 pub(super) fn compile(page: &TeletextPageDraft) -> Result<Layout, TeletextEncodingError> {
+    let layout = compile_for_composition(page)?;
+    // Sixteen designation codes, thirteen triplets each, including termination.
+    if layout.legacy_word_count() >= 16 * 13 {
+        return Err(TeletextEncodingError::Enhancements {
+            address: page.address,
+        });
+    }
+    Ok(layout)
+}
+
+/// Build checked cells before the enhanced composer decides which replacement
+/// glyphs survive. Its final merged program owns physical X26 capacity checks;
+/// an authored compatible replacement can remove a redundant base event.
+pub(super) fn compile_for_composition(
+    page: &TeletextPageDraft,
+) -> Result<Layout, TeletextEncodingError> {
     page.validate_structure()?;
     if page.national_option.get() >= 7 {
         return Err(TeletextEncodingError::NationalOption {
@@ -204,12 +220,6 @@ pub(super) fn compile(page: &TeletextPageDraft) -> Result<Layout, TeletextEncodi
                 }
             }
         }
-    }
-    // Sixteen designation codes, thirteen triplets each, including termination.
-    if layout.legacy_word_count() >= 16 * 13 {
-        return Err(TeletextEncodingError::Enhancements {
-            address: page.address,
-        });
     }
     Ok(layout)
 }

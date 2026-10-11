@@ -987,6 +987,39 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 ordered main-program checkpoint:
+An immutable ordered intermediate preserves exact original commands, invocation
+anchors, sparse original defaults and source provenance while composing positioned
+base replacements. Compatible authored glyphs suppress redundant derived glyphs;
+Level-2.5-only G0/G1/G3/DRCS retain fallback before replacement. Temporary Latin
+charset injection restores aliases and row-scoped context; existing expanded
+collection includes injected pairs/work. Exact output sizing precedes allocation.
+The enhanced layout defers only legacy X26 capacity; final physical packer rejects
+an oversized semantic plan at 209/208 with original source provenance.
+Forty-two focused composition/layout/local-packer/legacy tests pass
+(d1b8a32e-7cfc-4cae-9523-c0fd9607b583), including twelve new composition regressions,
+one new layout regression and the unchanged wire snapshot. Twelve affected tests
+pass after equivalent lint fixes (306ec719-521b-4254-b4b5-c1e29a33ae99) and again with
+the physical-capacity assertion (e94f63ed-a355-4cf3-9512-e7c57909ef7d).
+Actual production compose/pack/DVB decoding passes four fixed cases through guarded
+teletextimager 0.2.0 at both Levels 1.5 and 2.5
+(89e2c23a-a193-49d9-a4a6-c9a408c4c8f1). Pound/acute, compatible overrides,
+G0/G1 fallback and anchored full-ID Passive pointer relocation are checked.
+Fixture SHA256 bf4584486120137270f3a5ed62a7830ee5b1af81923445c0b87013b8ae91c603;
+helper/version/replay details are in the interchange reference. The initial
+synthetic fixture used English national pound directly and failed its intended
+marker assertion; explicit German option one now exercises actual derived G2.
+Wrong goldens, unknown members and duplicate cells fail. Frozen helpers, previous
+fixtures and unchanged legacy/native evidence are reused. Final strict FFmpeg
+all-target Clippy, formatting, architecture/progress checks and independent merge
+review pass. This adds no runtime activation or publication authority.
+Dual-receiver row/header lowering, Active/base priority, non-Latin decoding,
+geometry/default ownership, shared definition sizing and complete service,
+transport/client/editor/publication acceptance remain open. All six milestone
+acceptance/status/dependency records are unchanged.
+
+Earlier original context evidence follows:
+
 2026-10-11 original program/colour context checkpoint:
 The semantic service exposes the existing exact-owner effective program policy,
 borrowing local programs (including empty overrides) and synthesizing owned sparse

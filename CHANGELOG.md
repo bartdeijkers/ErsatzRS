@@ -153,6 +153,9 @@ release section when tagging a release.
   resolution preserve default suppression and main/Active colour priority before
   composition. Private positioned base glyphs now prepare context-aware
   composition while preserving existing fallback rows and packet bytes.
+  An ordered bounded main-program intermediate now retains original commands,
+  invocation anchors and provenance, with compatible-glyph suppression and
+  row-scoped charset restoration. Final wire/display semantics remain open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

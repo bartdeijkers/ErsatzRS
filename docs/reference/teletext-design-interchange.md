@@ -165,6 +165,69 @@ underlying base character above an authored replacement. Realized default roots
 must retain their original MOT owners, with declaration-to-selection consistency
 before using the selected-resource lowerer. These remain composer obligations.
 
+### Ordered main-program intermediate
+
+`compose_teletext_main_program` combines the exact owner's original effective
+program with positioned Western Latin replacements. Original commands retain
+their values and order. A stable merge flushes earlier base cells before an
+authored AP advance without moving an object invocation's original anchor.
+Authored G2, G0-with-diacritic and Level-1.5 G3 replacements suppress the derived
+replacement at that same cell; duplicate authored compatible replacements fail.
+Level-2.5-only G0, G1, G3 and DRCS glyphs retain their compatible base replacement
+before the authored glyph. Temporary Latin designations restore the original
+same-row designation, with the primary pair reselected on actual row changes.
+
+Trusted raw-input and exact-output budgets precede indexing and output allocation;
+a counting pass and an identical emitting pass retain exact command cardinality.
+The existing expanded collector checks injected pairs, repeated object work and
+located references. Each command has original-page, original-default-slot or
+base-cell provenance; nested errors retain full object identity and body ordinal.
+An immutable original colour context accompanies the plan. Explicit empty local
+programs and absent programs retain their different default-selection behavior.
+
+This is an unpublished lowering intermediate, not a validated final display or
+packet sequence. It does not settle dual-receiver row restoration, header wire
+positioning, Active/base overlap, non-Latin fallback reinterpretation, glyph
+footprints, object attribute inheritance or side panels. Final realization must
+retain original default-resource ownership, resolve those semantics and size the
+shared main/definition sequence before pointer allocation. The enhanced layout
+defers only the legacy standalone X26 capacity check; representability and
+fallback errors remain checked. No successful plan grants publication authority.
+
+Twelve focused merge tests cover exact original commands, offsets/anchors,
+compatible suppression versus enhanced fallback, G1 precedence, charset aliases
+and row resets, injected third-pair rejection, sparse original-default ownership,
+explicit empty overrides, header colour context and budget/error provenance.
+An oversized semantic plan is accepted here but rejected by the physical packer
+at 209 triplets against its 208-slot limit. This proves separation of gates.
+
+The separate pinned composition oracle independently decodes four actual
+production-composed/lowered cases at Levels 1.5 and 2.5: derived pound/acute,
+authored compatible replacements, G0/G1 with retained fallback and an anchored
+full-ID Passive invocation whose definition marker moves to five after insertion.
+Synthetic pages explicitly select German national option one, so pound requires
+an enhancement rather than occupying an English national-subset base cell.
+Exact code/repertoire/diacritic/foreground/background tuples and unchanged
+adjacent cells are checked. All original base X26 bodies are replaced once;
+other original header/presentation/fallback bytes remain unchanged.
+
+The four-case fixture SHA256 is
+`bf4584486120137270f3a5ed62a7830ee5b1af81923445c0b87013b8ae91c603`;
+the separate helper SHA256 is
+`e1cb2ad2b16e78a0f56baaae14434aa6d78f146d7e0173c7ade9f19db97228eb`.
+It reuses the unchanged teletextimager 0.2.0 loader at
+`2b0125b778c45ffdfa2df0b196870c093361f317`, with eight verified upstream
+source hashes, bounded input and the existing deadline/output-bounded child
+runner. Wrong goldens, unknown members and duplicate cells fail. Existing frozen
+fixtures/helpers remain unchanged. The
+[export/replay workflow](../../scripts/e2e/README.md#teletext-ordered-main-composition-decoder-calibration)
+uses the actual producer path rather than constructing expected bytes separately.
+This is selected independent cell decoding, not pixels, transport or client
+navigation. Inline non-Latin repertoire restoration remains unproven by this
+decoder; its same-cell designation handling selects the restored repertoire for
+an earlier glyph. That observation neither changes the required engine scope nor
+establishes correctness of the final wire compiler.
+
 ## Resource object allocation and invocation
 
 `allocate_teletext_resource_objects` uses the checked object catalog, separately

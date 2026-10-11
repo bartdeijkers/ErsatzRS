@@ -18,6 +18,7 @@ mod enhancement_program;
 mod layout;
 mod lift;
 mod local_object_program;
+mod main_composition;
 mod mot;
 mod object_allocation;
 mod object_pages;
@@ -59,6 +60,11 @@ pub use local_object_program::{
     compile_teletext_local_program_with_objects, EncodedTeletextLocalObjectProgram,
     TeletextLocalObjectDefinitionPosition, TeletextLocalObjectProgramEncodingError,
     TeletextLocalObjectProgramEncodingFailure,
+};
+pub use main_composition::{
+    compose_teletext_main_program, TeletextBaseCellCommandKind, TeletextMainComposition,
+    TeletextMainCompositionBudget, TeletextMainCompositionError, TeletextMainCompositionFailure,
+    TeletextMainCompositionSource,
 };
 pub use mot::{
     encode_teletext_mot_bodies, TeletextMotAllocationFailure, TeletextMotDefaultAllocation,
@@ -178,6 +184,10 @@ mod layout_tests;
 mod lift_tests;
 #[cfg(test)]
 mod local_object_program_tests;
+#[cfg(test)]
+mod main_composition_runtime_tests;
+#[cfg(test)]
+mod main_composition_tests;
 // Portable opt-in imager calibration; the libzvbi diagnostic guards its own ABI.
 #[cfg(test)]
 mod local_object_runtime_tests;
