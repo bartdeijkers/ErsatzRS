@@ -148,9 +148,10 @@ fn resolve_program(
 ) -> Result<TeletextColourContext, TeletextColourContextError> {
     preflight(catalog, owner, program, max_commands)?;
     let (default_screen, default_row) = match service.effective_presentation(owner) {
-        Some(TeletextEffectivePresentation::Extension { defaults, .. }) => {
-            (defaults.screen_colour, defaults.row_colour)
-        }
+        Some(
+            TeletextEffectivePresentation::Extension { defaults, .. }
+            | TeletextEffectivePresentation::MotFallback { defaults, .. },
+        ) => (defaults.screen_colour, defaults.row_colour),
         Some(TeletextEffectivePresentation::Header { .. }) => (
             TeletextColourReference::BLACK,
             TeletextColourReference::BLACK,

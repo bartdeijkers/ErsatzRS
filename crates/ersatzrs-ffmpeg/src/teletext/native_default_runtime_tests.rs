@@ -168,8 +168,15 @@ fn defaults() -> [Option<TeletextDefaultObjectSelection>; 4] {
     result
 }
 fn service(mode: DefaultProgram) -> TeletextSemanticService {
+    service_with_companions(mode, Vec::new(), false)
+}
+fn service_with_companions(
+    mode: DefaultProgram,
+    companions: Vec<TeletextResourceIdentity>,
+    suppressed: bool,
+) -> TeletextSemanticService {
     let page = base();
-    TeletextSemanticService::new(
+    TeletextSemanticService::new_with_object_companions(
         TeletextResolvedServiceDraft {
             base: TeletextPageSetDraft {
                 initial_page: page.address.page,
@@ -183,7 +190,7 @@ fn service(mode: DefaultProgram) -> TeletextSemanticService {
                         .unwrap(),
                 ),
                 compositional_links: Some(links()),
-                local_program: None,
+                local_program: suppressed.then(|| TeletextEnhancementProgram::new(vec![]).unwrap()),
                 resources: TeletextResolvedPageResourceSelection {
                     objects: TeletextResolvedObjectPageLinks {
                         public: Some(resource(0xa1, 0).page()),
@@ -197,6 +204,7 @@ fn service(mode: DefaultProgram) -> TeletextSemanticService {
             objects: definitions(mode),
             drcs: vec![],
         },
+        companions,
         TeletextServiceBudget {
             max_records: 16,
             max_objects: 3,
@@ -345,7 +353,11 @@ fn case(
     }
     units.extend_from_slice(&display[before_body..]);
     units.push(terminator(2));
-    let cells = if suppressed {
+    let cells = expected_cells(suppressed, mode);
+    serde_json::json!({"name":name,"units":units.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>(),"page":0x200,"subcode":0x10,"cells":cells})
+}
+fn expected_cells(suppressed: bool, mode: DefaultProgram) -> Vec<serde_json::Value> {
+    if suppressed {
         vec![
             cell(1, 8, b'T', 7, 0),
             cell(1, 9, b'T', 7, 0),
@@ -360,8 +372,7 @@ fn case(
                 DefaultProgram::RootOnly => cell(2, 9, b' ', 7, 0),
             },
         ]
-    };
-    serde_json::json!({"name":name,"units":units.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>(),"page":0x200,"subcode":0x10,"cells":cells})
+    }
 }
 fn cases(mode: DefaultProgram) -> Vec<serde_json::Value> {
     let service = service(mode);
@@ -473,3 +484,6 @@ async fn run_cases(mode: DefaultProgram, capture_variable: &str) {
     assert_eq!(report["cases_passed"], 2);
     println!("Independent native default activation: {report}");
 }
+
+#[path = "authored_service_runtime_tests.rs"]
+mod authored_service_runtime_tests;

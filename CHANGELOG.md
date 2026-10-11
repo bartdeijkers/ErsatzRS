@@ -127,7 +127,14 @@ release section when tagging a release.
   Checked colour/resource values, ordered enhancement programs and bounded
   object-derived DRCS/charset dependency checks provide the model foundation.
   Page/magazine presentation and supplied-selection service validation now retain
-  panel metadata, default suppression and aggregate dependency budgets. Verify
+  panel metadata, default suppression and aggregate dependency budgets. Authenticate
+  complete service candidates against actual MOT/X27 declarations, one MOT bank
+  per magazine, all sparse defaults and required resource subpages. Preserve
+  genuine empty companions and original POP presentation fallback. Compile every
+  display/resource with shared pointer reservations, explicit lifecycle records,
+  aggregate bounds and final physical inventory; emit M29 once. Independent full
+  compiler decoding retains both the original X27 defect and corrected test-only
+  result. Service transport, update history and full acceptance remain open. Verify
   the existing whole-display 127-invocations-per-type admission across sparse
   defaults, nested calls and independent subcodes; physical replay must reuse it.
   Trace a supplied physical program with the shared bounded spatial executor,

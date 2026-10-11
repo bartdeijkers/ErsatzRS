@@ -17,6 +17,7 @@ mod charset_execution;
 mod charset_execution_values;
 mod charset_values;
 mod compositional_links;
+mod declared_service;
 mod display_geometry;
 mod display_geometry_open_count;
 mod display_geometry_successive_count;
@@ -32,6 +33,7 @@ mod glyph_intent_values;
 mod glyph_layers;
 mod identity;
 mod mot;
+mod mot_presentation;
 mod mot_resolution;
 mod national_conversion;
 mod objects;
@@ -54,6 +56,7 @@ pub use charset_execution::*;
 pub use charset_execution_values::*;
 pub use charset_values::*;
 pub use compositional_links::*;
+pub use declared_service::*;
 pub use display_geometry::*;
 pub use display_geometry_open_count::*;
 pub use display_geometry_successive_count::*;
@@ -69,6 +72,7 @@ pub use glyph_intent_values::*;
 pub use glyph_layers::*;
 pub use identity::*;
 pub use mot::*;
+pub use mot_presentation::*;
 pub use mot_resolution::*;
 pub use national_conversion::*;
 pub use objects::*;
@@ -83,6 +87,9 @@ pub use spatial_trace::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod declared_service_tests;
 
 #[cfg(test)]
 mod enhancements_tests;
@@ -182,3 +189,6 @@ mod glyph_mask_tests;
 
 #[cfg(test)]
 mod display_resolution_tests;
+
+#[cfg(test)]
+mod mot_presentation_tests;

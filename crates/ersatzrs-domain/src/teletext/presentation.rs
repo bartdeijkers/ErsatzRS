@@ -74,6 +74,8 @@ impl TeletextColourRemapping {
 pub struct TeletextPanelWidth(u8);
 
 impl TeletextPanelWidth {
+    /// Eight-column field for balanced left and right side panels.
+    pub const EIGHT: Self = Self(8);
     /// Preserved zero width field; its meaning still depends on the panel flags.
     pub const ZERO: Self = Self(0);
 

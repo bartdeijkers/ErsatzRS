@@ -73,7 +73,8 @@ pub fn resolve_teletext_colour_composition(
     page_kind: TeletextPageKind,
 ) -> TeletextColourComposition {
     let (selected, black_background_substitution) = match presentation {
-        TeletextEffectivePresentation::Extension { defaults, .. } => {
+        TeletextEffectivePresentation::Extension { defaults, .. }
+        | TeletextEffectivePresentation::MotFallback { defaults, .. } => {
             (defaults.palette, defaults.black_background_substitution)
         }
         TeletextEffectivePresentation::Header { .. } => (TeletextLevel25Palette::standard(), false),

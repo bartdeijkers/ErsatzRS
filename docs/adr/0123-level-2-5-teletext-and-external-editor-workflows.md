@@ -229,6 +229,22 @@ compiler must authenticate caller-resolved resource/default metadata against
 actual MOT/X27 declarations, including explicit exact MOT selections, empty
 companions, declared extents and conditional POP presentation. Preserve unresolved
 conflicts as blockers; do not convert them to successful unselected roles.
+The owned declaration boundary now enforces one actual MOT bank per magazine
+(EN 300 706 §10.6), shared by every display subcode. A host selection cannot
+opt out of an emitted bank or invent a receiver MOT-S1 selector. Annex A.1's
+recommended zero S1 is not an unconditional rejection of a single nonzero S1.
+Subpage-specific resource overrides remain actual X27/4 declarations.
+Page X28 precedes magazine M29, then original associated POP fallback flags;
+never promote these effective defaults into synthetic transmitted declarations.
+The complete candidate compiler uses one original reservation list for display
+and resource allocation, retains native absent-X26 versus compiled present-X26
+paths and emits every authenticated resource, including explicit empty pages.
+Require exact caller-supplied lifecycle records, a uniform serial transmission
+mode, aggregate limits and final body-derived physical inventory. This candidate
+does not settle resource-command C2 order, update history, service-carousel
+delivery or host publication. Independent decoding must distinguish the original
+decoder deficiency from the receipted test-only correction; both preserve the
+normative authored-service fixture and positive expected cells.
 
 Foreign MOT defaults require two explicit producer paths. Without local X26,
 retain native MOT activation, sparse slots and exact owner/type/S1 plus original

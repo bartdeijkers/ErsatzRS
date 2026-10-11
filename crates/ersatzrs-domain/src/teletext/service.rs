@@ -142,6 +142,12 @@ pub enum TeletextEffectivePresentation<'a> {
     Header {
         national_option: TeletextNationalOption,
     },
+    /// Original associated POP flags when page/magazine presentation is absent.
+    /// These effective defaults do not establish an authored X28/M29 packet.
+    MotFallback {
+        national_option: TeletextNationalOption,
+        defaults: &'a TeletextLevel25PresentationDefaults,
+    },
 }
 
 impl TeletextEffectivePresentation<'_> {
@@ -153,7 +159,9 @@ impl TeletextEffectivePresentation<'_> {
         self,
     ) -> Result<TeletextPageCharsetDesignation, TeletextCharsetValueError> {
         match self {
-            Self::Extension { defaults, .. } => Ok(defaults.primary),
+            Self::Extension { defaults, .. } | Self::MotFallback { defaults, .. } => {
+                Ok(defaults.primary)
+            }
             Self::Header { national_option } => {
                 TeletextPageCharsetDesignation::new(national_option.get())
             }
@@ -194,6 +202,10 @@ pub enum TeletextServiceError {
         page: TeletextRawDataPageNumber,
         subpage: TeletextResourceSubpageIndex,
     },
+    #[error("teletext empty object companion {identity:?} must be POP or GPOP")]
+    ObjectCompanionKind {
+        identity: super::TeletextResourceIdentity,
+    },
     #[error(transparent)]
     Objects(#[from] TeletextObjectCatalogError),
     #[error(transparent)]
@@ -213,7 +225,9 @@ pub enum TeletextServiceError {
         page: TeletextRawDataPageNumber,
         subpage: TeletextResourceSubpageIndex,
     },
-    #[error("teletext display {display:?}, source {source_location:?}, X27 {role:?} does not announce used resource {page}/{subpage:?}")]
+    #[error(
+        "teletext display {display:?}, source {source_location:?}, X27 {role:?} does not announce used resource {page}/{subpage:?}"
+    )]
     CompositionalUsage {
         display: TeletextPageAddress,
         role: TeletextX27LinkRole,
@@ -229,7 +243,9 @@ pub enum TeletextServiceError {
         slot: u8,
         target: TeletextObjectIdentity,
     },
-    #[error("teletext display {display:?}, source {source_location:?}: object {target:?} is outside selected resource links")]
+    #[error(
+        "teletext display {display:?}, source {source_location:?}: object {target:?} is outside selected resource links"
+    )]
     ObjectSelection {
         display: TeletextPageAddress,
         source_location: TeletextEnhancementSource,
@@ -260,7 +276,9 @@ pub struct TeletextSemanticService {
     base: TeletextPageSetDraft,
     pages: BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
     magazines: BTreeMap<u8, TeletextLevel25PresentationDefaults>,
+    mot_fallbacks: BTreeMap<TeletextPageAddress, TeletextLevel25PresentationDefaults>,
     objects: TeletextEnhancementObjectCatalog,
+    object_companions: Vec<super::TeletextResourceIdentity>,
     drcs: TeletextDrcsCatalog,
     collected: BTreeMap<
         TeletextPageAddress,
@@ -282,21 +300,26 @@ impl TeletextSemanticService {
         draft: TeletextResolvedServiceDraft,
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextServiceError> {
-        check_input_budgets(&draft, budget)?;
+        Self::new_with_object_companions(draft, Vec::new(), budget)
+    }
+
+    /// Validate explicitly empty POP/GPOP subpages without phantom definitions.
+    /// Companion identities participate in the same record, structure, purpose,
+    /// collision and declared-link checks as populated resources. This remains
+    /// caller-resolved semantic input, not authenticated MOT or physical inventory.
+    /// # Errors
+    /// Rejects raw budgets first, then wrong purposes, repeated/occupied logical
+    /// owners and existing semantic validation failures. No partial model escapes.
+    pub fn new_with_object_companions(
+        draft: TeletextResolvedServiceDraft,
+        companions: Vec<super::TeletextResourceIdentity>,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextServiceError> {
+        check_input_budgets(&draft, &companions, budget)?;
+        validate_companion_kinds(&companions)?;
         draft.base.validate_structure()?;
         let addresses: BTreeSet<_> = draft.base.pages.iter().map(|page| page.address).collect();
-        let mut magazines = BTreeMap::new();
-        for declaration in draft.magazines {
-            if !(1..=8).contains(&declaration.magazine)
-                || magazines
-                    .insert(declaration.magazine, declaration.presentation)
-                    .is_some()
-            {
-                return Err(TeletextServiceError::Magazine {
-                    magazine: declaration.magazine,
-                });
-            }
-        }
+        let magazines = index_magazine_presentations(draft.magazines)?;
         let mut pages = BTreeMap::new();
         for page in draft.pages {
             if !addresses.contains(&page.address) {
@@ -310,8 +333,13 @@ impl TeletextSemanticService {
             }
         }
         validate_local_definitions(&draft.objects, &addresses, &pages)?;
-        let resource_index =
-            check_resource_records(&draft.base, &draft.objects, &draft.drcs, budget.max_records)?;
+        let resource_index = check_resource_records(
+            &draft.base,
+            &draft.objects,
+            &draft.drcs,
+            &companions,
+            budget.max_records,
+        )?;
         let objects = TeletextEnhancementObjectCatalog::new(
             draft.objects,
             TeletextObjectCatalogBudget {
@@ -324,7 +352,9 @@ impl TeletextSemanticService {
             base: draft.base,
             pages,
             magazines,
+            mot_fallbacks: BTreeMap::new(),
             objects,
+            object_companions: companions,
             drcs,
             collected: BTreeMap::new(),
         };
@@ -402,6 +432,11 @@ impl TeletextSemanticService {
     pub const fn objects(&self) -> &TeletextEnhancementObjectCatalog {
         &self.objects
     }
+    /// Explicit empty resource owners, retaining input order and purpose.
+    #[must_use]
+    pub fn object_companions(&self) -> &[super::TeletextResourceIdentity] {
+        &self.object_companions
+    }
     #[must_use]
     pub const fn drcs(&self) -> &TeletextDrcsCatalog {
         &self.drcs
@@ -434,9 +469,31 @@ impl TeletextSemanticService {
                 defaults,
             };
         }
+        if let Some(defaults) = self.mot_fallbacks.get(&page.address) {
+            return TeletextEffectivePresentation::MotFallback {
+                national_option: page.national_option,
+                defaults,
+            };
+        }
         TeletextEffectivePresentation::Header {
             national_option: page.national_option,
         }
+    }
+
+    /// Rebinding actual declarations must not inherit an earlier MOT's defaults.
+    /// The owning declaration factory calls this after all correspondence checks.
+    pub(super) fn clear_mot_fallbacks(&mut self) {
+        self.mot_fallbacks.clear();
+    }
+
+    /// Only the checked declaration factory can attach original POP fallback.
+    /// Actual page and magazine declarations remain untouched and take precedence.
+    pub(super) fn set_mot_fallback(
+        &mut self,
+        address: TeletextPageAddress,
+        defaults: TeletextLevel25PresentationDefaults,
+    ) {
+        self.mot_fallbacks.insert(address, defaults);
     }
 
     /// Effective metadata for an actual base owner; unknown addresses return None.
@@ -791,8 +848,41 @@ fn charge(
     Ok(())
 }
 
+fn validate_companion_kinds(
+    companions: &[super::TeletextResourceIdentity],
+) -> Result<(), TeletextServiceError> {
+    for &identity in companions {
+        if !matches!(
+            identity.kind(),
+            TeletextResourceKind::Pop | TeletextResourceKind::Gpop
+        ) {
+            return Err(TeletextServiceError::ObjectCompanionKind { identity });
+        }
+    }
+    Ok(())
+}
+
+fn index_magazine_presentations(
+    declarations: Vec<TeletextMagazinePresentationDraft>,
+) -> Result<BTreeMap<u8, TeletextLevel25PresentationDefaults>, TeletextServiceError> {
+    let mut magazines = BTreeMap::new();
+    for declaration in declarations {
+        if !(1..=8).contains(&declaration.magazine)
+            || magazines
+                .insert(declaration.magazine, declaration.presentation)
+                .is_some()
+        {
+            return Err(TeletextServiceError::Magazine {
+                magazine: declaration.magazine,
+            });
+        }
+    }
+    Ok(magazines)
+}
+
 fn check_input_budgets(
     draft: &TeletextResolvedServiceDraft,
+    companions: &[super::TeletextResourceIdentity],
     budget: TeletextServiceBudget,
 ) -> Result<(), TeletextServiceError> {
     let mut record_count = budget.max_records;
@@ -805,6 +895,12 @@ fn check_input_budgets(
     charge(
         &mut record_count,
         draft.drcs.len(),
+        "record",
+        budget.max_records,
+    )?;
+    charge(
+        &mut record_count,
+        companions.len(),
         "record",
         budget.max_records,
     )?;
@@ -839,6 +935,12 @@ fn check_input_budgets(
     charge(
         &mut items,
         draft.drcs.len(),
+        "structure item",
+        budget.max_structure_items,
+    )?;
+    charge(
+        &mut items,
+        companions.len(),
         "structure item",
         budget.max_structure_items,
     )?;
@@ -925,6 +1027,7 @@ fn check_resource_records(
     base: &TeletextPageSetDraft,
     objects: &[TeletextEnhancementObjectDefinition],
     drcs: &[TeletextDrcsSubtable],
+    companions: &[super::TeletextResourceIdentity],
     maximum: usize,
 ) -> Result<
     BTreeMap<(TeletextRawDataPageNumber, TeletextResourceSubpageIndex), TeletextResourceKind>,
@@ -933,11 +1036,16 @@ fn check_resource_records(
     let mut remaining = maximum;
     charge(&mut remaining, base.pages.len(), "record", maximum)?;
     let mut index = BTreeMap::new();
-    for (identity, repeatable) in drcs.iter().map(|table| (table.identity(), false)).chain(
-        objects
-            .iter()
-            .filter_map(|object| object.identity.resource().map(|identity| (identity, true))),
-    ) {
+    for (identity, repeatable) in drcs
+        .iter()
+        .map(|table| (table.identity(), false))
+        .chain(
+            objects
+                .iter()
+                .filter_map(|object| object.identity.resource().map(|identity| (identity, true))),
+        )
+        .chain(companions.iter().copied().map(|identity| (identity, false)))
+    {
         let key = (identity.page(), identity.logical_subpage());
         if let Some(kind) = index.get(&key) {
             if repeatable && *kind == identity.kind() {

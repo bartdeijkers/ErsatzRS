@@ -1351,3 +1351,6 @@ fn effective_program_rejects_unknown_exact_page_and_subcode_instead_of_empty_fal
     }
     assert_eq!(service, before);
 }
+
+#[path = "object_companion_service_tests.rs"]
+mod object_companion_service_tests;

@@ -372,14 +372,25 @@ equivalent normalization. Point placement alone cannot close engine acceptance.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.
-The final compiler must feed every unique page, including empty companions, into
-this check; service completeness and activation remain unimplemented.
+The owned service compiler now feeds every authenticated display/resource page,
+including empty companions, into this check. Exact lifecycle records and a
+uniform serial mode are required; activation and update history remain open.
 Bounded per-display MOT/X27 derivation now preserves role provenance, exact
 masks, original defaults/fallback and unresolved candidates for audited conflicts.
 It does not decide effective defaults or presentation.
-Next integrate derivation with catalog/effective-default checks, finish audited
-edge policies and prove declaration-to-selection consistency, then final display/object
-semantics, physical service allocation and the native compiler.
+The declaration boundary now checks every selected role and original sparse
+default against the actual bank, including suppressed and unassociated defaults,
+all advertised subpages and original requirements after X27 supersession.
+Require one MOT bank per magazine and bind all display subcodes to that actual
+bank; per-display host choices are not receiver selectors (§10.6). Preserve
+single nonzero S1 without turning Annex A.1's recommendation into a scalar ban.
+Apply original POP panel/BBS fallback only when actual X28 and M29 are absent.
+The complete compiler shares reservations with both display allocation passes,
+retains the original native composition and emits M29 once per magazine.
+Next integrate the heterogeneous display/resource/M29 candidate with the service
+carousel, finish resource-word C2 settlement, update-history policy and audited
+unused-POP presentation edges, then native service admission. Preserve the
+independent full-compiler decoder goldens and the original/corrected distinction.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export
 receipts; pending/publication state belongs to the eventual promotion owner.

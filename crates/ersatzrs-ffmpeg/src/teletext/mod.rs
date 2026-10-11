@@ -10,6 +10,7 @@
 mod augmented_origin_comparison;
 mod augmented_origin_compilation;
 mod augmented_origin_program;
+mod authored_service;
 mod base_compatibility_realization;
 mod base_display;
 mod buffer;
@@ -55,6 +56,7 @@ use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 pub use augmented_origin_comparison::*;
 pub use augmented_origin_compilation::*;
 pub use augmented_origin_program::*;
+pub use authored_service::*;
 pub use compiled_display_page::*;
 pub use native_default_page::*;
 pub use normalized_main_program::*;
@@ -278,5 +280,8 @@ mod signalling_runtime_tests;
 mod signalling_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod authored_service_tests;
 #[cfg(test)]
 mod transport_tests;

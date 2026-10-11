@@ -68,7 +68,9 @@ pub(super) fn trace_teletext_base_display(
             },
         ));
     }
-    if matches!(presentation, TeletextEffectivePresentation::Header { national_option } if national_option != page.national_option)
+    if matches!(presentation, TeletextEffectivePresentation::Header { national_option }
+        | TeletextEffectivePresentation::MotFallback { national_option, .. }
+        if national_option != page.national_option)
     {
         return Err(error(
             owner,
@@ -80,7 +82,8 @@ pub(super) fn trace_teletext_base_display(
         .primary_designation()
         .map_err(|reason| error(owner, None, reason.into()))?;
     let declaration = match presentation {
-        TeletextEffectivePresentation::Extension { defaults, .. } => Some(*defaults),
+        TeletextEffectivePresentation::Extension { defaults, .. }
+        | TeletextEffectivePresentation::MotFallback { defaults, .. } => Some(*defaults),
         TeletextEffectivePresentation::Header { .. } => None,
     };
     let authored = authored_cells(page, layout)?;

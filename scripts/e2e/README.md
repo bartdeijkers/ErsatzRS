@@ -592,6 +592,37 @@ As a negative check, request `corrected root` with
 `Unexpected mapped decoder path`. No Docker socket, host library installation,
 network access, source modification or publication occurs inside these containers.
 
+The same receipt and frozen object/resource helpers also support
+`authored-root` and `authored-nested`, exported by the complete service compiler.
+Capture `authored-root.json` and `authored-nested.json` using the
+[complete service candidate instructions](../../docs/reference/teletext-design-interchange.md#authenticated-complete-service-candidates).
+Reuse valid `proof_output`; no decoder rebuild is necessary. Bind these producer
+fixtures explicitly and replay all four variant/fixture combinations:
+
+```bash
+docker run --rm --pull=never --network none --read-only --cpus=1 --memory=512m \
+  --tmpfs /tmp:rw,exec,size=64m \
+  --mount "type=bind,src=$proof_output,dst=/out,readonly" \
+  --mount "type=bind,src=$proof_scripts,dst=/proof/scripts,readonly" \
+  --mount "type=bind,src=$proof_input/authored-root.json,dst=/proof/authored-root.json,readonly" \
+  --mount "type=bind,src=$proof_input/authored-nested.json,dst=/proof/authored-nested.json,readonly" \
+  --entrypoint /bin/sh "$proof_image" -c '
+    set -eu
+    for variant in original corrected; do
+      for fixture in authored-root authored-nested; do
+        LD_LIBRARY_PATH=/out/$variant python3 \
+          /proof/scripts/teletext-zvbi-x27-proof.py "$variant" "$fixture"
+      done
+    done' > "$proof_input/authored-results.ndjson"
+```
+
+The original authored-nested record must preserve the exact known failure with
+`conformance_passed: false`. Both corrected records and original authored-root
+must report two passing cases. The complete compiler emits the actual resources,
+including the required empty companion, and both native and compiled display
+paths. Only closing headers are added for decoder feeding. This does not prove
+service-carousel timing, transport, lifecycle history or client navigation.
+
 ## Teletext second local-object decoder calibration
 
 The separate opt-in cell oracle uses unmodified teletextimager 0.2.0 at

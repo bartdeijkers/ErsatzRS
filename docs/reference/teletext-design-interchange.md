@@ -796,18 +796,86 @@ ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
   < "$fixture_dir/compiled-display.json"
 ```
 
-The next full-service compiler must bind actual MOT declarations and exact
-per-display MOT selections to this same service. Recompute declaration resolution
-and compare selected roles and original sparse default slots; Local X26 suppresses
-execution, not authored declaration ownership. Reserve active defaults in every
-emitted MOT bank, including unassociated or suppressed defaults. Require explicit
-empty POP/GPOP companions and contiguous declared MOT subpage extents, preserve
-original requirements after X27 supersession, and apply presence-aware conditional
-POP presentation flags. Unresolved declaration/default conflicts reject complete
-service claims. Compile each resource and M29 once, check every actual physical
-header and service-wide transmission mode, and retain trusted aggregate bounds.
-Existing supplied inventory checks alone cannot prove this completeness or
-lifecycle history. These obligations remain required before engine acceptance.
+The owned complete-service boundary now authenticates these declarations before
+compiling resources and displays; see the candidate contract below. Engine,
+transport, client, editor and publication acceptance remain separate.
+
+### Authenticated complete service candidates
+
+`TeletextDeclaredService::new` consumes one immutable semantic service plus
+actual MOT declarations, exact display selections and explicit empty POP/GPOP
+companions. It compares all four selected resource roles and sparse default
+slots, retaining original owners after X27 supersession. Local X26 suppresses
+execution without removing declaration obligations. Every advertised MOT extent
+and applicable X27 mask requires the exact resource purpose and subpage, even
+for unassociated or superseded links. Active defaults in every emitted bank
+reserve real pointers and require actual type-matching definitions.
+
+Each magazine has one MOT bank (§10.6), applicable to all display subcodes.
+Every host selection must name that actual bank, or explicitly name no bank
+when the magazine emits none. Distinct simultaneous same-magazine MOT owners
+and a host opt-out reject with located diagnostics. A single nonzero S1 remains
+accepted: Annex A.1 recommends zero, rather than making every other raw value
+invalid. Individual resource overrides remain X27/4, not host-only routing.
+
+`new_with_object_companions` retains genuinely empty POP/GPOP resources without
+inventing objects. Raw record/structure limits precede purpose and collision
+checks. The declaration boundary requires the same exact companion inventory.
+Reauthentication clears previous derived presentation; actual page X28 precedes
+own-magazine M29, then original associated POP flags, then header fallback.
+Protocol/panel/BBS flags do not change charset, palette, planes or remapping.
+An unused POP link with otherwise eligible nontrivial presentation remains an
+explicit unresolved case pending primary evidence; this is not a scope waiver.
+
+`encode_teletext_authored_service` consumes that checked declaration and one
+explicit lifecycle record per resource. Missing, duplicate and unexpected
+records reject. One bounded list of all original MOT reservations drives the
+resource writer and both display allocation passes. Absent Local X26 with no
+Base-derived instructions retains native default activation and the original
+semantic composition; present X26 uses the complete normalized display writer.
+Failure cannot silently switch paths or exempt foreign owners. Every resource,
+including empty companions, is encoded once. M29 has one service-wide emission
+list; page-local copies are diagnostic only. All headers use serial mode.
+Aggregate page/unit/command bounds and actual final physical inventory reject
+the entire candidate without returning partial output.
+
+The opt-in native tests feed every produced resource and display unchanged,
+adding only explicit closing headers to commit the pages to the independent
+decoder. The root A/C and nested A/C/D oracles, contrasting selected-resource
+owner and empty-Local T fallback remain identical to the primitive calibration.
+Resources include the declared empty S1=0 companion. This is bounded decoder
+feeding, not proof of a timed service carousel, client navigation or transport.
+
+Request SHA256 values:
+
+- Authored root: `fbab6be109e59c0c29d30e0936ae4681a094217bb178821ecf3a81c778f31efd`.
+- Authored nested: `f837aa540a3ea608f13f2bfe692cabe48b4b731ec13ac8a58be8de8934e7f33f`.
+
+The existing libzvbi 0.2.42 source/configuration/library receipt and unchanged
+strict object/resource helpers are reused. Unmodified root succeeds;
+unmodified nested retains its exact X27 misrouting failure. The test-only X27
+correction succeeds for both two-case fixtures and verifies the actually mapped
+library hash. No upstream fixed release or suitable-client acceptance is claimed.
+The maintained replay also preserves the four original primitive fixtures.
+
+```bash
+ERSATZRS_TELETEXT_TEST_AUTHORED_SERVICE_ROOT_FIXTURE="$fixture_dir/authored-root.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  full_authored_service_native_root_and_compiled_empty_local_decode \
+  --lib --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_AUTHORED_SERVICE_NESTED_FIXTURE="$fixture_dir/authored-nested.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  full_authored_service_nested_selected_default_decode \
+  --lib --run-ignored ignored-only
+```
+
+Exporting nested with unmodified libzvbi intentionally returns nonzero after
+writing the unchanged producer fixture. Use the receipted offline replay for
+both decoder variants; never change expected cells to obtain a green result.
+Full resource-command C2 settlement, lifecycle/update histories, heterogeneous
+carousel/PES/TS delivery, host admission, all remaining national recipes and
+Level2.5 client/editor/publication gates remain required and open. P9A-01 owns
+current run IDs and verification evidence; no milestone acceptance is weakened.
 
 ### National-option carrier conversion
 

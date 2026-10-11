@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Replay the fixed X27/MOT oracle with one receipted Linux test decoder.
 
-Run four separate processes (original/corrected x root/nested), each with
+Run separate processes (original/corrected x primitive or authored fixtures), each with
 LD_LIBRARY_PATH=/out/<variant>. This records an upstream defect and a narrowly
 corrected independent C test decoder, not full-client or publication acceptance.
 Fixtures remain producer-owned captured JSON; this script never changes them.
@@ -30,6 +30,8 @@ PARSERS = {
 FIXTURES = {
     'root': '2759c8a3b45f0df2fe6beab77a39b5af432369b4f89ebdf2b93a72add762c9cd',
     'nested': '98d8416f14be48c760473a39e73f48b5934fcb91e8478a3ea6478fd7b7262db2',
+    'authored-root': 'fbab6be109e59c0c29d30e0936ae4681a094217bb178821ecf3a81c778f31efd',
+    'authored-nested': 'f837aa540a3ea608f13f2bfe692cabe48b4b731ec13ac8a58be8de8934e7f33f',
 }
 HELPERS = {
     'teletext-object-decoder.py': 'd8d7001f6df374614b95c59a413b07f60af4038089bed1811c12abbe2cf6c6f1',
@@ -63,7 +65,7 @@ def unique_object(pairs):
 
 
 def main():
-    require(len(sys.argv) == 3, 'Usage: teletext-zvbi-x27-proof.py original|corrected root|nested')
+    require(len(sys.argv) == 3, 'Usage: teletext-zvbi-x27-proof.py original|corrected root|nested|authored-root|authored-nested')
     variant, fixture = sys.argv[1:]
     require(variant in PARSERS and fixture in FIXTURES, 'Unknown variant or fixture')
     output, proof = Path('/out'), Path('/proof')
@@ -108,14 +110,15 @@ def main():
     require(library == output / entry['library'], 'Unexpected mapped decoder path')
     loaded_hash = digest(library)
     require(loaded_hash == entry['library_sha256'], 'Mapped decoder hash mismatch')
-    wanted_status = 1 if variant == 'original' and fixture == 'nested' else 0
+    wanted_status = 1 if variant == 'original' and fixture.endswith('nested') else 0
     require(status == wanted_status, 'Unexpected native outcome: ' + stdout.getvalue() + stderr.getvalue())
     if status == 0:
         report = json.loads(stdout.getvalue(), object_pairs_hook=unique_object)
         require(report == {'cases_passed': 2, 'decoder_version': '0.2.42'} and not stderr.getvalue(), 'Success oracle mismatch')
     else:
         report = json.loads(stderr.getvalue(), object_pairs_hook=unique_object)
-        require(report == {'error': 'native_foreign_mot_default_nested_selected_page: cell 1,8 differs: actual (84, 7, 0), expected (65, 1, 4)'} and not stdout.getvalue(), 'Upstream failure oracle changed')
+        name = 'authored_service_foreign_mot_nested_selected' if fixture == 'authored-nested' else 'native_foreign_mot_default_nested_selected_page'
+        require(report == {'error': name + ': cell 1,8 differs: actual (84, 7, 0), expected (65, 1, 4)'} and not stdout.getvalue(), 'Upstream failure oracle changed')
     print(json.dumps({
         'schema': 1, 'variant': variant, 'decoder_label': entry['label'], 'fixture': fixture,
         'conformance_passed': status == 0, 'exit_code': status,
