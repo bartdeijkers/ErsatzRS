@@ -244,7 +244,13 @@ target/type/origin/caller/offset facts match with complete unique coverage.
 Generated carriers retain separate exact-placement instances; numeric ID shifts
 are not evidence. Next check resolved typed glyph identities and exact original
 display origins before whole-page equivalence; these components do not correct
-the automatic composition path yet.
+the automatic composition path yet. Bounded typed comparison now checks actual
+assigned identities against exact original origins and paired provenance, including
+Unicode replacement context and full DRCS resources. Equal-mask false positives
+are rejected; complete structural/colour comparison remains separate. The native
+representative passes both full1000-cell views and literal decoding. Next connect
+the same-service normalization entry with original final-word C2 settlement;
+foreign MOT-default activation and row-zero lowering remain required/open.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone

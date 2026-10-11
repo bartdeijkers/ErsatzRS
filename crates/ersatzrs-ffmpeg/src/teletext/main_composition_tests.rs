@@ -10,6 +10,8 @@ mod raster_tests;
 #[path = "physical_replay_tests.rs"]
 mod physical_replay_tests;
 
+#[path = "augmented_origin_comparison_tests.rs"]
+mod augmented_origin_comparison_tests;
 #[path = "augmented_origin_compilation_tests.rs"]
 mod augmented_origin_compilation_tests;
 #[path = "augmented_origin_program_tests.rs"]

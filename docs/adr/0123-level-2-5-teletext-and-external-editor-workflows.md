@@ -183,6 +183,15 @@ numeric ID shifts never establish ancestry. Bound raw counts, storage arithmetic
 and unavoidable work before allocation, then charge visited scans. This proves
 call correspondence only; typed/display equivalence, same-generation authority,
 receiver equivalence, admission and readiness remain separate obligations.
+A bounded typed selected-page comparison now consumes only that private paired
+result. Carrier glyphs map to the exact original display-origin index; retained
+emitters use provenance and checked instances. Compare actual resolved assigned
+glyph identities, including repertoire/composite context and full DRCS resource
+identity/bitmap. Authored Base replacements reuse the existing explicit Latin
+identity construction; equal masks never establish identity. Preserve located
+current uncertainty and separate append-only histories. Full fragment/attribute/
+colour comparison remains required alongside this view; zero typed findings do
+not certify nonvisible state, matching generations, receiver acceptance or readiness.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

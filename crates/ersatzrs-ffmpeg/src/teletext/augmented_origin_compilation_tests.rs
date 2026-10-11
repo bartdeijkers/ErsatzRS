@@ -9,7 +9,7 @@ use crate::teletext::{
     TeletextAugmentedOriginProgramBudget, TeletextBaseCompatibilityRealizationBudget,
     TeletextOriginCarrierBudget, TeletextOriginCarrierPlacementBudget,
 };
-fn ancestry() -> TeletextAugmentedInvocationBudget {
+pub(super) fn ancestry() -> TeletextAugmentedInvocationBudget {
     TeletextAugmentedInvocationBudget {
         max_original_invocations: 256,
         max_actual_invocations: 512,
@@ -17,13 +17,13 @@ fn ancestry() -> TeletextAugmentedInvocationBudget {
         max_work: 100_000,
     }
 }
-fn objects() -> TeletextObjectCatalogBudget {
+pub(super) fn objects() -> TeletextObjectCatalogBudget {
     TeletextObjectCatalogBudget {
         max_objects: 64,
         max_commands: 8192,
     }
 }
-fn with_candidate(
+pub(super) fn with_candidate(
     fixture: Fixture,
     changed: Option<Vec<TeletextEnhancementObjectDefinition>>,
     inspect: impl FnOnce(
@@ -84,7 +84,7 @@ fn with_candidate(
     .unwrap();
     inspect(&service, &composition, &augmented);
 }
-fn compiled<'a>(
+pub(super) fn compiled<'a>(
     service: &TeletextSemanticService,
     augmented: &'a TeletextAugmentedOriginProgram<'a>,
     limits: TeletextAugmentedInvocationBudget,
@@ -105,7 +105,7 @@ fn compiled<'a>(
         limits,
     )
 }
-fn active() -> Fixture {
+pub(super) fn active() -> Fixture {
     let mut fixture = Fixture::new(
         vec![text(1, 8, "£")],
         Some(vec![

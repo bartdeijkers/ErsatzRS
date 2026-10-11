@@ -153,7 +153,10 @@ release section when tagging a release.
   IDs and private emitter maps. The representative dual-level decoder proof now
   consumes this producer and a paired physical factory now checks complete unique
   original/carrier invocation ancestry across nested calls and sparse defaults.
-  Full-page typed equivalence and automatic normalization remain open.
+  Compare selected typed identities and exact origins independently of mask
+  equality, including full DRCS resources and Unicode replacement context.
+  The native representative passes both complete model views; automatic
+  normalization and full standards/client/editor/publication acceptance stay open.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

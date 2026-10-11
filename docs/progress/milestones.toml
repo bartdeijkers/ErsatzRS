@@ -987,6 +987,33 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Bounded typed selected-page comparison now consumes only the private paired encoded candidate,
+checks exact original carrier-origin indices and retained provenance/instances, and compares
+actual resolved assigned identities independently of masks. Authored Base replacements reuse the
+extracted existing Latin identity construction; DRCS requires full reference/resource/bitmap
+identity. Original/actual source/root/origin/candidate/instance namespaces and append-only histories
+remain separate. Checked raw records/cells/storage, bounded diagnostics and charged lookup work
+precede/guard allocation and scans. Seven final regressions pass
+(c35557e9-6cfe-4087-b927-2e0e8cec20ab): pound/acute/at plus Active collision, identical Latin/Cyrillic
+masks with distinct identities, changed G2 repertoire, repeated/nested/sparse roots, exact budgets/
+immutability/history and equal DRCS pixels with distinct scope/S1/slot/fullresource identities.
+Initial run passed6/7; the DRCS fixture hit existing NeedsRowZeroLowering before comparison. Both
+bodies now select relative row1 before the same ordinal1 glyph and assert absolute2,8, preserving
+all identity/equal-bitmap assertions. Row-zero lowering remains required/open, not a waived limit.
+Thirteen existing domain-mask regressions pass (9d3339c2-4ab4-4cf3-bc95-0fbc175356f9) after the pure
+identity extraction. The pinned native fixture now passes complete1000 typed AND selected-model
+cells before unchanged Level1.5 pound/Level2.5 A/Z/B literal decoding
+(4e39164a-3531-4eae-b046-93ef06d4bd2a). Independent final-source review verifies fixture-only and
+pointer corrections plus whitespace-only helper wrapping preserve native/domain evidence.
+Strict domain/FFmpeg all-target Clippy, workspace formatting, architecture/new-allow/progress
+checks pass. Zero typed findings are not complete geometry/attribute/C1 equivalence, nonvisible
+admission, matching service generations, independent receiver readiness or publication. Next
+connect the bounded same-service normalization entry and reuse original final-word C2 settlement;
+foreign MOT-default activation/ownership needs a proven strategy, no cloned-owner exemption.
+Automatic Unicode/Active correction, full A7/A8/standards/client/editor/localized browser/
+publication acceptance remain open; all milestone contracts/status/dependencies unchanged.
+Earlier evidence follows unchanged:
+
 Producer-paired compilation now sends the private augmented candidate through the unchanged
 physical factory and owns that exact encoded replay beside bounded invocation ancestry. Retained
 roots map original commands or exact sparse default slots; nested calls map their already-checked

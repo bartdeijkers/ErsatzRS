@@ -127,6 +127,20 @@ pub fn resolve_teletext_glyph_mask(
 pub fn resolve_teletext_latin_replacement_mask(
     operation: TeletextColumnOperation,
 ) -> Result<TeletextGlyphMask, TeletextGlyphMaskError> {
+    resolve_teletext_glyph_mask(
+        resolve_teletext_latin_replacement_identity(operation)?,
+        None,
+        false,
+    )
+}
+
+/// Exact identity of an operation emitted by the existing Latin fallback layout.
+/// This performs no national substitution, font lookup or display composition.
+/// # Errors
+/// Rejects operations outside the existing G2/diacritic replacement vocabulary.
+pub fn resolve_teletext_latin_replacement_identity(
+    operation: TeletextColumnOperation,
+) -> Result<TeletextGlyphIdentity, TeletextGlyphMaskError> {
     let identity = match operation {
         TeletextColumnOperation::G2 { code } => TeletextGlyphIdentity::G2 {
             glyph: TeletextG2Glyph {
@@ -158,7 +172,7 @@ pub fn resolve_teletext_latin_replacement_mask(
         }
         _ => return Err(TeletextGlyphMaskError::UnsupportedReplacement),
     };
-    resolve_teletext_glyph_mask(identity, None, false)
+    Ok(identity)
 }
 
 fn table_mask(table: usize, code: u8) -> Result<TeletextGlyphMask, TeletextGlyphMaskError> {

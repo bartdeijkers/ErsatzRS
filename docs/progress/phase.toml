@@ -1151,9 +1151,11 @@ assembly now retains originals, distinct IDs and private emitter maps, with exac
 body sizing, aggregate scan/storage bounds and blocking-origin diagnostics. Its
 native representative still passes both literal levels and all1000 model cells.
 The paired physical factory now owns bounded original/actual invocation ancestry,
-checking roots, nested callsites, geometry, offsets and unique coverage. Next prove
-resolved typed glyph/origin correspondence and realize Unicode/Active physical
-priority with the existing collector. Explicit
+checking roots, nested callsites, geometry, offsets and unique coverage. Bounded
+typed comparison now checks resolved identities/exact origins, rejecting equal-mask
+and equal-bitmap identity mismatches. The native fixture passes both1000-cell views.
+Next connect same-service normalization with original final-word C2 settlement;
+foreign MOT-default activation and row-zero lowering remain required/open. Explicit
 resource calls lack page addresses; default-owner preservation needs a proven
 encoding strategy rather than relaxing selected-page checks;
 full engine/client/editor/publication acceptance remains open.

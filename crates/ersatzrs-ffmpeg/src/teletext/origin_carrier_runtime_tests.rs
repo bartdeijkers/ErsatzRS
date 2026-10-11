@@ -178,8 +178,24 @@ fn compiled(
     )
     .unwrap();
     assert_carrier_replay(&compiled);
+    assert_typed_origins_match(&compiled);
     assert_selected_model_matches(&original, compiled.physical().replay());
     compiled.into_physical()
+}
+
+fn assert_typed_origins_match(compiled: &EncodedTeletextAugmentedOriginProgram<'_>) {
+    let comparison = compare_teletext_augmented_origin_glyphs(
+        compiled,
+        TeletextAugmentedGlyphComparisonBudget {
+            max_records: 10_000,
+            max_cells: 1000,
+            max_diagnostics: 64,
+            max_work: 1_000_000,
+        },
+    )
+    .unwrap();
+    assert_eq!(comparison.compared_cells(), 1000);
+    assert!(comparison.diagnostics().is_empty());
 }
 
 fn assert_carrier_replay(compiled: &EncodedTeletextAugmentedOriginProgram<'_>) {

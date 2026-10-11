@@ -8,15 +8,15 @@ ADR 0120 requires synthetic p9a-04 engine acceptance before one ErsatzRS-Addons
 TV-guide add-on at p9b-01, inspired only by NOS pages 200–299.
 Add-ons own content; host validates/publishes/delivers. Subtitle gates remain. ADR 0123
 reopens P9A-01 for authored Level 2.5, fallback and pinned QTeletextMaker
-TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
-display/navigation are required; Kodi is optional. P9A-02 In progress; four milestones Not started.
+TTI/sidecar, TSDuck, independent decoding and suitable-client display/navigation
+remain required; Kodi optional. P9A-02 In progress; others Not started.
 
-Bounded services.
-v1 lifting retains bytes; resources preserve geometry, lifecycle,
-pointers/metadata/fresh definition state. Local definitions share bounded
-X26 with forward references. Decoders prove selected DRCS/object/main cells; local/G1 font gaps remain.
+Bounded v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
+metadata/fresh definition state. Local X26 retains forward references.
+Decoders prove selected DRCS/object/main cells; local/G1 font gaps remain.
 Replay/raster retain fallback; recipes/placement retain lineage/DAG/AP.
 Assembly retains originals/IDs/maps; encoding checks unique call ancestry.
+Typed origins/glyphs/resources reject equal-mask identities.
 C3 retains private/shared fragments and deferred writers.
 C2 uses packed words within emitters; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.

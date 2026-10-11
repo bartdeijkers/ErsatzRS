@@ -512,6 +512,29 @@ not typed glyph/display equivalence, receiver acceptance or admission. Next chec
 resolved typed identities against exact original display origins; automatic
 normalization, physical admission and full client navigation remain open.
 
+`compare_teletext_augmented_origin_glyphs` accepts only the private paired compiled
+candidate and scans the complete selected visual plane under record/cell/diagnostic/
+work/storage bounds. Generated glyph roles map to exact original display origins,
+including repaint origins sharing a candidate; retained emitters use original
+provenance and checked invocation maps. Compare actual assigned G0/G2 repertoires,
+composite base/mark context, special `@`, mosaics, G3 and DRCS identities. DRCS also
+requires equal full resolved resource identity and bitmap. Base Unicode uses the
+same extracted explicit-Latin replacement identity as the existing mask helper;
+physical Base still uses coded fallback. Equal masks are never identity evidence.
+
+Located typed findings keep original/actual source, root, candidate, origin and
+instance spaces separate. Current selected pending and full append-only histories
+remain distinct. This does not replace the whole-page fragment/attribute/mask/C.1
+comparison or certify service generations, nonvisible state or receiver readiness.
+Seven tests prove Unicode replacements/Active collision, equal-mask Latin/Cyrillic
+failure, changed G2 context, nested/repeated/sparse roots, budgets/history and equal
+DRCS pixels with distinct scope/S1/slot/resource. The DRCS identity fixture uses
+relative row1 to reach the comparison; row-zero lowering remains required/open.
+The pinned native fixture now passes both full1,000-cell typed and selected-model
+comparisons before unchanged literal dual-level decoding. Next build the bounded
+same-service normalization entry with original final-word C.2 settlement; foreign
+MOT/default ownership, automatic-path correction and full acceptance remain open.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled
