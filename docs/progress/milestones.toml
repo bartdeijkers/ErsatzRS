@@ -987,6 +987,29 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 monochrome DRCS body checkpoint: the native pure encoder preserves
+exact checked resource identity, all 48 glyph slots and twelve-by-ten pixel
+orientation in fixed optional row bodies. Undefined rows remain omitted;
+undefined halves use odd-parity SPACE, distinct from a defined blank glyph.
+Complete X28/3 derives DRCS/GDRCS function and coding zero, preserving mode zero
+for defined glyphs and F for undefined slots across triplet boundaries;
+reserved-zero padding is documented writer policy. No headers/carousel/readiness.
+Four focused FFmpeg regressions pass in Nextest
+2924d18c-a64d-4b88-ada5-6ca80874ffa7 (398 skipped): literal parity/byte vectors,
+all 4,096 scanlines, every slot for both purposes, exact modes/reserved bits,
+sparse/blank/empty cases and input-order independence. The prior 395-test
+baseline remains valid for unchanged code. Strict FFmpeg all-target Clippy,
+workspace formatting and architecture-lint pass; independent normative
+pixel/packet/boundedness review is clean. QTeletextMaker 1.0 source confirms
+valid bitmap geometry but ignores sparse-mode/parity errors, so it cannot be
+an undefined-slot oracle. Inspected libzvbi source is 0.2.45; installed runtime
+reports 0.2.42 and must be independently calibrated, not conflated with source.
+The official pinned editor AppImage is downloaded/extracted for later GUI proof,
+not accepted as an operational editor workflow. MOT/X27 selection, physical
+headers/pointers/program realization, complete enhanced compilation, v2/editor/
+preview/publication and actual decoder/client/browser/source/platform acceptance
+remain open. No milestone status/dependency/acceptance change or publication.
+
 2026-10-11 authored MOT checkpoint: checked Level 2.5 declarations preserve the
 explicit MOT identity/magazine and nonzero logical S1, all 256 raw association
 slots with FF retained reserved, one global plus seven public/normal links for

@@ -12,6 +12,7 @@ mod carousel;
 mod charset;
 mod clock;
 mod compositional;
+mod drcs;
 mod layout;
 mod lift;
 mod mot;
@@ -36,6 +37,7 @@ pub use clock::{
     TeletextClockConfig, TeletextClockError, TeletextClockReport, TeletextClockValidator,
 };
 pub use compositional::encode_teletext_compositional_links;
+pub use drcs::{encode_teletext_drcs_bodies, TeletextDrcsPacketBodies};
 pub use lift::lift_teletext_v1_page_set;
 pub use mot::{
     encode_teletext_mot_bodies, TeletextMotAllocationFailure, TeletextMotDefaultAllocation,
@@ -125,6 +127,8 @@ mod buffer_tests;
 mod clock_tests;
 #[cfg(test)]
 mod compositional_tests;
+#[cfg(test)]
+mod drcs_tests;
 #[cfg(test)]
 mod lift_tests;
 #[cfg(test)]

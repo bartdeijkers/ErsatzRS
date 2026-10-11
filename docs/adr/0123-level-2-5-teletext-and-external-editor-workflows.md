@@ -33,6 +33,9 @@ Default roots retain their original MOT resource independently of explicit links
 Checked Level 2.5 MOT declarations now retain explicit ownership, associations,
 full link banks, original defaults and ignored raw fields. Native MOT body coding
 checks supplied default allocations before emitting any of its seventeen rows.
+Native monochrome DRCS bodies preserve exact slots/pixels and sparse undefined
+glyphs, with an explicit X28/3 mode declaration. Resource headers, physical
+realization and actual decoder/client proof remain separate.
 MOT resolution, resolved display semantics, physical allocation, complete
 enhanced-service compilation and editor/publication workflows remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are

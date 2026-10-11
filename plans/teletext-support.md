@@ -88,6 +88,9 @@ Checked Level 2.5 MOT declarations and independently decoded body coding now
 retain explicit owners, full banks, extents, original default slots and ignored
 fields. Supplied physical selectors are checked without truncating semantic IDs;
 this does not prove object allocation or header/carousel lifecycle.
+Native monochrome DRCS bodies preserve slot/pixel geometry and sparse undefined
+glyphs; X28/3 declares modes explicitly. Actual decoder/client and resource
+header proof remain open.
 Next implement resource selection, resolve audited edge policies and prove
 declaration-to-selection consistency, then final display/object
 semantics, physical service allocation and the native compiler.

@@ -1140,6 +1140,8 @@ source locations; nested calls and glyphs inside defaults remain checked, while
 only original synthesized roots are exempt. Checked MOT declarations and native
 seventeen-row body coding preserve explicit ownership, full banks, original
 defaults and ignored fields; supplied allocations never truncate semantic IDs.
+Monochrome DRCS bodies preserve exact slots/pixels and sparse undefined modes;
+actual decoder, header and client proof remain open.
 MOT selection, actual pointer/program realization and header/carousel lifecycle,
 declaration-to-selection consistency and audited edge policies,
 final display/object semantics, physical service allocation, the enhanced compiler

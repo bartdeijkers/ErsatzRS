@@ -185,6 +185,35 @@ X26 triplets remain necessary even with an empty authored program. Compiler
 convergence for mixed v1/v2 producers remains open; using the old base encoder
 on an arbitrary enhanced service would silently discard its authored data.
 
+## Monochrome DRCS body coding
+
+`encode_teletext_drcs_bodies` receives a checked `TeletextDrcsSubtable` and returns
+its exact resource identity, twenty-four optional row bodies and X28/3. Slots
+0–47 select row one plus slot/2 and the corresponding twenty-byte half; input
+vector order never renumbers glyphs. Each of the ten twelve-pixel scanlines has
+two odd-parity D-bytes in left-to-right order with bit seven set. Defined blank
+pixels use 0x40; an undefined half of a present row uses SPACE 0x20. Wholly
+undefined rows are omitted. This preserves sparse absence rather than inventing
+blank definitions.
+
+X28/3 derives function four/GDRCS or five/DRCS and coding zero. Its forty-eight
+mode nibbles retain zero for defined monochrome glyphs and F for undefined slots,
+including cross-triplet boundaries. Remaining bits are canonical reserved zero.
+Independent parity/data-position tests decode literal corner/asymmetric fixtures,
+all 4,096 scanlines, every slot for both purposes, sparse/blank distinctions,
+empty resources and unchanged results after reversing input order. These are
+body/geometry checks, not actual decoder, header, transport or client acceptance.
+
+Pinned QTeletextMaker 1.0 decodes valid monochrome geometry but its Level 2.5 path
+ignores X28/3 modes and does not validate parity or undefined SPACE halves. Use
+it only for the applicable valid-glyph proof. The inspected libzvbi source is
+0.2.45; the currently installed independent decoder reports 0.2.42. Source audit
+and exact-runtime execution must remain distinct. Calibrate the actual decoder
+with literal sparse, blank, corner and bad-parity cases before claiming its proof.
+The official pinned editor AppImage was downloaded and extracted for later GUI
+verification (SHA256 `d2d77e8285fbb8147fe5014fb7f592f333dfd6bdcbad4b831197f1ad7a3a04a7`);
+this preparation does not prove an operational editor or display workflow.
+
 ## MOT/X27 preservation audit
 
 EN 300 706 sections 9.6.2, 10.6 and 13.8 require distinct source declarations

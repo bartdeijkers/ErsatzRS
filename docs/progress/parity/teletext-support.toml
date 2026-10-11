@@ -4,20 +4,20 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
-ADR 0120 requires independent generic engine acceptance with synthetic pages at
-p9a-04, then exactly one TV-guide teletext add-on in ErsatzRS-Addons at p9b-01.
-The add-on owns NOS-guide-inspired pages 200–299 and content; the host owns
-validation, publication, delivery and read-only programme context. Source
-subtitle requirements remain. ADR 0123 reopens P9A-01 for full authored Level 2.5,
-base fallback and QTeletextMaker TTI/sidecar design interchange. TSDuck,
-independent decoding and actual suitable-client display/navigation are required;
-Kodi is optional. P9A-02 remains In progress; four milestones are Not started.
-No engine/content/editor/client acceptance.
+ADR 0120 requires independent synthetic engine acceptance at p9a-04 before
+exactly one TV-guide add-on in ErsatzRS-Addons at p9b-01, inspired only by NOS
+guide pages 200–299. The add-on owns content; the host owns validation/publication,
+delivery and read-only guide context. Source subtitle gates remain. ADR 0123
+reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMaker
+TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
+display/navigation are required; Kodi is optional. P9A-02 is In progress; four
+milestones are Not started. Acceptance remains open.
 
-Checked palette/DRCS values, resource identities, ordered programs and bounded
-object/DRCS traversal underpin the supplied-selection semantic service.
-Presentation bodies and bounded v1 lifting preserve page/X26 presence and v1
-bytes; mixed-producer convergence remains open. X27 declarations/body coding
+Checked values/programs and bounded object/DRCS traversal underpin the
+supplied-selection semantic service.
+Presentation bodies/v1 lifting preserve page/X26 presence and v1 bytes. DRCS
+bodies preserve exact slots/pixels and sparse modes; decoder/header proof remains
+open. Mixed-producer convergence remains open. X27 declarations/body coding
 retain masks and required inventory; matching selected owners require announced
 used S1 with located failures. Only original synthesized MOT roots are exempt;
 nested calls and glyphs remain checked. MOT declarations/body coding retain
@@ -28,7 +28,7 @@ compilation and editor interfaces remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua controls remain preparatory.
 Shared app controls compose isolated channel drafts; native encoding retains the
-same pages. Guide/page bounds have proof. Acquisition, service activation, other
+same pages. Guide bounds are proven. Acquisition, activation, other
 regions, link CRC, UI/Lua and publication remain open.
 
 Report-only metadata/SQLite observations preserve ordinary tracks, exact
@@ -60,7 +60,8 @@ page/language/forced/default selection, native/Next Burn/Convert and copy/output
 policy, carriage/passthrough and HLS/browser fallback. Continuous compatible
 slate handover, automatic binding, publication/refresh/restart, localized
 management and full matrix/source/client/browser/smoke/TSDuck acceptance remain
-open. Milestones/debt own evidence; plans/teletext-support.md owns sequencing. UCU exceptions do not waive teletext gates. Production
+open. Milestones/debt own proof; plans/teletext-support.md owns sequencing. UCU waives
+no teletext gates. Production
 content waits for p9a-04; Phase 10 waits for p9b-02.
 '''
 

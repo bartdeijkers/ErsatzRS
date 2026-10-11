@@ -135,7 +135,9 @@ release section when tagging a release.
   source-located diagnostics; original default roots retain their exemption.
   Checked MOT declarations and packet-body coding preserve original resource
   ownership, full link banks/defaults, ignored fields and raw counts, with checked
-  supplied selectors and located failures. Authored resource selection, complete
+  supplied selectors and located failures. Monochrome DRCS body coding preserves
+  exact slots/pixels and sparse undefined glyphs with explicit X28/3 modes.
+  Authored resource selection, complete
   enhanced-service compilation, editor
   workflows and client acceptance remain open.
 - Extend Phase 9 acceptance with per-channel teletext add-on bindings and named
