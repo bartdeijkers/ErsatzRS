@@ -131,7 +131,15 @@ spacing Double Height cause for whole lower-main-row suppression. Suppressed
 controls cannot cascade; background-only cells reference their upper origin,
 separately from the ignored row's mapped default baseline. Illegal height rows
 retain located pending boundaries rather than choosing a decoder-specific clip.
-These base facts precede enhancement replay and do not settle final C.3 overlays.
+These base facts feed a shared layer-aware display resolver. Base/Active/Local,
+per-instance Adaptive inheritance and private Passive overlays retain separate
+execution semantics. Compact origin/writer pools preserve every original
+candidate, requested/effective size and deferred obscured attribute source;
+effective fragments alone define occupancy. Physical-order ties, illegal size
+boundaries and ambiguous inherited Adaptive non-origin sizing remain located
+pending evidence. The interchange reference owns the precise API and decoder
+limitations. This does not accept glyph rasterization, full A.7/A.8 admission,
+physical equivalence, suitable-client display, editor workflow or publication.
 G1 alphabetic positions now have a separate checked operation, preserving mode
 0x01 rather than promoting them to a Level 1.5-compatible character command.
 Original glyph/Passive attribute execution retains this intent; composition keeps

@@ -189,7 +189,11 @@ release section when tagging a release.
   layer-aware size/obscured-attribute rendering remains required.
   Coded-base fragments now retain spacing-driven lower-row suppression and exact
   upper origins beside independent row defaults; ignored controls do not cascade.
-  Illegal height boundaries and final enhancement overlays remain unresolved.
+  Layer-aware replay now retains shared and private execution, fragment origins,
+  effective size and deferred writers without changing their original sources.
+  Adaptive attribute-only repaint and partial higher-layer overlays remain
+  distinct. Pending boundaries/order and full rasterization, physical equivalence,
+  client/editor workflows and publication acceptance stay open.
   Known inclusive raw object intervals now reject sixteen simultaneous opens
   across all object types with original call diagnostics; unresolved intervals
   remain visible and full overlap/admission validation remains open.

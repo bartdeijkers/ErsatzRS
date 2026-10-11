@@ -148,3 +148,12 @@ mod glyph_intent_tests;
 
 #[cfg(test)]
 mod base_footprints_tests;
+
+mod display_resolution;
+mod display_resolution_values;
+mod display_resolution_writers;
+pub use display_resolution::*;
+pub use display_resolution_values::*;
+
+#[cfg(test)]
+mod display_resolution_tests;

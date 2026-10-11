@@ -12,13 +12,15 @@ use std::collections::BTreeMap;
 use ersatzrs_domain::{
     build_teletext_glyph_layers, resolve_teletext_attribute_execution,
     resolve_teletext_base_footprints, resolve_teletext_charset_execution,
-    resolve_teletext_display_geometry, resolve_teletext_drcs_execution,
-    resolve_teletext_glyph_intent, resolve_teletext_spatial_trace, TeletextAttributeExecution,
-    TeletextAttributeExecutionError, TeletextBaseDisplay, TeletextBaseFootprintError,
-    TeletextBaseFootprints, TeletextCharsetExecution, TeletextCharsetExecutionError,
-    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
-    TeletextColumnOperation, TeletextDisplayGeometry, TeletextDisplayGeometryBudget,
-    TeletextDisplayGeometryError, TeletextDrcsExecution, TeletextDrcsExecutionBudget,
+    resolve_teletext_display_geometry, resolve_teletext_display_resolution,
+    resolve_teletext_drcs_execution, resolve_teletext_glyph_intent, resolve_teletext_spatial_trace,
+    TeletextAttributeExecution, TeletextAttributeExecutionError, TeletextBaseDisplay,
+    TeletextBaseFootprintError, TeletextBaseFootprints, TeletextCharsetExecution,
+    TeletextCharsetExecutionError, TeletextCharsetPair, TeletextCharsetValueError,
+    TeletextCollectedEnhancementReferences, TeletextColumnOperation, TeletextDisplayGeometry,
+    TeletextDisplayGeometryBudget, TeletextDisplayGeometryError, TeletextDisplayResolution,
+    TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
+    TeletextDisplayResolutionInputs, TeletextDrcsExecution, TeletextDrcsExecutionBudget,
     TeletextDrcsExecutionError, TeletextEffectiveProgramSource,
     TeletextEnhancementCharsetDesignation, TeletextEnhancementCollectionBudget,
     TeletextEnhancementCollectionFailure, TeletextEnhancementCommand, TeletextEnhancementPosition,
@@ -105,8 +107,12 @@ pub enum TeletextMainCompositionFailure {
     DrcsExecution(#[from] TeletextDrcsExecutionError),
     #[error(transparent)]
     DisplayGeometry(#[from] TeletextDisplayGeometryError),
+    #[error(transparent)]
+    DisplayResolution(#[from] TeletextDisplayResolutionError),
     #[error("base and enhancement glyph candidate budget exceeds storage range")]
     GlyphIntentBudget,
+    #[error("original display resolution budget exceeds storage range")]
+    DisplayResolutionBudget,
     #[error(transparent)]
     Charset(#[from] TeletextCharsetValueError),
     #[error(transparent)]
@@ -153,6 +159,7 @@ pub struct TeletextMainComposition {
     glyph_intent: TeletextGlyphIntent,
     drcs_execution: TeletextDrcsExecution,
     display_geometry: TeletextDisplayGeometry,
+    display_resolution: TeletextDisplayResolution,
     collected: TeletextCollectedEnhancementReferences,
 }
 
@@ -237,6 +244,13 @@ impl TeletextMainComposition {
     pub const fn display_geometry(&self) -> &TeletextDisplayGeometry {
         &self.display_geometry
     }
+    /// Original layer-aware fragments and deferred attribute writers from these
+    /// exact immutable inputs. Pending evidence remains visible; this result
+    /// grants no physical equivalence, rasterization or publication authority.
+    #[must_use]
+    pub const fn display_resolution(&self) -> &TeletextDisplayResolution {
+        &self.display_resolution
+    }
     #[must_use]
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
         &self.collected
@@ -296,9 +310,10 @@ pub fn compose_teletext_main_program(
         layout.base_glyphs().len(),
         budget.max_input_commands,
     )?;
-    let primary = service
+    let presentation = service
         .effective_presentation(owner)
-        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?
+        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
+    let primary = presentation
         .primary_designation()
         .and_then(|value| TeletextEnhancementCharsetDesignation::new(value.get()))
         .map_err(|reason| error(owner, None, reason.into()))?;
@@ -324,9 +339,6 @@ pub fn compose_teletext_main_program(
                 error(owner, location, reason.into())
             },
         )?;
-    let presentation = service
-        .effective_presentation(owner)
-        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
     let base_display = trace_teletext_base_display(page, &layout, presentation, &colour_context)
         .map_err(|reason| error(owner, None, reason.into()))?;
     let base_footprints =
@@ -349,6 +361,14 @@ pub fn compose_teletext_main_program(
         &source,
         budget.collection,
     )?;
+    let display_resolution = original_display_resolution(
+        &base_display,
+        &base_footprints,
+        &colour_context,
+        &original_display,
+        &source,
+        budget.collection.max_commands,
+    )?;
     Ok(TeletextMainComposition {
         owner,
         original_program_source: source,
@@ -364,6 +384,7 @@ pub fn compose_teletext_main_program(
         glyph_intent: original_display.intent,
         drcs_execution: original_display.drcs,
         display_geometry: original_display.geometry,
+        display_resolution,
         collected,
     })
 }
@@ -425,6 +446,66 @@ struct OriginalDisplayExecution {
     intent: TeletextGlyphIntent,
     drcs: TeletextDrcsExecution,
     geometry: TeletextDisplayGeometry,
+}
+
+fn original_display_resolution(
+    base: &TeletextBaseDisplay,
+    base_footprints: &TeletextBaseFootprints,
+    colours: &TeletextColourContext,
+    original: &OriginalDisplayExecution,
+    source: &TeletextEffectiveProgramSource,
+    maximum: usize,
+) -> Result<TeletextDisplayResolution, TeletextMainCompositionError> {
+    let owner = base.owner();
+    let max_candidates = original_candidate_budget(owner, maximum)?;
+    let exhausted = || {
+        error(
+            owner,
+            None,
+            TeletextMainCompositionFailure::DisplayResolutionBudget,
+        )
+    };
+    let max_writers = (50_usize + TELETEXT_ROWS * TELETEXT_COLUMNS)
+        .checked_add(maximum)
+        .ok_or_else(exhausted)?;
+    let max_origins = maximum
+        .checked_mul(72)
+        .and_then(|count| count.checked_add(max_candidates))
+        .ok_or_else(exhausted)?;
+    // Conservative work ceiling, not allocation size: original command replay
+    // can visit all logical areas and attribute groups. The resolver preflights
+    // exact writer/origin storage independently before allocating it.
+    let max_updates = max_candidates
+        .checked_add(maximum)
+        .and_then(|count| count.checked_add(1))
+        .and_then(|count| count.checked_mul(TELETEXT_ROWS * 72 * 16))
+        .ok_or_else(exhausted)?;
+    resolve_teletext_display_resolution(
+        TeletextDisplayResolutionInputs {
+            base,
+            base_footprints,
+            original: &original.spatial,
+            layers: &original.glyphs,
+            attributes: &original.attributes,
+            intent: &original.intent,
+            drcs: &original.drcs,
+            geometry: &original.geometry,
+            row_colours: colours.row_colours(),
+        },
+        TeletextDisplayResolutionBudget {
+            max_candidates,
+            max_commands: maximum,
+            max_writers,
+            max_origins,
+            max_updates,
+        },
+    )
+    .map_err(|reason| {
+        let location = reason
+            .location
+            .and_then(|location| original_location(source, location));
+        error(owner, location, reason.into())
+    })
 }
 
 fn original_display_execution(

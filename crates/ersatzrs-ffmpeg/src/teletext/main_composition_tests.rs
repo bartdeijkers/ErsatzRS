@@ -197,6 +197,164 @@ impl Fixture {
 fn compose(service: &TeletextSemanticService) -> TeletextMainComposition {
     compose_teletext_main_program(service, owner(), budget()).unwrap()
 }
+
+#[test]
+fn same_service_display_resolution_defers_covered_writers_without_rewriting_observations() {
+    let size = |column, double_width| {
+        at(
+            column,
+            TeletextColumnOperation::Attributes {
+                double_height: false,
+                double_width,
+                boxed: false,
+                conceal: false,
+                invert: false,
+                underline_or_separated_mosaics: false,
+            },
+        )
+    };
+    let service = Fixture::new(
+        vec![text(1, 8, "ABCD")],
+        Some(vec![
+            position(1, 8),
+            original_foreground(8, 1),
+            size(8, true),
+            original_foreground(9, 4),
+            original_foreground(10, 2),
+            size(10, false),
+        ]),
+    )
+    .build();
+    let retained = service.clone();
+    let plan = compose(&service);
+    let display = plan.display_resolution();
+    assert_eq!(display.owner(), plan.owner());
+    assert_eq!(display.width(), 40);
+    let originals = plan.glyph_layers().candidates().len();
+    assert!(display.origins().len() >= originals);
+    for (index, origin) in display.origins()[..originals].iter().enumerate() {
+        assert_eq!(origin.candidate_index(), index);
+    }
+    for column in [8, 9] {
+        let cell = display.cell(1, column).unwrap();
+        assert_eq!(cell.attributes().foreground().value().unwrap().get(), 1);
+        assert_eq!(cell.origin(), display.cell(1, 8).unwrap().origin());
+    }
+    assert_eq!(
+        display.cell(1, 9).unwrap().fragment(),
+        TeletextDisplayFragment::DoubleWidthRight
+    );
+    assert_eq!(
+        display
+            .cell(1, 10)
+            .unwrap()
+            .attributes()
+            .foreground()
+            .value()
+            .unwrap()
+            .get(),
+        2
+    );
+    let blue = display
+        .writers()
+        .iter()
+        .find(|writer| {
+            matches!(writer.source(),
+                TeletextAttributeSource::Enhancement { location, .. } if location.command == 3
+            )
+        })
+        .unwrap();
+    assert_eq!(blue.placed_position(), (1, 9));
+    assert_eq!(blue.requested_start(), (1, 9));
+    assert_eq!(blue.effective_start(), (1, 10));
+    // The old pre-geometry projection is diagnostic and remains unchanged.
+    assert_eq!(
+        plan.attribute_execution()
+            .cell(1, 9)
+            .unwrap()
+            .foreground()
+            .value()
+            .unwrap()
+            .get(),
+        4
+    );
+    assert_eq!(service, retained);
+}
+
+#[test]
+fn same_service_display_resolution_keeps_suppressed_background_and_glyph_baseline_distinct() {
+    let style = TeletextStyle {
+        foreground: TeletextColour::Red,
+        background: TeletextColour::Blue,
+        height: TeletextHeight::Double,
+        ..TeletextStyle::default()
+    };
+    let upper = TeletextRow {
+        row: 1,
+        runs: vec![
+            TeletextRun {
+                column: 8,
+                style,
+                content: TeletextRunContent::Text { text: "A".into() },
+            },
+            TeletextRun {
+                column: 14,
+                style: TeletextStyle {
+                    height: TeletextHeight::Normal,
+                    ..style
+                },
+                content: TeletextRunContent::Text { text: "C".into() },
+            },
+        ],
+    };
+    // Authored fallback leaves the spacing-suppressed row empty. Original
+    // ignored coded controls are tested independently by the domain fixtures.
+    let service = Fixture::new(vec![upper], Some(vec![position(2, 14), g0(14)])).build();
+    let plan = compose(&service);
+    let display = plan.display_resolution();
+    assert_eq!(
+        display.cell(2, 8).unwrap().fragment(),
+        TeletextDisplayFragment::DoubleHeightBottom
+    );
+    assert_eq!(
+        display
+            .cell(2, 8)
+            .unwrap()
+            .attributes()
+            .foreground()
+            .value()
+            .unwrap()
+            .get(),
+        1
+    );
+    let glyph = display.cell(2, 14).unwrap();
+    assert_eq!(glyph.attributes().foreground().value().unwrap().get(), 7);
+    assert_eq!(glyph.attributes().background().value().unwrap().get(), 0);
+    let background = display.cell(2, 15).unwrap();
+    assert_eq!(
+        background.fragment(),
+        TeletextDisplayFragment::BackgroundOnly
+    );
+    assert_eq!(
+        background.attributes().background().value().unwrap().get(),
+        4
+    );
+    let candidate = plan.glyph_layers().candidates()
+        [display.origins()[glyph.origin().unwrap()].candidate_index()];
+    assert_eq!(candidate.source().unwrap().command, 1);
+    assert_eq!(candidate.priority(), TeletextGlyphPriority::Local);
+    assert_eq!(
+        plan.attribute_execution()
+            .cell(2, 15)
+            .unwrap()
+            .background()
+            .value()
+            .unwrap()
+            .get(),
+        0
+    );
+}
+
 fn originals(plan: &TeletextMainComposition) -> Vec<TeletextEnhancementCommand> {
     plan.program()
         .commands()

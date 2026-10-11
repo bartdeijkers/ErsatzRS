@@ -175,13 +175,18 @@ overlap/areas and size footprints, and normalize the physical instructions again
 both receiver views. Full display/publication acceptance remains open.
 All original candidates now retain pre-geometry attribute observations, including
 losing private Passive state, with shared stages before Adaptive and Passive.
-Next consume original writers and these stages in layer-aware C.3 resolution:
-spacing lower-row suppression, origin fragments and deferred obscured attributes.
-Do not resize a flattened glyph winner or use these observations as final attrs.
+The layer-aware resolver now consumes original writers separately from these
+diagnostic stages: spacing lower-row suppression, shared and per-instance
+execution, origin fragments and deferred obscured attributes. It does not resize
+a flattened glyph winner or use those observations as final attributes.
 Coded-base fragments now retain spacing Double Height suppression, exact upper
 origins and separate mapped lower-row default baselines. Ignored lower controls
-do not cascade. Illegal height boundaries remain pending; final C.3 must replay
-enhancements over these base facts, including nonspacing-only height and panels.
+do not cascade. Replay retains requested/effective size and each obscured
+writer's original placement/source, with compact immutable fragment origins.
+Illegal height boundaries, physical-order ties and inherited Adaptive non-origin
+sizing remain pending. Next settle this evidence, complete A.7/A.8 admission and
+glyph rasterization, then normalize both receiver views. Fragment tests alone
+cannot accept the engine, client, editor or publication workflow.
 The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
 selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
 alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.

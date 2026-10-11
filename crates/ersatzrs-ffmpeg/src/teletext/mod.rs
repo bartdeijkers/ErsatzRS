@@ -193,6 +193,8 @@ mod composed_main_tests;
 #[cfg(test)]
 mod compositional_tests;
 #[cfg(test)]
+mod display_resolution_runtime_tests;
+#[cfg(test)]
 mod drcs_tests;
 #[cfg(test)]
 mod enhancement_program_tests;

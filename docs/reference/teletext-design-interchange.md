@@ -531,6 +531,79 @@ authoring diagnostics; discretionary decoder responses are not a clipping rule.
 Full C.3, A.7/A.8, physical realization and engine/client/editor/publication
 acceptance remain required and open.
 
+### Layer-aware display resolution
+
+Main composition retains `display_resolution()` from its exact original Base,
+spacing footprints, commands, glyph candidates, attribute observations, glyph
+intent, DRCS and selected geometry. The fixed visual plane refers to compact
+immutable origin, attribute-selection and writer pools. Original losing,
+obscured and unplaced candidates remain indexed rather than being discarded.
+Additional execution origins can reference the same original candidate when an
+Adaptive attribute-only change re-renders a shared-layer character. This keeps
+older uncovered fragments and their attributes intact instead of changing their
+original context in place.
+This result is not a generation certificate or publication authorization.
+
+Base, Active and Local share execution state. Original spacing writers and
+enhancement writers execute over visual left/main/right areas. Spacing-suppressed
+lower main rows discard coded controls and glyphs; an actual enhancement glyph
+there inherits that row's original mapped defaults. Background-only cells use
+the upper shared-layer background. Attribute-only Adaptive or Passive work does
+not repaint those cells. Nonspacing-only height preserves uncovered lower data.
+
+Adaptive instances inherit each unchanged attribute group from the shared
+Base/Active/Local cell at the current position; an explicit Display Attributes
+command replaces the whole six-flag group. Passive instances start with fresh white-on-black Normal
+private state and paint only their own glyphs. A Normal Passive glyph can overlay
+one lower enlarged fragment while preserving the other fragments and origins.
+
+Every occupied part references its origin's attributes. Obscured writers retain
+their original source and placed/requested position while their effective start
+moves to the next free position within their valid area and lifetime. C2 still
+compares effective start and original placement; equal cross-source keys retain
+typed pending transmission evidence rather than choosing traversal order.
+Requested attributes remain distinct from effective footprint geometry. Use
+`effective_size()` and fragment identity for occupancy, never re-expand a cell
+from its requested Double Width/Height writer flags. A double-size request whose
+width conflicts with an earlier occupied part can retain legal double height.
+Illegal boundaries and ambiguous inherited Adaptive sizing on a non-origin
+fragment retain located pending evidence rather than a universal clipping rule.
+
+The opt-in `display_resolution_runtime_tests` fixture uses actual producer DVB
+units with literal Level 1.5/2.5 tuples for covered foreground deferral and
+supersession, Adaptive origin size inheritance/explicit Normal, an explicit
+Normal overlay on an Adaptive right fragment, and Passive right/bottom fragment
+overlays. It reuses the pinned imager 0.2.0 fragment helper.
+Separate temporary comparison showed libzvbi 0.2.42's global recopy erasing Normal
+Passive overlays; both decoders also failed the tested legal double-size
+axis-reduction case. These observations are decoder limitations, not permission
+to change normative wire output or positive proof of those disputed functions.
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR=/path/to/pinned-teletextimager \
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(teletext::display_resolution_runtime_tests)'
+```
+
+Set `ERSATZRS_TELETEXT_TEST_DISPLAY_RESOLUTION_FIXTURE` to an existing temporary
+directory's file to archive the request. Fragment decoding does not establish
+glyph pixels, full A.7/A.8 admission, physical receiver equivalence, suitable-
+client navigation, editor interchange or engine/publication acceptance. These
+remain required; pending evidence is not a permanent feature restriction.
+
+The final focused run passes all 724 teletext tests
+(`d4a1b06a-a342-40f0-9b82-d918515a9658`), including 26 new domain cases and two
+same-service composition regressions. All eight native checks pass
+(`bdf1a632-11a9-47b5-a4b7-3ea5a9112234`); the seven prior requests plus the
+spacing/nonspacing footprint request retain their exact previous bytes. The new
+six-case request SHA-256 is
+`14d2f71a71c5cbb86cde2e500924830543768d07ae90a5d257bb9e6f79b1858c`.
+The unchanged fragment helper SHA-256 is
+`a0273b4755de05bacc39e5e8c57624842a045891b1f46e944fb8933524678a49`.
+Strict domain/FFmpeg all-target Clippy, workspace formatting and architecture
+checks pass. Independent review covers normative stage behavior, candidate/source
+retention, bounded work and the behavior-preserving helper extraction.
+
 ### Original charset contexts
 
 `resolve_teletext_charset_execution` retains exactly one immutable record per

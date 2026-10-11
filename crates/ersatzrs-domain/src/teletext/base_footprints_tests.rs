@@ -22,7 +22,11 @@ fn default_source(row: u8) -> TeletextBaseAttributeSource {
     }
 }
 
-fn source(row: u8, column: u8, control: TeletextBaseSpacingControl) -> TeletextBaseAttributeSource {
+pub(super) fn source(
+    row: u8,
+    column: u8,
+    control: TeletextBaseSpacingControl,
+) -> TeletextBaseAttributeSource {
     TeletextBaseAttributeSource::Spacing {
         position: position(row, column),
         control,
@@ -30,7 +34,7 @@ fn source(row: u8, column: u8, control: TeletextBaseSpacingControl) -> TeletextB
     }
 }
 
-fn attributes(row: u8, foreground: u8, background: u8) -> TeletextBaseDisplayAttributes {
+pub(super) fn attributes(row: u8, foreground: u8, background: u8) -> TeletextBaseDisplayAttributes {
     let source = default_source(row);
     TeletextBaseDisplayAttributes::new(
         TeletextBaseAttributeValues {
@@ -59,7 +63,7 @@ fn attributes(row: u8, foreground: u8, background: u8) -> TeletextBaseDisplayAtt
     .unwrap()
 }
 
-fn empty_rows(foreground: u8, background: u8) -> Rows {
+pub(super) fn empty_rows(foreground: u8, background: u8) -> Rows {
     (0_u8..25)
         .map(|row| {
             (0_u8..40)
@@ -84,7 +88,7 @@ fn empty_rows(foreground: u8, background: u8) -> Rows {
         .collect()
 }
 
-fn put(
+pub(super) fn put(
     rows: &mut Rows,
     row: u8,
     column: u8,
@@ -107,7 +111,7 @@ fn put(
         TeletextBaseDisplayCell::new(position(row, column), code, kind, None, attributes).unwrap();
 }
 
-fn finish(
+pub(super) fn finish(
     rows: Rows,
     presentation: Option<TeletextLevel25PresentationDefaults>,
 ) -> TeletextBaseDisplay {
@@ -121,7 +125,12 @@ fn finish(
     .unwrap()
 }
 
-fn height_segment(rows: &mut Rows, row: u8, control_column: u8, normal_column: Option<u8>) {
+pub(super) fn height_segment(
+    rows: &mut Rows,
+    row: u8,
+    control_column: u8,
+    normal_column: Option<u8>,
+) {
     let dh = TeletextBaseSpacingControl::DoubleHeight;
     let before = rows[usize::from(row)][usize::from(control_column)].attributes();
     put(rows, row, control_column, 0x0d, Some(dh), before);
@@ -179,7 +188,7 @@ fn lower_attributes(column: u8, flashing: bool) -> TeletextBaseDisplayAttributes
     TeletextBaseDisplayAttributes::new(values, sources).unwrap()
 }
 
-fn mixed_base() -> TeletextBaseDisplay {
+pub(super) fn mixed_base() -> TeletextBaseDisplay {
     let mut rows = empty_rows(7, 0);
     let blue = TeletextBaseSpacingControl::AlphaColour {
         colour: TeletextColour::Blue,
