@@ -366,6 +366,7 @@ fn shared_mot_reservations_change_actual_pointer_without_rebinding_semantic_targ
         TeletextEncodingRegion::WesternLatin,
         &defaults,
         &limits(),
+        None,
     )
     .unwrap();
     let allocation = allocate_teletext_resource_objects(service.objects(), &defaults, 64).unwrap();
@@ -430,6 +431,7 @@ fn exact_owner_and_late_comparison_cutoff_return_no_owned_page_or_mutation() {
         TeletextEncodingRegion::WesternLatin,
         &[],
         &limits(),
+        None,
     )
     .unwrap_err();
     assert_eq!(missing.owner, unknown);
@@ -445,6 +447,7 @@ fn exact_owner_and_late_comparison_cutoff_return_no_owned_page_or_mutation() {
         TeletextEncodingRegion::WesternLatin,
         &[],
         &bounded,
+        None,
     )
     .unwrap_err();
     assert!(
@@ -472,6 +475,7 @@ fn defaults_raw_bound_precedes_packing_without_partial_units() {
         TeletextEncodingRegion::WesternLatin,
         &[selected, selected, selected],
         &bounded,
+        None,
     )
     .unwrap_err();
     assert!(

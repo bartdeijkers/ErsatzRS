@@ -66,6 +66,9 @@ fn empty_link() -> TeletextMotObjectLink {
     )
 }
 fn mot() -> TeletextMotLevel25Declaration {
+    mot_with_type(TeletextObjectType::Passive)
+}
+fn mot_with_type(object_type: TeletextObjectType) -> TeletextMotLevel25Declaration {
     let mut public = [empty_link(); 7];
     public[0] = TeletextMotObjectLink::new(
         TeletextX27LinkTarget::Page {
@@ -77,7 +80,7 @@ fn mot() -> TeletextMotLevel25Declaration {
         [
             TeletextMotDefaultObject::Object {
                 target: target(20),
-                object_type: TeletextObjectType::Passive,
+                object_type,
             },
             TeletextMotDefaultObject::NoObject { raw_number: 77 },
         ],
@@ -647,3 +650,6 @@ pub(super) fn candidate() -> EncodedTeletextAuthoredService {
     let tx = transmissions(&declared);
     encode_teletext_authored_service(declared, &tx, &limits()).unwrap()
 }
+
+#[path = "authored_service_transmission_tests.rs"]
+mod transmission_tests;

@@ -6,10 +6,10 @@
 //! carousel timing, display composition, publication or receiver readiness.
 
 use ersatzrs_domain::{
-    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog, TeletextObjectIdentity,
-    TeletextObjectType, TeletextResourceHeaderError, TeletextResourceHeaderMetadata,
-    TeletextResourceIdentity, TeletextResourceKind, TeletextResourceLastPacket,
-    TeletextResourceTransmission, TeletextResourceUpdateCounter,
+    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog, TeletextEnhancementSource,
+    TeletextObjectIdentity, TeletextObjectType, TeletextResourceHeaderError,
+    TeletextResourceHeaderMetadata, TeletextResourceIdentity, TeletextResourceKind,
+    TeletextResourceLastPacket, TeletextResourceTransmission, TeletextResourceUpdateCounter,
 };
 
 use super::enhancement_program::{CommandWords, LoweringState, ResourceContext};
@@ -104,6 +104,42 @@ impl TeletextObjectDefinitionPosition {
     }
 }
 
+/// Final emitted range of one original resource definition command.
+///
+/// Coordinates start at FIRST X3, including pointer extensions. Injected DRCS
+/// selectors and origin modifiers belong to the range; its last word is the
+/// original command's semantic word. Definition markers, termination, padding
+/// and zero-word position identities have no command record. This is producer
+/// provenance, not executing-instance, generation or receiver authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextObjectCommandPosition {
+    source: TeletextEnhancementSource,
+    first_word: usize,
+    semantic_word: usize,
+}
+
+impl TeletextObjectCommandPosition {
+    /// Exact unchanged object identity and original definition command ordinal.
+    #[must_use]
+    pub const fn source(&self) -> TeletextEnhancementSource {
+        self.source
+    }
+
+    /// First physical word, zero-based from FIRST X3, including pointer rows.
+    #[must_use]
+    pub const fn first_word(&self) -> usize {
+        self.first_word
+    }
+
+    /// Final semantic word, zero-based from FIRST X3, including pointer rows.
+    /// Its logical row is `3 + word / 13`, with zero-based triplet `word % 13`.
+    /// Logical rows 26 through 41 are X26 designations zero through fifteen.
+    #[must_use]
+    pub const fn semantic_word(&self) -> usize {
+        self.semantic_word
+    }
+}
+
 /// Immutable complete resource page, without a closing next-page/FF header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodedTeletextObjectPage {
@@ -111,6 +147,7 @@ pub struct EncodedTeletextObjectPage {
     transmission_mode: TeletextResourceTransmissionMode,
     units: Vec<[u8; 46]>,
     positions: Vec<TeletextObjectDefinitionPosition>,
+    commands: Vec<TeletextObjectCommandPosition>,
 }
 
 impl EncodedTeletextObjectPage {
@@ -134,6 +171,14 @@ impl EncodedTeletextObjectPage {
     #[must_use]
     pub fn definition_positions(&self) -> &[TeletextObjectDefinitionPosition] {
         &self.positions
+    }
+
+    /// Actual final-pass command spans in physical definition/emission order.
+    /// Every record belongs to this exact resource; shared definition words do
+    /// not establish order between different executing object instances.
+    #[must_use]
+    pub fn command_positions(&self) -> &[TeletextObjectCommandPosition] {
+        &self.commands
     }
 }
 
@@ -212,7 +257,7 @@ pub fn encode_teletext_object_page(
                 TeletextObjectPageEncodingFailure::Header(reason),
             )
         })?;
-    let words = encode_words(resource, catalog, allocations, tx.last_subpage, &plan)?;
+    let (words, commands) = encode_words(resource, catalog, allocations, tx.last_subpage, &plan)?;
     let mut units =
         Vec::with_capacity(2 + usize::from(plan.pointer_packets) + words.len().div_ceil(13));
     units.push(encode_teletext_resource_header(header, tx.mode));
@@ -229,6 +274,7 @@ pub fn encode_teletext_object_page(
         transmission_mode: tx.mode,
         units,
         positions: plan.positions,
+        commands,
     })
 }
 
@@ -313,6 +359,7 @@ struct PagePlan {
     pointer_packets: u8,
     body_start: u8,
     word_count: usize,
+    command_count: usize,
     positions: Vec<TeletextObjectDefinitionPosition>,
 }
 
@@ -344,6 +391,7 @@ fn preflight(
         pointer_packets,
         body_start: pointer_packets + 1,
         word_count: 1,
+        command_count: 0,
         positions: Vec::new(),
     };
     let origin = usize::from(plan.body_start - 3) * TRIPLETS_PER_PACKET;
@@ -386,6 +434,11 @@ fn preflight(
                 Some(ordinal),
                 words.words().len(),
             )?;
+            // Each recorded command consumes at least one already bounded
+            // physical word; count before allocating any command-position table.
+            if !words.words().is_empty() {
+                plan.command_count += 1;
+            }
         }
     }
     Ok(plan)
@@ -457,8 +510,10 @@ fn encode_words(
     allocations: &TeletextResourceObjectAllocations,
     last_subpage: bool,
     plan: &PagePlan,
-) -> Result<Vec<u32>, TeletextObjectPageEncodingError> {
+) -> Result<(Vec<u32>, Vec<TeletextObjectCommandPosition>), TeletextObjectPageEncodingError> {
     let mut words = Vec::with_capacity(plan.word_count);
+    let mut commands = Vec::with_capacity(plan.command_count);
+    let origin = usize::from(plan.body_start - 3) * TRIPLETS_PER_PACKET;
     for allocation in allocations.resource_entries(resource) {
         let item = definition(resource, catalog, allocation)?;
         let number = allocation.object_number();
@@ -469,22 +524,32 @@ fn encode_words(
         ));
         let mut state = LoweringState::new();
         for (ordinal, command) in item.program.commands().iter().enumerate() {
-            words.extend_from_slice(
-                lower(
-                    resource,
-                    item.identity,
-                    item.object_type,
-                    ordinal,
-                    *command,
-                    &mut state,
-                    allocations,
-                )?
-                .words(),
-            );
+            let lowered = lower(
+                resource,
+                item.identity,
+                item.object_type,
+                ordinal,
+                *command,
+                &mut state,
+                allocations,
+            )?;
+            if lowered.words().is_empty() {
+                continue;
+            }
+            let first_word = origin + words.len();
+            words.extend_from_slice(lowered.words());
+            commands.push(TeletextObjectCommandPosition {
+                source: TeletextEnhancementSource {
+                    object: Some(item.identity),
+                    command: ordinal,
+                },
+                first_word,
+                semantic_word: origin + words.len() - 1,
+            });
         }
     }
     words.push(termination(last_subpage));
-    Ok(words)
+    Ok((words, commands))
 }
 
 fn append_pointer_rows(

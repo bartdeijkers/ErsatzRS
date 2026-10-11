@@ -21,6 +21,9 @@ use super::main_composition::{
     TeletextMainCompositionSource, TeletextPhysicalDisplayReplay,
     TeletextPhysicalDisplayReplayError,
 };
+use super::resource_transmission::{
+    ResourceTransmissionContext, TeletextResourceTransmissionError,
+};
 use super::TeletextResourceObjectAllocations;
 
 /// Packing diagnostics remapped to authored/default/base or original object intent.
@@ -38,6 +41,8 @@ pub enum TeletextComposedMainEncodingError {
     Composition(#[from] TeletextMainCompositionError),
     #[error(transparent)]
     Packing(#[from] TeletextComposedMainPackingError),
+    #[error(transparent)]
+    Resource(#[from] TeletextResourceTransmissionError),
 }
 
 /// Immutable semantic plan and its single physical main/local-definition sequence.
@@ -87,6 +92,27 @@ pub fn compile_teletext_composed_main_program(
     composition_budget: TeletextMainCompositionBudget,
     packing_budget: TeletextObjectCatalogBudget,
 ) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
+    compile_composed_with_resources(
+        service,
+        owner,
+        allocations,
+        composition_budget,
+        packing_budget,
+        None,
+    )
+}
+
+pub(super) fn compile_composed_with_resources(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    allocations: &TeletextResourceObjectAllocations,
+    composition_budget: TeletextMainCompositionBudget,
+    packing_budget: TeletextObjectCatalogBudget,
+    resources: Option<&ResourceTransmissionContext<'_>>,
+) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
+    if let Some(resources) = resources {
+        resources.validate_catalog(service.objects(), allocations)?;
+    }
     let composition = compose_teletext_main_program(service, owner, composition_budget)?;
     let links = service.page_enhancements().get(&owner).map_or(
         TeletextResolvedObjectPageLinks {
@@ -115,6 +141,7 @@ pub fn compile_teletext_composed_main_program(
         &composition,
         &encoded,
         composition_budget.collection.max_commands,
+        resources,
     )?;
     let composition = composition.with_transmission(
         service,
@@ -131,6 +158,7 @@ fn transmission_evidence(
     composition: &TeletextMainComposition,
     encoded: &EncodedTeletextLocalObjectProgram,
     maximum: usize,
+    resources: Option<&ResourceTransmissionContext<'_>>,
 ) -> Result<TeletextAttributeTransmissionEvidence, TeletextMainCompositionError> {
     let original = composition.spatial_trace();
     let fail = |reason| TeletextMainCompositionError {
@@ -162,6 +190,35 @@ fn transmission_evidence(
     }
     let mut positions = Vec::new();
     for (event_ordinal, event) in original.events().iter().enumerate() {
+        if let Some(resources) = resources.filter(|_| {
+            event
+                .source()
+                .object
+                .is_some_and(|target| target.resource().is_some())
+        }) {
+            if let Some(word) =
+                resources
+                    .word(original, *event, event_ordinal)
+                    .map_err(|reason| TeletextMainCompositionError {
+                        owner: composition.owner(),
+                        location: event.source().object.map(|identity| {
+                            TeletextMainCompositionSource::Object {
+                                identity,
+                                command: event.source().command,
+                            }
+                        }),
+                        reason: reason.into(),
+                    })?
+            {
+                positions.push(TeletextAttributeTransmissionPosition {
+                    event_ordinal,
+                    source: event.source(),
+                    invocation: event.invocation(),
+                    word,
+                });
+            }
+            continue;
+        }
         let expected = if let Some(identity) = event.source().object {
             TeletextMainCompositionSource::Object {
                 identity,
@@ -226,6 +283,8 @@ pub enum TeletextPhysicalDisplayEncodingError {
     Packing(#[from] TeletextLocalObjectProgramEncodingError),
     #[error(transparent)]
     Transmission(#[from] TeletextPhysicalDisplayTransmissionError),
+    #[error(transparent)]
+    Resource(#[from] TeletextResourceTransmissionError),
 }
 
 /// Actual supplied-program replay bound internally to its final packed words.
@@ -269,6 +328,33 @@ pub fn compile_teletext_physical_display_program(
     replay_budget: TeletextEnhancementCollectionBudget,
     packing_budget: TeletextObjectCatalogBudget,
 ) -> Result<EncodedTeletextPhysicalDisplayProgram, TeletextPhysicalDisplayEncodingError> {
+    compile_physical_with_resources(
+        service,
+        composition,
+        actual_program,
+        catalog,
+        allocations,
+        (replay_budget, packing_budget),
+        None,
+    )
+}
+
+pub(super) fn compile_physical_with_resources(
+    service: &TeletextSemanticService,
+    composition: &TeletextMainComposition,
+    actual_program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    allocations: &TeletextResourceObjectAllocations,
+    budgets: (
+        TeletextEnhancementCollectionBudget,
+        TeletextObjectCatalogBudget,
+    ),
+    resources: Option<&ResourceTransmissionContext<'_>>,
+) -> Result<EncodedTeletextPhysicalDisplayProgram, TeletextPhysicalDisplayEncodingError> {
+    let (replay_budget, packing_budget) = budgets;
+    if let Some(resources) = resources {
+        resources.validate_catalog(catalog, allocations)?;
+    }
     let owner = composition.owner();
     let replay = replay_teletext_physical_display(
         service,
@@ -293,7 +379,8 @@ pub fn compile_teletext_physical_display_program(
         packing_budget,
         Some(composition.colour_context().row_colours()[0]),
     )?;
-    let evidence = physical_transmission_evidence(&replay, &encoded, replay_budget.max_commands)?;
+    let evidence =
+        physical_transmission_evidence(&replay, &encoded, replay_budget.max_commands, resources)?;
     let replay =
         replay.with_transmission(service, composition, &evidence, replay_budget.max_commands)?;
     Ok(EncodedTeletextPhysicalDisplayProgram { replay, encoded })
@@ -303,6 +390,7 @@ fn physical_transmission_evidence(
     replay: &TeletextPhysicalDisplayReplay,
     encoded: &EncodedTeletextLocalObjectProgram,
     maximum: usize,
+    resources: Option<&ResourceTransmissionContext<'_>>,
 ) -> Result<TeletextAttributeTransmissionEvidence, TeletextPhysicalDisplayTransmissionError> {
     let trace = replay.spatial_trace();
     let fail = |reason| TeletextPhysicalDisplayTransmissionError {
@@ -336,6 +424,25 @@ fn physical_transmission_evidence(
     // retain distinct invocation IDs while sharing the physical definition word.
     let mut positions = Vec::with_capacity(trace.events().len());
     for (event_ordinal, event) in trace.events().iter().enumerate() {
+        if let Some(resources) = resources.filter(|_| {
+            event
+                .source()
+                .object
+                .is_some_and(|target| target.resource().is_some())
+        }) {
+            if let Some(word) = resources
+                .word(trace, *event, event_ordinal)
+                .map_err(&fail)?
+            {
+                positions.push(TeletextAttributeTransmissionPosition {
+                    event_ordinal,
+                    source: event.source(),
+                    invocation: event.invocation(),
+                    word,
+                });
+            }
+            continue;
+        }
         let mut matches = encoded
             .command_positions()
             .iter()

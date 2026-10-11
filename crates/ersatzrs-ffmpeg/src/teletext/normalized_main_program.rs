@@ -1,8 +1,10 @@
 //! Owned engine normalization candidate; not whole-service admission or publication.
+use super::augmented_origin_compilation::compile_augmented_with_resources;
+use super::composed_main::compile_composed_with_resources;
+use super::resource_transmission::ResourceTransmissionContext;
 use super::{
     allocate_teletext_resource_objects, build_teletext_augmented_origin_program,
     compare_teletext_augmented_origin_glyphs, compare_teletext_physical_display,
-    compile_teletext_augmented_origin_program, compile_teletext_composed_main_program,
     plan_teletext_base_compatibility_realization, plan_teletext_origin_carrier_placement,
     EncodedTeletextAugmentedOriginProgram, EncodedTeletextLocalObjectProgram,
     EncodedTeletextPhysicalDisplayProgram, TeletextAugmentedGlyphComparisonBudget,
@@ -128,6 +130,16 @@ pub(super) fn compile_teletext_normalized_main_program_with_defaults(
     defaults: &[TeletextDefaultObjectSelection],
     budget: &TeletextNormalizedMainProgramBudget,
 ) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
+    compile_normalized_with_resources(service, owner, defaults, budget, None)
+}
+
+pub(super) fn compile_normalized_with_resources(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    defaults: &[TeletextDefaultObjectSelection],
+    budget: &TeletextNormalizedMainProgramBudget,
+    resources: Option<&ResourceTransmissionContext<'_>>,
+) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
     let fail = |reason| TeletextNormalizedMainProgramError { owner, reason };
     let original_allocations = allocate_teletext_resource_objects(
         service.objects(),
@@ -139,12 +151,13 @@ pub(super) fn compile_teletext_normalized_main_program_with_defaults(
             error,
         )))
     })?;
-    let original = compile_teletext_composed_main_program(
+    let original = compile_composed_with_resources(
         service,
         owner,
         &original_allocations,
         budget.composition,
         budget.packing,
+        resources,
     )
     .map_err(|error| {
         fail(TeletextNormalizedMainProgramFailure::Original(Box::new(
@@ -182,13 +195,14 @@ pub(super) fn compile_teletext_normalized_main_program_with_defaults(
                 error,
             )))
         })?;
-        let compiled = compile_teletext_augmented_origin_program(
+        let compiled = compile_augmented_with_resources(
             service,
             &augmented,
             &allocations,
             budget.replay,
             budget.packing,
             budget.ancestry,
+            resources,
         )
         .map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::Compilation(Box::new(

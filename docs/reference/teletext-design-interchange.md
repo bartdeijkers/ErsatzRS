@@ -951,9 +951,66 @@ The maintained receipt replay accepts `carousel-root`/`carousel-nested` in
 separate original/corrected processes. Original nested must retain
 `conformance_passed:false`; both corrected fixtures and original root report
 two passing cases. Exporting nested on the original decoder intentionally
-returns nonzero after writing the producer fixture. Resource-word C2, update
+returns nonzero after writing the producer fixture. Remaining charset/order ties, update
 history, larger-service scheduling, hostv2 served transport, full national
 recipes and suitable-client/editor/publication gates remain required/open.
+
+### Final resource command positions and attribute settlement
+
+`EncodedTeletextObjectPage::command_positions()` retains each exact full object
+identity and original body ordinal, with `first_word()` and `semantic_word()`.
+The final emission pass records these spans after pointer extension, DRCS
+selectors and invocation-origin modifiers. Coordinates start at FIRST X3:
+rows3–25 occupy the first23 groups of13 triplets, followed by X26 designations.
+Packet metadata bytes are not triplets. Definition markers, termination, padding
+and genuine zero-output position identities have no command record. Physical
+capacity bounds the nonempty record count before sidecar allocation; original
+raw command admission still includes every zero-output command.
+
+The complete authored factory encodes resources privately before displays, then
+borrows these exact pages together with the original catalogue and shared MOT
+reservations. Output ordering stays displays followed by logical resources.
+The private resource index requires every emitted command and exact original
+definition/type/pointer. Augmented resource definitions and allocations must
+match before reuse; generated Local carriers remain separate. Missing resources,
+wrong S1 or altered bodies, types, reservations and trace operations reject with
+located correspondence errors. Empty contexts invent no diagnostic resource.
+Shared lowering classifies zero-output commands; no duplicate AP policy is used.
+
+Combine Local and resource positions into one exact-trace evidence object before
+original compatibility planning and before actual model comparison. Native MOT
+defaults bind their resource body events while retaining sparse DefaultSlot
+provenance and absent X26; their synthetic root calls gain no wire timestamp.
+Repeated and nested executions retain separate invocation IDs while reusing
+the same definition word. Existing Annex C.2 comparison settles writers only
+inside one exact executing object instance. Resource page, pointer, storage and
+carousel acquisition order cannot decide cross-instance priority. Attributes,
+display resolution and colour are recomputed together; charset and unresolved
+cross-instance histories remain separate mandatory work.
+
+Thirteen new pure regressions cover literal pointer/displaced/boundary words,
+no-op/raw bounds, exact catalogue/allocation/trace correspondence, independent
+repeated instances, native defaults and both normalized attribute models. The
+complete two-cycle Active/Adaptive calibration passes unchanged libzvbi0.2.42:
+literal A65, foreground13, background0, plus the frozen unaffected Base B.
+The receipted offline replay verifies the actually mapped original library;
+no decoder correction is needed for this fixture. Current request SHA256:
+`0ee3aff7c8e60610dcbd6fe432080b559a437c57218cb142489ee2ecea4ba8cc`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_RESOURCE_C2_FIXTURE="$fixture_dir/resource-c2.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  complete_carousel_active_and_adaptive_resource_c2_decode \
+  --lib --run-ignored ignored-only
+```
+
+Use the maintained offline receipt replay with selector `original resource-c2`,
+mounting this request as `/proof/resource-c2.json`. Prior carousel root/nested
+and TSDuck fixture hashes remain byte-identical, so their corrected/original
+receipt outcomes remain valid. The original nested decoder still fails its
+unchanged positive oracle. Exact results belong to P9A-01 evidence. These are
+synthetic model, native decoding and transport checkpoints, without host-v2
+publication, actual client navigation or editor workflow acceptance.
 
 ### National-option carrier conversion
 

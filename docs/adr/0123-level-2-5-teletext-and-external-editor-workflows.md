@@ -240,9 +240,17 @@ The complete candidate compiler uses one original reservation list for display
 and resource allocation, retains native absent-X26 versus compiled present-X26
 paths and emits every authenticated resource, including explicit empty pages.
 Require exact caller-supplied lifecycle records, a uniform serial transmission
-mode, aggregate limits and final body-derived physical inventory. This candidate
-does not settle resource-command C2 order, update history, service-carousel
-delivery or host publication. Independent decoding must distinguish the original
+mode, aggregate limits and final body-derived physical inventory. Final POP/GPOP
+command positions must come from the actual emission pass, including inserted
+selectors and pointer-row displacement. Bind these positions to each exact
+original or augmented executing instance before compatibility planning and
+comparison; native defaults retain their original root and owner. Reuse requires
+unchanged resource definitions, types and physical allocations. Markers, padding,
+zero-output commands and synthetic default calls establish no command timestamp.
+Annex C.2 evidence compares only writers in one exact executing object instance;
+storage, pointer or carousel order cannot rank separate instances. Retain those
+uncertainties. The candidate does not establish update history, served delivery
+or host publication. Independent decoding must distinguish the original
 decoder deficiency from the receipted test-only correction; both preserve the
 normative authored-service fixture and positive expected cells.
 Complete service delivery planning now reuses the same bounded carousel,

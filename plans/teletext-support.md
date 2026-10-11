@@ -391,8 +391,13 @@ The heterogeneous service now shares the existing carousel, packetizer and outpu
 epoch, with actual display-only PMT signalling. Acquisition orders M29, MOT, DRCS,
 objects and displays; unchanged resource repeats clear C4/C8. The fixed 20 ms
 plan rejects resource/M29 cycles over twenty seconds before replacement.
-Next finish resource-word C2 settlement, update-history policy, larger-service
-resource interleaving and audited unused-POP presentation edges, then host v2
+The resource writer now retains exact final command spans. The complete compiler
+binds them to native defaults and both normalization passes before planning or
+comparison, preserving original owners and executing instances. Reusing these
+words requires exact unchanged resource bodies, types and physical allocations.
+Separate instances gain no order from resource storage or carousel acquisition.
+Next audit remaining charset/cross-instance uncertainty, update-history policy,
+larger-service resource interleaving and unused-POP presentation edges, then host v2
 admission. Preserve independent full-compiler/carousel decoder goldens and the
 original/corrected distinction. Synthetic TSDuck transport is not served-playback
 or suitable-client acceptance.

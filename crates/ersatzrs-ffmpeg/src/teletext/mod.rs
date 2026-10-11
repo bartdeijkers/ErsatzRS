@@ -45,6 +45,7 @@ mod psi_framing;
 mod psi_monitor;
 mod raster;
 mod resource_pages;
+mod resource_transmission;
 mod signalling;
 pub mod source_assembly;
 pub mod source_header;
@@ -52,6 +53,10 @@ pub mod source_pes;
 mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
+
+pub use resource_transmission::{
+    TeletextResourceTransmissionError, TeletextResourceTransmissionFailure,
+};
 
 pub use augmented_origin_comparison::*;
 pub use augmented_origin_compilation::*;
@@ -110,9 +115,9 @@ pub use object_allocation::{
     TeletextResourceObjectAllocation, TeletextResourceObjectAllocations,
 };
 pub use object_pages::{
-    encode_teletext_object_page, EncodedTeletextObjectPage, TeletextObjectDefinitionPosition,
-    TeletextObjectPageEncodingError, TeletextObjectPageEncodingFailure,
-    TeletextObjectPageTransmission,
+    encode_teletext_object_page, EncodedTeletextObjectPage, TeletextObjectCommandPosition,
+    TeletextObjectDefinitionPosition, TeletextObjectPageEncodingError,
+    TeletextObjectPageEncodingFailure, TeletextObjectPageTransmission,
 };
 pub use output::{
     TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,

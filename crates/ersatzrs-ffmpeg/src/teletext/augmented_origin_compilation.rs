@@ -1,7 +1,9 @@
 //! Producer-paired invocation correspondence, not display admission or generation.
+use super::composed_main::compile_physical_with_resources;
+use super::resource_transmission::ResourceTransmissionContext;
 use super::{
-    compile_teletext_physical_display_program, EncodedTeletextPhysicalDisplayProgram,
-    TeletextAugmentedOriginProgram, TeletextAugmentedOriginSource, TeletextMainCompositionSource,
+    EncodedTeletextPhysicalDisplayProgram, TeletextAugmentedOriginProgram,
+    TeletextAugmentedOriginSource, TeletextMainCompositionSource,
     TeletextPhysicalDisplayEncodingError, TeletextResourceObjectAllocations,
 };
 use ersatzrs_domain::{
@@ -127,6 +129,26 @@ pub fn compile_teletext_augmented_origin_program<'a>(
     packing_budget: TeletextObjectCatalogBudget,
     ancestry_budget: TeletextAugmentedInvocationBudget,
 ) -> Result<EncodedTeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginCompilationError> {
+    compile_augmented_with_resources(
+        service,
+        augmented,
+        allocations,
+        replay_budget,
+        packing_budget,
+        ancestry_budget,
+        None,
+    )
+}
+
+pub(super) fn compile_augmented_with_resources<'a>(
+    service: &TeletextSemanticService,
+    augmented: &'a TeletextAugmentedOriginProgram<'a>,
+    allocations: &TeletextResourceObjectAllocations,
+    replay_budget: TeletextEnhancementCollectionBudget,
+    packing_budget: TeletextObjectCatalogBudget,
+    ancestry_budget: TeletextAugmentedInvocationBudget,
+    resources: Option<&ResourceTransmissionContext<'_>>,
+) -> Result<EncodedTeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginCompilationError> {
     let composition = augmented.placement().plan().composition();
     let original = composition.spatial_trace().invocations();
     let mut state = Ancestry {
@@ -151,14 +173,14 @@ pub fn compile_teletext_augmented_origin_program<'a>(
         augmented.carriers().len(),
         ancestry_budget.max_carriers,
     )?;
-    let physical = compile_teletext_physical_display_program(
+    let physical = compile_physical_with_resources(
         service,
         composition,
         augmented.program(),
         augmented.catalog(),
         allocations,
-        replay_budget,
-        packing_budget,
+        (replay_budget, packing_budget),
+        resources,
     )
     .map_err(|error| {
         state.error(

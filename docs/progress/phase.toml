@@ -1136,7 +1136,10 @@ correction passes both fixtures. The complete carousel/output plan now acquires
 M29/MOT/DRCS/objects before displays, repeats resources with C4/C8 cleared and
 retains existing pacing/capacity/acknowledgement fences. Seventy-nine focused
 checks, real TSDuck and two-cycle original/corrected decoding pass with the known
-original nested failure preserved. Next finish resource-word C2, update history,
+original nested failure preserved. Resource command spans now settle same-instance
+attributes before both normalization passes and native preview. Exact original
+bodies/types/allocations fence reuse; resource order grants no cross-instance
+priority. Next audit remaining charset/cross-instance ties, update history,
 larger-service interleaving and host v2 admission. The fixed planner explicitly
 rejects resource/M29 cycles over twenty seconds; no authoring waiver is accepted.
 No engine, editor, client navigation or publication acceptance is claimed.

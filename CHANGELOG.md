@@ -137,7 +137,10 @@ release section when tagging a release.
   result. Reuse the bounded carousel/output epoch for complete services, with
   magazine/resource acquisition order, immutable C4/C8 repeats, exact cycle
   timing and display-only signalling. Independent carousel decoding and TSDuck
-  checks pass; hosted transport, update history and full acceptance remain open. Verify
+  checks pass. Final resource command spans now settle same-instance attributes
+  in native preview and both normalization passes, with exact body/allocation
+  correspondence and original default provenance. Cross-instance uncertainty,
+  hosted transport, update history and full acceptance remain open. Verify
   the existing whole-display 127-invocations-per-type admission across sparse
   defaults, nested calls and independent subcodes; physical replay must reuse it.
   Trace a supplied physical program with the shared bounded spatial executor,

@@ -262,6 +262,7 @@ fn mandatory_function_packet_and_empty_page_header_preserve_wire_order_and_lifec
             "full first is neither partial nor continuation"
         );
         assert!(page.definition_positions().is_empty());
+        assert!(page.command_positions().is_empty());
         assert!(body_words(&page)
             .iter()
             .all(|word| fields(*word) == (63, 31, 3)));
@@ -557,6 +558,17 @@ fn definitions_reset_ap_and_both_drcs_selectors_instead_of_inheriting_previous_o
         ]
     );
     assert_eq!(actual[12], (63, 31, 3));
+    assert_eq!(
+        command_spans(&page),
+        [
+            (source(target(owner, 1), 0), 1, 1),
+            (source(target(owner, 1), 1), 2, 3),
+            (source(target(owner, 1), 2), 4, 5),
+            (source(target(owner, 2), 0), 7, 7),
+            (source(target(owner, 2), 1), 8, 9),
+            (source(target(owner, 2), 2), 10, 11),
+        ]
+    );
 }
 
 #[test]
@@ -596,6 +608,14 @@ fn nested_invocation_uses_exact_other_resource_map_and_immediate_origin_modifier
             (63, 31, 3)
         ]
     );
+    assert_eq!(
+        command_spans(&page),
+        [
+            (source(target(owner, 65535), 0), 1, 1),
+            (source(target(owner, 65535), 1), 2, 3),
+            (source(target(owner, 65535), 2), 4, 4),
+        ]
+    );
 }
 
 #[test]
@@ -609,4 +629,199 @@ fn resource_purpose_rejects_non_object_pages_before_making_units() {
     assert_eq!(error.target, None);
     assert_eq!(error.command, None);
     assert_eq!(error.reason, TeletextObjectPageEncodingFailure::Kind);
+}
+
+fn command_spans(
+    page: &EncodedTeletextObjectPage,
+) -> Vec<(TeletextEnhancementSource, usize, usize)> {
+    page.command_positions()
+        .iter()
+        .map(|position| {
+            (
+                position.source(),
+                position.first_word(),
+                position.semantic_word(),
+            )
+        })
+        .collect()
+}
+
+fn source(identity: TeletextObjectIdentity, command: usize) -> TeletextEnhancementSource {
+    TeletextEnhancementSource {
+        object: Some(identity),
+        command,
+    }
+}
+
+#[test]
+fn command_positions_omit_identity_moves_preserve_ordinals_and_raw_budget() {
+    for kind in [TeletextResourceKind::Pop, TeletextResourceKind::Gpop] {
+        let owner = resource(kind, 15);
+        for object_type in [
+            TeletextObjectType::Active,
+            TeletextObjectType::Adaptive,
+            TeletextObjectType::Passive,
+        ] {
+            let input = catalog(vec![definition(
+                owner,
+                65535,
+                object_type,
+                vec![position(0, 0), position(0, 0), foreground()],
+            )]);
+            let saved = input.clone();
+            let page = encode(owner, &input, true);
+            let clean = encode(
+                owner,
+                &catalog(vec![definition(
+                    owner,
+                    65535,
+                    object_type,
+                    vec![foreground()],
+                )]),
+                true,
+            );
+            assert_eq!(page.data_units(), clean.data_units());
+            assert_eq!(page.definition_positions(), clean.definition_positions());
+            assert_eq!(
+                command_spans(&page),
+                [(source(target(owner, 65535), 2), 1, 1)]
+            );
+            assert_eq!(fields(words(row(&page, 3, 0))[1]), (8, 0, 5));
+            assert_eq!(fields(words(row(&page, 3, 0))[2]), (63, 31, 3));
+            let allocations = allocate_teletext_resource_objects(&input, &[], 128).unwrap();
+            let failure =
+                encode_teletext_object_page(owner, &input, &allocations, transmission(true), 2)
+                    .unwrap_err();
+            assert_eq!(failure.target, Some(target(owner, 65535)));
+            assert_eq!(failure.command, None);
+            assert_eq!(
+                failure.reason,
+                TeletextObjectPageEncodingFailure::CommandBudget { maximum: 2 }
+            );
+            assert_eq!(input, saved);
+        }
+    }
+}
+
+#[test]
+fn command_positions_include_first_x3_pointer_extensions_without_marker_records() {
+    for kind in [TeletextResourceKind::Pop, TeletextResourceKind::Gpop] {
+        let owner = resource(kind, 7);
+        for (definitions, origin, physical_row) in
+            [(1_u16, 0_usize, 3_u8), (17, 13, 4), (25, 26, 5)]
+        {
+            let input = catalog(
+                (0..definitions)
+                    .map(|id| {
+                        definition(
+                            owner,
+                            id,
+                            TeletextObjectType::Active,
+                            if id == 0 { vec![foreground()] } else { vec![] },
+                        )
+                    })
+                    .collect(),
+            );
+            let page = encode(owner, &input, true);
+            assert_eq!(
+                usize::from(page.definition_positions()[0].absolute_index()),
+                origin
+            );
+            assert_eq!(
+                command_spans(&page),
+                [(source(target(owner, 0), 0), origin + 1, origin + 1)]
+            );
+            let actual = words(row(&page, physical_row, 0));
+            assert_eq!(fields(actual[0]), (40, 21, 7));
+            assert_eq!(fields(actual[1]), (8, 0, 5));
+            assert_eq!(page.definition_positions().len(), usize::from(definitions));
+        }
+    }
+}
+
+#[test]
+fn command_positions_match_literal_x25_x26_and_last_designation_words() {
+    let owner = resource(TeletextResourceKind::Gpop, 2);
+    let input = catalog(vec![definition(
+        owner,
+        65535,
+        TeletextObjectType::Active,
+        vec![foreground(); 505],
+    )]);
+    let page = encode(owner, &input, true);
+    assert_eq!(page.command_positions().len(), 505);
+    for (ordinal, absolute, packet_number, designation, triplet) in [
+        (0_usize, 1_usize, 3_u8, 0_u8, 1_usize),
+        (297, 298, 25, 0, 12),
+        (298, 299, 26, 0, 0),
+        (311, 312, 26, 1, 0),
+        (504, 505, 26, 15, 11),
+    ] {
+        let position = page.command_positions()[ordinal];
+        assert_eq!(position.source(), source(target(owner, 65535), ordinal));
+        assert_eq!(position.first_word(), absolute);
+        assert_eq!(position.semantic_word(), absolute);
+        assert_eq!(
+            fields(words(row(&page, packet_number, designation))[triplet]),
+            (8, 0, 5)
+        );
+    }
+    assert_eq!(fields(words(row(&page, 3, 0))[0]), (40, 21, 2));
+    assert_eq!(fields(words(row(&page, 26, 15))[12]), (63, 31, 3));
+}
+
+#[test]
+fn command_positions_follow_actual_default_reserved_assignment_not_catalog_order() {
+    let owner = resource(TeletextResourceKind::Pop, 9);
+    let input = catalog(vec![
+        definition(owner, 10, TeletextObjectType::Active, vec![foreground()]),
+        definition(owner, 20, TeletextObjectType::Active, vec![foreground()]),
+    ]);
+    let allocations = allocate_teletext_resource_objects(
+        &input,
+        &[TeletextDefaultObjectSelection {
+            target: target(owner, 20),
+            object_type: TeletextObjectType::Active,
+        }],
+        128,
+    )
+    .unwrap();
+    let page = encode_teletext_object_page(owner, &input, &allocations, transmission(true), 2_000)
+        .unwrap();
+    assert_eq!(
+        command_spans(&page),
+        [
+            (source(target(owner, 20), 0), 1, 1),
+            (source(target(owner, 10), 0), 3, 3),
+        ]
+    );
+    let actual = words(row(&page, 3, 0));
+    assert_eq!(fields(actual[0]), (40, 21, 9));
+    assert_eq!(fields(actual[1]), (8, 0, 5));
+    assert_eq!(fields(actual[2]), (40, 21, 25));
+    assert_eq!(fields(actual[3]), (8, 0, 5));
+    assert_eq!(fields(actual[4]), (63, 31, 3));
+}
+
+#[test]
+fn compound_drcs_range_crosses_x25_to_x26_and_names_the_glyph_not_selector() {
+    let owner = resource(TeletextResourceKind::Pop, 6);
+    let mut commands = vec![position(1, 8)];
+    commands.extend(std::iter::repeat_n(foreground(), 296));
+    commands.push(drcs_command(8, TeletextDrcsTableScope::Normal));
+    let input = catalog(vec![definition(
+        owner,
+        65535,
+        TeletextObjectType::Active,
+        commands,
+    )]);
+    let page = encode(owner, &input, true);
+    assert_eq!(page.command_positions().len(), 298);
+    let position = page.command_positions()[297];
+    assert_eq!(position.source(), source(target(owner, 65535), 297));
+    assert_eq!(position.first_word(), 298);
+    assert_eq!(position.semantic_word(), 299);
+    assert_eq!(fields(words(row(&page, 25, 0))[12]), (40, 24, 80));
+    assert_eq!(fields(words(row(&page, 26, 0))[0]), (8, 13, 111));
+    assert_eq!(fields(words(row(&page, 26, 0))[1]), (63, 31, 3));
 }

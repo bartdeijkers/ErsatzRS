@@ -13,6 +13,9 @@ use ersatzrs_domain::{
 };
 
 use super::compiled_display_page::encode_teletext_compiled_display_page;
+use super::resource_transmission::{
+    settle_native, ResourceTransmissionContext, TeletextResourceTransmissionError,
+};
 use super::{
     allocate_teletext_resource_objects, compose_teletext_main_program, encode_teletext_drcs_page,
     encode_teletext_mot_page, encode_teletext_native_default_page, encode_teletext_object_page,
@@ -183,6 +186,8 @@ pub enum TeletextAuthoredServiceEncodingFailure {
     Compiled(Box<TeletextCompiledDisplayPageEncodingError>),
     #[error("object page encoding failed: {0}")]
     Object(Box<TeletextObjectPageEncodingError>),
+    #[error("resource transmission correspondence failed: {0}")]
+    ResourceTransmission(Box<TeletextResourceTransmissionError>),
     #[error("resource page encoding failed: {0}")]
     Resource(Box<TeletextResourcePageEncodingError>),
     #[error("actual physical inventory failed: {0}")]
@@ -245,16 +250,45 @@ pub fn encode_teletext_authored_service(
         budget.normalization.max_resource_objects,
     )
     .map_err(|reason| error(Failure::Allocation(Box::new(reason))))?;
+    // The same final resource bodies supply C2 evidence before either display
+    // pass. Keep them private until every display and final inventory succeeds.
+    let mut resources = Vec::with_capacity(declared.resource_inventory().len());
+    for &resource in declared.resource_inventory() {
+        let tx = transmissions[&resource].1;
+        resources.push(encode_resource(
+            &declared,
+            resource,
+            &allocations,
+            tx,
+            budget.max_commands,
+        )?);
+    }
+    let resource_context = ResourceTransmissionContext::new(
+        declared.semantic().objects(),
+        &allocations,
+        &resources,
+        budget.max_commands,
+        budget.normalization.max_resource_objects,
+        budget.max_pages,
+    )
+    .map_err(|reason| Error {
+        resource: reason.resource,
+        ..error(Failure::ResourceTransmission(Box::new(reason)))
+    })?;
     let mut pages = Vec::with_capacity(count);
     let mut inventory = Vec::with_capacity(count);
     let mut units = declared.semantic().magazine_presentations().len();
     for page in &declared.semantic().base().pages {
-        let encoded = encode_display(&declared, page.address, &defaults, budget)?;
+        let encoded = encode_display(
+            &declared,
+            page.address,
+            &defaults,
+            &resource_context,
+            budget,
+        )?;
         append_page(encoded, &mut pages, &mut inventory, &mut units, budget)?;
     }
-    for &resource in declared.resource_inventory() {
-        let tx = transmissions[&resource].1;
-        let encoded = encode_resource(&declared, resource, &allocations, tx, budget.max_commands)?;
+    for encoded in resources {
         append_page(encoded, &mut pages, &mut inventory, &mut units, budget)?;
     }
     validate_teletext_physical_page_inventory(&inventory, budget.max_pages)
@@ -318,7 +352,10 @@ fn preflight(
             },
         ))));
     }
-    sized::<EncodedTeletextAuthoredPage>("pages", count)?;
+    let stored_pages = count
+        .checked_add(declared.resource_inventory().len())
+        .ok_or_else(|| error(Failure::Size { category: "pages" }))?;
+    sized::<EncodedTeletextAuthoredPage>("pages", stored_pages)?;
     sized::<TeletextPhysicalPageInventoryRecord>("inventory", count)?;
     sized::<(
         TeletextResourceIdentity,
@@ -408,6 +445,7 @@ fn encode_display(
     declared: &TeletextDeclaredService,
     owner: TeletextPageAddress,
     defaults: &[TeletextDefaultObjectSelection],
+    resources: &ResourceTransmissionContext<'_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
 ) -> Result<EncodedTeletextAuthoredPage, Error> {
     let service = declared.semantic();
@@ -431,6 +469,13 @@ fn encode_display(
         let composition =
             compose_teletext_main_program(service, owner, budget.normalization.composition)
                 .map_err(|reason| located(Failure::Composition(Box::new(reason))))?;
+        let composition = settle_native(
+            composition,
+            service,
+            resources,
+            budget.normalization.composition.collection.max_commands,
+        )
+        .map_err(|reason| located(Failure::Composition(Box::new(reason))))?;
         let encoded = encode_teletext_native_default_page(
             service,
             owner,
@@ -450,6 +495,7 @@ fn encode_display(
             TeletextEncodingRegion::WesternLatin,
             defaults,
             &budget.normalization,
+            Some(resources),
         )
         .map_err(|reason| located(Failure::Compiled(Box::new(reason))))?;
         Ok(EncodedTeletextAuthoredPage::CompiledDisplay(Box::new(

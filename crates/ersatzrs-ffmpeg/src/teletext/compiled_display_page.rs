@@ -8,8 +8,9 @@ use ersatzrs_domain::{
     TeletextDefaultObjectSelection, TeletextPageAddress, TeletextSemanticService,
 };
 
-use super::normalized_main_program::compile_teletext_normalized_main_program_with_defaults;
+use super::normalized_main_program::compile_normalized_with_resources;
 use super::packets::{self, PageEnhancements, PagePacketMetadata};
+use super::resource_transmission::ResourceTransmissionContext;
 use super::{
     layout, presentation, EncodedTeletextNormalizedMainProgram, EncodedTeletextPage,
     TeletextEncodingError, TeletextEncodingRegion, TeletextNormalizedMainProgramBudget,
@@ -73,7 +74,7 @@ pub fn encode_teletext_normalized_display_page(
     region: TeletextEncodingRegion,
     budget: TeletextNormalizedMainProgramBudget,
 ) -> Result<EncodedTeletextCompiledDisplayPage, TeletextCompiledDisplayPageEncodingError> {
-    encode_teletext_compiled_display_page(service, owner, region, &[], &budget)
+    encode_teletext_compiled_display_page(service, owner, region, &[], &budget, None)
 }
 
 /// Assemble actual metadata, normalized X26 and original fallback/header rows.
@@ -87,6 +88,7 @@ pub(super) fn encode_teletext_compiled_display_page(
     region: TeletextEncodingRegion,
     defaults: &[TeletextDefaultObjectSelection],
     budget: &TeletextNormalizedMainProgramBudget,
+    resources: Option<&ResourceTransmissionContext<'_>>,
 ) -> Result<EncodedTeletextCompiledDisplayPage, TeletextCompiledDisplayPageEncodingError> {
     let error = |reason| TeletextCompiledDisplayPageEncodingError { owner, reason };
     let page = service
@@ -96,13 +98,12 @@ pub(super) fn encode_teletext_compiled_display_page(
         .find(|page| page.address == owner)
         .ok_or_else(|| error(TeletextCompiledDisplayPageEncodingFailure::MissingPage))?;
     let TeletextEncodingRegion::WesternLatin = region;
-    let normalized =
-        compile_teletext_normalized_main_program_with_defaults(service, owner, defaults, budget)
-            .map_err(|reason| {
-                error(TeletextCompiledDisplayPageEncodingFailure::Normalization(
-                    Box::new(reason),
-                ))
-            })?;
+    let normalized = compile_normalized_with_resources(service, owner, defaults, budget, resources)
+        .map_err(|reason| {
+            error(TeletextCompiledDisplayPageEncodingFailure::Normalization(
+                Box::new(reason),
+            ))
+        })?;
     let compiled = layout::compile_for_composition(page).map_err(|reason| {
         error(TeletextCompiledDisplayPageEncodingFailure::Base(Box::new(
             reason,
