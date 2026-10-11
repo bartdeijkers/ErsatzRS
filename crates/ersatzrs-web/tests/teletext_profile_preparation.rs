@@ -48,6 +48,8 @@ mod channel_documents;
 mod designs;
 #[path = "teletext_profile_preparation/documents.rs"]
 mod documents;
+#[path = "teletext_profile_preparation/preview.rs"]
+mod preview;
 #[path = "teletext_profile_preparation/publications.rs"]
 mod publications;
 const SCRIPT: &str = r#"case "$1" in

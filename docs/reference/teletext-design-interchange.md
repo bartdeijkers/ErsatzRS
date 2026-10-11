@@ -3622,3 +3622,22 @@ remain separate required work. The deadline bounds native admission; an admitted
 SQLite transaction uses the existing timeout contract and is not falsely reported
 as undone after commit. These APIs are internal preparation, not a completed admin
 or external-editor workflow.
+
+### Exact-address native preview
+
+`host::teletext_preview::project_teletext_preview` takes a complete compiler-owned
+`EncodedTeletextAuthoredService`, exact `TeletextPageAddress`, display options and
+trusted `TeletextPreviewBudget`. It selects the exact page and subcode without
+first-page fallback and returns an owned canonical enhanced raster with navigation
+borrowed from that same checked display. Both native and compiled displays use
+the original enhanced composition; this is separate from the physical normalized
+view and is not a Level 1/1.5 fallback renderer.
+
+Page scans, composition records, pixel storage, diagnostics and conservative work
+units are bounded. Work units are not a wall-clock guarantee; asynchronous callers
+must use a joined worker. Missing addresses, arithmetic and raster failures report
+the requested page/subpage. Located unresolved cells remain diagnostics, while
+RGB4, video and receiver-header roles remain distinct; no guessed RGB replaces
+receiver context. Debug output excludes authored text/settings. Preview neither
+mutates packets nor promotes output. Localized browser presentation, actual
+navigation and matching client transmission still require integration evidence.

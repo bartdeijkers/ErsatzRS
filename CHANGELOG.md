@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Added
 
+- Add bounded native teletext previews for exact page/subpage addresses, keeping
+  validated navigation, located diagnostics and RGB/video/unresolved pixel roles.
 - Add durable pending teletext publication requests for exact design revisions,
   with atomic checks against the live design head, complete channel profiles and
   previous request. Keep historical revision selection explicit and preserve
