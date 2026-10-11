@@ -707,7 +707,14 @@ the same manifest/settings transaction. Exact request preflights and the child
 capability environment follow that selection; manifest rechecks and the returned
 selection receipt retain it. The explicit global legacy API remains fixed at v1.
 Base-only single-binding and channel preparation reject v2 before any producer
-starts, preserving authored content until the complete compiler is integrated.
+starts, preserving authored content through that legacy path. An additive bound
+document path now validates the selected response and runs the complete authored
+compiler off async workers, retaining the checked model beside encoded output.
+One deadline covers invocation and CPU stages; a fresh selection check follows
+encoding. Lifecycle metadata remains host supplied. Channel composition and
+publication authority are still separate obligations; the
+[bound preparation reference](../reference/teletext-design-interchange.md#bound-native-document-preparation)
+owns the exact API and remaining boundaries.
 
 Introduce `teletext.pages.v2`, retaining the existing `pages` operation. Its request
 uses `schema_version = 2` with the same guide input fields and limits as v1;

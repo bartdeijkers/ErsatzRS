@@ -1128,9 +1128,11 @@ Preparatory v2 response parsing and direct bounded conversion now authenticate
 original declarations into an unpublished service. Installed profiles now pin
 the highest supported declared contract, exact request/environment/receipt and
 manifest fences; base-only preparation rejects v2 before any producer starts.
-Integrate complete authored native candidate preparation next, retaining the
-shared deadline and fresh selection fences; resolve producer inheritance before
-channel composition. No activation or
+Bound document preparation now validates and fully encodes one selected producer
+off async workers, retaining the original deadline, explicit host lifecycle and
+fresh post-encoding selection check. Resolve producer-local inheritance before
+channel composition next; preserve original resource identities/default suppression
+and aggregate limits. No activation or
 publication authority follows from this input checkpoint.
 Owned service candidates now authenticate actual MOT/X27 selections, all original
 sparse defaults and advertised resource subpages, including empty companions.

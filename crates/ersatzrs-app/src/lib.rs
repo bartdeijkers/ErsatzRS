@@ -17,6 +17,7 @@ pub mod teletext_channels;
 pub mod teletext_guide;
 pub mod teletext_pages;
 pub mod teletext_pages_v2;
+pub mod teletext_profile_documents;
 pub mod teletext_profiles;
 
 pub use error::{ApplicationError, Result};

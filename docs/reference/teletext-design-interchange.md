@@ -3135,11 +3135,58 @@ the producer. Channel preparation checks every binding before starting any
 producer, including a v2 binding later in a mixed selection. These are explicit
 unavailable preparation results, without fallback, partial candidate or package
 activation. No schema migration or installed package modification is needed.
-Complete authored native preparation, producer-isolated channel composition,
-durable drafts/editor interchange and explicit publication remain open.
+The additive bound native path below prepares one complete producer document.
+Producer-isolated channel composition, durable drafts/editor interchange and
+explicit publication remain open.
 This input path does not activate packages,
 change live output or establish complete engine/client acceptance. P9A-01 owns
 the current verification evidence.
+
+### Bound native document preparation
+
+`ApplicationServices::invoke_bound_teletext_document` builds the guide request
+under the exact selected contract and invokes the existing profile runtime under
+one 30-second absolute deadline. It checks the full returned selection and opaque
+generation, then rereads the authoritative binding before returning a private
+`BoundTeletextDocumentInput`. Raw producer output is never a preview document.
+
+`BoundTeletextDocumentInput::validate` is synchronous bounded CPU work. Hosts run
+it off async workers with trusted `TeletextProfileDocumentBudget`, independently
+of producer fields. It validates exactly v1 or v2 without retries: v1 retains its
+base draft; v2 retains the complete checked `TeletextDeclaredService`. Deadline
+checks surround validation and prevent an expired successful result from escaping;
+they do not preempt CPU work. A private prepared value retains the document,
+selection, generation and original deadline. Debug output omits authored content,
+correlation values and settings values.
+
+The native `prepare_bound_teletext_document_candidate` entrypoint invokes this
+application function, then joins one `spawn_blocking` validation/encoding task.
+Its explicit `TeletextDocumentEncodingPolicy` supplies validation budgets, the
+v1 encoding region, complete compiler budgets and every resource lifecycle record.
+V1 is lifted with unchanged fallback, explicit base presentation and empty Local
+X26, then authenticated with no MOT/resources/defaults. V2 moves its original
+checked declaration into the complete authored service compiler without cloning
+or replacing it with base-only pages.
+
+The compiler owns pointers, physical packet fields, complete resource/display
+inventory and service-wide M29 emission. Resource counters, Changed/Unchanged
+choices and POP termination stay explicit host inputs; opaque producer generation
+or package hashes cannot select them. Missing, duplicate or foreign lifecycle
+records and encoding failures reject the complete candidate.
+
+The private native result retains the complete encoded service, its original
+checked declarations and derived descriptor beside the exact selection,
+generation and deadline. Existing original/physical preview APIs borrow that
+same compiled candidate. Before returning it, the host calls
+`recheck_teletext_document_selection` after CPU work, with deadline checks around
+the fresh repository read. Publication must still recheck eligibility and use
+trusted generation ownership; these observations grant no live admission.
+
+This supports one explicit output-channel/addon binding. Channel-wide mixed
+producer inheritance/composition, durable drafts and TTI import/export, localized
+admin/browser workflows, source acquisition, refresh/restart, hosted transport
+and explicit publication remain open. Base-only preparation continues to reject
+v2; it cannot silently discard authored content. P9A-01 owns current evidence.
 
 ## Planned validation and evidence sequence
 

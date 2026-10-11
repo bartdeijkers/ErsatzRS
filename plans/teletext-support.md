@@ -82,7 +82,9 @@ host budgets. It preserves the 1024-page fallback capacity independently of
 metadata. Installed profile selection now pins the highest declared supported
 contract; request preflights, process environment, manifest rechecks and receipts
 retain it. Base-only preparation rejects v2 before any producer starts; complete
-authored native candidate preparation and producer-isolated channel composition
+authored preparation now has an additive bound validation/complete-encoding path
+with an original deadline, explicit host lifecycle and fresh post-encoding
+selection fence. Producer-isolated channel composition and live publication
 remain open. The global legacy API stays explicitly v1. See the
 [input reference](../docs/reference/teletext-design-interchange.md#preparatory-v2-authored-input).
 The presentation packet-body encoder and bounded v1 lift preserve explicit

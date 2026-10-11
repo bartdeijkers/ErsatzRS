@@ -17,6 +17,9 @@ use crate::teletext_guide::TeletextGuideChannel;
 const ADDON: &str = "org.example.teletext";
 const GENERATION: &str = "supplied-generation";
 
+#[path = "teletext_profile_documents_tests.rs"]
+mod documents_tests;
+
 fn selection(channel_id: i64) -> TeletextSelectionSnapshot {
     TeletextSelectionSnapshot {
         contract: ersatzrs_domain::TeletextPageContract::V1,

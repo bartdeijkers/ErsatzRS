@@ -150,8 +150,10 @@ release section when tagging a release.
   trusted work budgets and authenticated resolved assertions. Pin the highest
   supported installed profile contract through exact request, process capability,
   manifest and receipt checks; base-only preparation rejects enhanced selections
-  before any producer starts. Complete authored live preparation, durable restart
-  and broader client acceptance remain open. Final resource command spans now settle same-instance attributes
+  before any producer starts. Add bound authored validation and complete native
+  encoding with explicit host lifecycle, shared deadlines and fresh selection
+  checks; the same checked model remains available for preview. Channel composition,
+  live publication, durable restart and broader client acceptance remain open. Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all
   applicable charset aliases share one exact repertoire pair, retaining raw

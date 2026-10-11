@@ -41,6 +41,9 @@ use uuid::Uuid;
 const ADDON: &str = "org.ersatzrs.teletext.native-profile-fixture";
 const SECONDARY: &str = "org.ersatzrs.teletext.native-profile-fixture.secondary";
 const GENERATION: &str = "native-profile-generation";
+
+#[path = "teletext_profile_preparation/documents.rs"]
+mod documents;
 const SCRIPT: &str = r#"case "$1" in
 check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
 pages) ;;
