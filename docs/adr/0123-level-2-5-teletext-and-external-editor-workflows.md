@@ -272,6 +272,23 @@ actual displays and reuse all source, capacity, pacing and acknowledgement fence
 Pure output planning and synthetic TSDuck/decoder checks do not establish
 host publication or suitable-client display/navigation acceptance.
 
+At complete generation replacement, compare each known raw resource page/S1
+against its last completed encoded body. Ignore only the S2 update counter and
+C4/C8 lifecycle bits; preserve kind, extent, allocations and every other actual
+wire byte. Byte-identical `FullUnchangedFirst` requires the same counter. Changed
+content, changed kind or a retired owner requires `FullChangedFirst` and the next
+counter modulo eight (Annex A.1, B.6(5), Table B.1). A deliberate full refresh may
+advance the counter even when final bytes are identical; equality alone does not
+prove all intermediate receiver history (A.1 note 3). Pending candidates that
+have emitted no header never advance this history. Completed legacy displays
+retire retained resource bodies on reused raw page addresses, keeping counters.
+Keep only the latest completed bodies plus counter-only tombstones in the finite
+raw-page/S1 namespace; do not retain every generation or clone resource bodies.
+Rejection must preserve the existing plan and history. The owner still confirms
+actual delivery and fences generations before calling replacement. This local
+history grants no durable restart, cold receiver, publication or decoder-cache
+assurance; those remain required host and independent-client acceptance work.
+
 Foreign MOT defaults require two explicit producer paths. Without local X26,
 retain native MOT activation, sparse slots and exact owner/type/S1 plus original
 nested-resource context. When X26 is required, defaults are suppressed (§13.8,

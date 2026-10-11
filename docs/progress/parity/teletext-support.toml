@@ -6,9 +6,9 @@ adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
 ADR 0120 requires p9a-04 engine acceptance before one ErsatzRS-Addons
 TV-guide add-on at p9b-01, inspired only by NOS pages 200–299.
-Host validates content; subtitles remain. ADR 0123 requires authored
+ADR 0123 requires authored
 Level2.5/fallback, pinned QTeletextMaker TTI/sidecar, TSDuck/independent decoding
-and client display/navigation; Kodi optional. P9A-02 In progress; four Not started.
+and client display/navigation; Kodi optional.
 
 v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
 metadata/fresh state. Local X26 retains forward references.
@@ -37,6 +37,7 @@ X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
 Headers reject physical/logical-owner collisions.
 Declarations check roles/defaults/extents/empty owners, one MOT/magazine.
 Compiler keeps resources/M29; paced sweeps preserve deadlines/cursors/FF.
+Replacement checks completed bodies/counters; pending/retired/legacy owners stay safe.
 TSDuck/shifted slots/EOF/root/corrected nested pass.
 QTM headed edit/save/reopen proves renumber/loss; host roundtrip open.
 

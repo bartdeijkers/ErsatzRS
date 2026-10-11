@@ -147,6 +147,13 @@ impl EncodedTeletextAuthoredService {
     pub const fn unit_count(&self) -> usize {
         self.unit_count
     }
+
+    /// Move only completed resource bodies into private carousel history.
+    pub(super) fn into_resource_pages(self) -> Vec<EncodedTeletextAuthoredPage> {
+        let mut pages = self.pages;
+        pages.retain(|page| page.resource_header().is_some());
+        pages
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -46,6 +46,7 @@ mod psi_monitor;
 mod raster;
 mod resource_pages;
 mod resource_transmission;
+mod service_update;
 mod signalling;
 pub mod source_assembly;
 pub mod source_header;

@@ -141,13 +141,16 @@ release section when tagging a release.
   with preserved display order, repeat controls and generation boundaries. Larger
   display cycles now use bounded resource deadlines with a physical-window margin;
   paced-output and independent TSDuck checks include shifted null slots and
-  premature EOF rejection. Final resource command spans now settle same-instance attributes
+  premature EOF rejection. Check resource replacements against completed wire
+  content and modulo-eight counters, preserving pending candidates, retired owners
+  and legacy-page reuse without advancing history on rejection. Durable restart
+  and receiver-cache acceptance remain open. Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all
   applicable charset aliases share one exact repertoire pair, retaining raw
   source uncertainty and prior history. Complete encoding/raster and independent
   decoding pass; different repertoires still reject. Cross-instance uncertainty,
-  hosted transport, update history and full acceptance remain open. Headed
+  hosted transport, durable update history and full acceptance remain open. Headed
   pinned-QTeletextMaker edit/save/reopen calibration records actual identity
   normalization and unknown-record loss; full host interchange remains open. Verify
   the existing whole-display 127-invocations-per-type admission across sparse

@@ -963,6 +963,52 @@ explicit delivery start, sink acknowledgements and EOF fences. The web host
 still needs version2 service admission/publication; these constructors grant no
 package, profile or live-stream capability by themselves.
 
+### Consecutive full-resource updates
+
+At `replace_authored_at_boundary`, known resource owners use the raw magazine/page
+and logical S1. Compare the actual immutable encoded resource kind, last-packet
+extent and all units, ignoring only header byte9 (S2/C4) and the C8 bit in header
+byte12. Other controls, allocations, pointers, modes and sparse/removed body
+packets remain content. M29 has no resource S2 counter.
+
+| Previous state | Requested full transmission | Required S2 |
+| --- | --- | --- |
+| Same normalized bytes | `FullUnchangedFirst` | Previous counter |
+| Same normalized bytes, deliberate refresh | `FullChangedFirst` | Previous counter plus one modulo eight |
+| Changed bytes/kind, or retired known owner | `FullChangedFirst` | Previous counter plus one modulo eight |
+| Cold or previously unknown owner | Caller-supplied complete lifecycle | No invented previous counter |
+
+These checks implement Annex A.1, B.6(5) and Table B.1's full-transmission path.
+Equal final bytes do not prove unseen intermediate receiver history (A.1 note3).
+Partial/continuation transmission is not implemented by this complete-service
+compiler; that does not waive any outstanding standards requirement.
+
+Use the last completed generation rather than an untransmitted replacement.
+For example, completed A at S2=7 followed by pending B at S2=0 still allows an
+untransmitted C matching A at Unchanged/S2=7. Only after B's complete cycle may
+a later changed update use S2=1. Never-emitted removal can likewise be cancelled;
+completed removal keeps a counter-only tombstone and requires Changed on return.
+Completed legacy displays retire retained bodies sharing their raw page address,
+across all S1, while leaving counters and unrelated resources intact.
+
+History moves resource bodies from the replaced complete candidate without
+cloning. It retains only the latest completed resource bodies and retired counters
+in at most32,640 raw-page/S1 keys, not every prior generation. Rejected candidates
+leave history, immutable current bytes, cursor, boundaries and programme clock
+unchanged. Existing timing and mid-cycle fences run first. The owner must confirm
+the planned final batch's actual delivery and generation fence before replacement;
+this synchronous cursor does not acknowledge the sink.
+
+```bash
+./run.sh test -p ersatzrs-ffmpeg \
+  -E 'test(service_update::) | test(carousel::authored_service_update_tests::)'
+```
+
+These are preparatory in-process checks. Durable restart/publication authority,
+cold receiver state and independent warm-cache update/display decoding remain
+required and open. Earlier unchanged single-service transport/decoder receipts
+remain applicable; they do not prove consecutive receiver-cache updates.
+
 The complete mixed-service calibration sends four real carousel cycles through
 the production packetizer. Independent calibration adds PSI/PCR only and retains
 Rust PES/TS bytes. TSDuck3.44-4676 checks sync/transport errors, PID references,

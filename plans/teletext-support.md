@@ -408,8 +408,15 @@ new pure/output regressions join79 focused passes; actual paced packet deadlines
 shifted null slots, sole FF acknowledgement/EOF and independent TSDuck with damage
 control pass. Longer display cycles no longer imply resource acquisition failure.
 The reference owns exact run IDs, capture hash and capacity/jitter limits.
-Next audit remaining different-pair priority, update-history policy,
-and unused-POP presentation edges, then host v2
+The replacement boundary now checks consecutive complete resource bodies and
+update metadata against the last completed generation. Never-emitted candidates
+cannot advance history. Changed or retired owners require Changed/next modulo-eight
+counter; identical Unchanged retains its counter, while deliberate full refresh
+may advance it. Completed legacy page reuse retires matching resource bodies.
+The reference owns exact normalization, finite history bounds and regressions.
+Durable restart/cold-client history and warm-cache independent decoding remain open.
+Next audit remaining different-pair priority and unused-POP presentation edges,
+then host v2
 admission. Preserve independent full-compiler/carousel decoder goldens and the
 original/corrected distinction. Synthetic TSDuck transport is not served-playback
 or suitable-client acceptance.

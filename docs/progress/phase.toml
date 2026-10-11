@@ -1149,7 +1149,10 @@ controls and sole FF boundary. Seven new pure/output regressions join79 focused
 passes; physical packet deadlines with shifted null slots, premature EOF rejection,
 acknowledged completion and real TSDuck damage control pass. Longer display cycles
 are accepted within fixed acquisition capacity, with one physical-window margin.
-Next audit different-pair priority, update history and host v2 admission;
+Replacement now checks resource bytes/counters against completed generations;
+pending candidates do not advance history, and retired/legacy-overwritten owners
+require a changed update. Next prove durable restart and warm-cache decoding,
+then audit different-pair priority and host v2 admission;
 actual sink jitter and complete runtime acceptance remain open.
 No engine, editor, client navigation or publication acceptance is claimed.
 Pinned QTeletextMaker now has headed synthetic edit/navigation/Save As/reopen

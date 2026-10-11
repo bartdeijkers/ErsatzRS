@@ -85,6 +85,7 @@ pub struct TeletextCarousel {
     magazine_pending: bool,
     resource_start_ticks: u64,
     resource_resume: Option<usize>,
+    resource_history: super::service_update::ResourceUpdateHistory,
 }
 
 #[derive(Debug)]
@@ -224,6 +225,7 @@ impl TeletextCarousel {
             magazine_pending: false,
             resource_start_ticks: 0,
             resource_resume: None,
+            resource_history: super::service_update::ResourceUpdateHistory::default(),
         }
     }
 
@@ -249,6 +251,7 @@ impl TeletextCarousel {
             magazine_pending,
             resource_start_ticks: 0,
             resource_resume: None,
+            resource_history: super::service_update::ResourceUpdateHistory::default(),
         })
     }
 
@@ -278,7 +281,8 @@ impl TeletextCarousel {
 
     /// Replace with a complete authored service while retaining the programme clock.
     /// # Errors
-    /// Rejects mid-cycle replacement or an excessive resource repetition interval.
+    /// Rejects mid-cycle replacement, excessive acquisition cost or stale resource
+    /// lifecycle metadata. Cold startup has no previous receiver-state proof.
     pub fn replace_authored_at_boundary(
         &mut self,
         service: EncodedTeletextAuthoredService,
@@ -287,13 +291,27 @@ impl TeletextCarousel {
             return Err(TeletextTransportError::MidCycleReplacement);
         }
         let content = CarouselContent::authored(service)?;
+        let completed = match &self.content {
+            CarouselContent::Authored { service, .. } if !self.first_cycle => {
+                Some(service.as_ref())
+            }
+            CarouselContent::Legacy(_) | CarouselContent::Authored { .. } => None,
+        };
+        if let CarouselContent::Authored { service, .. } = &content {
+            self.resource_history.validate(service, completed)?;
+        }
         self.replace_content(content);
         Ok(())
     }
 
     fn replace_content(&mut self, content: CarouselContent) {
         self.magazine_pending = !content.magazines().is_empty();
-        self.content = content;
+        let previous = std::mem::replace(&mut self.content, content);
+        if !self.first_cycle {
+            if let CarouselContent::Authored { service, .. } = previous {
+                self.resource_history.record_completed(*service);
+            }
+        }
         self.page = 0;
         self.unit = 0;
         self.first_cycle = true;
@@ -357,6 +375,11 @@ impl TeletextCarousel {
         } else if self.page == self.content.page_count() {
             // A serial-mode page can be closed by a header from any magazine.
             let magazine = self.content.initial_magazine();
+            if let CarouselContent::Legacy(set) = &self.content {
+                // Completed legacy displays may reuse former raw resource pages.
+                // The owner still confirms this closing batch before replacement.
+                self.resource_history.retire_display_owners(set);
+            }
             self.page = 0;
             self.unit = 0;
             self.boundary = true;
@@ -417,6 +440,10 @@ pub(super) mod authored_service_carousel_tests;
 #[cfg(test)]
 #[path = "authored_service_interleave_tests.rs"]
 mod authored_service_interleave_tests;
+
+#[cfg(test)]
+#[path = "authored_service_update_tests.rs"]
+mod authored_service_update_tests;
 
 #[cfg(test)]
 mod tests {

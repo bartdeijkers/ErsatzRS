@@ -1,3 +1,7 @@
+use ersatzrs_domain::{
+    TeletextResourceIdentity, TeletextResourceTransmission, TeletextResourceUpdateCounter,
+};
+
 use super::TeletextCarouselBatch;
 
 const PTS_MASK: u64 = (1 << 33) - 1;
@@ -17,6 +21,16 @@ pub enum TeletextTransportError {
     /// A complete acquisition sweep plus one display/closure exceeds fixed capacity.
     #[error("teletext acquisition interval requires {batches} batches; resource repetition permits {maximum}")]
     CycleTiming { batches: usize, maximum: usize },
+    /// A resource update would retain stale content or skip its known counter.
+    #[error("teletext resource {resource:?} update from {previous:?} requires {expected_transmission:?}/{expected:?}, received {transmission:?}/{requested:?}")]
+    ResourceUpdate {
+        resource: TeletextResourceIdentity,
+        previous: TeletextResourceUpdateCounter,
+        requested: TeletextResourceUpdateCounter,
+        expected: TeletextResourceUpdateCounter,
+        transmission: TeletextResourceTransmission,
+        expected_transmission: TeletextResourceTransmission,
+    },
     /// Replacing pages mid-cycle would mix distinct coherent page sets.
     #[error("teletext replacement requires a complete carousel boundary")]
     MidCycleReplacement,

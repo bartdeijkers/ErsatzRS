@@ -367,8 +367,15 @@ fn magazine_prefix_and_partial_cycles_forbid_replacement_but_boundary_keeps_cloc
     assert_eq!(carousel.next_batch().unwrap().presentation_ticks(), ticks);
     cycle(&mut carousel);
     let ticks = carousel.ticks;
+    let declared = fixtures::declared(fixtures::input());
+    let mut tx = fixtures::transmissions(&declared);
+    for record in &mut tx {
+        record.update = TeletextResourceFullUpdate::Unchanged;
+    }
     carousel
-        .replace_authored_at_boundary(fixtures::candidate())
+        .replace_authored_at_boundary(
+            encode_teletext_authored_service(declared, &tx, &fixtures::limits()).unwrap(),
+        )
         .unwrap();
     let magazine = carousel.next_batch().unwrap();
     assert_eq!(magazine.kind(), TeletextCarouselBatchKind::Magazine);
