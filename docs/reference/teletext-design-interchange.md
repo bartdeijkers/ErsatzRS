@@ -303,6 +303,25 @@ already cover each type's 127/128 boundary and repeated nested traversal. Reuse
 those tests; checked service construction supplies the located normative rejection
 before geometry. P9A-01 owns current verification.
 
+`resolve_teletext_spatial_program` supplies the first physical-replay seam: it
+traces one exact host-supplied program against its checked catalogue using the
+same counting/emitting walker as `resolve_teletext_spatial_trace`. No layout or
+Base-compatible glyph merge runs here. Main/root command ordinals refer to the
+supplied Local program, including added Base replacements and carrier calls;
+full object identities/body ordinals and actual instances remain exact. The
+existing service entry still uses its original effective selection and sparse
+DefaultSlot tags. Original semantic provenance belongs in a separate mapping,
+never in place of physical command ordinals.
+
+The caller still owns complete-program reference collection under the original
+primary repertoire, resource/DRCS dependency checks and original default-owner
+authorization. This trace is a bounded diagnostic, not accepted service data,
+full A.8 admission, transmission evidence or publication readiness. The next
+step must replay glyph/attribute/charset/DRCS/geometry/display/colour resolution
+from this actual trace, bind evidence to final packed words and compare the whole
+page with the immutable original through the generated-source mapping. Reusing
+ordinary main composition would add Base fallback again and is inappropriate.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

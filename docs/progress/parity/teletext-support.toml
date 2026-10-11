@@ -12,12 +12,12 @@ reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMa
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
 display/navigation are required; Kodi is optional. P9A-02 In progress; four milestones Not started.
 
-Bounded immutable services.
+Bounded services.
 v1 lifting retains bytes; resources preserve geometry, lifecycle,
 pointers/metadata/fresh definition state. Local definitions share bounded
 X26 with forward references. Decoders prove selected
 DRCS/object/main cells; recorded local/G1 font gaps do not establish rendering.
-Composition keeps AP/fallback and spacing suppression.
+AP/fallback and supplied spatial replay retain exact sources.
 C3 retains private/shared fragments and deferred writers.
 Packed C2 resolves within emitters; other order/size/extent stays pending.
 G1 mode/fallback and Latin decoder gaps survive.

@@ -757,3 +757,253 @@ fn exact_subcode_unknown_owner_is_rejected_without_returning_partial_events() {
         matches!(error.reason,TeletextSpatialTraceFailure::Service(reason) if matches!(*reason, TeletextServiceError::MissingPage {address} if address==other))
     );
 }
+
+fn replay_budget() -> TeletextSpatialTraceBudget {
+    TeletextSpatialTraceBudget {
+        max_events: 128,
+        max_invocations: 16,
+    }
+}
+
+#[test]
+fn supplied_local_program_trace_equals_existing_service_trace_without_recomposing() {
+    let target = local(0xffff);
+    let service = service(
+        Some(vec![
+            position(2, 8),
+            invoke(target, TeletextObjectType::Passive, None),
+            glyph(9, b'B'),
+        ]),
+        vec![definition(
+            target,
+            TeletextObjectType::Passive,
+            vec![position(1, 3), glyph(4, b'A')],
+        )],
+        [None; 4],
+        None,
+    );
+    let (source, program) = service.effective_program(owner()).unwrap();
+    assert_eq!(source, TeletextEffectiveProgramSource::Local);
+    let replay =
+        resolve_teletext_spatial_program(owner(), &program, service.objects(), replay_budget())
+            .unwrap();
+    assert_eq!(replay, resolve(&service));
+}
+
+#[test]
+fn service_default_slots_remain_original_while_supplied_program_ordinals_are_local() {
+    let first = global(0xa2, 0xfffe);
+    let last = public(0xa0, 0xffff);
+    let service = service(
+        None,
+        vec![
+            definition(first, TeletextObjectType::Passive, vec![glyph(1, b'A')]),
+            definition(last, TeletextObjectType::Passive, vec![glyph(2, b'B')]),
+        ],
+        [
+            Some(TeletextDefaultObjectSelection {
+                target: first,
+                object_type: TeletextObjectType::Passive,
+            }),
+            None,
+            None,
+            Some(TeletextDefaultObjectSelection {
+                target: last,
+                object_type: TeletextObjectType::Passive,
+            }),
+        ],
+        None,
+    );
+    let original = resolve(&service);
+    let (_, program) = service.effective_program(owner()).unwrap();
+    let replay =
+        resolve_teletext_spatial_program(owner(), &program, service.objects(), replay_budget())
+            .unwrap();
+    assert_eq!(
+        original.original_program_source(),
+        &TeletextEffectiveProgramSource::Defaults { slots: vec![0, 3] }
+    );
+    assert_eq!(
+        original.invocations()[1].root_source(),
+        TeletextSpatialRootSource::DefaultSlot { slot: 3 }
+    );
+    assert_eq!(
+        replay.original_program_source(),
+        &TeletextEffectiveProgramSource::Local
+    );
+    assert_eq!(
+        replay.invocations()[1].root_source(),
+        TeletextSpatialRootSource::Local { command: 1 }
+    );
+    assert_eq!(replay.events()[3].source(), original.events()[3].source());
+    assert_eq!(replay.invocations()[1].target(), last);
+    assert_eq!(original, resolve(&service));
+}
+
+#[test]
+fn augmented_main_and_new_carrier_catalog_keep_exact_ordinals_full_id_and_instance() {
+    let active = local(7);
+    let carrier = local(0xffff);
+    let service = service(
+        Some(vec![
+            position(1, 8),
+            invoke(active, TeletextObjectType::Active, None),
+            glyph(9, b'B'),
+        ]),
+        vec![definition(
+            active,
+            TeletextObjectType::Active,
+            vec![glyph(0, b'A')],
+        )],
+        [None; 4],
+        None,
+    );
+    let mut definitions = service.objects().definitions().to_vec();
+    definitions.push(definition(
+        carrier,
+        TeletextObjectType::Passive,
+        vec![glyph(0, b'Z')],
+    ));
+    let catalog = TeletextEnhancementObjectCatalog::new(
+        definitions,
+        TeletextObjectCatalogBudget {
+            max_objects: 2,
+            max_commands: 2,
+        },
+    )
+    .unwrap();
+    let program = TeletextEnhancementProgram::new(vec![
+        position(1, 8),
+        invoke(active, TeletextObjectType::Active, None),
+        TeletextEnhancementCommand::AtColumn {
+            column: 8,
+            operation: TeletextColumnOperation::G2 {
+                code: TeletextGlyphCode::new(0x23).unwrap(),
+            },
+        },
+        invoke(carrier, TeletextObjectType::Passive, None),
+        glyph(9, b'B'),
+    ])
+    .unwrap();
+    let collected = catalog
+        .collect_display_references(
+            owner(),
+            &program,
+            TeletextPageCharsetDesignation::new(0).unwrap().pair(),
+            TeletextEnhancementCollectionBudget {
+                max_commands: 7,
+                max_drcs_references: 0,
+            },
+        )
+        .unwrap();
+    assert_eq!(collected.command_count(), 7);
+    let replay =
+        resolve_teletext_spatial_program(owner(), &program, &catalog, replay_budget()).unwrap();
+    assert_eq!((replay.events().len(), replay.invocations().len()), (7, 2));
+    assert_eq!(replay.events()[3].command(), program.commands()[2]);
+    assert_eq!(
+        replay.events()[3].source(),
+        TeletextEnhancementSource {
+            object: None,
+            command: 2
+        }
+    );
+    assert_eq!(
+        replay.events()[5].source(),
+        TeletextEnhancementSource {
+            object: Some(carrier),
+            command: 0
+        }
+    );
+    assert_eq!(
+        replay.events()[5].root_source(),
+        TeletextSpatialRootSource::Local { command: 3 }
+    );
+    assert_eq!(replay.events()[5].invocation().unwrap().get(), 1);
+    assert_eq!(absolute(replay.events()[5].absolute_after()), (1, 8));
+    assert_eq!(replay.events()[6].source().command, 4);
+    assert_eq!(service.objects().definitions().len(), 1);
+}
+
+#[test]
+fn supplied_replay_exact_budget_failures_preserve_inputs_and_augmented_blame() {
+    let carrier = local(0xffff);
+    let catalog = TeletextEnhancementObjectCatalog::new(
+        vec![definition(
+            carrier,
+            TeletextObjectType::Passive,
+            vec![glyph(0, b'Z')],
+        )],
+        TeletextObjectCatalogBudget {
+            max_objects: 1,
+            max_commands: 1,
+        },
+    )
+    .unwrap();
+    let program = TeletextEnhancementProgram::new(vec![
+        position(1, 8),
+        glyph(8, b'A'),
+        invoke(carrier, TeletextObjectType::Passive, None),
+        glyph(9, b'B'),
+    ])
+    .unwrap();
+    let before = (program.clone(), catalog.clone());
+    let exact = resolve_teletext_spatial_program(
+        owner(),
+        &program,
+        &catalog,
+        TeletextSpatialTraceBudget {
+            max_events: 5,
+            max_invocations: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!((exact.events().len(), exact.invocations().len()), (5, 1));
+    let error = resolve_teletext_spatial_program(
+        owner(),
+        &program,
+        &catalog,
+        TeletextSpatialTraceBudget {
+            max_events: 4,
+            max_invocations: 1,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextSpatialTraceFailure::EventBudget { maximum: 4 }
+    );
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 3
+        })
+    );
+    assert_eq!(
+        error.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 3 })
+    );
+    let error = resolve_teletext_spatial_program(
+        owner(),
+        &program,
+        &catalog,
+        TeletextSpatialTraceBudget {
+            max_events: 5,
+            max_invocations: 0,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextSpatialTraceFailure::InvocationBudget { maximum: 0 }
+    );
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 2
+        })
+    );
+    assert_eq!((program, catalog), before);
+}

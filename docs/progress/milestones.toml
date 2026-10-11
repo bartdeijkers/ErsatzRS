@@ -987,6 +987,22 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+The supplied-program spatial seam reuses the existing counting/emitting walker. Exact host
+program/catalog replay retains physical Local main ordinals, full targets/body ordinals and
+actual instances, without composing or inserting Base glyphs. Existing service replay keeps
+its original effective selection and sparse DefaultSlot tags. Four added regressions cover
+Local trace equality, default/physical source separation, actual augmented Active/carrier
+catalog and exact event/call budget errors without input mutation. All15 spatial tests pass
+(f55fda03-6a48-4558-a801-dcf9553d486a); all52 affected FFmpeg main composition/raster tests
+pass (eb171029-6c0b-470e-9910-2ca235de461a). Strict affected all-target Clippy, workspace
+formatting, architecture/progress checks and independent review pass. Existing native/dependency
+evidence is reused. This trace supplies no full
+service/A8/physical/publication admission. Actual augmented DRCS source validation, shared
+attribute/charset/glyph/geometry/display/colour replay, final-word transmission evidence,
+original default-owner authorization and whole-page equivalence remain required next work.
+The Unicode/Active wire oracle remains failing; no milestone contract/status/dependency change.
+Earlier evidence follows unchanged:
+
 The A8(1) boundary audit confirms that the existing complete-program collector already
 shares one counter per type across all repeated/nested invocations of one exact display.
 Service construction collects every selected sparse default root in one effective program;

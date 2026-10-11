@@ -95,6 +95,12 @@ execution while preserving declarations. Any physical augmented program must
 pass that same collection against its actual catalogue; direct lowerer counts
 cannot replace it. Open/successive-object and word/resource admission remain
 separate. Service admission remains the owner of the whole-display type limit.
+Supplied-program spatial replay shares the existing two-pass walker without
+rerunning Base composition. It retains physical Local main ordinals and full
+body identities/instances; the service entry retains its original sparse default
+tags. Keep original provenance in a separate mapping, and bind transmission
+evidence to the actual final words. Complete reference/resource admission and
+whole-page equivalence remain required; the replay trace grants no readiness.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

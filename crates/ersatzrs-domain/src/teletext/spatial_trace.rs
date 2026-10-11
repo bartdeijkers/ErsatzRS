@@ -1,4 +1,4 @@
-//! Bounded spatial events from the original effective semantic program.
+//! Bounded spatial events from a selected or supplied semantic main.
 //!
 //! Positions are retained without clipping to display or side-panel geometry.
 //! This is not attribute execution, glyph priority, footprint resolution, wire
@@ -62,13 +62,13 @@ impl TeletextSpatialInvocationId {
 /// Root selection provenance inherited unchanged by descendants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextSpatialRootSource {
-    /// Ordinal in the original explicit local program, including an empty one.
+    /// Ordinal in the selected or supplied local main, including an empty one.
     Local { command: usize },
     /// Original sparse MOT default slot, not its compacted program ordinal.
     DefaultSlot { slot: u8 },
 }
 
-/// One original command, before any base-glyph composition or wire lowering.
+/// One unchanged selected or supplied command, before wire lowering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextSpatialEvent {
     command: TeletextEnhancementCommand,
@@ -82,7 +82,7 @@ pub struct TeletextSpatialEvent {
     root_source: TeletextSpatialRootSource,
 }
 impl TeletextSpatialEvent {
-    /// Unchanged authored or original default-selection command.
+    /// Unchanged selected or supplied command, including original default roots.
     #[must_use]
     pub const fn command(self) -> TeletextEnhancementCommand {
         self.command
@@ -281,14 +281,52 @@ pub fn resolve_teletext_spatial_trace(
                 root_source: None,
                 reason: TeletextSpatialTraceFailure::Service(Box::new(error)),
             })?;
-    let mut count = Walker::new(owner, service.objects(), &selection, budget, None);
-    count.walk(&program, Context::main())?;
+    resolve_program(owner, &program, service.objects(), selection, budget)
+}
+
+/// Trace a supplied host program and checked catalog as one physical Local main.
+///
+/// Main ordinals refer to this exact supplied program, including generated base
+/// replacements and carrier calls. No base glyphs are composed or inserted here.
+/// This does not establish an existing service page, selected resource links,
+/// complete A.8 admission, physical transmission order or publication readiness.
+/// The caller must collect the complete program through
+/// `TeletextEnhancementObjectCatalog::collect_display_references` using its actual
+/// original primary repertoire and validate its dependencies separately.
+/// # Errors
+/// Rejects expanded event/invocation budgets, broken invocation closure, backwards
+/// relative AP moves or arithmetic overflow. No input is modified or partial
+/// trace returned. The existing service entry retains its own default-slot tags.
+pub fn resolve_teletext_spatial_program(
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    budget: TeletextSpatialTraceBudget,
+) -> Result<TeletextSpatialTrace, TeletextSpatialTraceError> {
+    resolve_program(
+        owner,
+        program,
+        catalog,
+        TeletextEffectiveProgramSource::Local,
+        budget,
+    )
+}
+
+fn resolve_program(
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    selection: TeletextEffectiveProgramSource,
+    budget: TeletextSpatialTraceBudget,
+) -> Result<TeletextSpatialTrace, TeletextSpatialTraceError> {
+    let mut count = Walker::new(owner, catalog, &selection, budget, None);
+    count.walk(program, Context::main())?;
     let output = Output {
         events: Vec::with_capacity(count.events),
         invocations: Vec::with_capacity(count.invocations),
     };
-    let mut emit = Walker::new(owner, service.objects(), &selection, budget, Some(output));
-    emit.walk(&program, Context::main())?;
+    let mut emit = Walker::new(owner, catalog, &selection, budget, Some(output));
+    emit.walk(program, Context::main())?;
     // Output is absent only for the counting pass; preserve a static error rather
     // than relying on a runtime panic if the internal pass contract ever changes.
     let output = emit.output.ok_or(TeletextSpatialTraceError {

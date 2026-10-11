@@ -192,8 +192,11 @@ physical realization by reusing the existing full-program per-type 127 counter,
 which already includes repeated/nested calls and all selected default roots per
 exact page/subcode. Validate the actual augmented catalogue/program, preserving
 default ownership and physical/source ordinals. Then settle remaining
-physical-order evidence, complete A.7/A.8 admission and
-glyph rasterization, then normalize both receiver views. Fragment tests alone
+glyph/attribute/charset/DRCS and whole-page display/colour equivalence from the
+new supplied-program spatial replay, which shares the existing bounded walker
+without composing Base fallback again. Preserve original-source mapping and
+bind C.2 evidence to final physical words. Complete remaining physical-order,
+A.7/A.8 and glyph evidence before normalizing both receiver views. Fragment tests alone
 cannot accept the engine, client, editor or publication workflow.
 The final main/local packer supplies actual word positions for known same-emitter
 C.2 ties; compiled composition maps original sources/instances and rebuilds the

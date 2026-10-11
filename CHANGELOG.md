@@ -130,6 +130,8 @@ release section when tagging a release.
   panel metadata, default suppression and aggregate dependency budgets. Verify
   the existing whole-display 127-invocations-per-type admission across sparse
   defaults, nested calls and independent subcodes; physical replay must reuse it.
+  Trace a supplied physical program with the shared bounded spatial executor,
+  preserving augmented command ordinals and original service default tags.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.
