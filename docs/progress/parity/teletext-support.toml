@@ -37,7 +37,7 @@ X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
 Headers reject physical/logical-owner collisions.
 Declarations check roles/defaults/extents/empty owners, one MOT/magazine.
 Compiler keeps resources/M29; paced sweeps preserve deadlines/cursors/FF.
-Replacement checks completed bodies/counters; pending/retired/legacy owners stay safe.
+Replacement checks completed/pending/retired/legacy state; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/corrected nested pass.
 QTM headed edit/save/reopen proves renumber/loss; host roundtrip open.
 

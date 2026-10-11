@@ -542,6 +542,34 @@ records source pins, coverage and the separately reproduced X27 limitation.
 This diagnostic does not establish client display/navigation, transport integrity,
 complete Level 2.5 compilation or the design/editor/publication workflow.
 
+## Teletext warm-cache DRCS update calibration
+
+The additive Linux x64 diagnostic keeps one receipted original libzvbi 0.2.42
+decoder across four generations and two complete production-carousel cycles
+each. It verifies Changed A at counter7, identical Unchanged A, Changed B after
+wrap to counter0 and identical Unchanged B. Actual MOT/DRCS/display packets,
+fixed independent glyph/font pixels and PAL8 rendering are checked without
+extra closing headers or decoder resets.
+
+Use the original maintained proof-build receipt and run:
+
+```bash
+LD_LIBRARY_PATH="$proof_dir/original" \
+ERSATZRS_TELETEXT_TEST_RESOURCE_UPDATE_FIXTURE="$fixture_dir/updates.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  consecutive_complete_carousel_drcs_updates_decode_with_one_warm_cache \
+  --lib --run-ignored ignored-only --success-output immediate
+LD_LIBRARY_PATH="$proof_dir/original" \
+  python3 scripts/e2e/teletext-resource-update-decoder.py < "$fixture_dir/updates.json"
+python3 scripts/e2e/teletext-resource-update-decoder_test.py
+```
+
+The [canonical reference](../../docs/reference/teletext-design-interchange.md#warm-cache-drcs-update-diagnostic)
+owns exact hashes, ABI/library/source guards, closed input limits, independent
+pixel oracles and proof boundaries. The helper executes only its hash-verified
+ABI source bytes, ignoring cached bytecode. Runtime/playback/client navigation,
+restart, other resources and full Level 2.5 acceptance remain separate gates.
+
 ## Teletext object decoder calibration
 
 The separate explicitly ignored diagnostic uses the same Linux x64, Python 3

@@ -1005,9 +1005,77 @@ this synchronous cursor does not acknowledge the sink.
 ```
 
 These are preparatory in-process checks. Durable restart/publication authority,
-cold receiver state and independent warm-cache update/display decoding remain
-required and open. Earlier unchanged single-service transport/decoder receipts
-remain applicable; they do not prove consecutive receiver-cache updates.
+cold receiver state and broader resource/client update decoding remain required
+and open. Earlier unchanged single-service transport/decoder receipts remain
+applicable; they do not prove consecutive receiver-cache updates.
+
+### Warm-cache DRCS update diagnostic
+
+The opt-in Linux x64 diagnostic uses one original libzvbi 0.2.42 decoder across
+four complete-service generations, with two actual carousel cycles each:
+
+| Checkpoint | DRCS body | S2 | First C4/C8 | Repeated C4/C8 |
+| --- | --- | --- | --- | --- |
+| `a_changed` | Fixed asymmetric A | 7 | 1/1 | 0/0 |
+| `a_unchanged` | Identical A | 7 | 0/0 | 0/0 |
+| `b_changed` | Different fixed asymmetric B | 0 | 1/1 | 0/0 |
+| `b_repeat` | Identical B | 0 | 0/0 | 0/0 |
+
+Resource 2C0 retains normal S1=0, slot 0 and nn=1. An actual MOT 2FE declaration
+selects it for display 200:0, whose Local X26 references that DRCS glyph at (1,8).
+Base T fallback at (1,8) and B calibration at (2,1) are preserved. No X27 or invented
+closing header is added: same-magazine resource/display acquisition uses the
+unchanged production compiler, carousel and replacement boundary. Actual batches
+retain continuous programme ticks across all replacements.
+
+The new helper fetches/unrefs the display after each generation, checking exact
+Unicode 0xF400, normal opaque FG7/BG0, all 120 cached DRCS pixels and all 120 PAL8
+rendered pixels against fixed independent A/B literals. Base B is also checked
+as Unicode 66 and 120 literal font pixels from pinned `wstfont2.xbm`, SHA256
+`f6a1fa6714e3604a466eb8d6ca3b496c2dcf217f217985c710eee288137d41ad`.
+Native canvases retain guard bytes. One decoder and monotonic synthetic 40 ms
+per-unit decode timestamps span every checkpoint; these decoder feeds do not
+prove actual sink timing or paced transport.
+
+Input is closed, bounded to 2 MiB, four sequences, four checkpoints and 256 units
+per checkpoint. Every header/lifecycle/framing check runs before native loading.
+No supplied expected-pixel field is accepted. The frozen ABI helper is read once,
+hashed and compiled from those exact source bytes; valid cached bytecode cannot
+replace it. The mapped original library must match the existing receipted
+`2991c13d…` hash; the corrected X27 variant is not used.
+
+Pinned helper SHA256:
+`3d6fc3f37304c23e56559dbec610bbfbd5d3feea54ca37a9a16a73c6a3e5b678`.
+Contract-test SHA256:
+`b1b885ee425a2209f664cd89da71fd5dff7840a99435803f6d503eec64f6e244`.
+The 53,970-byte request has100 units per checkpoint and SHA256
+`93d749f9ecd507b3d83ffd71b874ab42c718c09ee904cd032a62da73325d0166`.
+
+```bash
+LD_LIBRARY_PATH="$proof_dir/original" \
+ERSATZRS_TELETEXT_TEST_PYTHON=python3 \
+ERSATZRS_TELETEXT_TEST_RESOURCE_UPDATE_FIXTURE="$fixture_dir/updates.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  consecutive_complete_carousel_drcs_updates_decode_with_one_warm_cache \
+  --lib --run-ignored ignored-only --success-output immediate
+LD_LIBRARY_PATH="$proof_dir/original" \
+  python3 scripts/e2e/teletext-resource-update-decoder.py < "$fixture_dir/updates.json"
+python3 scripts/e2e/teletext-resource-update-decoder_test.py
+```
+
+P9A-01 owns the actual run evidence. Eight pure contract tests include malformed
+input, duplicate JSON, counter/flag/repetition errors, pre-native bounds,
+one-decoder lifetime and a valid malicious cached-bytecode control. An actual
+negative probe replaces only B's bitmap units with A's valid bytes, retaining
+all expected B headers: header validation succeeds, native decoding rejects the
+cached pixel mismatch. The positive fixture and pixel oracles stay unchanged.
+
+This proves the representative normal DRCS warm-cache replacement and unchanged
+control. The decoder does not reject every incorrect counter tuple itself;
+engine negative tests provide that separate evidence. Object/MOT update history,
+removal/reintroduction decoding, restart authority, actual client navigation,
+full Level 2.5 and editor/publication acceptance remain open. No cache-eviction or
+complete conformance claim follows from this diagnostic.
 
 The complete mixed-service calibration sends four real carousel cycles through
 the production packetizer. Independent calibration adds PSI/PCR only and retains
@@ -1027,7 +1095,7 @@ ERSATZRS_TELETEXT_TEST_AUTHORED_CAROUSEL_TS="$fixture_dir/authored-carousel.ts" 
 ```
 
 Two full carousel cycles also pass the unchanged root A/C and empty-Local T
-oracle with libzvbi0.2.42. Original nested decoding preserves its exact known X27
+oracle with libzvbi 0.2.42. Original nested decoding preserves its exact known X27
 failure; the same receipted test-only correction passes nested A/C/D and Local
 suppression. No page body or closing header is replaced in this fixture.
 Request SHA256 values:
@@ -1090,7 +1158,7 @@ cross-instance histories remain separate mandatory work.
 Thirteen new pure regressions cover literal pointer/displaced/boundary words,
 no-op/raw bounds, exact catalogue/allocation/trace correspondence, independent
 repeated instances, native defaults and both normalized attribute models. The
-complete two-cycle Active/Adaptive calibration passes unchanged libzvbi0.2.42:
+complete two-cycle Active/Adaptive calibration passes unchanged libzvbi 0.2.42:
 literal A65, foreground13, background0, plus the frozen unaffected Base B.
 The receipted offline replay verifies the actually mapped original library;
 no decoder correction is needed for this fixture. Current request SHA256:

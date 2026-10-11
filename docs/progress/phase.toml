@@ -1151,8 +1151,10 @@ acknowledged completion and real TSDuck damage control pass. Longer display cycl
 are accepted within fixed acquisition capacity, with one physical-window margin.
 Replacement now checks resource bytes/counters against completed generations;
 pending candidates do not advance history, and retired/legacy-overwritten owners
-require a changed update. Next prove durable restart and warm-cache decoding,
-then audit different-pair priority and host v2 admission;
+require a changed update. Independent original libzvbi warm-cache DRCS decoding
+passes four complete generations with literal glyph/font/render checks and a
+stale-body negative probe. Next prove durable restart and remaining resource/client
+updates, then audit different-pair priority and host v2 admission;
 actual sink jitter and complete runtime acceptance remain open.
 No engine, editor, client navigation or publication acceptance is claimed.
 Pinned QTeletextMaker now has headed synthetic edit/navigation/Save As/reopen

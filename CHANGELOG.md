@@ -143,8 +143,10 @@ release section when tagging a release.
   paced-output and independent TSDuck checks include shifted null slots and
   premature EOF rejection. Check resource replacements against completed wire
   content and modulo-eight counters, preserving pending candidates, retired owners
-  and legacy-page reuse without advancing history on rejection. Durable restart
-  and receiver-cache acceptance remain open. Final resource command spans now settle same-instance attributes
+  and legacy-page reuse without advancing history on rejection. Independent
+  warm-cache DRCS decoding now verifies changed and unchanged complete generations,
+  exact glyph pixels and counter wraparound. Durable restart and broader client
+  acceptance remain open. Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all
   applicable charset aliases share one exact repertoire pair, retaining raw

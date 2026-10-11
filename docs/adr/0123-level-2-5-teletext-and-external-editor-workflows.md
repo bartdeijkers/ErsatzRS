@@ -288,6 +288,11 @@ Rejection must preserve the existing plan and history. The owner still confirms
 actual delivery and fences generations before calling replacement. This local
 history grants no durable restart, cold receiver, publication or decoder-cache
 assurance; those remain required host and independent-client acceptance work.
+The additive original libzvbi0.2.42 warm-cache diagnostic now checks representative
+normal DRCS replacement through the complete compiler/carousel, with independent
+fixed glyph/font/render oracles. It grants no restart, other-resource or full
+client conformance; the [reference](../reference/teletext-design-interchange.md#warm-cache-drcs-update-diagnostic)
+owns the pinned replay and proof boundaries.
 
 Foreign MOT defaults require two explicit producer paths. Without local X26,
 retain native MOT activation, sparse slots and exact owner/type/S1 plus original

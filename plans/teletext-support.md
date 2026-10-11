@@ -414,7 +414,12 @@ cannot advance history. Changed or retired owners require Changed/next modulo-ei
 counter; identical Unchanged retains its counter, while deliberate full refresh
 may advance it. Completed legacy page reuse retires matching resource bodies.
 The reference owns exact normalization, finite history bounds and regressions.
-Durable restart/cold-client history and warm-cache independent decoding remain open.
+Independent original libzvbi 0.2.42 warm-cache DRCS decoding now passes four
+complete-service generations, retaining exact pixels, full-update flags,
+counter7-to0 and unchanged Base text. Fixed-literal negative and bounded-helper
+checks preserve the positive oracle. The reference owns versions, hashes and
+replay. Durable restart/cold-client history, other resource updates and actual
+client navigation remain open.
 Next audit remaining different-pair priority and unused-POP presentation edges,
 then host v2
 admission. Preserve independent full-compiler/carousel decoder goldens and the
