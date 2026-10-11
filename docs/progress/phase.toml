@@ -1158,8 +1158,12 @@ Same-service normalization now owns original/physical models, reuses original
 final-word C2 settlement once and requires both complete comparisons before output.
 The original Unicode/Active positive decoder oracle passes through this explicit
 entry; ordinary paths and live application integration remain separate. Next prove
-foreign MOT-default activation/ownership and row-zero lowering; both are required/open. Explicit
-resource calls lack page addresses; default-owner preservation needs a proven
+foreign MOT-default activation/ownership and nonidentity row-zero lowering;
+both are required/open. Explicit resource calls lack page addresses.
+Exact already-at-AP `(0,0)` identity moves now
+emit no word/timing record, with all534 teletext tests and six native implicit/
+explicit cases passing. Nonidentity row-zero lowering remains required;
+default-owner preservation needs a proven
 encoding strategy rather than relaxing selected-page checks;
 full engine/client/editor/publication acceptance remains open.
 ADR 0123 requires authored Level 2.5 design/validation/encoding/publication/display,

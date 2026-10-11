@@ -987,6 +987,31 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+The shared lowerer now elides only SetPosition(0,0) at an already-identical enhanced AP, emitting
+no colour/compatibility word and preserving both DRCS latches and every raw command bound.
+Zero-output commands have no command-position/timing record; subsequent authored ordinals and
+actual definition pointers remain exact. Eight new tests cover termination-only bytes, all3types/
+empty bodies, exact sparse records, packet-boundary pointers, 207/208 payload bounds, raw budget,
+header colour/DRCS latches, unchanged failed-command state and sparse actual-word C2 ordering.
+All534 nonignored FFmpeg teletext tests pass (3472327d-b9ed-4a62-9b11-77efc0ceb789), including
+all new tests and existing resources/transport/snapshots/normalization regressions. Pinned
+teletextimager0.2.0/2b0125b778c45ffdfa2df0b196870c093361f317 passes six implicit/explicit
+Active/Adaptive/Passive cases after complete production-DVB-unit equality and independent literal
+Level1.5 ZZ/Level2.5 AZ checks; the normalized Unicode/Active oracle also remains green
+(a1997691-fe69-4391-836a-e26d51fa28ba). Request SHA256
+2b85bc263c7539ede97e632eda8a1a6e0af6c78978721d947a12c1e9e1b5581a and replay live in
+the interchange reference. Strict FFmpeg all-target Clippy, workspace formatting and progress/
+new-allow checks pass; frozen-source independent review is clean. Architecture-lint evidence from
+the previous checkpoint remains applicable: no crate boundary/dependency/app/admin change.
+Other row-zero positions/resets and full standards/client/editor/localized preview/publication
+acceptance remain required/open. The foreign-default audit confirms native no-X26 activation
+and a distinct complete X26 realization path are required: even compatibility-only X26 suppresses
+MOT defaults, and explicit calls cannot address arbitrary foreign POP/GPOP owners. Preserve
+exact provenance, every glyph/attribute/charset/row/screen contribution and strict link checks;
+collision-only carriers cannot suffice. ADR0123/reference/plan record these planned obligations.
+No milestone contract/status/dependency or ordinary-playback gate is weakened.
+Earlier evidence follows unchanged:
+
 Explicit bounded same-service normalization now accepts one immutable service, exact owner and
 per-stage budgets, reusing the existing composed factory's original final-word C2 settlement
 once. Plan/placement/assembly, actual allocation/packing/replay and paired ancestry are constructed

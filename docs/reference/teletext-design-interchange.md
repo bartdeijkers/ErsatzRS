@@ -562,6 +562,66 @@ literal expectations are unchanged. Foreign MOT/default activation cannot be
 fixed by cloning owners or relaxing selected links; row-zero lowering and complete
 standards/client/editor/localized preview/publication acceptance remain open.
 
+### Redundant row-zero position lowering
+
+The shared lowerer accepts an exact `SetPosition(0,0)` identity only when the
+enhanced active position already equals `(0,0)`. It emits no triplet or colour
+writer and preserves legacy compatibility-row state plus both DRCS latches.
+Omit its emitted command-position record rather than assigning an earlier word;
+retain subsequent authored ordinals. Actual pointer and packet-boundary sizing
+use zero emitted words while raw command budgets still count the command.
+This does not implement arbitrary header positioning or later row-zero resets.
+
+Eight new tests cover termination-only encoding, all local object types and empty
+bodies, packet-boundary pointers, exact sparse source/word records, raw-command
+versus physical capacity, header colour and both DRCS latches, unchanged located
+failure state and sparse actual-word C.2 settlement. All534 nonignored FFmpeg
+teletext tests pass (`3472327d-b9ed-4a62-9b11-77efc0ceb789`), including existing
+resource/transport/snapshot/normalization regressions. Strict FFmpeg all-target
+Clippy and workspace formatting pass; independent source/oracle review is clean.
+The previous architecture-lint evidence remains applicable: no boundary,
+dependency, application or admin source changed.
+
+Pinned teletextimager 0.2.0 at `2b0125b778c45ffdfa2df0b196870c093361f317`
+passes six implicit/explicit cases across Active/Adaptive/Passive objects after
+complete production DVB-unit equality checks and unchanged literal dual-level
+`ZZ`/`AZ` cells. The normalized Unicode/Active oracle remains green in the same
+run (`a1997691-fe69-4391-836a-e26d51fa28ba`). New request SHA256:
+`2b85bc263c7539ede97e632eda8a1a6e0af6c78978721d947a12c1e9e1b5581a`.
+Export or replay this synthetic proof with the unchanged pinned helper:
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR=<pinned-checkout> \
+ERSATZRS_TELETEXT_TEST_ROW_ZERO_IMAGER_FIXTURE=<request.json> \
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(redundant_initial_object_position_decodes_without_wire_or_colour_changes)'
+```
+
+Nonidentity row-zero lowering, foreign defaults and full standards/client/editor/
+localized preview/publication acceptance remain required. This test does not
+prove client navigation, complete row-zero support or whole-service readiness.
+
+### Foreign defaults and physical activation
+
+[EN 300 706 §13.8 and E.11](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf#page=101)
+requires suppression of MOT defaults whenever local X26 is present, including
+compatibility-only words. Table 28's object invocation carries scope/type/S1 and
+pointer selection, not a page number; actual selected resource links determine
+its owner. Current rejection of foreign defaults on the explicit-call path is
+therefore correct, but does not fulfill authored support for those pages.
+
+The pending implementation needs a no-X26 native activation path and a separate
+X26 realization path. Native activation must retain exact MOT slots, full original
+owners and nested selected-resource context. X26 may directly call selected roots;
+foreign contributions require producer-owned physical realizations with original
+root/instance provenance. Do not clone Local semantic owners or waive link checks.
+Realization must cover all affected origins, attribute-only and charset effects,
+row/screen planes, panels and header contributions, not just Unicode/Active seeds.
+Prove sparse/repeated public/global defaults, mixed foreign roots/nested selected
+calls, compatibility-only suppression, wrong-link rejection, unchanged fallback,
+complete typed/structural/temporal comparisons and independent decoding. These
+paths and their whole-service transport/publication acceptance remain open.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

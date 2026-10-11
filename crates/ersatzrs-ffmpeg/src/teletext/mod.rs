@@ -241,6 +241,8 @@ mod mot_tests;
 mod object_allocation_tests;
 #[cfg(test)]
 mod object_pages_tests;
+#[cfg(test)]
+mod row_zero_lowering_tests;
 // Intentional opt-in Linux x64 decoder-ABI calibration, not platform acceptance.
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod object_runtime_tests;

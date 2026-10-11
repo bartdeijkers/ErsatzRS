@@ -160,6 +160,10 @@ release section when tagging a release.
   The original Unicode/Active decoder oracle passes with unchanged dual-level
   literal expectations. Foreign-default ownership, row-zero lowering, live
   integration and full standards/client/editor/publication acceptance stay open.
+  Elide exact already-at-`(0,0)` position identities without colour or timing
+  side effects, preserving raw budgets, pointers, source ordinals and both DRCS
+  latches. Other row-zero lowering remains required. Document native MOT versus
+  X26 foreign-default realization obligations without weakening owner checks.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

@@ -204,6 +204,23 @@ and literal expectations; ordinary compiler paths remain separately available.
 It grants no whole-service admission, publication or receiver readiness. Foreign
 MOT-default ownership, row-zero lowering and remaining standards/client/editor
 acceptance remain required, without selected-link exemptions or cloned owners.
+The shared lowerer now elides only `SetPosition(0,0)` when its enhanced active
+position is already `(0,0)`. It emits no word, colour change or timing record;
+following authored ordinals and actual definition pointers remain exact. Keep
+compatibility-row tracking and both DRCS latches unchanged. Raw command budgets
+still count every command. This supports redundant initial/identity positioning
+in all object types; other row-zero positions and moves remain required/open.
+
+Foreign MOT defaults require two explicit producer paths. Without local X26,
+retain native MOT activation, sparse slots and exact owner/type/S1 plus original
+nested-resource context. When X26 is required, defaults are suppressed (§13.8,
+E.11); explicit calls address only the selected POP/GPOP, not arbitrary owners
+(Table 28). Keep selected-link enforcement. Foreign-root materialization must
+retain original default/root/instance provenance separately from generated
+physical identities and prove every affected glyph, attribute, charset and
+screen/row plane, including attribute-only contributions. Compatibility-only X26
+also needs this proof. Existing collision-only carriers do not satisfy it.
+No cloned semantic owner or selected-link exemption is an encoding strategy.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

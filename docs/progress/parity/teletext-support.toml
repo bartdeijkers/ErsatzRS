@@ -15,8 +15,8 @@ Bounded v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
 metadata/fresh definition state. Local X26 retains forward references.
 Replay/raster retain fallback; recipes/placement retain lineage/DAG/AP.
 Assembly retains originals/IDs/maps; encoding checks unique call ancestry.
-C3 retains private/shared fragments and deferred writers.
-C2 uses packed words within emitters; other order/size/extent pending.
+Identity AP00 lowering retains words/pointers/C2; other row-zero stays open.
+C2 uses packed words; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.
 Charset/glyph/DRCS facts retain national aliases, bans, unresolved composition,
 exact resources/bitmaps, losers and defined blanks. Lowering owns selectors.

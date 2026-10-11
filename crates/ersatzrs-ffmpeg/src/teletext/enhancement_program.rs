@@ -336,6 +336,12 @@ impl CommandWords {
     pub(super) fn words(&self) -> &[u32] {
         &self.values[..self.len]
     }
+    const fn none() -> Self {
+        Self {
+            values: [0; 2],
+            len: 0,
+        }
+    }
     const fn one(value: u32) -> Self {
         Self {
             values: [value, 0],
@@ -422,6 +428,12 @@ impl LoweringState {
         let value = match command {
             TeletextEnhancementCommand::SetPosition { position } => {
                 if position.row() == 0 {
+                    // EN 300 706 12.3.2: the enhanced AP starts at (0,0).
+                    // Its identity move has no row-colour or compatibility-row
+                    // effect; mode7 would incorrectly add those effects.
+                    if position.column() == 0 && self.active_position == (0, 0) {
+                        return Ok(CommandWords::none());
+                    }
                     return Err(TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
                         position,
                     });

@@ -639,6 +639,85 @@ fn cases() -> Vec<serde_json::Value> {
 
 #[tokio::test]
 #[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn redundant_initial_object_position_decodes_without_wire_or_colour_changes() {
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let identity = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xffff));
+    let mut cases = Vec::new();
+    for object_type in [
+        TeletextObjectType::Active,
+        TeletextObjectType::Adaptive,
+        TeletextObjectType::Passive,
+    ] {
+        let build = |name: &str, explicit: bool| {
+            let mut commands = Vec::new();
+            let mut main = Vec::new();
+            if explicit {
+                commands.push(position(0, 0));
+                commands.push(position(0, 0));
+                main.push(position(0, 0));
+            }
+            commands.push(at(
+                0,
+                TeletextColumnOperation::G0 {
+                    code: TeletextGlyphCode::new(b'A').unwrap(),
+                },
+            ));
+            main.extend([
+                position(1, 8),
+                TeletextEnhancementCommand::InvokeObject {
+                    target: identity,
+                    object_type,
+                    offset: None,
+                },
+            ]);
+            encoded_case(
+                name,
+                vec![text(1, 8, "ZZ")],
+                main,
+                vec![TeletextEnhancementObjectDefinition {
+                    identity,
+                    object_type,
+                    program: TeletextEnhancementProgram::new(commands).unwrap(),
+                }],
+                &[
+                    cell(1, 8, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 7, 0]),
+                    cell(1, 9, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, 7, 0]),
+                ],
+            )
+        };
+        let implicit = build(&format!("implicit_{object_type:?}"), false);
+        let explicit = build(&format!("explicit_{object_type:?}"), true);
+        // Both authored nops disappear without changing pointers, header/rows,
+        // object colours or any complete production DVB data-unit bytes.
+        assert_eq!(implicit["units"], explicit["units"]);
+        cases.extend([implicit, explicit]);
+    }
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.0", "cases":cases,
+    }))
+    .unwrap();
+    if let Some(path) =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_ROW_ZERO_IMAGER_FIXTURE"])
+    {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&output).unwrap(),
+        serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
+        "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317","cases_passed":6,"levels":["1.5","2.5"]})
+    );
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
 async fn composed_main_program_decodes_with_pinned_independent_teletextimager() {
     let request =
         serde_json::to_vec(&serde_json::json!({"expected_version":"0.2.0","cases":cases()}))

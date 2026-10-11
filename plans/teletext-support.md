@@ -256,6 +256,16 @@ entry without weakening literal expectations or fallback. Existing ordinary
 compiler paths stay available; live application/publication integration remains
 open. Next preserve foreign MOT-default activation/ownership and implement row-zero
 lowering; both remain required, without cloned-owner or selected-link exemptions.
+The shared lowerer now elides only exact already-at-AP `(0,0)` identity moves,
+without colour words or invented timing. Complete DVB bytes and dual-level cells
+match implicit positioning for all three object types. Nonidentity row-zero
+positions/reset normalization remain required; this is no full header acceptance.
+Foreign defaults need a native no-X26 activation path and a distinct X26 realization
+path: even compatibility-only X26 suppresses MOT roots. Explicit calls address only
+the selected resource; retain strict owner checks. Materialize foreign contributions
+with original root/instance provenance and prove attribute-only/charset/row/screen
+plane effects as well as all selected glyphs, rather than cloning semantic owners.
+Collision-only carrier closure is insufficient; all contributions remain required.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone
