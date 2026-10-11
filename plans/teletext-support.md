@@ -188,6 +188,10 @@ sizing remain pending. A.4 now checks known raw own AP addresses including setup
 charset and disabled panels; children retain separate areas. A.7 uses that same
 address membership and whole-instance attribute-type masks, preserving permitted
 Passive/mixed pairs and separate C.3 size fragments. Next settle remaining
+physical realization by reusing the existing full-program per-type 127 counter,
+which already includes repeated/nested calls and all selected default roots per
+exact page/subcode. Validate the actual augmented catalogue/program, preserving
+default ownership and physical/source ordinals. Then settle remaining
 physical-order evidence, complete A.7/A.8 admission and
 glyph rasterization, then normalize both receiver views. Fragment tests alone
 cannot accept the engine, client, editor or publication workflow.

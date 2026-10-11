@@ -12,7 +12,7 @@ reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMa
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
 display/navigation are required; Kodi is optional. P9A-02 In progress; four milestones Not started.
 
-Bounded traversal underpins immutable services.
+Bounded immutable services.
 v1 lifting retains bytes; resources preserve geometry, lifecycle,
 pointers/metadata/fresh definition state. Local definitions share bounded
 X26 with forward references. Decoders prove selected
@@ -26,7 +26,8 @@ exact resources/bitmaps, losers and defined blanks. Lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
 Intervals reject sixteen simultaneous opens; unknown ones survive.
-Call/write runs reject overflow; agreeing size flags keep provenance.
+Collector caps each type at 127 per display, including nesting/default roots.
+Call/write runs and size provenance remain.
 Pinned MIT masks/C1 rasterize fragments/DRCS; Unicode
 keeps Base priority. Headers use receiver markers; invert precedes flash; bottom
 parts retain origin-row planes. Eight opaque DRCS rectangles match libzvbi RGBA.

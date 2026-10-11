@@ -106,6 +106,9 @@ mod display_geometry_open_count_tests;
 mod display_geometry_successive_count_tests;
 
 #[cfg(test)]
+mod service_invocation_admission_tests;
+
+#[cfg(test)]
 mod charset_values_tests;
 
 #[cfg(test)]

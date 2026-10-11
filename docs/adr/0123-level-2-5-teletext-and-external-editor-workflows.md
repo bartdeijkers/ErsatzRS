@@ -88,6 +88,13 @@ and restoring row-scoped repertoire. It retains original effective-program and
 colour context. Final dual-receiver positioning, base/object priority, geometry,
 default-resource realization and shared packet sizing remain required; the
 intermediate does not authorize publication or redefine display semantics.
+Reuse the existing complete-program collector for A.8(1): one exact display has
+one counter per object type, shared across repeated/nested calls and all selected
+default roots, with a maximum of 127. Explicit empty local data suppresses default
+execution while preserving declarations. Any physical augmented program must
+pass that same collection against its actual catalogue; direct lowerer counts
+cannot replace it. Open/successive-object and word/resource admission remain
+separate. Service admission remains the owner of the whole-display type limit.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

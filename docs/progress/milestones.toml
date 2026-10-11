@@ -987,6 +987,21 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+The A8(1) boundary audit confirms that the existing complete-program collector already
+shares one counter per type across all repeated/nested invocations of one exact display.
+Service construction collects every selected sparse default root in one effective program;
+explicit empty local data suppresses their execution while preserving declarations. Composed
+main collection also validates the derived program. Physical replay must reuse this on its
+actual augmented main/catalog; direct lowerer counters alone are insufficient. No duplicate
+geometry gate or caller bypass is added. Three new service tests cover default127+root128,
+independent POP/GPOP roots64+63 versus64+64, and exact-subcode127+127 versus second128,
+with original located constructor errors. These and reused all-type/nested collector
+regressions pass (6 tests;05fb426d-642a-462e-a69e-add808f8db1b). Strict domain all-target
+Clippy, workspace formatting, progress checks and independent review pass; valid prior
+architecture/decoder evidence is reused. A8 open/successive, geometry/order, generated resource/word limits and final
+physical equivalence remain separate required evidence; milestones remain unchanged.
+Earlier evidence follows unchanged:
+
 The D5/G1 correction follows Table26 notes11/12 and Table29: enhanced G1 uses D5 alone,
 while explicit D5=0 cancels earlier Base separation through the original compound writer.
 Defaults do not cancel; later spacing can restore separation and spacing Contiguous Mosaics

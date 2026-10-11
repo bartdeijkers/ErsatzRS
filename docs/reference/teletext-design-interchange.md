@@ -285,6 +285,24 @@ all nine affected tests pass after equivalent lint corrections in
 `c9ec93bc-985b-4ab7-b82d-5a2aa6c3524a`. Strict FFmpeg all-target Clippy and
 formatting pass. This does not turn the failing independent wire oracle green.
 
+Physical replay must reuse the existing `collect_display_references` on its
+actual augmented program/catalog before returning bytes. A.8(1)'s 127 limit is
+already counted per type over one entire exact display, including side panels,
+every repeated/nested call and all selected sparse default roots. The service
+constructor selects one effective program per page/subcode; an explicit empty
+local program suppresses defaults without deleting their declarations. The
+composed-main factory also collects its complete derived program. A second
+geometric counter is unnecessary; raw lowerer direct-call counts alone are
+insufficient for any future generated calls. This fact does not settle A.8
+open/successive limits, word/resource budgets or physical equivalence.
+
+Three service-boundary regressions prove combined sparse defaults, nested calls
+across independent POP/GPOP roots and independent counters for two exact
+subcodes, with located constructor rejection at 128. Existing collector tests
+already cover each type's 127/128 boundary and repeated nested traversal. Reuse
+those tests; checked service construction supplies the located normative rejection
+before geometry. P9A-01 owns current verification.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

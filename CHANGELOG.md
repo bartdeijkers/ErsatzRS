@@ -127,8 +127,10 @@ release section when tagging a release.
   Checked colour/resource values, ordered enhancement programs and bounded
   object-derived DRCS/charset dependency checks provide the model foundation.
   Page/magazine presentation and supplied-selection service validation now retain
-  panel metadata, default suppression and aggregate dependency budgets. Native
-  presentation-body coding and bounded v1 lifting preserve existing packet bytes
+  panel metadata, default suppression and aggregate dependency budgets. Verify
+  the existing whole-display 127-invocations-per-type admission across sparse
+  defaults, nested calls and independent subcodes; physical replay must reuse it.
+  Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.
   Effective same-target object/glyph references require announced S1 values with
