@@ -368,6 +368,24 @@ address. A default owned by a different original POP/GPOP page therefore needs
 proven materialization or another correct wire strategy. The existing composed
 factory rejection protects against calling the selected page's wrong object.
 
+`compile_teletext_physical_display_program` binds actual replay and main/local
+packing in one host call. It first enforces the colour-plane and whole-program
+DRCS checks, then packs that exact program/catalog with original selected links,
+resource allocations and header-row colour. It does not compose another main or
+relax resource-page selection. The immutable result exposes separate physical
+replay and encoded main/local sequence; the caller keeps its original target.
+
+Sparse transmission evidence uses the packer's actual source ordinals/full
+object identities and final semantic-word positions. Compatibility insertions
+are included in those positions. An original-provenance mapping cannot replace
+this physical matching. Domain evidence preserves exact executing instances;
+repeated calls do not establish cross-instance chronology. Resource bodies
+without emitted word positions remain unknown. Actual attributes/display/colour
+are rebuilt from consumed evidence through the shared resolvers; other physical
+projections and the original target remain unchanged. Packing/word fit and these
+C.2 facts do not establish whole-page equivalence, suitable-client rendering or
+publication readiness.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

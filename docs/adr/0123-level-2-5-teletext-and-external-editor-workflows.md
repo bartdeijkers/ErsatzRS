@@ -127,6 +127,14 @@ POP/GPOP invocation contains scope/type and allocated N/S1, not a resource-page
 address. A selected-page mismatch must keep failing until materialization or
 another proven encoding preserves the original MOT target; authorization alone
 cannot fix receiver routing.
+An actual-program packing diagnostic now binds replay and X26 packing within
+one call, using unchanged selected resource links and the original header colour.
+Its sparse C.2 evidence matches actual main/object sources directly to final
+semantic words, including compatibility insertions. Repeated definition calls
+retain distinct instances; unavailable resource words and cross-instance order
+remain unknown. Consuming that evidence updates only actual attributes, display
+and colour, leaving original targets and retained glyph/DRCS/geometry unchanged.
+This binds final-word evidence; it does not prove full wire-page equivalence.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

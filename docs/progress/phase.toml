@@ -1136,7 +1136,9 @@ dependency against original service links/bitmaps with explicit budgets.
 Physical replay now shares the complete glyph/attribute/charset/DRCS/geometry
 and display/colour chain without reinserting fallback or replacing the target.
 Actual colour prepass checks the original Base/footprint plane invariant.
-Next bind final packed-word evidence and compare whole-page projections, then
+Actual packing now binds final-word evidence to the same supplied program and
+rebuilds its physical attributes/display/colour without replacing the target.
+Next compare whole-page projections, then
 realize Unicode/Active physical priority with the existing collector. Explicit
 resource calls lack page addresses; default-owner preservation needs a proven
 encoding strategy rather than relaxing selected-page checks;

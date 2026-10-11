@@ -987,6 +987,24 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Actual-program packing now binds guarded physical replay and the unchanged X26 packer in one
+call, using original selected links/allocations/header colour. Sparse C2 evidence matches actual
+main/object sources directly to final semantic words, with exact executing instances, and updates
+consumed physical attributes/display/C1 through shared resolution. Other projections and the
+original target remain immutable. Seven added regressions cover shifted/generated Base ordinals,
+compatibility restoration and local marker positions, consumed literal pink RGB, repeated-instance
+and resource-body pending, unchanged wrong-default-owner rejection, exact207+termination208 versus
+208+termination209 capacity, sparse evidence and stale same-owner/ordinal trace mismatch.
+All14 packing/replay tests pass (bc661feb-5ef1-414b-83e9-b5a8d663fafd); all454 selected FFmpeg
+teletext tests pass (71c732a6-e6c8-4730-83f1-340128d69805). Strict FFmpeg all-target Clippy,
+workspace formatting and independent joint source/failure-path review pass. Existing unchanged
+native wire/pixel evidence remains applicable. Same-emitter C2 facts do not establish cross-instance
+or resource chronology, C4/size/extent, full wire-page equivalence, normalization or readiness.
+No default-owner bypass, fallback recomposition, milestone contract/status/dependency change or
+publication. Whole-page comparison and actual Unicode/Active normalization remain next work;
+the correct independent Unicode/Active wire oracle remains failing. Full engine/client/editor/
+localized browser/publication acceptance remains open. Earlier evidence follows unchanged:
+
 Shared physical-display replay now consumes the actual supplied program/catalog with the
 original composition's Base/footprints/colour planes, reusing the entire post-spatial
 glyph/attribute/charset/intent/DRCS/geometry and display/colour chain without composing fallback

@@ -136,6 +136,8 @@ release section when tagging a release.
   while retaining original service links and bitmap authority.
   Replay physical page projections through shared resolution, preserving the
   original target and explicit encoding discrepancies for later comparison.
+  Bind physical replay to final packed words for same-emitter attribute order;
+  absent resource positions and cross-instance ordering stay unresolved.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

@@ -411,3 +411,201 @@ fn actual_active_catalog_planes_are_checked_instead_of_original_definitions() {
     );
     assert_eq!((service, original), retained);
 }
+
+fn tied_main() -> TeletextEnhancementProgram {
+    program(vec![
+        position(1, 8),
+        at(
+            8,
+            TeletextColumnOperation::Foreground {
+                colour: TeletextColourReference::new(4).unwrap(),
+            },
+        ),
+        at(
+            8,
+            TeletextColumnOperation::Foreground {
+                colour: TeletextColourReference::new(13).unwrap(),
+            },
+        ),
+        g0(8),
+    ])
+}
+
+fn final_evidence(
+    service: &TeletextSemanticService,
+    original: &TeletextMainComposition,
+    actual: &TeletextEnhancementProgram,
+    replay: &TeletextPhysicalDisplayReplay,
+) -> TeletextAttributeTransmissionEvidence {
+    let allocations = super::super::object_allocation::allocate_teletext_resource_objects(
+        service.objects(),
+        &[],
+        4,
+    )
+    .unwrap();
+    let encoded = super::super::local_object_program::compile_with_context(
+        owner(),
+        actual,
+        service.objects(),
+        &allocations,
+        TeletextResolvedObjectPageLinks {
+            public: None,
+            global: None,
+        },
+        TeletextObjectCatalogBudget {
+            max_objects: 4,
+            max_commands: 64,
+        },
+        Some(original.colour_context().row_colours()[0]),
+    )
+    .unwrap();
+    // These foregrounds physically follow the one row selector: blue word1,
+    // pink word2. No ordinal-only or detached hypothetical evidence is used.
+    assert_eq!(encoded.command_positions()[1].semantic_word(), 1);
+    assert_eq!(encoded.command_positions()[2].semantic_word(), 2);
+    let positions: Vec<_> = replay
+        .spatial_trace()
+        .events()
+        .iter()
+        .enumerate()
+        .map(
+            |(event_ordinal, event)| TeletextAttributeTransmissionPosition {
+                event_ordinal,
+                source: event.source(),
+                invocation: event.invocation(),
+                word: encoded
+                    .command_positions()
+                    .iter()
+                    .find(|position| position.source() == event.source())
+                    .unwrap()
+                    .semantic_word(),
+            },
+        )
+        .collect();
+    TeletextAttributeTransmissionEvidence::new(
+        replay.spatial_trace(),
+        &positions,
+        limits().max_commands,
+    )
+    .unwrap()
+}
+
+#[test]
+fn internal_final_packing_updates_only_actual_attribute_display_and_colour_projections() {
+    let service = Fixture::new(vec![text(1, 8, "A")], Some(vec![])).build();
+    let original = compose(&service);
+    let retained = original.clone();
+    let actual = tied_main();
+    let replay =
+        replay_teletext_physical_display(&service, &original, &actual, service.objects(), limits())
+            .unwrap();
+    assert_eq!(
+        replay
+            .attribute_execution()
+            .cell(1, 8)
+            .unwrap()
+            .foreground()
+            .value(),
+        None
+    );
+    let no_positions = TeletextAttributeTransmissionEvidence::new(
+        replay.spatial_trace(),
+        &[],
+        limits().max_commands,
+    )
+    .unwrap();
+    let sparse = replay
+        .clone()
+        .with_transmission(&service, &original, &no_positions, limits().max_commands)
+        .unwrap();
+    assert_eq!(
+        sparse
+            .attribute_execution()
+            .cell(1, 8)
+            .unwrap()
+            .foreground()
+            .value(),
+        None
+    );
+    let evidence = final_evidence(&service, &original, &actual, &replay);
+    let settled = replay
+        .clone()
+        .with_transmission(&service, &original, &evidence, limits().max_commands)
+        .unwrap();
+    assert_eq!(
+        settled
+            .attribute_execution()
+            .cell(1, 8)
+            .unwrap()
+            .foreground()
+            .value(),
+        Some(TeletextColourReference::new(13).unwrap())
+    );
+    assert_eq!(
+        settled
+            .display_resolution()
+            .cell(1, 8)
+            .unwrap()
+            .attributes()
+            .foreground()
+            .value(),
+        Some(TeletextColourReference::new(13).unwrap())
+    );
+    let pixel = settled
+        .colour_composition()
+        .pixel(
+            settled.display_resolution(),
+            1,
+            8,
+            true,
+            TeletextColourPixelOptions {
+                reveal_concealed: false,
+                flash_phase: TeletextFlashPhase::Original,
+            },
+        )
+        .unwrap();
+    assert!(matches!(pixel, TeletextColourPixel::Rgb(rgb) if rgb.get() == [7, 0, 7]));
+    assert_eq!(settled.spatial_trace(), replay.spatial_trace());
+    assert_eq!(settled.glyph_layers(), replay.glyph_layers());
+    assert_eq!(settled.charset_execution(), replay.charset_execution());
+    assert_eq!(settled.glyph_intent(), replay.glyph_intent());
+    assert_eq!(settled.drcs_execution(), replay.drcs_execution());
+    assert_eq!(settled.display_geometry(), replay.display_geometry());
+    assert_eq!(original, retained);
+}
+
+#[test]
+fn internal_final_evidence_rejects_changed_commands_with_identical_owner_and_ordinals() {
+    let service = Fixture::new(vec![text(1, 8, "A")], Some(vec![])).build();
+    let original = compose(&service);
+    let retained = original.clone();
+    let actual = tied_main();
+    let replay =
+        replay_teletext_physical_display(&service, &original, &actual, service.objects(), limits())
+            .unwrap();
+    let evidence = final_evidence(&service, &original, &actual, &replay);
+    let mut commands = actual.commands().to_vec();
+    commands[2] = at(
+        8,
+        TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::new(2).unwrap(),
+        },
+    );
+    let changed = replay_teletext_physical_display(
+        &service,
+        &original,
+        &program(commands),
+        service.objects(),
+        limits(),
+    )
+    .unwrap();
+    let error = changed
+        .with_transmission(&service, &original, &evidence, limits().max_commands)
+        .unwrap_err();
+    assert_eq!(error.owner, owner());
+    assert!(
+        matches!(error.reason, TeletextMainCompositionFailure::AttributeExecution(error)
+        if error.reason == TeletextAttributeExecutionFailure::TransmissionMismatch)
+    );
+    assert_eq!(original, retained);
+}

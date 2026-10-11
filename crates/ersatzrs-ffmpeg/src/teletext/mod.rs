@@ -57,8 +57,10 @@ pub use colour_context::{
     TeletextColourContextFailure,
 };
 pub use composed_main::{
-    compile_teletext_composed_main_program, EncodedTeletextComposedMainProgram,
+    compile_teletext_composed_main_program, compile_teletext_physical_display_program,
+    EncodedTeletextComposedMainProgram, EncodedTeletextPhysicalDisplayProgram,
     TeletextComposedMainEncodingError, TeletextComposedMainPackingError,
+    TeletextPhysicalDisplayEncodingError, TeletextPhysicalDisplayTransmissionError,
 };
 pub use compositional::encode_teletext_compositional_links;
 pub use drcs::{encode_teletext_drcs_bodies, TeletextDrcsPacketBodies};

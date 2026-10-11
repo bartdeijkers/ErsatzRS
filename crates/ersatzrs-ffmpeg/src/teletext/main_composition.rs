@@ -294,33 +294,20 @@ impl TeletextMainComposition {
         maximum: usize,
     ) -> Result<Self, TeletextMainCompositionError> {
         let source = &self.original_program_source;
-        let attributes = resolve_teletext_attribute_execution_with_transmission(
-            &self.base_display,
-            &self.spatial_trace,
-            &self.glyph_layers,
-            self.colour_context.row_colours(),
-            maximum,
-            transmission,
-        )
-        .map_err(|reason| {
-            let location = reason
-                .location
-                .and_then(|location| original_location(source, location));
-            error(self.owner, location, reason.into())
-        })?;
-        let display = original_display_resolution(
+        let (attributes, display) = display_after_transmission(
             &self.base_display,
             &self.base_footprints,
             &self.colour_context,
             OriginalDisplayBorrowed {
                 spatial: &self.spatial_trace,
                 glyphs: &self.glyph_layers,
-                attributes: &attributes,
+                attributes: &self.attribute_execution,
                 intent: &self.glyph_intent,
                 drcs: &self.drcs_execution,
                 geometry: &self.display_geometry,
             },
             source,
+            transmission,
             maximum,
         )?;
         let presentation = service.effective_presentation(self.owner).ok_or_else(|| {
@@ -558,6 +545,61 @@ impl TeletextPhysicalDisplayReplay {
     pub const fn colour_composition(&self) -> &TeletextColourComposition {
         &self.colour_composition
     }
+    /// Factory-only settlement using final packing of this exact replay input.
+    /// The factory retains the same service/composition/program/catalog pairing;
+    /// this method is not detached evidence or public publication authority.
+    pub(super) fn with_transmission(
+        mut self,
+        service: &TeletextSemanticService,
+        original: &TeletextMainComposition,
+        transmission: &TeletextAttributeTransmissionEvidence,
+        maximum: usize,
+    ) -> Result<Self, TeletextPhysicalDisplayReplayError> {
+        let update = || -> Result<_, TeletextMainCompositionError> {
+            let source = TeletextEffectiveProgramSource::Local;
+            let (attributes, display) = display_after_transmission(
+                &original.base_display,
+                &original.base_footprints,
+                &original.colour_context,
+                self.execution.borrowed(),
+                &source,
+                transmission,
+                maximum,
+            )?;
+            let presentation = service.effective_presentation(self.owner).ok_or_else(|| {
+                error(
+                    self.owner,
+                    None,
+                    TeletextMainCompositionFailure::SelectionState,
+                )
+            })?;
+            let page = service
+                .base()
+                .pages
+                .iter()
+                .find(|page| page.address == self.owner)
+                .ok_or_else(|| {
+                    error(
+                        self.owner,
+                        None,
+                        TeletextMainCompositionFailure::SelectionState,
+                    )
+                })?;
+            let colours = resolve_teletext_colour_composition(
+                &display,
+                presentation,
+                original.colour_context.row_colours(),
+                original.colour_context.screen_colour(),
+                page.kind,
+            );
+            Ok((attributes, display, colours))
+        };
+        let (attributes, display, colours) = update().map_err(physical_replay_error)?;
+        self.execution.attributes = attributes;
+        self.display_resolution = display;
+        self.colour_composition = colours;
+        Ok(self)
+    }
 }
 
 /// Replay an already-composed or augmented main through the shared display chain.
@@ -649,7 +691,13 @@ pub fn replay_teletext_physical_display(
             colour_composition,
         })
     };
-    build().map_err(|error| TeletextPhysicalDisplayReplayError {
+    build().map_err(physical_replay_error)
+}
+
+fn physical_replay_error(
+    error: TeletextMainCompositionError,
+) -> TeletextPhysicalDisplayReplayError {
+    TeletextPhysicalDisplayReplayError {
         owner: error.owner,
         location: error.location.and_then(|source| match source {
             TeletextMainCompositionSource::OriginalPage { command } => {
@@ -661,7 +709,7 @@ pub fn replay_teletext_physical_display(
             _ => None,
         }),
         reason: error.reason,
-    })
+    }
 }
 
 fn check_physical_colour_context(
@@ -827,6 +875,43 @@ impl OriginalDisplayExecution {
             geometry: &self.geometry,
         }
     }
+}
+
+fn display_after_transmission(
+    base: &TeletextBaseDisplay,
+    footprints: &TeletextBaseFootprints,
+    colours: &TeletextColourContext,
+    execution: OriginalDisplayBorrowed<'_>,
+    source: &TeletextEffectiveProgramSource,
+    transmission: &TeletextAttributeTransmissionEvidence,
+    maximum: usize,
+) -> Result<(TeletextAttributeExecution, TeletextDisplayResolution), TeletextMainCompositionError> {
+    let attributes = resolve_teletext_attribute_execution_with_transmission(
+        base,
+        execution.spatial,
+        execution.glyphs,
+        colours.row_colours(),
+        maximum,
+        transmission,
+    )
+    .map_err(|reason| {
+        let location = reason
+            .location
+            .and_then(|value| original_location(source, value));
+        error(base.owner(), location, reason.into())
+    })?;
+    let display = original_display_resolution(
+        base,
+        footprints,
+        colours,
+        OriginalDisplayBorrowed {
+            attributes: &attributes,
+            ..execution
+        },
+        source,
+        maximum,
+    )?;
+    Ok((attributes, display))
 }
 
 fn original_display_resolution(
