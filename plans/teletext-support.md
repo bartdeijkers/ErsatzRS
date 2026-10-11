@@ -184,6 +184,14 @@ exact declaration provenance. Equal-position cross-source order stays pending;
 secondary metadata creates no ESC or new G2. Next settle source-order questions,
 execute glyph/mark tables and supported ESC semantics, then prove non-Latin Base
 fallback and normalize both receiver views with geometry/footprint validation.
+Finite original glyph lookup now preserves all G0/G2 table identities, G1/G3
+and raw DRCS references in the same immutable composition. Base national aliases
+use the actual Table 32/36 subset; enhanced glyphs omit national substitution.
+Explicit bans, unmarked cells, nonalphabetic bases and unverified composition
+remain distinct. Next implement verified glyph shapes/Unicode projection and
+non-Latin composition, then DRCS selectors, size/object/panel geometry and final
+receiver-equivalent normalization. This lookup cannot authorize preview or
+publication; the interchange reference owns exact table exceptions and proof.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

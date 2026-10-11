@@ -440,6 +440,76 @@ async fn g1_alphabet_decodes_without_national_substitutions_with_libzvbi() {
     );
 }
 
+// Intentional Linux x64 exception: the sibling's frozen public ctypes ABI is
+// calibrated for that layout. This is a fixed-cell decoder proof, not a client
+// rendering/navigation proof or acceptance of complete non-Latin authoring.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly calibrated native libzvbi decoder"]
+async fn original_non_latin_g0_assignments_decode_with_libzvbi() {
+    // Literal identities from EN 300 706 tables 39, 42 and 46, independent of
+    // the production lookup and decoder mapping: Cyrillic A, Greek Alpha, Aleph.
+    let samples = [
+        ("original_cyrillic_a", 0x24, 0x41, 0x0410),
+        ("original_greek_alpha", 0x37, 0x41, 0x0391),
+        ("original_hebrew_aleph", 0x55, 0x60, 0x05d0),
+    ];
+    let cases: Vec<_> = samples
+        .into_iter()
+        .map(|(name, designation, code, unicode)| {
+            let mut case = encoded_case_with_context(
+                name,
+                vec![text(1, 8, "T"), text(2, 1, "B")],
+                vec![
+                    position(1, 8),
+                    at(
+                        8,
+                        TeletextColumnOperation::DesignateCharset {
+                            designation: TeletextEnhancementCharsetDesignation::new(designation)
+                                .unwrap(),
+                        },
+                    ),
+                    at(
+                        8,
+                        TeletextColumnOperation::G0 {
+                            code: TeletextGlyphCode::new(code).unwrap(),
+                        },
+                    ),
+                ],
+                vec![],
+                &[],
+                true,
+            );
+            case["cells"] = serde_json::json!([
+                {"row":1,"column":8,"unicode":unicode,"foreground":7,"background":0},
+            ]);
+            case
+        })
+        .collect();
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.42", "cases":cases,
+    }))
+    .unwrap();
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_G0_ASSIGNMENTS_LIBZVBI_FIXTURE",
+    ]) {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({"decoder_version":"0.2.42","cases_passed":3})
+    );
+}
+
 fn contextual_cases() -> Vec<serde_json::Value> {
     let pound = [0x23, 7, 0, 7, 0];
     let white = [b'Z', 15, 0, 7, 0];

@@ -1213,6 +1213,12 @@ G0 metadata never changes G2 or invents ESC. Next settle pending order and execu
 character/mark tables and supported ESC semantics, validate footprints/geometry,
 and prove non-Latin fallback and physical equivalence in both receiver views.
 This remains an unpublished semantic intermediate, not full Level 2.5 acceptance.
+Finite glyph assignment now preserves all original G0/G2 identities and national
+subset aliases, G1/G3 and raw DRCS references from that same charset execution.
+Explicit bans and unmarked cells remain distinct; non-Latin/mixed composition
+stays pending with the actual current pair. Next establish glyph shapes/Unicode
+projection and non-Latin composition, DRCS selectors and full geometry before
+physical normalization and receiver/client/editor/publication acceptance.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

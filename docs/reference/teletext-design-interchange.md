@@ -474,6 +474,90 @@ execution, footprint/panel geometry, final physical normalization and complete
 Level 1.5/2.5 receiver proof remain open. No partial result grants preview,
 publication or engine acceptance authority, or imposes a permanent feature limit.
 
+### Original glyph assignment and render intent
+
+`resolve_teletext_glyph_intent` consumes the original charset execution and
+retains one record per candidate, in unchanged order, including losers and Base
+blank/spacing roles. The main-composition factory retains that exact immutable
+charset execution alongside the lookup; copied pending indexes refer to its
+shared registry. Equality of page identities alone is not a generation proof.
+The trusted count includes all 992 Base cells and enhancement candidates; exact
+count and checked linear-storage arithmetic precede allocation. Factory limits
+add that fixed Base count to the original command bound with checked arithmetic.
+
+Closed identities preserve repertoire, code and actual national subset without
+Unicode or font substitution. G0 covers Latin, Cyrillic 1/2/3, Greek, Arabic and
+Hebrew; G2 covers Latin, Cyrillic, Greek and Arabic. Base national substitution
+uses all Table 32 aliases and the thirteen Table 36 positions, not a designation's
+low three bits. The explicit Level 2.5 primary selection, extension presence and
+original header national bits remain separate. Legacy clients that combine
+region/header bits can differ; this does not prove both receiver views. Enhanced
+G0/G1 alphabet positions never acquire national substitution. Fixed G1 mosaics,
+G3 and raw DRCS references need no fictitious G0/G2 selection.
+
+The normative assignment audit uses EN 300 706 V1.2.1 tables 35–48. These literal
+exceptions are independent of fonts, blank glyph metrics and decoder mappings:
+
+| Table | Explicitly prohibited positions | Unmarked empty positions |
+| --- | --- | --- |
+| Arabic G0, Table 44 | None | `0x7E` |
+| Latin G2, Table 37 | `0x59`, `0x5A`, `0x5B`, `0x65` | `0x40` |
+| Cyrillic G2, Table 41 | `0x26`, `0x28` | `0x40` |
+| Greek G2, Table 43 | None | `0x40` |
+| Arabic G2, Table 45 | None | `0x7F` |
+| G3, Table 48 | `0x6E`, `0x6F`, `0x7E`, `0x7F` | None |
+
+G3's four positions are explicitly unassigned and should not be transmitted;
+`0x5F` is an assigned background-only glyph, and `0x20` is not a SPACE. Explicit
+SPACE remains assigned in G0/G2. Unmarked cells retain exact identity with
+`Pending/UnmarkedTableCell`, without guessing SPACE or imposing a transmission
+ban. `ShouldNotTransmit` preserves the exact code and prohibition reason.
+
+Nonzero diacritics retain exact current G0 and current-G2 column-4 entry.
+Latin/Cyrillic/Greek marks include dot below at index 9 and low line at index C;
+Arabic's column 4 contains letters and is not a Latin mark table. Proven
+nonalphabetic bases produce `Unassigned/NonAlphabeticBase`; established Latin
+alphabet/Latin-mark intent is assigned. Non-Latin or mixed-pair composition
+remains `Pending/UnverifiedComposition`, retaining both raw identities rather
+than inventing shaped output or permanently excluding those repertoires.
+Mode `0x10`/code `0x2A` instead produces `AtSymbol` independently of charset
+ordering; other zero-diacritic codes use current G0. Ordinary direct G0 `0x2A`
+remains its actual table position. Unknown charset order cannot manufacture one
+repertoire identity, and keeps the original pending registry index.
+
+Assignment is a diagnostic semantic intermediate, not renderer or validation
+acceptance. Font shapes, Unicode projection, Arabic joining/composition, DRCS
+selector resolution, object/size footprints, panels, physical order and complete
+receiver/client/editor/publication proof remain open. No lookup result grants
+preview readiness or authorizes publication.
+
+The assignment checkpoint passes 93 selected tests
+(`c5aec45c-04ad-48fd-85a5-578786348008`) and 37 final affected tests after cosmetic
+semicolon/factory-extraction fixes (`b7e7cf19-851a-45c2-965b-be5f4e457282`). Ten
+new domain tests exhaust G0/G2/G3 positions and all national aliases, with literal
+primary-table fixtures, original losing sources, pending order and exact budgets.
+Three consumer proofs retain the same immutable charset context and Base intent.
+Strict affected all-target Clippy, formatting and independent reviews pass.
+
+Six final native tests pass (`f24b1766-4f60-4b54-afda-64eed9fffb68`). The new
+`original_non_latin_g0_assignments_decode_with_libzvbi` case uses production
+composition/packing with original X26 G0 selections. Primary tables 39, 42 and 46
+independently identify Cyrillic capital A (`0x24/0x41`), Greek capital Alpha
+(`0x37/0x41`) and Hebrew Aleph (`0x55/0x60`); literal Unicode scalar expectations
+are `U+0410`, `U+0391` and `U+05D0`. Frozen libzvbi 0.2.42 Linux-x64 formatted-cell
+decoding returns each with exact colours and unchanged Base calibration B. This
+is no pixel/navigation/client, complete repertoire or faithful non-Latin Base
+encoding proof. Existing frozen helper scripts are unchanged; all six previous
+requests retain their prior hashes. The new three-case request SHA-256 is
+`777570132d17e63020d4deee8bf60024bf0f6097f2ac01a21f3b1f1c398a3abe`.
+Replay/export uses the existing native suite plus:
+
+```sh
+ERSATZRS_TELETEXT_TEST_G0_ASSIGNMENTS_LIBZVBI_FIXTURE=/tmp/teletext-g0-assignments.json \
+  ./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(original_non_latin_g0_assignments_decode_with_libzvbi)'
+```
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

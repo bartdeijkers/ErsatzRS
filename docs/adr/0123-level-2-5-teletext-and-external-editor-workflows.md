@@ -133,9 +133,20 @@ spatial, glyph and attribute projections. Local/Active declarations share spatia
 absolute-row state; Adaptive/Passive instances keep fresh private state across
 rows. Every contender retains its own context, original writer provenance and
 pending equal-position source order. Primary/secondary/header national metadata,
-Base Unicode intent and actual coded role remain separate. This does not execute
-character tables/ESC, resolve full geometry or prove physical receiver equivalence;
+Base Unicode intent and actual coded role remain separate. This does not implement
+ESC authoring, resolve full geometry or prove physical receiver equivalence;
 the interchange reference defines the boundary. Full acceptance remains open.
+The same immutable composition now retains finite glyph identities from the
+original charset execution. All seven G0 tables, all four G2 tables, G1 mosaics
+and alphabetic positions, G3 and raw DRCS references remain distinct. Table 32
+selects the actual Table 36 national subset for Base glyphs; enhancement glyphs
+never gain national substitution. Explicit prohibited positions and unmarked
+empty cells remain different outcomes. Current-G0/current-G2 composite intent
+retains unverified non-Latin composition, rather than substituting Latin marks.
+The zero-diacritic 2/A exception is always @, even when charset order is pending.
+This assignment boundary establishes no Unicode/font/raster, DRCS resolution,
+geometry, preview or publication authority. Temporary missing evidence is not a
+permanent engine restriction; full authored Level 2.5 acceptance remains open.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

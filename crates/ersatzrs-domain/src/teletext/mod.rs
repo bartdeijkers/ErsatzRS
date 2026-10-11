@@ -19,6 +19,8 @@ mod enhancement_objects;
 mod enhancement_program;
 mod enhancement_values;
 mod enhancements;
+mod glyph_intent;
+mod glyph_intent_values;
 mod glyph_layers;
 mod identity;
 mod mot;
@@ -45,6 +47,8 @@ pub use enhancement_objects::*;
 pub use enhancement_program::*;
 pub use enhancement_values::*;
 pub use enhancements::*;
+pub use glyph_intent::*;
+pub use glyph_intent_values::*;
 pub use glyph_layers::*;
 pub use identity::*;
 pub use mot::*;
@@ -114,3 +118,6 @@ mod attribute_execution_tests;
 
 #[cfg(test)]
 mod charset_execution_tests;
+
+#[cfg(test)]
+mod glyph_intent_tests;

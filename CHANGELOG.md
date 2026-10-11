@@ -178,6 +178,9 @@ release section when tagging a release.
   Original charset contexts now retain shared row and private object lifetimes,
   exact declaration sources and every losing glyph. Ambiguous source order stays
   pending; character lookup and physical receiver equivalence remain open.
+  Finite glyph lookup now preserves original repertoire positions and national
+  subsets, distinguishing prohibited codes and uncertain cells/compositions.
+  Glyph shapes, complete preview and publication acceptance remain open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

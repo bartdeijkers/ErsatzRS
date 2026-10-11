@@ -1376,3 +1376,155 @@ fn same_service_charset_execution_uses_spatial_shared_state_for_active_glyphs() 
     assert!(active.candidate().invocation().is_some());
     assert_eq!(service, before);
 }
+
+#[test]
+fn glyph_intent_retains_exact_charset_candidates_without_promoting_generated_words() {
+    let alpha = at(
+        8,
+        TeletextColumnOperation::G1Alpha {
+            code: TeletextG1AlphaCode::new(0x40).unwrap(),
+        },
+    );
+    let mut fixture = Fixture::new(vec![text(1, 8, "é")], Some(vec![position(1, 8), alpha]));
+    fixture.primary = Some(0x37);
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let intent = plan.glyph_intent();
+    assert_eq!(intent.owner(), owner());
+    assert_eq!(
+        intent.records().len(),
+        plan.charset_execution().records().len()
+    );
+    for (record, context) in intent
+        .records()
+        .iter()
+        .zip(plan.charset_execution().records())
+    {
+        assert_eq!(record.context(), context);
+    }
+    let contenders: Vec<_> = intent
+        .records()
+        .iter()
+        .filter(|record| record.context().candidate().position() == (1, 8))
+        .collect();
+    assert_eq!(contenders.len(), 2);
+    assert_eq!(
+        contenders[0]
+            .context()
+            .candidate()
+            .base()
+            .unwrap()
+            .authored()
+            .unwrap()
+            .content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    for record in &contenders {
+        assert_eq!(record.disposition(), TeletextGlyphDisposition::Assigned);
+        let Some(TeletextGlyphIdentity::G0 { glyph }) = record.glyph() else {
+            panic!("original Greek G0 identity must remain distinct from generated Latin words");
+        };
+        assert_eq!(glyph.repertoire(), TeletextG0Repertoire::Greek);
+        assert_eq!(glyph.national_subset(), None);
+    }
+    assert!(plan.program().commands().contains(&charset(8, 0)));
+    assert!(plan.charset_execution().declarations().is_empty());
+    assert_eq!(service, before);
+}
+
+#[test]
+fn glyph_intent_preserves_forbidden_and_unmarked_positions_without_mutating_programs() {
+    let commands = vec![
+        position(1, 1),
+        at(1, TeletextColumnOperation::G2 { code: code(0x59) }),
+        at(2, TeletextColumnOperation::G2 { code: code(0x40) }),
+        at(
+            3,
+            TeletextColumnOperation::G3 {
+                code: code(0x6e),
+                compatibility: TeletextG3Compatibility::Level25,
+            },
+        ),
+        at(
+            4,
+            TeletextColumnOperation::G0Diacritic {
+                code: code(0x2a),
+                diacritic: TeletextDiacriticIndex::new(0).unwrap(),
+            },
+        ),
+    ];
+    let service = Fixture::new(vec![], Some(commands.clone())).build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let records: Vec<_> = plan
+        .glyph_intent()
+        .records()
+        .iter()
+        .filter(|record| record.context().candidate().operation().is_some())
+        .collect();
+    assert_eq!(records.len(), 4);
+    assert_eq!(
+        records[0].disposition(),
+        TeletextGlyphDisposition::ShouldNotTransmit
+    );
+    assert_eq!(
+        records[0].reason(),
+        Some(TeletextGlyphIntentReason::ProhibitedTablePosition)
+    );
+    assert!(
+        matches!(records[0].glyph(), Some(TeletextGlyphIdentity::G2 { glyph }) if glyph.code() == 0x59)
+    );
+    assert_eq!(records[1].disposition(), TeletextGlyphDisposition::Pending);
+    assert_eq!(
+        records[1].reason(),
+        Some(TeletextGlyphIntentReason::UnmarkedTableCell)
+    );
+    assert_eq!(
+        records[2].disposition(),
+        TeletextGlyphDisposition::ShouldNotTransmit
+    );
+    assert!(
+        matches!(records[2].glyph(), Some(TeletextGlyphIdentity::G3 { code }) if code.get() == 0x6e)
+    );
+    assert_eq!(records[3].disposition(), TeletextGlyphDisposition::Assigned);
+    assert_eq!(records[3].glyph(), Some(TeletextGlyphIdentity::AtSymbol));
+    assert_eq!(originals(&plan), commands);
+    assert_eq!(service, before);
+}
+
+#[test]
+fn actual_base_layout_uses_full_national_alias_instead_of_low_three_bits() {
+    let mut fixture = Fixture::new(vec![text(1, 1, "#")], None);
+    fixture.primary = Some(0x08); // Table 32 Polish, although low three bits equal English.
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let record = plan
+        .glyph_intent()
+        .records()
+        .iter()
+        .find(|record| record.context().candidate().position() == (1, 1))
+        .unwrap();
+    let Some(TeletextGlyphIdentity::G0 { glyph }) = record.glyph() else {
+        panic!("coded Base G0");
+    };
+    assert_eq!(glyph.code(), 0x23);
+    assert_eq!(glyph.repertoire(), TeletextG0Repertoire::Latin);
+    assert_eq!(
+        glyph.national_subset(),
+        Some(TeletextNationalSubset::Polish)
+    );
+    assert_eq!(
+        record
+            .context()
+            .candidate()
+            .base()
+            .unwrap()
+            .authored()
+            .unwrap()
+            .content(),
+        TeletextBaseAuthoredContent::Text { character: '#' }
+    );
+    assert_eq!(service, before);
+}

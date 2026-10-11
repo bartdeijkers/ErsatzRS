@@ -11,17 +11,18 @@ use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
     build_teletext_glyph_layers, resolve_teletext_attribute_execution,
-    resolve_teletext_charset_execution, resolve_teletext_spatial_trace, TeletextAttributeExecution,
-    TeletextAttributeExecutionError, TeletextBaseDisplay, TeletextCharsetExecution,
-    TeletextCharsetExecutionError, TeletextCharsetPair, TeletextCharsetValueError,
-    TeletextCollectedEnhancementReferences, TeletextColumnOperation,
-    TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
+    resolve_teletext_charset_execution, resolve_teletext_glyph_intent,
+    resolve_teletext_spatial_trace, TeletextAttributeExecution, TeletextAttributeExecutionError,
+    TeletextBaseDisplay, TeletextCharsetExecution, TeletextCharsetExecutionError,
+    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
+    TeletextColumnOperation, TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
     TeletextEnhancementCollectionBudget, TeletextEnhancementCollectionFailure,
     TeletextEnhancementCommand, TeletextEnhancementPosition, TeletextEnhancementProgram,
     TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextG3Compatibility,
-    TeletextGlyphLayers, TeletextGlyphLayersError, TeletextObjectIdentity, TeletextPageAddress,
-    TeletextSemanticService, TeletextServiceError, TeletextSpatialTrace,
-    TeletextSpatialTraceBudget, TeletextSpatialTraceError,
+    TeletextGlyphIntent, TeletextGlyphIntentError, TeletextGlyphLayers, TeletextGlyphLayersError,
+    TeletextObjectIdentity, TeletextPageAddress, TeletextSemanticService, TeletextServiceError,
+    TeletextSpatialTrace, TeletextSpatialTraceBudget, TeletextSpatialTraceError, TELETEXT_COLUMNS,
+    TELETEXT_ROWS,
 };
 
 use super::base_display::{trace_teletext_base_display, TeletextBaseDisplayError};
@@ -93,6 +94,10 @@ pub enum TeletextMainCompositionFailure {
     #[error(transparent)]
     CharsetExecution(#[from] TeletextCharsetExecutionError),
     #[error(transparent)]
+    GlyphIntent(#[from] TeletextGlyphIntentError),
+    #[error("base and enhancement glyph candidate budget exceeds storage range")]
+    GlyphIntentBudget,
+    #[error(transparent)]
     Charset(#[from] TeletextCharsetValueError),
     #[error(transparent)]
     Program(#[from] TeletextEnhancementProgramError),
@@ -134,6 +139,7 @@ pub struct TeletextMainComposition {
     glyph_layers: TeletextGlyphLayers,
     attribute_execution: TeletextAttributeExecution,
     charset_execution: TeletextCharsetExecution,
+    glyph_intent: TeletextGlyphIntent,
     collected: TeletextCollectedEnhancementReferences,
 }
 
@@ -185,10 +191,17 @@ impl TeletextMainComposition {
     }
     /// Original per-contender repertoire context, separate from coded Base
     /// fallback and generated compatibility words. Pending source order,
-    /// glyph lookup, geometry and physical receiver equivalence remain open.
+    /// geometry and physical receiver equivalence remain open.
     #[must_use]
     pub const fn charset_execution(&self) -> &TeletextCharsetExecution {
         &self.charset_execution
+    }
+    /// Audited original table positions from this exact charset execution.
+    /// Losing candidates and pending registry indices are preserved. Assignment
+    /// evidence does not certify rasterization, arbitration or publication.
+    #[must_use]
+    pub const fn glyph_intent(&self) -> &TeletextGlyphIntent {
+        &self.glyph_intent
     }
     #[must_use]
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
@@ -300,6 +313,8 @@ pub fn compose_teletext_main_program(
             &source,
             budget.collection.max_commands,
         )?;
+    let glyph_intent =
+        original_glyph_intent(&charset_execution, &source, budget.collection.max_commands)?;
     Ok(TeletextMainComposition {
         owner,
         original_program_source: source,
@@ -311,7 +326,31 @@ pub fn compose_teletext_main_program(
         glyph_layers,
         attribute_execution,
         charset_execution,
+        glyph_intent,
         collected,
+    })
+}
+
+fn original_glyph_intent(
+    charset: &TeletextCharsetExecution,
+    source: &TeletextEffectiveProgramSource,
+    maximum: usize,
+) -> Result<TeletextGlyphIntent, TeletextMainCompositionError> {
+    let owner = charset.owner();
+    let max_candidates = (TELETEXT_ROWS * TELETEXT_COLUMNS - 8)
+        .checked_add(maximum)
+        .ok_or_else(|| {
+            error(
+                owner,
+                None,
+                TeletextMainCompositionFailure::GlyphIntentBudget,
+            )
+        })?;
+    resolve_teletext_glyph_intent(charset, max_candidates).map_err(|reason| {
+        let location = reason
+            .location
+            .and_then(|location| original_location(source, location));
+        error(owner, location, reason.into())
     })
 }
 
