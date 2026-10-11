@@ -595,3 +595,105 @@ fn actual_current_cyrillic_pair_reaches_composite_raster_without_latin_substitut
     assert_eq!(image.owner(), owner());
     assert_eq!(service, before);
 }
+
+const SEPARATED_BLOCKS: [u32; 10] = [0, 0x79e, 0x79e, 0, 0x79e, 0x79e, 0x79e, 0, 0x79e, 0x79e];
+
+fn full_mosaics(column: u8, count: usize, separated: bool) -> TeletextRun {
+    TeletextRun {
+        column,
+        style: TeletextStyle::default(),
+        content: TeletextRunContent::Mosaics {
+            cells: vec![TeletextMosaic::new(63).unwrap(); count],
+            separated,
+        },
+    }
+}
+
+#[test]
+fn enhanced_g1_ignores_underlying_base_spacing_in_every_original_execution_scope() {
+    for kind in [
+        None,
+        Some(TeletextObjectType::Active),
+        Some(TeletextObjectType::Adaptive),
+        Some(TeletextObjectType::Passive),
+    ] {
+        let target = local(1200);
+        let mosaic = |column| {
+            at(
+                column,
+                TeletextColumnOperation::G1 {
+                    mosaic: TeletextMosaic::new(63).unwrap(),
+                },
+            )
+        };
+        let mut fixture = Fixture::new(
+            vec![TeletextRow {
+                row: 1,
+                runs: vec![full_mosaics(8, 2, true)],
+            }],
+            Some(vec![
+                position(1, 8),
+                kind.map_or_else(|| mosaic(8), |kind| invoke(target, kind)),
+            ]),
+        );
+        if let Some(kind) = kind {
+            fixture
+                .objects
+                .push(definition(target, kind, vec![mosaic(0)]));
+        }
+        let plan = compose(&fixture.build());
+        assert!(
+            plan.base_display()
+                .cell(1, 8)
+                .unwrap()
+                .attributes()
+                .values()
+                .separated
+        );
+        let image = raster(&plan);
+        assert_eq!(cell_rows(&image, 1, 8, 1), [0xfff; 10], "{kind:?}");
+        assert_eq!(
+            cell_rows(&image, 1, 9, 1),
+            SEPARATED_BLOCKS,
+            "default D5 must not cancel Base spacing: {kind:?}"
+        );
+    }
+}
+
+#[test]
+fn explicit_d5_zero_cancels_base_mosaic_spacing_but_later_spacing_separation_reenables_it() {
+    let rows = vec![TeletextRow {
+        row: 1,
+        runs: vec![
+            full_mosaics(4, 4, true),
+            full_mosaics(12, 2, false),
+            full_mosaics(20, 2, true),
+        ],
+    }];
+    let plan =
+        compose(&Fixture::new(rows, Some(vec![position(1, 5), size(5, false, false)])).build());
+    // Literal Layout controls establish different placed/effective sources.
+    for (column, code) in [(3, 0x1a), (11, 0x19), (19, 0x1a)] {
+        assert_eq!(plan.base_display().cell(1, column).unwrap().code(), code);
+    }
+    let image = raster(&plan);
+    assert_eq!(cell_rows(&image, 1, 4, 1), SEPARATED_BLOCKS);
+    assert_eq!(cell_rows(&image, 1, 5, 1), [0xfff; 10]);
+    assert_eq!(cell_rows(&image, 1, 7, 1), [0xfff; 10]);
+    assert_eq!(cell_rows(&image, 1, 12, 1), [0xfff; 10]);
+    assert_eq!(cell_rows(&image, 1, 20, 1), SEPARATED_BLOCKS);
+    let writer = plan
+        .display_resolution()
+        .cell(1, 5)
+        .unwrap()
+        .attributes()
+        .spacing_separated()
+        .writer()
+        .unwrap();
+    assert!(
+        matches!(writer.source(), TeletextAttributeSource::Enhancement {location, ..}
+        if location.object.is_none() && location.command == 1)
+    );
+    assert_eq!(writer.placed_position(), (1, 5));
+    assert_eq!(writer.effective_start(), (1, 5));
+}

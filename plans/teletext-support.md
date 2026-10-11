@@ -202,7 +202,13 @@ Base priority and retains higher-layer overrides. Bounded output retains located
 unresolved pixels; it does not authorize publication. Receiver-owned header
 cells use a distinct marker and exact identity in preview navigation. Invert
 precedes supplied flash phase; enlarged bottom fragments retain origin-row planes.
-Eight opaque DRCS rectangles match independent libzvbi 0.2.42 pixels. Next settle
+Eight opaque DRCS rectangles match independent libzvbi 0.2.42 pixels. Physical
+replay must use the corrected separation contract: enhanced
+G1 uses D5 alone, Base G1 also uses surviving spacing separation, and explicit
+D5=0 cancels an earlier spacing writer with its original C.2/C.3 scope and
+deferral. Defaults do not cancel; later spacing separation can restore it.
+Before full engine acceptance, retain independent wire/raster evidence for these
+cases alongside the unchanged Unicode/Active positive oracle. Next settle
 remaining source/extent, Arabic composite and complete background-parameter
 evidence. Known alphabetic composites now fit exact current masks under explicit
 font policy; definite consumed window/inverted-adjacent BBS parameters retain

@@ -1062,9 +1062,63 @@ prove compliant authoring.
 
 Table 29 D5 separates G1 mosaics and underlines alphanumerics, including SPACE
 and spacing cells displayed as SPACE. This raster chooses the full bottom mask
-row before enlargement. G3/DRCS remain unchanged for their undefined D5 response;
+row before enlargement. Table 26 notes 11/12 restrict spacing mosaic separation
+to Base Level 1/1.5 characters; enhanced G1 depends on D5 alone. An explicit
+Display Attributes triplet with D5=0 also writes spacing separation false,
+retaining the same original source, physical C.2 order, C.3 deferral and object
+scope. Row/private defaults do not cancel spacing. A later spacing Separated
+Mosaics can restore separation; spacing Contiguous Mosaics cannot clear D5=1.
+Carrier materialization must preserve this Base/enhanced distinction rather than
+unconditionally combining spacing with D5. G3/DRCS remain unchanged for their undefined D5 response;
 Annex G.2 permits decoder-specific non-DRCS/underline appearance. Exact atlas
 shapes are a font policy, not normative pixel geometry.
+
+The D5 correction is covered by four original-writer and two actual-raster
+regressions, including all original execution scopes, exact pending sources,
+hidden-writer deferral and later spacing restoration. Three production compiled
+X26 cases also pass independent libzvbi 0.2.42 decoding and guarded normal-cell
+RGBA rendering: enhanced G1 with default D5 over separated Base data, explicit
+D5 separation and explicit D5=0 cancellation of Base separation. The host atlas
+uses separated rows `0,1950,1950,0,1950,1950,1950,0,1950,1950`; the pinned native
+font uses `4030,4030,0,4030,4030,4030,0,4030,4030,0`. Both contiguous masks are
+`4095` on all ten rows. These separate literal font expectations follow Annex
+G.2's decoder font freedom; native decoding still checks exact mosaic identity,
+normal size, opaque white/black colours and unchanged Base calibration `B`.
+Production raster must match its own literal before native loading.
+
+The normative later-spacing oracle remains positive and fails on libzvbi
+0.2.42: a later Base `1A` after explicit D5=0 remains contiguous in that decoder.
+Its test is explicitly ignored as a known decoder regression, with no changed
+golden or accepted restriction on authoring. The same four production-wire cases
+all pass pinned teletextimager 0.2.0 at both Level 1.5 and 2.5, including that
+later spacing restoration. Literal tuples check full mosaic code 127,
+contiguous/separated set 24/25, white/black and the unchanged calibration `B`.
+The existing helper's eight upstream source guards remain unchanged. This
+offscreen calibration is
+Linux x86-64 only and establishes no suitable-client navigation, complete
+Level 2.5, editor or publication acceptance. P9A-01 owns current test evidence.
+
+| D5/G1 evidence | SHA-256 |
+| --- | --- |
+| Passing three-case request | `6b3e56c7d6309971912f770bfe2b54f8cc080b164a43d8470709f79ec0aea17f` |
+| Correct later-spacing request | `c8d8b0e2dbbf14fa730fab54a11a644d38b572aa7b63ca7a4ba68bb7346fabcb` |
+| Native mosaic helper | `94619eb91da173536b41ddc4ce4da05d63061dcd7898fe304b29e8cfd98336bf` |
+| Passing four-case imager request | `8621d2e1f401e4ce82311a30d114f64d77b7131771f8c71581f39cb63ca26ef9` |
+
+```bash
+ERSATZRS_TELETEXT_TEST_MOSAIC_FIXTURE=/tmp/teletext-mosaic.json \
+  ./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(composed_mosaic_d5_raster_matches_independent_native_g1_pixels)'
+python3 scripts/e2e/teletext-mosaic-decoder.py < /tmp/teletext-mosaic.json
+python3 scripts/e2e/test_teletext_mosaic_decoder.py
+# Explicit pinned detached checkout, as in the other imager calibrations.
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$TELETEXT_IMAGER_SRC" \
+  ./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(composed_mosaic_spacing_decodes_with_pinned_imager)'
+# Expected failure on libzvbi 0.2.42; retain the standard-conforming oracle.
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(composed_mosaic_later_spacing_reenables_separation_with_libzvbi)'
+```
 
 Known alphabetic composite masks use the actual current G0 base and current G2
 mark. Below-letter marks 9/B/C/E retain the full base, including Latin capitals;

@@ -987,6 +987,27 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+The D5/G1 correction follows Table26 notes11/12 and Table29: enhanced G1 uses D5 alone,
+while explicit D5=0 cancels earlier Base separation through the original compound writer.
+Defaults do not cancel; later spacing can restore separation and spacing Contiguous Mosaics
+cannot clear D5=1. Four domain and two actual-raster regressions cover Local/Active,
+Adaptive extent/Passive private state, exact pending/C2 sources and hidden C3 deferral.
+All813 selected domain/FFmpeg teletext tests pass (038f7054-f871-49cb-acfa-fe190ea59fe6).
+Three actual composed-X26/raster cases pass pinned libzvbi0.2.42 decoding/guarded RGBA
+(7a76fe87-0fa5-49eb-ae01-2ec7b29c52b3); decoder-specific separated-font geometry is distinct
+from the unchanged host atlas. The correct later-Base1A oracle fails on this decoder
+(d24b4877-bd3f-4093-b885-123019a72b7a), which keeps the glyph contiguous after D5=0.
+All four same-wire cases pass pinned teletextimager0.2.0/2b0125b7 at both Level1.5/2.5
+(62c6df0c-19ea-4025-a981-125c227c4dd6), including later spacing restoration, with
+literal code/set/colour and unchanged B calibration. After equivalent test lint/format
+corrections, all35 affected domain tests pass (442d4c35-3930-4d38-b086-a5c4c9cc50d6).
+Request/helper hashes and replay instructions are in the interchange reference; 28 malformed
+helper inputs reject before native loading with one positive validation-barrier control.
+Strict affected all-target Clippy, workspace formatting, architecture/progress checks and
+independent source/test/helper review pass. No full renderer/client/navigation/editor/publication acceptance
+or permanent engine restriction follows; statuses/dependencies/acceptance remain unchanged.
+Earlier evidence follows unchanged:
+
 The Unicode/Active realization checkpoint retains the correct positive production-wire oracle:
 Page 200/subcode 0 uses German national option one; row 1/column 8 must show pound/G2 at Level
 1.5 and original Active A/G0 at Level 2.5, with adjacent Z unchanged. Pinned imager 0.2.0/2b0125b7 passes

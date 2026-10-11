@@ -13,6 +13,10 @@ mod raster_tests;
 #[path = "raster_runtime_tests.rs"]
 mod raster_runtime_tests;
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "mosaic_runtime_tests.rs"]
+mod mosaic_runtime_tests;
+
 fn owner() -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(200).unwrap(),

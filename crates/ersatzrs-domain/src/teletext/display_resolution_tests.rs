@@ -3,7 +3,7 @@
 use super::attribute_execution_tests::{
     at, definition, foreground, glyph, invoke, local, owner, service, set,
 };
-use super::base_footprints_tests::{attributes, empty_rows, finish, mixed_base, put};
+use super::base_footprints_tests::{attributes, empty_rows, finish, mixed_base, put, source};
 use super::*;
 
 struct Fixture {
@@ -1841,4 +1841,231 @@ fn any_disagreeing_predecessor_or_incoming_display_size_keeps_three_writer_size_
         );
         assert_display_contenders(&result, index, true);
     }
+}
+
+fn d5(column: u8, separated: bool) -> TeletextEnhancementCommand {
+    at(
+        column,
+        TeletextColumnOperation::Attributes {
+            double_height: false,
+            double_width: false,
+            boxed: false,
+            conceal: false,
+            invert: false,
+            underline_or_separated_mosaics: separated,
+        },
+    )
+}
+
+// Three literal spacing transitions: SetAt 1A at 3, 19 at 12, 1A at 18.
+fn separated_base() -> TeletextBaseDisplay {
+    let mut rows = empty_rows(7, 0);
+    let mosaic = TeletextBaseSpacingControl::MosaicColour {
+        colour: TeletextColour::White,
+    };
+    for column in 0_u8..40 {
+        let baseline = attributes(1, 7, 0);
+        let mut values = baseline.values();
+        let mut sources = baseline.sources();
+        if column >= 1 {
+            values.graphics = true;
+            sources.graphics = source(1, 0, mosaic);
+            sources.foreground = sources.graphics;
+            sources.conceal = sources.graphics;
+        }
+        if column >= 3 {
+            let (placed, control, separated) = if column >= 18 {
+                (18, TeletextBaseSpacingControl::SeparatedMosaics, true)
+            } else if column >= 12 {
+                (12, TeletextBaseSpacingControl::ContiguousMosaics, false)
+            } else {
+                (3, TeletextBaseSpacingControl::SeparatedMosaics, true)
+            };
+            values.separated = separated;
+            sources.separated = source(1, placed, control);
+        }
+        let control = match column {
+            0 => Some(mosaic),
+            3 | 18 => Some(TeletextBaseSpacingControl::SeparatedMosaics),
+            12 => Some(TeletextBaseSpacingControl::ContiguousMosaics),
+            _ => None,
+        };
+        put(
+            &mut rows,
+            1,
+            column,
+            control.map_or(0x7f, TeletextBaseSpacingControl::code),
+            control,
+            TeletextBaseDisplayAttributes::new(values, sources).unwrap(),
+        );
+    }
+    finish(rows, None)
+}
+
+#[test]
+fn explicit_local_and_active_d5_zero_cancel_spacing_with_original_writer_and_later_spacing_restore()
+{
+    for object_type in [None, Some(TeletextObjectType::Active)] {
+        let target = local(1200);
+        let (main, definitions) = object_type.map_or_else(
+            || (vec![set(1, 8), d5(8, false)], vec![]),
+            |kind| {
+                (
+                    vec![set(1, 8), invoke(target, kind, None)],
+                    vec![definition(target, kind, vec![d5(0, false)])],
+                )
+            },
+        );
+        let service = service(main, definitions);
+        let fixture = Fixture::new(separated_base(), &service);
+        let result = resolve(&fixture);
+        for (column, expected) in [(7, true), (8, false), (11, false), (12, false), (18, true)] {
+            assert_eq!(
+                result
+                    .cell(1, column)
+                    .unwrap()
+                    .attributes()
+                    .spacing_separated()
+                    .value(),
+                Some(expected)
+            );
+        }
+        let field = result.cell(1, 8).unwrap().attributes().spacing_separated();
+        let writer = field.writer().unwrap();
+        assert_eq!(writer.placed_position(), (1, 8));
+        assert_eq!(writer.effective_start(), (1, 8));
+        assert!(
+            matches!(writer.source(), TeletextAttributeSource::Enhancement {location, ..}
+            if location.object == object_type.map(|_| target)
+            && location.command == usize::from(object_type.is_none()))
+        );
+        assert!(
+            matches!(result.cell(1, 18).unwrap().attributes().spacing_separated().writer().unwrap().source(),
+            TeletextAttributeSource::Base {source: TeletextBaseAttributeSource::Spacing {position, control: TeletextBaseSpacingControl::SeparatedMosaics, ..}, ..}
+                if position.column() == 18)
+        );
+    }
+}
+
+#[test]
+fn adaptive_d5_cancellation_expires_with_extent_and_passive_private_cancellation_does_not_change_gaps(
+) {
+    for kind in [TeletextObjectType::Adaptive, TeletextObjectType::Passive] {
+        let target = local(1201);
+        let service = service(
+            vec![set(1, 8), invoke(target, kind, None)],
+            vec![definition(target, kind, vec![d5(0, false), glyph(2, b'A')])],
+        );
+        let result = resolve(&Fixture::new(separated_base(), &service));
+        assert_eq!(
+            result
+                .cell(1, 10)
+                .unwrap()
+                .attributes()
+                .spacing_separated()
+                .value(),
+            Some(false)
+        );
+        assert_eq!(
+            result
+                .cell(1, 11)
+                .unwrap()
+                .attributes()
+                .spacing_separated()
+                .value(),
+            Some(true)
+        );
+        assert_eq!(
+            result
+                .cell(1, 8)
+                .unwrap()
+                .attributes()
+                .spacing_separated()
+                .value(),
+            Some(kind == TeletextObjectType::Passive)
+        );
+        let writer = result
+            .cell(1, 10)
+            .unwrap()
+            .attributes()
+            .spacing_separated()
+            .writer()
+            .unwrap();
+        assert!(
+            matches!(writer.source(), TeletextAttributeSource::Enhancement {location, invocation: Some(_), ..}
+            if location.object == Some(target) && location.command == 0)
+        );
+    }
+}
+
+#[test]
+fn spacing_contiguous_cannot_clear_nonspacing_d5_and_equal_key_cancellation_retains_pending_sources(
+) {
+    let service_true = service(vec![set(1, 8), d5(8, true)], vec![]);
+    let result = resolve(&Fixture::new(separated_base(), &service_true));
+    let attributes = result.cell(1, 13).unwrap().attributes();
+    assert_eq!(attributes.spacing_separated().value(), Some(false));
+    assert_eq!(
+        attributes.underline_or_separated_mosaics().value(),
+        Some(true)
+    );
+    let service_tie = service(vec![set(1, 3), d5(3, false)], vec![]);
+    let result = resolve(&Fixture::new(separated_base(), &service_tie));
+    let field = result.cell(1, 4).unwrap().attributes().spacing_separated();
+    assert_eq!(field.value(), None);
+    let pending = field.pending().unwrap();
+    assert_eq!(
+        pending.reason(),
+        TeletextDisplayPendingReason::TransmissionOrder
+    );
+    let sources: Vec<_> = [pending.first_writer(), pending.second_writer()]
+        .into_iter()
+        .flatten()
+        .map(|index| result.writers()[index].source())
+        .collect();
+    assert!(sources
+        .iter()
+        .any(|source| matches!(source, TeletextAttributeSource::Base { .. })));
+    assert!(sources.iter().any(
+        |source| matches!(source, TeletextAttributeSource::Enhancement {location, ..}
+        if location.object.is_none() && location.command == 1)
+    ));
+}
+
+#[test]
+fn hidden_d5_zero_cancellation_defers_with_original_placement_and_keeps_enlarged_parts() {
+    let wide_separated = at(
+        8,
+        TeletextColumnOperation::Attributes {
+            double_height: false,
+            double_width: true,
+            boxed: false,
+            conceal: false,
+            invert: false,
+            underline_or_separated_mosaics: true,
+        },
+    );
+    let service = service(
+        vec![set(1, 8), wide_separated, glyph(8, b'A'), d5(9, false)],
+        vec![],
+    );
+    let result = resolve(&Fixture::new(separated_base(), &service));
+    for column in [8, 9] {
+        let attributes = result.cell(1, column).unwrap().attributes();
+        assert_eq!(attributes.spacing_separated().value(), Some(true));
+        assert_eq!(
+            attributes.underline_or_separated_mosaics().value(),
+            Some(true)
+        );
+    }
+    let field = result.cell(1, 10).unwrap().attributes().spacing_separated();
+    assert_eq!(field.value(), Some(false));
+    let writer = field.writer().unwrap();
+    assert_eq!(writer.requested_start(), (1, 9));
+    assert_eq!(writer.placed_position(), (1, 9));
+    assert_eq!(writer.effective_start(), (1, 10));
+    assert!(
+        matches!(writer.source(), TeletextAttributeSource::Enhancement {location, ..}
+        if location.command == 3)
+    );
 }

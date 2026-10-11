@@ -258,6 +258,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Fix enhanced teletext G1 mosaic separation and explicit D5 cancellation in the
+  shared display model and raster. Keep original writer order and object scope;
+  retain independent decoder limitations and full engine acceptance as open.
 - Retain managed scan ownership through local FFprobe cancellation and cleanup
   in the web worker, startup replay and standalone scanner. Gate terminal scan
   updates on confirmed cleanup; stop the worker and reject new scans when

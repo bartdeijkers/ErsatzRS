@@ -1392,6 +1392,13 @@ fn operation_values(operation: TeletextColumnOperation) -> [Option<Value>; FIELD
             ] {
                 values[field] = Some(Value::Flag(value));
             }
+            // Table 29 D5=0 also cancels an earlier Level 1 Separated Mosaics
+            // attribute. Retain this explicit writer's C.2/C.3 scope and source;
+            // a row/default D5=0 is not a cancellation command. Later spacing
+            // separation may supersede this write, while D5=1 remains separate.
+            if !underline_or_separated_mosaics {
+                values[SPACING] = Some(Value::Flag(false));
+            }
         }
         _ => {}
     }

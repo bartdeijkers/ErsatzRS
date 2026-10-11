@@ -163,9 +163,16 @@ transparency are distinct from video alpha. Pixel and diagnostic budgets are hos
 policy; unresolved cells carry original locations instead of guessed glyphs.
 Annex G.2 permits font/underline shape choices; D5 separates G1 mosaics and
 underlines ordinary alphanumerics, with G3/DRCS unchanged as an explicit decoder
-policy for their undefined response. Receiver-owned header cells are a distinct
-marker; exact identity belongs in preview navigation, without invented header
-errors or a decoder-specific subpage abbreviation. Invert exchanges references
+policy for their undefined response. Table 26 notes 11/12 restrict spacing mosaic
+separation to Level 1/1.5 characters; enhanced G1 uses D5 alone. Explicit Table 29
+D5=0 also cancels an
+earlier Base spacing separation through the original writer's C.2/C.3 ordering,
+scope and deferral. Defaults do not perform that cancellation. Later spacing
+separation can restore it; spacing Contiguous Mosaics cannot clear D5=1. This
+correction is required in the common model and raster before physical replay.
+Receiver-owned header cells retain a distinct marker; exact identity belongs in
+preview navigation, without invented header errors or a decoder-specific subpage
+abbreviation. Invert exchanges references
 before supplied flash phase and C.1; enlarged bottom fragments retain the exact
 origin row plane. Eight actual-production opaque DRCS rectangles now match
 independent libzvbi 0.2.42 bitmap and RGBA rendering, covering enlargement,

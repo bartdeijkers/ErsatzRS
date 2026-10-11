@@ -297,12 +297,15 @@ fn selected_mask(
         .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
     let spacing = cell.attributes().spacing_separated();
     let separated = if matches!(identity, TeletextGlyphIdentity::G1Mosaic { .. }) {
+        // Table 26 notes 11/12 limit spacing separation to Level 1/1.5
+        // characters. Enhanced mode-01 mosaics use the non-spacing D5 only.
         d5_value
-            || spacing
-                .value()
-                .ok_or(TeletextRasterCellFailure::GlyphAttribute {
-                    pending: spacing.pending().copied().map(Box::new),
-                })?
+            || (intent.context().candidate().base().is_some()
+                && spacing
+                    .value()
+                    .ok_or(TeletextRasterCellFailure::GlyphAttribute {
+                        pending: spacing.pending().copied().map(Box::new),
+                    })?)
     } else {
         false
     };
