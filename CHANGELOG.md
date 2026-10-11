@@ -141,7 +141,9 @@ release section when tagging a release.
   complete bounded MOT/DRCS sequences derive actual last rows and keep empty
   DRCS undefined. A bounded local X26 compiler lowers typed colour, attribute,
   glyph and DRCS commands with located failures and unchanged input. Required
-  object/row-zero lowering and base/enhancement composition remain open.
+  row-zero lowering and base/enhancement composition remain open. Resource-object
+  allocation now preserves full IDs/shared defaults, exact resource/type selection
+  and invocation offsets; definition bodies/local-object packing remain open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. X27 decoder limits,
   full feature/client proof and service scheduling remain open.

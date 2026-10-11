@@ -15,10 +15,10 @@ milestones are Not started. Acceptance remains open.
 
 Checked values/programs and bounded object/DRCS traversal underpin the service.
 Presentation/v1 lifting retain page/X26 presence and v1 bytes; DRCS
-retains geometry, lifecycle states and actual last rows. 12 local X26 tests
-cover fields/order/limits; 9 libzvbi 0.2.42 MOT-based cases retain identical
-compiled bytes and pass. Object/row-zero lowering, base composition, X27 decoding
-and service scheduling remain open. X27 retains masks and required inventory; matching selected owners require announced
+retains geometry, lifecycle states and actual last rows. 23 local X26/allocation/invocation tests cover fields/order/limits, full IDs,
+shared defaults and exact resource/type selection. Nine libzvbi 0.2.42 cases pass
+with identical bytes. Definition pages/local-object packing, row-zero lowering,
+base composition, X27 decoding and service scheduling remain open. X27 retains masks and required inventory; matching selected owners require announced
 used S1 with located failures. Only original synthesized MOT roots are exempt;
 nested calls and glyphs remain checked. MOT declarations/body coding retain
 explicit owners, full banks/extents/defaults, ignored selectors/fallback and

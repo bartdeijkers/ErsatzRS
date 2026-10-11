@@ -128,6 +128,50 @@ bodies are not safe to append blindly to existing encoded pages. Synthetic nativ
 resource calibration replaces the known empty base X26 body explicitly; it does
 not establish general base/enhancement composition or complete Level 2.5 readiness.
 
+## Resource object allocation and invocation
+
+`allocate_teletext_resource_objects` uses the checked object catalog, separately
+supplied original MOT default targets and a trusted object/input budget. It
+checks raw counts before scanning and all defaults before assigning slots.
+Repeated defaults are validated but deduplicated; distinct defaults retain
+supplied order, then remaining definitions retain authored catalog order.
+One immutable map covers every resource invocation and MOT default. Each key
+retains complete scope/page/S1, the entire host `u16` ID and exact type. The
+allocator never truncates IDs, rebinds owners or spills into another subpage.
+Local definitions remain in the input budget but require separate shared-page
+packing; they do not acquire resource pointers.
+
+Each resource/type/S1 admits at most 32 objects, of which MOT defaults occupy
+only the first 16. The nine-bit number is
+`S1 | half<<4 | group<<5 | pointer_packet_index<<7`.
+Pointer packets 1–4 each contain four groups of even/odd pointers per type.
+`mot_default_allocation()` returns an exact eight-bit selector only for the
+first two pointer packets, preserving target/type. Later pointers require
+explicit invocation. Invalid targets/types/default scopes, budgets or capacity
+return located identifiers and no partial map. This allocation does not prove
+packet-body capacity, pointer values or emitted definition pages.
+
+`compile_teletext_local_program_with_resource_objects` takes the same map and
+explicit resolved public/global links. It checks selected resource page and exact
+allocated target/type before writing the nine-bit invocation fields. Any supplied
+origin modifier immediately precedes its invocation, including explicit zero
+modifiers; invocation leaves the caller's active position and DRCS selections
+unchanged. Direct invocations are bounded at 127 per type and all inserted
+modifiers consume the existing 207-payload-triplet capacity. The semantic service
+still owns transitive counts, type/ownership closure and selected dependencies.
+Local targets retain `NeedsObjectAllocation` until their actual definition is
+packed into the same owner's X26 sequence; no host ID becomes a wire pointer.
+
+Complete object definition pages remain required. Their pointer values address
+absolute triplets 0–506 relative to the first triplet of packet 3, independently
+of pointer-table extensions. Pointer and definition data cannot share a packet.
+Canonical contiguous pointer tables use two/three/four packets and leave
+507/494/481 definition-area triplets. Local definitions instead share all 208
+X26 slots with authored and base-derived enhancements. Original MOT banks must
+be supplied separately; the effective per-display four default slots cannot
+reconstruct their provenance. Full bodies, display semantics and publication
+remain required acceptance work.
+
 ## Presentation and supplied service selection
 
 `TeletextLevel25PresentationDefaults` carries an assigned primary designation,

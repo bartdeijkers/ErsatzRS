@@ -987,6 +987,34 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 resource object allocation/invocation checkpoint:
+Immutable checked POP/GPOP maps preserve complete scope/page/S1/host-u16-ID/type.
+Raw catalog/default budgets precede scanning; every default is validated before
+assignment. Distinct defaults retain supplied priority and deduplicate; remaining
+definitions retain authored order. Capacity is 32 objects/type/S1, with MOT defaults
+in the first 16; no truncation/rebinding/spill occurs. The same map supplies exact
+MOT selectors and explicit nine-bit invocation. Resource-aware local compilation
+checks the selected page and exact target/type; immediate origin modifiers retain
+zero/maximum offsets without modifying caller AP/DRCS state. Direct count127 and
+inserted-word physical capacity remain separate fences. Local definitions still
+need shared-owner X26 packing rather than invented pointers.
+Twenty-three focused allocation/compiler tests pass in Nextest
+e3a1956d-6454-4e73-b886-1fc200552270 (409 skipped), including 11 new tests and
+the valid12-case local baseline. Independent readers check every scope/type/S1/
+pointerbank, exact identity/default priority, budgets and late failures, every
+invocation field, missing/wrong resource/type, offsets,127/128 and207/overflow.
+The actual libzvbi0.2.42 diagnostic still passes nine unchanged MOT/DRCS cases in
+Nextest31a5c5a0-0d56-4d32-8d38-fd4cda0a9647 (one diagnostic,431 skipped).
+Fixture SHA256 remains68a84487506433f674c233e5be656dd4bd83d836f911b4ae24caac08c1f1d230.
+Strict FFmpeg all-target Clippy, final formatting, architecture and independent
+allocation/invocation/oracle reviews pass. Unchanged426-test baseline remains valid.
+Actual object definition bodies, local-object allocation, full physical inventory,
+resolved default/presentation/geometry and base/enhancement composition remain
+required. Full independent feature/client/editor/publication acceptance remains
+open. No milestone/dependency/acceptance change, push or publication.
+
+Earlier local enhancement checkpoint follows:
+
 2026-10-11 bounded local enhancement compilation checkpoint:
 compile_teletext_local_program preserves exact display owner, borrowed command
 order, assigned field values and independently latched normal/global DRCS S1.

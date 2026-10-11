@@ -17,6 +17,7 @@ mod enhancement_program;
 mod layout;
 mod lift;
 mod mot;
+mod object_allocation;
 mod output;
 mod packets;
 mod pmt_install;
@@ -41,13 +42,18 @@ pub use clock::{
 pub use compositional::encode_teletext_compositional_links;
 pub use drcs::{encode_teletext_drcs_bodies, TeletextDrcsPacketBodies};
 pub use enhancement_program::{
-    compile_teletext_local_program, EncodedTeletextLocalProgram, TeletextLocalProgramEncodingError,
+    compile_teletext_local_program, compile_teletext_local_program_with_resource_objects,
+    EncodedTeletextLocalProgram, TeletextLocalProgramEncodingError,
     TeletextLocalProgramEncodingFailure,
 };
 pub use lift::lift_teletext_v1_page_set;
 pub use mot::{
     encode_teletext_mot_bodies, TeletextMotAllocationFailure, TeletextMotDefaultAllocation,
     TeletextMotDefaultAllocations, TeletextMotEncodingError, TeletextMotPacketBody,
+};
+pub use object_allocation::{
+    allocate_teletext_resource_objects, TeletextObjectAllocationError,
+    TeletextResourceObjectAllocation, TeletextResourceObjectAllocations,
 };
 pub use output::{
     TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
@@ -146,6 +152,8 @@ mod enhancement_program_tests;
 mod lift_tests;
 #[cfg(test)]
 mod mot_tests;
+#[cfg(test)]
+mod object_allocation_tests;
 #[cfg(test)]
 mod pmt_install_tests;
 #[cfg(test)]

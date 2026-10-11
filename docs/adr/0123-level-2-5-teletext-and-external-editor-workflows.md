@@ -44,8 +44,11 @@ and independent invalid-glyph fallback. A bounded local X26 compiler now lowers
 typed colour/attribute/glyph/DRCS commands without mutation or partial output;
 twelve independent regressions cover fields, order, physical limits and located
 errors. The nine native cases retain identical bytes through that compiler.
-Object allocation, context-dependent row-zero positioning and base/enhancement
-composition remain required work. X27 native decoding has a separately
+Bounded resource-object allocation now preserves full IDs and shared MOT defaults;
+resource invocations check exact selection/type and retain immediate offsets.
+Twenty-three focused regressions cover the local compiler and new object paths.
+Actual object definition bodies, local-object allocation, context-dependent
+row-zero positioning and base/enhancement composition remain required work. X27 native decoding has a separately
 reproduced version-specific gap; normative encoding is retained. Full external
 feature decoding and actual client display/navigation remain open.
 A bounded per-display MOT/X27 derivation now preserves selected context, exact

@@ -1145,8 +1145,10 @@ Checked resource headers preserve physical subcodes/all six lifecycle states;
 complete bounded MOT/DRCS sequences derive actual last rows, including undefined
 empty DRCS. A bounded local X26 compiler preserves command order, fields and
 independent DRCS latches; twelve regressions cover physical limits and located
-errors. Required object/row-zero lowering and base/enhancement composition remain
-open. Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
+errors. Bounded resource-object allocation and invocation preserve full IDs,
+shared defaults, exact resource/type selection and offsets; 23 focused tests pass.
+Definition pages/local-object packing, row-zero lowering and base/enhancement
+composition remain required work. Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
 invocations and prove exact pixels/native
 offscreen rendering and isolated invalid-glyph fallback. X27 decoding limitations
 are recorded without changing normative wire output. Service lifecycle/scheduling,

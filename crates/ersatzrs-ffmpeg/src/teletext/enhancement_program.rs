@@ -9,10 +9,12 @@ use ersatzrs_domain::{
     TeletextColumnOperation, TeletextDrcsTableScope, TeletextEnhancementCommand,
     TeletextEnhancementPosition, TeletextEnhancementProgram, TeletextEnhancementSource,
     TeletextFlashMode, TeletextFlashRate, TeletextG3Compatibility, TeletextObjectIdentity,
-    TeletextObjectOffset, TeletextObjectType, TeletextPageAddress,
+    TeletextObjectOffset, TeletextObjectScope, TeletextObjectType, TeletextPageAddress,
+    TeletextRawDataPageNumber, TeletextResolvedObjectPageLinks,
 };
 
 use super::packets::{hamming_24_18, hamming_8_4};
+use super::TeletextResourceObjectAllocations;
 
 const TRIPLETS_PER_PACKET: usize = 13;
 const MAX_PACKETS: usize = 16;
@@ -43,6 +45,21 @@ pub enum TeletextLocalProgramEncodingFailure {
         object_type: TeletextObjectType,
         offset: Option<TeletextObjectOffset>,
     },
+    /// A physical allocation never grants access to another selected resource.
+    #[error("object {target:?} is outside selected resource {selected:?}")]
+    ObjectSelection {
+        target: TeletextObjectIdentity,
+        selected: Option<TeletextRawDataPageNumber>,
+    },
+    /// Lookup uses the complete semantic identity and exact declared type.
+    #[error("object {target:?}, type {object_type:?} has no physical allocation")]
+    MissingObjectAllocation {
+        target: TeletextObjectIdentity,
+        object_type: TeletextObjectType,
+    },
+    /// Transitive counts still belong to the semantic service collector.
+    #[error("local program exceeds 127 direct {object_type:?} object invocations")]
+    InvocationCount { object_type: TeletextObjectType },
     /// Annex A.4 prohibits decreasing active screen addresses from this source.
     #[error("active position moves backwards from {previous:?} to {requested:?}")]
     ActivePositionOrder {
@@ -116,6 +133,49 @@ pub fn compile_teletext_local_program(
     program: &TeletextEnhancementProgram,
     max_commands: usize,
 ) -> Result<EncodedTeletextLocalProgram, TeletextLocalProgramEncodingError> {
+    compile(owner, program, max_commands, None)
+}
+
+/// Compile local commands with one immutable public/global object allocation map.
+///
+/// Each invocation must match the supplied display's resolved resource links and
+/// the complete allocated semantic target/type. Origin modifiers immediately
+/// precede their invocation; neither changes the caller's active position or
+/// DRCS latches. The wire number comes from checked allocation, never a masked
+/// host ID. Local definitions, resolved object geometry and complete dependency
+/// validation still require service composition. This does not encode the
+/// referenced object definition pages or grant publication authority.
+/// # Errors
+/// Returns the same atomic/located lowering errors as the context-free compiler,
+/// or a selection/allocation/direct-invocation-count failure. Local targets still
+/// require their owner's shared X26 definition allocation.
+pub fn compile_teletext_local_program_with_resource_objects(
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    max_commands: usize,
+    allocations: &TeletextResourceObjectAllocations,
+    links: TeletextResolvedObjectPageLinks,
+) -> Result<EncodedTeletextLocalProgram, TeletextLocalProgramEncodingError> {
+    compile(
+        owner,
+        program,
+        max_commands,
+        Some(ResourceContext { allocations, links }),
+    )
+}
+
+#[derive(Clone, Copy)]
+struct ResourceContext<'a> {
+    allocations: &'a TeletextResourceObjectAllocations,
+    links: TeletextResolvedObjectPageLinks,
+}
+
+fn compile(
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    max_commands: usize,
+    context: Option<ResourceContext<'_>>,
+) -> Result<EncodedTeletextLocalProgram, TeletextLocalProgramEncodingError> {
     if program.commands().len() > max_commands {
         return Err(TeletextLocalProgramEncodingError {
             owner,
@@ -128,7 +188,7 @@ pub fn compile_teletext_local_program(
     let mut state = LoweringState::new();
     let mut payload_triplet_count = 0;
     for (ordinal, command) in program.commands().iter().enumerate() {
-        let words = state.lower(owner, ordinal, *command)?;
+        let words = state.lower(owner, ordinal, *command, context)?;
         payload_triplet_count += words.len;
         if payload_triplet_count >= MAX_TRIPLETS {
             return Err(located_error(
@@ -149,7 +209,7 @@ pub fn compile_teletext_local_program(
     state = LoweringState::new();
     let mut index = 0;
     for (ordinal, command) in program.commands().iter().enumerate() {
-        let words = state.lower(owner, ordinal, *command)?;
+        let words = state.lower(owner, ordinal, *command, context)?;
         for &value in &words.values[..words.len] {
             let body = &mut packet_bodies[index / TRIPLETS_PER_PACKET];
             let offset = 1 + (index % TRIPLETS_PER_PACKET) * 3;
@@ -204,6 +264,7 @@ struct LoweringState {
     active_position: (u8, u8),
     global_s1: Option<u8>,
     normal_s1: Option<u8>,
+    invocations: [u8; 3],
 }
 
 impl LoweringState {
@@ -212,6 +273,7 @@ impl LoweringState {
             active_position: (0, 0),
             global_s1: None,
             normal_s1: None,
+            invocations: [0; 3],
         }
     }
 
@@ -220,6 +282,7 @@ impl LoweringState {
         owner: TeletextPageAddress,
         ordinal: usize,
         command: TeletextEnhancementCommand,
+        context: Option<ResourceContext<'_>>,
     ) -> Result<CommandWords, TeletextLocalProgramEncodingError> {
         let value = match command {
             TeletextEnhancementCommand::SetPosition { position } => {
@@ -259,9 +322,36 @@ impl LoweringState {
                 object_type,
                 offset,
             } => {
-                return Err(located_error(
-                    owner,
-                    ordinal,
+                return self.invoke(owner, ordinal, target, object_type, offset, context);
+            }
+        };
+        Ok(CommandWords::one(value))
+    }
+
+    fn invoke(
+        &mut self,
+        owner: TeletextPageAddress,
+        ordinal: usize,
+        target: TeletextObjectIdentity,
+        object_type: TeletextObjectType,
+        offset: Option<TeletextObjectOffset>,
+        context: Option<ResourceContext<'_>>,
+    ) -> Result<CommandWords, TeletextLocalProgramEncodingError> {
+        let fail = |reason| located_error(owner, ordinal, reason);
+        let Some((context, resource)) = context.zip(target.resource()) else {
+            return Err(fail(
+                TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
+                    target,
+                    object_type,
+                    offset,
+                },
+            ));
+        };
+        let (selected, scope) = match target.scope() {
+            TeletextObjectScope::Public => (context.links.public, 0x10),
+            TeletextObjectScope::Global => (context.links.global, 0x18),
+            TeletextObjectScope::Local => {
+                return Err(fail(
                     TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
                         target,
                         object_type,
@@ -270,7 +360,44 @@ impl LoweringState {
                 ));
             }
         };
-        Ok(CommandWords::one(value))
+        if selected != Some(resource.page()) {
+            return Err(fail(TeletextLocalProgramEncodingFailure::ObjectSelection {
+                target,
+                selected,
+            }));
+        }
+        let allocation = context
+            .allocations
+            .lookup(target, object_type)
+            .ok_or_else(|| {
+                fail(
+                    TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
+                        target,
+                        object_type,
+                    },
+                )
+            })?;
+        let (type_index, type_code) = match object_type {
+            TeletextObjectType::Active => (0, 1),
+            TeletextObjectType::Adaptive => (1, 2),
+            TeletextObjectType::Passive => (2, 3),
+        };
+        if self.invocations[type_index] == 127 {
+            return Err(fail(TeletextLocalProgramEncodingFailure::InvocationCount {
+                object_type,
+            }));
+        }
+        self.invocations[type_index] += 1;
+        let [low, high] = allocation.object_number().to_le_bytes();
+        let invocation = word(
+            0x20 | scope | (low >> 7) | (high << 1),
+            0x10 | type_code,
+            low & 0x7f,
+        );
+        Ok(offset.map_or_else(
+            || CommandWords::one(invocation),
+            |offset| CommandWords::two(word(40 + offset.row(), 16, offset.column()), invocation),
+        ))
     }
 
     fn move_to(

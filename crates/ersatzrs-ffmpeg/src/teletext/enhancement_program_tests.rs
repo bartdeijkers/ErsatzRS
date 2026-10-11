@@ -3,7 +3,8 @@
 use ersatzrs_domain::*;
 
 use super::{
-    compile_teletext_local_program, TeletextLocalProgramEncodingError,
+    allocate_teletext_resource_objects, compile_teletext_local_program,
+    compile_teletext_local_program_with_resource_objects, TeletextLocalProgramEncodingError,
     TeletextLocalProgramEncodingFailure,
 };
 
@@ -499,4 +500,324 @@ fn drcs_selector_and_invocation_preserve_order_across_packet_boundary() {
     assert_eq!(actual[12], (40, 24, 0x1f));
     assert_eq!(actual[13], (8, 13, 47));
     assert!(actual[14..].iter().all(|word| *word == (63, 31, 7)));
+}
+
+fn object_resource(global: bool, s1: u8) -> TeletextResourceIdentity {
+    TeletextResourceIdentity::new(
+        if global {
+            TeletextResourceKind::Gpop
+        } else {
+            TeletextResourceKind::Pop
+        },
+        TeletextRawDataPageNumber::new(8, if global { 0xa1 } else { 0xa0 }).unwrap(),
+        TeletextResourceSubpageIndex::new(s1).unwrap(),
+    )
+    .unwrap()
+}
+
+fn object_target(resource: TeletextResourceIdentity, id: u16) -> TeletextObjectIdentity {
+    if resource.kind() == TeletextResourceKind::Gpop {
+        TeletextObjectIdentity::global(resource, TeletextObjectId::new(id)).unwrap()
+    } else {
+        TeletextObjectIdentity::public(resource, TeletextObjectId::new(id)).unwrap()
+    }
+}
+
+fn object_catalog(
+    resource: TeletextResourceIdentity,
+    kind: TeletextObjectType,
+    count: u16,
+) -> TeletextEnhancementObjectCatalog {
+    TeletextEnhancementObjectCatalog::new(
+        (0_u16..count)
+            .map(|id| TeletextEnhancementObjectDefinition {
+                identity: object_target(resource, 0xff00 + id),
+                object_type: kind,
+                program: program(vec![]),
+            })
+            .collect(),
+        TeletextObjectCatalogBudget {
+            max_objects: 32,
+            max_commands: 0,
+        },
+    )
+    .unwrap()
+}
+
+fn object_links() -> TeletextResolvedObjectPageLinks {
+    TeletextResolvedObjectPageLinks {
+        public: Some(object_resource(false, 0).page()),
+        global: Some(object_resource(true, 0).page()),
+    }
+}
+
+#[test]
+fn actual_resource_invocations_cover_all_types_scopes_s1_and_pointer_slots() {
+    for global in [false, true] {
+        for (type_code, kind) in [
+            (1_u8, TeletextObjectType::Active),
+            (2, TeletextObjectType::Adaptive),
+            (3, TeletextObjectType::Passive),
+        ] {
+            for s1 in 0_u8..16 {
+                let resource = object_resource(global, s1);
+                let catalog = object_catalog(resource, kind, 32);
+                let allocations = allocate_teletext_resource_objects(&catalog, &[], 32).unwrap();
+                for ordinal in 0_u8..32 {
+                    let input = program(vec![
+                        position(1, 8),
+                        TeletextEnhancementCommand::InvokeObject {
+                            target: object_target(resource, 0xff00 + u16::from(ordinal)),
+                            object_type: kind,
+                            offset: None,
+                        },
+                    ]);
+                    let before = input.clone();
+                    let output = compile_teletext_local_program_with_resource_objects(
+                        owner(),
+                        &input,
+                        2,
+                        &allocations,
+                        object_links(),
+                    )
+                    .unwrap();
+                    assert_eq!(input, before);
+                    let actual = words(output.packet_bodies());
+                    // Decode source/type/pointer packet/group/half independently.
+                    let (address, mode, data) = actual[1];
+                    assert_eq!((address >> 3) & 3, if global { 3 } else { 2 });
+                    assert_eq!(address & 4, 0);
+                    assert_eq!(address & 3, ordinal / 8);
+                    assert_eq!(mode, 16 + type_code);
+                    assert_eq!((data >> 5) & 3, (ordinal % 8) / 2);
+                    assert_eq!((data >> 4) & 1, ordinal % 2);
+                    assert_eq!(data & 15, s1);
+                    assert_eq!(actual[2], (63, 31, 7));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn origin_modifier_is_immediately_before_invocation_and_does_not_move_caller() {
+    let resource = object_resource(false, 15);
+    let kind = TeletextObjectType::Adaptive;
+    let catalog = object_catalog(resource, kind, 32);
+    let allocations = allocate_teletext_resource_objects(&catalog, &[], 32).unwrap();
+    for (row, column) in [(0, 0), (0, 71), (23, 0), (23, 71)] {
+        let input = program(vec![
+            position(4, 8),
+            at(8, drcs(TeletextDrcsTableScope::Global, 15, 1)),
+            TeletextEnhancementCommand::InvokeObject {
+                target: object_target(resource, 0xff1f),
+                object_type: kind,
+                offset: Some(TeletextObjectOffset::new(row, column).unwrap()),
+            },
+            at(8, drcs(TeletextDrcsTableScope::Global, 15, 47)),
+        ]);
+        let output = compile_teletext_local_program_with_resource_objects(
+            owner(),
+            &input,
+            4,
+            &allocations,
+            object_links(),
+        )
+        .unwrap();
+        assert_eq!(output.payload_triplet_count(), 6);
+        let actual = words(output.packet_bodies());
+        assert_eq!(
+            &actual[..6],
+            &[
+                (44, 4, 8),
+                (40, 24, 31),
+                (8, 13, 1),
+                (40 + row, 16, column),
+                (51, 18, 127),
+                (8, 13, 47)
+            ]
+        );
+    }
+}
+
+#[test]
+fn wrong_selected_resource_or_missing_exact_type_is_a_located_atomic_failure() {
+    let resource = object_resource(false, 1);
+    let catalog = object_catalog(resource, TeletextObjectType::Passive, 1);
+    let allocations = allocate_teletext_resource_objects(&catalog, &[], 1).unwrap();
+    let target = object_target(resource, 0xff00);
+    let input = program(vec![
+        position(1, 8),
+        TeletextEnhancementCommand::InvokeObject {
+            target,
+            object_type: TeletextObjectType::Passive,
+            offset: None,
+        },
+    ]);
+    let before = input.clone();
+    for selected in [None, Some(object_resource(true, 1).page())] {
+        let links = TeletextResolvedObjectPageLinks {
+            public: selected,
+            ..object_links()
+        };
+        let error = compile_teletext_local_program_with_resource_objects(
+            owner(),
+            &input,
+            2,
+            &allocations,
+            links,
+        )
+        .unwrap_err();
+        assert_eq!(error.owner, owner());
+        assert_eq!(error.location.unwrap().command, 1);
+        assert_eq!(
+            error.reason,
+            TeletextLocalProgramEncodingFailure::ObjectSelection { target, selected }
+        );
+    }
+    assert_eq!(input, before);
+    let input = program(vec![TeletextEnhancementCommand::InvokeObject {
+        target,
+        object_type: TeletextObjectType::Active,
+        offset: None,
+    }]);
+    let error = compile_teletext_local_program_with_resource_objects(
+        owner(),
+        &input,
+        1,
+        &allocations,
+        object_links(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
+            target,
+            object_type: TeletextObjectType::Active,
+        }
+    );
+    let missing = object_target(resource, 0xfe00);
+    let input = program(vec![TeletextEnhancementCommand::InvokeObject {
+        target: missing,
+        object_type: TeletextObjectType::Passive,
+        offset: None,
+    }]);
+    let error = compile_teletext_local_program_with_resource_objects(
+        owner(),
+        &input,
+        1,
+        &allocations,
+        object_links(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
+            target: missing,
+            object_type: TeletextObjectType::Passive,
+        }
+    );
+}
+
+#[test]
+fn context_never_invents_allocation_for_local_definitions() {
+    let allocations = allocate_teletext_resource_objects(
+        &object_catalog(object_resource(false, 0), TeletextObjectType::Active, 0),
+        &[],
+        0,
+    )
+    .unwrap();
+    let target = TeletextObjectIdentity::local(owner(), TeletextObjectId::new(65535));
+    let offset = Some(TeletextObjectOffset::new(23, 71).unwrap());
+    let input = program(vec![TeletextEnhancementCommand::InvokeObject {
+        target,
+        object_type: TeletextObjectType::Passive,
+        offset,
+    }]);
+    let error = compile_teletext_local_program_with_resource_objects(
+        owner(),
+        &input,
+        1,
+        &allocations,
+        object_links(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
+            target,
+            object_type: TeletextObjectType::Passive,
+            offset,
+        }
+    );
+}
+
+#[test]
+fn direct_invocation_limit_and_inserted_origin_words_are_counted_separately() {
+    let resource = object_resource(true, 0);
+    let kind = TeletextObjectType::Passive;
+    let allocations =
+        allocate_teletext_resource_objects(&object_catalog(resource, kind, 1), &[], 1).unwrap();
+    let command = TeletextEnhancementCommand::InvokeObject {
+        target: object_target(resource, 0xff00),
+        object_type: kind,
+        offset: None,
+    };
+    let input = program(vec![command; 127]);
+    let output = compile_teletext_local_program_with_resource_objects(
+        owner(),
+        &input,
+        128,
+        &allocations,
+        object_links(),
+    )
+    .unwrap();
+    assert_eq!(output.payload_triplet_count(), 127);
+    let input = program(vec![command; 128]);
+    let error = compile_teletext_local_program_with_resource_objects(
+        owner(),
+        &input,
+        128,
+        &allocations,
+        object_links(),
+    )
+    .unwrap_err();
+    assert_eq!(error.location.unwrap().command, 127);
+    assert_eq!(
+        error.reason,
+        TeletextLocalProgramEncodingFailure::InvocationCount { object_type: kind }
+    );
+    let command = TeletextEnhancementCommand::InvokeObject {
+        target: object_target(resource, 0xff00),
+        object_type: kind,
+        offset: Some(TeletextObjectOffset::new(0, 0).unwrap()),
+    };
+    let mut commands = vec![position(1, 8)];
+    commands.extend(vec![command; 103]);
+    let input = program(commands.clone());
+    let output = compile_teletext_local_program_with_resource_objects(
+        owner(),
+        &input,
+        105,
+        &allocations,
+        object_links(),
+    )
+    .unwrap();
+    assert_eq!(output.payload_triplet_count(), 207);
+    assert_eq!(output.packet_bodies().len(), 16);
+    commands.push(command);
+    let input = program(commands);
+    let error = compile_teletext_local_program_with_resource_objects(
+        owner(),
+        &input,
+        105,
+        &allocations,
+        object_links(),
+    )
+    .unwrap_err();
+    assert_eq!(error.location.unwrap().command, 104);
+    assert_eq!(
+        error.reason,
+        TeletextLocalProgramEncodingFailure::PayloadCapacity
+    );
 }
