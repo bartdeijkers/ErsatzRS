@@ -164,6 +164,11 @@ release section when tagging a release.
   side effects, preserving raw budgets, pointers, source ordinals and both DRCS
   latches. Other row-zero lowering remains required. Document native MOT versus
   X26 foreign-default realization obligations without weakening owner checks.
+  Preserve native no-X26 default activation, original sparse owners and actual
+  page/magazine declaration presence through the shared packet writer. Reject
+  X26-dependent inputs with located diagnostics; retain the mixed nested-resource
+  conformance oracle despite the known libzvbi X27/4 decoder limitation. Whole
+  service generation and full client/editor acceptance remain open.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

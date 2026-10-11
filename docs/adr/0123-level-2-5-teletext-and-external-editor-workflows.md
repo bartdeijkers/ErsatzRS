@@ -221,6 +221,18 @@ physical identities and prove every affected glyph, attribute, charset and
 screen/row plane, including attribute-only contributions. Compatibility-only X26
 also needs this proof. Existing collision-only carriers do not satisfy it.
 No cloned semantic owner or selected-link exemption is an encoding strategy.
+The native page packet boundary now retains absent local X26, original sparse
+default identities and actual page X27/X28 declarations. Return an original
+magazine M29 separately; do not promote it to an invented page override. Reject
+any present local program, including an empty one, and locate base replacements
+requiring X26 before returning bytes. This reuses the checked fallback/header/
+editorial-link writer and preserves the old encoder's exact packet sequence.
+MOT/resource inventory, complete service generation and admission remain separate.
+Independent libzvbi 0.2.42 evidence must distinguish native root activation from
+the mixed foreign-default/nested-selected case: its known shifted X27/4 parser
+misreads the correct link and rolls back the whole enhancement. Preserve that
+case's normative bytes and positive oracle; decoder-specific wire changes do
+not establish standards conformance or acceptance.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

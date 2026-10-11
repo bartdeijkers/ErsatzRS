@@ -26,6 +26,7 @@ mod lift;
 mod local_object_program;
 mod main_composition;
 mod mot;
+mod native_default_page;
 mod normalized_main_program;
 mod object_allocation;
 mod object_pages;
@@ -53,6 +54,7 @@ use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 pub use augmented_origin_comparison::*;
 pub use augmented_origin_compilation::*;
 pub use augmented_origin_program::*;
+pub use native_default_page::*;
 pub use normalized_main_program::*;
 pub use origin_carrier::*;
 pub use origin_carrier_placement::*;
@@ -238,6 +240,8 @@ mod local_object_runtime_tests;
 #[cfg(test)]
 mod mot_tests;
 #[cfg(test)]
+mod native_default_page_tests;
+#[cfg(test)]
 mod object_allocation_tests;
 #[cfg(test)]
 mod object_pages_tests;
@@ -246,6 +250,9 @@ mod row_zero_lowering_tests;
 // Intentional opt-in Linux x64 decoder-ABI calibration, not platform acceptance.
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod object_runtime_tests;
+// Same opt-in Linux x64 decoder-ABI exception as the resource/object probes.
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod native_default_runtime_tests;
 #[cfg(test)]
 mod physical_inventory_tests;
 #[cfg(test)]

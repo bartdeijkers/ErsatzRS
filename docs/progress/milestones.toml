@@ -987,7 +987,27 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
-The shared lowerer now elides only SetPosition(0,0) at an already-identical enhanced AP, emitting
+Native display packets now preserve absent X26, sparse original defaults, actual X27/X28
+presence and separately returned M29 through the existing packet writer. Unknown owners,
+present local programs and X26-dependent base replacements reject before output. Eight new
+tests pass (280e1ba1-d5e9-40ae-9330-baf82a0ea4ff); all534 unchanged teletext baseline tests
+remain valid from 1ee16c40-8a06-4773-ab3c-659ef7f1267d after independently reviewed mechanical
+metadata borrowing. The corrected new fixtures retain validation and original literal oracles.
+Native b2b82489-c621-4fb1-accd-df90c1326ba4 passes the sparse second-slot foreign A0 root despite
+X27 selecting A1 (A/C/SPACE) and local-X26 suppression (T/T/SPACE), but FAILS the unchanged
+nested-selected A/C/D conformance case under libzvbi0.2.42. This is one passing test plus
+one known failing test, not a green suite: its shifted X27/4 parser misreads8A1 as358 and rolls
+back the whole enhancement. Normative bytes, frozen helpers and mixed request98d8416f remain
+unchanged; the new root request2759c8a3 and replay are in the interchange reference. Pinned
+imager has no MOT-default/X27-selected-resource handling and cannot provide this proof.
+Eight old resource-object native cases pass (3fcd07e7-dfb5-4821-b738-a50c658a4a64); three
+relevant imager tests pass (fa918e08-cece-4492-b651-662df4e35b88), including all6 row-zero
+cases and normalized Unicode/Active. Final strict FFmpeg all-target Clippy, formatting,
+progress/new-allow checks and independent review pass. Prior architecture evidence remains
+valid; boundary/dependencies/app/admin and all6 milestone statuses/dependencies/acceptance
+are unchanged. Complete service generation/inventory, foreign X26 realization, suitable mixed
+decoding and full standards/client/editor/localized preview/publication acceptance remain open.
+Earlier evidence follows unchanged: The shared lowerer now elides only SetPosition(0,0) at an already-identical enhanced AP, emitting
 no colour/compatibility word and preserving both DRCS latches and every raw command bound.
 Zero-output commands have no command-position/timing record; subsequent authored ordinals and
 actual definition pointers remain exact. Eight new tests cover termination-only bytes, all3types/

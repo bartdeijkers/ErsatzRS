@@ -1312,6 +1312,13 @@ A bounded compiled-page inventory fence now rejects exact display/resource heade
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,
 and establish completeness/lifecycle before activation or publication.
+Native display packet encoding now preserves absent local X26 and exact sparse
+MOT-default owners, actual X27/X28 presence and separately returned original M29.
+Any present local program or base replacement requiring X26 rejects before output;
+legacy bytes remain unchanged. Prove native root activation separately from the
+mixed foreign-root/nested-selected positive case blocked by the known libzvbi
+0.2.42 X27/4 parser defect. Keep normative bytes/oracles; next supply complete
+service inventory/generation and foreign realization when X26 is required.
 Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
 invocations and prove exact pixels/native
 offscreen rendering and isolated invalid-glyph fallback. X27 decoding limitations

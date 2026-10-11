@@ -1,6 +1,7 @@
 use ersatzrs_domain::{
-    TeletextLanguage, TeletextNavigationRole, TeletextPageAddress, TeletextPageDraft,
-    TeletextPageKind, TeletextPageNumber, TeletextPageSetDraft, TELETEXT_ROWS,
+    TeletextLanguage, TeletextLevel25PresentationDefaults, TeletextNavigationRole,
+    TeletextPageAddress, TeletextPageDraft, TeletextPageKind, TeletextPageNumber,
+    TeletextPageSetDraft, TeletextX27Level25Links, TELETEXT_ROWS,
 };
 
 use super::{layout, presentation, TeletextEncodingError, TeletextEncodingRegion};
@@ -113,6 +114,37 @@ pub fn encode_teletext_page(
                 address: page.address,
             }
         })?;
+    // Keep the legacy explicit Latin region declaration: national header bits
+    // alone can select Czech or Turkish under a receiver's country default.
+    encode_compiled_page(
+        page,
+        &compiled,
+        &PagePacketMetadata {
+            presentation: Some(&presentation),
+            compositional_links: None,
+            enhancements: LegacyEnhancements::Emit,
+        },
+    )
+}
+
+pub(super) enum LegacyEnhancements {
+    Emit,
+    Omit,
+}
+
+/// Exact packet presence, independent of effective receiver fallback metadata.
+pub(super) struct PagePacketMetadata<'a> {
+    pub presentation: Option<&'a TeletextLevel25PresentationDefaults>,
+    pub compositional_links: Option<&'a TeletextX27Level25Links>,
+    pub enhancements: LegacyEnhancements,
+}
+
+/// Share header, editorial links and fallback rows between both authored paths.
+pub(super) fn encode_compiled_page(
+    page: &TeletextPageDraft,
+    compiled: &layout::Layout,
+    metadata: &PagePacketMetadata<'_>,
+) -> Result<EncodedTeletextPage, TeletextEncodingError> {
     let subtitle = page.kind == TeletextPageKind::Subtitle;
     let mut rows = compiled.rows.map(|row| row.map(odd_parity));
     let address = page.address;
@@ -152,32 +184,24 @@ pub fn encode_teletext_page(
             subtitle,
         ));
     }
-    // X/28 makes the Latin region explicit. Header national bits alone can
-    // otherwise select Czech or Turkish according to a receiver's local default.
-    units.push(data_unit(
-        address.page.wire_magazine(),
-        28,
-        &presentation::encode_presentation(&presentation),
-        subtitle,
-    ));
-    let mut enhancements = compiled.legacy_enhancements();
-    enhancements.push(layout::triplet(63, 31, 0));
-    for (designation, triplets) in (0_u8..16).zip(enhancements.chunks(13)) {
-        let mut bytes = [0; 40];
-        bytes[0] = hamming_8_4(designation);
-        for (index, target) in bytes[1..].chunks_exact_mut(3).enumerate() {
-            let value = triplets
-                .get(index)
-                .copied()
-                .unwrap_or_else(|| layout::triplet(63, 31, 0));
-            target.copy_from_slice(&hamming_24_18(value));
-        }
+    if let Some(links) = metadata.compositional_links {
         units.push(data_unit(
             address.page.wire_magazine(),
-            26,
-            &bytes,
+            27,
+            &super::encode_teletext_compositional_links(address, links),
             subtitle,
         ));
+    }
+    if let Some(defaults) = metadata.presentation {
+        units.push(data_unit(
+            address.page.wire_magazine(),
+            28,
+            &presentation::encode_presentation(defaults),
+            subtitle,
+        ));
+    }
+    if matches!(metadata.enhancements, LegacyEnhancements::Emit) {
+        append_legacy_enhancements(page, compiled, &mut units);
     }
     // Transmit blank body rows too: no stale pixels survive an authored update.
     for (packet, row) in (1_u8..25).zip(&rows[1..]) {
@@ -194,6 +218,32 @@ pub fn encode_teletext_page(
         language: page.language.clone(),
         units,
     })
+}
+
+fn append_legacy_enhancements(
+    page: &TeletextPageDraft,
+    compiled: &layout::Layout,
+    units: &mut Vec<[u8; 46]>,
+) {
+    let mut enhancements = compiled.legacy_enhancements();
+    enhancements.push(layout::triplet(63, 31, 0));
+    for (designation, triplets) in (0_u8..16).zip(enhancements.chunks(13)) {
+        let mut bytes = [0; 40];
+        bytes[0] = hamming_8_4(designation);
+        for (index, target) in bytes[1..].chunks_exact_mut(3).enumerate() {
+            let value = triplets
+                .get(index)
+                .copied()
+                .unwrap_or_else(|| layout::triplet(63, 31, 0));
+            target.copy_from_slice(&hamming_24_18(value));
+        }
+        units.push(data_unit(
+            page.address.page.wire_magazine(),
+            26,
+            &bytes,
+            page.kind == TeletextPageKind::Subtitle,
+        ));
+    }
 }
 
 // EN 300 706 annex A.1: mFF with a non-wildcard subcode closes a page without

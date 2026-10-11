@@ -622,6 +622,73 @@ calls, compatibility-only suppression, wrong-link rejection, unchanged fallback,
 complete typed/structural/temporal comparisons and independent decoding. These
 paths and their whole-service transport/publication acceptance remain open.
 
+### Native default display packets
+
+`encode_teletext_native_default_page` consumes one immutable semantic service and
+exact display page/subcode. Its owned result preserves original sparse default
+identities, header/kind/language, editorial links and all fallback rows without
+inventing local X26. Only actual page declarations emit X27/4 and X28/0. Original
+M29/0 is returned separately, including when a page declaration overrides it.
+Missing owners, any present local program (even empty) and a first base replacement
+requiring X26 reject before output with located diagnostics. These are routing
+conditions for this primitive, not accepted limitations on authored Level 2.5.
+Reuse the ordinary packet writer; the legacy encoder's units remain identical.
+This primitive does not generate MOT/resources or certify complete service
+inventory, generation, transport scheduling, admission or publication.
+
+Eight new tests pass (`280e1ba1-d5e9-40ae-9330-baf82a0ea4ff`), including an
+independent legacy-byte comparison across seven national options and three page
+kinds, sparse foreign defaults, actual declaration presence and failure locations.
+The first run passed all534 existing teletext tests plus seven new tests
+(`1ee16c40-8a06-4773-ab3c-659ef7f1267d`); its remaining new fixture needed an
+actual selected-resource catalog entry. That fixture is corrected without
+relaxing resource validation or its wire expectations. The final eight-test run
+is the evidence for the corrected fixtures; the unchanged534-test baseline is
+reused after independently verified mechanical metadata borrowing.
+
+Pinned Linux x64 libzvbi 0.2.42 independently passes two production root-only
+cases: sparse second-slot Active default from original A0 despite actual X27/4
+selecting A1, with literal `A/C/SPACE` glyphs/colours; adding one production empty
+local X26 packet suppresses defaults and leaves `T/T/SPACE`. Native run
+`b2b82489-c621-4fb1-accd-df90c1326ba4` has **one passing test and one failing
+conformance test**, not a green suite. The unchanged mixed nested-selected case
+still expects `A/C/D`, but the known shifted X27/4 parser reads correct triplets
+`0x29445/0x0000c` as page358/mask1 instead of 8A1/mask3. Failed nested lookup
+restores the whole fallback page. Keep its normative bytes and positive oracle:
+neither a shifted-wire workaround nor a passing root-only case proves this case.
+Pinned teletextimager 0.2.0 has no MOT-default activation or selected X27 resource
+handling and cannot supply this proof unchanged. Suitable independent mixed-case
+decoding and actual client display/navigation remain open.
+
+Production root-only request SHA256:
+`2759c8a3b45f0df2fe6beab77a39b5af432369b4f89ebdf2b93a72add762c9cd`.
+The original mixed request remains exactly:
+`98d8416f14be48c760473a39e73f48b5934fcb91e8478a3ea6478fd7b7262db2`.
+Direct replay passes the two root-only cases and fails the original mixed case.
+The unchanged object helper remains
+`d8d7001f6df374614b95c59a413b07f60af4038089bed1811c12abbe2cf6c6f1`;
+its unchanged resource/ABI/version helper remains
+`615bc0ceb7b24738e7cb7e8a6df076c8b58eb9968ecdc7e07d226f76f5d7a76d`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_NATIVE_DEFAULT_ROOT_FIXTURE=<root-request.json> \
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(native_foreign_mot_root_only_and_local_suppression_decode)'
+python3 scripts/e2e/teletext-object-decoder.py < <root-request.json>
+```
+
+Export the unchanged mixed conformance request with
+`ERSATZRS_TELETEXT_TEST_NATIVE_DEFAULT_FIXTURE` and
+`test(native_foreign_mot_default_and_nested_selected_resource_decode)`; this
+explicit opt-in test fails under 0.2.42 and is not acceptance evidence.
+Eight existing resource-object native cases pass
+(`3fcd07e7-dfb5-4821-b738-a50c658a4a64`). Three relevant pinned-imager tests
+pass (`fa918e08-cece-4492-b651-662df4e35b88`), including the six row-zero
+implicit/explicit cases and normalized Unicode/Active oracle. Final strict FFmpeg
+all-target Clippy, workspace formatting and independent delta review pass.
+No crate boundary, dependency, application or admin source changed; prior
+architecture-lint evidence remains applicable. All milestones remain open.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

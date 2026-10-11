@@ -260,12 +260,19 @@ The shared lowerer now elides only exact already-at-AP `(0,0)` identity moves,
 without colour words or invented timing. Complete DVB bytes and dual-level cells
 match implicit positioning for all three object types. Nonidentity row-zero
 positions/reset normalization remain required; this is no full header acceptance.
-Foreign defaults need a native no-X26 activation path and a distinct X26 realization
-path: even compatibility-only X26 suppresses MOT roots. Explicit calls address only
+The native page packet primitive now preserves absent X26, original sparse defaults
+and actual X27/X28 presence, with original M29 returned separately. It rejects local
+program presence and locates fallback replacements requiring X26 before output;
+legacy packet bytes remain unchanged. Complete native service generation and a
+distinct X26 realization path remain required: even compatibility-only X26
+suppresses MOT roots. Explicit calls address only
 the selected resource; retain strict owner checks. Materialize foreign contributions
 with original root/instance provenance and prove attribute-only/charset/row/screen
 plane effects as well as all selected glyphs, rather than cloning semantic owners.
 Collision-only carrier closure is insufficient; all contributions remain required.
+Keep the mixed foreign-root/nested-selected positive oracle intact despite the
+known libzvbi 0.2.42 X27/4 parsing defect. Native root activation and suppression
+evidence cannot certify this mixed case or whole-service/client acceptance.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone
