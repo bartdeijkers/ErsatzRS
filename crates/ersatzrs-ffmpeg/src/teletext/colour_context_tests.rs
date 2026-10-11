@@ -499,3 +499,230 @@ fn non_active_colour_declarations_are_not_contributors_or_readiness_validation()
         assert_eq!(actual.row_colours(), &[colour(0); 25]);
     }
 }
+
+fn catalog(
+    definitions: Vec<TeletextEnhancementObjectDefinition>,
+) -> TeletextEnhancementObjectCatalog {
+    TeletextEnhancementObjectCatalog::new(
+        definitions,
+        TeletextObjectCatalogBudget {
+            max_objects: 16,
+            max_commands: 1024,
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn supplied_program_colour_context_matches_selected_local_defaults_and_empty() {
+    let target = public(0xffff);
+    let mut selections = [None; 4];
+    selections[3] = Some(TeletextDefaultObjectSelection {
+        target,
+        object_type: TeletextObjectType::Active,
+    });
+    for main in [None, Some(vec![]), Some(vec![screen(12), row(4, 3, true)])] {
+        let service = service(
+            main,
+            vec![definition(
+                target,
+                TeletextObjectType::Active,
+                vec![screen(6)],
+            )],
+            selections,
+            Some(defaults(7, 2)),
+            None,
+        );
+        let before = service.clone();
+        let (_, selected) = service.effective_program(owner()).unwrap();
+        let original = resolve(&service, owner(), 4).unwrap();
+        let supplied = super::colour_context::resolve_teletext_program_colour_context(
+            &service,
+            owner(),
+            &selected,
+            service.objects(),
+            4,
+        )
+        .unwrap();
+        assert_eq!(supplied, original);
+        assert_eq!(service, before);
+    }
+}
+
+#[test]
+fn supplied_main_planes_use_original_presentation_defaults_without_reselection() {
+    let service = service(Some(vec![]), vec![], [None; 4], Some(defaults(6, 2)), None);
+    let before = service.clone();
+    let supplied = program(vec![screen(12), row(7, 3, false)]);
+    let context = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        owner(),
+        &supplied,
+        service.objects(),
+        2,
+    )
+    .unwrap();
+    assert_eq!(context.screen_colour(), colour(12));
+    assert_eq!(context.row_colour(6), Some(colour(12)));
+    assert_eq!(context.row_colour(7), Some(colour(3)));
+    assert_eq!(context.row_colour(8), Some(colour(12)));
+    let original = resolve(&service, owner(), 0).unwrap();
+    assert_eq!(original.screen_colour(), colour(6));
+    assert_eq!(original.row_colours(), &[colour(2); 25]);
+    assert_ne!(context, original);
+    assert_eq!(service, before);
+}
+
+#[test]
+fn supplied_active_catalogue_controls_actual_planes_and_repeated_exact_budget() {
+    let service = simple(vec![]);
+    let target = local(0xffff);
+    let supplied_catalog = catalog(vec![definition(
+        target,
+        TeletextObjectType::Active,
+        vec![screen(13), row(0, 4, false)],
+    )]);
+    let supplied = program(vec![
+        position(3, 0),
+        invoke(target, TeletextObjectType::Active),
+        invoke(target, TeletextObjectType::Active),
+    ]);
+    let before = (service.clone(), supplied.clone(), supplied_catalog.clone());
+    let context = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        owner(),
+        &supplied,
+        &supplied_catalog,
+        7,
+    )
+    .unwrap();
+    assert_eq!(context.screen_colour(), colour(13));
+    assert_eq!(context.row_colour(2), Some(colour(13)));
+    assert_eq!(context.row_colour(3), Some(colour(4)));
+    assert_eq!(context.row_colour(4), Some(colour(13)));
+    let short = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        owner(),
+        &supplied,
+        &supplied_catalog,
+        6,
+    )
+    .unwrap_err();
+    assert_eq!(short.reason, Failure::CommandBudget { maximum: 6 });
+    assert_eq!(
+        short.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 2
+        })
+    );
+    assert_eq!((service, supplied, supplied_catalog), before);
+}
+
+#[test]
+fn supplied_active_colour_errors_preserve_actual_body_and_shifted_root_ordinals() {
+    let service = simple(vec![]);
+    let target = local(0xffff);
+    let supplied_catalog = catalog(vec![definition(
+        target,
+        TeletextObjectType::Active,
+        vec![row(2, 4, false)],
+    )]);
+    let supplied = program(vec![
+        screen(3),
+        position(23, 0),
+        invoke(target, TeletextObjectType::Active),
+    ]);
+    let error = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        owner(),
+        &supplied,
+        &supplied_catalog,
+        4,
+    )
+    .unwrap_err();
+    assert_eq!(error.reason, Failure::RowGeometry { row: 25 });
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: Some(target),
+            command: 0
+        })
+    );
+    assert_eq!(error.invocation, Some(2));
+    let missing = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        owner(),
+        &supplied,
+        service.objects(),
+        4,
+    )
+    .unwrap_err();
+    assert_eq!(missing.reason, Failure::MissingDefinition { target });
+    assert_eq!(
+        missing.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 2
+        })
+    );
+    assert_eq!(missing.invocation, Some(2));
+}
+
+#[test]
+fn supplied_colour_guard_rejects_unknown_owner_and_mistyped_active_definition() {
+    let service = simple(vec![]);
+    let target = local(0xffff);
+    let supplied = program(vec![invoke(target, TeletextObjectType::Active)]);
+    let supplied_catalog = catalog(vec![definition(
+        target,
+        TeletextObjectType::Passive,
+        vec![screen(12)],
+    )]);
+    let raw_budget = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        owner(),
+        &supplied,
+        &supplied_catalog,
+        0,
+    )
+    .unwrap_err();
+    assert_eq!(raw_budget.reason, Failure::CommandBudget { maximum: 0 });
+    assert_eq!(raw_budget.location, None);
+    let mistyped = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        owner(),
+        &supplied,
+        &supplied_catalog,
+        2,
+    )
+    .unwrap_err();
+    assert_eq!(
+        mistyped.reason,
+        Failure::DefinitionType {
+            target,
+            actual: TeletextObjectType::Passive
+        }
+    );
+    assert_eq!(
+        mistyped.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 0
+        })
+    );
+    assert_eq!(mistyped.invocation, Some(0));
+    let mut foreign = owner();
+    foreign.subcode = TeletextSubcode::new(0x1235).unwrap();
+    let unknown = super::colour_context::resolve_teletext_program_colour_context(
+        &service,
+        foreign,
+        &supplied,
+        &supplied_catalog,
+        0,
+    )
+    .unwrap_err();
+    assert_eq!(unknown.owner, foreign);
+    assert_eq!(unknown.reason, Failure::UnknownOwner);
+    assert_eq!(unknown.location, None);
+}

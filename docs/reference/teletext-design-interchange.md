@@ -341,6 +341,33 @@ and IDs do not certify intent generation, positions or instances. Full spatial
 correspondence, object/default-owner authorization, geometry, physical evidence
 and whole-page equivalence remain separate required gates.
 
+`replay_teletext_physical_display` consumes a composition, its same immutable
+original service and the actual supplied program/catalog under explicit
+collection bounds. It shares the original post-spatial glyph/attribute/charset/
+intent/DRCS/geometry execution and display/colour resolvers. Base cells, spacing
+footprints and colour planes are borrowed from the original composition; layout
+and Base-compatible insertion never run again. The owned diagnostic exposes
+each actual projection while leaving the original target untouched.
+An actual-program colour prepass validates the screen/row plane invariant before
+spatial projection. The retained Base and spacing footprints were prepared with
+the original planes, so changed effective planes are rejected. Original service
+presentation defaults remain authoritative, while direct Active bodies are read
+from the actual catalog. This is a replay boundary; authored colour changes use
+a freshly composed original design.
+
+Failures distinguish physical `Main` ordinals from full object identity/body
+ordinals. Source/attribute/geometry pending remains visible. The original and
+physical projections may differ: the unnormalized Unicode/Active case still
+has that exact discrepancy. Matching page identities do not certify the
+service/composition pairing. Final packed-word evidence, whole-page comparison,
+selected links/default-owner realization, raster and publication remain open.
+
+Do not bypass selected-resource checks merely to pack synthesized MOT roots.
+The explicit invocation word has scope/type and N/S1, without a resource-page
+address. A default owned by a different original POP/GPOP page therefore needs
+proven materialization or another correct wire strategy. The existing composed
+factory rejection protects against calling the selected page's wrong object.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

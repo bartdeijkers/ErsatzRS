@@ -6,8 +6,8 @@
 
 use ersatzrs_domain::{
     TeletextColourReference, TeletextEffectivePresentation, TeletextEnhancementCommand,
-    TeletextEnhancementProgram, TeletextEnhancementSource, TeletextObjectIdentity,
-    TeletextObjectType, TeletextPageAddress, TeletextSemanticService,
+    TeletextEnhancementObjectCatalog, TeletextEnhancementProgram, TeletextEnhancementSource,
+    TeletextObjectIdentity, TeletextObjectType, TeletextPageAddress, TeletextSemanticService,
 };
 
 /// Static failure at an original command, without retaining authored content.
@@ -17,8 +17,13 @@ pub enum TeletextColourContextFailure {
     UnknownOwner,
     #[error("inspected main and direct Active commands exceed trusted budget {maximum}")]
     CommandBudget { maximum: usize },
-    #[error("object {target:?} has no definition in the semantic service")]
+    #[error("object {target:?} has no definition in the supplied catalogue")]
     MissingDefinition { target: TeletextObjectIdentity },
+    #[error("object {target:?} is {actual:?}, not the invoked Active type")]
+    DefinitionType {
+        target: TeletextObjectIdentity,
+        actual: TeletextObjectType,
+    },
     #[error("relative active position moves backwards from {previous:?} to {requested:?}")]
     ActivePositionOrder {
         previous: (u8, u8),
@@ -106,7 +111,42 @@ pub fn resolve_teletext_colour_context(
             TeletextColourContextFailure::UnknownOwner,
         )
     })?;
-    preflight(service, owner, &program, max_commands)?;
+    resolve_program(service, owner, &program, service.objects(), max_commands)
+}
+
+/// Reuse the original presentation defaults with the actual supplied program.
+///
+/// Only main and direct Active colour commands contribute, under the same bounded
+/// policy as the selected-service entry. Definitions come from the supplied checked
+/// catalogue, including newly materialized objects. This is a colour-plane guard,
+/// not full program, resource-link, geometry or publication admission. Callers must
+/// collect and validate the actual complete program separately.
+pub(super) fn resolve_teletext_program_colour_context(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    max_commands: usize,
+) -> Result<TeletextColourContext, TeletextColourContextError> {
+    if service.effective_presentation(owner).is_none() {
+        return Err(error(
+            owner,
+            None,
+            None,
+            TeletextColourContextFailure::UnknownOwner,
+        ));
+    }
+    resolve_program(service, owner, program, catalog, max_commands)
+}
+
+fn resolve_program(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    max_commands: usize,
+) -> Result<TeletextColourContext, TeletextColourContextError> {
+    preflight(catalog, owner, program, max_commands)?;
     let (default_screen, default_row) = match service.effective_presentation(owner) {
         Some(TeletextEffectivePresentation::Extension { defaults, .. }) => {
             (defaults.screen_colour, defaults.row_colour)
@@ -143,7 +183,7 @@ pub fn resolve_teletext_colour_context(
         } = *value
         {
             let row = u16::from(position.0) + offset.map_or(0, |offset| u16::from(offset.row()));
-            inspect_active(service, owner, target, command, row, &mut active)?;
+            inspect_active(catalog, owner, target, command, row, &mut active)?;
         }
     }
     let explicit_screen = main.screen.or(active.screen);
@@ -174,30 +214,36 @@ fn error(
 }
 
 fn definition(
-    service: &TeletextSemanticService,
+    catalog: &TeletextEnhancementObjectCatalog,
     owner: TeletextPageAddress,
     target: TeletextObjectIdentity,
     invocation: usize,
 ) -> Result<&TeletextEnhancementProgram, TeletextColourContextError> {
-    service
-        .objects()
+    let located = |reason| {
+        error(
+            owner,
+            Some(TeletextEnhancementSource {
+                object: None,
+                command: invocation,
+            }),
+            Some(invocation),
+            reason,
+        )
+    };
+    let definition = catalog
         .definition(target)
-        .map(|definition| &definition.program)
-        .ok_or_else(|| {
-            error(
-                owner,
-                Some(TeletextEnhancementSource {
-                    object: None,
-                    command: invocation,
-                }),
-                Some(invocation),
-                TeletextColourContextFailure::MissingDefinition { target },
-            )
-        })
+        .ok_or_else(|| located(TeletextColourContextFailure::MissingDefinition { target }))?;
+    if definition.object_type != TeletextObjectType::Active {
+        return Err(located(TeletextColourContextFailure::DefinitionType {
+            target,
+            actual: definition.object_type,
+        }));
+    }
+    Ok(&definition.program)
 }
 
 fn preflight(
-    service: &TeletextSemanticService,
+    catalog: &TeletextEnhancementObjectCatalog,
     owner: TeletextPageAddress,
     main: &TeletextEnhancementProgram,
     maximum: usize,
@@ -220,7 +266,7 @@ fn preflight(
             ..
         } = *value
         {
-            let body = definition(service, owner, target, command)?;
+            let body = definition(catalog, owner, target, command)?;
             remaining = remaining
                 .checked_sub(body.commands().len())
                 .ok_or_else(|| {
@@ -235,14 +281,14 @@ fn preflight(
 }
 
 fn inspect_active(
-    service: &TeletextSemanticService,
+    catalog: &TeletextEnhancementObjectCatalog,
     owner: TeletextPageAddress,
     target: TeletextObjectIdentity,
     invocation: usize,
     origin_row: u16,
     colours: &mut Colours,
 ) -> Result<(), TeletextColourContextError> {
-    let body = definition(service, owner, target, invocation)?;
+    let body = definition(catalog, owner, target, invocation)?;
     let mut position = (0, 0);
     for (command, value) in body.commands().iter().enumerate() {
         let location = TeletextEnhancementSource {

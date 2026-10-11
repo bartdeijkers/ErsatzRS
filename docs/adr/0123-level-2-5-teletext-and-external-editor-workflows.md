@@ -111,6 +111,22 @@ preflight, source checks and bitmap lookup share the original resolver's paths.
 This diagnostic does not certify placements, instances, complete object selection,
 geometry or publication. Physical projection and whole-page equivalence remain
 required before accepting generated carriers.
+Physical-display replay now shares the complete post-spatial glyph, attribute,
+charset, DRCS and geometry chain, plus display and colour resolution. It borrows
+the original composition's Base/footprints/colour planes without inserting
+fallback again, and retains its separate original target. Actual supplied main
+ordinals have physical diagnostic labels; exact object IDs/body ordinals survive.
+The caller must use the same immutable original service/composition. This is
+analysis, not final-word ordering, packing, equivalence or readiness authority.
+Before replay, resolve actual screen/row colours with the shared bounded prepass
+and require them to match those used to prepare the retained Base/footprints.
+Changed planes require a fresh design composition; they cannot silently reuse
+the original planes or supply evidence of physical equivalence.
+Default-root ownership still requires a proven physical strategy: an explicit
+POP/GPOP invocation contains scope/type and allocated N/S1, not a resource-page
+address. A selected-page mismatch must keep failing until materialization or
+another proven encoding preserves the original MOT target; authorization alone
+cannot fix receiver routing.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

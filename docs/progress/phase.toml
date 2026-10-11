@@ -1133,9 +1133,13 @@ Supplied-program replay now shares the bounded spatial walker and retains
 physical ordinals while original services keep their default-slot tags.
 Supplied DRCS replay now rechecks actual program/catalog sources and every DRCS
 dependency against original service links/bitmaps with explicit budgets.
-Next reuse full glyph/attribute/charset and display/colour execution on that
-actual trace, preserving source mappings and final packed-word evidence.
-Then realize Unicode/Active physical priority with the existing collector;
+Physical replay now shares the complete glyph/attribute/charset/DRCS/geometry
+and display/colour chain without reinserting fallback or replacing the target.
+Actual colour prepass checks the original Base/footprint plane invariant.
+Next bind final packed-word evidence and compare whole-page projections, then
+realize Unicode/Active physical priority with the existing collector. Explicit
+resource calls lack page addresses; default-owner preservation needs a proven
+encoding strategy rather than relaxing selected-page checks;
 full engine/client/editor/publication acceptance remains open.
 ADR 0123 requires authored Level 2.5 design/validation/encoding/publication/display,
 correct Level 1/1.5 fallback and actual QTeletextMaker TTI/sidecar interchange.

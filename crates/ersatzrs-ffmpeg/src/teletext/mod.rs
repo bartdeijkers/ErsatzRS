@@ -74,9 +74,10 @@ pub use local_object_program::{
     TeletextLocalObjectProgramEncodingError, TeletextLocalObjectProgramEncodingFailure,
 };
 pub use main_composition::{
-    compose_teletext_main_program, TeletextBaseCellCommandKind, TeletextMainComposition,
-    TeletextMainCompositionBudget, TeletextMainCompositionError, TeletextMainCompositionFailure,
-    TeletextMainCompositionSource,
+    compose_teletext_main_program, replay_teletext_physical_display, TeletextBaseCellCommandKind,
+    TeletextMainComposition, TeletextMainCompositionBudget, TeletextMainCompositionError,
+    TeletextMainCompositionFailure, TeletextMainCompositionSource, TeletextPhysicalDisplayReplay,
+    TeletextPhysicalDisplayReplayError, TeletextPhysicalDisplaySource,
 };
 pub use mot::{
     encode_teletext_mot_bodies, TeletextMotAllocationFailure, TeletextMotDefaultAllocation,

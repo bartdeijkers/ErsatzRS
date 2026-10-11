@@ -7,6 +7,9 @@ use super::main_composition::*;
 #[path = "raster_tests.rs"]
 mod raster_tests;
 
+#[path = "physical_replay_tests.rs"]
+mod physical_replay_tests;
+
 // Intentional opt-in Linux x64 public decoder-ABI calibration; all other native
 // platforms retain portable raster tests and separate platform/client gates.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

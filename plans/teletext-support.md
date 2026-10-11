@@ -200,6 +200,13 @@ actual main/body sources while retaining the
 original service's links and pixels. This covers new carrier IDs and shifted
 main ordinals without treating detached collected references as authority;
 placement, instance and full object/default-owner validation remain separate.
+Shared physical-display replay now executes the complete resolution chain on
+that actual program, retaining the original target separately and identifying
+physical main ordinals in diagnostics. Compare both whole-page projections;
+reject changed actual screen/row planes before reusing original Base/footprints.
+the current Unicode/Active discrepancy remains. Preserve original MOT owners
+through a proven encoding strategy: explicit resource calls carry no page
+address, so relaxing selected-page checks alone would route to the wrong page.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone

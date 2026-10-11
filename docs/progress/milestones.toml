@@ -987,6 +987,31 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Shared physical-display replay now consumes the actual supplied program/catalog with the
+original composition's Base/footprints/colour planes, reusing the entire post-spatial
+glyph/attribute/charset/intent/DRCS/geometry and display/colour chain without composing fallback
+again. Original targets stay separate; public failures distinguish physical main ordinals
+from full object/body sources. Seven new replay regressions prove the unchanged ActiveA-versus-current
+Local-pound discrepancy, no second merge, shifted main/new carrier DRCS with original bitmap,
+complete hidden dependency rejection, unresolved C2 writers and raw/expanded limits with immutable
+inputs. Actual screen/all25 row colours are checked against retained Base/footprint planes before
+spatial allocation; changed main/Active planes reject with screen/first-row diagnostics while
+equivalent explicit colours pass. Five further prepass tests cover original selection/defaults,
+actual Active catalog, budgets, source positions, missing owner and invalid definition types.
+All25 prepass/replay tests pass (07432374-3126-4ab7-9e05-b1ada4eb45ea); all447 selected FFmpeg
+teletext tests pass (84981125-24a1-4970-8fa0-213d100c8174). Strict FFmpeg all-target Clippy and
+workspace formatting pass; independent review of the final guard is clean.
+Packet encoding is unchanged; valid prior independent
+wire/pixel evidence is reused. Same immutable service/composition pairing is a caller invariant,
+not certified by matching owners. Original pending and physical pending remain separate facts.
+No final-word ordering, equivalence, raster, publication or full engine acceptance is claimed.
+An explicit POP/GPOP invocation carries scope/type+N/S1, not a resource-page address; the existing
+different-owner MOT-default packing rejection must remain until a proven physical strategy
+preserves the target. A bare selected-page exception would encode a wrong receiver target.
+Whole-page comparison/final-word evidence and actual normalization remain required next work;
+the correct Unicode/Active wire oracle remains failing. Milestone contracts/status/dependencies
+are unchanged. Earlier evidence follows unchanged:
+
 Supplied-program DRCS replay now independently collects the actual main/catalog under the
 original primary and explicit bounds, checks exact referenced operations and validates all
 DRCS dependencies, even when intent omits a reference. Normal/Global links and bitmaps remain
