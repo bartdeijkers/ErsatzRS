@@ -11,6 +11,7 @@ mod buffer;
 mod carousel;
 mod charset;
 mod clock;
+mod compositional;
 mod layout;
 mod lift;
 mod output;
@@ -33,6 +34,7 @@ pub use carousel::{TeletextCarousel, TeletextCarouselBatch, TeletextCarouselBatc
 pub use clock::{
     TeletextClockConfig, TeletextClockError, TeletextClockReport, TeletextClockValidator,
 };
+pub use compositional::encode_teletext_compositional_links;
 pub use lift::lift_teletext_v1_page_set;
 pub use output::{
     TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
@@ -116,6 +118,8 @@ pub enum TeletextEncodingError {
 mod buffer_tests;
 #[cfg(test)]
 mod clock_tests;
+#[cfg(test)]
+mod compositional_tests;
 #[cfg(test)]
 mod lift_tests;
 #[cfg(test)]

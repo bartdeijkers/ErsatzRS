@@ -24,7 +24,11 @@ aggregate ownership, budgets and effective dependencies. The native presentation
 body encoder now carries complete checked X28/0 or M29/0 fields; the existing v1
 encoder uses it with byte-identical declarations. A bounded, consuming v1 lift
 retains explicit page presentation and empty local-X26 presence before composition.
-MOT/X27 resolution, resolved display semantics, physical allocation, complete
+Checked X27/4 declarations retain fixed roles, exact targets, validity and masks;
+the semantic service checks their required Level 2.5 resource inventory. A native
+body encoder preserves those fields with independently checked packet coding.
+Default roots retain their original MOT resource independently of explicit links.
+MOT declarations/resolution, resolved display semantics, physical allocation, complete
 enhanced-service compilation and editor/publication workflows remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are
 reusable baseline evidence, not Level 2.5 acceptance.
@@ -111,6 +115,19 @@ Active objects may invoke adaptive/passive, adaptive may invoke passive, and
 passive may invoke none. Resource objects cannot invoke local definitions; local
 references retain exact page/subcode ownership. Resolve every declared target and
 type before traversing the effective page program.
+
+Preserve a complete X27/4 declaration separately from packet absence and resolved
+selection. An explicit FF/FFFF target retains its magazine; a real target's zero
+mask requires no subpages. Keep assigned level applicability and fixed GPOP/POP/
+GDRCS/DRCS roles. Check required Level 2.5 resource kind/page/S1 even when no
+effective command currently uses it. Encoder-reserved fields use a documented
+writer convention, not an invented universal input validity rule.
+
+Default-object roots keep their independently declared original MOT resource,
+checked catalog identity, scope and type. Do not rebind them to another X27-selected
+page. Only synthesized default roots bypass explicit-invocation link matching;
+local and nested calls retain their supplied-selection checks and shared budgets.
+The mixed-default/X27 nested-call policy still requires authored resolution proof.
 
 Collect DRCS references and charset-pair designations over all invoked programs
 under caller-owned work/output budgets and per-type invocation limits. Preserve

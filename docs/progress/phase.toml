@@ -1132,9 +1132,10 @@ palette/DRCS values, raw resource identities, ordered enhancement programs and
 checked object closure/reference collection, presentation declarations and the
 supplied-selection semantic service are implemented. Presentation packet-body
 encoding and bounded v1 lifting preserve explicit page/X26 presence and unchanged
-v1 bytes. Mixed-producer compiler convergence remains open. Preserve MOT/X27 masks,
-null/absent distinctions and independently owned defaults through audited resolution.
-Authored MOT/X27 resolution,
+v1 bytes. Mixed-producer compiler convergence remains open. Checked X27/4 declarations
+and body coding retain masks, null/absent distinctions and required inventory.
+Default roots retain their independently declared original resource owner.
+Authored MOT declarations/selection, used-mask membership and audited edge policies,
 final display/object semantics, physical service allocation, the enhanced compiler
 and operational draft/publication workflow remain open.
 The editor normalizes

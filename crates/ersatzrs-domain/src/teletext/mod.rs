@@ -8,6 +8,7 @@
 //! semantics, physical resource allocation or Level 2.5 encoding readiness.
 
 mod charset_values;
+mod compositional_links;
 mod drcs_resources;
 mod enhancement_objects;
 mod enhancement_program;
@@ -23,6 +24,7 @@ mod service;
 mod source;
 
 pub use charset_values::*;
+pub use compositional_links::*;
 pub use drcs_resources::*;
 pub use enhancement_objects::*;
 pub use enhancement_program::*;
@@ -51,6 +53,9 @@ mod drcs_resources_tests;
 
 #[cfg(test)]
 mod charset_values_tests;
+
+#[cfg(test)]
+mod compositional_links_tests;
 
 #[cfg(test)]
 mod enhancement_values_tests;

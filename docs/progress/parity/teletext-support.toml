@@ -19,7 +19,9 @@ DRCS dependency validation, ordered programs and bounded object-derived referenc
 collection, presentation declarations and a supplied-selection semantic service
 are preparatory. Presentation packet-body encoding and bounded v1 lifting retain
 explicit page/X26 presence with unchanged v1 bytes; they do not establish mixed
-producer convergence. Authored MOT/X27 resolution, final object/display semantics,
+producer convergence. Checked X27/4 declarations/body coding retain masks and
+required inventory; default roots retain their original resource owner. Authored
+MOT resolution, used-mask membership, final object/display semantics,
 physical allocation, native enhanced encoding and editor interfaces remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua controls remain preparatory.

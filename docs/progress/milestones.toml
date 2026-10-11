@@ -987,6 +987,36 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 authored X27/inventory checkpoint: private checked X27/4 declarations
+preserve four fixed roles, explicit real/null targets and null magazine, assigned
+validities and every 16-bit S1 requirement mask. Strict map-only JSON rejects
+unknown/duplicate/positional/missing fields and invalid null masks or reserved
+address purposes, even for zero-mask and Level-3.5-only metadata.
+The native complete body encoder retains role bits, compatibility bits, target
+nibbles, XOR magazine mapping and masks; canonical extra Level 3.5 null links and
+zero reserved fields are documented writer conventions. Independent parity/data
+position decoding checks literal words, all magazine pairs, all masks, assigned
+validities, page nibbles and distinct roles. No Level 3.5 resource is authored.
+Exact service page metadata now owns the optional declaration. Every required
+Level 2.5 kind/page/S1 must exist in the already bounded resource catalog, even
+without effective references; null, zero and Level-3.5-only metadata invent no
+inventory. Default roots retain their original MOT resource rather than being
+rebound to explicit selected links. Catalog scope/type/identity checks and shared
+traversal budgets remain; local and nested explicit invocation checks are intact.
+All 375 focused teletext tests pass (138 domain, 237 FFmpeg, including 18 new
+regressions; 177 out-of-filter/ignored tests skipped) in Nextest
+e371e243-ec20-4d06-8ff1-5aff4c974a8c. The eight declaration tests pass again after
+a test-only lint cleanup. Strict affected all-target Clippy, workspace formatting
+and architecture-lint pass; independent standards, coding, serde, inventory and
+default-owner reviews are clean. Existing v1 packet snapshot and all prior
+presentation/lifting regressions pass unchanged.
+MOT declarations/selection, null/override/global-association/mixed-default nested
+edge policies, declaration-to-resolved-link consistency and used-S1 mask membership
+remain open. Empty object-resource representation, physical allocation, full
+enhanced compilation/v2/editor/preview/publication and actual client/browser/source/
+platform acceptance remain open. Body coding is not carousel or transport/client
+acceptance. No milestone status/dependency/acceptance change or publication.
+
 2026-10-11 v1 lifting/presentation-body checkpoint: the native encoder packs the
 complete checked X28/0 or M29/0 presentation body, including asymmetric RGB
 palettes, assigned charset aliases, raw panel flags/status/width, screen/row

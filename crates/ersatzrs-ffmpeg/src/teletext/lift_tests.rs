@@ -52,6 +52,7 @@ fn every_v1_subpage_has_explicit_presentation_and_empty_local_presence() {
     assert!(service.objects().definitions().is_empty());
     for page in &base.pages {
         let metadata = &service.page_enhancements()[&page.address];
+        assert_eq!(metadata.compositional_links, None);
         let presentation = metadata.presentation.unwrap();
         assert_eq!(presentation.primary.get(), page.national_option.get());
         assert_eq!(presentation.secondary, None);

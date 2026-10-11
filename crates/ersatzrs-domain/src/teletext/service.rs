@@ -1,7 +1,8 @@
 //! Immutable semantic service after explicitly supplied page-resource resolution.
 //!
-//! MOT/X27 declarations and their resolution are not represented by the supplied
-//! selection. This boundary checks presentation precedence, ownership and complete
+//! X27 declarations retain their required inventory, separately from the supplied
+//! resolved selection. MOT/null/default derivation remains outside this boundary.
+//! This checks presentation precedence, ownership and complete
 //! effective-program dependencies; it is not a physical allocation or readiness
 //! token. The unchanged v1 base model remains embedded rather than extended.
 
@@ -19,7 +20,8 @@ use super::{
     TeletextObjectCatalogError, TeletextObjectIdentity, TeletextObjectScope, TeletextObjectType,
     TeletextPageAddress, TeletextPageCharsetDesignation, TeletextPageDraft, TeletextPageSetDraft,
     TeletextRawDataPageNumber, TeletextResourceKind, TeletextResourceSubpageIndex,
-    TeletextRunContent, TeletextStructureError,
+    TeletextRunContent, TeletextStructureError, TeletextX27Level25Links, TeletextX27LinkRole,
+    TeletextX27LinkTarget,
 };
 
 /// Explicitly resolved public/global object links, not MOT or X27 declarations.
@@ -29,7 +31,8 @@ pub struct TeletextResolvedObjectPageLinks {
     pub global: Option<TeletextRawDataPageNumber>,
 }
 
-/// One semantic default-object slot, prior to compiler pointer allocation.
+/// One semantic default-object slot, retaining its independent MOT resource owner.
+/// The root is not rebound to the display's explicit invocation links.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextDefaultObjectSelection {
     pub target: TeletextObjectIdentity,
@@ -52,6 +55,8 @@ pub struct TeletextResolvedPageResourceSelection {
 pub struct TeletextResolvedPageEnhancementDraft {
     pub address: TeletextPageAddress,
     pub presentation: Option<TeletextLevel25PresentationDefaults>,
+    /// Preserved authored X27/4 presence; this does not infer MOT/null precedence.
+    pub compositional_links: Option<TeletextX27Level25Links>,
     /// `Some(empty)` still suppresses every supplied default-object slot.
     pub local_program: Option<TeletextEnhancementProgram>,
     pub resources: TeletextResolvedPageResourceSelection,
@@ -200,6 +205,15 @@ pub enum TeletextServiceError {
         page: TeletextRawDataPageNumber,
     },
     #[error(
+        "teletext display {display:?}, X27 {role:?} requires absent resource {page}/{subpage:?}"
+    )]
+    CompositionalResource {
+        display: TeletextPageAddress,
+        role: TeletextX27LinkRole,
+        page: TeletextRawDataPageNumber,
+        subpage: TeletextResourceSubpageIndex,
+    },
+    #[error(
         "teletext display {display:?}, default slot {slot}: target {target:?} has wrong scope"
     )]
     DefaultScope {
@@ -309,6 +323,7 @@ impl TeletextSemanticService {
         // Declared defaults are validated even when local X26 suppresses them.
         // They do not consume effective-display glyph/pair/invocation budgets.
         for page in service.pages.values() {
+            validate_compositional_inventory(page, &resource_index)?;
             service.validate_links_and_defaults(page, &resource_index)?;
         }
         let mut remaining_work = budget.max_collected_commands;
@@ -339,7 +354,12 @@ impl TeletextSemanticService {
                     error,
                 })?;
             if let Some(enhancement) = enhancement {
-                validate_object_references(page.address, enhancement.resources.objects, &refs)?;
+                validate_object_references(
+                    page.address,
+                    enhancement.resources.objects,
+                    &program_source,
+                    &refs,
+                )?;
                 refs.validate_drcs(&service.drcs, enhancement.resources.drcs)
                     .map_err(|error| TeletextServiceError::CollectedDrcs {
                         program_source: program_source.clone(),
@@ -494,15 +514,9 @@ impl TeletextSemanticService {
                         },
                     });
                 }
-                validate_object_target(
-                    page.address,
-                    page.resources.objects,
-                    selection.target,
-                    TeletextEnhancementSource {
-                        object: None,
-                        command: 0,
-                    },
-                )?;
+                // EN 300 706 13.8 ties a default root to its original MOT
+                // resource, independently of X27's explicit invocation links.
+                // Its exact definition/type and scope were checked above.
             }
         }
         // Even unused declared DRCS links must name existing resource pages.
@@ -510,6 +524,42 @@ impl TeletextSemanticService {
             .validate_display_usage(page.address, page.resources.drcs, &[])?;
         Ok(())
     }
+}
+
+fn validate_compositional_inventory(
+    page: &TeletextResolvedPageEnhancementDraft,
+    resources: &BTreeMap<
+        (TeletextRawDataPageNumber, TeletextResourceSubpageIndex),
+        TeletextResourceKind,
+    >,
+) -> Result<(), TeletextServiceError> {
+    let Some(links) = page.compositional_links else {
+        return Ok(());
+    };
+    for role in TeletextX27LinkRole::ALL {
+        let link = links.link(role);
+        if !link.validity().applies_at_level25() {
+            continue;
+        }
+        let TeletextX27LinkTarget::Page { page: target } = link.target() else {
+            // Explicit null is retained; it neither demands sixteen records
+            // nor settles the separate MOT/null fallback policy.
+            continue;
+        };
+        for subpage in TeletextResourceSubpageIndex::ALL {
+            if link.required_subpages().requires(subpage)
+                && resources.get(&(target, subpage)) != Some(&role.kind())
+            {
+                return Err(TeletextServiceError::CompositionalResource {
+                    display: page.address,
+                    role,
+                    page: target,
+                    subpage,
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_local_definitions(
@@ -584,9 +634,19 @@ fn effective_program(
 fn validate_object_references(
     display: TeletextPageAddress,
     links: TeletextResolvedObjectPageLinks,
+    program_source: &TeletextEffectiveProgramSource,
     refs: &TeletextCollectedEnhancementReferences,
 ) -> Result<(), TeletextServiceError> {
     for invocation in refs.object_references() {
+        if matches!(
+            program_source,
+            TeletextEffectiveProgramSource::Defaults { .. }
+        ) && invocation.source_location.object.is_none()
+        {
+            // Effective defaults synthesize only root invocations. Nested
+            // commands retain object attribution and the supplied link policy.
+            continue;
+        }
         validate_object_target(
             display,
             links,

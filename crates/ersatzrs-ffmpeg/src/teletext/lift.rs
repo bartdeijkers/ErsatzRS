@@ -42,6 +42,7 @@ pub fn lift_teletext_v1_page_set(
             Ok(TeletextResolvedPageEnhancementDraft {
                 address: page.address,
                 presentation: Some(presentation),
+                compositional_links: None,
                 local_program: Some(TeletextEnhancementProgram::new(Vec::new())?),
                 resources: TeletextResolvedPageResourceSelection {
                     objects: TeletextResolvedObjectPageLinks {

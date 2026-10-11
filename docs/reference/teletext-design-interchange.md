@@ -122,14 +122,22 @@ options 0–6 select primary codes 0x00–0x06; reserved fallback 0x07 is diagno
 Explicit assigned aliases ending in seven are accepted. Language codes do not
 silently select another repertoire. Unknown page lookups return no presentation.
 
-The supplied resource selection is already resolved; it does not preserve or
-parse MOT/X27 declarations or requirement masks. Default slots retain GPOP1,
+The supplied resource selection is already resolved. Optional `compositional_links`
+retain a checked X27/4 declaration on the exact display metadata owner, independently
+of that selection. Every set mask bit on a real, Level-2.5-applicable target requires
+the matching catalog kind/page/S1, including unused records. Null and zero masks
+do not invent inventory; Level-3.5-only metadata is retained without requiring
+Level 3.5 resources. This does not derive MOT/X27 selection or prove that every
+used S1 is announced. Default slots retain GPOP1,
 GPOP2, POP1, POP2 order and sparse ordinals. A present local program, including an
 empty one, suppresses every default. Local definitions require an actual base
 owner and explicit local declaration. Declared links/default targets are checked
 even when suppressed; their unused glyphs/charset designations do not count as
-part of the effective page. Collected transitive POP/GPOP references must match
-the selected links, and DRCS uses the existing complete-reference validator.
+part of the effective page. Default roots retain their original resource owner;
+they are not rebound to explicit links. Catalog identity/type and slot scope still
+apply. Local and nested explicit calls must match the supplied selected links;
+DRCS uses the existing complete-reference validator. Shared traversal budgets
+include default roots, without charging suppressed programs.
 
 Service budgets cover unique resource records, definitions, structural items,
 base content bytes, authored commands and aggregate expanded commands/glyph
@@ -185,13 +193,29 @@ fields and two default-object slots retain their original MOT/resource ownership
 Semantic object IDs are not limited to physical default pointer indices.
 
 Do not erase masks, automatically rebind defaults to an overridden resource or
-select the first/S1-zero MOT record implicitly. The supplied-selection service
-currently checks linked page equality; authored resolution must also validate
-required S1 sets and retain independently sourced default provenance. Any local
+select the first/S1-zero MOT record implicitly. Supplied explicit object calls
+currently check selected page equality; authored resolution must also derive the
+binding and validate used-S1 mask membership while retaining independently sourced
+default provenance. Any local
 X26 presence suppresses MOT defaults.
 
+The implemented `TeletextX27Level25Links` has four required named links. Each
+checked link carries an explicit target, validity and `TeletextSubpageRequirementMask`;
+strict map-only JSON rejects unknown, duplicate, positional or missing fields.
+Null masks must be FFFF; valid real masks include every 16-bit combination.
+Address-purpose checks apply even to unused or Level-3.5-only metadata.
+
+`encode_teletext_compositional_links` encodes the complete pre-bit-reversal X27/4
+body. First-four roles, compatibility bits, target nibbles, XOR magazines,
+validities and all mask bits are independently decoded in tests. Reserved bits
+and triplet 13 are zero by writer convention. The two additional Level 3.5 slots
+use pinned-QTeletextMaker-calibrated null GPOP/POP declarations; this encodes no
+authored Level 3.5 extension. Body coding is not carousel integration, resource
+allocation, transport conformity or actual display/navigation proof.
+
 Null-X27 fallback, conflicting MOT supersedable flags and global-default
-association edge cases still need a documented, independently calibrated policy.
+association and mixed-default nested-call edge cases still need a documented,
+independently calibrated policy.
 The inspected libzvbi 0.2.45 source falls back to MOT on null X27 and lacks complete
 global-default handling; the pinned QTeletextMaker source can remove an all-null
 packet. Neither is a complete oracle for these cases. Preserve the declarations

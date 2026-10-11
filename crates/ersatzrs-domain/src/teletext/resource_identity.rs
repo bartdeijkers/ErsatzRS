@@ -121,6 +121,29 @@ impl fmt::Display for TeletextRawDataPageNumber {
 pub struct TeletextResourceSubpageIndex(u8);
 
 impl TeletextResourceSubpageIndex {
+    /// Explicit logical S1 zero, without any physical update/header bits.
+    pub const ZERO: Self = Self(0);
+
+    /// All sixteen assigned logical S1 values, in unchanged numeric order.
+    pub const ALL: [Self; 16] = [
+        Self(0),
+        Self(1),
+        Self(2),
+        Self(3),
+        Self(4),
+        Self(5),
+        Self(6),
+        Self(7),
+        Self(8),
+        Self(9),
+        Self(10),
+        Self(11),
+        Self(12),
+        Self(13),
+        Self(14),
+        Self(15),
+    ];
+
     /// Validate a logical subpage without masking physical metadata bits.
     /// # Errors
     /// Returns `Subpage` for values above 15.
