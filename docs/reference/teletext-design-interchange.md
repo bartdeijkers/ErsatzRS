@@ -386,6 +386,18 @@ projections and the original target remain unchanged. Packing/word fit and these
 C.2 facts do not establish whole-page equivalence, suitable-client rendering or
 publication readiness.
 
+`render_teletext_physical_display` takes one immutable physical replay, pixel
+options and a raster budget. Its actual display, glyph intent, DRCS and colours
+share the original renderer's fragment/mask/pixel and diagnostic paths. It does
+not borrow authored replacement lookup: absent X26 restoration renders raw Base
+SPACE for `£` and ASCII `e` for `é`, whereas the original design renderer retains
+its authored replacement. Present enhancement identities render normally. The
+known original Active `A` versus physical Local `£` discrepancy stays visible.
+Diagnostics retain actual source ordinals, object identities and instances;
+pixel/diagnostic limits reject without returning partial output. This host
+diagnostic is not an independent receiver, a glyph-lineage comparison, whole-page
+equivalence or publication authority.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

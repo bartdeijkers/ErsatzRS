@@ -987,6 +987,21 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Physical raster now consumes one immutable actual replay through shared fragment/mask/DRCS/C1
+helpers. The original design retains authored Base replacements; actual replay renders raw
+transmitted fallback when X26 restoration is absent. Six regressions prove dropped/present
+pound/accent instructions, original ActiveA versus actual Local-pound discrepancy, packed
+literal pink, shifted/generated DRCS source/instance alignment and pixel/diagnostic fences.
+All6 focused tests pass (d6b16254-47c4-4494-962f-6784211878e2); all460 selected FFmpeg teletext
+tests pass (4e20c2f6-7782-450b-9ce8-f2462565c43a). Strict FFmpeg all-target Clippy and independent
+frozen-source review pass; original renderer behavior is covered by the shared-path regressions.
+Packet encoding is unchanged, so prior independent wire/pixel evidence remains applicable.
+This is host diagnostic rendering, not independent receiver proof, authored lineage or whole-page
+equivalence. No milestone contract/status/dependency changes or publication. Whole-page comparison
+and actual Unicode/Active normalization remain next work; the correct independent wire oracle
+remains failing. Full engine/client/editor/localized browser/publication acceptance stays open.
+Earlier evidence follows unchanged:
+
 Actual-program packing now binds guarded physical replay and the unchanged X26 packer in one
 call, using original selected links/allocations/header colour. Sparse C2 evidence matches actual
 main/object sources directly to final semantic words, with exact executing instances, and updates

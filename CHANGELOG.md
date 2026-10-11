@@ -138,6 +138,9 @@ release section when tagging a release.
   original target and explicit encoding discrepancies for later comparison.
   Bind physical replay to final packed words for same-emitter attribute order;
   absent resource positions and cross-instance ordering stay unresolved.
+  Render physical replay with shared glyph/fragment/colour helpers, showing raw
+  Base fallback when authored Unicode instructions are absent and retaining
+  actual located diagnostics; whole-page equivalence remains unproven.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

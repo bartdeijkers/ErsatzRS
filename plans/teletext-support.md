@@ -211,6 +211,10 @@ The actual-program packing diagnostic now binds supplied replay to final main/
 local semantic words in one call, preserving selected links and header colour.
 Same-emitter C.2 uses exact physical sources and instances; unencoded resource
 words and cross-instance order remain pending. Original targets stay separate.
+Physical raster now uses that actual replay through the shared renderer, retaining
+raw transmitted Base fallback instead of restoring absent authored Unicode.
+Located unresolved cells and budgets remain explicit; host pixel comparison alone
+cannot prove glyph lineage, whole-page semantics or independent receiver behavior.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone

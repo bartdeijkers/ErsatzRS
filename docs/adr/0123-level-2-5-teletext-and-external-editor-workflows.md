@@ -135,6 +135,13 @@ retain distinct instances; unavailable resource words and cross-instance order
 remain unknown. Consuming that evidence updates only actual attributes, display
 and colour, leaving original targets and retained glyph/DRCS/geometry unchanged.
 This binds final-word evidence; it does not prove full wire-page equivalence.
+Physical raster diagnostics now consume only the immutable actual replay through
+the same fragment, glyph-mask, DRCS and colour helpers as the original renderer.
+The original design may lift authored Unicode at Base priority; physical replay
+must render the transmitted Base fallback when its enhancement is absent. Do not
+restore original replacements or target ownership into the physical projection.
+Located unresolved cells and host budgets remain explicit. Raster diagnostics
+alone do not establish authored identity, whole-page equivalence or readiness.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

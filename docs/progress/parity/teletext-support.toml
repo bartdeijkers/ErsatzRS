@@ -17,7 +17,7 @@ v1 lifting retains bytes; resources preserve geometry, lifecycle,
 pointers/metadata/fresh definition state. Local definitions share bounded
 X26 with forward references. Decoders prove selected
 DRCS/object/main cells; recorded local/G1 font gaps do not establish rendering.
-Physical replay shares resolvers and preserves original targets/resources.
+Physical replay/raster share resolvers; raw Base fallback stays visible.
 C3 retains private/shared fragments and deferred writers.
 Actual C2 uses packed words within emitters; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.

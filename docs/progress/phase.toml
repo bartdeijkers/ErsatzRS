@@ -1138,6 +1138,8 @@ and display/colour chain without reinserting fallback or replacing the target.
 Actual colour prepass checks the original Base/footprint plane invariant.
 Actual packing now binds final-word evidence to the same supplied program and
 rebuilds its physical attributes/display/colour without replacing the target.
+Physical raster shares the renderer but uses raw transmitted Base fallback;
+missing Unicode instructions and the Active/Local discrepancy stay visible.
 Next compare whole-page projections, then
 realize Unicode/Active physical priority with the existing collector. Explicit
 resource calls lack page addresses; default-owner preservation needs a proven

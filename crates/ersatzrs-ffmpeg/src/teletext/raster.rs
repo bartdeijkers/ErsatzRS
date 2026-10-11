@@ -8,14 +8,15 @@ use std::mem::size_of;
 
 use ersatzrs_domain::{
     resolve_teletext_glyph_mask, resolve_teletext_latin_replacement_mask,
-    TeletextColourCompositionError, TeletextColourPixel, TeletextColourPixelOptions,
-    TeletextDisplayFragment, TeletextDisplayPending, TeletextEnhancementSource,
-    TeletextGlyphDisposition, TeletextGlyphIdentity, TeletextGlyphIntentReason, TeletextGlyphMask,
-    TeletextGlyphMaskError, TeletextPageAddress, TeletextSpatialInvocationId,
-    TeletextSpatialRootSource,
+    TeletextColourComposition, TeletextColourCompositionError, TeletextColourPixel,
+    TeletextColourPixelOptions, TeletextDisplayFragment, TeletextDisplayPending,
+    TeletextDisplayResolution, TeletextDrcsExecution, TeletextEnhancementSource,
+    TeletextGlyphDisposition, TeletextGlyphIdentity, TeletextGlyphIntent,
+    TeletextGlyphIntentReason, TeletextGlyphMask, TeletextGlyphMaskError, TeletextPageAddress,
+    TeletextSpatialInvocationId, TeletextSpatialRootSource,
 };
 
-use super::TeletextMainComposition;
+use super::{TeletextMainComposition, TeletextPhysicalDisplayReplay};
 
 const CELL_WIDTH: usize = 12;
 const CELL_HEIGHT: usize = 10;
@@ -138,7 +139,64 @@ pub fn render_teletext_composition(
     options: TeletextColourPixelOptions,
     budget: TeletextRasterBudget,
 ) -> Result<TeletextRaster, TeletextRasterError> {
-    let display = composition.display_resolution();
+    render_raster(
+        RasterInputs {
+            owner: composition.owner(),
+            authored: Some(composition),
+            display: composition.display_resolution(),
+            intent: composition.glyph_intent(),
+            drcs: composition.drcs_execution(),
+            colours: composition.colour_composition(),
+        },
+        options,
+        budget,
+    )
+}
+
+/// Rasterize the supplied physical projection without restoring absent authored
+/// Base replacements. Actual transmitted Base codes and enhancement identities
+/// determine glyphs, fragments, colours and located diagnostics.
+///
+/// All projections come from the same immutable replay. This diagnostic does
+/// not prove packing, target equivalence or receiver readiness.
+/// # Errors
+/// Returns no partial raster on exceeded host budgets or allocation failure.
+pub fn render_teletext_physical_display(
+    physical: &TeletextPhysicalDisplayReplay,
+    options: TeletextColourPixelOptions,
+    budget: TeletextRasterBudget,
+) -> Result<TeletextRaster, TeletextRasterError> {
+    render_raster(
+        RasterInputs {
+            owner: physical.owner(),
+            authored: None,
+            display: physical.display_resolution(),
+            intent: physical.glyph_intent(),
+            drcs: physical.drcs_execution(),
+            colours: physical.colour_composition(),
+        },
+        options,
+        budget,
+    )
+}
+
+#[derive(Clone, Copy)]
+struct RasterInputs<'a> {
+    owner: TeletextPageAddress,
+    // Only the original design raster lifts authored Unicode at Base priority.
+    authored: Option<&'a TeletextMainComposition>,
+    display: &'a TeletextDisplayResolution,
+    intent: &'a TeletextGlyphIntent,
+    drcs: &'a TeletextDrcsExecution,
+    colours: &'a TeletextColourComposition,
+}
+
+fn render_raster(
+    inputs: RasterInputs<'_>,
+    options: TeletextColourPixelOptions,
+    budget: TeletextRasterBudget,
+) -> Result<TeletextRaster, TeletextRasterError> {
+    let display = inputs.display;
     let width = usize::from(display.width()) * CELL_WIDTH;
     let count = width * ROWS * CELL_HEIGHT;
     if count > budget.max_pixels {
@@ -161,7 +219,7 @@ pub fn render_teletext_composition(
         .map_err(|_| TeletextRasterError::Allocation)?;
     for row in 0..25 {
         for column in 0..display.width() {
-            let result = render_cell(composition, row, column, options);
+            let result = render_cell(inputs, row, column, options);
             let cell_pixels = match result {
                 Ok(value) => value,
                 Err(reason) => {
@@ -172,7 +230,7 @@ pub fn render_teletext_composition(
                             maximum: budget.max_diagnostics,
                         });
                     }
-                    diagnostics.push(diagnostic(composition, row, column, reason));
+                    diagnostics.push(diagnostic(inputs, row, column, reason));
                     [TeletextRasterPixel::Unresolved(index); CELL_WIDTH * CELL_HEIGHT]
                 }
             };
@@ -185,7 +243,7 @@ pub fn render_teletext_composition(
         }
     }
     Ok(TeletextRaster {
-        owner: composition.owner(),
+        owner: inputs.owner,
         width,
         pixels,
         diagnostics,
@@ -204,12 +262,12 @@ fn storage_fits<T>(count: usize) -> Result<(), TeletextRasterError> {
 }
 
 fn render_cell(
-    composition: &TeletextMainComposition,
+    inputs: RasterInputs<'_>,
     row: u8,
     column: u8,
     options: TeletextColourPixelOptions,
 ) -> Result<[TeletextRasterPixel; CELL_WIDTH * CELL_HEIGHT], TeletextRasterCellFailure> {
-    let display = composition.display_resolution();
+    let display = inputs.display;
     let Some(cell) = display.cell(row, column) else {
         return if row == 0 {
             Ok([TeletextRasterPixel::ReceiverHeader; CELL_WIDTH * CELL_HEIGHT])
@@ -230,7 +288,7 @@ fn render_cell(
     let mask = if cell.fragment() == TeletextDisplayFragment::BackgroundOnly {
         None
     } else {
-        Some(selected_mask(composition, cell)?)
+        Some(selected_mask(inputs, cell)?)
     };
     let mut pixels = [TeletextRasterPixel::Unresolved(0); CELL_WIDTH * CELL_HEIGHT];
     for y in 0..10_u8 {
@@ -243,8 +301,8 @@ fn render_cell(
                 false
             };
             pixels[usize::from(y) * CELL_WIDTH + usize::from(x)] = TeletextRasterPixel::Colour(
-                composition
-                    .colour_composition()
+                inputs
+                    .colours
                     .pixel(display, row, column, coverage, options)?,
             );
         }
@@ -253,16 +311,16 @@ fn render_cell(
 }
 
 fn selected_mask(
-    composition: &TeletextMainComposition,
+    inputs: RasterInputs<'_>,
     cell: ersatzrs_domain::TeletextDisplayCell<'_>,
 ) -> Result<TeletextGlyphMask, TeletextRasterCellFailure> {
     let candidate_index = cell
         .origin()
-        .and_then(|index| composition.display_resolution().origins().get(index))
+        .and_then(|index| inputs.display.origins().get(index))
         .ok_or(TeletextRasterCellFailure::MissingGlyph)?
         .candidate_index();
-    let intent = composition
-        .glyph_intent()
+    let intent = inputs
+        .intent
         .records()
         .get(candidate_index)
         .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
@@ -274,7 +332,7 @@ fn selected_mask(
         })?;
     // A generated Latin replacement retains the selected Base's priority and
     // exact authored position. It never becomes a competing Local glyph.
-    if let Some(base) = intent.context().candidate().base() {
+    if let Some((composition, base)) = inputs.authored.zip(intent.context().candidate().base()) {
         if let Some(operation) =
             composition.base_replacement(base.position().row(), base.position().column())
         {
@@ -309,15 +367,15 @@ fn selected_mask(
     } else {
         false
     };
-    let drcs = composition
-        .drcs_execution()
+    let drcs = inputs
+        .drcs
         .records()
         .binary_search_by_key(
             &candidate_index,
             ersatzrs_domain::TeletextExecutedDrcsGlyph::candidate_index,
         )
         .ok()
-        .map(|index| &composition.drcs_execution().records()[index]);
+        .map(|index| &inputs.drcs.records()[index]);
     let mask = resolve_teletext_glyph_mask(identity, drcs, separated)?;
     // Table 29 leaves G3/DRCS D5 response undefined: keep their masks unchanged.
     // Annex G.2 permits decoder-specific underline shaping. Alphanumerics use
@@ -357,22 +415,22 @@ fn fragment_position(fragment: TeletextDisplayFragment, x: u8, y: u8) -> (u8, u8
 }
 
 fn diagnostic(
-    composition: &TeletextMainComposition,
+    inputs: RasterInputs<'_>,
     row: u8,
     column: u8,
     reason: TeletextRasterCellFailure,
 ) -> TeletextRasterDiagnostic {
-    let candidate = composition
-        .display_resolution()
+    let candidate = inputs
+        .display
         .cell(row, column)
         .and_then(ersatzrs_domain::TeletextDisplayCell::origin)
-        .and_then(|index| composition.display_resolution().origins().get(index))
+        .and_then(|index| inputs.display.origins().get(index))
         .map(ersatzrs_domain::TeletextDisplayOrigin::candidate_index);
     let original = candidate
-        .and_then(|index| composition.glyph_intent().records().get(index))
+        .and_then(|index| inputs.intent.records().get(index))
         .map(|record| record.context().candidate());
     TeletextRasterDiagnostic {
-        owner: composition.owner(),
+        owner: inputs.owner,
         visual_position: (row, column),
         candidate,
         original_position: original.map(ersatzrs_domain::TeletextGlyphCandidate::position),
