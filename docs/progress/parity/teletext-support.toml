@@ -23,7 +23,7 @@ G1 mode/fallback and Latin decoder gaps survive.
 Glyph/DRCS keep aliases/bans/resources/losers/blanks; lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
-Intervals reject sixteen simultaneous opens; unknown ones survive.
+Intervals reject sixteen simultaneous opens; unknown survive.
 Collector caps each type at 127 per display, with nested/default roots.
 Call/write runs and size provenance remain.
 MIT masks/C1 rasterize fragments/DRCS; Unicode
@@ -36,9 +36,9 @@ foreign X26 realization, row-zero and full A7/A8/C3/client proof stay open.
 X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
 Headers reject physical/logical-owner collisions.
 Declarations check roles/defaults/extents/empty owners, one MOT/magazine.
-Compiler keeps resources/M29; carousel/output reuse timing/fences.
-TSDuck/root/corrected nested pass.
-Pinned QTM headed edit/save/reopen proves renumber/loss; host roundtrip open.
+Compiler keeps resources/M29; paced sweeps preserve deadlines/cursors/FF.
+TSDuck/shifted slots/EOF/root/corrected nested pass.
+QTM headed edit/save/reopen proves renumber/loss; host roundtrip open.
 
 ADR 0122 profiles/themes/zones and admin/Lua remain preparatory.
 App keeps isolated drafts/guide bounds; acquisition,
@@ -51,8 +51,8 @@ missing PTS, not source identity, readiness or inventory. Bounds follow JSON dec
 not input/child RSS. Acquisition/revisions/selection stay open; auxiliary failure
 preserves ordinary metadata, uncertain cleanup is fatal. P9A-03 owns proof.
 
-Carousel/PES/TS, all-program PSI/PMT monitoring, PCR/CBR checks and bounded
-retention preserve AV, packet timing and epoch-bound acknowledgement. Finite EOF
+Carousel/PES/TS, all-program PSI/PMT, PCR/CBR checks and bounded
+retention preserve AV/timing/epoch acknowledgement. Finite EOF
 drains validated output; changed/malformed input is terminal. P9A-04 owns proof.
 
 Authored bindings apply to final MPEG-TS roles. Legacy wrapper/first encoder

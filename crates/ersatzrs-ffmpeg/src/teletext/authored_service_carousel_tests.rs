@@ -55,7 +55,7 @@ fn rich_candidate(update: TeletextResourceFullUpdate) -> EncodedTeletextAuthored
     encode_teletext_authored_service(declared, &tx, &fixtures::limits()).unwrap()
 }
 
-fn cycle(carousel: &mut TeletextCarousel) -> Vec<TeletextCarouselBatch> {
+pub(super) fn cycle(carousel: &mut TeletextCarousel) -> Vec<TeletextCarouselBatch> {
     let mut batches = vec![];
     loop {
         let batch = carousel.next_batch().unwrap();
@@ -67,7 +67,18 @@ fn cycle(carousel: &mut TeletextCarousel) -> Vec<TeletextCarouselBatch> {
     }
 }
 
-fn many_displays(count: usize, resources: bool) -> EncodedTeletextAuthoredService {
+pub(in crate::teletext) fn many_displays(
+    count: usize,
+    resources: bool,
+) -> EncodedTeletextAuthoredService {
+    service_with_resources(count, usize::from(resources), resources)
+}
+
+pub(super) fn service_with_resources(
+    count: usize,
+    resource_count: usize,
+    magazines: bool,
+) -> EncodedTeletextAuthoredService {
     let mut input = fixtures::input();
     let template = input.base.pages[0].clone();
     let enhancement = input.pages[1].clone();
@@ -97,8 +108,23 @@ fn many_displays(count: usize, resources: bool) -> EncodedTeletextAuthoredServic
         })
         .collect();
     input.objects.clear();
-    if !resources {
-        input.drcs.clear();
+    if resource_count != 1 {
+        input.drcs = (0..resource_count)
+            .map(|index| {
+                let page =
+                    TeletextRawDataPageNumber::new(2, 0xc0 + u8::try_from(index / 16).unwrap())
+                        .unwrap();
+                let identity = TeletextResourceIdentity::new(
+                    TeletextResourceKind::Drcs,
+                    page,
+                    TeletextResourceSubpageIndex::new(u8::try_from(index % 16).unwrap()).unwrap(),
+                )
+                .unwrap();
+                TeletextDrcsSubtable::new(identity, vec![]).unwrap()
+            })
+            .collect();
+    }
+    if !magazines {
         input.magazines.clear();
     }
     let mut semantic_budget = fixtures::semantic_limits();
@@ -117,6 +143,7 @@ fn many_displays(count: usize, resources: bool) -> EncodedTeletextAuthoredServic
         .collect();
     let mut declaration_budget = fixtures::declaration_limits();
     declaration_budget.max_displays = 600;
+    declaration_budget.max_resources = 600;
     let declared =
         TeletextDeclaredService::new(semantic, vec![], selections, vec![], declaration_budget)
             .unwrap();
@@ -128,19 +155,11 @@ fn many_displays(count: usize, resources: bool) -> EncodedTeletextAuthoredServic
 }
 
 #[test]
-fn resource_cycle_exactly_20_seconds_is_accepted_and_longer_is_atomic() {
-    // 498 two-batch displays + two resource batches + M29 + terminator.
-    let mut carousel = TeletextCarousel::new_authored(many_displays(498, true)).unwrap();
+fn intrinsic_acquisition_capacity_failure_is_atomic_at_replacement() {
+    let mut carousel = TeletextCarousel::new_authored(many_displays(497, true)).unwrap();
     let batches = cycle(&mut carousel);
-    assert_eq!(batches.len(), 1_000);
-    assert_eq!(carousel.ticks, 20 * 90_000);
-    assert!(matches!(
-        TeletextCarousel::new_authored(many_displays(499, true)),
-        Err(TeletextTransportError::CycleTiming {
-            batches: 1_002,
-            maximum: 1_000
-        })
-    ));
+    assert_eq!(batches.len(), 998);
+    assert_eq!(carousel.ticks, 998 * 1_800);
     let state = (
         carousel.page,
         carousel.unit,
@@ -148,12 +167,14 @@ fn resource_cycle_exactly_20_seconds_is_accepted_and_longer_is_atomic() {
         carousel.boundary,
         carousel.first_cycle,
         carousel.magazine_pending,
+        carousel.resource_start_ticks,
+        carousel.resource_resume,
     );
     let original = carousel.content.page(0).0.to_vec();
     assert_eq!(
-        carousel.replace_authored_at_boundary(many_displays(499, true)),
+        carousel.replace_authored_at_boundary(service_with_resources(1, 500, true)),
         Err(TeletextTransportError::CycleTiming {
-            batches: 1_002,
+            batches: 1_005,
             maximum: 1_000
         })
     );
@@ -164,7 +185,9 @@ fn resource_cycle_exactly_20_seconds_is_accepted_and_longer_is_atomic() {
             carousel.ticks,
             carousel.boundary,
             carousel.first_cycle,
-            carousel.magazine_pending
+            carousel.magazine_pending,
+            carousel.resource_start_ticks,
+            carousel.resource_resume
         ),
         state
     );
@@ -173,7 +196,6 @@ fn resource_cycle_exactly_20_seconds_is_accepted_and_longer_is_atomic() {
         carousel.next_batch().unwrap().kind(),
         TeletextCarouselBatchKind::Magazine
     );
-    // Mid-cycle failure takes precedence over candidate timing validation.
     assert_eq!(
         carousel.replace_authored_at_boundary(many_displays(499, true)),
         Err(TeletextTransportError::MidCycleReplacement)

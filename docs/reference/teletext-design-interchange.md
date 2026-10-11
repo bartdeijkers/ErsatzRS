@@ -881,8 +881,8 @@ current run IDs and verification evidence; no milestone acceptance is weakened.
 
 `TeletextCarousel::new_authored` owns a complete service candidate. It reuses the
 legacy cursor, 20 ms header/body interval, at most31 units per PES batch and
-closing mFF header. Actual M29 is emitted once per cycle in a separate Magazine
-batch. Resource indexes are bounded and ordered MOT, DRCS/GDRCS, POP/GPOP,
+closing mFF header. Actual M29 is emitted in a separate Magazine acquisition
+batch, repeated with resources when needed. Resource indexes are bounded and ordered MOT, DRCS/GDRCS, POP/GPOP,
 then original display order (Annex B.3/B.7). Owned pages are retained; batches
 copy only their scheduled units.
 The first header retains supplied resource lifecycle state. Later identical
@@ -891,15 +891,68 @@ other header bit. Display C4 repetition remains unchanged. Source units stay
 immutable.
 
 Resource and M29 acquisition repetition must remain within twenty seconds
-(Annex B.6). Before order-index allocation, count one magazine batch when present,
-each page header and ceil(bodyunits/31) batches, and one final terminator.
-A resource/M29 plan exceeding1000 batches at20 ms rejects with `CycleTiming`.
-Display-only candidates do not gain an invented resource limit. This bounded
-planner is not an approved restriction on authored pages; larger-service
-resource interleaving remains open work. Overflow or failed timing validation
+(Annex B.6(1)); this does not bound the whole display carousel. Before order-index
+allocation, count a complete acquisition sweep R (magazines plus resource headers
+and ceil(bodyunits/31)), the largest whole display D, the sole final FF and one
+physical-window margin. `R + D + 2 > 1000` rejects with `CycleTiming` when resources
+or M29 exist. This is fixed-rate output capacity, not an approved authored-feature
+restriction. Display-only candidates gain no resource repetition limit.
+
+At a complete display boundary, refresh before another whole display plus FF and
+the window margin would exceed the sweep-start interval. Retain the exact display
+cursor while M29 and the existing B.7-ordered resources repeat; resume it after
+the full sweep. Magazine-only and resource-only services use their actual first
+transmission as the interval anchor. All immutable sweep components have fixed
+relative offsets, so at most999 batch intervals between sweep starts also bounds
+each full component repetition. The extra window accommodates different physical
+null-slot positions. Actual sink jitter remains a separate delivery acceptance.
+
+Internal refreshes clear resource C4/C8 even in the first long display cycle;
+later first-pass displays still retain their supplied erase header. There is one
+FF only after all original displays. Overflow or failed timing validation
 must not change an existing plan. Replacement requires the complete boundary;
 even a first magazine-only batch closes that boundary. Clock and whole-generation
 ownership survive legacy/authored transitions.
+
+Seven new pure/output regressions join79 focused passes
+(`7209953e-f08c-4448-86da-3bbb19b4bcb9`). The499-display fixture produces1005
+batches with acquisition starts at0/997 and one closing FF. Both changed/unchanged
+first-cycle resources, M29-only/resource-only paths, immutable bodies, unique
+display order, mid-refresh replacement/overflow and intrinsic acquisition-capacity
+rejection are checked. An initial large fixture used reserved1BE; correction to
+valid2C0–2DF logical-S1 groups changes no production rule.
+
+The actual output epoch streams bounded20ms windows, consumes40 early null slots
+with valid adaptation-only packets after frame500 and checks the final byte of
+every resource/M29 unit against the physical TS packet schedule. More than10ms
+additional in-window displacement still retains the20s repetition bound. Source/
+PCR packets, continuity and the sole FF remain intact. EOF after a confirmed
+internal refresh is `Unterminated`; preparing/exposing FF does not establish
+completion until its exact schedule is acknowledged. Strict affected all-target
+Clippy, formatting and independent standards/code review pass; a test-only
+`filter().next_back()` lint correction uses equivalent `rfind()`.
+
+TSDuck3.44-4676 independently validates the complete paced output and detects
+deliberate PID512 continuity damage
+(`f381c795-da3e-4ced-9fd4-da7ebf5a2c90`). Synthetic PSI/PCR are the existing output
+fixture; this is not hosted AV, source-subtitle or client acceptance. The capture
+has12562912 bytes and SHA256
+`37a28ff3e14ce9ba568f5193c0a102cb27ae6169862777ecaf7f2991f6204ea0`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_TSANALYZE="$tsanalyze" \
+ERSATZRS_TELETEXT_TEST_INTERLEAVED_TS="$fixture_dir/interleaved.ts" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  interleaved_paced_service_passes_tsduck_and_detects_counter_damage \
+  --run-ignored ignored-only
+```
+
+Three unchanged small-service carousel cases also pass original libzvbi0.2.42
+(`f97a84f6-de3b-4fa8-adba-0df9f958cf94`): root/empty Local, resource C2 and shared
+charset aliases. Root and alias requests retain the exact recorded hashes; valid
+earlier receipts/goldens are reused. Full update history, hostv2 admission,
+national/carrier gaps and complete engine/editor/client/publication acceptance
+remain open. No milestone contracts/statuses/dependencies change.
 
 `TeletextServiceDescriptor::from_authored_service` advertises only original
 initial/subtitle display roles, addresses and languages. MOT/DRCS/object pages
@@ -952,7 +1005,7 @@ separate original/corrected processes. Original nested must retain
 `conformance_passed:false`; both corrected fixtures and original root report
 two passing cases. Exporting nested on the original decoder intentionally
 returns nonzero after writing the producer fixture. Remaining charset/order ties, update
-history, larger-service scheduling, hostv2 served transport, full national
+history, hostv2 served transport, full national
 recipes and suitable-client/editor/publication gates remain required/open.
 
 ### Final resource command positions and attribute settlement

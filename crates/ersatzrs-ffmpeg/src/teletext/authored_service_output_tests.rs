@@ -4,6 +4,9 @@ use super::tests::{bytes, config, end, expose_and_ack, source};
 use super::*;
 use crate::teletext::authored_service_tests::{candidate, declared, input, limits, transmissions};
 
+#[path = "authored_service_interleave_output_tests.rs"]
+mod interleave;
+
 fn cycle_batches() -> u64 {
     let mut carousel = TeletextCarousel::new_authored(candidate()).unwrap();
     let mut count = 0;

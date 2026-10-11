@@ -1143,9 +1143,14 @@ priority. Shared charset aliases now establish exact pair consensus while
 retaining raw pending sources and prior contexts. Ten new pure regressions join
 98 focused passes; complete normalization/raster, independent two-cycle decoding,
 offline Docker identity receipt, strict Clippy/fmt and TSDuck pass. Different
-pairs still reject with located diagnostics. Next audit different-pair priority, update history,
-larger-service interleaving and host v2 admission. The fixed planner explicitly
-rejects resource/M29 cycles over twenty seconds; no authoring waiver is accepted.
+pairs still reject with located diagnostics. Resource/M29 sweeps now refresh
+between whole displays while retaining the exact cursor, independent repeat
+controls and sole FF boundary. Seven new pure/output regressions join79 focused
+passes; physical packet deadlines with shifted null slots, premature EOF rejection,
+acknowledged completion and real TSDuck damage control pass. Longer display cycles
+are accepted within fixed acquisition capacity, with one physical-window margin.
+Next audit different-pair priority, update history and host v2 admission;
+actual sink jitter and complete runtime acceptance remain open.
 No engine, editor, client navigation or publication acceptance is claimed.
 Pinned QTeletextMaker now has headed synthetic edit/navigation/Save As/reopen
 calibration on an unchanged binary. Actual subcode renumbering and unknown-record

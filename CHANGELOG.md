@@ -137,7 +137,11 @@ release section when tagging a release.
   result. Reuse the bounded carousel/output epoch for complete services, with
   magazine/resource acquisition order, immutable C4/C8 repeats, exact cycle
   timing and display-only signalling. Independent carousel decoding and TSDuck
-  checks pass. Final resource command spans now settle same-instance attributes
+  checks pass. Refresh complete resource/M29 sweeps between whole display pages
+  with preserved display order, repeat controls and generation boundaries. Larger
+  display cycles now use bounded resource deadlines with a physical-window margin;
+  paced-output and independent TSDuck checks include shifted null slots and
+  premature EOF rejection. Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all
   applicable charset aliases share one exact repertoire pair, retaining raw

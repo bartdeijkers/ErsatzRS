@@ -10,6 +10,9 @@ pub(super) const MAX_BATCH_UNITS: usize = 31;
 const STEP_TICKS: u64 = 1_800;
 // EN 300 706 B.6: resource and magazine acquisition repetition is at most 20 s.
 const MAX_RESOURCE_CYCLE_BATCHES: usize = 1_000;
+// Null-slot placement may differ within each 20 ms output window.
+// Reserve one window so physical packet positions retain the B.6 bound.
+const RESOURCE_WINDOW_MARGIN: usize = 1;
 
 /// Purpose of a bounded serial-mode transmission batch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +83,8 @@ pub struct TeletextCarousel {
     boundary: bool,
     first_cycle: bool,
     magazine_pending: bool,
+    resource_start_ticks: u64,
+    resource_resume: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -94,22 +99,27 @@ enum CarouselContent {
 impl CarouselContent {
     fn authored(service: EncodedTeletextAuthoredService) -> Result<Self, TeletextTransportError> {
         let magazine_batch = usize::from(!service.magazine_units().is_empty());
-        let batches = service
-            .pages()
+        let displays = service.declared().semantic().base().pages.len();
+        let resources = &service.pages()[displays..];
+        let resource_batches = resources.iter().try_fold(magazine_batch, |sum, page| {
+            sum.checked_add(page_batches(page.data_units()))
+                .ok_or(TeletextTransportError::ClockOverflow)
+        })?;
+        let largest_display = service.pages()[..displays]
             .iter()
-            .try_fold(1 + magazine_batch, |sum, page| {
-                sum.checked_add(1 + (page.data_units().len() - 1).div_ceil(MAX_BATCH_UNITS))
-                    .ok_or(TeletextTransportError::ClockOverflow)
-            })?;
-        if (!service.declared().resource_inventory().is_empty() || magazine_batch != 0)
-            && batches > MAX_RESOURCE_CYCLE_BATCHES
-        {
+            .map(|page| page_batches(page.data_units()))
+            .max()
+            .unwrap_or(0);
+        let batches = resource_batches
+            .checked_add(largest_display)
+            .and_then(|sum| sum.checked_add(1 + RESOURCE_WINDOW_MARGIN))
+            .ok_or(TeletextTransportError::ClockOverflow)?;
+        if resource_batches != 0 && batches > MAX_RESOURCE_CYCLE_BATCHES {
             return Err(TeletextTransportError::CycleTiming {
                 batches,
                 maximum: MAX_RESOURCE_CYCLE_BATCHES,
             });
         }
-        let displays = service.declared().semantic().base().pages.len();
         let mut resource_order: Vec<_> = (displays..service.pages().len()).collect();
         resource_order.sort_unstable_by_key(|&index| {
             // Authenticated owned candidates retain displays first, then resources.
@@ -134,6 +144,17 @@ impl CarouselContent {
             Self::Legacy(set) => set.pages().len(),
             Self::Authored { service, .. } => service.pages().len(),
         }
+    }
+
+    fn resource_count(&self) -> usize {
+        match self {
+            Self::Legacy(_) => 0,
+            Self::Authored { resource_order, .. } => resource_order.len(),
+        }
+    }
+
+    fn has_acquisition(&self) -> bool {
+        self.resource_count() != 0 || !self.magazines().is_empty()
     }
 
     fn magazines(&self) -> &[[u8; 46]] {
@@ -185,6 +206,10 @@ impl CarouselContent {
     }
 }
 
+fn page_batches(units: &[[u8; 46]]) -> usize {
+    1 + (units.len() - 1).div_ceil(MAX_BATCH_UNITS)
+}
+
 impl TeletextCarousel {
     /// Start a plan at relative time zero from a validated, fully encoded set.
     #[must_use]
@@ -197,15 +222,18 @@ impl TeletextCarousel {
             boundary: true,
             first_cycle: true,
             magazine_pending: false,
+            resource_start_ticks: 0,
+            resource_resume: None,
         }
     }
 
     /// Start one complete authored service, acquiring resources before displays.
-    /// This fixed 20 ms batch plan rejects resource/M29 cycles longer than
-    /// 20 seconds. The diagnostic is a schedule limit, not an authored-page
-    /// limitation; larger services require a separately verified schedule.
+    /// Refresh complete resources/M29 between complete displays within 20 seconds.
+    /// Display cycles may be longer; refreshes do not permit generation replacement.
     /// # Errors
-    /// Rejects schedules exceeding the 20-second resource repetition bound.
+    /// Rejects an acquisition sweep plus one whole display/terminator that cannot
+    /// fit the fixed 20 ms cadence's resource repetition bound, including one
+    /// window of physical null-slot placement margin.
     pub fn new_authored(
         service: EncodedTeletextAuthoredService,
     ) -> Result<Self, TeletextTransportError> {
@@ -219,6 +247,8 @@ impl TeletextCarousel {
             boundary: true,
             first_cycle: true,
             magazine_pending,
+            resource_start_ticks: 0,
+            resource_resume: None,
         })
     }
 
@@ -267,6 +297,43 @@ impl TeletextCarousel {
         self.page = 0;
         self.unit = 0;
         self.first_cycle = true;
+        self.resource_start_ticks = self.ticks;
+        self.resource_resume = None;
+    }
+
+    fn prepare_acquisition(&mut self) {
+        if !self.content.has_acquisition() {
+            return;
+        }
+        if !self.magazine_pending
+            && self.unit == 0
+            && self.page >= self.content.resource_count()
+            && self.page < self.content.page_count()
+        {
+            let elapsed = (self.ticks - self.resource_start_ticks) / STEP_TICKS;
+            // Reserve the sole closing FF as well as the next whole display.
+            // Preflight guarantees a complete sweep plus any display can fit.
+            let following =
+                page_batches(self.content.page(self.page).0) + 1 + RESOURCE_WINDOW_MARGIN;
+            if elapsed + following as u64 > MAX_RESOURCE_CYCLE_BATCHES as u64 {
+                self.resource_resume = Some(self.page);
+                self.page = 0;
+                self.magazine_pending = !self.content.magazines().is_empty();
+            }
+        }
+        if self.magazine_pending
+            || (self.content.magazines().is_empty() && self.page == 0 && self.unit == 0)
+        {
+            self.resource_start_ticks = self.ticks;
+        }
+    }
+
+    fn resume_display(&mut self) {
+        if self.page == self.content.resource_count() {
+            if let Some(resume) = self.resource_resume.take() {
+                self.page = resume;
+            }
+        }
     }
 
     /// Plan the next bounded batch, leaving a 20 ms presentation interval.
@@ -277,13 +344,16 @@ impl TeletextCarousel {
             .ticks
             .checked_add(STEP_TICKS)
             .ok_or(TeletextTransportError::ClockOverflow)?;
+        self.prepare_acquisition();
         let (kind, units) = if self.magazine_pending {
             self.magazine_pending = false;
             self.boundary = false;
-            (
+            let batch = (
                 TeletextCarouselBatchKind::Magazine,
                 self.content.magazines().to_vec(),
-            )
+            );
+            self.resume_display();
+            batch
         } else if self.page == self.content.page_count() {
             // A serial-mode page can be closed by a header from any magazine.
             let magazine = self.content.initial_magazine();
@@ -302,7 +372,9 @@ impl TeletextCarousel {
             if self.unit == 0 {
                 self.unit = 1;
                 let mut header = units[0];
-                if !self.first_cycle {
+                if !self.first_cycle
+                    || (resource_header.is_some() && self.resource_resume.is_some())
+                {
                     // Repetition must not erase already acquired page content.
                     // C4 shares this Hamming nibble with subcode bits 4..6.
                     let low = subcode.to_le_bytes()[0];
@@ -323,6 +395,7 @@ impl TeletextCarousel {
                 if end == units.len() {
                     self.page += 1;
                     self.unit = 0;
+                    self.resume_display();
                 }
                 (TeletextCarouselBatchKind::Page, batch)
             }
@@ -339,7 +412,11 @@ impl TeletextCarousel {
 
 #[cfg(test)]
 #[path = "authored_service_carousel_tests.rs"]
-mod authored_service_carousel_tests;
+pub(super) mod authored_service_carousel_tests;
+
+#[cfg(test)]
+#[path = "authored_service_interleave_tests.rs"]
+mod authored_service_interleave_tests;
 
 #[cfg(test)]
 mod tests {

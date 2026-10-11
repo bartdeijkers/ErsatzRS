@@ -258,9 +258,16 @@ packetizer and output-epoch machinery. Order acquisition as M29, MOT, DRCS,
 object pages, then displays (Annex B.3/B.7). Repeating identical complete resource
 pages clears C4 and C8 while preserving counter, S1, extent and other flags;
 display repetition retains its existing C4 rule. Require resource/M29 repetition
-within twenty seconds (B.6); the fixed 20 ms planner rejects overlong cycles
-before allocation or replacement. Larger-service interleaving remains required
-work, not an approved authoring restriction. Derive PMT navigation only from
+within twenty seconds (B.6). The fixed20ms planner now refreshes complete resource/
+M29 sweeps between whole displays, retains the saved display cursor and reserves
+one physical null-slot window. Display-cycle duration is independent of the
+resource repetition deadline. Check acquisition sweep plus largest whole display,
+final FF and window margin before allocation/replacement; infeasible fixed-rate
+capacity is a transport diagnostic, not an authoring waiver. Internal refreshes
+clear only resource repeat controls and create no replacement/acknowledgement
+boundary. Physical packet-schedule and independent TSDuck regressions are in the
+[interchange reference](../reference/teletext-design-interchange.md#complete-service-carousel-and-output-planning);
+actual sink jitter and full hosted/client acceptance remain open. Derive PMT navigation only from
 actual displays and reuse all source, capacity, pacing and acknowledgement fences.
 Pure output planning and synthetic TSDuck/decoder checks do not establish
 host publication or suitable-client display/navigation acceptance.

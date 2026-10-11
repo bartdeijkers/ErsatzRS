@@ -390,7 +390,7 @@ retains the original native composition and emits M29 once per magazine.
 The heterogeneous service now shares the existing carousel, packetizer and output
 epoch, with actual display-only PMT signalling. Acquisition orders M29, MOT, DRCS,
 objects and displays; unchanged resource repeats clear C4/C8. The fixed 20 ms
-plan rejects resource/M29 cycles over twenty seconds before replacement.
+plan bounds resource acquisition sweeps independently of the display cycle.
 The resource writer now retains exact final command spans. The complete compiler
 binds them to native defaults and both normalization passes before planning or
 comparison, preserving original owners and executing instances. Reusing these
@@ -402,8 +402,14 @@ resource-backed normalization preserves all cells and both raster phases;
 different repertoires still reject with located diagnostics. Actual two-cycle
 independent decoding passes with a pinned offline receipt. No storage/carousel
 order becomes cross-instance charset authority.
+Complete resource/M29 sweeps now refresh between whole displays using the saved
+cursor, independent resource-repeat flags and a physical-window margin. Seven
+new pure/output regressions join79 focused passes; actual paced packet deadlines,
+shifted null slots, sole FF acknowledgement/EOF and independent TSDuck with damage
+control pass. Longer display cycles no longer imply resource acquisition failure.
+The reference owns exact run IDs, capture hash and capacity/jitter limits.
 Next audit remaining different-pair priority, update-history policy,
-larger-service resource interleaving and unused-POP presentation edges, then host v2
+and unused-POP presentation edges, then host v2
 admission. Preserve independent full-compiler/carousel decoder goldens and the
 original/corrected distinction. Synthetic TSDuck transport is not served-playback
 or suitable-client acceptance.
