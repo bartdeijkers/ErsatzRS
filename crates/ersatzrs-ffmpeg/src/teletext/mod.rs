@@ -175,8 +175,11 @@ pub enum TeletextEncodingError {
 
 #[cfg(test)]
 mod base_display_runtime_tests;
+
 #[cfg(test)]
 mod base_display_tests;
+#[cfg(test)]
+mod base_footprint_runtime_tests;
 #[cfg(test)]
 mod buffer_tests;
 #[cfg(test)]

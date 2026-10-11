@@ -84,7 +84,7 @@ fn service(
     .unwrap()
 }
 
-fn encoded_case(
+pub(super) fn encoded_case(
     name: &str,
     rows: Vec<TeletextRow>,
     main: Vec<TeletextEnhancementCommand>,

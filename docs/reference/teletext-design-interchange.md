@@ -432,6 +432,60 @@ or DRCS, validate prohibited object overlap/open-object limits, normalize physic
 instructions or authorize rendering/publication. Final C2 transmission ties,
 Adaptive endpoints, geometry and both receiver views remain mandatory work.
 
+### Coded-base height fragments and suppression
+
+The same immutable main composition retains `base_footprints()` alongside its
+exact coded `base_display()`. This fixed 25-by-40 intermediate references original
+coded positions and fragment origins; it does not replace original cells or
+interpret the after-Adaptive attribute projection as a base rendering layer.
+
+The existing authored fallback emits normal-height and double-height spacing
+controls. Double Height is SetAfter; Normal Height is SetAt. Any processed spacing
+Double Height control suppresses all ordinary data and controls in the next main
+row, including when immediately cancelled or placed in column 39. Suppressed
+lower-row controls do not trigger further suppression. Double-height lower
+fragments reference their exact upper origin. Remaining lower cells are
+background-only and reference the upper background origin. Final background
+still requires the upper Base/Active/Local layer; Adaptive/Passive background-only
+overrides must not be inferred from these base facts.
+
+Each row separately retains its real mapped start defaults, supplied from the
+original presentation and colour context. This includes full-row black-background
+substitution independently of spacing CLUT remapping. Ignored lower-row coded
+foreground, background, flash and size do not become enhancement inheritance.
+Nonspacing-only height does not create whole-row spacing suppression. Panels are
+not ordinary lower-row data and are resolved separately by final layer replay.
+
+Illegal height rows 0/23/24 retain located pending boundary facts, including
+affected lower-row uncertainty, without choosing universal clipping. Independent
+imager 0.2.0 and libzvbi 0.2.42 agree on legal suppression corner cases but differ
+at those illegal boundaries. Their public fragment-tag numbers also differ.
+libzvbi 0.2.42 disagrees with Table 4's independent black-background substitution
+under asymmetric remapping; its output is not a substitution-conformance oracle.
+
+The bounded `teletext-base-footprint-decoder.py` oracle consumes actual producer
+DVB units and literal code/repertoire/mark/foreground/background/fragment tuples
+at both Level 1.5 and 2.5. It uses the existing pinned imager loader and source
+guards without changing the original composition oracle or its requests. Native
+production proof distinguishes spacing height fragments from nonspacing-only
+height preserving uncovered lower coded data. This proves selected decoded
+fragments, not pixels, full C.3 overlap, suitable-client navigation or publication.
+
+Replay the production fragment gate with the existing pinned checkout:
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR=/path/to/pinned-teletextimager \
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(teletext::base_footprint_runtime_tests)'
+```
+
+Set `ERSATZRS_TELETEXT_TEST_BASE_FOOTPRINT_FIXTURE` to a file in an existing
+temporary directory to archive the exact request. Its SHA-256 is
+`d7a29971f30296d98df958b6e7bebb906f2c27b584f9668f5a1ca159dc9c3d32`;
+the new helper is `a0273b4755de05bacc39e5e8c57624842a045891b1f46e944fb8933524678a49`.
+The original composition helper remains
+`e1cb2ad2b16e78a0f56baaae14434aa6d78f146d7e0173c7ade9f19db97228eb`.
+
 ### Original candidate attribute observations
 
 `TeletextAttributeExecution.records()` retains one immutable pre-geometry

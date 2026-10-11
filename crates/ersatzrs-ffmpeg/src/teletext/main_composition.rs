@@ -11,21 +11,22 @@ use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
     build_teletext_glyph_layers, resolve_teletext_attribute_execution,
-    resolve_teletext_charset_execution, resolve_teletext_display_geometry,
-    resolve_teletext_drcs_execution, resolve_teletext_glyph_intent, resolve_teletext_spatial_trace,
-    TeletextAttributeExecution, TeletextAttributeExecutionError, TeletextBaseDisplay,
-    TeletextCharsetExecution, TeletextCharsetExecutionError, TeletextCharsetPair,
-    TeletextCharsetValueError, TeletextCollectedEnhancementReferences, TeletextColumnOperation,
-    TeletextDisplayGeometry, TeletextDisplayGeometryBudget, TeletextDisplayGeometryError,
-    TeletextDrcsExecution, TeletextDrcsExecutionBudget, TeletextDrcsExecutionError,
-    TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
-    TeletextEnhancementCollectionBudget, TeletextEnhancementCollectionFailure,
-    TeletextEnhancementCommand, TeletextEnhancementPosition, TeletextEnhancementProgram,
-    TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextG3Compatibility,
-    TeletextGlyphIntent, TeletextGlyphIntentError, TeletextGlyphLayers, TeletextGlyphLayersError,
-    TeletextObjectIdentity, TeletextPageAddress, TeletextSemanticService, TeletextServiceError,
-    TeletextSpatialTrace, TeletextSpatialTraceBudget, TeletextSpatialTraceError, TELETEXT_COLUMNS,
-    TELETEXT_ROWS,
+    resolve_teletext_base_footprints, resolve_teletext_charset_execution,
+    resolve_teletext_display_geometry, resolve_teletext_drcs_execution,
+    resolve_teletext_glyph_intent, resolve_teletext_spatial_trace, TeletextAttributeExecution,
+    TeletextAttributeExecutionError, TeletextBaseDisplay, TeletextBaseFootprintError,
+    TeletextBaseFootprints, TeletextCharsetExecution, TeletextCharsetExecutionError,
+    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
+    TeletextColumnOperation, TeletextDisplayGeometry, TeletextDisplayGeometryBudget,
+    TeletextDisplayGeometryError, TeletextDrcsExecution, TeletextDrcsExecutionBudget,
+    TeletextDrcsExecutionError, TeletextEffectiveProgramSource,
+    TeletextEnhancementCharsetDesignation, TeletextEnhancementCollectionBudget,
+    TeletextEnhancementCollectionFailure, TeletextEnhancementCommand, TeletextEnhancementPosition,
+    TeletextEnhancementProgram, TeletextEnhancementProgramError, TeletextEnhancementSource,
+    TeletextG3Compatibility, TeletextGlyphIntent, TeletextGlyphIntentError, TeletextGlyphLayers,
+    TeletextGlyphLayersError, TeletextObjectIdentity, TeletextPageAddress, TeletextSemanticService,
+    TeletextServiceError, TeletextSpatialTrace, TeletextSpatialTraceBudget,
+    TeletextSpatialTraceError, TELETEXT_COLUMNS, TELETEXT_ROWS,
 };
 
 use super::base_display::{trace_teletext_base_display, TeletextBaseDisplayError};
@@ -89,6 +90,8 @@ pub enum TeletextMainCompositionFailure {
     #[error(transparent)]
     BaseDisplay(#[from] TeletextBaseDisplayError),
     #[error(transparent)]
+    BaseFootprints(#[from] TeletextBaseFootprintError),
+    #[error(transparent)]
     SpatialTrace(#[from] TeletextSpatialTraceError),
     #[error(transparent)]
     GlyphLayers(#[from] TeletextGlyphLayersError),
@@ -142,6 +145,7 @@ pub struct TeletextMainComposition {
     provenance: Vec<TeletextMainCompositionSource>,
     colour_context: TeletextColourContext,
     base_display: TeletextBaseDisplay,
+    base_footprints: TeletextBaseFootprints,
     spatial_trace: TeletextSpatialTrace,
     glyph_layers: TeletextGlyphLayers,
     attribute_execution: TeletextAttributeExecution,
@@ -178,6 +182,13 @@ impl TeletextMainComposition {
     #[must_use]
     pub const fn base_display(&self) -> &TeletextBaseDisplay {
         &self.base_display
+    }
+    /// Coded-base fragments and spacing-driven main-row suppression. These
+    /// exact origins reference the retained Base trace, before any enhancement
+    /// overlays. Pending boundaries and final layer-aware C.3 remain explicit.
+    #[must_use]
+    pub const fn base_footprints(&self) -> &TeletextBaseFootprints {
+        &self.base_footprints
     }
     /// Original command coordinates and repeated invocation identities, before
     /// base-glyph insertion. Final attribute arbitration and footprints remain open.
@@ -318,6 +329,9 @@ pub fn compose_teletext_main_program(
         .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
     let base_display = trace_teletext_base_display(page, &layout, presentation, &colour_context)
         .map_err(|reason| error(owner, None, reason.into()))?;
+    let base_footprints =
+        resolve_teletext_base_footprints(&base_display, colour_context.row_colours())
+            .map_err(|reason| error(owner, None, reason.into()))?;
     let collected = service
         .objects()
         .collect_display_references(owner, &program, primary.pair(), budget.collection)
@@ -342,6 +356,7 @@ pub fn compose_teletext_main_program(
         provenance: built.provenance,
         colour_context,
         base_display,
+        base_footprints,
         spatial_trace: original_display.spatial,
         glyph_layers: original_display.glyphs,
         attribute_execution: original_display.attributes,

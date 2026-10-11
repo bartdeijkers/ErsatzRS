@@ -126,6 +126,12 @@ stages before Adaptive and Passive application. Neither an observation nor a
 flattened cell winner supplies final size/overlap semantics. C.3 resolution must
 replay original layer/instance writers, spacing lower-row suppression, origin
 fragments and deferred obscured attributes before rendering and publication.
+The same composition now retains fixed coded-base fragments and the original
+spacing Double Height cause for whole lower-main-row suppression. Suppressed
+controls cannot cascade; background-only cells reference their upper origin,
+separately from the ignored row's mapped default baseline. Illegal height rows
+retain located pending boundaries rather than choosing a decoder-specific clip.
+These base facts precede enhancement replay and do not settle final C.3 overlays.
 G1 alphabetic positions now have a separate checked operation, preserving mode
 0x01 rather than promoting them to a Level 1.5-compatible character command.
 Original glyph/Passive attribute execution retains this intent; composition keeps

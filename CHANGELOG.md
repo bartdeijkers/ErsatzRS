@@ -187,6 +187,9 @@ release section when tagging a release.
   Original attribute execution now retains every candidate's pre-geometry
   observation, losing Passive private state and separate shared stages; complete
   layer-aware size/obscured-attribute rendering remains required.
+  Coded-base fragments now retain spacing-driven lower-row suppression and exact
+  upper origins beside independent row defaults; ignored controls do not cascade.
+  Illegal height boundaries and final enhancement overlays remain unresolved.
   Known inclusive raw object intervals now reject sixteen simultaneous opens
   across all object types with original call diagnostics; unresolved intervals
   remain visible and full overlap/admission validation remains open.

@@ -11,6 +11,7 @@ mod attribute_execution;
 mod attribute_observations;
 mod attribute_values;
 mod base_display;
+mod base_footprints;
 mod charset_execution;
 mod charset_execution_values;
 mod charset_values;
@@ -44,6 +45,7 @@ pub use attribute_execution::*;
 pub use attribute_observations::*;
 pub use attribute_values::*;
 pub use base_display::*;
+pub use base_footprints::*;
 pub use charset_execution::*;
 pub use charset_execution_values::*;
 pub use charset_values::*;
@@ -143,3 +145,6 @@ mod charset_execution_tests;
 
 #[cfg(test)]
 mod glyph_intent_tests;
+
+#[cfg(test)]
+mod base_footprints_tests;

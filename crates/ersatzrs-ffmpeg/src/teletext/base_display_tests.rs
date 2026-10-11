@@ -581,6 +581,175 @@ fn reserved_legacy_national_bits_fail_before_a_base_trace_can_be_obtained() {
     );
 }
 
+fn compose_base_fragments(service: &TeletextSemanticService) -> super::TeletextMainComposition {
+    compose_teletext_main_program(
+        service,
+        service.base().pages[0].address,
+        TeletextMainCompositionBudget {
+            max_input_commands: 128,
+            max_output_commands: 128,
+            collection: TeletextEnhancementCollectionBudget {
+                max_commands: 128,
+                max_drcs_references: 0,
+            },
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn composition_retains_exact_base_fragment_origins_and_separate_mapped_row_defaults() {
+    let mut presentation =
+        super::presentation::western_latin_v1_presentation(TeletextNationalOption::new(1).unwrap())
+            .unwrap();
+    presentation.remapping = TeletextColourRemapping::FgClut2BgClut1;
+    presentation.black_background_substitution = true;
+    presentation.row_colour = TeletextColourReference::new(18).unwrap();
+    let service = service(
+        vec![row(
+            1,
+            vec![run(
+                8,
+                TeletextStyle {
+                    foreground: TeletextColour::Red,
+                    background: TeletextColour::Blue,
+                    height: TeletextHeight::Double,
+                    ..TeletextStyle::default()
+                },
+                "A",
+            )],
+        )],
+        Some(presentation),
+        vec![],
+    );
+    let original = service.clone();
+    let composed = compose_base_fragments(&service);
+    let footprints = composed.base_footprints();
+    assert_eq!(footprints.owner(), service.base().pages[0].address);
+    assert_eq!(footprints.cells().len(), 1000);
+    assert_eq!(
+        footprints.row(2).unwrap().suppressed_by(),
+        Some(position(1, 7))
+    );
+    for (row, column, kind, origin) in [
+        (1, 7, TeletextBaseFragmentKind::Normal, position(1, 7)),
+        (
+            1,
+            8,
+            TeletextBaseFragmentKind::DoubleHeightTop,
+            position(1, 8),
+        ),
+        (
+            2,
+            8,
+            TeletextBaseFragmentKind::DoubleHeightBottom,
+            position(1, 8),
+        ),
+        (
+            2,
+            6,
+            TeletextBaseFragmentKind::BackgroundOnly,
+            position(1, 6),
+        ),
+    ] {
+        let fragment = footprints.cell(row, column).unwrap();
+        assert_eq!(fragment.coded_position(), position(row, column));
+        assert_eq!(fragment.kind(), kind);
+        assert_eq!(fragment.origin(), Some(origin));
+        assert_eq!(fragment.pending(), None);
+    }
+    let origin = cell(composed.base_display(), 1, 8);
+    assert_eq!(origin.code(), b'A');
+    assert_eq!(origin.attributes().values().foreground.get(), 17);
+    assert_eq!(origin.attributes().values().background.get(), 12);
+    // The lower coded cell remains its own blank/reset trace, not a cloned A.
+    assert_eq!(cell(composed.base_display(), 2, 8).code(), b' ');
+    let baseline = footprints.row(2).unwrap().baseline();
+    assert_eq!(baseline.values().foreground.get(), 23);
+    assert_eq!(baseline.values().background.get(), 18);
+    assert!(!baseline.values().double_height);
+    assert_eq!(
+        baseline.sources().background,
+        TeletextBaseAttributeSource::RowDefault {
+            row: 2,
+            start_column: 0,
+        }
+    );
+    assert_eq!(service, original);
+}
+
+#[test]
+fn composition_keeps_nonspacing_height_separate_from_spacing_lower_row_suppression() {
+    let service = service(
+        vec![
+            row(1, vec![run(8, TeletextStyle::default(), "A")]),
+            row(
+                2,
+                vec![run(
+                    4,
+                    TeletextStyle {
+                        foreground: TeletextColour::Red,
+                        ..TeletextStyle::default()
+                    },
+                    "B",
+                )],
+            ),
+        ],
+        None,
+        vec![
+            TeletextEnhancementCommand::SetPosition {
+                position: position(1, 8),
+            },
+            TeletextEnhancementCommand::AtColumn {
+                column: 8,
+                operation: TeletextColumnOperation::Attributes {
+                    double_height: true,
+                    double_width: false,
+                    boxed: false,
+                    conceal: false,
+                    invert: false,
+                    underline_or_separated_mosaics: false,
+                },
+            },
+        ],
+    );
+    let before = service.clone();
+    let composed = compose_base_fragments(&service);
+    let footprints = composed.base_footprints();
+    assert_eq!(
+        footprints.row(1).unwrap().first_double_height_control(),
+        None
+    );
+    assert_eq!(footprints.row(2).unwrap().suppressed_by(), None);
+    assert_eq!(
+        footprints.cell(1, 8).unwrap().kind(),
+        TeletextBaseFragmentKind::Normal
+    );
+    assert_eq!(
+        footprints.cell(2, 4).unwrap().kind(),
+        TeletextBaseFragmentKind::Normal
+    );
+    assert_eq!(cell(composed.base_display(), 2, 4).code(), b'B');
+    assert_eq!(
+        cell(composed.base_display(), 2, 4)
+            .attributes()
+            .values()
+            .foreground
+            .get(),
+        1
+    );
+    assert_eq!(
+        composed
+            .attribute_execution()
+            .before_adaptive_cell(1, 8)
+            .unwrap()
+            .double_height()
+            .value(),
+        Some(true)
+    );
+    assert_eq!(service, before);
+}
+
 fn reconstruct(
     display: &TeletextBaseDisplay,
     cells: Box<[[TeletextBaseDisplayCell; 40]; 25]>,

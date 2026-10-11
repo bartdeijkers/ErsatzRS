@@ -178,6 +178,10 @@ losing private Passive state, with shared stages before Adaptive and Passive.
 Next consume original writers and these stages in layer-aware C.3 resolution:
 spacing lower-row suppression, origin fragments and deferred obscured attributes.
 Do not resize a flattened glyph winner or use these observations as final attrs.
+Coded-base fragments now retain spacing Double Height suppression, exact upper
+origins and separate mapped lower-row default baselines. Ignored lower controls
+do not cascade. Illegal height boundaries remain pending; final C.3 must replay
+enhancements over these base facts, including nonspacing-only height and panels.
 The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
 selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
 alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.
