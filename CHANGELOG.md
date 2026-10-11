@@ -167,6 +167,9 @@ release section when tagging a release.
   remain open.
   Breaking Rust API: `TeletextOutputBinding::pages()` now returns optional base
   content; use `content()` for complete authored bindings.
+  Retain exact validated producer response bytes and schema in original binding
+  order beside native candidates, preserving the actual V1 lift region without
+  reserialization. Durable concept storage and explicit publication remain open.
   Add a pinned persistent-decoder diagnostic confirming that M29 palette defaults
   survive omission despite page erasure; safe replacement remains required.
   Final resource command spans now settle same-instance attributes

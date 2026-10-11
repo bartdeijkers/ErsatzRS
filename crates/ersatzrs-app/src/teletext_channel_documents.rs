@@ -10,7 +10,7 @@ use crate::{
     },
     teletext_profile_documents::{
         BoundTeletextDocumentError, BoundTeletextDocumentInput, TeletextProfileDocument,
-        TeletextProfileDocumentBudget,
+        TeletextProfileDocumentBudget, TeletextValidatedDocumentSource,
     },
     teletext_profiles::{TeletextProfileRuntimeError, TeletextProfileRuntimeReceipt},
     ApplicationServices,
@@ -68,6 +68,7 @@ impl BoundChannelTeletextDocumentInput {
     ) -> Result<PreparedChannelTeletextDocuments, ChannelTeletextDocumentError> {
         check_deadline(Instant::now(), self.deadline)?;
         let mut documents = Vec::with_capacity(self.receipts.len());
+        let mut sources = Vec::with_capacity(self.receipts.len());
         for (binding, receipt) in self.receipts.into_iter().enumerate() {
             let prepared = BoundTeletextDocumentInput::from_channel_receipt(receipt, self.deadline)
                 .validate(budget)
@@ -75,14 +76,16 @@ impl BoundChannelTeletextDocumentInput {
                     binding,
                     error: Box::new(error),
                 })?;
-            let (_, _, document, _) = prepared.into_parts();
+            let (_, _, document, source, _) = prepared.into_parts_with_source();
             documents.push(document);
+            sources.push(source);
         }
         check_deadline(Instant::now(), self.deadline)?;
         Ok(PreparedChannelTeletextDocuments {
             selection: self.selection,
             generation: self.generation,
             documents,
+            sources,
             entry_addon_id: self.entry_addon_id,
             deadline: self.deadline,
         })
@@ -104,11 +107,34 @@ pub struct PreparedChannelTeletextDocuments {
     selection: TeletextChannelSelectionSnapshot,
     generation: String,
     documents: Vec<TeletextProfileDocument>,
+    sources: Vec<TeletextValidatedDocumentSource>,
     entry_addon_id: Option<String>,
     deadline: Instant,
 }
 
 impl PreparedChannelTeletextDocuments {
+    /// Move ordered originals and sources under their complete observed selection.
+    /// Both vectors have one element per binding in the original binding order.
+    #[must_use]
+    pub fn into_parts_with_sources(
+        self,
+    ) -> (
+        TeletextChannelSelectionSnapshot,
+        String,
+        Vec<TeletextProfileDocument>,
+        Vec<TeletextValidatedDocumentSource>,
+        Option<String>,
+        Instant,
+    ) {
+        (
+            self.selection,
+            self.generation,
+            self.documents,
+            self.sources,
+            self.entry_addon_id,
+            self.deadline,
+        )
+    }
     #[must_use]
     pub const fn selection(&self) -> &TeletextChannelSelectionSnapshot {
         &self.selection
@@ -121,6 +147,11 @@ impl PreparedChannelTeletextDocuments {
     pub fn documents(&self) -> &[TeletextProfileDocument] {
         &self.documents
     }
+    /// `sources()[i]` belongs to `documents()[i]` and `selection().bindings[i]`.
+    #[must_use]
+    pub fn sources(&self) -> &[TeletextValidatedDocumentSource] {
+        &self.sources
+    }
     #[must_use]
     pub fn entry_addon_id(&self) -> Option<&str> {
         self.entry_addon_id.as_deref()
@@ -130,6 +161,8 @@ impl PreparedChannelTeletextDocuments {
         self.deadline
     }
     /// Move the whole association into host work; another channel fence is required.
+    /// This compatibility projection drops sources; use `into_parts_with_sources`
+    /// when retaining original producer responses.
     #[must_use]
     pub fn into_parts(
         self,

@@ -41,6 +41,41 @@ pub enum TeletextProfileDocument {
     Authored(Box<TeletextDeclaredService>),
 }
 
+/// Exact bounded UTF-8 producer response after selected-contract/model validation.
+/// Private construction preserves the original schema and correlation; neither
+/// field establishes expiry, revision ownership or publication eligibility.
+pub struct TeletextValidatedDocumentSource {
+    contract: TeletextPageContract,
+    generation: String,
+    bytes: Vec<u8>,
+}
+
+impl TeletextValidatedDocumentSource {
+    #[must_use]
+    pub const fn contract(&self) -> TeletextPageContract {
+        self.contract
+    }
+    /// Original opaque correlation, never a durable design revision.
+    #[must_use]
+    pub fn generation(&self) -> &str {
+        &self.generation
+    }
+    /// Exact original response bytes, without serialization or normalization.
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+impl fmt::Debug for TeletextValidatedDocumentSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextValidatedDocumentSource")
+            .field("contract", &self.contract)
+            .field("response_bytes", &self.bytes.len())
+            .finish_non_exhaustive()
+    }
+}
+
 /// Owned raw receipt, obtainable only after invocation and selection fencing.
 /// Content stays private until exact-contract validation completes.
 pub struct BoundTeletextDocumentInput {
@@ -96,10 +131,16 @@ impl BoundTeletextDocumentInput {
             )),
         };
         check_deadline(Instant::now(), self.deadline)?;
+        let source = TeletextValidatedDocumentSource {
+            contract: self.receipt.selection.contract,
+            generation: self.receipt.generation.clone(),
+            bytes: self.receipt.stdout,
+        };
         Ok(PreparedBoundTeletextDocument {
             selection: self.receipt.selection,
             generation: self.receipt.generation,
             document,
+            source,
             deadline: self.deadline,
         })
     }
@@ -119,13 +160,36 @@ pub struct PreparedBoundTeletextDocument {
     selection: TeletextSelectionSnapshot,
     generation: String,
     document: TeletextProfileDocument,
+    source: TeletextValidatedDocumentSource,
     deadline: Instant,
 }
 
 impl PreparedBoundTeletextDocument {
+    /// Move the complete association and exact source without copying responses.
+    /// Subsequent work still needs the existing selection/deadline fences.
+    #[must_use]
+    pub fn into_parts_with_source(
+        self,
+    ) -> (
+        TeletextSelectionSnapshot,
+        String,
+        TeletextProfileDocument,
+        TeletextValidatedDocumentSource,
+        Instant,
+    ) {
+        (
+            self.selection,
+            self.generation,
+            self.document,
+            self.source,
+            self.deadline,
+        )
+    }
     /// Move the complete document and its observed association into native work.
     /// The caller must retain this association and recheck it after encoding;
     /// these components grant no publication authority.
+    /// This compatibility projection drops the source; retain it with
+    /// `into_parts_with_source` when preparing durable original documents.
     #[must_use]
     pub fn into_parts(
         self,
@@ -156,6 +220,11 @@ impl PreparedBoundTeletextDocument {
     #[must_use]
     pub const fn document(&self) -> &TeletextProfileDocument {
         &self.document
+    }
+    /// The source belongs to this exact document and observed selection.
+    #[must_use]
+    pub const fn source(&self) -> &TeletextValidatedDocumentSource {
+        &self.source
     }
     /// Original shared deadline; subsequent stages must not restart this budget.
     #[must_use]

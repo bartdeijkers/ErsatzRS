@@ -524,6 +524,10 @@ It is required Phase 9 work, with implementation and independent acceptance open
   Complete authored bindings now feed the existing paced/retained final MPEG-TS
   forwarding seam, sharing immutable content with independent output epochs.
   Normal-route lookup of explicitly published revisions is still missing.
+  Exact validated response allocations now remain associated with ordered
+  native candidates, including schema/correlation and the actual V1 lift region.
+  Durable immutable draft revisions/CAS and reload remain the next seam; preserve
+  original lifecycle/edit-policy context and do not reinvoke packages on reload.
   Next prove mixed output with independent decoding. Warm magazine/resource
   replacement, client/editor workflows and explicit publication remain required.
 - The TV-guide add-on declares named colour/layout themes, permitted overrides

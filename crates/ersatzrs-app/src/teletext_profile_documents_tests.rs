@@ -74,6 +74,90 @@ fn document_receipt(
     }
 }
 
+#[test]
+fn validated_sources_move_exact_response_allocations_and_preserve_local_presence() {
+    use crate::teletext_profile_documents::BoundTeletextDocumentInput;
+    for shape in 0..4 {
+        let mut selected = selection(1);
+        let mut value: serde_json::Value = if shape == 0 {
+            serde_json::from_slice(&output(GENERATION, "Literal <b>page</b>")).unwrap()
+        } else {
+            selected.contract = ersatzrs_domain::TeletextPageContract::V2;
+            serde_json::from_slice(&authored_output()).unwrap()
+        };
+        match shape {
+            1 => value["page_enhancements"][0]["local_program"] = serde_json::Value::Null,
+            2 => value["page_enhancements"][0]["local_program"] = json!({"commands":[]}),
+            _ => {}
+        }
+        let mut bytes = serde_json::to_vec_pretty(&value).unwrap();
+        bytes.extend_from_slice(b"\n \t");
+        let expected = bytes.clone();
+        let allocation = bytes.as_ptr();
+        let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
+        let prepared = BoundTeletextDocumentInput::from_channel_receipt(
+            document_receipt(selected.clone(), bytes),
+            deadline,
+        )
+        .validate(budgets())
+        .unwrap();
+        assert_eq!(prepared.source().bytes(), expected);
+        assert_eq!(prepared.source().bytes().as_ptr(), allocation);
+        assert_eq!(prepared.source().contract(), selected.contract);
+        assert_eq!(prepared.source().generation(), GENERATION);
+        let debug = format!("{:?}", prepared.source());
+        assert!(!debug.contains(GENERATION));
+        assert!(!debug.contains("Literal"));
+        assert!(!debug.contains("Café"));
+        if let TeletextProfileDocument::Authored(declared) = prepared.document() {
+            let owner = declared.semantic().base().pages[0].address;
+            let program = &declared.semantic().page_enhancements()[&owner].local_program;
+            match shape {
+                1 => assert!(program.is_none()),
+                2 => assert!(program.as_ref().unwrap().commands().is_empty()),
+                _ => assert_eq!(program.as_ref().unwrap().commands().len(), 3),
+            }
+        }
+        let (observed, correlation, _, source, end) = prepared.into_parts_with_source();
+        assert_eq!(observed, selected);
+        assert_eq!(correlation, GENERATION);
+        assert_eq!(source.bytes(), expected);
+        assert_eq!(source.bytes().as_ptr(), allocation);
+        assert_eq!(end, deadline);
+    }
+}
+
+#[test]
+fn raw_source_failures_never_create_validated_retained_records() {
+    use crate::teletext_profile_documents::BoundTeletextDocumentInput;
+    for contract in [
+        ersatzrs_domain::TeletextPageContract::V1,
+        ersatzrs_domain::TeletextPageContract::V2,
+    ] {
+        for bytes in [
+            vec![b' '; wire::MAX_TELETEXT_PAGES_OUTPUT_BYTES + 1],
+            vec![0xff],
+            b"private malformed source".to_vec(),
+        ] {
+            let mut selected = selection(1);
+            selected.contract = contract;
+            let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
+            let result = BoundTeletextDocumentInput::from_channel_receipt(
+                document_receipt(selected, bytes),
+                deadline,
+            )
+            .validate(budgets());
+            let error = result.unwrap_err();
+            assert!(matches!(
+                error,
+                BoundTeletextDocumentError::BaseResponse(_)
+                    | BoundTeletextDocumentError::AuthoredResponse(_)
+            ));
+            assert!(!format!("{error:?}").contains("private malformed source"));
+        }
+    }
+}
+
 #[tokio::test]
 async fn selected_v2_input_preserves_complete_authored_fallback_and_packet_presence() {
     let repo = authored_repository();

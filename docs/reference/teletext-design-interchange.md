@@ -3449,6 +3449,24 @@ into encoding without cloning originals. Explicit Off retains no producers,
 provenance, metadata, encoding or descriptor, ignores unused entry/lifecycle
 policy and still receives the final complete-channel fence.
 
+`TeletextValidatedDocumentSource` is privately constructed only after exact
+selected-contract parsing and domain validation under the original deadline.
+It moves the bounded UTF-8 response allocation without serialization, retaining
+its schema and original opaque correlation. Prepared single-binding/channel
+values expose `source()`/ordered `sources()` and additive consuming projections;
+legacy tuple projections explicitly discard sources. Debug shows only schema and
+byte count. No response text or correlation is exposed by Debug.
+
+The native channel candidate retains these exact sources before M29-derived X28
+composition, in the same order as bindings/producers, plus `v1_region()` only
+when a V1 lift actually occurred. V2-only and Off retain no unused region; Off
+has no source records. This is in-memory retention, not durable storage or an
+export permission. Next store bounded immutable revisions with private historical
+selection/edit-policy context, exact host lifecycle records and digest/CAS, then
+reload through the same validation/compiler without fabricating invocation
+receipts or invoking packages. A saved draft's fresh read deadline differs from
+the original invocation deadline; publication requires its own current fence.
+
 This is an unpublished cold candidate. A later promotion needs its own fresh
 selection check, admitted generation ownership and safe output boundary. Warm
 M29/MOT/page-X28 replacement, durable drafts, editor interchange, localized UI,

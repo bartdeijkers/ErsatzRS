@@ -171,6 +171,21 @@ fn display_units(page: &EncodedTeletextAuthoredPage) -> &[[u8; 46]] {
     }
 }
 
+fn assert_original_sources(result: &EncodedChannelTeletextDocumentCandidate, values: &[&Value]) {
+    assert_eq!(result.sources().len(), values.len());
+    for (index, value) in values.iter().enumerate() {
+        let source = &result.sources()[index];
+        assert_eq!(source.bytes(), serde_json::to_vec(value).unwrap());
+        assert_eq!(source.generation(), GENERATION);
+        assert_eq!(
+            source.contract(),
+            result.selection().bindings[index].contract
+        );
+        assert!(!format!("{source:?}").contains(GENERATION));
+        assert!(!format!("{source:?}").contains("ZZ"));
+    }
+}
+
 #[tokio::test]
 async fn mixed_contracts_retain_order_originals_exact_entry_and_complete_native_pages() {
     let mut fixture = Fixture::new().await;
@@ -204,6 +219,8 @@ async fn mixed_contracts_retain_order_originals_exact_entry_and_complete_native_
     assert_eq!(result.metadata().unwrap().entry, address(124, 32));
     assert_eq!(result.metadata().unwrap().language.as_str(), "fra");
     assert_eq!(result.producers().len(), 2);
+    assert_eq!(result.v1_region(), Some(policy().v1_region));
+    assert_original_sources(&result, &[&first, &second]);
     let original_base = ersatzrs_app::teletext_pages::parse_page_set(
         &serde_json::to_vec(&first).unwrap(),
         GENERATION,
@@ -268,13 +285,12 @@ async fn mixed_contracts_retain_order_originals_exact_entry_and_complete_native_
 #[tokio::test]
 async fn different_full_magazine_themes_become_page_packets_without_changing_originals() {
     let mut fixture = Fixture::new().await;
-    configure_pair(
-        &fixture,
-        &response(DocumentFixture::Authored, "day", 123, 16, "nld"),
-        &response(DocumentFixture::Authored, "night", 124, 32, "fra"),
-    )
-    .await;
+    let first = response(DocumentFixture::Authored, "day", 123, 16, "nld");
+    let second = response(DocumentFixture::Authored, "night", 124, 32, "fra");
+    configure_pair(&fixture, &first, &second).await;
     let result = candidate(&fixture, policy()).await.unwrap();
+    assert!(result.v1_region().is_none());
+    assert_original_sources(&result, &[&first, &second]);
     let encoded = result.encoded().unwrap();
     assert!(encoded.magazine_units().is_empty());
     for (index, rgb) in [[15, 0, 0], [0, 0, 15]].into_iter().enumerate() {
@@ -409,6 +425,8 @@ async fn off_invokes_nobody_and_has_no_composed_or_native_partial_result() {
     assert!(result.selection().bindings.is_empty());
     assert!(result.entry_addon_id().is_none());
     assert!(result.producers().is_empty());
+    assert!(result.sources().is_empty());
+    assert!(result.v1_region().is_none());
     assert!(result.provenance().is_empty());
     assert!(result.metadata().is_none());
     assert!(result.encoded().is_none());

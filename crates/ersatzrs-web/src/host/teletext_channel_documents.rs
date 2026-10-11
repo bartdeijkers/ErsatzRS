@@ -8,15 +8,18 @@ use ersatzrs_app::{
         TeletextChannelDocumentInputBudget,
     },
     teletext_guide::SuppliedTeletextGuideContext,
-    teletext_profile_documents::{TeletextProfileDocument, TeletextProfileDocumentBudget},
+    teletext_profile_documents::{
+        TeletextProfileDocument, TeletextProfileDocumentBudget, TeletextValidatedDocumentSource,
+    },
     ApplicationServices,
 };
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextColdProducerComposition,
-    TeletextComposedProducerPage, TeletextPageAddress, TeletextProducerCompositionBudget,
-    TeletextProducerCompositionError, TeletextProducerCompositionFailure,
-    TeletextProducerCompositionMetadata, TeletextProducerPresentation,
-    TeletextProducerPresentationBudget, TeletextProducerPresentationError,
+    TeletextComposedProducerPage, TeletextPageAddress, TeletextPageContract,
+    TeletextProducerCompositionBudget, TeletextProducerCompositionError,
+    TeletextProducerCompositionFailure, TeletextProducerCompositionMetadata,
+    TeletextProducerPresentation, TeletextProducerPresentationBudget,
+    TeletextProducerPresentationError,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service, EncodedTeletextAuthoredService,
@@ -48,6 +51,8 @@ pub struct EncodedChannelTeletextDocumentCandidate {
     generation: String,
     deadline: Instant,
     entry_addon_id: Option<String>,
+    sources: Vec<TeletextValidatedDocumentSource>,
+    v1_region: Option<TeletextEncodingRegion>,
     producers: Vec<TeletextProducerPresentation>,
     provenance: Vec<TeletextComposedProducerPage>,
     metadata: Option<TeletextProducerCompositionMetadata>,
@@ -75,6 +80,17 @@ impl EncodedChannelTeletextDocumentCandidate {
     #[must_use]
     pub fn producers(&self) -> &[TeletextProducerPresentation] {
         &self.producers
+    }
+    /// Exact sources before composition: `sources()[i]` belongs to
+    /// `producers()[i]` and `selection().bindings[i]`.
+    #[must_use]
+    pub fn sources(&self) -> &[TeletextValidatedDocumentSource] {
+        &self.sources
+    }
+    /// Explicit host region actually used for V1 lift; absent for V2-only/Off.
+    #[must_use]
+    pub const fn v1_region(&self) -> Option<TeletextEncodingRegion> {
+        self.v1_region
     }
     #[must_use]
     pub fn provenance(&self) -> &[TeletextComposedProducerPage] {
@@ -177,10 +193,10 @@ fn encode_channel(
     policy: &TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError> {
     check_deadline(input.deadline())?;
-    let (selection, generation, documents, entry_addon_id, deadline) =
-        input.validate(policy.validation)?.into_parts();
+    let (selection, generation, documents, sources, entry_addon_id, deadline) =
+        input.validate(policy.validation)?.into_parts_with_sources();
     check_deadline(deadline)?;
-    if documents.len() != selection.bindings.len() {
+    if documents.len() != selection.bindings.len() || sources.len() != documents.len() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
     let mut candidate = EncodedChannelTeletextDocumentCandidate {
@@ -188,6 +204,8 @@ fn encode_channel(
         generation,
         deadline,
         entry_addon_id,
+        sources,
+        v1_region: None,
         producers: Vec::new(),
         provenance: Vec::new(),
         metadata: None,
@@ -196,6 +214,13 @@ fn encode_channel(
     };
     if documents.is_empty() {
         return Ok(candidate);
+    }
+    if candidate
+        .sources
+        .iter()
+        .any(|source| source.contract() == TeletextPageContract::V1)
+    {
+        candidate.v1_region = Some(policy.v1_region);
     }
     let producers = prepare_producers(documents, deadline, policy)?;
     let metadata = entry_metadata(&candidate, &producers, policy.entry)?;

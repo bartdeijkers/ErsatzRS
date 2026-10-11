@@ -287,6 +287,17 @@ async fn mixed_documents_keep_exact_requests_order_deadline_and_authored_metadat
     assert_eq!(prepared.generation(), GENERATION);
     assert_eq!(prepared.entry_addon_id(), Some(B));
     assert_eq!(prepared.deadline(), deadline);
+    assert_eq!(prepared.sources().len(), 2);
+    for (index, expected) in [basic(binding(A, 1)).stdout, authored_output()]
+        .into_iter()
+        .enumerate()
+    {
+        let source = &prepared.sources()[index];
+        assert_eq!(source.bytes(), expected);
+        assert_eq!(source.contract(), before.bindings[index].contract);
+        assert_eq!(source.generation(), GENERATION);
+        assert!(!format!("{source:?}").contains(GENERATION));
+    }
     let TeletextProfileDocument::Base(base) = &prepared.documents()[0] else {
         panic!("v1 changed contract")
     };
@@ -322,10 +333,13 @@ async fn mixed_documents_keep_exact_requests_order_deadline_and_authored_metadat
     );
     assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
     assert_eq!(*repo.selection.lock().unwrap(), before);
-    let (selected, generation, documents, entry, end) = prepared.into_parts();
+    let (selected, generation, documents, sources, entry, end) = prepared.into_parts_with_sources();
     assert_eq!(selected, before);
     assert_eq!(generation, GENERATION);
     assert_eq!(documents.len(), 2);
+    assert_eq!(sources.len(), 2);
+    assert_eq!(sources[0].bytes(), basic(binding(A, 1)).stdout);
+    assert_eq!(sources[1].bytes(), authored_output());
     assert_eq!(entry.as_deref(), Some(B));
     assert_eq!(end, deadline);
 }
@@ -348,6 +362,7 @@ async fn off_is_fenced_empty_and_on_requires_selected_entry_without_writes() {
     .unwrap();
     let prepared = input.validate(document_budget()).unwrap();
     assert!(prepared.documents().is_empty());
+    assert!(prepared.sources().is_empty());
     assert!(prepared.entry_addon_id().is_none());
     assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
     for (entry, missing) in [(None, true), (Some(C), false)] {
