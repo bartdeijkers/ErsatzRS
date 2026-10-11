@@ -11,6 +11,7 @@ mod buffer;
 mod carousel;
 mod charset;
 mod clock;
+mod colour_context;
 mod compositional;
 mod drcs;
 mod enhancement_program;
@@ -41,6 +42,10 @@ pub use buffer::{TeletextBufferError, TeletextPacketBuffer};
 pub use carousel::{TeletextCarousel, TeletextCarouselBatch, TeletextCarouselBatchKind};
 pub use clock::{
     TeletextClockConfig, TeletextClockError, TeletextClockReport, TeletextClockValidator,
+};
+pub use colour_context::{
+    resolve_teletext_colour_context, TeletextColourContext, TeletextColourContextError,
+    TeletextColourContextFailure,
 };
 pub use compositional::encode_teletext_compositional_links;
 pub use drcs::{encode_teletext_drcs_bodies, TeletextDrcsPacketBodies};
@@ -159,6 +164,8 @@ pub enum TeletextEncodingError {
 mod buffer_tests;
 #[cfg(test)]
 mod clock_tests;
+#[cfg(test)]
+mod colour_context_tests;
 #[cfg(test)]
 mod compositional_tests;
 #[cfg(test)]

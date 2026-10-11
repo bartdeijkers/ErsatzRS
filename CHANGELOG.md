@@ -149,7 +149,9 @@ release section when tagging a release.
   and independent definition state. A bounded compiled-page inventory check now
   rejects exact display/resource header collisions and repeated logical resource
   owners while preserving distinct-S1 identities. Complete service compilation
-  remains open. Private positioned base glyphs now prepare context-aware
+  remains open. Exact-owner effective program access and bounded original colour
+  resolution preserve default suppression and main/Active colour priority before
+  composition. Private positioned base glyphs now prepare context-aware
   composition while preserving existing fallback rows and packet bytes.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional

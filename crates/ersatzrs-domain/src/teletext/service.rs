@@ -452,6 +452,32 @@ impl TeletextSemanticService {
             .map(|page| self.presentation(page))
     }
 
+    /// Effective ordered program for one exact existing base page/subcode.
+    ///
+    /// Present local programs, including an empty override, remain borrowed and
+    /// suppress all declared defaults. Without local X26, the existing selection
+    /// policy synthesizes owned default invocations in canonical sparse slot
+    /// order, or an owned empty `BaseOnly` program. This exposes already validated
+    /// semantic selection; it grants no physical encoding or publication authority.
+    /// # Errors
+    /// Returns `MissingPage` for an unknown exact owner, including another subcode
+    /// of an existing page. It does not fabricate an empty program for that owner.
+    pub fn effective_program(
+        &self,
+        address: TeletextPageAddress,
+    ) -> Result<
+        (
+            TeletextEffectiveProgramSource,
+            Cow<'_, TeletextEnhancementProgram>,
+        ),
+        TeletextServiceError,
+    > {
+        if !self.base.pages.iter().any(|page| page.address == address) {
+            return Err(TeletextServiceError::MissingPage { address });
+        }
+        effective_program(self.pages.get(&address))
+    }
+
     fn validate_links_and_defaults(
         &self,
         page: &TeletextResolvedPageEnhancementDraft,

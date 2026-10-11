@@ -1215,3 +1215,139 @@ fn metadata_owners_duplicates_and_magazines_are_checked_without_partial_mutation
         &original.base
     );
 }
+
+#[test]
+fn effective_program_borrows_original_nonempty_local_program_for_exact_owner() {
+    let owner = address(200, 0x1234);
+    let mut input = draft(&[owner]);
+    input.pages[0].local_program = Some(program(vec![charset(0)]));
+    let service = TeletextSemanticService::new(input, budget()).unwrap();
+    let before = service.clone();
+    let (source, effective) = service.effective_program(owner).unwrap();
+    assert_eq!(source, TeletextEffectiveProgramSource::Local);
+    let std::borrow::Cow::Borrowed(borrowed) = effective else {
+        panic!("expected original local program borrow")
+    };
+    let stored = service.page_enhancements()[&owner]
+        .local_program
+        .as_ref()
+        .unwrap();
+    assert!(std::ptr::eq(borrowed, stored));
+    assert_eq!(borrowed.commands(), &[charset(0)]);
+    assert_eq!(service, before);
+}
+
+#[test]
+fn effective_program_borrows_empty_local_override_and_suppresses_declared_defaults() {
+    let owner = address(200, 0x1234);
+    let target = global(0xb0, 65535);
+    let mut input = draft(&[owner]);
+    input.pages[0].local_program = Some(program(vec![]));
+    input.pages[0].resources.defaults[1] = Some(selection(target, TeletextObjectType::Active));
+    input.objects.push(definition(
+        target,
+        TeletextObjectType::Active,
+        vec![charset(0)],
+    ));
+    let service = TeletextSemanticService::new(
+        input,
+        TeletextServiceBudget {
+            max_collected_commands: 0,
+            ..budget()
+        },
+    )
+    .unwrap();
+    let (source, effective) = service.effective_program(owner).unwrap();
+    assert_eq!(source, TeletextEffectiveProgramSource::Local);
+    let std::borrow::Cow::Borrowed(borrowed) = effective else {
+        panic!("expected present empty local override borrow")
+    };
+    assert!(borrowed.commands().is_empty());
+    assert!(std::ptr::eq(
+        borrowed,
+        service.page_enhancements()[&owner]
+            .local_program
+            .as_ref()
+            .unwrap()
+    ));
+    assert_eq!(service.collected(owner).unwrap().0, source);
+}
+
+#[test]
+fn effective_program_synthesizes_sparse_defaults_in_canonical_order_with_exact_targets() {
+    let owner = address(200, 0x1234);
+    let global_target = global(0xb0, 65535);
+    let public_target = public(0xb1, 15, 0);
+    let mut input = draft(&[owner]);
+    // Insert slot3 first to prove physical/editor insertion order is irrelevant.
+    input.pages[0].resources.defaults[3] =
+        Some(selection(public_target, TeletextObjectType::Passive));
+    input.pages[0].resources.defaults[1] =
+        Some(selection(global_target, TeletextObjectType::Adaptive));
+    input.objects = vec![
+        definition(public_target, TeletextObjectType::Passive, vec![]),
+        definition(global_target, TeletextObjectType::Adaptive, vec![]),
+    ];
+    let service = TeletextSemanticService::new(input, budget()).unwrap();
+    let before = service.clone();
+    let (source, effective) = service.effective_program(owner).unwrap();
+    assert_eq!(
+        source,
+        TeletextEffectiveProgramSource::Defaults { slots: vec![1, 3] }
+    );
+    assert!(matches!(effective, std::borrow::Cow::Owned(_)));
+    assert_eq!(
+        effective.commands(),
+        &[
+            TeletextEnhancementCommand::InvokeObject {
+                target: global_target,
+                object_type: TeletextObjectType::Adaptive,
+                offset: None,
+            },
+            TeletextEnhancementCommand::InvokeObject {
+                target: public_target,
+                object_type: TeletextObjectType::Passive,
+                offset: None,
+            },
+        ]
+    );
+    assert_eq!(service.collected(owner).unwrap().0, source);
+    assert_eq!(service, before);
+}
+
+#[test]
+fn effective_program_is_owned_base_only_with_empty_or_absent_enhancement_metadata() {
+    let owner = address(200, 0x1234);
+    for omit_metadata in [false, true] {
+        let mut input = draft(&[owner]);
+        if omit_metadata {
+            input.pages.clear();
+        }
+        let service = TeletextSemanticService::new(input, budget()).unwrap();
+        let (source, effective) = service.effective_program(owner).unwrap();
+        assert_eq!(source, TeletextEffectiveProgramSource::BaseOnly);
+        assert!(matches!(effective, std::borrow::Cow::Owned(_)));
+        assert!(effective.commands().is_empty());
+        assert_eq!(service.collected(owner).unwrap().0, source);
+    }
+}
+
+#[test]
+fn effective_program_rejects_unknown_exact_page_and_subcode_instead_of_empty_fallback() {
+    let owner = address(200, 0x1234);
+    let mut input = draft(&[owner]);
+    input.pages.clear();
+    let service = TeletextSemanticService::new(input, budget()).unwrap();
+    let before = service.clone();
+    for unknown in [
+        address(200, 0x1235),
+        address(201, 0x1234),
+        address(800, 0x1234),
+    ] {
+        assert_eq!(
+            service.effective_program(unknown),
+            Err(TeletextServiceError::MissingPage { address: unknown })
+        );
+    }
+    assert_eq!(service, before);
+}

@@ -127,6 +127,11 @@ subtitle/national-subset decoding pass. Merge authored AP/charset/header-colour/
 default context before final local-definition sizing; do not concatenate bodies.
 Row-zero position lowering and base/enhancement composition remain required work,
 without permanent scope restrictions.
+The compiler now reuses exact-owner effective program selection, retaining local
+empty overrides and sparse original MOT roots. Original colour context is resolved
+before insertion, with main/Active priority, exact row origins and bounded repeated
+work. The interchange reference specifies this prerequisite; ordered glyph merge,
+repertoire restoration and full final service composition remain required.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

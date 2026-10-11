@@ -156,6 +156,15 @@ also realize original default-object behavior when the local program was absent;
 `Some(empty)` continues suppressing defaults. Definition allocation follows final
 merged sizing. Blind prefixing or copying the legacy black header selector is unsafe.
 
+Annex A.3 requires a separate compatibility-row tracker: row-address words for
+DRCS selection or object offsets can change a Level 1.5 receiver's row while the
+Level 2.5 AP remains unchanged. Restore compatible row context without a backward
+screen address. Preserve original display priority when derived local glyphs
+overlap Active objects; inserting a local glyph must not silently promote the
+underlying base character above an authored replacement. Realized default roots
+must retain their original MOT owners, with declaration-to-selection consistency
+before using the selected-resource lowerer. These remain composer obligations.
+
 ## Resource object allocation and invocation
 
 `allocate_teletext_resource_objects` uses the checked object catalog, separately
@@ -344,6 +353,33 @@ they are not rebound to explicit links. Catalog identity/type and slot scope sti
 apply. Local and nested explicit calls must match the supplied selected links;
 DRCS uses the existing complete-reference validator. Shared traversal budgets
 include default roots, without charging suppressed programs.
+
+`TeletextSemanticService::effective_program(address)` exposes that same selection
+policy for an exact existing base owner. Local programs remain borrowed, including
+empty overrides; defaults and base-only programs are owned synthesis. Unknown
+pages or different raw subcodes return `MissingPage`, never an invented empty
+program. Retain the source tag: synthesized MOT roots keep their independent
+owners and must not be relabelled as ordinary explicit invocations.
+
+`resolve_teletext_colour_context` computes original screen and all 25 row colours
+before a composer inserts positioning-only selectors. It uses this effective
+program and page-before-magazine presentation. Main colours outrank direct Active
+object colours; Active calls retain invocation order and exact row origins/offsets.
+Table 28 and clauses 13.2/13.3 permit these colours only in main/Active data, and
+valid object type edges prevent nested Active calls. This narrow prepass does not
+validate inapplicable colour declarations in Adaptive/Passive bodies; the complete
+compiler must still reject them.
+
+Annex A.5 distinguishes explicitly invoked screen colour from default screen
+colour. Missing row colours use explicit screen colour, then the selected default
+row colour, then black; default screen colour alone does not colour the rows.
+Real down-to-bottom assignments update the tail, while this-only assignments
+override one row. Main length and every repeated direct Active body are charged
+against the trusted inspected-command budget before colour processing. Absolute
+colour rows and relative screen order retain original command/object locations
+and invocation ordinals on error; they are never clamped. The result is immutable
+original colour context, not packet coding, glyph/panel geometry or readiness.
+Synthetic selectors must not feed back into this prepass.
 
 Service budgets cover unique resource records, definitions, structural items,
 base content bytes, authored commands and aggregate expanded commands/glyph

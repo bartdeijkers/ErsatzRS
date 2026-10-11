@@ -78,7 +78,11 @@ regressions, the existing wire snapshot and pinned runtime Unicode/subtitle/
 national-subset proof pass. Charset/header-colour/default context and final merged
 definition sizing remain required; events alone do not constitute composition.
 Context-dependent row-zero positioning and base/enhancement composition remain
-required work. A bounded compiled-page identity fence now rejects exact physical
+required work. The compiler now reuses exact-owner effective program selection
+and a bounded original-colour prepass, preserving local empty overrides, sparse
+MOT roots, main/Active priority and explicit-screen versus default-row fallback.
+These prerequisites do not establish merged glyph/object semantics or readiness.
+A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions
 use actual empty DRCS/POP/MOT headers, counters/last rows and magazine-eight/BCD

@@ -6,8 +6,8 @@ adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
 ADR 0120 requires independent synthetic engine acceptance at p9a-04 before
 exactly one TV-guide add-on in ErsatzRS-Addons at p9b-01, inspired only by NOS
-guide pages 200–299. The add-on owns content; the host owns validation/publication,
-delivery and read-only guide context. Source subtitle gates remain. ADR 0123
+guide pages 200–299. Add-ons own content; the host owns validation/publication,
+delivery and read-only guides. Source subtitle gates remain. ADR 0123
 reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMaker
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
 display/navigation are required; Kodi is optional. P9A-02 is In progress; four
@@ -16,24 +16,25 @@ milestones are Not started. Acceptance remains open.
 Checked values/programs and bounded object/DRCS traversal underpin the service.
 v1 lifting retains presence/bytes; DRCS retains geometry/lifecycle/last rows. Full POP/GPOP writers
 preserve exact pointers, mandatory metadata, fresh object state and empty companions.
-Local definitions share one bounded X26 sequence with exact forward references;
-45 tests pass. Eight libzvbi 0.2.42 object cases
+Local definitions share one bounded X26 sequence with exact forward references.
+Eight libzvbi 0.2.42 object cases
 decode all scope/type combinations and nested origins; nine DRCS cases retain
 identical bytes. Three local types fail correct .42 rendering; the separate fault
 diagnostic reproduces fallback with identical units and a correct exported oracle.
 Pinned teletextimager independently decodes direct types, high designations and
 nested origins with guarded sources. Positioned base glyphs retain exact fallback/
-legacy bytes; seven new tests pass. Complete local/pointer decoding, row-zero/base
+legacy bytes. Exact-owner effective programs and bounded original colour context
+preserve default suppression and main/Active priority. Complete local/pointer decoding, row-zero/base
 composition, X27 and service scheduling remain open.
 X27 preserves masks/used S1; MOT retains full banks/defaults/raw fields and IDs.
 Derivation retains provenance/conflicts. A bounded compiled-header inventory fence
-rejects exact physical/logical-owner collisions; eleven actual-header tests pass.
-Effective defaults/presentation, selection, final semantics, complete physical
+rejects exact physical/logical-owner collisions.
+Effective defaults/presentation, selection, final semantics, physical
 realization/compilation and editor interfaces remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua controls remain preparatory.
 Shared app controls compose isolated channel drafts; native encoding retains the
-same pages. Guide bounds are proven. Acquisition, activation, other
+same pages. Guide bounds pass. Acquisition, activation, other
 regions, link CRC, UI/Lua and publication remain open.
 
 Report-only metadata/SQLite preserves tracks, exact source ownership, raw data
@@ -60,7 +61,7 @@ P9A-03/04 retain source persistence/rescans, exact page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage/passthrough and HLS/browser
 gates. Continuous slate handover, activation/publication/refresh/restart,
 localized management and full source/client/browser/smoke/TSDuck matrix remain
-open. Milestones/debt own proof; the plan owns sequencing. UCU waives no teletext
+open. Milestones own proof; plans own sequencing. UCU waives no teletext
 gates. Content waits for p9a-04; Phase 10 waits for p9b-02.
 '''
 

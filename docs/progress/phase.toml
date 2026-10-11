@@ -1164,6 +1164,10 @@ origins. Private positioned base-glyph events preserve fallback/legacy bytes and
 located diagnostics; seven new tests, the existing wire snapshot and actual
 pinned Unicode/subtitle/national-subset decoding pass. The next composer must
 resolve authored AP/charset/header colour/defaults before merged definition sizing.
+Exact-owner effective program access now reuses the existing selection policy.
+A bounded original-colour prepass preserves main/Active priority, exact row origins,
+real spans and explicit-screen/default-row precedence before synthetic insertion.
+Ordered glyph merge and complete service composition remain open.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,
