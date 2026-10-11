@@ -145,11 +145,13 @@ release section when tagging a release.
   allocation now preserves full IDs/shared defaults, exact resource/type selection
   and invocation offsets. Complete bounded POP/GPOP pages now retain exact
   pointers, definition markers, resource metadata and independent object state;
-  local-object packing and complete service compilation remain open.
+  local objects now share one bounded X26 sequence with exact forward selectors
+  and independent definition state. Complete service compilation remains open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and
-  exact glyph/colour behavior. X27 decoder limits,
+  exact glyph/colour behavior. A separate pinned diagnostic records a local-object
+  decoder limitation; it does not establish local rendering acceptance. X27 decoder limits,
   full feature/client proof and service scheduling remain open.
   Bounded MOT/X27 derivation preserves provenance,
   original defaults and conflicting candidates. Effective defaults/presentation,

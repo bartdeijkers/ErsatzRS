@@ -16,6 +16,7 @@ mod drcs;
 mod enhancement_program;
 mod layout;
 mod lift;
+mod local_object_program;
 mod mot;
 mod object_allocation;
 mod object_pages;
@@ -48,6 +49,11 @@ pub use enhancement_program::{
     TeletextLocalProgramEncodingFailure,
 };
 pub use lift::lift_teletext_v1_page_set;
+pub use local_object_program::{
+    compile_teletext_local_program_with_objects, EncodedTeletextLocalObjectProgram,
+    TeletextLocalObjectDefinitionPosition, TeletextLocalObjectProgramEncodingError,
+    TeletextLocalObjectProgramEncodingFailure,
+};
 pub use mot::{
     encode_teletext_mot_bodies, TeletextMotAllocationFailure, TeletextMotDefaultAllocation,
     TeletextMotDefaultAllocations, TeletextMotEncodingError, TeletextMotPacketBody,
@@ -156,6 +162,11 @@ mod drcs_tests;
 mod enhancement_program_tests;
 #[cfg(test)]
 mod lift_tests;
+#[cfg(test)]
+mod local_object_program_tests;
+// Intentional opt-in Linux x64 decoder-ABI calibration, not platform acceptance.
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod local_object_runtime_tests;
 #[cfg(test)]
 mod mot_tests;
 #[cfg(test)]

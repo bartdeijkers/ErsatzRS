@@ -57,8 +57,16 @@ Eight additional libzvbi 0.2.42 cases independently decode all public/global
 active/adaptive/passive combinations, nested relative origins and exact glyph/
 colour behavior, with unchanged base cells. This covers the first pointer bank,
 not external decoding of every legal pointer or complete display semantics.
-Local-object allocation, context-dependent row-zero positioning and
-base/enhancement composition remain required work. X27 native decoding has a separately
+Local-object compilation now allocates exact marker positions and packs the main
+program plus all owned definitions into one bounded X26 sequence. Forward and
+nested references preserve full IDs/types; each definition has fresh state.
+Eleven new byte-oracle regressions bring the focused compiler total to 45.
+Actual .42 decoding leaves base text for all three correctly pointed local types;
+the separate pinned fault diagnostic reproduces this with unchanged encoded units
+and a separately exported correct conformance oracle. This is a decoder limitation,
+not local rendering acceptance or an engine restriction.
+Context-dependent row-zero positioning and base/enhancement composition remain
+required work. X27 native decoding has a separately
 reproduced version-specific gap; normative encoding is retained. Full external
 feature decoding and actual client display/navigation remain open.
 A bounded per-display MOT/X27 derivation now preserves selected context, exact

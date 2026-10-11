@@ -502,3 +502,28 @@ pointer bank only; byte tests cover all pointer banks and capacities. Higher-ban
 external decoding, local objects, complete inheritance/service composition,
 actual client display/navigation, transport and editor/publication remain open.
 This helper is neither a production dependency nor platform acceptance.
+
+## Local-object decoder limitation diagnostic
+
+The explicitly ignored Linux x64 diagnostic records an actual libzvbi 0.2.42
+limitation for correctly assigned local definition markers. It uses the unchanged
+object helper and complete production local-program bodies.
+
+```bash
+fixture_dir="$(mktemp -d)"
+ERSATZRS_TELETEXT_TEST_LOCAL_OBJECT_FIXTURE="$fixture_dir/diagnostic.json" \
+ERSATZRS_TELETEXT_TEST_LOCAL_OBJECT_CONFORMANCE_FIXTURE="$fixture_dir/conformance.json" \
+  ./run.sh test -p ersatzrs-ffmpeg local_object_runtime_tests --lib \
+  --run-ignored ignored-only
+python3 scripts/e2e/teletext-object-decoder.py < "$fixture_dir/diagnostic.json"
+# Expected to fail on this pinned decoder: correct authored glyph/colour oracle.
+python3 scripts/e2e/teletext-object-decoder.py < "$fixture_dir/conformance.json"
+```
+
+The diagnostic requires exact base T/white/black fallback for all three local
+object types, alongside the independent B calibration. The separate conformance
+fixture retains the correct A/red/blue expectations. Their production units are
+byte-identical; only expected decoder cells differ. A green diagnostic reproduces
+the limitation and cannot establish local-object rendering or Level 2.5 acceptance.
+The [local-decoder reference](../../docs/reference/teletext-design-interchange.md#local-object-decoder-limitation)
+records hashes, source findings and the still-required decoder/client evidence.

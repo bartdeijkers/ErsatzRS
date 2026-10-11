@@ -1151,8 +1151,11 @@ pages retain pointers/definition markers, mandatory X28, actual last rows and
 independent object state, with legal empty companions; 34 focused tests pass.
 Eight pinned native object cases cover all scope/type combinations and nested
 relative origins with exact glyph/colour behavior and unchanged base cells.
-External decoding beyond the first pointer bank, local-object packing, row-zero
-lowering and base/enhancement composition remain required work.
+Local objects now share one bounded X26 sequence with forward/nested selectors
+and fresh definition state; 45 focused regressions pass. Correct local rendering
+fails on libzvbi 0.2.42 and a separate fault diagnostic reproduces exact fallback.
+External pointer-extension/local decoding, row-zero lowering and base/enhancement
+composition remain required work.
 Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
 invocations and prove exact pixels/native
 offscreen rendering and isolated invalid-glyph fallback. X27 decoding limitations

@@ -163,6 +163,7 @@ pub fn compile_teletext_local_program_with_resource_objects(
         Some(ResourceContext {
             allocations,
             links: Some(links),
+            local_objects: None,
         }),
     )
 }
@@ -171,6 +172,7 @@ pub fn compile_teletext_local_program_with_resource_objects(
 pub(super) struct ResourceContext<'a> {
     allocations: &'a TeletextResourceObjectAllocations,
     links: Option<TeletextResolvedObjectPageLinks>,
+    local_objects: Option<&'a [(TeletextObjectIdentity, TeletextObjectType, u8)]>,
 }
 
 impl<'a> ResourceContext<'a> {
@@ -183,7 +185,68 @@ impl<'a> ResourceContext<'a> {
         Self {
             allocations,
             links: None,
+            local_objects: None,
         }
+    }
+
+    // The local-page compiler owns this complete, exact-owner/type map. Its
+    // sizing pass discards provisional words; only packed positions are emitted.
+    pub(super) const fn local_page(
+        allocations: &'a TeletextResourceObjectAllocations,
+        links: TeletextResolvedObjectPageLinks,
+        local_objects: &'a [(TeletextObjectIdentity, TeletextObjectType, u8)],
+    ) -> Self {
+        Self {
+            allocations,
+            links: Some(links),
+            local_objects: Some(local_objects),
+        }
+    }
+
+    fn object_number(
+        self,
+        target: TeletextObjectIdentity,
+        object_type: TeletextObjectType,
+        offset: Option<TeletextObjectOffset>,
+    ) -> Result<(u16, u8), TeletextLocalProgramEncodingFailure> {
+        let needs_allocation = || TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
+            target,
+            object_type,
+            offset,
+        };
+        let (selected, scope) = match target.scope() {
+            TeletextObjectScope::Local => {
+                let numbers = self.local_objects.ok_or_else(needs_allocation)?;
+                let (_, _, number) = numbers
+                    .iter()
+                    .find(|(identity, kind, _)| *identity == target && *kind == object_type)
+                    .ok_or(
+                        TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
+                            target,
+                            object_type,
+                        },
+                    )?;
+                return Ok((u16::from(*number), 0x08));
+            }
+            TeletextObjectScope::Public => (self.links.map(|links| links.public), 0x10),
+            TeletextObjectScope::Global => (self.links.map(|links| links.global), 0x18),
+        };
+        let resource = target.resource().ok_or_else(needs_allocation)?;
+        if let Some(selected) = selected {
+            if selected != Some(resource.page()) {
+                return Err(TeletextLocalProgramEncodingFailure::ObjectSelection {
+                    target,
+                    selected,
+                });
+            }
+        }
+        let allocation = self.allocations.lookup(target, object_type).ok_or(
+            TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
+                target,
+                object_type,
+            },
+        )?;
+        Ok((allocation.object_number(), scope))
     }
 }
 
@@ -355,38 +418,14 @@ impl LoweringState {
         offset: Option<TeletextObjectOffset>,
         context: Option<ResourceContext<'_>>,
     ) -> Result<CommandWords, TeletextLocalProgramEncodingFailure> {
-        let Some((context, resource)) = context.zip(target.resource()) else {
+        let Some(context) = context else {
             return Err(TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
                 target,
                 object_type,
                 offset,
             });
         };
-        let (selected, scope) = match target.scope() {
-            TeletextObjectScope::Public => (context.links.map(|links| links.public), 0x10),
-            TeletextObjectScope::Global => (context.links.map(|links| links.global), 0x18),
-            TeletextObjectScope::Local => {
-                return Err(TeletextLocalProgramEncodingFailure::NeedsObjectAllocation {
-                    target,
-                    object_type,
-                    offset,
-                });
-            }
-        };
-        if let Some(selected) = selected {
-            if selected != Some(resource.page()) {
-                return Err(TeletextLocalProgramEncodingFailure::ObjectSelection {
-                    target,
-                    selected,
-                });
-            }
-        }
-        let allocation = context.allocations.lookup(target, object_type).ok_or(
-            TeletextLocalProgramEncodingFailure::MissingObjectAllocation {
-                target,
-                object_type,
-            },
-        )?;
+        let (number, scope) = context.object_number(target, object_type, offset)?;
         let (type_index, type_code) = match object_type {
             TeletextObjectType::Active => (0, 1),
             TeletextObjectType::Adaptive => (1, 2),
@@ -396,7 +435,7 @@ impl LoweringState {
             return Err(TeletextLocalProgramEncodingFailure::InvocationCount { object_type });
         }
         self.invocations[type_index] += 1;
-        let [low, high] = allocation.object_number().to_le_bytes();
+        let [low, high] = number.to_le_bytes();
         let invocation = word(
             0x20 | scope | (low >> 7) | (high << 1),
             0x10 | type_code,

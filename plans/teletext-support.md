@@ -108,9 +108,14 @@ and independent per-object state. They preflight the full body capacity and allo
 explicit empty companion resources. Eight pinned native cases independently
 decode all public/global object types and nested relative origins, including
 exact glyph/colour behavior and unchanged base cells. External decoding beyond
-the first pointer bank remains open. Local-object packing, row-zero position
-lowering and base/enhancement composition remain required work, without permanent
-scope restrictions.
+the first pointer bank remains open. Local-object compilation now packs the main
+program and exact-owner definitions into one 208-slot sequence, including forward
+and nested references; eleven new regressions bring the focused total to 45.
+Actual .42 local-object decoding fails the correct glyph/colour oracle. A separate
+fault diagnostic reproduces fallback without changing normative encoder bytes or
+rendering acceptance. Correct local decoding remains required.
+Row-zero position lowering and base/enhancement composition remain required work,
+without permanent scope restrictions.
 Bounded per-display MOT/X27 derivation now preserves role provenance, exact
 masks, original defaults/fallback and unresolved candidates for audited conflicts.
 It does not decide effective defaults or presentation.

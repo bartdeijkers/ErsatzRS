@@ -987,6 +987,39 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 local-object packing checkpoint:
+compile_teletext_local_program_with_objects preserves full owner/raw-subcode,
+host ID and type. Raw catalog count and main/owned-command aggregates are checked
+before lowering; intrinsic capacity also bounds the temporary map. One 208-slot
+sequence packs the main program, data-six termination, authored-order local
+markers/bodies and final data-five termination. No-local data-seven bytes remain
+unchanged. Exact marker indices become designation/triplet selectors; private
+sizing placeholders never reach output. Forward/nested local calls and selected
+resource calls retain exact targets; each definition resets AP/DRCS/type counts.
+Forty-five focused compiler/allocation tests pass in Nextest
+695e0a17-5621-4173-80a9-83b2da45f034 (411 skipped), including 11 new independent
+marker/field/capacity/owner/budget/state tests. After cosmetic Clippy corrections,
+the 11 affected tests pass again in 8553ebfd-a53b-492a-9aed-e7c45ee21754.
+Initial actual local-object rendering FAILED on libzvbi 0.2.42:
+e31bda63-7a67-4b80-b031-492d140b604b. Separate replay confirms all three types
+leave base T/white/black instead of authored A/red/blue, while base B survives.
+Normative markers/selectors remain unchanged. A clearly named pinned-version
+fault diagnostic now requires this exact observed fallback; it separately exports
+the correct conformance oracle with byte-identical production units. This green
+diagnostic reproduces the decoder limitation, not local rendering acceptance.
+Nextest cd395d31-b70a-4eb0-ba4d-62b4c51be4be passes all three native diagnostics
+(453 skipped): 17 unchanged positive DRCS/resource-object cases plus 3 local fault
+cases. Their fixture hashes and source findings are recorded in the interchange
+reference; both frozen helpers remain unchanged. High-designation/nested-local
+source findings still need runtime calibration with a suitable decoder.
+Strict FFmpeg all-target Clippy, formatting and independent reviews pass.
+Row-zero lowering, base/enhancement composition, final geometry/inheritance,
+complete service lifecycle, independent local decoding, suitable-client navigation
+and operational editor/draft/publication remain required. No milestone, acceptance
+or dependency changes; no engine restriction, push or publication.
+
+Earlier complete public/global object-page checkpoint follows:
+
 2026-10-11 complete public/global object-page checkpoint:
 encode_teletext_object_page uses the original checked catalog and shared immutable
 allocation map. Exact map/type/completeness and resource-command budget checks

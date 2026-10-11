@@ -159,8 +159,9 @@ modifiers; invocation leaves the caller's active position and DRCS selections
 unchanged. Direct invocations are bounded at 127 per type and all inserted
 modifiers consume the existing 207-payload-triplet capacity. The semantic service
 still owns transitive counts, type/ownership closure and selected dependencies.
-Local targets retain `NeedsObjectAllocation` until their actual definition is
-packed into the same owner's X26 sequence; no host ID becomes a wire pointer.
+This resource-only entry point retains `NeedsObjectAllocation` for local targets.
+The separate local-object compiler packs their actual definitions into the same
+owner's X26 sequence; no host ID becomes a wire pointer.
 
 ### Complete public/global object pages
 
@@ -196,11 +197,42 @@ passive objects reject screen/row-colour operations. Row-zero positioning still
 requires context-dependent lowering. The result is immutable complete page data,
 not service inventory, lifecycle history, carousel timing or publication authority.
 
-Local definitions still share all 208 X26 slots with authored and base-derived
+Local definitions share all 208 X26 slots with authored and base-derived
 enhancements. Original MOT banks must be supplied separately; the effective
-per-display four default slots cannot reconstruct their provenance. Local packing,
+per-display four default slots cannot reconstruct their provenance. Combined
+base/enhancement packing,
 final display semantics, complete service composition and publication remain
 required acceptance work.
+
+### Local object packing
+
+`compile_teletext_local_program_with_objects` takes an explicitly present main
+program, a checked catalog, the resource allocation map, selected links and
+trusted object/command budgets. It checks the raw catalog count before scanning
+and charges the main program plus every exact-owner local definition before
+lowering. Owner identity includes the complete raw subcode. Unused owned
+definitions retain authored order; foreign owners cannot satisfy invocations.
+
+One sequence of at most 208 triplets contains the main program, its termination
+data six, definition markers/bodies and final termination data five. Adjacent
+markers terminate preceding definitions; final termination fills padding. Without
+local definitions, the existing data-seven local-only output remains byte-identical.
+An empty supplied program remains present; this primitive does not infer absence.
+
+Two-pass sizing accounts for all inserted DRCS selectors and origin modifiers
+before body allocation. Only the sizing pass uses private provisional selectors;
+they never reach output. Final selectors use the exact definition marker index:
+designation `i/13`, slot `i%13`, number `(designation<<4)|slot`. Slots 13–15 are
+not invented, host IDs are not masked and forward/nested calls retain exact type.
+Each definition resets active position, invocation counts and both DRCS latches.
+Resource calls in local definitions retain this display's selected links.
+
+Eleven new independent byte-oracle tests cover literal marker boundaries,
+full IDs/types/owners, nested forward references, state isolation, inserted-word
+capacity and exact 208/209 rejection. Final geometry/inheritance, effective
+repertoires/expanded work and composition with base-derived glyph enhancements
+remain service obligations. This compiler does not replace or append to an
+arbitrary existing X26 sequence and carries no publication authority.
 
 ## Presentation and supplied service selection
 
@@ -472,6 +504,32 @@ independent decoding, local objects, full composition, transport and actual
 suitable-client navigation remain required acceptance work. The separate
 [object calibration workflow](../../scripts/e2e/README.md#teletext-object-decoder-calibration)
 exports and replays the synthetic cases; it has no production runtime dependency.
+
+### Local-object decoder limitation
+
+The correct local-marker conformance oracle fails with actual libzvbi 0.2.42
+for all three direct local object types. At row 4, column 8 it expects authored
+A/red/blue but retrieves base T/white/black; the separate base B still decodes.
+The pinned fault reproducer requires that exact fallback for both checked cells.
+Its successful diagnostic means the decoder limitation was reproduced, not that
+local-object rendering was accepted. Correct conformance expectations are exported
+separately, with byte-identical production units. Neither compiler pointers nor
+the required rendering acceptance criterion are changed.
+
+The diagnostic fixture SHA256 is
+`850bf27926b478e254ec44737f34e86e4d0373762f2d2b2821686035a094eb6e`;
+the correct conformance fixture SHA256 is
+`11bfc143b8ad25d66433b7e8235cdede3fc39ab4cddae685547eb2c6c09bfe2c`.
+Both frozen decoder helpers remain unchanged. The existing nine DRCS and eight
+resource-object positive cases still pass with their previous fixture hashes.
+
+The audited .42 `teletext.c` local branch passes the definition marker to the
+enhancer, whose definition handler stops; the resource resolver instead advances
+past its checked marker. This explains the observed direct-local failure. The
+same source has an incorrect high-designation shift and rejects nested local
+invocations. Those additional limits are source findings, not runtime acceptance
+evidence. Independent local-object rendering still needs a corrected, versioned
+decoder and suitable-client proof; the engine does not ban these standard features.
 
 ## MOT/X27 preservation audit
 
