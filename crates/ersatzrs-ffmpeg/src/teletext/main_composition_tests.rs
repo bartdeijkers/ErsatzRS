@@ -1669,3 +1669,262 @@ fn drcs_execution_is_bound_to_current_immutable_service_even_when_ids_match() {
     );
     assert_ne!(plan, changed);
 }
+
+fn split_panel_fixture(main: Vec<TeletextEnhancementCommand>) -> Fixture {
+    let mut fixture = Fixture::new(vec![text(1, 4, "é")], Some(main));
+    let mut presentation =
+        super::presentation::western_latin_v1_presentation(TeletextNationalOption::new(1).unwrap())
+            .unwrap();
+    presentation.panels = TeletextSidePanels {
+        left: true,
+        right: true,
+        status: TeletextPanelStatus::Level25And35,
+        width: TeletextPanelWidth::new(4).unwrap(),
+    };
+    fixture.presentation = Some(presentation);
+    fixture
+}
+
+#[test]
+fn selected_panels_place_original_candidates_without_promoting_generated_base_words() {
+    let target = local(0xffff);
+    let mut fixture = split_panel_fixture(vec![
+        position(1, 4),
+        g0(4),
+        TeletextEnhancementCommand::InvokeObject {
+            target,
+            object_type: TeletextObjectType::Passive,
+            offset: Some(TeletextObjectOffset::new(0, 36).unwrap()),
+        },
+        TeletextEnhancementCommand::InvokeObject {
+            target,
+            object_type: TeletextObjectType::Passive,
+            offset: Some(TeletextObjectOffset::new(0, 64).unwrap()),
+        },
+    ]);
+    fixture
+        .objects
+        .push(definition(target, TeletextObjectType::Passive, vec![g0(0)]));
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let geometry = plan.display_geometry();
+    assert_eq!(geometry.owner(), owner());
+    assert_eq!(
+        (
+            geometry.left_width(),
+            geometry.right_width(),
+            geometry.total_width()
+        ),
+        (4, 12, 56)
+    );
+    assert_eq!(
+        geometry.panels(),
+        plan.base_display().presentation().map(|value| value.panels)
+    );
+    assert_eq!(
+        geometry.records().len(),
+        plan.glyph_layers().candidates().len()
+    );
+    for (index, record) in geometry.records().iter().enumerate() {
+        assert_eq!(record.candidate_index(), index);
+        assert_eq!(record.candidate(), &plan.glyph_layers().candidates()[index]);
+    }
+    for (raw, visual, area) in [
+        (4, 8, TeletextRawDisplayArea::Main),
+        (40, 44, TeletextRawDisplayArea::RightPanel),
+        (68, 0, TeletextRawDisplayArea::LeftPanel),
+    ] {
+        let record = geometry
+            .records()
+            .iter()
+            .find(|record| {
+                record.candidate().position() == (1, raw)
+                    && record.candidate().operation().is_some()
+            })
+            .unwrap();
+        assert_eq!(record.area(), area);
+        assert_eq!(
+            record.placement(),
+            TeletextCandidatePlacement::Placed {
+                row: 1,
+                column: visual
+            }
+        );
+    }
+    let contenders: Vec<_> = geometry
+        .records()
+        .iter()
+        .filter(|record| record.candidate().position() == (1, 4))
+        .collect();
+    assert_eq!(contenders.len(), 2);
+    assert_eq!(
+        contenders[0]
+            .candidate()
+            .base()
+            .unwrap()
+            .authored()
+            .unwrap()
+            .content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    assert_eq!(
+        contenders[1].candidate().source(),
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 1
+        })
+    );
+    assert_eq!(service, before);
+}
+
+#[test]
+fn display_geometry_keeps_header_gap_and_wide_object_candidates_explicitly_unplaced() {
+    let target = local(0xffff);
+    let wide = local(0xfffe);
+    let mut fixture = split_panel_fixture(vec![
+        position(0, 39),
+        TeletextEnhancementCommand::InvokeObject {
+            target,
+            object_type: TeletextObjectType::Passive,
+            offset: Some(TeletextObjectOffset::new(0, 2).unwrap()),
+        },
+        position(1, 39),
+        TeletextEnhancementCommand::InvokeObject {
+            target,
+            object_type: TeletextObjectType::Passive,
+            offset: Some(TeletextObjectOffset::new(0, 13).unwrap()),
+        },
+        TeletextEnhancementCommand::InvokeObject {
+            target: wide,
+            object_type: TeletextObjectType::Passive,
+            offset: Some(TeletextObjectOffset::new(0, 45).unwrap()),
+        },
+    ]);
+    fixture
+        .objects
+        .push(definition(target, TeletextObjectType::Passive, vec![g0(0)]));
+    fixture.objects.push(definition(
+        wide,
+        TeletextObjectType::Passive,
+        vec![position(0, 39), g0(39)],
+    ));
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let records = plan.display_geometry().records();
+    for (position, reason) in [
+        ((0, 41), TeletextCandidateNonplacement::HeaderPanel),
+        ((1, 52), TeletextCandidateNonplacement::OutsideActiveWidth),
+        ((1, 123), TeletextCandidateNonplacement::OutsideDisplay),
+    ] {
+        let record = records
+            .iter()
+            .find(|record| record.candidate().position() == position)
+            .unwrap();
+        assert_eq!(
+            record.placement(),
+            TeletextCandidatePlacement::Unplaced(reason)
+        );
+    }
+    let object = records
+        .iter()
+        .find(|record| record.candidate().position() == (1, 123))
+        .unwrap();
+    assert_eq!(
+        object.candidate().source(),
+        Some(TeletextEnhancementSource {
+            object: Some(wide),
+            command: 1
+        })
+    );
+    assert_eq!(object.candidate().invocation().unwrap().get(), 2);
+    assert_eq!(
+        object.candidate().root_source(),
+        Some(TeletextSpatialRootSource::Local { command: 4 })
+    );
+    assert_eq!(service, before);
+}
+
+#[test]
+fn original_object_cannot_write_across_panels_but_may_invoke_a_separate_panel_child() {
+    let parent = local(30);
+    let child = local(31);
+    let mut fixture = split_panel_fixture(vec![
+        position(1, 39),
+        invoke(parent, TeletextObjectType::Active),
+    ]);
+    fixture.objects.push(definition(
+        parent,
+        TeletextObjectType::Active,
+        vec![position(0, 0), g0(0), g0(1)],
+    ));
+    let invalid = fixture.clone().build();
+    let before = invalid.clone();
+    let rejected = compose_teletext_main_program(&invalid, owner(), budget()).unwrap_err();
+    assert_eq!(
+        rejected.location,
+        Some(TeletextMainCompositionSource::Object {
+            identity: parent,
+            command: 2
+        })
+    );
+    let TeletextMainCompositionFailure::DisplayGeometry(error) = rejected.reason else {
+        panic!("located geometry error");
+    };
+    assert_eq!(error.position, Some((1, 40)));
+    assert_eq!(error.invocation.unwrap().get(), 0);
+    assert_eq!(
+        error.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 1 })
+    );
+    assert_eq!(
+        error.reason,
+        TeletextDisplayGeometryFailure::CrossAreaWrite {
+            previous: TeletextRawDisplayArea::Main,
+            requested: TeletextRawDisplayArea::RightPanel,
+        }
+    );
+    assert_eq!(invalid, before);
+    fixture.objects[0].program = program(vec![
+        position(0, 0),
+        g0(0),
+        TeletextEnhancementCommand::InvokeObject {
+            target: child,
+            object_type: TeletextObjectType::Passive,
+            offset: Some(TeletextObjectOffset::new(0, 1).unwrap()),
+        },
+    ]);
+    fixture.objects.push(definition(
+        child,
+        TeletextObjectType::Passive,
+        vec![position(0, 0), g0(0)],
+    ));
+    let valid = fixture.build();
+    let before = valid.clone();
+    let plan = compose(&valid);
+    for (source, raw, visual, invocation) in [(parent, 39, 43, 0), (child, 40, 44, 1)] {
+        let record = plan
+            .display_geometry()
+            .records()
+            .iter()
+            .find(|record| {
+                record.candidate().source()
+                    == Some(TeletextEnhancementSource {
+                        object: Some(source),
+                        command: 1,
+                    })
+            })
+            .unwrap();
+        assert_eq!(record.candidate().position(), (1, raw));
+        assert_eq!(record.candidate().invocation().unwrap().get(), invocation);
+        assert_eq!(
+            record.placement(),
+            TeletextCandidatePlacement::Placed {
+                row: 1,
+                column: visual
+            }
+        );
+    }
+    assert_eq!(valid, before);
+}

@@ -14,6 +14,8 @@ mod charset_execution;
 mod charset_execution_values;
 mod charset_values;
 mod compositional_links;
+mod display_geometry;
+mod display_geometry_values;
 mod drcs_execution;
 mod drcs_resources;
 mod enhancement_objects;
@@ -43,6 +45,8 @@ pub use charset_execution::*;
 pub use charset_execution_values::*;
 pub use charset_values::*;
 pub use compositional_links::*;
+pub use display_geometry::*;
+pub use display_geometry_values::*;
 pub use drcs_execution::*;
 pub use drcs_resources::*;
 pub use enhancement_objects::*;
@@ -81,6 +85,9 @@ mod drcs_resources_tests;
 
 #[cfg(test)]
 mod drcs_execution_tests;
+
+#[cfg(test)]
+mod display_geometry_tests;
 
 #[cfg(test)]
 mod charset_values_tests;

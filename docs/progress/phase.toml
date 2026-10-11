@@ -1225,6 +1225,12 @@ pixels remain distinct from missing slots; losing sources/instances survive.
 Reuse existing explicit references and private selector lowering. Next apply
 colour/size and full glyph/DRCS footprint/panel geometry, resolve physical order
 and prove both receiver views before preview/client/editor/publication acceptance.
+Selected geometry now retains raw-to-visual panel placement, exact original
+candidates and direct per-instance address/write facts. Definite own area crossing
+rejects with provenance; legal separate children and pending intervals survive.
+Next extend that same result with A.7/A.8 admission and C.3 occupied footprints,
+origin/deferred attribute execution and validated rasterization before physical
+normalization and full engine/client/editor/publication acceptance.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

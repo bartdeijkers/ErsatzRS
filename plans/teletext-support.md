@@ -198,6 +198,12 @@ Reuse the existing explicit-reference lowerer and fresh private selectors; do no
 invent a second authored selector interpreter. Next apply validated glyph shapes
 and DRCS pixels under complete colour/size/footprint/panel rules, then normalize
 physical order against both receiver views. Preview and publication remain gated.
+Selected geometry now preserves raw/visual panel placement and original instance
+address/write facts in the same composition model. Definite own cross-area writes
+are rejected; separate panel children and pending endpoint evidence stay distinct.
+Next extend this result with A.7/A.8 admissibility and C.3 occupied footprints,
+origin/deferred attributes, then validated glyph rasterization and receiver-
+equivalent normalization. Point placement alone cannot close engine acceptance.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

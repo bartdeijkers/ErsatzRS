@@ -4,8 +4,9 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
-ADR 0120 requires independent synthetic engine acceptance at p9a-04 before one TV-guide
-add-on in ErsatzRS-Addons at p9b-01, inspired only by NOS pages 200–299. Add-ons own content; the host owns validation/publication,
+ADR 0120 requires independent synthetic engine acceptance at p9a-04 before one
+TV-guide add-on in ErsatzRS-Addons at p9b-01, inspired only by NOS pages 200–299.
+Add-ons own content; the host owns validation/publication,
 delivery and read-only guides. Source subtitle gates remain. ADR 0123
 reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMaker
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
@@ -14,17 +15,19 @@ display/navigation are required; Kodi is optional. P9A-02 is In progress; four m
 Checked programs and bounded object/DRCS traversal underpin the immutable service.
 v1 lifting retains presence/bytes; resource writers preserve geometry, lifecycle,
 pointers, metadata and fresh definition state. Local definitions share bounded
-X26 with exact forward references. Pinned independent decoders prove selected
+X26 with exact forward references. Independent decoders prove selected
 DRCS/object/main cells; recorded local/G1 font gaps do not establish rendering.
 Composition retains AP, provenance, fallback, spacing and original instances.
-The attribute executor separates four-group inheritance/panel defaults;
+Attribute execution separates four-group inheritance/panel defaults;
 C2/Adaptive endpoints remain pending. G1 alphabets preserve mode/base fallback;
 Latin cells pass libzvbi; imager has a font-gap diagnostic. Charset contexts retain
 shared/private state and pending source order. Finite G0/G2/G1/G3/DRCS identities
 retain national aliases, prohibited codes and unresolved composition/cells.
 DRCS references resolve exact resources/bitmaps from the same service, preserving
 losers and defined blank glyphs. Existing lowering owns private selector state.
-Shapes, geometry, normalization, physical equivalence, X27 and scheduling remain open.
+Selected geometry retains panel placement and direct own-instance address/write
+facts, rejecting definite own area crossing without merging child extents.
+Footprints, A7/A8 admission, C3, shapes, normalization and physical proof stay open.
 X27 preserves masks/used S1; MOT retains full banks/defaults/raw fields and IDs.
 Derivation retains provenance/conflicts. A bounded compiled-header inventory fence
 rejects exact physical/logical-owner collisions.
@@ -53,8 +56,7 @@ Linux x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission, tokens, reapi
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
-Decoder Health exists; P9A-02 owns six-RID packaging, licensing
-and remaining platform proof.
+P9A-02 owns decoder Health, six-RID packaging, licensing and remaining proof.
 P9A-03/04 retain source persistence/rescans, exact page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage/passthrough and HLS/browser
 gates. Continuous slate handover, activation/publication/refresh/restart,

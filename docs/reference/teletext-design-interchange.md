@@ -615,6 +615,49 @@ fixed-cell proofs; it is no new DRCS placement or full rendering proof. Existing
 independent DRCS resource decoding remains applicable. Strict affected all-target
 Clippy, formatting, architecture and independent reviews pass.
 
+### Selected display coordinates and original object regions
+
+`resolve_teletext_display_geometry` consumes Base presentation, original spatial
+trace and glyph layers from the same immutable service. Main composition retains
+this shared geometry alongside the original attribute, charset, glyph-intent and
+DRCS projections. The geometry result is the boundary to extend with occupied
+footprints and geometry-aware final attributes; point placement is not a separate
+renderer or publication certificate.
+
+The actual `level25_widths()` determines visible columns without changing raw
+panel flags/status/width. Visual order is left panel, forty main columns, right
+panel, while original address order is main/right/left. For left width L and
+right width R, main raw columns 0–39 map to visual L–L+39; right raw 40–40+R-1
+map to L+40–L+39+R; left raw 72-L–71 map to visual 0–L-1. Total width is at most
+56. Absent presentation and Level-3.5-only panel metadata select no Level 2.5
+panels. Raw unused metadata survives; no Level 3.5 support is implied.
+
+Every candidate retains its original index, content and source/root/instance,
+including losing Base/object candidates and authored Unicode intent. Header-owned
+columns, header panels, disabled panels, inactive-width gaps and positions beyond
+the display remain different explicit nonplacements. No clipping, wrapping,
+rebinding or promotion of generated compatibility words occurs. All candidate,
+event and invocation counts and checked linear-storage bounds precede allocation;
+exact Base equality and one-to-one original glyph-event correspondence reject
+mismatched projections. Matching identifiers alone cannot certify generation.
+
+Per-instance region facts separate direct AP-addressing instructions from definite
+own glyph/four-attribute-group writes. Pure position and charset setup is not a
+written glyph. Descendant addresses/writes never become parent extents. Definite
+selected-cell writes by one object across main and a side panel are rejected with
+the offending original source/instance. A main-area parent can instead invoke a
+separate panel child. Setup-only or unplaced area evidence remains explicit;
+it cannot silently create a certified occupied rectangle.
+
+Known Annex A.8 intervals use raw row/column order, starting at the caller AP
+before the invocation offset and ending inclusively at the last direct explicit
+addressing event, including non-glyph setup. An address-only body can establish an
+endpoint even without a written glyph. Missing, out-of-display and backwards
+endpoints remain typed pending evidence. Child endpoints are excluded. These
+intervals do not yet prove the fifteen-open/fifteen-successive-open admission
+limits, A.7 overlap admissibility or C.3 double-size footprint/attribute behavior.
+Those remain required before full geometry, renderer and engine acceptance.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

@@ -154,6 +154,13 @@ references already contain selector choices; the existing lowerer emits private
 Normal/Global selections with fresh definition state. The interchange reference
 owns this boundary. Bitmap resolution cannot certify placement, size/colour,
 overlap, receiver-equivalent rendering or preview/publication readiness.
+Selected display geometry now maps original candidates through actual Level 2.5
+panel widths while preserving raw addressing, metadata, losers and nonplacements.
+Per-instance direct-address/write facts distinguish own area violations from legal
+separate child placement; caller AP and direct endpoints retain raw interval
+semantics. The same immutable composition owns these inputs. Extend this shared
+result with occupied footprints and geometry-aware attributes; A.7/A.8 admission,
+C.3, physical equivalence and complete renderer/preview/publication remain open.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions
