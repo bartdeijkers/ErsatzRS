@@ -91,6 +91,34 @@ pub struct TeletextServiceBudget {
     pub max_collected_drcs_references: usize,
 }
 
+impl TeletextServiceBudget {
+    /// Bound base input before allocating one derived enhancement record per page.
+    ///
+    /// This allocation-free preflight shares the service's structural/content
+    /// accounting. It validates neither structure nor encoding and grants no
+    /// authority: `TeletextSemanticService::new` must still check the full draft.
+    /// # Errors
+    /// Returns the first record, structural-item or content-byte budget failure.
+    pub fn validate_base_with_page_metadata(
+        self,
+        base: &TeletextPageSetDraft,
+    ) -> Result<(), TeletextServiceError> {
+        let mut records = self.max_records;
+        charge(&mut records, base.pages.len(), "record", self.max_records)?;
+        let mut items = self.max_structure_items;
+        for _ in 0..2 {
+            charge(
+                &mut items,
+                base.pages.len(),
+                "structure item",
+                self.max_structure_items,
+            )?;
+        }
+        let mut bytes = self.max_base_content_bytes;
+        charge_base_structure_and_content(base, &mut items, &mut bytes, self)
+    }
+}
+
 /// Which source provides effective page/magazine presentation data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextPresentationSource {

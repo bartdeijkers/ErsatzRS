@@ -20,9 +20,12 @@ per-type invocation limits are enforced; collected DRCS failures retain their
 source command. Checked presentation declarations retain page/magazine presence,
 colour remapping and raw panel metadata. A semantic service composes the unchanged
 base set with explicitly supplied resolved resource selections and validates their
-aggregate ownership, budgets and effective dependencies. MOT/X27 resolution,
-resolved display semantics, physical allocation, enhanced encoding and
-editor/publication workflows remain unimplemented. Existing
+aggregate ownership, budgets and effective dependencies. The native presentation
+body encoder now carries complete checked X28/0 or M29/0 fields; the existing v1
+encoder uses it with byte-identical declarations. A bounded, consuming v1 lift
+retains explicit page presentation and empty local-X26 presence before composition.
+MOT/X27 resolution, resolved display semantics, physical allocation, complete
+enhanced-service compilation and editor/publication workflows remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are
 reusable baseline evidence, not Level 2.5 acceptance.
 The standards/editor source audits do not establish real editor or client proof.
@@ -53,6 +56,12 @@ before publication. The addon contract must be explicitly versioned for enhanced
 pages; the existing closed v1 contract remains base-only compatibility, never a
 silent lossy downgrade. Retain supported structure, attributes and navigation.
 Reject Level 3.5-only features with a targeted explanation and location.
+
+Lift v1 contributions with the original encoder's explicit page presentation and
+present local-X26 semantics, including blank pages. A present empty authored
+program suppresses defaults but must not suppress character-enhancement triplets
+derived from the preserved base text. Keep these per-producer values before merged
+magazine defaults can affect the service; lifting alone does not prove encoding.
 
 The native encoder and browser preview consume the same immutable validated model
 and generation. Preview offers enhanced and base views. Diagnostics identify page,

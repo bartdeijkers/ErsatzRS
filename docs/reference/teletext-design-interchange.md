@@ -145,6 +145,59 @@ must not be used to silently discard this aggregate's resources or override its
 non-Latin presentation. Operational v2 input, editor, preview and publication
 interfaces remain open.
 
+## Presentation packet coding and v1 lifting
+
+The native `teletext::presentation` encoder packs the checked presentation into
+the 234 data bits shared by X28/0 and M29/0. It fixes the function/coding prefix,
+retains primary/secondary aliases and the no-second-G0 sentinel, raw panel fields,
+CLUT2/3 RGB order, screen/row colours, substitution and remapping. It is a packet
+body encoder, not enhanced-service compilation or rendering. Palette construction
+uses the explicitly named `TeletextLevel25Palette::standard()` for table 30;
+there is still no implicit presentation `Default`.
+
+`lift_teletext_v1_page_set` consumes the unchanged base draft. Shared record,
+structural-item and content-byte preflight precedes structure checks and derived
+metadata allocation. Each exact page/subcode receives the old encoder's explicit
+Western Latin X28 declaration and `Some(empty)` authored local program, with no
+resource links/defaults or invented resources. The final service constructor
+rechecks the complete candidate. National option seven retains a located error;
+non-representable characters still require later encoding validation.
+
+The old encoder's literal X28 bytes match for all seven national options. Empty
+local presence prevents inherited default objects from altering these pages;
+explicit page presentation wins over a conflicting magazine theme. Base text,
+styles, exact identities and navigation remain intact. Derived base-character
+X26 triplets remain necessary even with an empty authored program. Compiler
+convergence for mixed v1/v2 producers remains open; using the old base encoder
+on an arbitrary enhanced service would silently discard its authored data.
+
+## MOT/X27 preservation audit
+
+EN 300 706 sections 9.6.2, 10.6 and 13.8 require distinct source declarations
+before adapting to supplied resolved selections. A present X27/4 carries four
+fixed roles (GPOP, POP, GDRCS, DRCS), level applicability and individual 16-bit S1
+requirement masks. A real target with mask zero requires no S1; it never means
+all subpages. Relative magazine coding XORs three-bit magazine addresses; absolute
+code zero denotes magazine eight, while relative zero leaves the owner magazine
+unchanged. Packet absence and an explicit FF/FFFF null record remain distinct.
+MOT link selectors, contiguous maximum-S1 extents, supersedable flags, fallback
+fields and two default-object slots retain their original MOT/resource ownership.
+Semantic object IDs are not limited to physical default pointer indices.
+
+Do not erase masks, automatically rebind defaults to an overridden resource or
+select the first/S1-zero MOT record implicitly. The supplied-selection service
+currently checks linked page equality; authored resolution must also validate
+required S1 sets and retain independently sourced default provenance. Any local
+X26 presence suppresses MOT defaults.
+
+Null-X27 fallback, conflicting MOT supersedable flags and global-default
+association edge cases still need a documented, independently calibrated policy.
+The inspected libzvbi 0.2.45 source falls back to MOT on null X27 and lacks complete
+global-default handling; the pinned QTeletextMaker source can remove an all-null
+packet. Neither is a complete oracle for these cases. Preserve the declarations
+while resolving this uncertainty; do not count transport or partial decoder
+checks as complete authored/display acceptance.
+
 ## Standards audit
 
 Basis: [ETSI EN 300 706 V1.2.1 (2003-04)](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf).

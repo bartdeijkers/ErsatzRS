@@ -76,6 +76,10 @@ model foundation. Bounded effective-program traversal collects transitive DRCS
 references and checks primary/X26 pair and invocation limits. Presentation
 declarations and the explicitly resolved semantic service retain page/magazine
 presence, panels and default suppression while checking aggregate dependencies.
+The presentation packet-body encoder and bounded v1 lift preserve explicit
+page/X26 presence and unchanged v1 bytes. Full mixed-v1/v2 compiler convergence
+remains open. Preserve MOT/X27 masks, null/absent distinctions and default
+provenance before resolving their audited edge cases.
 Next implement authored MOT/X27 declaration resolution, final display/object
 semantics, physical service allocation and the native compiler.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.

@@ -186,6 +186,15 @@ struct DrcsLinkFields {
 }
 
 impl TeletextDrcsPageLinks {
+    /// Explicit absence of both resource links, without selecting receiver defaults.
+    #[must_use]
+    pub const fn unlinked() -> Self {
+        Self {
+            normal: None,
+            global: None,
+        }
+    }
+
     /// Check linked page purposes without acquiring resources or selecting S1.
     /// # Errors
     /// Rejects addresses reserved for another page purpose.

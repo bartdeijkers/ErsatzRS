@@ -32,6 +32,9 @@ pub enum TeletextEnhancementValueError {
 pub struct TeletextColourReference(u8);
 
 impl TeletextColourReference {
+    /// Fixed CLUT0 black, independent of editable palette declarations.
+    pub const BLACK: Self = Self(0);
+
     /// Validate a reference without masking unknown high bits.
     /// # Errors
     /// Returns `ColourReference` for values above 31.
@@ -105,7 +108,7 @@ impl From<TeletextRgb> for [u8; 3] {
 
 /// Editable Level 2.5 colour tables; fixed CLUT0/1 are deliberately absent.
 ///
-/// This is an explicit authored declaration, not the standard default palette.
+/// This is an explicit authored declaration, not an implicit receiver default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TeletextLevel25Palette {
@@ -113,6 +116,36 @@ pub struct TeletextLevel25Palette {
     pub clut2: [TeletextRgb; 8],
     /// Eight independently checked colours for CLUT3.
     pub clut3: [TeletextRgb; 8],
+}
+
+impl TeletextLevel25Palette {
+    /// EN 300 706 table 30 CLUT2/3 colours, explicitly requested by the caller.
+    /// A missing presentation declaration never invokes this constructor implicitly.
+    #[must_use]
+    pub const fn standard() -> Self {
+        Self {
+            clut2: [
+                TeletextRgb([15, 0, 5]),
+                TeletextRgb([15, 7, 0]),
+                TeletextRgb([0, 15, 7]),
+                TeletextRgb([15, 15, 11]),
+                TeletextRgb([0, 12, 10]),
+                TeletextRgb([5, 0, 0]),
+                TeletextRgb([6, 5, 2]),
+                TeletextRgb([12, 7, 7]),
+            ],
+            clut3: [
+                TeletextRgb([3, 3, 3]),
+                TeletextRgb([15, 7, 7]),
+                TeletextRgb([7, 15, 7]),
+                TeletextRgb([15, 15, 7]),
+                TeletextRgb([7, 7, 15]),
+                TeletextRgb([15, 7, 15]),
+                TeletextRgb([7, 15, 15]),
+                TeletextRgb([13, 13, 13]),
+            ],
+        }
+    }
 }
 
 /// Checked glyph slot within a DRCS subtable; not a Unicode code point.

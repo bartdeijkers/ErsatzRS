@@ -90,7 +90,7 @@ fn palette_fixture() -> Value {
 
 #[test]
 fn palette_roundtrip_preserves_table_entry_and_component_order() {
-    // Explicit synthetic declaration; this test does not expose a default palette API.
+    // Explicit declaration roundtrip, independent of the named standard constructor.
     let fixture = palette_fixture();
     let palette: TeletextLevel25Palette = serde_json::from_value(fixture.clone()).unwrap();
     assert_eq!(palette.clut2[0].get(), [15, 0, 5]);

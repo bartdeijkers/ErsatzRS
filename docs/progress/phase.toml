@@ -1130,7 +1130,11 @@ The standards and pinned editor-source audits are recorded. ADR 0123 defines the
 v2 selection/wire boundary and durable revision/export-receipt ownership. Checked
 palette/DRCS values, raw resource identities, ordered enhancement programs and
 checked object closure/reference collection, presentation declarations and the
-supplied-selection semantic service are implemented. Authored MOT/X27 resolution,
+supplied-selection semantic service are implemented. Presentation packet-body
+encoding and bounded v1 lifting preserve explicit page/X26 presence and unchanged
+v1 bytes. Mixed-producer compiler convergence remains open. Preserve MOT/X27 masks,
+null/absent distinctions and independently owned defaults through audited resolution.
+Authored MOT/X27 resolution,
 final display/object semantics, physical service allocation, the enhanced compiler
 and operational draft/publication workflow remain open.
 The editor normalizes

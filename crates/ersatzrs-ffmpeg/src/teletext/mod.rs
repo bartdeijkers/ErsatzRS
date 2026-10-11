@@ -12,9 +12,11 @@ mod carousel;
 mod charset;
 mod clock;
 mod layout;
+mod lift;
 mod output;
 mod packets;
 mod pmt_install;
+mod presentation;
 mod psi;
 mod psi_framing;
 mod psi_monitor;
@@ -31,6 +33,7 @@ pub use carousel::{TeletextCarousel, TeletextCarouselBatch, TeletextCarouselBatc
 pub use clock::{
     TeletextClockConfig, TeletextClockError, TeletextClockReport, TeletextClockValidator,
 };
+pub use lift::lift_teletext_v1_page_set;
 pub use output::{
     TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
 };
@@ -114,7 +117,11 @@ mod buffer_tests;
 #[cfg(test)]
 mod clock_tests;
 #[cfg(test)]
+mod lift_tests;
+#[cfg(test)]
 mod pmt_install_tests;
+#[cfg(test)]
+mod presentation_tests;
 #[cfg(test)]
 mod psi_monitor_tests;
 #[cfg(test)]

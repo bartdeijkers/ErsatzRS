@@ -17,7 +17,9 @@ No engine/content/editor/client acceptance.
 Checked Level 2.5 palette/DRCS values, raw resource identities and supplied-reference
 DRCS dependency validation, ordered programs and bounded object-derived reference
 collection, presentation declarations and a supplied-selection semantic service
-are preparatory; authored MOT/X27 resolution, final object/display semantics,
+are preparatory. Presentation packet-body encoding and bounded v1 lifting retain
+explicit page/X26 presence with unchanged v1 bytes; they do not establish mixed
+producer convergence. Authored MOT/X27 resolution, final object/display semantics,
 physical allocation, native enhanced encoding and editor interfaces remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua controls remain preparatory.

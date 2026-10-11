@@ -74,6 +74,9 @@ impl TeletextColourRemapping {
 pub struct TeletextPanelWidth(u8);
 
 impl TeletextPanelWidth {
+    /// Preserved zero width field; its meaning still depends on the panel flags.
+    pub const ZERO: Self = Self(0);
+
     /// Check the raw field without canonicalizing zero or disabled panels.
     /// # Errors
     /// Returns `PanelWidth` when the input exceeds 15.

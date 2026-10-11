@@ -987,6 +987,33 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 v1 lifting/presentation-body checkpoint: the native encoder packs the
+complete checked X28/0 or M29/0 presentation body, including asymmetric RGB
+palettes, assigned charset aliases, raw panel flags/status/width, screen/row
+colours, substitution and all eight remappings. Literal pre-change X28 bytes
+match for all seven Western Latin national options; the existing wire snapshot
+is unchanged. Named standard-palette/black/zero-width/unlinked values eliminate
+library panic sites without introducing implicit presentation defaults.
+The consuming v1 lift shares allocation-free service budget accounting before
+structural checks and per-page metadata allocation. It retains unchanged base
+content/styles/navigation and explicit page/X26 presence. Present empty authored
+programs suppress defaults while base-character triplets remain encoder-derived.
+Conflicting magazine presentation/default objects do not alter lifted pages;
+the same service still applies those declarations to its unlifted peer.
+All 357 focused teletext tests pass (125 domain, 232 FFmpeg, including 13 new
+regressions; 177 out-of-filter/ignored tests skipped) in Nextest
+b4189d69-4124-4379-8c46-daf479cd09b4. Strict affected all-target Clippy,
+workspace formatting and architecture-lint pass; independent production,
+standard-field, compatibility and budget reviews are clean after private-field
+API correction and removal of fixed-literal runtime expects.
+The MOT/X27 audit retains masks, null/absent distinctions and independently owned
+defaults, with null-fallback/override/global-association edge policies still to
+resolve. Full mixed-v1/v2 compiler convergence, MOT/X27 declarations/resolution,
+geometry/glyph/object semantics, physical service allocation, complete enhanced
+encoding, v2/editor/preview/publication and actual client/browser/source/platform
+acceptance remain open. No milestone status/dependency/acceptance change,
+production TV-guide content, live publication or full CI claim.
+
 2026-10-11 presentation/service checkpoint: checked complete X28/M29 presentation
 values retain assigned primary/secondary designations, editable palettes, all
 spacing-colour remappings and every raw panel flag/width/status combination.

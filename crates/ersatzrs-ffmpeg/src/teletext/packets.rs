@@ -3,7 +3,7 @@ use ersatzrs_domain::{
     TeletextPageKind, TeletextPageNumber, TeletextPageSetDraft, TELETEXT_ROWS,
 };
 
-use super::{layout, TeletextEncodingError, TeletextEncodingRegion};
+use super::{layout, presentation, TeletextEncodingError, TeletextEncodingRegion};
 
 /// A validated page's EN 300 472 data units, without PES/TS publication authority.
 ///
@@ -107,6 +107,12 @@ pub fn encode_teletext_page(
 ) -> Result<EncodedTeletextPage, TeletextEncodingError> {
     let TeletextEncodingRegion::WesternLatin = region;
     let compiled = layout::compile(page)?;
+    let presentation =
+        presentation::western_latin_v1_presentation(page.national_option).map_err(|_| {
+            TeletextEncodingError::NationalOption {
+                address: page.address,
+            }
+        })?;
     let subtitle = page.kind == TeletextPageKind::Subtitle;
     let mut rows = compiled.rows.map(|row| row.map(odd_parity));
     let address = page.address;
@@ -151,7 +157,7 @@ pub fn encode_teletext_page(
     units.push(data_unit(
         address.page.wire_magazine(),
         28,
-        &latin_designation(page.national_option.get()),
+        &presentation::encode_presentation(&presentation),
         subtitle,
     ));
     let mut enhancements = compiled.enhancements;
@@ -249,54 +255,6 @@ fn editorial_links(
     let crc = page_crc(rows);
     data[38..].copy_from_slice(&crc.to_be_bytes());
     Ok(data)
-}
-
-// EN 300 706 9.4.2.2/table 4: Format 1, Latin region zero, no second G0,
-// no side panels, standard CLUTs 2/3 and black screen/row, no remapping.
-fn latin_designation(national: u8) -> [u8; 40] {
-    let mut words = [0_u32; 13];
-    let mut offset = 0;
-    write_bits(&mut words, &mut offset, 0, 7); // Basic Level 1 page, odd parity.
-    write_bits(&mut words, &mut offset, u32::from(national), 7);
-    write_bits(&mut words, &mut offset, 127, 7); // No second G0 set.
-    write_bits(&mut words, &mut offset, 0, 7); // Panels and width.
-    let colours = [
-        [15, 0, 5],
-        [15, 7, 0],
-        [0, 15, 7],
-        [15, 15, 11],
-        [0, 12, 10],
-        [5, 0, 0],
-        [6, 5, 2],
-        [12, 7, 7],
-        [3, 3, 3],
-        [15, 7, 7],
-        [7, 15, 7],
-        [15, 15, 7],
-        [7, 7, 15],
-        [15, 7, 15],
-        [7, 15, 15],
-        [13, 13, 13],
-    ];
-    for colour in colours {
-        for component in colour {
-            write_bits(&mut words, &mut offset, component, 4);
-        }
-    }
-    write_bits(&mut words, &mut offset, 0, 14); // Screen/row, substitution, mapping.
-    let mut packet = [0_u8; 40];
-    packet[0] = hamming_8_4(0);
-    for (target, word) in packet[1..].chunks_exact_mut(3).zip(words) {
-        target.copy_from_slice(&hamming_24_18(word));
-    }
-    packet
-}
-
-fn write_bits(words: &mut [u32; 13], offset: &mut usize, value: u32, bits: u8) {
-    for bit in 0..bits {
-        words[*offset / 18] |= ((value >> bit) & 1) << (*offset % 18);
-        *offset += 1;
-    }
 }
 
 // EN 300 706 9.6.1: Fibonacci register stages 7,9,12,16, zero seed;
