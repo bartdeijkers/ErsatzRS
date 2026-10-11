@@ -111,60 +111,84 @@ fn compiled(
         max_objects: 4,
         max_commands: 128,
     };
-    let gap = derive_gap(&original, service.objects(), packing, origin);
-    let carrier = build_teletext_origin_carrier(
+    let plan = plan_teletext_base_compatibility_realization(
         &original,
-        origin,
-        service.objects(),
-        TeletextOriginCarrierBudget {
+        TeletextBaseCompatibilityRealizationBudget {
+            max_commands: 128,
             max_candidates: 2048,
             max_origins: 4096,
-            catalog: packing,
-            max_id_checks: 65536,
-            max_output_commands: 16,
+            max_seeds: 16,
+            max_edges: 16,
+            max_updates: 100_000,
         },
     )
     .unwrap();
+    let placement = derive_placement(&plan, service.objects(), packing, origin);
+    let augmented = build_teletext_augmented_origin_program(
+        &placement,
+        TeletextAugmentedOriginProgramBudget {
+            max_input_commands: 128,
+            max_output_commands: 128,
+            max_carriers: 4,
+            max_identity_checks: 1024,
+            max_work: 100_000,
+            recipe: TeletextOriginCarrierBudget {
+                max_candidates: 2048,
+                max_origins: 4096,
+                catalog: packing,
+                max_id_checks: 1024,
+                max_output_commands: 6,
+            },
+        },
+    )
+    .unwrap();
+    assert_eq!(augmented.carriers().len(), 1);
+    let carrier = &augmented.carriers()[0];
     assert_eq!(carrier.original_origin_index(), origin);
     assert_eq!(
-        carrier.definition().object_type,
+        carrier.original_source(),
+        Some(TeletextEnhancementSource {
+            object: Some(active),
+            command: 0,
+        })
+    );
+    assert_eq!(
+        augmented
+            .catalog()
+            .definition(carrier.identity())
+            .unwrap()
+            .object_type,
         TeletextObjectType::Passive
     );
-    let mut definitions = service.objects().definitions().to_vec();
-    definitions.push(carrier.definition().clone());
-    let catalog = TeletextEnhancementObjectCatalog::new(definitions, packing).unwrap();
-    let mut commands = original.program().commands().to_vec();
-    // Retain every original command and use the producer-derived unchanged gap.
-    // Actual replay below proves the literal anchor. This one-component oracle
-    // does not settle full augmented correspondence or arbitrary later paints.
-    assert!(commands.iter().any(|command| matches!(command,
+    assert!(augmented.program().commands().iter().any(|command| matches!(command,
         TeletextEnhancementCommand::InvokeObject { target, object_type: TeletextObjectType::Active, offset: None } if *target == active)));
-    commands.insert(
-        gap.after_command().map_or(0, |command| command + 1),
-        TeletextEnhancementCommand::InvokeObject {
-            target: carrier.definition().identity,
-            object_type: TeletextObjectType::Passive,
-            offset: None,
-        },
-    );
-    let program = TeletextEnhancementProgram::new(commands).unwrap();
-    let allocations = allocate_teletext_resource_objects(&catalog, &[], 4).unwrap();
+    let allocations = allocate_teletext_resource_objects(augmented.catalog(), &[], 4).unwrap();
     let actual = compile_teletext_physical_display_program(
         service,
         &original,
-        &program,
-        &catalog,
+        augmented.program(),
+        augmented.catalog(),
         &allocations,
         collection,
         packing,
     )
     .unwrap();
+    assert_carrier_replay(&augmented, &actual);
+    assert_selected_model_matches(&original, actual.replay());
+    actual
+}
+
+fn assert_carrier_replay(
+    augmented: &TeletextAugmentedOriginProgram<'_>,
+    actual: &EncodedTeletextPhysicalDisplayProgram,
+) {
+    let carrier = &augmented.carriers()[0];
     let invocation = actual
         .replay()
         .spatial_trace()
         .invocations()
         .iter()
-        .find(|invocation| invocation.target() == carrier.definition().identity)
+        .find(|invocation| invocation.target() == carrier.identity())
         .unwrap();
     assert_eq!(
         (
@@ -177,30 +201,23 @@ fn compiled(
         (invocation.origin().row(), invocation.origin().column()),
         (1, 8)
     );
-    assert_selected_model_matches(&original, actual.replay());
-    actual
+    assert_eq!(
+        augmented.emitter_source(invocation.source()),
+        Some(TeletextAugmentedOriginSource::CarrierCall { carrier: 0 })
+    );
+    // This fixture observes distinct original/actual IDs without treating their
+    // numeric values as general invocation-ancestry correspondence.
+    assert_ne!(carrier.original_invocation(), Some(invocation.id()));
 }
 
-fn derive_gap(
-    original: &TeletextMainComposition,
-    catalog: &TeletextEnhancementObjectCatalog,
+fn derive_placement<'a>(
+    plan: &'a TeletextBaseCompatibilityRealizationPlan<'a>,
+    catalog: &'a TeletextEnhancementObjectCatalog,
     packing: TeletextObjectCatalogBudget,
     origin: usize,
-) -> TeletextOriginCarrierGap {
-    let plan = plan_teletext_base_compatibility_realization(
-        original,
-        TeletextBaseCompatibilityRealizationBudget {
-            max_commands: 128,
-            max_candidates: 2048,
-            max_origins: 4096,
-            max_seeds: 16,
-            max_edges: 16,
-            max_updates: 100_000,
-        },
-    )
-    .unwrap();
+) -> TeletextOriginCarrierPlacement<'a> {
     let placement = plan_teletext_origin_carrier_placement(
-        &plan,
+        plan,
         catalog,
         TeletextOriginCarrierPlacementBudget {
             max_commands: 128,
@@ -226,7 +243,7 @@ fn derive_gap(
     assert_eq!(call.original_origin_index(), origin);
     assert_eq!(call.raw_position(), (1, 8));
     assert_eq!((call.offset().row(), call.offset().column()), (0, 0));
-    gap
+    placement
 }
 
 fn assert_selected_model_matches(

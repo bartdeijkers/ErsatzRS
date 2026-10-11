@@ -149,7 +149,10 @@ release section when tagging a release.
   retained-anchor placement passes dual-level independent decoding. Derive
   whole-component DAG order and unchanged main gaps from actual composed root
   events, with checked panel/offset mapping and explicit pending components;
-  automatic full-page normalization remains open.
+  build bounded candidates retaining original commands/bodies, distinct generated
+  IDs and private emitter maps. The representative dual-level decoder proof now
+  consumes this producer; actual invocation ancestry, full-page typed equivalence
+  and automatic normalization remain open.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

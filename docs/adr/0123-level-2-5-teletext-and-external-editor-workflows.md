@@ -165,9 +165,16 @@ child events are not caller anchors. Inverse selected panel geometry and checked
 componentwise offsets choose the latest viable gap without changing original
 commands. Unknown/cyclic/unrepresentable components remain pending, with original
 global histories retained even without seeds. Generated order alone cannot
-settle later original paints. Full augmented source/instance correspondence,
-distinct generated IDs and whole-page typed/display equivalence remain required;
-placement does not certify admission or readiness.
+settle later original paints. A private augmented candidate now retains all
+original commands and catalog bodies, inserts contiguous component calls and
+allocates distinct lowest-free IDs against the growing catalog. Checked emitter
+maps distinguish retained main/object commands from generated calls/body roles;
+original source, root and instance facts remain separate. Bound both recipe
+passes, aggregate ID scans, assembly work and storage before copying originals.
+Pending components reject with the blocking origin, including when it differs
+from the first component member. This is producer assembly, not actual invocation
+ancestry. Pair the existing physical factory with exact original/actual ancestry
+before proving whole-page typed/display equivalence, admission or readiness.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

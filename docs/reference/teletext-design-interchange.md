@@ -473,14 +473,23 @@ components retain global original histories. Raw counts/storage and explicit
 placement scans/graph work are bounded before allocation; expanded tracing has
 its own budgets. Spatial failures retain their actual composed-main namespace.
 
-Placement does not allocate IDs, assemble a program, create a source map or prove
-whole-page equivalence. Later retained Passive paints can still redraw fragments;
-the producer must compare the complete actual augmented page and preserve typed
-identity plus original/actual invocation ancestry separately. Repeated per-origin
-recipes require distinct lowest-free IDs against the growing catalog. The pinned
-representative decoder fixture now uses this derived gap, retaining the original
-literal dual-level oracle and complete selected-model comparison. General batch
-correspondence, physical admission and full client navigation remain open.
+`build_teletext_augmented_origin_program` borrows that exact placement and owns a
+private checked candidate. Retain all original commands and object bodies; insert
+component calls contiguously in DAG order. Two recipe passes obtain exact body
+sizes before copying originals and then allocate distinct lowest-free Local IDs
+against the growing catalog. Both passes charge catalog visits and ID probes;
+assembly has explicit command, carrier, storage and scan budgets. Reject pending
+components with their blocking origin rather than the first component member.
+
+Private emitter maps distinguish retained main provenance/object body ordinals
+from generated calls/body roles. They retain original origin/source/root/instance
+facts separately and cannot certify actual invocation ancestry or a service
+generation. The pinned representative fixture now consumes this producer through
+actual allocation, encoding and replay; its complete 1,000-cell selected-model
+comparison and literal dual-level decoding still pass. Later retained Passive
+paints can redraw fragments. Next pair the existing physical factory with bounded
+original/actual invocation correspondence and prove typed/display equivalence;
+automatic normalization, physical admission and full client navigation stay open.
 
 ### Shared base display trace
 

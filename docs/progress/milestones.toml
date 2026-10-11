@@ -987,6 +987,30 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Bounded producer-owned augmented assembly now borrows the exact placement, preserves all
+original commands/catalog bodies and inserts component calls contiguously in DAG order. Exact
+body sizing precedes original copies; two recipe passes charge aggregate catalog/ID probes,
+assembly storage/scans and distinct lowest-free Local IDs against the growing catalog. Private
+emitter maps distinguish retained main/body sources from generated call/body roles while keeping
+original origin/root/instance namespaces separate. Ten final focused tests pass
+(e7b73897-cb2f-4e05-9033-c3fa1aa5d9af), including distinct IDs, unchanged originals, exact command
+roles/provenance, pending/no-seed behavior and budgets. Independent review found that a later
+blocking origin was blamed on the first component member; the corrected public multi-origin
+fixture proves the exact blocked Passive source/root/instance and preservation of originals.
+The pinned native fixture now consumes actual producer assembly, allocation, unchanged physical
+factory and replay, passes the complete1000 selected-model comparison and unchanged literal
+Level1.5 pound/Level2.5 A/Z/B oracle (6e3aa4bc-f326-4c8c-94f6-9cc98c2b5afa). Final helper/method-ref
+Clippy corrections preserve control, work and failure order under independent frozen-source
+review, so that native evidence remains valid. Strict FFmpeg all-target Clippy, workspace
+formatting, architecture/new-allow/progress checks pass. Existing34 consumer/471 shared-path
+checks remain valid. Assembly/emitter correspondence is not actual invocation ancestry, service
+generation, full typed/display equivalence, automatic normalization or publication readiness.
+Next pair the existing physical factory with bounded retained/generated actual ancestry; retain
+full original histories and prove whole-page typed/display equivalence. The automatic Unicode/
+Active conformance oracle remains failing. All milestone contracts/status/dependencies remain
+unchanged; full engine/client/editor/localized browser/publication acceptance stays open.
+Earlier evidence follows unchanged:
+
 Bounded carrier candidate placement now borrows the exact compatibility plan/catalog, groups
 connected whole rectangles/precedence and retains deterministic DAG order separately from pending
 cyclic membership. Only root main events of the actual composed program provide unchanged gaps;

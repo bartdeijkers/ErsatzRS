@@ -232,8 +232,15 @@ Bounded candidate placement now preserves whole-component DAG order and derives
 latest unchanged main gaps from actual composed root events, with selected-panel
 inverse mapping and checked componentwise offsets. The pinned representative
 wire oracle uses this derived gap; general later-paint equivalence remains open.
-Next produce the bounded augmented-program source map and distinct-ID assembly;
-these components do not correct the automatic composition path yet.
+Bounded augmented assembly now preserves originals, inserts contiguous component
+calls and allocates distinct lowest-free IDs. Private emitter maps retain original
+source/root/instance facts separately from generated calls/body roles. Exact body
+sizes and storage bounds precede copies; both recipe passes and aggregate ID scans
+are charged. Pending components report the blocking origin. The representative
+native oracle consumes this producer and still passes complete selected-model and
+dual-level literal comparisons. Next pair the unchanged physical factory with
+bounded original/actual invocation ancestry; these components do not correct the
+automatic composition path yet.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone
