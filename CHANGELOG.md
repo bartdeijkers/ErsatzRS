@@ -15,6 +15,8 @@ release section when tagging a release.
 
 ### Added
 
+- Preserve the exact complete teletext service when transferring a pending
+  publication request to shared stream output; live promotion remains open.
 - Add bounded native teletext previews for exact page/subpage addresses, keeping
   validated navigation, located diagnostics and RGB/video/unresolved pixel roles.
 - Add durable pending teletext publication requests for exact design revisions,

@@ -1,6 +1,6 @@
 //! Durable, fully compiled originals without active-publication authority.
 
-use std::{fmt, fmt::Write as _, time::Instant};
+use std::{fmt, fmt::Write as _, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use ersatzrs_app::{
@@ -361,6 +361,54 @@ impl RequestedOriginalTeletextPublication {
     #[must_use]
     pub const fn design(&self) -> &RestoredOriginalTeletextDesign {
         &self.design
+    }
+
+    /// Move compiled output together with its exact pending request/selection.
+    /// Raw stored documents and preview-only projections are released, without
+    /// cloning the full service. This neither rechecks current configuration nor
+    /// admits a generation; the runtime owner must still perform those fences.
+    /// Returns no candidate when the original carries no compiled output.
+    #[must_use]
+    pub fn into_output_candidate(self) -> Option<RequestedTeletextOutputCandidate> {
+        let RestoredOriginalTeletextDesign {
+            selection,
+            originals,
+            ..
+        } = self.design;
+        Some(RequestedTeletextOutputCandidate {
+            request: self.request,
+            selection,
+            service: Arc::new(originals.encoded?),
+        })
+    }
+}
+
+/// Associated pending request and exact immutable output, without promotion.
+pub struct RequestedTeletextOutputCandidate {
+    request: ersatzrs_domain::TeletextPublicationRequest,
+    selection: TeletextChannelSelectionSnapshot,
+    service: Arc<EncodedTeletextAuthoredService>,
+}
+impl RequestedTeletextOutputCandidate {
+    #[must_use]
+    pub const fn request(&self) -> &ersatzrs_domain::TeletextPublicationRequest {
+        &self.request
+    }
+    #[must_use]
+    pub const fn selection(&self) -> &TeletextChannelSelectionSnapshot {
+        &self.selection
+    }
+    #[must_use]
+    pub const fn service(&self) -> &Arc<EncodedTeletextAuthoredService> {
+        &self.service
+    }
+}
+impl fmt::Debug for RequestedTeletextOutputCandidate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RequestedTeletextOutputCandidate")
+            .field("request", &self.request)
+            .field("binding_count", &self.selection.bindings.len())
+            .finish_non_exhaustive()
     }
 }
 

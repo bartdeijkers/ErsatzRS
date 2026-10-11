@@ -90,9 +90,22 @@ impl TeletextOutputBinding {
         service: EncodedTeletextAuthoredService,
         first_byte_timeout: Duration,
     ) -> Result<Self, TeletextPumpError> {
+        Self::new_authored_shared(config, Arc::new(service), first_byte_timeout)
+    }
+
+    /// Share the exact complete service without copying its compiled contents.
+    /// Each forwarding gate still owns its independent transport/output epoch.
+    /// This provides no publication or current channel-selection authority.
+    /// # Errors
+    /// Rejects the same timing, gate policy and authored cycle bounds.
+    pub fn new_authored_shared(
+        config: TeletextOutputConfig,
+        service: Arc<EncodedTeletextAuthoredService>,
+        first_byte_timeout: Duration,
+    ) -> Result<Self, TeletextPumpError> {
         Self::new_inner(
             config,
-            TeletextOutputContent::Authored(Arc::new(service)),
+            TeletextOutputContent::Authored(service),
             first_byte_timeout,
         )
     }

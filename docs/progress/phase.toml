@@ -1152,6 +1152,8 @@ whole server-process/publication restart acceptance. Explicit pending publicatio
 requests now recompile exact retained revisions and atomically fence live head,
 whole-channel selection and request CAS. Pending persistence grants no accepted
 output or automatic startup activation. Exact-address native preview retains raster/navigation/diagnostics.
+An exact pending request can now move its compiled service into shared output ownership;
+this preserves request/selection and grants no current-configuration or promotion authority.
 Next connect the promotion owner and localized preview controls; original-only capture
 is not an editor-permission or zone/template acceptance.
 Prioritize the existing synthetic profile-selection→validation→preview→explicit

@@ -358,3 +358,100 @@ async fn authored_content_preserves_false_eof_and_capacity_rejections() {
     ));
     assert!(sink.is_empty());
 }
+
+#[test]
+fn caller_shared_complete_service_is_identical_in_multiple_bindings_and_content_clones() {
+    let service = Arc::new(authored_service());
+    let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
+    let first = TeletextOutputBinding::new_authored_shared(
+        policy(),
+        Arc::clone(&service),
+        Duration::from_millis(40),
+    )
+    .unwrap();
+    let second = TeletextOutputBinding::new_authored_shared(
+        policy(),
+        Arc::clone(&service),
+        Duration::from_millis(50),
+    )
+    .unwrap();
+    assert_eq!(Arc::strong_count(&service), 3);
+    let expected = expected_units(&first);
+    for binding in [&first, &second] {
+        let TeletextOutputContent::Authored(shared) = binding.content() else {
+            panic!("shared complete service required");
+        };
+        assert!(Arc::ptr_eq(&service, shared));
+        assert!(std::ptr::eq(service.pages(), shared.pages()));
+        assert!(std::ptr::eq(
+            service.magazine_units(),
+            shared.magazine_units()
+        ));
+        assert!(std::ptr::eq(service.inventory(), shared.inventory()));
+        assert_eq!(shared.unit_count(), service.unit_count());
+        assert_eq!(
+            TeletextServiceDescriptor::from_authored_service(shared),
+            descriptor
+        );
+        assert_eq!(expected_units(binding), expected);
+        assert_eq!(binding.config().elementary_pid, policy().elementary_pid);
+        assert!(binding.pages().is_none());
+    }
+    assert_eq!(first.first_byte_timeout(), Duration::from_millis(40));
+    assert_eq!(second.first_byte_timeout(), Duration::from_millis(50));
+    let TeletextOutputContent::Authored(cloned) = first.content().clone() else {
+        panic!("cloned content must retain authored identity");
+    };
+    assert!(Arc::ptr_eq(&service, &cloned));
+    assert_eq!(Arc::strong_count(&service), 4);
+    drop((first, second, cloned));
+    assert_eq!(Arc::strong_count(&service), 1);
+}
+
+#[test]
+fn shared_authored_constructor_rejects_the_same_timing_and_gate_policies_without_retention() {
+    let service = Arc::new(authored_service());
+    for timeout in [Duration::ZERO, Duration::MAX] {
+        assert!(matches!(
+            TeletextOutputBinding::new_authored_shared(policy(), Arc::clone(&service), timeout),
+            Err(TeletextPumpError::Configuration)
+        ));
+        assert_eq!(Arc::strong_count(&service), 1);
+    }
+    let mut overflow = policy();
+    overflow.max_hold = Duration::MAX;
+    assert!(matches!(
+        TeletextOutputBinding::new_authored_shared(
+            overflow,
+            Arc::clone(&service),
+            Duration::from_millis(40)
+        ),
+        Err(TeletextPumpError::Configuration)
+    ));
+    assert_eq!(Arc::strong_count(&service), 1);
+    for kind in 0..3 {
+        let mut invalid = policy();
+        match kind {
+            0 => invalid.max_buffer_packets = 0,
+            1 => invalid.playout_delay = Duration::ZERO,
+            _ => invalid.clock.muxrate_bps = 0,
+        }
+        assert!(matches!(
+            TeletextOutputBinding::new_authored_shared(
+                invalid,
+                Arc::clone(&service),
+                Duration::from_millis(40)
+            ),
+            Err(TeletextPumpError::Gate(_))
+        ));
+        assert_eq!(Arc::strong_count(&service), 1);
+    }
+    let valid = TeletextOutputBinding::new_authored_shared(
+        policy(),
+        Arc::clone(&service),
+        Duration::from_millis(40),
+    )
+    .unwrap();
+    assert_eq!(Arc::strong_count(&service), 2);
+    assert!(!expected_units(&valid).is_empty());
+}

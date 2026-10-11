@@ -3641,3 +3641,24 @@ RGB4, video and receiver-header roles remain distinct; no guessed RGB replaces
 receiver context. Debug output excludes authored text/settings. Preview neither
 mutates packets nor promotes output. Localized browser presentation, actual
 navigation and matching client transmission still require integration evidence.
+
+### Pending request to shared output ownership
+
+`RequestedOriginalTeletextPublication::into_output_candidate` consumes the exact
+native result, retaining its immutable pending request and complete original
+channel selection while moving the compiled service into an `Arc`. It releases
+the stored document/preview context without copying the complete service. The
+sealed candidate exposes request, selection and shared service; Debug excludes
+authored content, settings and digests. No compiled output yields no candidate.
+
+`TeletextOutputBinding::new_authored_shared` accepts that shared complete service
+under the existing timing, gate and cycle checks. The owned constructor delegates
+to the same path. Each output gate still owns its independent transport epoch;
+sharing the model does not share mutable carousel progress or resource history.
+
+These are ownership seams, without live channel revalidation or promotion
+authority. Normal routes do not automatically consume pending requests. Runtime
+admission, an actual safe replacement boundary, accepted generation persistence,
+withdrawal and warm decoder/resource reconciliation remain required. A synthetic
+caller using the direct final MPEG-TS route must be labelled as an explicit cold
+candidate trial, never as accepted normal-route publication or full engine proof.
