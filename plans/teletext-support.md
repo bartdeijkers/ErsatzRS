@@ -160,6 +160,13 @@ receiver levels, then the original Local/Adaptive/Passive glyph tiers and the
 standard's distinct colour-inheritance behavior. Glyph rank alone must not choose
 attributes. Resolve footprints, panel areas and physical realization before
 granting full display or publication authority.
+The retained glyph layers now compare original character candidates by their
+standard-defined rank and invocation identity while keeping losing base intent.
+Next implement all four attribute groups with their distinct inheritance and
+scope rules, preserving C2 source evidence and unresolved transmission ties.
+Do not infer attributes from the highest character rank. The diagnostic layers
+retain raw out-of-area/header/panel candidates for explicit geometry validation;
+no overlap, pixel rendering or wire equivalence acceptance is implied.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

@@ -15,6 +15,7 @@ mod enhancement_objects;
 mod enhancement_program;
 mod enhancement_values;
 mod enhancements;
+mod glyph_layers;
 mod identity;
 mod mot;
 mod mot_resolution;
@@ -36,6 +37,7 @@ pub use enhancement_objects::*;
 pub use enhancement_program::*;
 pub use enhancement_values::*;
 pub use enhancements::*;
+pub use glyph_layers::*;
 pub use identity::*;
 pub use mot::*;
 pub use mot_resolution::*;
@@ -95,3 +97,6 @@ mod service_tests;
 
 #[cfg(test)]
 mod spatial_trace_tests;
+
+#[cfg(test)]
+mod glyph_layers_tests;

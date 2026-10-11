@@ -106,6 +106,11 @@ work/allocation limits. Main composition retains it from the same immutable
 service, without treating generated base commands as original Local semantics.
 Glyph priority and per-attribute arbitration remain separate required resolution;
 logical traversal order is not physical packet transmission evidence.
+Original glyph layers now retain all base and original enhancement contenders
+with separate character ranks and invocation provenance. The diagnostic highest
+character contender does not choose an attribute bundle or approve overlap,
+panels, character-set execution, footprints or physical equivalence. Generated
+compatibility words cannot acquire original Local provenance in this model.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

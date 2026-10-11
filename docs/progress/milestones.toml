@@ -987,6 +987,43 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 original glyph-layer checkpoint:
+Same-service main composition retains every non-header-owned Base cell and
+bounded original glyph contenders from its original spatial trace. Base Unicode/
+mosaic intent, coded roles and Base attributes remain distinct from raw typed
+G0/G1/G2/G3/diacritic/DRCS operations and their exact source/root/instance IDs.
+Generated compatibility words never become original Local glyph candidates.
+Diagnostic character rank follows Base, Active, Local, Adaptive and Passive;
+allowed same-type ties retain actual invocation and original event order. A single
+sorted candidate vector and sparse spans retain all losers and wider positions.
+Header-panel candidates survive but are marked outside logical addressability;
+actual panel enable/width, object areas and footprints remain unresolved.
+Ninety-four selected tests pass (5e3d27c2-bc3f-49e7-bf2b-bc0945eaae5e; 674 skipped),
+including twelve new domain cases and two actual-layout integration oracles.
+They retain Base authored e-acute behind Active A, original Local above Active,
+all five ranks, repeated Passive instances, sparse defaults/full resources,
+raw glyph variants, non-glyph absence, located exact candidate budgets, original
+same-cell writes, header panels, wide 165/369 and foreign exact-subcode rejection.
+After lint-only method-reference/error-adapter extraction, all 28 affected tests
+pass again (a4586b02-7220-4983-a414-9ccc7b7398a4; 740 skipped). Strict final
+all-target domain/FFmpeg Clippy, workspace formatting and independent source/
+test/delta reviews pass without new lint allowances. Initial redundant-closure
+and function-length findings were corrected rather than suppressed.
+Three final native tests pass (31dd22ea-716d-4ba6-9ab3-9eaaec575949; 542 skipped).
+The four base and six composed production-encoder cases still decode at both
+levels with all three fixture hashes and the pinned decoder helper unchanged.
+This reuses the existing feature coverage; the new diagnostic rank itself is not
+independent pixel, two-receiver or physical priority proof. Architecture/progress
+validation passes. Existing wire lowering does not yet realize the retained
+character priority, and all four attribute groups, charset execution, prohibited
+overlap validation, footprints/panels, physical normalization, full service/
+transport/client/editor/publication acceptance remain open. Next implement one
+consumed attribute executor covering foreground, background, flash and compound
+display attributes, with per-cell lower-context inheritance and C2 provenance.
+All six milestone acceptance/status/dependency records remain unchanged.
+
+Earlier original spatial evidence follows:
+
 2026-10-11 original spatial checkpoint:
 Main composition retains a domain-owned trace from the same immutable service's
 original effective program and checked full-ID object catalog. Original commands,

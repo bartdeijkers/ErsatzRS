@@ -165,6 +165,9 @@ release section when tagging a release.
   Original object tracing now preserves exact repeated/nested call coordinates
   and sparse default provenance under bounded allocation; glyph and attribute
   resolution remain required before display or publication acceptance.
+  Glyph layers now keep original base intent separate from object/local
+  character precedence, retaining losing and out-of-area contenders explicitly
+  for subsequent attribute, geometry and receiver-equivalence validation.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

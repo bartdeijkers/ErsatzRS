@@ -295,6 +295,42 @@ and arbitration, footprints, panel areas, header normalization and equivalent
 receiver views remain required. The trace has no serialized authoring, rendering
 or publication authority.
 
+### Original glyph layers
+
+`build_teletext_glyph_layers` combines a checked base display and original
+spatial trace without interpreting generated compatibility instructions as
+original Local content. The main composition factory supplies both inputs from
+one immutable service. The standalone function checks exact page/subcode
+identity; equal owners alone do not certify generation identity.
+
+Every non-header-owned base cell remains a candidate, including coded blanks
+and spacing controls. Its original authored Unicode or mosaic intent and base
+attributes stay separate from the fallback byte. Original glyph commands retain
+their raw typed operation, full source, root source, executing invocation and
+event ordinal. Colour, designation, position and call commands add no glyphs.
+The character ranks are Base, Active, Local, Adaptive and Passive, in ascending
+order (EN 300 706 clause 13.2). Among allowed same-type object overlaps, the later
+invocation takes precedence (Annex A.7); raw glyph intent still needs repertoire
+execution and glyph lookup.
+
+Counting all enhancement candidates precedes allocation under a trusted limit.
+One global candidate vector and sparse spans retain losing candidates as well
+as the highest ranked contender at each exact coordinate. Sorting is by logical
+position, character rank, invocation and original event order; it is not packet
+transmission order. Wider coordinates, broadcast-owned header positions and
+potential panel positions remain visible. Logical addressability is only a
+coordinate classification, not acceptance of enabled widths, object areas or
+footprints. No candidate is silently clipped or discarded.
+
+`highest_priority_candidate` is a diagnostic character comparison, not a final
+renderable cell. It does not approve prohibited Adaptive overlap or overlapping
+Active attribute types, choose attributes, execute character-set lifetimes,
+resolve DRCS pixels or apply size occlusion. Base attributes retained in a
+candidate remain base attributes; the winning character does not select an
+attribute bundle. Level 1.5 interpretation and physical equivalence still need
+separate proof. Full per-attribute inheritance/arbitration, geometry and both
+receiver views remain required before encoding/publication acceptance.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

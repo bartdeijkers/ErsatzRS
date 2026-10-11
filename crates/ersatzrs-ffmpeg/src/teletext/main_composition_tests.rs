@@ -778,3 +778,120 @@ fn spatial_rejection_keeps_nested_original_source_and_invocation_identity() {
     );
     assert_eq!(service, before);
 }
+
+#[test]
+fn original_active_glyph_outranks_base_unicode_without_promoting_derived_words() {
+    let target = local(44);
+    let mut fixture = Fixture::new(
+        vec![text(1, 9, "é")],
+        Some(vec![
+            position(1, 8),
+            invoke(target, TeletextObjectType::Active),
+        ]),
+    );
+    fixture.objects = vec![definition(target, TeletextObjectType::Active, vec![g0(1)])];
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose_teletext_main_program(&service, owner(), budget()).unwrap();
+    let layers = plan.glyph_layers();
+    assert_eq!(layers.owner(), owner());
+    let contenders = layers.candidates_at(1, 9);
+    assert_eq!(contenders.len(), 2);
+    assert_eq!(contenders[0].priority(), TeletextGlyphPriority::Base);
+    let base = contenders[0].base().unwrap();
+    assert_eq!(base.code(), b'e');
+    assert_eq!(
+        base.authored().unwrap().content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    assert_eq!(base, *plan.base_display().cell(1, 9).unwrap());
+    let active = layers.highest_priority_candidate(1, 9).unwrap();
+    assert_eq!(active.priority(), TeletextGlyphPriority::Active);
+    assert_eq!(
+        active.operation(),
+        Some(TeletextColumnOperation::G0 { code: code(b'A') })
+    );
+    assert_eq!(
+        active.source(),
+        Some(TeletextEnhancementSource {
+            object: Some(target),
+            command: 0,
+        })
+    );
+    assert_eq!(active.invocation().unwrap().get(), 0);
+    assert_eq!(
+        active.root_source(),
+        Some(TeletextSpatialRootSource::Local { command: 1 })
+    );
+    assert!(plan.provenance().iter().any(|source| matches!(
+        source,
+        TeletextMainCompositionSource::BaseCell {
+            kind: TeletextBaseCellCommandKind::Glyph,
+            ..
+        }
+    )));
+    assert_eq!(
+        layers
+            .candidates()
+            .iter()
+            .filter(|candidate| candidate.operation().is_some())
+            .count(),
+        1
+    );
+    // This is the semantic intent oracle. Charset/attributes/footprints and the
+    // two physical receiver views are separate required acceptance evidence.
+    assert_eq!(service, before);
+}
+
+#[test]
+fn original_local_candidate_outranks_active_while_all_base_intent_survives() {
+    let target = local(45);
+    let mut fixture = Fixture::new(
+        vec![text(1, 9, "é")],
+        Some(vec![
+            position(1, 8),
+            invoke(target, TeletextObjectType::Active),
+            g2(9),
+        ]),
+    );
+    fixture.objects = vec![definition(target, TeletextObjectType::Active, vec![g0(1)])];
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose_teletext_main_program(&service, owner(), budget()).unwrap();
+    let layers = plan.glyph_layers();
+    let contenders = layers.candidates_at(1, 9);
+    assert_eq!(
+        contenders
+            .iter()
+            .map(TeletextGlyphCandidate::priority)
+            .collect::<Vec<_>>(),
+        vec![
+            TeletextGlyphPriority::Base,
+            TeletextGlyphPriority::Active,
+            TeletextGlyphPriority::Local,
+        ]
+    );
+    let base = contenders[0].base().unwrap();
+    assert_eq!(
+        base.authored().unwrap().content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    let local = layers.highest_priority_candidate(1, 9).unwrap();
+    assert_eq!(
+        local.operation(),
+        Some(TeletextColumnOperation::G2 { code: code(0x54) })
+    );
+    assert_eq!(local.invocation(), None);
+    assert_eq!(
+        local.source(),
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 2,
+        })
+    );
+    assert_eq!(
+        local.root_source(),
+        Some(TeletextSpatialRootSource::Local { command: 2 })
+    );
+    assert_eq!(service, before);
+}
