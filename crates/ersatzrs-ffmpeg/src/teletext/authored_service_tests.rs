@@ -653,3 +653,6 @@ pub(super) fn candidate() -> EncodedTeletextAuthoredService {
 
 #[path = "authored_service_transmission_tests.rs"]
 mod transmission_tests;
+
+#[path = "authored_service_charset_tests.rs"]
+mod charset_tests;

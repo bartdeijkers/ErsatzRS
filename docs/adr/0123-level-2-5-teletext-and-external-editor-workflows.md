@@ -426,6 +426,14 @@ never gain national substitution. Explicit prohibited positions and unmarked
 empty cells remain different outcomes. Current-G0/current-G2 composite intent
 retains unverified non-Latin composition, rather than substituting Latin marks.
 The zero-diacritic 2/A exception is always @, even when charset order is pending.
+Unresolved raw designation order does not itself prevent a glyph identity when
+every applicable choice has the same exact Table 34 G0/G2 pair. Retain all raw
+aliases and provenance; establish only the pair consensus, including applicable
+previous pending context and own-definition timing. Different pairs remain
+unresolved. A generated carrier may emit a physical representative for a proven
+pair without claiming an original declaration winner. Comparison must distinguish
+actual unresolved glyph intent from retained raw history. Fixed glyph families
+and the independent @ case gain no synthetic charset dependency.
 This assignment boundary establishes no Unicode/font/raster, DRCS resolution,
 geometry, preview or publication authority. Temporary missing evidence is not a
 permanent engine restriction; full authored Level 2.5 acceptance remains open.

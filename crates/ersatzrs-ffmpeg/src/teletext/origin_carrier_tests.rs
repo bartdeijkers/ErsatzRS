@@ -396,6 +396,53 @@ fn authored_replacements_and_national_base_use_explicit_latin_conversion() {
 }
 
 #[test]
+fn shared_alias_consensus_has_a_physical_recipe_without_a_raw_winner() {
+    let target = local(0xffff);
+    let mut fixture = Fixture::new(
+        vec![],
+        Some(vec![
+            position(1, 5),
+            charset(5, 1),
+            invoke(target, TeletextObjectType::Active),
+            g0(6),
+        ]),
+    );
+    fixture.objects.push(definition(
+        target,
+        TeletextObjectType::Active,
+        vec![charset(0, 0)],
+    ));
+    let service = fixture.build();
+    let composition = compose(&service);
+    let retained = composition.clone();
+    let index = origin(&composition, 1, 6);
+    let candidate = composition.display_resolution().origins()[index].candidate_index();
+    let intent = &composition.glyph_intent().records()[candidate];
+    assert_eq!(intent.disposition(), TeletextGlyphDisposition::Assigned);
+    assert_eq!(
+        intent.selected_pair(),
+        Some(TeletextCharsetPair::LatinLatin)
+    );
+    let selection = intent.context().selection().unwrap();
+    assert_eq!(selection.value(), None);
+    assert!(selection.pending().is_some());
+    assert_eq!(selection.declaration(), None);
+    let recipe =
+        build_teletext_origin_carrier(&composition, index, service.objects(), limits()).unwrap();
+    assert_eq!(
+        operations(&recipe)[4],
+        TeletextColumnOperation::DesignateCharset {
+            designation: TeletextEnhancementCharsetDesignation::new(0).unwrap()
+        }
+    );
+    assert_eq!(
+        operations(&recipe)[5],
+        TeletextColumnOperation::G0 { code: code(b'A') }
+    );
+    assert_eq!(composition, retained);
+}
+
+#[test]
 fn special_at_symbol_needs_no_charset_even_when_shared_designation_order_is_pending() {
     let target = local(0xffff);
     let special = TeletextColumnOperation::G0Diacritic {

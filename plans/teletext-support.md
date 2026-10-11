@@ -396,7 +396,13 @@ binds them to native defaults and both normalization passes before planning or
 comparison, preserving original owners and executing instances. Reusing these
 words requires exact unchanged resource bodies, types and physical allocations.
 Separate instances gain no order from resource storage or carousel acquisition.
-Next audit remaining charset/cross-instance uncertainty, update-history policy,
+Shared charset aliases now establish exact pair consensus without choosing a
+raw writer; prior pending choices and original sources survive. Complete
+resource-backed normalization preserves all cells and both raster phases;
+different repertoires still reject with located diagnostics. Actual two-cycle
+independent decoding passes with a pinned offline receipt. No storage/carousel
+order becomes cross-instance charset authority.
+Next audit remaining different-pair priority, update-history policy,
 larger-service resource interleaving and unused-POP presentation edges, then host v2
 admission. Preserve independent full-compiler/carousel decoder goldens and the
 original/corrected distinction. Synthetic TSDuck transport is not served-playback

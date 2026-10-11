@@ -35,6 +35,7 @@ FIXTURES = {
     'carousel-root': '8636493c5710c59339c14e06f4fb0ccbc33dfa12fc2abd5aadd4716efd60be8d',
     'carousel-nested': '093f973725e0c7a1beeff3ad178af968f24ced16aac1cd77cc5467b522bf5975',
     'resource-c2': '0ee3aff7c8e60610dcbd6fe432080b559a437c57218cb142489ee2ecea4ba8cc',
+    'charset-consensus': '3a2ad74aa78a28ac97a944b324c58a8a7cf381f9f56c6391187502531d519af0',
 }
 HELPERS = {
     'teletext-object-decoder.py': 'd8d7001f6df374614b95c59a413b07f60af4038089bed1811c12abbe2cf6c6f1',
@@ -68,7 +69,7 @@ def unique_object(pairs):
 
 
 def main():
-    require(len(sys.argv) == 3, 'Usage: teletext-zvbi-x27-proof.py original|corrected root|nested|authored-root|authored-nested|carousel-root|carousel-nested|resource-c2')
+    require(len(sys.argv) == 3, 'Usage: teletext-zvbi-x27-proof.py original|corrected root|nested|authored-root|authored-nested|carousel-root|carousel-nested|resource-c2|charset-consensus')
     variant, fixture = sys.argv[1:]
     require(variant in PARSERS and fixture in FIXTURES, 'Unknown variant or fixture')
     output, proof = Path('/out'), Path('/proof')
@@ -117,7 +118,8 @@ def main():
     require(status == wanted_status, 'Unexpected native outcome: ' + stdout.getvalue() + stderr.getvalue())
     if status == 0:
         report = json.loads(stdout.getvalue(), object_pairs_hook=unique_object)
-        require(report == {'cases_passed': 2, 'decoder_version': '0.2.42'} and not stderr.getvalue(), 'Success oracle mismatch')
+        cases = 1 if fixture == 'charset-consensus' else 2
+        require(report == {'cases_passed': cases, 'decoder_version': '0.2.42'} and not stderr.getvalue(), 'Success oracle mismatch')
     else:
         report = json.loads(stderr.getvalue(), object_pairs_hook=unique_object)
         name = {

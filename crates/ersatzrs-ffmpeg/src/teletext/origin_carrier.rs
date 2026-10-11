@@ -481,15 +481,24 @@ fn glyph_recipe(
     }
     let selection = intent.context().selection();
     let charset = selection
-        .map(
-            |selection| match selection.value().ok_or(Failure::Charset)? {
-                TeletextCharsetSelection::Enhancement(value) => Ok(value),
-                TeletextCharsetSelection::PagePrimary(value) => {
-                    TeletextEnhancementCharsetDesignation::new(value.get())
-                        .map_err(|_| Failure::Charset)
-                }
-            },
-        )
+        .map(|selection| match selection.value() {
+            Some(TeletextCharsetSelection::Enhancement(value)) => Ok(value),
+            Some(TeletextCharsetSelection::PagePrimary(value)) => {
+                TeletextEnhancementCharsetDesignation::new(value.get())
+                    .map_err(|_| Failure::Charset)
+            }
+            None => {
+                let pair = intent.selected_pair().ok_or(Failure::Charset)?;
+                // A derived carrier needs a physical pair designation, not
+                // a winner among the original aliases. Preserve the raw
+                // pending selection and emit the first assigned Table 34
+                // code for this independently established exact pair.
+                (0..=0x7f)
+                    .filter_map(|code| TeletextEnhancementCharsetDesignation::new(code).ok())
+                    .find(|designation| designation.pair() == pair)
+                    .ok_or(Failure::Charset)
+            }
+        })
         .transpose()?;
     let operation = if let Some(operation) = candidate.operation() {
         operation

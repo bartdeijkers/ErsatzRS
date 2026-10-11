@@ -1139,7 +1139,11 @@ checks, real TSDuck and two-cycle original/corrected decoding pass with the know
 original nested failure preserved. Resource command spans now settle same-instance
 attributes before both normalization passes and native preview. Exact original
 bodies/types/allocations fence reuse; resource order grants no cross-instance
-priority. Next audit remaining charset/cross-instance ties, update history,
+priority. Shared charset aliases now establish exact pair consensus while
+retaining raw pending sources and prior contexts. Ten new pure regressions join
+98 focused passes; complete normalization/raster, independent two-cycle decoding,
+offline Docker identity receipt, strict Clippy/fmt and TSDuck pass. Different
+pairs still reject with located diagnostics. Next audit different-pair priority, update history,
 larger-service interleaving and host v2 admission. The fixed planner explicitly
 rejects resource/M29 cycles over twenty seconds; no authoring waiver is accepted.
 No engine, editor, client navigation or publication acceptance is claimed.

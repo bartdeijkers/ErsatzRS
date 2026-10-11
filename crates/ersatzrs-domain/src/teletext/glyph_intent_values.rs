@@ -1,8 +1,8 @@
 //! Checked-context glyph identities, independent of fonts, Unicode and rasterization.
 
 use super::{
-    TeletextDrcsGlyphReference, TeletextExecutedGlyphCharset, TeletextGlyphCode, TeletextMosaic,
-    TeletextPageAddress,
+    TeletextCharsetPair, TeletextDrcsGlyphReference, TeletextExecutedGlyphCharset,
+    TeletextGlyphCode, TeletextMosaic, TeletextPageAddress,
 };
 
 /// Primary alphanumeric table identity (EN 300 706 tables 35/38–40/42/44/46).
@@ -144,6 +144,7 @@ pub struct TeletextExecutedGlyphIntent {
     pub(super) disposition: TeletextGlyphDisposition,
     pub(super) glyph: Option<TeletextGlyphIdentity>,
     pub(super) reason: Option<TeletextGlyphIntentReason>,
+    pub(super) selected_pair: Option<TeletextCharsetPair>,
 }
 impl TeletextExecutedGlyphIntent {
     /// Unchanged original candidate/context, including opaque pending-order index.
@@ -156,7 +157,7 @@ impl TeletextExecutedGlyphIntent {
         self.disposition
     }
     /// Retained exact identity also for unassigned/prohibited positions. Unknown
-    /// designation order cannot produce a single identity and returns none.
+    /// designation order returns none when applicable repertoire pairs disagree.
     #[must_use]
     pub const fn glyph(&self) -> Option<TeletextGlyphIdentity> {
         self.glyph
@@ -164,6 +165,15 @@ impl TeletextExecutedGlyphIntent {
     #[must_use]
     pub const fn reason(&self) -> Option<TeletextGlyphIntentReason> {
         self.reason
+    }
+
+    /// Required repertoire pair, known directly or agreed by every applicable
+    /// unresolved designation. This chooses no raw alias or declaration winner;
+    /// the original context and pending registry remain unchanged. Fixed-family
+    /// and charset-independent glyphs have no required pair.
+    #[must_use]
+    pub const fn selected_pair(&self) -> Option<TeletextCharsetPair> {
+        self.selected_pair
     }
 }
 

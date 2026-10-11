@@ -426,10 +426,15 @@ impl Builder<'_> {
         }
         for (index, record) in intent.records().iter().enumerate() {
             self.charge(None)?;
-            let selection = record
-                .context()
-                .selection()
-                .and_then(ersatzrs_domain::TeletextExecutedCharsetSelection::pending);
+            // Raw alias-order history can remain unresolved while every
+            // applicable pair proves one glyph identity. Compare actual glyph
+            // uncertainty; retaining that history is not a display failure.
+            let selection = match record.reason() {
+                Some(ersatzrs_domain::TeletextGlyphIntentReason::CharsetOrder { pending }) => {
+                    Some(pending)
+                }
+                _ => None,
+            };
             let kind = if selection.is_some() {
                 Some(TeletextPhysicalComparisonPendingKind::Charset)
             } else if record.disposition() != TeletextGlyphDisposition::Assigned {

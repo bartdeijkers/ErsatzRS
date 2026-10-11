@@ -1647,8 +1647,61 @@ eligibility and Arabic G2 letter composition remain precise
 a permanent authoring exclusion.
 Mode `0x10`/code `0x2A` instead produces `AtSymbol` independently of charset
 ordering; other zero-diacritic codes use current G0. Ordinary direct G0 `0x2A`
-remains its actual table position. Unknown charset order cannot manufacture one
-repertoire identity, and keeps the original pending registry index.
+remains its actual table position. Unknown charset order keeps the original
+pending registry index. Differing possible pairs cannot manufacture one identity.
+
+#### Shared charset alias consensus
+
+Equal-position Local/Active declarations can retain an unresolved raw winner
+while every applicable Table 34 designation selects the same exact G0/G2 pair.
+Glyph intent now exposes that derived `selected_pair()` without changing the
+raw selection, alias values, declaration indexes or source/root/invocation
+contenders. It compares complete pairs, never Unicode or equal font masks.
+Private Adaptive/Passive state and known raw aliases remain unchanged.
+
+One checked cache entry per pending record avoids recursive history walks or
+per-glyph contender allocations. Final declarations supersede the previous
+position; same-cell choices retain the applicable previous context, including
+an earlier pending choice, and exclude later declarations in the glyph's own
+definition. Every remaining contender must agree. Disagreement anywhere in
+the applicable chain remains `CharsetOrder`; agreeing last two writers cannot
+erase an older possible repertoire. Existing prohibited/unmarked/composite
+assignment rules still apply after consensus.
+
+A derived carrier with a known pair but no raw winner emits the first assigned
+Table 34 code for that pair. This physical representative never replaces the
+original pending choice. Whole-display comparison diagnoses actual unresolved
+glyph intent, rather than rejecting harmless retained raw history. Different
+Local/POP repertoires still produce a located diagnostic and reject the complete
+candidate atomically.
+
+Ten new pure regressions join 98 focused passes
+(`616e8bc2-f43e-4d02-823d-aadc6c23192d`), including all 1,000 display cells and
+both full raster phases after complete resource-backed normalization. Strict
+domain/FFmpeg all-target Clippy, formatting and independent consumer reviews
+pass. The unchanged libzvbi 0.2.42 helper decodes two actual carousel cycles at
+page 200/subcode 0, retaining Base B and enhanced A/7/0 at row 1, column 10
+(`b8a8bada-a4ab-4984-a36f-df24580435f0`: three decoder tests pass; the transport
+test initially lacks explicit tool paths). The separately configured TSDuck
+test passes (`631b0277-f793-4404-86ec-e72fdefe2820`), including intentional
+continuity damage detection. Existing TS, root and resource-C2 fixture hashes
+remain byte-identical; their prior receipt evidence remains valid.
+
+New request SHA256:
+`3a2ad74aa78a28ac97a944b324c58a8a7cf381f9f56c6391187502531d519af0`.
+The maintained offline Docker receipt accepts `charset-consensus`, pins one
+successful case, and verifies the actually mapped unchanged library SHA256
+`2991c13dcd1f8c2b694bcce57b5edd2e68ba5bfab1c3cada55f6e088463e9bf9`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_CHARSET_CONSENSUS_FIXTURE="$fixture_dir/charset-consensus.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  complete_carousel_shared_charset_aliases_decode --lib --run-ignored ignored-only
+```
+
+Use the pinned decoder environment and receipt replay described above. This is
+one representative authored-service proof; different-pair priority, complete
+Level 2.5 client display/navigation, editor roundtrip and publication stay open.
 
 Assignment is a diagnostic semantic intermediate, not renderer or validation
 acceptance. Font shapes, Unicode projection, Arabic joining/composition, DRCS

@@ -1,5 +1,8 @@
 //! Primary-table identities and assignment evidence, not Unicode/font oracles.
 
+#[path = "glyph_intent_consensus_tests.rs"]
+mod consensus_tests;
+
 use super::*;
 
 fn owner() -> TeletextPageAddress {

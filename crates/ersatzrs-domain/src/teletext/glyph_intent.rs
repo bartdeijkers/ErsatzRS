@@ -8,6 +8,8 @@
 
 use std::mem::size_of;
 
+use super::charset_execution_values::PendingFilter;
+
 use super::{
     TeletextBaseDisplayCellKind, TeletextCharsetExecution, TeletextCharsetPair,
     TeletextColumnOperation, TeletextEnhancementSource, TeletextExecutedGlyphCharset,
@@ -42,7 +44,9 @@ pub enum TeletextGlyphIntentFailure {
 /// Resolve all original coded identities without choosing a winning candidate.
 ///
 /// `max_candidates` bounds ALL records, including the 992 non-header Base cells.
-/// Exact count and linear storage arithmetic are checked before allocating.
+/// Exact count, linear storage and shared pending-scan arithmetic are checked
+/// before allocating. Each pending selection's pair consensus is cached once;
+/// raw aliases, ordering uncertainty and prior context remain unchanged.
 /// Pending charset indexes reuse the supplied execution's registry, without a
 /// registry clone or per-cell contender vector. The authoritative factory must
 /// retain that same execution alongside this output; owner equality is not a
@@ -68,19 +72,32 @@ pub fn resolve_teletext_glyph_intent(
             },
         ));
     }
-    if count
+    let allocation = count
         .checked_mul(size_of::<TeletextExecutedGlyphIntent>())
-        .is_none_or(|bytes| bytes > isize::MAX as usize)
-    {
+        .and_then(|bytes| {
+            charset
+                .pending()
+                .len()
+                .checked_mul(size_of::<Option<TeletextCharsetPair>>())
+                .and_then(|cache| bytes.checked_add(cache))
+        });
+    let work = charset
+        .shared
+        .len()
+        .checked_add(1)
+        .and_then(|span| charset.pending().len().checked_mul(span))
+        .and_then(|scans| scans.checked_add(count));
+    if allocation.is_none_or(|bytes| isize::try_from(bytes).is_err()) || work.is_none() {
         return Err(lookup_error(
             charset,
             None,
             TeletextGlyphIntentFailure::AllocationSize,
         ));
     }
+    let pairs = pending_pairs(charset)?;
     let mut records = Vec::with_capacity(count);
     for &context in charset.records() {
-        records.push(resolve_record(charset, context)?);
+        records.push(resolve_record(charset, context, &pairs)?);
     }
     Ok(TeletextGlyphIntent {
         owner: charset.owner(),
@@ -88,15 +105,54 @@ pub fn resolve_teletext_glyph_intent(
     })
 }
 
+fn pending_pairs(
+    charset: &TeletextCharsetExecution,
+) -> Result<Vec<Option<TeletextCharsetPair>>, TeletextGlyphIntentError> {
+    let mut pairs = Vec::with_capacity(charset.pending().len());
+    for (index, pending) in charset.pending().iter().enumerate() {
+        let mut pair = None;
+        let mut agreed = true;
+        if matches!(pending.filter, PendingFilter::Glyph { .. }) {
+            let previous = pending.previous();
+            pair = if let Some(value) = previous.value() {
+                Some(value.pair())
+            } else if let Some(earlier) = previous.pending().filter(|&earlier| earlier < index) {
+                pairs[earlier]
+            } else {
+                return Err(lookup_error(
+                    charset,
+                    None,
+                    TeletextGlyphIntentFailure::InconsistentContext,
+                ));
+            };
+            // A disagreement in an applicable older context cannot disappear
+            // merely because the current group's last two aliases agree.
+            agreed = pair.is_some();
+        }
+        for contender in charset.pending_contenders(index) {
+            let actual = contender.designation().pair();
+            if let Some(expected) = pair {
+                agreed &= expected == actual;
+            } else {
+                pair = Some(actual);
+            }
+        }
+        pairs.push(if agreed { pair } else { None });
+    }
+    Ok(pairs)
+}
+
 fn resolve_record(
     charset: &TeletextCharsetExecution,
     context: TeletextExecutedGlyphCharset,
+    pairs: &[Option<TeletextCharsetPair>],
 ) -> Result<TeletextExecutedGlyphIntent, TeletextGlyphIntentError> {
     let mut record = TeletextExecutedGlyphIntent {
         context,
         disposition: TeletextGlyphDisposition::Assigned,
         glyph: None,
         reason: None,
+        selected_pair: None,
     };
     if let Some(cell) = context.candidate().base() {
         record.glyph = Some(match cell.kind() {
@@ -124,6 +180,7 @@ fn resolve_record(
                     })?;
                     TeletextGlyphIdentity::G1Mosaic { mosaic }
                 } else {
+                    record.selected_pair = Some(charset.primary().pair());
                     let (g0, _) = repertoires(charset.primary().pair());
                     let glyph = TeletextG0Glyph {
                         repertoire: g0,
@@ -164,7 +221,7 @@ fn resolve_record(
         TeletextColumnOperation::Drcs { reference } => {
             record.glyph = Some(TeletextGlyphIdentity::Drcs { reference });
         }
-        _ => resolve_selected(charset, &mut record, operation)?,
+        _ => resolve_selected(charset, &mut record, operation, pairs)?,
     }
     Ok(record)
 }
@@ -173,6 +230,7 @@ fn resolve_selected(
     charset: &TeletextCharsetExecution,
     record: &mut TeletextExecutedGlyphIntent,
     operation: TeletextColumnOperation,
+    pairs: &[Option<TeletextCharsetPair>],
 ) -> Result<(), TeletextGlyphIntentError> {
     // Table 29 explicitly requires @ for mode 10000/code 2A regardless of
     // current G0. Retain original pending context without inventing a dependence.
@@ -182,26 +240,11 @@ fn resolve_selected(
         record.glyph = Some(TeletextGlyphIdentity::AtSymbol);
         return Ok(());
     }
-    let selection = record.context.selection().ok_or_else(|| {
-        lookup_error(
-            charset,
-            Some(&record.context),
-            TeletextGlyphIntentFailure::InconsistentContext,
-        )
-    })?;
-    if let Some(pending) = selection.pending() {
-        record.disposition = TeletextGlyphDisposition::Pending;
-        record.reason = Some(TeletextGlyphIntentReason::CharsetOrder { pending });
+    let Some(pair) = resolve_pair(charset, record, pairs)? else {
         return Ok(());
-    }
-    let value = selection.value().ok_or_else(|| {
-        lookup_error(
-            charset,
-            Some(&record.context),
-            TeletextGlyphIntentFailure::InconsistentContext,
-        )
-    })?;
-    let (g0, g2) = repertoires(value.pair());
+    };
+    record.selected_pair = Some(pair);
+    let (g0, g2) = repertoires(pair);
     match operation {
         TeletextColumnOperation::G0 { code } => {
             let glyph = TeletextG0Glyph {
@@ -256,6 +299,31 @@ fn resolve_selected(
         }
     }
     Ok(())
+}
+
+fn resolve_pair(
+    charset: &TeletextCharsetExecution,
+    record: &mut TeletextExecutedGlyphIntent,
+    pairs: &[Option<TeletextCharsetPair>],
+) -> Result<Option<TeletextCharsetPair>, TeletextGlyphIntentError> {
+    let inconsistent = || {
+        lookup_error(
+            charset,
+            Some(&record.context),
+            TeletextGlyphIntentFailure::InconsistentContext,
+        )
+    };
+    let selection = record.context.selection().ok_or_else(inconsistent)?;
+    if let Some(pending) = selection.pending() {
+        let pair = *pairs.get(pending).ok_or_else(inconsistent)?;
+        if pair.is_none() {
+            record.disposition = TeletextGlyphDisposition::Pending;
+            record.reason = Some(TeletextGlyphIntentReason::CharsetOrder { pending });
+        }
+        Ok(pair)
+    } else {
+        Ok(Some(selection.value().ok_or_else(inconsistent)?.pair()))
+    }
 }
 
 fn assign_g0(record: &mut TeletextExecutedGlyphIntent, glyph: TeletextG0Glyph) {
