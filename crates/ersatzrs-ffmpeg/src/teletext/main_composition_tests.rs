@@ -16,6 +16,8 @@ mod augmented_origin_comparison_tests;
 mod augmented_origin_compilation_tests;
 #[path = "augmented_origin_program_tests.rs"]
 mod augmented_origin_program_tests;
+#[path = "normalized_main_program_tests.rs"]
+mod normalized_main_program_tests;
 #[path = "origin_carrier_tests.rs"]
 mod origin_carrier_tests;
 #[path = "physical_comparison_tests.rs"]

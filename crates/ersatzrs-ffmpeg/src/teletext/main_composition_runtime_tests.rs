@@ -1,6 +1,6 @@
 //! Opt-in fixed-cell evidence for the production composition/lowering path.
-//! The opt-in Unicode/Active conformance oracle currently reproduces a wire
-//! priority failure. This does not settle header context or full client acceptance.
+//! The Unicode/Active oracle uses the bounded normalization candidate; other
+//! fixtures retain their explicit encoder paths. Full client acceptance is separate.
 
 use ersatzrs_domain::*;
 
@@ -95,6 +95,13 @@ pub(super) fn encoded_case(
     encoded_case_with_context(name, rows, main, definitions, cells, false)
 }
 
+#[derive(Clone, Copy)]
+enum MainEncoding {
+    Local,
+    Composed,
+    Normalized,
+}
+
 fn encoded_case_with_context(
     name: &str,
     rows: Vec<TeletextRow>,
@@ -102,6 +109,22 @@ fn encoded_case_with_context(
     definitions: Vec<TeletextEnhancementObjectDefinition>,
     cells: &[serde_json::Value],
     compatibility: bool,
+) -> serde_json::Value {
+    let encoding = if compatibility {
+        MainEncoding::Composed
+    } else {
+        MainEncoding::Local
+    };
+    encoded_case_with_encoding(name, rows, main, definitions, cells, encoding)
+}
+
+fn encoded_case_with_encoding(
+    name: &str,
+    rows: Vec<TeletextRow>,
+    main: Vec<TeletextEnhancementCommand>,
+    definitions: Vec<TeletextEnhancementObjectDefinition>,
+    cells: &[serde_json::Value],
+    encoding: MainEncoding,
 ) -> serde_json::Value {
     let mut page = super::transport_tests::draft(200, 0, false);
     // In English, pound is a direct national character. German forces the
@@ -111,50 +134,7 @@ fn encoded_case_with_context(
     let owner = page.address;
     let service = service(&page, main, definitions);
     let objects = service.objects();
-    let allocations = allocate_teletext_resource_objects(objects, &[], 4).unwrap();
-    let composition_budget = TeletextMainCompositionBudget {
-        max_input_commands: 64,
-        max_output_commands: 64,
-        collection: TeletextEnhancementCollectionBudget {
-            max_commands: 128,
-            max_drcs_references: 0,
-        },
-    };
-    let packing_budget = TeletextObjectCatalogBudget {
-        max_objects: 4,
-        max_commands: 128,
-    };
-    let local = if compatibility {
-        let compiled = compile_teletext_composed_main_program(
-            &service,
-            owner,
-            &allocations,
-            composition_budget,
-            packing_budget,
-        )
-        .unwrap();
-        if matches!(
-            name,
-            "compiled_local_colour_tie" | "compiled_adaptive_colour_tie"
-        ) {
-            assert_compiled_colour_tie(&compiled, name);
-        }
-        compiled.encoded().clone()
-    } else {
-        let composed = compose_teletext_main_program(&service, owner, composition_budget).unwrap();
-        compile_teletext_local_program_with_objects(
-            owner,
-            composed.program(),
-            objects,
-            &allocations,
-            TeletextResolvedObjectPageLinks {
-                public: None,
-                global: None,
-            },
-            packing_budget,
-        )
-        .unwrap()
-    };
+    let local = encode_fixture_main(name, &service, owner, encoding);
     if matches!(name, "invocation_anchor" | "context_body_restore") {
         let positions = local.definition_positions();
         assert_eq!(positions.len(), 1);
@@ -191,6 +171,138 @@ fn encoded_case_with_context(
     units.push(terminator(2));
     serde_json::json!({"name":name,"page":0x200,"subcode":0,
         "units":units.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>(),"cells":cells})
+}
+
+fn encode_fixture_main(
+    name: &str,
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    encoding: MainEncoding,
+) -> super::EncodedTeletextLocalObjectProgram {
+    let composition_budget = TeletextMainCompositionBudget {
+        max_input_commands: 64,
+        max_output_commands: 64,
+        collection: TeletextEnhancementCollectionBudget {
+            max_commands: 128,
+            max_drcs_references: 0,
+        },
+    };
+    let packing_budget = TeletextObjectCatalogBudget {
+        max_objects: 4,
+        max_commands: 128,
+    };
+    if matches!(encoding, MainEncoding::Normalized) {
+        return super::compile_teletext_normalized_main_program(
+            service,
+            owner,
+            normalization_budget(composition_budget, packing_budget),
+        )
+        .unwrap()
+        .encoded()
+        .clone();
+    }
+    let objects = service.objects();
+    let allocations = allocate_teletext_resource_objects(objects, &[], 4).unwrap();
+    if matches!(encoding, MainEncoding::Composed) {
+        let compiled = compile_teletext_composed_main_program(
+            service,
+            owner,
+            &allocations,
+            composition_budget,
+            packing_budget,
+        )
+        .unwrap();
+        if matches!(
+            name,
+            "compiled_local_colour_tie" | "compiled_adaptive_colour_tie"
+        ) {
+            assert_compiled_colour_tie(&compiled, name);
+        }
+        compiled.encoded().clone()
+    } else {
+        let composed = compose_teletext_main_program(service, owner, composition_budget).unwrap();
+        compile_teletext_local_program_with_objects(
+            owner,
+            composed.program(),
+            objects,
+            &allocations,
+            TeletextResolvedObjectPageLinks {
+                public: None,
+                global: None,
+            },
+            packing_budget,
+        )
+        .unwrap()
+    }
+}
+
+fn normalization_budget(
+    composition: TeletextMainCompositionBudget,
+    packing: TeletextObjectCatalogBudget,
+) -> super::TeletextNormalizedMainProgramBudget {
+    use super::{
+        TeletextAugmentedGlyphComparisonBudget, TeletextAugmentedInvocationBudget,
+        TeletextAugmentedOriginProgramBudget, TeletextBaseCompatibilityRealizationBudget,
+        TeletextNormalizedMainProgramBudget, TeletextOriginCarrierBudget,
+        TeletextOriginCarrierPlacementBudget, TeletextPhysicalComparisonBudget,
+    };
+    TeletextNormalizedMainProgramBudget {
+        composition,
+        packing,
+        replay: composition.collection,
+        max_resource_objects: 4,
+        realization: TeletextBaseCompatibilityRealizationBudget {
+            max_commands: 128,
+            max_candidates: 2048,
+            max_origins: 4096,
+            max_seeds: 16,
+            max_edges: 16,
+            max_updates: 100_000,
+        },
+        placement: TeletextOriginCarrierPlacementBudget {
+            max_commands: 128,
+            max_origins: 4096,
+            max_edges: 16,
+            catalog: packing,
+            spatial: TeletextSpatialTraceBudget {
+                max_events: 128,
+                max_invocations: 16,
+            },
+            max_work: 100_000,
+        },
+        assembly: TeletextAugmentedOriginProgramBudget {
+            max_input_commands: 128,
+            max_output_commands: 128,
+            max_carriers: 4,
+            max_identity_checks: 1024,
+            max_work: 100_000,
+            recipe: TeletextOriginCarrierBudget {
+                max_candidates: 2048,
+                max_origins: 4096,
+                catalog: packing,
+                max_id_checks: 1024,
+                max_output_commands: 6,
+            },
+        },
+        ancestry: TeletextAugmentedInvocationBudget {
+            max_original_invocations: 16,
+            max_actual_invocations: 16,
+            max_carriers: 4,
+            max_work: 100_000,
+        },
+        glyph_comparison: TeletextAugmentedGlyphComparisonBudget {
+            max_records: 10_000,
+            max_cells: 1000,
+            max_diagnostics: 64,
+            max_work: 1_000_000,
+        },
+        display_comparison: TeletextPhysicalComparisonBudget {
+            max_records: 10_000,
+            max_cells: 1000,
+            max_diagnostics: 64,
+            max_updates: 1_000_000,
+        },
+    }
 }
 
 fn assert_compiled_colour_tie(compiled: &super::EncodedTeletextComposedMainProgram, name: &str) {
@@ -462,11 +574,11 @@ fn anchored_case() -> serde_json::Value {
 }
 
 #[tokio::test]
-#[ignore = "Known Unicode/Active wire priority regression; requires pinned teletextimager"]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
 async fn base_unicode_active_override_decodes_with_pinned_imager() {
     let owner = super::transport_tests::draft(200, 0, false).address;
     let identity = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xffff));
-    let case = encoded_case_with_context(
+    let case = encoded_case_with_encoding(
         "base_unicode_active_override",
         vec![text(1, 8, "£Z"), text(2, 1, "B")],
         vec![
@@ -492,7 +604,7 @@ async fn base_unicode_active_override_decodes_with_pinned_imager() {
             cell(1, 8, [0x23, 7, 0, 7, 0], [b'A', 0, 0, 7, 0]),
             cell(1, 9, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, 7, 0]),
         ],
-        true,
+        MainEncoding::Normalized,
     );
     let request = serde_json::to_vec(&serde_json::json!({
         "expected_version":"0.2.0", "cases":[case],

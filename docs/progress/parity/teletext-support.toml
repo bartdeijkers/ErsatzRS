@@ -13,10 +13,8 @@ remain required; Kodi optional. P9A-02 In progress; others Not started.
 
 Bounded v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
 metadata/fresh definition state. Local X26 retains forward references.
-Decoders prove selected DRCS/object/main cells; local/G1 font gaps remain.
 Replay/raster retain fallback; recipes/placement retain lineage/DAG/AP.
 Assembly retains originals/IDs/maps; encoding checks unique call ancestry.
-Typed origins/glyphs/resources reject equal-mask identities.
 C3 retains private/shared fragments and deferred writers.
 C2 uses packed words within emitters; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.
@@ -32,7 +30,8 @@ keeps Base priority. Headers use receiver markers; invert precedes flash; bottom
 parts retain origin-row planes. Eight opaque DRCS rectangles match libzvbi RGBA.
 Composites/BBS retain masks/writers; D5 cancels spacing with original scope.
 Enhanced G1 uses D5 only; native later-spacing discrepancy stays open.
-Unicode/Active wire priority fails; full A7/A8/C3/client proof stays open.
+Explicit same-service normalization passes the Unicode/Active wire oracle;
+ordinary encoding, foreign defaults, row-zero and full A7/A8/C3/client proof stay open.
 X27/MOT retain masks, S1, banks/defaults/raw fields/IDs and derivation provenance/conflicts.
 Compiled-header fence rejects exact physical/logical-owner collisions.
 Defaults/selection/compiler/editor remain open.
@@ -71,9 +70,9 @@ Phase 10 waits for p9b-02.
 [[debt]]
 id          = 'teletext-generated-unicode-base-priority-is-not-preserved-on-wire'
 adr         = '0123'
-description = 'Generated Unicode fallback currently becomes Local X26 glyph data and outranks an original Active glyph, although the retained semantic/raster result correctly keeps Unicode at Base priority. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
+description = 'The ordinary composed compiler generates Local X26 fallback that outranks an original Active glyph. The explicit normalized engine candidate now passes the unchanged representative dual-level oracle, but broad integration and remaining standards coverage are unproven. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
 discovered  = '2026-10-11'
-evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The bounded realization intermediate retains affected final origins/fragments and unresolved evidence; it does not correct the encoder or grant publication readiness. Actual lowering, generated-resource accounting and independent dual-receiver proof remain open.'
+evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The new explicit same-service normalization entry passes the unchanged positive oracle with pinned teletextimager (af44fcf5-1934-4899-8d06-59172060d9f1), after both bounded comparisons and original C2 settlement. P9A-01 and the interchange reference retain the original failure and new request hash. This does not change ordinary compiler paths or grant publication readiness. Foreign default ownership, row-zero/national conversion, broad integration and full dual-receiver/service/client proof remain open.'
 resolved    = false
 
 [[debt]]

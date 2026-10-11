@@ -228,10 +228,10 @@ decoder; its same-cell designation handling selects the restored repertoire for
 an earlier glyph. That observation neither changes the required engine scope nor
 establishes correctness of the final wire compiler.
 
-### Unresolved Unicode/Active wire priority
+### Unicode/Active wire priority: original failure and normalized candidate
 
 The opt-in `base_unicode_active_override_decodes_with_pinned_imager` regression
-uses the actual `compile_teletext_composed_main_program` output, including final
+originally used actual `compile_teletext_composed_main_program` output, including final
 local definitions and retained DVB units. German national option one forces the
 authored pound at page 200/subcode zero, row 1, column 8 into derived G2 fallback.
 An original full-ID `ffff` Active object writes G0 `A` there; adjacent `Z` must
@@ -244,7 +244,14 @@ passes the fallback check but reports Level 2.5 `[35,7,0,7,0]` instead of
 defect evidence, not successful decoder acceptance. The production request SHA256
 is `6ad7b72e9d33b3d339fb7f4b61bb3c0b708fd805b1f9f68f7324425048a83d7b`.
 The existing main-composition decoder helper and earlier positive oracles are
-unchanged. Export or replay the regression with:
+unchanged. The positive regression now explicitly chooses
+`compile_teletext_normalized_main_program`; it retains German option one, the
+same original rows/object and the same two literal cells. It passes both levels
+in `af44fcf5-1934-4899-8d06-59172060d9f1`. The new request SHA256 is
+`9f54ec86a2c7a15927916b83d97493b03842658015b18066c3a8d60379419756`.
+The original failing artifact remains historical evidence for the ordinary
+composed path; this result supersedes it only for the explicit normalized route.
+Export or replay the current positive regression with:
 
 ```bash
 ERSATZRS_TELETEXT_TEST_IMAGER_DIR=<pinned-checkout> \
@@ -453,7 +460,8 @@ Level 2.5 `A`, adjacent `Z` and calibration `B`. This representative component
 now consumes its derived unchanged-main gap; it is not automatic normalization,
 a global lineage proof, full receiver
 equivalence, display/navigation or publication acceptance. The original automatic
-composition path's correct Unicode/Active conformance oracle remains failing.
+composition path was recorded failing above; the later explicit normalized route
+passes that unchanged positive oracle, without proving general client acceptance.
 
 `plan_teletext_origin_carrier_placement` privately borrows the exact compatibility
 plan and supplied catalog. Connected whole rectangles and undirected precedence
@@ -531,9 +539,28 @@ failure, changed G2 context, nested/repeated/sparse roots, budgets/history and e
 DRCS pixels with distinct scope/S1/slot/resource. The DRCS identity fixture uses
 relative row1 to reach the comparison; row-zero lowering remains required/open.
 The pinned native fixture now passes both full1,000-cell typed and selected-model
-comparisons before unchanged literal dual-level decoding. Next build the bounded
-same-service normalization entry with original final-word C.2 settlement; foreign
-MOT/default ownership, automatic-path correction and full acceptance remain open.
+comparisons before unchanged literal dual-level decoding.
+
+`compile_teletext_normalized_main_program` now accepts only one immutable service,
+exact selected owner and per-stage host budgets. It reuses the existing composed
+factory and consumes its original final-word C.2-settled target once. Internally
+it derives the plan, placement, augmented catalog/program, allocations, physical
+encoding and paired ancestry. No caller plan, map or detached trace can substitute
+another generation. Both original and augmented allocation/packing passes are
+explicitly bounded. Complete typed and selected-model comparisons must succeed
+before the owned original/physical result escapes; located failures return no
+partial bytes. Histories survive and no-seed pages still undergo both comparisons.
+This is an explicit engine candidate, not service or durable publication admission.
+
+Eight tests cover owned lifetime, original fallback bytes, no-collision replacement
+and C.2 settlement, exact subcode lookup, no-seed typed/global uncertainty, both
+allocation limits, stage cutoffs and foreign sparse-slot default rejection
+(`3b726d74-8d3c-4f19-a7d6-572598b41bcf`). The original Unicode/Active positive
+oracle now passes via this route; three unchanged native Local/Composed/C.2 cases
+also pass (`74289bc4-52de-421f-b409-07cea2f6597c`). The pinned decoder/helper and
+literal expectations are unchanged. Foreign MOT/default activation cannot be
+fixed by cloning owners or relaxing selected links; row-zero lowering and complete
+standards/client/editor/localized preview/publication acceptance remain open.
 
 ### Shared base display trace
 

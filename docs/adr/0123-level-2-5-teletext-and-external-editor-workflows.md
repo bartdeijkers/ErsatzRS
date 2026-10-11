@@ -192,6 +192,18 @@ identity construction; equal masks never establish identity. Preserve located
 current uncertainty and separate append-only histories. Full fragment/attribute/
 colour comparison remains required alongside this view; zero typed findings do
 not certify nonvisible state, matching generations, receiver acceptance or readiness.
+An explicit bounded normalization entry now constructs both owned models from one
+immutable service and exact selected page/subcode. Reuse the existing composed
+factory's final-word C.2 settlement once, then derive placement, augmented assembly,
+actual allocation/encoding and paired ancestry internally. Successful results
+require complete typed-identity and complete selected-model comparisons; stage
+failure or either comparison's findings release no partial wire candidate. Keep
+original and actual models together without detached caller maps. This entry
+corrects the representative Unicode/Active decoder oracle with unchanged fallback
+and literal expectations; ordinary compiler paths remain separately available.
+It grants no whole-service admission, publication or receiver readiness. Foreign
+MOT-default ownership, row-zero lowering and remaining standards/client/editor
+acceptance remain required, without selected-link exemptions or cloned owners.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

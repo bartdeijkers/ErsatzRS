@@ -987,6 +987,30 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Explicit bounded same-service normalization now accepts one immutable service, exact owner and
+per-stage budgets, reusing the existing composed factory's original final-word C2 settlement
+once. Plan/placement/assembly, actual allocation/packing/replay and paired ancestry are constructed
+internally; successful owned original/physical output requires complete typed AND selected-model
+comparisons. No partial bytes escape a stage error or comparison finding. Pending histories survive;
+no-seed pages still run both checks. Eight regressions pass
+(3b726d74-8d3c-4f19-a7d6-572598b41bcf): owned lifetime, ordinary fallback immutability,
+no-collision/C2, exact subcode errors, typed/global no-seed uncertainty, both allocation counts,
+phase cutoffs and strict foreign sparse-default rejection. The previously failing positive
+Unicode/Active oracle now explicitly uses this route and passes both unchanged literal levels
+(af44fcf5-1934-4899-8d06-59172060d9f1). New request SHA256
+9f54ec86a2c7a15927916b83d97493b03842658015b18066c3a8d60379419756; the reference retains
+original failed request/run evidence without rewriting it. Three existing native Local/Composed/
+C2 decoder cases pass after the common helper extraction (74289bc4-52de-421f-b409-07cea2f6597c).
+Pinned teletextimager 0.2.0/2b0125b778c45ffdfa2df0b196870c093361f317, source guards,
+helper and literal goldens remain unchanged. Independent final-source review proves borrowed
+private-budget and test type-alias corrections mechanical, preserving valid focused/native evidence.
+Strict FFmpeg all-target Clippy, workspace formatting, architecture/new-allow/progress checks pass.
+Ordinary encoder paths remain separate; no whole-service/durable-generation/publication authority
+or full Level2.5/client acceptance follows. Next prove foreign MOT-default activation/ownership,
+row-zero lowering and remaining full A7/A8/national conversion/standards/client/editor/localized
+browser/publication gates; no cloned owner or selected-link exemption. All milestone contracts/
+statuses/dependencies unchanged. Earlier evidence follows unchanged:
+
 Bounded typed selected-page comparison now consumes only the private paired encoded candidate,
 checks exact original carrier-origin indices and retained provenance/instances, and compares
 actual resolved assigned identities independently of masks. Authored Base replacements reuse the

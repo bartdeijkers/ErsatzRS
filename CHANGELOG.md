@@ -155,8 +155,11 @@ release section when tagging a release.
   original/carrier invocation ancestry across nested calls and sparse defaults.
   Compare selected typed identities and exact origins independently of mask
   equality, including full DRCS resources and Unicode replacement context.
-  The native representative passes both complete model views; automatic
-  normalization and full standards/client/editor/publication acceptance stay open.
+  An explicit bounded same-service normalization entry now owns both models and
+  requires complete typed and selected-model comparisons before returning bytes.
+  The original Unicode/Active decoder oracle passes with unchanged dual-level
+  literal expectations. Foreign-default ownership, row-zero lowering, live
+  integration and full standards/client/editor/publication acceptance stay open.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

@@ -58,6 +58,12 @@ impl EncodedTeletextComposedMainProgram {
     pub const fn encoded(&self) -> &EncodedTeletextLocalObjectProgram {
         &self.encoded
     }
+
+    /// Consumes the preliminary packing while retaining its settled target model.
+    #[must_use]
+    pub(super) fn into_composition(self) -> TeletextMainComposition {
+        self.composition
+    }
 }
 
 /// Compose and pack one exact owner using the same immutable service throughout.
