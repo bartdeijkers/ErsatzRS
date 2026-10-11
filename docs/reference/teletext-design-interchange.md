@@ -268,6 +268,33 @@ same-service retention; these are not independent pixel or object-priority proof
 Use the [base display calibration](../../scripts/e2e/README.md#teletext-base-display-calibration)
 to replay the cell evidence.
 
+### Original object coordinates
+
+`resolve_teletext_spatial_trace` produces an immutable domain-owned trace from
+one exact owner's original effective program and checked object catalog. It
+retains original commands and full source identities, sparse default slots,
+distinct repeated invocation IDs, parent relationships and immediate offsets.
+Each object starts at relative zero; nested origins add the caller's absolute
+position and immediate offset. Returning from a child preserves the caller's AP.
+Screen colour leaves AP unchanged; row colour selects its original row/column
+zero. Relative address order is checked independently for every program type.
+
+Counting precedes exact event/invocation allocation under separate trusted
+limits. Both passes use the same immutable selection and catalog. Located errors
+retain the executing instance and root source, including a second invocation of
+the same full object ID. Coordinates use checked wider arithmetic without
+clipping or wrapping. Out-of-area coordinates remain unresolved input for the
+subsequent geometry validator, rather than becoming accepted display cells.
+
+Main composition retains this trace from the same service as its checked base
+display, independently of generated base replacement commands. It reuses its
+existing expanded-command limit for both counters and preserves earlier
+reference-collection error precedence. Logical event preorder is not physical
+packet transmission order. Separate glyph priority, per-attribute inheritance
+and arbitration, footprints, panel areas, header normalization and equivalent
+receiver views remain required. The trace has no serialized authoring, rendering
+or publication authority.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

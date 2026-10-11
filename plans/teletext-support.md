@@ -152,6 +152,14 @@ attribute inheritance against this trace, then footprints and both receiver
 views before normalizing physical instructions. A base-derived Unicode glyph
 must not gain local-enhancement priority over an authored Active object. This
 intermediate grants neither rendering nor publication acceptance.
+Original spatial tracing now preserves repeated/full-ID calls, nested caller
+origins and sparse original defaults under bounded two-pass allocation. Main
+composition consumes it independently of generated base glyphs. Next combine
+base intent and original object events: prove base `é` versus Active `A` at both
+receiver levels, then the original Local/Adaptive/Passive glyph tiers and the
+standard's distinct colour-inheritance behavior. Glyph rank alone must not choose
+attributes. Resolve footprints, panel areas and physical realization before
+granting full display or publication authority.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

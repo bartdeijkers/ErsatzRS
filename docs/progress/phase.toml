@@ -1178,10 +1178,16 @@ header normalization, original default realization, final semantics and full
 historical/suitable-client decoding remain required before service publication.
 Main composition now retains a bounded base display trace from actual checked
 rows, preserving coded fallback, authored intent, spacing-attribute provenance,
-raw/remapped colours and double-height origins. Next resolve original object
-invocations and inherited attributes, then footprints and both receiver views;
+raw/remapped colours and double-height origins. Resolve inherited attributes,
+footprints and both receiver views;
 base-derived Unicode must retain base priority before physical normalization.
 This is not enhanced rendering or publication acceptance.
+Original spatial tracing now retains full command/instance/default provenance,
+exact nested origins and caller AP with bounded count-before-allocation passes.
+Main composition consumes original events separately from derived base commands.
+Next prove base/Active glyph priority together with distinct per-attribute
+inheritance, then footprints/panels and physical receiver equivalence. Logical
+event order is not physical transmission proof or publication authority.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

@@ -100,6 +100,12 @@ spacing-attribute sources remain distinct, with separate raw and remapped colour
 and double-height origins. This supports the shared semantic resolver; it does
 not settle object priority, full footprints or browser rendering. Base-derived
 Unicode must still retain base priority in final semantic and physical views.
+A pure-domain original spatial trace now preserves exact command sources and
+repeated invocation identities, origins, offsets and caller AP under two-pass
+work/allocation limits. Main composition retains it from the same immutable
+service, without treating generated base commands as original Local semantics.
+Glyph priority and per-attribute arbitration remain separate required resolution;
+logical traversal order is not physical packet transmission evidence.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

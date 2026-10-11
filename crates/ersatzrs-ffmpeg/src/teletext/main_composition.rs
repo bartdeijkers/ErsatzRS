@@ -10,13 +10,14 @@
 use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
-    TeletextBaseDisplay, TeletextCharsetPair, TeletextCharsetValueError,
-    TeletextCollectedEnhancementReferences, TeletextColumnOperation,
+    resolve_teletext_spatial_trace, TeletextBaseDisplay, TeletextCharsetPair,
+    TeletextCharsetValueError, TeletextCollectedEnhancementReferences, TeletextColumnOperation,
     TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
     TeletextEnhancementCollectionBudget, TeletextEnhancementCollectionFailure,
     TeletextEnhancementCommand, TeletextEnhancementPosition, TeletextEnhancementProgram,
     TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextG3Compatibility,
     TeletextObjectIdentity, TeletextPageAddress, TeletextSemanticService, TeletextServiceError,
+    TeletextSpatialTrace, TeletextSpatialTraceBudget, TeletextSpatialTraceError,
 };
 
 use super::base_display::{trace_teletext_base_display, TeletextBaseDisplayError};
@@ -80,6 +81,8 @@ pub enum TeletextMainCompositionFailure {
     #[error(transparent)]
     BaseDisplay(#[from] TeletextBaseDisplayError),
     #[error(transparent)]
+    SpatialTrace(#[from] TeletextSpatialTraceError),
+    #[error(transparent)]
     Charset(#[from] TeletextCharsetValueError),
     #[error(transparent)]
     Program(#[from] TeletextEnhancementProgramError),
@@ -117,6 +120,7 @@ pub struct TeletextMainComposition {
     provenance: Vec<TeletextMainCompositionSource>,
     colour_context: TeletextColourContext,
     base_display: TeletextBaseDisplay,
+    spatial_trace: TeletextSpatialTrace,
     collected: TeletextCollectedEnhancementReferences,
 }
 
@@ -146,6 +150,12 @@ impl TeletextMainComposition {
     #[must_use]
     pub const fn base_display(&self) -> &TeletextBaseDisplay {
         &self.base_display
+    }
+    /// Original command coordinates and repeated invocation identities, before
+    /// base-glyph insertion. Attribute inheritance and footprints remain unresolved.
+    #[must_use]
+    pub const fn spatial_trace(&self) -> &TeletextSpatialTrace {
+        &self.spatial_trace
     }
     #[must_use]
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
@@ -249,6 +259,20 @@ pub fn compose_teletext_main_program(
                 failure.reason.into(),
             )
         })?;
+    let spatial_trace = resolve_teletext_spatial_trace(
+        service,
+        owner,
+        TeletextSpatialTraceBudget {
+            max_events: budget.collection.max_commands,
+            max_invocations: budget.collection.max_commands,
+        },
+    )
+    .map_err(|reason| {
+        let location = reason
+            .location
+            .and_then(|location| original_location(&source, location));
+        error(owner, location, reason.into())
+    })?;
     Ok(TeletextMainComposition {
         owner,
         original_program_source: source,
@@ -256,6 +280,7 @@ pub fn compose_teletext_main_program(
         provenance: built.provenance,
         colour_context,
         base_display,
+        spatial_trace,
         collected,
     })
 }

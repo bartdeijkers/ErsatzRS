@@ -657,3 +657,124 @@ fn generated_compatible_glyph_precedes_authored_level25_mosaic() {
         }
     );
 }
+
+#[test]
+fn retained_spatial_trace_uses_original_commands_before_derived_base_insertion() {
+    let target = local(42);
+    let original = vec![
+        position(1, 8),
+        invoke(target, TeletextObjectType::Passive),
+        g0(9),
+    ];
+    let mut fixture = Fixture::new(vec![text(1, 9, "£")], Some(original.clone()));
+    fixture.objects = vec![definition(
+        target,
+        TeletextObjectType::Passive,
+        vec![position(0, 1), g0(1)],
+    )];
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let spatial = plan.spatial_trace();
+    assert_eq!(spatial.owner(), owner());
+    assert_eq!(
+        spatial.original_program_source(),
+        &TeletextEffectiveProgramSource::Local
+    );
+    let root_commands: Vec<_> = spatial
+        .events()
+        .iter()
+        .filter(|event| event.invocation().is_none())
+        .map(|event| event.command())
+        .collect();
+    assert_eq!(root_commands, original);
+    assert_eq!(spatial.events().len(), 5);
+    assert_eq!(spatial.invocations().len(), 1);
+    let instance = &spatial.invocations()[0];
+    assert_eq!(instance.target(), target);
+    assert_eq!(
+        (instance.origin().row(), instance.origin().column()),
+        (1, 8)
+    );
+    let body = spatial
+        .events()
+        .iter()
+        .find(|event| event.source().object == Some(target) && event.source().command == 1)
+        .unwrap();
+    assert_eq!(
+        (body.absolute_after().row(), body.absolute_after().column()),
+        (1, 9)
+    );
+    assert_eq!(
+        body.root_source(),
+        TeletextSpatialRootSource::Local { command: 1 }
+    );
+    assert!(plan.provenance().iter().any(|source| matches!(
+        source,
+        TeletextMainCompositionSource::BaseCell {
+            kind: TeletextBaseCellCommandKind::Glyph,
+            ..
+        }
+    )));
+    assert_eq!(
+        plan.base_display()
+            .cell(1, 9)
+            .unwrap()
+            .authored()
+            .unwrap()
+            .content(),
+        TeletextBaseAuthoredContent::Text { character: '£' }
+    );
+    assert_eq!(service, before);
+}
+
+#[test]
+fn spatial_rejection_keeps_nested_original_source_and_invocation_identity() {
+    let target = local(43);
+    let mut fixture = Fixture::new(
+        vec![],
+        Some(vec![
+            position(1, 8),
+            invoke(target, TeletextObjectType::Adaptive),
+        ]),
+    );
+    fixture.objects = vec![definition(
+        target,
+        TeletextObjectType::Adaptive,
+        vec![position(0, 2), g0(1)],
+    )];
+    let service = fixture.build();
+    let before = service.clone();
+    let error = compose_teletext_main_program(&service, owner(), budget()).unwrap_err();
+    assert_eq!(error.owner, owner());
+    assert_eq!(
+        error.location,
+        Some(TeletextMainCompositionSource::Object {
+            identity: target,
+            command: 1,
+        })
+    );
+    let TeletextMainCompositionFailure::SpatialTrace(spatial) = error.reason else {
+        panic!("expected original spatial rejection");
+    };
+    assert_eq!(
+        spatial.location,
+        Some(TeletextEnhancementSource {
+            object: Some(target),
+            command: 1,
+        })
+    );
+    assert_eq!(
+        spatial.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 1 })
+    );
+    assert_eq!(spatial.invocation.unwrap().get(), 0);
+    assert_eq!(
+        spatial.reason,
+        TeletextSpatialTraceFailure::ActivePositionOrder {
+            previous: (0, 2),
+            requested: (0, 1),
+        }
+    );
+    assert_eq!(service, before);
+}

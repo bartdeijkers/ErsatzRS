@@ -26,6 +26,7 @@ mod resource_header;
 mod resource_identity;
 mod service;
 mod source;
+mod spatial_trace;
 
 pub use base_display::*;
 pub use charset_values::*;
@@ -46,6 +47,7 @@ pub use resource_header::*;
 pub use resource_identity::*;
 pub use service::*;
 pub use source::*;
+pub use spatial_trace::*;
 
 #[cfg(test)]
 mod tests;
@@ -90,3 +92,6 @@ mod presentation_tests;
 
 #[cfg(test)]
 mod service_tests;
+
+#[cfg(test)]
+mod spatial_trace_tests;

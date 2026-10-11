@@ -162,6 +162,9 @@ release section when tagging a release.
   Main composition now retains checked base cells, authored glyph intent and
   spacing-attribute provenance with separate raw/remapped colours, preparing
   shared display resolution without claiming enhanced rendering or publication.
+  Original object tracing now preserves exact repeated/nested call coordinates
+  and sparse default provenance under bounded allocation; glyph and attribute
+  resolution remain required before display or publication acceptance.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and
