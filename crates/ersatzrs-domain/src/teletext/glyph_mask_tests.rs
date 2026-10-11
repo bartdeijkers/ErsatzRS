@@ -274,7 +274,7 @@ fn current_g2_shapes_are_distinct_and_composites_use_only_verified_repertoires()
     for (base, mark) in [
         (
             TeletextG0Glyph {
-                repertoire: TeletextG0Repertoire::Greek,
+                repertoire: TeletextG0Repertoire::Arabic,
                 ..base
             },
             mark,
@@ -298,6 +298,294 @@ fn current_g2_shapes_are_distinct_and_composites_use_only_verified_repertoires()
             Err(TeletextGlyphMaskError::UnverifiedComposition { base, mark })
         );
     }
+}
+
+fn composite(
+    base_family: TeletextG0Repertoire,
+    code: u8,
+    mark_family: TeletextG2Repertoire,
+    mark_code: u8,
+) -> TeletextGlyphIdentity {
+    TeletextGlyphIdentity::Composite {
+        base: TeletextG0Glyph {
+            repertoire: base_family,
+            code,
+            national_subset: None,
+        },
+        mark: TeletextG2Glyph {
+            repertoire: mark_family,
+            code: mark_code,
+        },
+    }
+}
+
+#[test]
+fn non_latin_composite_literals_translate_or_fit_the_actual_glyph_without_font_borrowing() {
+    for (family, code, mark_code, expected) in [
+        (
+            TeletextG0Repertoire::Cyrillic1,
+            0x40,
+            0x47,
+            [0, 0x060, 0x306, 0x306, 0x306, 0x1fe, 6, 6, 6, 0],
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic2,
+            0x26,
+            0x42,
+            [0x060, 0x0c0, 0x306, 0x306, 0x3e6, 0x336, 0x3e6, 0, 0, 0],
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic3,
+            0x26,
+            0x4a,
+            [
+                0x060, 0x090, 0x060, 0x198, 0, 0x0e0, 0x060, 0x060, 0x060, 0x1f8,
+            ],
+        ),
+        // Greek 4/0 already has an eight-row glyph. The ring needs THREE rows;
+        // its seven-row base fit retains all horizontal bits (36C union row).
+        (
+            TeletextG0Repertoire::Greek,
+            0x40,
+            0x4a,
+            [
+                0x060, 0x090, 0x060, 0x36c, 0, 0x0e0, 0x060, 0x060, 0x060, 0x1f8,
+            ],
+        ),
+        (
+            TeletextG0Repertoire::Greek,
+            0x41,
+            0x47,
+            [0, 0x060, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0],
+        ),
+    ] {
+        let mark_family = if family == TeletextG0Repertoire::Greek {
+            TeletextG2Repertoire::Greek
+        } else {
+            TeletextG2Repertoire::Cyrillic
+        };
+        assert_eq!(
+            rows(composite(family, code, mark_family, mark_code)),
+            expected
+        );
+    }
+    // This exact current-Cyrillic capital A previously swallowed dot-above.
+    assert_eq!(
+        rows(composite(
+            TeletextG0Repertoire::Cyrillic2,
+            0x41,
+            TeletextG2Repertoire::Cyrillic,
+            0x47
+        )),
+        [0, 0x060, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0]
+    );
+}
+
+#[test]
+fn supplied_mixed_composite_identities_keep_their_base_family_and_actual_mark() {
+    // A font primitive may shape a supplied identity without inventing a
+    // reachable Table 34 designation; the semantic factory retains that duty.
+    for (base_family, code, mark_family, mark_code, expected) in [
+        (
+            TeletextG0Repertoire::Hebrew,
+            0x60,
+            TeletextG2Repertoire::Latin,
+            0x4a,
+            [
+                0x060, 0x090, 0x060, 0x31c, 0x18c, 0x1cc, 0x36c, 0x338, 0x318, 0x30c,
+            ],
+        ),
+        (
+            TeletextG0Repertoire::Hebrew,
+            0x41,
+            TeletextG2Repertoire::Greek,
+            0x47,
+            [0, 0x060, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0],
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic1,
+            0x40,
+            TeletextG2Repertoire::Greek,
+            0x4a,
+            [0x060, 0x090, 0x060, 0x306, 0x306, 0x306, 0x1fe, 6, 6, 6],
+        ),
+    ] {
+        assert_eq!(
+            rows(composite(base_family, code, mark_family, mark_code)),
+            expected
+        );
+    }
+}
+
+#[test]
+fn all_mark_classes_preserve_their_actual_masks_and_below_marks_keep_full_capitals() {
+    let expected_below = [
+        (
+            0x49,
+            [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0x060],
+        ),
+        (
+            0x4b,
+            [
+                0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x646, 0x040, 0x1c0,
+            ],
+        ),
+        (
+            0x4c,
+            [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0x7fe],
+        ),
+        (
+            0x4e,
+            [
+                0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x646, 0x040, 0x070,
+            ],
+        ),
+    ];
+    for (mark_code, expected) in expected_below {
+        assert_eq!(
+            rows(composite(
+                TeletextG0Repertoire::Latin,
+                0x41,
+                TeletextG2Repertoire::Latin,
+                mark_code
+            )),
+            expected
+        );
+    }
+    for (family, code, mark_family) in [
+        (
+            TeletextG0Repertoire::Cyrillic1,
+            0x40,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic2,
+            0x26,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic3,
+            0x26,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            TeletextG0Repertoire::Greek,
+            0x40,
+            TeletextG2Repertoire::Greek,
+        ),
+        (
+            TeletextG0Repertoire::Hebrew,
+            0x60,
+            TeletextG2Repertoire::Latin,
+        ),
+    ] {
+        let base_rows = rows(g0(family, code));
+        for mark_code in 0x41..=0x4f {
+            let mark_rows = rows(g2(mark_family, mark_code));
+            let result = rows(composite(family, code, mark_family, mark_code));
+            assert!(result.iter().all(|&row| row <= 0xfff));
+            assert_ne!(result, base_rows, "{family:?}/{code:02x}/{mark_code:02x}");
+            if matches!(mark_code, 0x49 | 0x4b | 0x4c | 0x4e) {
+                for ((actual, base), mark) in result.into_iter().zip(base_rows).zip(mark_rows) {
+                    assert_eq!(actual, base | mark);
+                }
+            } else {
+                // The complete mark zone is unchanged and disjoint from fitted
+                // base pixels; this checks every above-mark class, including ring.
+                let mark_end = mark_rows.iter().rposition(|&row| row != 0).unwrap();
+                assert_eq!(&result[..=mark_end], &mark_rows[..=mark_end]);
+                assert_ne!(
+                    result[mark_end + 1..]
+                        .iter()
+                        .fold(0, |union, row| union | row),
+                    0
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn composite_font_policy_rejects_letter_marks_nonletters_and_unknown_positions() {
+    for (family, code, mark_family, mark_code) in [
+        (
+            TeletextG0Repertoire::Latin,
+            0x41,
+            TeletextG2Repertoire::Arabic,
+            0x41,
+        ),
+        (
+            TeletextG0Repertoire::Arabic,
+            0x41,
+            TeletextG2Repertoire::Arabic,
+            0x41,
+        ),
+        (
+            TeletextG0Repertoire::Hebrew,
+            0x60,
+            TeletextG2Repertoire::Arabic,
+            0x41,
+        ),
+        (
+            TeletextG0Repertoire::Greek,
+            0x52,
+            TeletextG2Repertoire::Greek,
+            0x41,
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic1,
+            0x26,
+            TeletextG2Repertoire::Cyrillic,
+            0x41,
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic2,
+            0x20,
+            TeletextG2Repertoire::Cyrillic,
+            0x41,
+        ),
+        (
+            TeletextG0Repertoire::Cyrillic2,
+            0x80,
+            TeletextG2Repertoire::Cyrillic,
+            0x41,
+        ),
+        (
+            TeletextG0Repertoire::Greek,
+            0x41,
+            TeletextG2Repertoire::Greek,
+            0x40,
+        ),
+        (
+            TeletextG0Repertoire::Greek,
+            0x41,
+            TeletextG2Repertoire::Greek,
+            0x50,
+        ),
+    ] {
+        let identity = composite(family, code, mark_family, mark_code);
+        let TeletextGlyphIdentity::Composite { base, mark } = identity else {
+            unreachable!()
+        };
+        assert_eq!(
+            resolve_teletext_glyph_mask(identity, None, false),
+            Err(TeletextGlyphMaskError::UnverifiedComposition { base, mark })
+        );
+    }
+    // Current G0 alphabetic designation never adds a Base national subset.
+    let base = TeletextG0Glyph {
+        repertoire: TeletextG0Repertoire::Latin,
+        code: 0x41,
+        national_subset: Some(TeletextNationalSubset::English),
+    };
+    let mark = TeletextG2Glyph {
+        repertoire: TeletextG2Repertoire::Latin,
+        code: 0x42,
+    };
+    assert_eq!(
+        resolve_teletext_glyph_mask(TeletextGlyphIdentity::Composite { base, mark }, None, false),
+        Err(TeletextGlyphMaskError::UnverifiedComposition { base, mark })
+    );
 }
 
 #[test]

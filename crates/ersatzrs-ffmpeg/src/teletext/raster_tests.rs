@@ -462,3 +462,136 @@ fn receiver_header_uses_exact_identity_without_inventing_authored_errors_or_glyp
         Some(TeletextRasterPixel::Colour(_))
     ));
 }
+
+#[test]
+fn actual_composition_distinguishes_substituted_window_background_from_explicit_equal_colour() {
+    for explicit in [false, true] {
+        let mut commands = vec![
+            TeletextEnhancementCommand::SetRowColour {
+                row: 1,
+                colour: TeletextColourReference::new(8).unwrap(),
+                following_rows: false,
+            },
+            position(1, 8),
+        ];
+        if explicit {
+            commands.push(at(
+                8,
+                TeletextColumnOperation::Background {
+                    colour: TeletextColourReference::new(8).unwrap(),
+                },
+            ));
+        }
+        commands.push(at(
+            8,
+            TeletextColumnOperation::Attributes {
+                double_width: false,
+                double_height: false,
+                boxed: true,
+                conceal: false,
+                invert: false,
+                underline_or_separated_mosaics: false,
+            },
+        ));
+        let mut fixture = Fixture::new(vec![text(1, 8, "A")], Some(commands));
+        let mut presentation = crate::teletext::presentation::western_latin_v1_presentation(
+            TeletextNationalOption::new(1).unwrap(),
+        )
+        .unwrap();
+        presentation.black_background_substitution = true;
+        fixture.presentation = Some(presentation);
+        let service = fixture.build();
+        let before = service.clone();
+        let plan = compose(&service);
+        let image = raster(&plan);
+        if explicit {
+            assert_eq!(
+                image.pixel(96, 10),
+                Some(TeletextRasterPixel::Colour(TeletextColourPixel::Video))
+            );
+            assert!(image.diagnostics().is_empty());
+        } else {
+            let Some(TeletextRasterPixel::Unresolved(index)) = image.pixel(96, 10) else {
+                panic!("a substituted window parameter must remain diagnosed");
+            };
+            let diagnostic = &image.diagnostics()[index];
+            let TeletextRasterCellFailure::Colour(error) = &diagnostic.reason else {
+                panic!("original colour parameter failure must survive rasterization");
+            };
+            assert_eq!(
+                error.reason,
+                TeletextColourCompositionFailure::BackgroundParameterFromSubstitution {
+                    usage: TeletextBackgroundParameterUse::WindowTransparency,
+                }
+            );
+            let evidence = error.parameter.as_ref().unwrap();
+            assert!(matches!(
+                evidence.background_source,
+                TeletextAttributeSource::Base {
+                    source: TeletextBaseAttributeSource::RowDefault { .. },
+                    ..
+                }
+            ));
+            assert!(matches!(
+                evidence.consumer_source,
+                Some(TeletextAttributeSource::Enhancement { .. })
+            ));
+            assert_eq!(diagnostic.visual_position, (1, 8));
+            assert_eq!(error.owner, owner());
+            assert!(error.location.is_some());
+        }
+        assert_eq!(service, before);
+    }
+}
+
+#[test]
+fn actual_current_cyrillic_pair_reaches_composite_raster_without_latin_substitution() {
+    let service = Fixture::new(
+        vec![],
+        Some(vec![
+            position(1, 8),
+            charset(8, 0x24),
+            at(
+                8,
+                TeletextColumnOperation::G0Diacritic {
+                    code: code(b'A'),
+                    diacritic: TeletextDiacriticIndex::new(7).unwrap(),
+                },
+            ),
+        ]),
+    )
+    .build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let record = plan
+        .glyph_intent()
+        .records()
+        .iter()
+        .find(|record| {
+            matches!(
+                record.glyph(),
+                Some(TeletextGlyphIdentity::Composite { .. })
+            )
+        })
+        .unwrap();
+    let Some(TeletextGlyphIdentity::Composite { base, mark }) = record.glyph() else {
+        panic!("the actual current pair must survive composition");
+    };
+    assert_eq!(
+        (base.repertoire(), base.code()),
+        (TeletextG0Repertoire::Cyrillic2, b'A')
+    );
+    assert_eq!(
+        (mark.repertoire(), mark.code()),
+        (TeletextG2Repertoire::Cyrillic, 0x47)
+    );
+    assert_eq!(record.disposition(), TeletextGlyphDisposition::Assigned);
+    let image = raster(&plan);
+    assert!(image.diagnostics().is_empty());
+    assert_eq!(
+        cell_rows(&image, 1, 8, 1),
+        [0x000, 0x060, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0x000,]
+    );
+    assert_eq!(image.owner(), owner());
+    assert_eq!(service, before);
+}

@@ -201,6 +201,8 @@ release section when tagging a release.
   Receiver-owned headers use a distinct marker; invert precedes flash and
   enlarged bottom parts retain origin-row colours. Eight production DRCS
   rectangles match independent libzvbi pixels, including enlargement and reveal.
+  Alphabetic composite fonts preserve current letter/mark families; defined
+  substituted-background parameter failures retain their original writers.
   Complete rendering, physical equivalence, client/editor workflows and
   publication acceptance stay open.
   Known inclusive raw object intervals now reject sixteen simultaneous opens

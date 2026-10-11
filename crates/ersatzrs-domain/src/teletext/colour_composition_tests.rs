@@ -764,3 +764,368 @@ fn appended_repaint_origin_selects_its_row_while_background_only_keeps_current_r
         [0, 0, 15]
     );
 }
+
+fn bbs_plan(
+    display: &TeletextDisplayResolution,
+    enabled: bool,
+    kind: TeletextPageKind,
+) -> TeletextColourComposition {
+    let defaults = TeletextLevel25PresentationDefaults {
+        primary: TeletextPageCharsetDesignation::new(0).unwrap(),
+        secondary: None,
+        palette: TeletextLevel25Palette::standard(),
+        screen_colour: colour(3),
+        row_colour: colour(8),
+        black_background_substitution: enabled,
+        remapping: TeletextColourRemapping::FgClut0BgClut0,
+        panels: TeletextSidePanels {
+            left: false,
+            right: false,
+            status: TeletextPanelStatus::Level25And35,
+            width: TeletextPanelWidth::ZERO,
+        },
+    };
+    resolve_teletext_colour_composition(
+        display,
+        TeletextEffectivePresentation::Extension {
+            source: TeletextPresentationSource::Page,
+            defaults: &defaults,
+        },
+        &[colour(8); 25],
+        colour(3),
+        kind,
+    )
+}
+
+fn parameter_source(command: usize) -> TeletextAttributeSource {
+    TeletextAttributeSource::Enhancement {
+        event_ordinal: command,
+        location: TeletextEnhancementSource {
+            object: None,
+            command,
+        },
+        root_source: TeletextSpatialRootSource::Local { command },
+        invocation: None,
+        effective_start: (1, 8),
+        placed_position: (1, 7),
+    }
+}
+
+fn background_spacing_source(control: TeletextBaseSpacingControl) -> TeletextAttributeSource {
+    TeletextAttributeSource::Base {
+        position: (1, 8),
+        source: TeletextBaseAttributeSource::Spacing {
+            position: TeletextEnhancementPosition::new(1, 7).unwrap(),
+            control,
+            timing: TeletextSpacingTiming::SetAt,
+        },
+    }
+}
+
+#[test]
+fn window_rejects_only_consumed_substituted_background_transparency() {
+    let mut display = display();
+    set_value(&mut display, BG, Value::Colour(colour(8)));
+    set_value(&mut display, BOXED, Value::Flag(true));
+    display.writers[BOXED].source = parameter_source(12);
+    for source in [
+        display.writers[BG].source,
+        background_spacing_source(TeletextBaseSpacingControl::BlackBackground),
+    ] {
+        display.writers[BG].source = source;
+        // A transmitted 1C remains substituted; C2 explicitness is not proof.
+        display.writers[BG].explicit = true;
+        for (invert, coverage) in [(false, false), (true, true)] {
+            set_value(&mut display, INVERT, Value::Flag(invert));
+            let error = bbs_plan(&display, true, TeletextPageKind::FullPage)
+                .pixel(
+                    &display,
+                    1,
+                    8,
+                    coverage,
+                    options(TeletextFlashPhase::Original),
+                )
+                .unwrap_err();
+            assert_eq!(
+                error.reason,
+                TeletextColourCompositionFailure::BackgroundParameterFromSubstitution {
+                    usage: TeletextBackgroundParameterUse::WindowTransparency,
+                }
+            );
+            let evidence = error.parameter.as_deref().unwrap();
+            assert_eq!(evidence.background_source, source);
+            assert_eq!(evidence.consumer_source, Some(parameter_source(12)));
+            assert_eq!(
+                error.location,
+                Some(TeletextEnhancementSource {
+                    object: None,
+                    command: 12
+                })
+            );
+            assert_eq!(error.position, (1, 8));
+            assert!(error.pending.is_none());
+        }
+        for (invert, coverage) in [(false, true), (true, false)] {
+            set_value(&mut display, INVERT, Value::Flag(invert));
+            assert_eq!(
+                rgb(bbs_plan(&display, true, TeletextPageKind::FullPage)
+                    .pixel(
+                        &display,
+                        1,
+                        8,
+                        coverage,
+                        options(TeletextFlashPhase::Original)
+                    )
+                    .unwrap()),
+                [15, 0, 0]
+            );
+        }
+    }
+}
+
+#[test]
+fn window_background_selection_accounts_for_conceal_and_flash_phase() {
+    let mut display = display();
+    set_value(&mut display, BG, Value::Colour(colour(8)));
+    set_value(&mut display, BOXED, Value::Flag(true));
+    set_value(&mut display, CONCEAL, Value::Flag(true));
+    let plan = bbs_plan(&display, true, TeletextPageKind::FullPage);
+    assert!(matches!(
+        plan.pixel(&display, 1, 8, true, options(TeletextFlashPhase::Original))
+            .unwrap_err()
+            .reason,
+        TeletextColourCompositionFailure::BackgroundParameterFromSubstitution {
+            usage: TeletextBackgroundParameterUse::WindowTransparency,
+        }
+    ));
+    assert_eq!(
+        rgb(plan
+            .pixel(
+                &display,
+                1,
+                8,
+                true,
+                TeletextColourPixelOptions {
+                    reveal_concealed: true,
+                    flash_phase: TeletextFlashPhase::Original,
+                }
+            )
+            .unwrap()),
+        [15, 0, 0]
+    );
+    set_value(&mut display, CONCEAL, Value::Flag(false));
+    set_value(
+        &mut display,
+        FLASH,
+        Value::Flash(TeletextExecutedFlash {
+            mode: TeletextFlashMode::Normal,
+            rate: TeletextFlashRate::Slow1Hz,
+        }),
+    );
+    assert!(plan
+        .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+        .is_err());
+    assert_eq!(
+        rgb(plan
+            .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Original))
+            .unwrap()),
+        [15, 0, 0]
+    );
+}
+
+#[test]
+fn inverted_adjacent_clut_checks_original_background_source_in_both_phases() {
+    let mut display = display();
+    set_value(&mut display, BG, Value::Colour(colour(17)));
+    set_value(&mut display, INVERT, Value::Flag(true));
+    set_value(
+        &mut display,
+        FLASH,
+        Value::Flash(TeletextExecutedFlash {
+            mode: TeletextFlashMode::AdjacentClut,
+            rate: TeletextFlashRate::Slow1Hz,
+        }),
+    );
+    display.writers[FLASH].source = parameter_source(9);
+    display.writers[INVERT].source = parameter_source(10);
+    let background = display.writers[BG].source;
+    for phase in [TeletextFlashPhase::Original, TeletextFlashPhase::Alternate] {
+        let error = bbs_plan(&display, true, TeletextPageKind::FullPage)
+            .pixel(&display, 1, 8, true, options(phase))
+            .unwrap_err();
+        assert_eq!(
+            error.reason,
+            TeletextColourCompositionFailure::BackgroundParameterFromSubstitution {
+                usage: TeletextBackgroundParameterUse::InvertedAdjacentClut,
+            }
+        );
+        assert_eq!(
+            error.parameter.as_deref(),
+            Some(&TeletextBackgroundParameterEvidence {
+                background_source: background,
+                consumer_source: Some(parameter_source(9)),
+                invert_source: Some(parameter_source(10)),
+            })
+        );
+        assert_eq!(
+            error.location,
+            Some(TeletextEnhancementSource {
+                object: None,
+                command: 9
+            })
+        );
+    }
+    display.writers[BG].source = parameter_source(7);
+    assert_eq!(
+        rgb(bbs_plan(&display, true, TeletextPageKind::FullPage)
+            .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+            .unwrap()),
+        [15, 7, 7]
+    );
+    assert_eq!(
+        display
+            .cell(1, 8)
+            .unwrap()
+            .attributes()
+            .background()
+            .value(),
+        Some(colour(17))
+    );
+}
+
+#[test]
+fn explicit_background_sources_and_noninverted_pairing_preserve_literal_colours() {
+    let mut display = display();
+    set_value(&mut display, BG, Value::Colour(colour(17)));
+    set_value(&mut display, INVERT, Value::Flag(true));
+    set_value(
+        &mut display,
+        FLASH,
+        Value::Flash(TeletextExecutedFlash {
+            mode: TeletextFlashMode::AdjacentClut,
+            rate: TeletextFlashRate::Slow1Hz,
+        }),
+    );
+    for source in [
+        parameter_source(7),
+        background_spacing_source(TeletextBaseSpacingControl::NewBackground),
+        TeletextAttributeSource::PanelDefault { row: 1 },
+    ] {
+        display.writers[BG].source = source;
+        assert_eq!(
+            rgb(bbs_plan(&display, true, TeletextPageKind::FullPage)
+                .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Original))
+                .unwrap()),
+            [15, 7, 0]
+        );
+        assert_eq!(
+            rgb(bbs_plan(&display, true, TeletextPageKind::FullPage)
+                .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+                .unwrap()),
+            [15, 7, 7]
+        );
+    }
+    display.writers[BG].source =
+        background_spacing_source(TeletextBaseSpacingControl::BlackBackground);
+    set_value(&mut display, INVERT, Value::Flag(false));
+    assert_eq!(
+        rgb(bbs_plan(&display, true, TeletextPageKind::FullPage)
+            .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+            .unwrap()),
+        [7, 0, 0]
+    );
+    set_value(&mut display, INVERT, Value::Flag(true));
+    assert_eq!(
+        rgb(bbs_plan(&display, false, TeletextPageKind::FullPage)
+            .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+            .unwrap()),
+        [15, 7, 7]
+    );
+}
+
+#[test]
+fn window_checks_winning_writer_without_rejecting_other_cells_or_boxing() {
+    let mut display = display();
+    set_value(&mut display, BG, Value::Colour(colour(8)));
+    set_value(&mut display, BOXED, Value::Flag(true));
+    display.writers[BG].source = parameter_source(7);
+    assert_eq!(
+        bbs_plan(&display, true, TeletextPageKind::FullPage)
+            .pixel(&display, 1, 8, false, options(TeletextFlashPhase::Original))
+            .unwrap(),
+        TeletextColourPixel::Video
+    );
+    display.writers[BG].source =
+        background_spacing_source(TeletextBaseSpacingControl::BlackBackground);
+    for kind in [TeletextPageKind::Subtitle, TeletextPageKind::Newsflash] {
+        assert_eq!(
+            bbs_plan(&display, true, kind)
+                .pixel(&display, 1, 8, false, options(TeletextFlashPhase::Original))
+                .unwrap(),
+            TeletextColourPixel::Video
+        );
+    }
+    assert_eq!(
+        bbs_plan(&display, false, TeletextPageKind::FullPage)
+            .pixel(&display, 1, 8, false, options(TeletextFlashPhase::Original))
+            .unwrap(),
+        TeletextColourPixel::Video
+    );
+    // Same colour/source but no Window on the neighbouring cell.
+    let mut unboxed = display.writers[BOXED];
+    unboxed.values[BOXED] = Some(Value::Flag(false));
+    let writer = display.writers.len();
+    display.writers.push(unboxed);
+    let mut state = display.states[0];
+    state[BOXED].writer = writer;
+    display.states.push(state);
+    display.cells[49] = Some(Cell {
+        origin: None,
+        attributes: 1,
+        fragment: TeletextDisplayFragment::Normal,
+    });
+    assert!(bbs_plan(&display, true, TeletextPageKind::FullPage)
+        .pixel(&display, 1, 8, false, options(TeletextFlashPhase::Original))
+        .is_err());
+    assert_eq!(
+        bbs_plan(&display, true, TeletextPageKind::FullPage)
+            .pixel(&display, 1, 9, false, options(TeletextFlashPhase::Original))
+            .unwrap(),
+        TeletextColourPixel::Video
+    );
+}
+
+#[test]
+fn unresolved_background_precedes_definite_parameter_check() {
+    let mut display = display();
+    set_value(&mut display, BG, Value::Colour(colour(8)));
+    set_value(&mut display, BOXED, Value::Flag(true));
+    let pending = TeletextDisplayPending {
+        candidate: Some(48),
+        position: (1, 8),
+        location: Some(TeletextEnhancementSource {
+            object: None,
+            command: 7,
+        }),
+        root_source: Some(TeletextSpatialRootSource::Local { command: 7 }),
+        invocation: None,
+        reason: TeletextDisplayPendingReason::TransmissionOrder,
+        first: Some(0),
+        second: Some(1),
+        previous: None,
+        incoming_previous: None,
+    };
+    display.pending.push(pending);
+    display.states[0][BG].pending = Some(0);
+    let error = bbs_plan(&display, true, TeletextPageKind::FullPage)
+        .pixel(&display, 1, 8, false, options(TeletextFlashPhase::Original))
+        .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextColourCompositionFailure::AttributePending {
+            field: TeletextColourField::Background,
+        }
+    );
+    assert_eq!(error.pending.as_deref(), Some(&pending));
+    assert!(error.parameter.is_none());
+}

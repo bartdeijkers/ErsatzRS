@@ -195,9 +195,13 @@ unresolved pixels; it does not authorize publication. Receiver-owned header
 cells use a distinct marker and exact identity in preview navigation. Invert
 precedes supplied flash phase; enlarged bottom fragments retain origin-row planes.
 Eight opaque DRCS rectangles match independent libzvbi 0.2.42 pixels. Next settle
-remaining source/extent, non-Latin composite and explicit-background evidence,
-then consume this raster in the localized preview and prove physical equivalence
-and independent client display/navigation. Engine, external-editor and add-on acceptance stay open.
+remaining source/extent, Arabic composite and complete background-parameter
+evidence. Known alphabetic composites now fit exact current masks under explicit
+font policy; definite consumed window/inverted-adjacent BBS parameters retain
+located failures while explicit backgrounds remain valid. No whole-service
+admission follows. Next consume this raster in the localized preview and prove
+physical equivalence and independent client display/navigation. Engine,
+external-editor and add-on acceptance stay open.
 The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
 selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
 alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.

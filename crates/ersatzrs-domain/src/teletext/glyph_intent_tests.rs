@@ -402,15 +402,130 @@ fn special_zero_diacritic_at_is_distinct_from_raw_asterisk_and_nonzero_compositi
         records[4].reason(),
         Some(TeletextGlyphIntentReason::NonAlphabeticBase)
     );
-    assert_eq!(
-        records[5].reason(),
-        Some(TeletextGlyphIntentReason::UnverifiedComposition)
-    );
-    assert_eq!(records[5].disposition(), TeletextGlyphDisposition::Pending);
+    assert_eq!(records[5].reason(), None);
+    assert_eq!(records[5].disposition(), TeletextGlyphDisposition::Assigned);
+    match records[5].glyph().unwrap() {
+        TeletextGlyphIdentity::Composite { base, mark } => {
+            assert_eq!(base.repertoire(), TeletextG0Repertoire::Greek);
+            assert_eq!(mark.repertoire(), TeletextG2Repertoire::Greek);
+        }
+        other => panic!("expected current Greek pair, got {other:?}"),
+    }
     assert_eq!(
         records[6].reason(),
         Some(TeletextGlyphIntentReason::NonAlphabeticBase)
     );
+}
+
+#[test]
+fn alphabetic_composites_retain_each_current_pair_for_all_fifteen_marks() {
+    // Literal Table 34 designations and independently audited alphabetic cells.
+    for (primary, code, base_family, mark_family) in [
+        (
+            0,
+            0x41,
+            TeletextG0Repertoire::Latin,
+            TeletextG2Repertoire::Latin,
+        ),
+        (
+            0x20,
+            0x40,
+            TeletextG0Repertoire::Cyrillic1,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            0x24,
+            0x26,
+            TeletextG0Repertoire::Cyrillic2,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            0x25,
+            0x26,
+            TeletextG0Repertoire::Cyrillic3,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            0x37,
+            0x40,
+            TeletextG0Repertoire::Greek,
+            TeletextG2Repertoire::Greek,
+        ),
+    ] {
+        let mut commands = vec![set(1, 8)];
+        commands.extend((1..=15).map(|index| {
+            at(
+                8,
+                TeletextColumnOperation::G0Diacritic {
+                    code: TeletextGlyphCode::new(code).unwrap(),
+                    diacritic: TeletextDiacriticIndex::new(index).unwrap(),
+                },
+            )
+        }));
+        let original = context(primary, commands, vec![]);
+        let unchanged = original.clone();
+        let result = intent(&original);
+        for (index, record) in (1..=15).zip(enhanced(&result)) {
+            assert_eq!(record.disposition(), TeletextGlyphDisposition::Assigned);
+            assert_eq!(record.reason(), None);
+            assert!(!record.context().national_substitution());
+            match record.glyph().unwrap() {
+                TeletextGlyphIdentity::Composite { base, mark } => {
+                    assert_eq!(
+                        (base.repertoire(), base.code(), base.national_subset()),
+                        (base_family, code, None)
+                    );
+                    assert_eq!(
+                        (mark.repertoire(), mark.code()),
+                        (mark_family, 0x40 | index)
+                    );
+                }
+                other => panic!("expected composite, got {other:?}"),
+            }
+        }
+        assert_eq!(original, unchanged);
+    }
+}
+
+#[test]
+fn arabic_supplementary_letters_never_become_substituted_latin_accents() {
+    for (primary, code, base_family) in [
+        (0x40, 0x41, TeletextG0Repertoire::Latin),
+        (0x47, 0x41, TeletextG0Repertoire::Arabic),
+        (0x55, 0x60, TeletextG0Repertoire::Hebrew),
+    ] {
+        let mut commands = vec![set(1, 8)];
+        commands.extend((0..=15).map(|index| {
+            at(
+                8,
+                TeletextColumnOperation::G0Diacritic {
+                    code: TeletextGlyphCode::new(code).unwrap(),
+                    diacritic: TeletextDiacriticIndex::new(index).unwrap(),
+                },
+            )
+        }));
+        let result = intent(&context(primary, commands, vec![]));
+        let records = enhanced(&result);
+        assert_eq!(records[0].disposition(), TeletextGlyphDisposition::Assigned);
+        assert_eq!(g0_identity(records[0]).repertoire(), base_family);
+        for (index, record) in (1..=15).zip(&records[1..]) {
+            assert_eq!(record.disposition(), TeletextGlyphDisposition::Pending);
+            assert_eq!(
+                record.reason(),
+                Some(TeletextGlyphIntentReason::UnverifiedComposition)
+            );
+            match record.glyph().unwrap() {
+                TeletextGlyphIdentity::Composite { base, mark } => {
+                    assert_eq!((base.repertoire(), base.code()), (base_family, code));
+                    assert_eq!(
+                        (mark.repertoire(), mark.code()),
+                        (TeletextG2Repertoire::Arabic, 0x40 | index)
+                    );
+                }
+                other => panic!("expected unresolved actual pair, got {other:?}"),
+            }
+        }
+    }
 }
 
 #[test]

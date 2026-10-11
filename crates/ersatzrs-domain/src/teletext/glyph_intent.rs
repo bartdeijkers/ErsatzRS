@@ -298,16 +298,19 @@ fn assign_composite(
             record.reason = Some(TeletextGlyphIntentReason::NonAlphabeticBase);
         }
         Some(true)
-            if base.repertoire == TeletextG0Repertoire::Latin
-                && mark.repertoire == TeletextG2Repertoire::Latin => {}
-        // Alphabetic eligibility alone is not verified non-Latin composite
-        // shaping. Preserve the actual G0/G2 identity instead of synthesizing
-        // a Latin overlay or claiming an unsupported exact composite glyph.
+            if matches!(
+                mark.repertoire,
+                TeletextG2Repertoire::Latin
+                    | TeletextG2Repertoire::Cyrillic
+                    | TeletextG2Repertoire::Greek
+            ) => {}
+        // Arabic G2 letters are not established diacritical marks. Assignment
+        // is separate from the decoder's chosen twelve-by-ten font policy.
         _ => pending(record, TeletextGlyphIntentReason::UnverifiedComposition),
     }
 }
 
-fn alphabetic(base: TeletextG0Glyph) -> Option<bool> {
+pub(super) fn alphabetic(base: TeletextG0Glyph) -> Option<bool> {
     Some(match base.repertoire {
         TeletextG0Repertoire::Latin => matches!(base.code, 0x41..=0x5a | 0x61..=0x7a),
         TeletextG0Repertoire::Cyrillic1 => matches!(base.code, 0x40..=0x7e),

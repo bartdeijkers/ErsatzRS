@@ -37,8 +37,14 @@ output, uses only Python's standard library, and performs no subprocesses,
 network calls or runtime acquisition. Artifact generation is a maintainer
 operation; production uses embedded immutable bytes on all supported targets.
 
-Lookup does not establish complete display readiness. Non-Latin/mixed-pair
-composite shaping remains an explicit error until independently established.
+Lookup does not establish complete display readiness. Known alphabetic
+composites preserve their exact supplied base/mark families. Above-letter
+non-Latin marks reserve their actual occupied top rows, with base translation or
+bounded row-union vertical fitting below them. Below marks retain full base masks;
+only above-letter Latin capitals use the reduced Latin table. This is deliberate
+font policy under EN 300 706 section 15.6/G.2, not lossless atlas reproduction or
+normative exact pixels. Arabic/unknown compositions remain explicit pending
+requirements. Fixed bitmap bytes and their pinned import do not change.
 G1 alphabetic positions use current G0 through the original checked identity;
 they are not taken from the G1 mosaic table. Mosaics use separate contiguous
 and separated masks. The cell renderer decides underline/flash/colour/visibility

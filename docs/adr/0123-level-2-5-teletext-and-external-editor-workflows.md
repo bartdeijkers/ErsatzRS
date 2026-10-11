@@ -160,8 +160,15 @@ before supplied flash phase and C.1; enlarged bottom fragments retain the exact
 origin row plane. Eight actual-production opaque DRCS rectangles now match
 independent libzvbi 0.2.42 bitmap and RGBA rendering, covering enlargement,
 scope, invert and conceal/reveal. This is bounded representative pixel evidence,
-not full client/transport acceptance. Unverified non-Latin/mixed composites and
-Table 4's explicit-background parameter evidence remain open. Borrowed
+not full client/transport acceptance. Known alphabetic composites now preserve
+actual current G0/G2 masks, fitting above marks into the chosen twelve-by-ten
+font while below marks retain full bases. This is explicit vertical font policy,
+not lossless atlas reproduction; Arabic/unknown assignments stay pending.
+Two definite Table 4 dependencies now retain background/consumer/invert source:
+consumed window transparency from substituted BG and inverted Adjacent CLUT's
+paired-BG parameter in both phases. Explicit backgrounds remain distinct; no
+whole-service admission follows. Remaining Arabic/background parameter evidence
+and complete client/editor/publication gates stay open. Borrowed
 atlas/imager shape equality remains self-consistency only. The retained MIT
 notice is included in the root distribution license. This adds no publication
 permission, permanent feature restriction or milestone acceptance waiver.

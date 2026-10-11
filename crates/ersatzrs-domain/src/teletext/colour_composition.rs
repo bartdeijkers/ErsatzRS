@@ -1,10 +1,12 @@
 //! EN 300 706 table 30 colours and C.1 planes, without glyph raster authority.
 
 use super::{
-    TeletextColourReference, TeletextDisplayAttribute, TeletextDisplayFragment,
-    TeletextDisplayOrigin, TeletextDisplayPending, TeletextDisplayResolution,
-    TeletextEffectivePresentation, TeletextEnhancementSource, TeletextFlashMode,
-    TeletextLevel25Palette, TeletextPageAddress, TeletextPageKind,
+    TeletextAttributeSource, TeletextBaseAttributeSource, TeletextBaseSpacingControl,
+    TeletextColourReference, TeletextDisplayAttribute, TeletextDisplayAttributes,
+    TeletextDisplayFragment, TeletextDisplayOrigin, TeletextDisplayPending,
+    TeletextDisplayResolution, TeletextDisplayWriter, TeletextEffectivePresentation,
+    TeletextEnhancementSource, TeletextFlashMode, TeletextLevel25Palette, TeletextPageAddress,
+    TeletextPageKind,
 };
 
 /// Output-only four-bit components; device colour-space conversion is separate.
@@ -46,8 +48,9 @@ pub struct TeletextColourPixelOptions {
 
 /// Selected RGB map and original plane metadata; no duplicate cell execution.
 /// Background substitution is already materialized in display attributes. This
-/// result does not certify table 4's explicit-background parameter requirement
-/// for window or colour-table-flash functions, nor geometry/raster readiness.
+/// result checks definite consumed window transparency and inverted adjacent-CLUT
+/// parameter dependencies. Other table 4 authoring requirements and complete
+/// geometry/raster readiness remain separate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TeletextColourComposition {
     owner: TeletextPageAddress,
@@ -55,6 +58,7 @@ pub struct TeletextColourComposition {
     rows: [TeletextColourReference; 25],
     screen: TeletextColourReference,
     page_kind: TeletextPageKind,
+    black_background_substitution: bool,
 }
 
 /// Resolve checked declarations without reapplying spacing remapping.
@@ -68,9 +72,11 @@ pub fn resolve_teletext_colour_composition(
     screen_colour: TeletextColourReference,
     page_kind: TeletextPageKind,
 ) -> TeletextColourComposition {
-    let selected = match presentation {
-        TeletextEffectivePresentation::Extension { defaults, .. } => defaults.palette,
-        TeletextEffectivePresentation::Header { .. } => TeletextLevel25Palette::standard(),
+    let (selected, black_background_substitution) = match presentation {
+        TeletextEffectivePresentation::Extension { defaults, .. } => {
+            (defaults.palette, defaults.black_background_substitution)
+        }
+        TeletextEffectivePresentation::Header { .. } => (TeletextLevel25Palette::standard(), false),
     };
     TeletextColourComposition {
         owner: display.owner(),
@@ -78,6 +84,7 @@ pub fn resolve_teletext_colour_composition(
         rows: *row_colours,
         screen: screen_colour,
         page_kind,
+        black_background_substitution,
     }
 }
 
@@ -171,7 +178,8 @@ impl TeletextColourComposition {
     /// Coverage uses the effective fragment geometry, not requested size flags.
     /// Conceal substitutes SPACE before selecting foreground/background.
     /// # Errors
-    /// Preserves unresolved original provenance and reports absent/foreign cells.
+    /// Preserves unresolved original provenance, reports absent/foreign cells, and
+    /// rejects the definite table 4 parameter dependencies described above.
     pub fn pixel(
         &self,
         display: &TeletextDisplayResolution,
@@ -235,17 +243,39 @@ impl TeletextColourComposition {
         } else {
             background.get()
         };
+        self.check_background_parameter(
+            position,
+            attrs,
+            boxed,
+            invert,
+            flash.mode(),
+            colour == 8
+                && bg.get() == 8
+                && selects_original_background(covered, invert, flash.mode(), options.flash_phase),
+        )?;
+        let plane_row = self.plane_row(display, row, cell.fragment(), cell.origin(), position)?;
+        Ok(self.compose_index(colour, self.rows[usize::from(plane_row)], boxed))
+    }
+
+    fn plane_row(
+        &self,
+        display: &TeletextDisplayResolution,
+        row: u8,
+        fragment: TeletextDisplayFragment,
+        origin: Option<usize>,
+        position: (u16, u16),
+    ) -> Result<u8, TeletextColourCompositionError> {
         // C.3(4) retains the origin's presentation for enlarged bottom parts.
         // QTeletextMaker cac2167 decode.cpp 1508-1515 and imager 2b0125
         // teletextdecoder.py 1426-1429 corroborate the full-row plane selection.
         // BackgroundOnly is not an enlarged character part and keeps this row.
-        let plane_row = if matches!(
-            cell.fragment(),
+        if matches!(
+            fragment,
             TeletextDisplayFragment::DoubleHeightBottom
                 | TeletextDisplayFragment::DoubleSizeBottomLeft
                 | TeletextDisplayFragment::DoubleSizeBottomRight
         ) {
-            cell.origin()
+            origin
                 .and_then(|index| display.origins().get(index))
                 .and_then(TeletextDisplayOrigin::visual_position)
                 .map(|(origin_row, _)| origin_row)
@@ -256,11 +286,68 @@ impl TeletextColourComposition {
                         None,
                         TeletextColourCompositionFailure::MissingOrigin,
                     )
-                })?
+                })
         } else {
-            row
+            Ok(row)
+        }
+    }
+
+    // Table 4 (9.4.2.2) requires explicitly transmitted background parameters.
+    // Table 29 D1/C.1 identify window transparency; D4 exchanges the colours
+    // before adjacent-CLUT pairing. These are definite dependencies only, not
+    // whole-page authoring admission or a blanket BBS/window prohibition.
+    fn check_background_parameter(
+        &self,
+        position: (u16, u16),
+        attrs: TeletextDisplayAttributes<'_>,
+        boxed: bool,
+        invert: bool,
+        mode: TeletextFlashMode,
+        transparent_original_background: bool,
+    ) -> Result<(), TeletextColourCompositionError> {
+        let Some(background_source) = attrs
+            .background()
+            .writer()
+            .map(TeletextDisplayWriter::source)
+        else {
+            return Ok(());
         };
-        Ok(self.compose_index(colour, self.rows[usize::from(plane_row)], boxed))
+        if !self.black_background_substitution || !substituted_background(background_source) {
+            return Ok(());
+        }
+        let (usage, consumer_source) = if invert && mode == TeletextFlashMode::AdjacentClut {
+            // The authored paired-CLUT parameter is required in BOTH phases.
+            (
+                TeletextBackgroundParameterUse::InvertedAdjacentClut,
+                attrs.flash().writer().map(TeletextDisplayWriter::source),
+            )
+        } else if self.page_kind == TeletextPageKind::FullPage
+            && boxed
+            && transparent_original_background
+        {
+            (
+                TeletextBackgroundParameterUse::WindowTransparency,
+                attrs.boxed().writer().map(TeletextDisplayWriter::source),
+            )
+        } else {
+            return Ok(());
+        };
+        let invert_source = attrs.invert().writer().map(TeletextDisplayWriter::source);
+        let mut error = self.error(
+            position,
+            None,
+            TeletextColourCompositionFailure::BackgroundParameterFromSubstitution { usage },
+        );
+        error.location = consumer_source
+            .and_then(enhancement_location)
+            .or_else(|| invert_source.and_then(enhancement_location))
+            .or_else(|| enhancement_location(background_source));
+        error.parameter = Some(Box::new(TeletextBackgroundParameterEvidence {
+            background_source,
+            consumer_source,
+            invert_source,
+        }));
+        Err(error)
     }
 
     fn known<T: Copy>(
@@ -288,8 +375,49 @@ impl TeletextColourComposition {
             position,
             location: pending.and_then(|value| value.location()),
             pending: pending.map(Box::new),
+            parameter: None,
             reason,
         }
+    }
+}
+
+fn substituted_background(source: TeletextAttributeSource) -> bool {
+    matches!(
+        source,
+        TeletextAttributeSource::Base {
+            source: TeletextBaseAttributeSource::RowDefault { .. }
+                | TeletextBaseAttributeSource::Spacing {
+                    control: TeletextBaseSpacingControl::BlackBackground,
+                    ..
+                },
+            ..
+        }
+    )
+}
+
+fn enhancement_location(source: TeletextAttributeSource) -> Option<TeletextEnhancementSource> {
+    match source {
+        TeletextAttributeSource::Enhancement { location, .. } => Some(location),
+        _ => None,
+    }
+}
+
+fn selects_original_background(
+    covered: bool,
+    invert: bool,
+    mode: TeletextFlashMode,
+    phase: TeletextFlashPhase,
+) -> bool {
+    let effective_background = !covered
+        || matches!(
+            (mode, phase),
+            (TeletextFlashMode::Normal, TeletextFlashPhase::Alternate)
+                | (TeletextFlashMode::Inverted, TeletextFlashPhase::Original)
+        );
+    if effective_background {
+        !invert
+    } else {
+        invert
     }
 }
 
@@ -327,8 +455,27 @@ pub enum TeletextColourCompositionFailure {
     MissingOrigin,
     #[error("display fragment has unresolved original provenance")]
     DisplayPending,
+    #[error("background parameter depends on black-background substitution: {usage:?}")]
+    BackgroundParameterFromSubstitution {
+        usage: TeletextBackgroundParameterUse,
+    },
     #[error("original colour attribute is unresolved: {field:?}")]
     AttributePending { field: TeletextColourField },
+}
+
+/// Proven background-parameter uses; this is not an exhaustive authoring validator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeletextBackgroundParameterUse {
+    WindowTransparency,
+    InvertedAdjacentClut,
+}
+
+/// Original winning writers, before colour exchange or paired-CLUT selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextBackgroundParameterEvidence {
+    pub background_source: TeletextAttributeSource,
+    pub consumer_source: Option<TeletextAttributeSource>,
+    pub invert_source: Option<TeletextAttributeSource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -340,5 +487,7 @@ pub struct TeletextColourCompositionError {
     pub location: Option<TeletextEnhancementSource>,
     /// Original registry links remain valid in the retained immutable display.
     pub pending: Option<Box<TeletextDisplayPending>>,
+    /// Allocated only for a definite table 4 parameter-source failure.
+    pub parameter: Option<Box<TeletextBackgroundParameterEvidence>>,
     pub reason: TeletextColourCompositionFailure,
 }

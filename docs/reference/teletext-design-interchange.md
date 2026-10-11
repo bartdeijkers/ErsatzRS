@@ -694,10 +694,13 @@ ban. `ShouldNotTransmit` preserves the exact code and prohibition reason.
 Nonzero diacritics retain exact current G0 and current-G2 column-4 entry.
 Latin/Cyrillic/Greek marks include dot below at index 9 and low line at index C;
 Arabic's column 4 contains letters and is not a Latin mark table. Proven
-nonalphabetic bases produce `Unassigned/NonAlphabeticBase`; established Latin
-alphabet/Latin-mark intent is assigned. Non-Latin or mixed-pair composition
-remains `Pending/UnverifiedComposition`, retaining both raw identities rather
-than inventing shaped output or permanently excluding those repertoires.
+nonalphabetic bases produce `Unassigned/NonAlphabeticBase`. Known alphabetic
+G0 with an actual Latin/Cyrillic/Greek G2 diacritic is assigned, retaining the
+exact current pair, including Hebrew and supplied mixed identities. The font
+primitive cannot invent a reachable Table 34 designation. Arabic alphabetic
+eligibility and Arabic G2 letter composition remain precise
+`Pending/UnverifiedComposition` requirements, without Latin substitution or
+a permanent authoring exclusion.
 Mode `0x10`/code `0x2A` instead produces `AtSymbol` independently of charset
 ordering; other zero-diacritic codes use current G0. Ordinary direct G0 `0x2A`
 remains its actual table position. Unknown charset order cannot manufacture one
@@ -920,17 +923,58 @@ unswapped foreground, a recorded decoder discrepancy rather than an encoder rule
 Enlarged bottom fragments use their exact retained origin's full-row plane,
 including appended repaint origins. C.3(4) and both pinned decoder sources agree;
 ordinary BackgroundOnly cells continue to use their own row plane.
-Table 4's explicit-background requirement for window/colour-table-flash
-parameters still requires source-aware authoring proof; a materialized tuple
-alone is insufficient.
+Table 4's explicit-background rule now checks two definite parameter uses in
+this consumed diagnostic output. Selected BBS plus a winning Base row default or
+Black Background (1C) writer identifies substituted original background. A
+transmitted 1C is still substituted: C.2 writer explicitness is not sufficient.
+Explicit New Background and non-spacing background remain distinct even when
+they yield identical colour indexes. Panel/private defaults are not classified
+as BBS-derived. Pending attributes are reported first.
+
+A FullPage window diagnoses only an actually consumed transparent original-BG
+pixel; ordinary foreground-only pixels and Subtitle/Newsflash Boxing survive.
+Inverted Adjacent CLUT uses original BG as its paired-foreground parameter, so
+that authored condition is checked in **both phases**, including a current phase
+that does not yet pair the CLUT. The located typed failure retains full
+background, consumer and inversion writers; later explicit background overrides
+can restore valid output. These two checks do not certify all Table 4 parameters
+or provide whole-service/publication admission. Equal RGB tuples alone cannot
+prove compliant authoring.
 
 Table 29 D5 separates G1 mosaics and underlines alphanumerics, including SPACE
 and spacing cells displayed as SPACE. This raster chooses the full bottom mask
 row before enlargement. G3/DRCS remain unchanged for their undefined D5 response;
 Annex G.2 permits decoder-specific non-DRCS/underline appearance. Exact atlas
-shapes are a font policy, not normative pixel geometry. Non-Latin/mixed-pair
-composite shaping remains an explicit unresolved support requirement; the actual
-current G0/G2 is preserved rather than substituted with a Latin mark.
+shapes are a font policy, not normative pixel geometry.
+
+Known alphabetic composite masks use the actual current G0 base and current G2
+mark. Below-letter marks 9/B/C/E retain the full base, including Latin capitals;
+above-letter Latin keeps the existing reduced-capital policy. Other known
+repertoires, including supplied mixed/Hebrew identities, reserve the actual
+mark's occupied top rows. The ring needs three rows. Occupied base rows translate
+when they fit; otherwise bounded row-union vertical fitting uses every original
+row and retains horizontal bits. This deliberately changes the font's vertical
+shape; it is not lossless atlas reproduction or Latin glyph borrowing. The exact
+mark mask remains unchanged and visible. Table 29, section 15.6 and informative
+E.10/G.2 distinguish current repertoires, support advice and decoder font freedom.
+Arabic/mixed-letter composition, unknown assignments and actual client proof
+remain required and open. No permanent authoring restriction is added.
+
+Six colour regressions, four literal mask/policy tests, two original-intent tests
+and two actual-composition raster checks extend the passing focused suite to 785
+(`0410bf54-f84c-4f61-9f26-b3ceb8530efb`). The 23 affected colour/consumer tests pass
+after equivalent Clippy method-reference/Copy corrections
+(`d143bfd7-5928-4f0d-b468-bd49d48c6207`); the other valid results are reused.
+The real service fixture distinguishes equal explicit/substituted window colours
+and preserves its parameter writers. A second fixture proves the actual current
+Cyrillic2/Cyrillic pair reaches literal dot-above raster pixels without Latin
+substitution. Eighteen synthetic base/mark/result contact-sheet cases were
+visually checked for legibility, separately from Rust execution and independent
+native rendering. Eight actual-production DRCS pixel cases still pass with
+libzvbi 0.2.42 (`b17a54d7-c035-46e3-9f7f-087b6b57c459`), retaining the identical
+request hash recorded below. Strict all-target Clippy and independent review pass.
+This accepts the specified font policy and definite diagnostic
+checks, not full Level 2.5, Arabic, transport or suitable-client/publication gates.
 
 The [bitmap provenance](../../crates/ersatzrs-domain/src/teletext/font_data/PROVENANCE.md)
 records pin, input hashes, table ordering, license and reproducible stdlib import.
@@ -941,7 +985,7 @@ Pillow or any production runtime dependency. Changed pinned source bytes reject
 before output creation. The root distribution license carries the complete MIT
 notice alongside the unchanged ErsatzRS zlib notice.
 
-All 771 selected domain/FFmpeg teletext tests pass
+The earlier raster checkpoint's 771 selected domain/FFmpeg teletext tests pass
 (`0d88004d-4369-4c8e-82de-88ec096d245b`), including sixteen colour tests and ten
 actual-composition raster tests. Literal regressions cover joint invert/flash,
 origin-row transparency and receiver-owned header cells under a zero diagnostic

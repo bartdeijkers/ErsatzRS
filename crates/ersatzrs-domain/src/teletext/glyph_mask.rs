@@ -80,8 +80,9 @@ pub enum TeletextGlyphMaskError {
 /// DRCS uses a matching immutable resolved record from that same service.
 /// # Errors
 /// Rejects prohibited/unmarked positions, malformed identities, absent/mismatched
-/// DRCS and unverified composites. Non-Latin composition remains an open support
-/// requirement, never a silent Latin fallback or permanent authoring exclusion.
+/// DRCS and unverified composites. Composition retains the exact current G0/G2;
+/// its vertical fitting is a font choice, not lossless atlas reproduction or
+/// certification of a reference decoder's glyph shapes.
 pub fn resolve_teletext_glyph_mask(
     identity: TeletextGlyphIdentity,
     drcs: Option<&TeletextExecutedDrcsGlyph>,
@@ -250,27 +251,60 @@ fn composite_mask(
     base: TeletextG0Glyph,
     mark: TeletextG2Glyph,
 ) -> Result<TeletextGlyphMask, TeletextGlyphMaskError> {
-    if base.repertoire() != TeletextG0Repertoire::Latin
-        || mark.repertoire() != TeletextG2Repertoire::Latin
-        || base.national_subset().is_some()
-        || !base.code().is_ascii_alphabetic()
+    if !matches!(
+        mark.repertoire(),
+        TeletextG2Repertoire::Latin | TeletextG2Repertoire::Cyrillic | TeletextG2Repertoire::Greek
+    ) || base.national_subset().is_some()
+        || super::glyph_intent::alphabetic(base) != Some(true)
         || !(0x41..=0x4f).contains(&mark.code())
     {
         return Err(TeletextGlyphMaskError::UnverifiedComposition { base, mark });
     }
-    // The pinned reduced font contains ONLY Latin capitals. Other repertoires
-    // must not acquire these shapes merely because their raw code lies in 4/5.
-    let mut shaped = table_mask(
-        if base.code().is_ascii_uppercase() {
-            27
-        } else {
-            0
-        },
-        base.code(),
-    )?;
     let accent = g2_mask(mark)?;
+    let below = matches!(mark.code(), 0x49 | 0x4b | 0x4c | 0x4e);
+    // EN 300 706 §15.6 and informative G.2 leave precise shapes to the decoder.
+    // Below-letter marks retain the full current base. Above-letter Latin keeps
+    // the existing font policy; ONLY its capitals have a supplied reduced font.
+    let mut shaped = if below {
+        g0_mask(base)?
+    } else if base.repertoire() == TeletextG0Repertoire::Latin {
+        table_mask(
+            if base.code().is_ascii_uppercase() {
+                27
+            } else {
+                0
+            },
+            base.code(),
+        )?
+    } else {
+        fit_above_mark(g0_mask(base)?, accent)
+            .ok_or(TeletextGlyphMaskError::UnverifiedComposition { base, mark })?
+    };
     for (row, accent_row) in shaped.0.iter_mut().zip(accent.0) {
         *row |= accent_row;
     }
     Ok(shaped)
+}
+
+/// Fit the actual repertoire's occupied rows below the unchanged actual mark.
+/// Translation is lossless when it fits. Otherwise row-union vertical fitting
+/// deliberately changes this font's shape; no source row or horizontal bit is
+/// discarded, and no Latin glyph replaces the original repertoire. The ring
+/// occupies THREE top rows, so a fixed two-row reservation would be incorrect.
+fn fit_above_mark(base: TeletextGlyphMask, mark: TeletextGlyphMask) -> Option<TeletextGlyphMask> {
+    let first = base.0.iter().position(|&row| row != 0)?;
+    let last = base.0.iter().rposition(|&row| row != 0)?;
+    let start = mark.0.iter().rposition(|&row| row != 0)? + 1;
+    let available = 10_usize.checked_sub(start).filter(|&height| height > 0)?;
+    let height = last - first + 1;
+    let mut fitted = TeletextGlyphMask([0; 10]);
+    for (index, &row) in base.0[first..=last].iter().enumerate() {
+        let target = if height <= available {
+            index
+        } else {
+            index * available / height
+        };
+        fitted.0[start + target] |= row;
+    }
+    Some(fitted)
 }

@@ -4,38 +4,36 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
-ADR 0120 requires independent synthetic engine acceptance at p9a-04 before one
-TV-guide add-on in ErsatzRS-Addons at p9b-01, inspired only by NOS pages 200–299.
-Add-ons own content; the host owns validation/publication,
-delivery and read-only guides. Subtitle gates remain. ADR 0123
+ADR 0120 requires synthetic p9a-04 engine acceptance before one ErsatzRS-Addons
+TV-guide add-on at p9b-01, inspired only by NOS pages 200–299.
+Add-ons own content; host owns validation/publication/delivery/read-only guides.
+Subtitle gates remain. ADR 0123
 reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMaker
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
 display/navigation are required; Kodi is optional. P9A-02 In progress; four milestones Not started.
 
-Checked programs and bounded object/DRCS traversal underpin immutable services.
+Bounded programs/object/DRCS traversal underpin immutable services.
 v1 lifting retains presence/bytes; resource writers preserve geometry, lifecycle,
-pointers, metadata and fresh definition state. Local definitions share bounded
+pointers/metadata/fresh definition state. Local definitions share bounded
 X26 with exact forward references. Independent decoders prove selected
 DRCS/object/main cells; recorded local/G1 font gaps do not establish rendering.
 Composition retains AP/fallback and spacing suppression.
 C3 replays shared/private stages, footprints and deferred original writers.
-Pending order/size/extent; G1 keeps mode/fallback.
-Latin libzvbi proof retains imager gaps.
+Pending order/size/extent; G1 retains mode/fallback.
+Latin libzvbi proof records imager gaps.
 Charset/glyph/DRCS facts retain national aliases, bans, unresolved composition,
 exact resources/bitmaps, losers and defined blanks. Lowering owns selectors.
 Geometry retains panels/own-instance writes; definite own area crossing rejects
 without merging child extents.
 Intervals reject sixteen simultaneous opens; unknown ones survive.
-Known call/write runs reject successive overflow; equal size flags retain provenance.
+Call/write runs reject successive overflow; agreeing size flags keep provenance.
 Pinned MIT masks and C1 planes now rasterize known fragments/DRCS; Unicode
 keeps Base priority. Headers use receiver markers; invert precedes flash; bottom
 parts retain origin-row planes. Eight opaque DRCS rectangles match libzvbi RGBA.
-Composites/background evidence, A7/A8/C3, normalization and client proof stay open.
-X27 preserves masks/used S1; MOT retains banks/defaults/raw fields/IDs.
-Derivation keeps provenance/conflicts. Compiled-header fence
-rejects exact physical/logical-owner collisions.
-Effective defaults/presentation, selection, final semantics, compilation and
-editor interfaces remain open.
+Known composites fit actual masks; definite BBS parameters retain writers. Arabic, full A7/A8/C3/background and client proof stay open.
+X27/MOT retain masks, S1, banks/defaults/raw fields/IDs and derivation provenance/conflicts.
+Compiled-header fence rejects exact physical/logical-owner collisions.
+Final defaults/selection/semantics/compilation and editor interfaces remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua remain preparatory.
 Shared app controls compose isolated channel drafts; native encoding retains the
@@ -59,7 +57,7 @@ Linux x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission, tokens, reapi
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
-P9A-02 owns decoder Health, six-RID packaging and licensing proof.
+P9A-02 owns decoder Health, six-RID packaging/licensing.
 P9A-03/04 retain source persistence/rescans, exact page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage/passthrough and HLS/browser
 gates. Slate handover, activation/publication/refresh/restart,
