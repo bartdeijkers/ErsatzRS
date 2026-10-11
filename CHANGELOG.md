@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Add durable pending teletext publication requests for exact design revisions,
+  with atomic checks against the live design head, complete channel profiles and
+  previous request. Keep historical revision selection explicit and preserve
+  requests across restart; live generation promotion remains to be connected.
 - Add durable teletext original-design revisions with bounded, exact source
   preservation, atomic revision checks and retained deletion tombstones. Restore
   historical previews through the same complete native compiler without running

@@ -851,6 +851,20 @@ use the existing database timeout contract and do not pretend to undo committed
 saves. See the interchange reference for the implementation boundary and P9A-01
 for verified evidence; no milestone acceptance is changed.
 
+The pending-request foundation now retains immutable `TeletextPublicationRequest`
+rows and a per-channel current-request pointer. Requesting requires fresh complete
+native compilation associated with the exact stored identity/revision/digest and
+original selection. One immediate transaction then verifies the live nondeleted
+design head, bounded immutable revision integrity, complete canonical channel
+selection and independent current-request CAS before writing both records.
+The expected live head is separate from the selected target revision: deliberate
+publication of an older revision is allowed when the head is still current.
+Requests remain readable after channel/profile/package removal and application
+reconstruction. They are pending intents only, with no runtime consumer, accepted
+generation or automatic startup activation yet. A later output promotion owner
+must revalidate all fences and reconcile warm receiver state; pending persistence
+never proves published-generation recovery or changes ADR 0122 timing.
+
 ### Evidence and delivery order
 
 P9A-01 is reopened for the expanded standards/interchange contract. P9A-04 accepts

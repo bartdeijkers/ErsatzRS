@@ -12,10 +12,10 @@ use ersatzrs_domain::{
     TELETEXT_DESIGN_DOCUMENT_VERSION,
 };
 use sha2::{Digest as _, Sha256};
-use sqlx::Row as _;
+use sqlx::{Executor, Row as _, Transaction};
 
 use super::SqlxResultExt as _;
-use crate::db::{DbPool, DbRow};
+use crate::db::{Db, DbPool, DbRow};
 
 /// Atomic heads and exact immutable documents, independent of producer lifetime.
 #[derive(Clone)]
@@ -39,15 +39,7 @@ macro_rules! head_sql {
 #[async_trait]
 impl TeletextDesignRepository for SqliteTeletextDesignRepository {
     async fn head(&self, id: EntityId) -> Result<Option<TeletextDesignHead>> {
-        validate_identity(id)?;
-        sqlx::query(head_sql!(r#"WHERE "Id" = ?"#))
-            .bind(id)
-            .fetch_optional(&self.0)
-            .await
-            .repository()?
-            .as_ref()
-            .map(decode_head)
-            .transpose()
+        head_with_executor(&self.0, id).await
     }
 
     async fn revision(
@@ -56,31 +48,7 @@ impl TeletextDesignRepository for SqliteTeletextDesignRepository {
         revision: i64,
         max_document_bytes: usize,
     ) -> Result<Option<TeletextDesignRevision>> {
-        validate_identity(id)?;
-        if revision <= 0 {
-            return Err(invalid("revision"));
-        }
-        let maximum = i64::try_from(max_document_bytes).map_err(|_| invalid("document budget"))?;
-        // CASE prevents SQLx from receiving oversized bodies or malformed metadata.
-        let row = sqlx::query(
-            r#"SELECT "DesignId", "Revision",
-            CASE WHEN TYPEOF("DocumentVersion") = 'integer'
-                THEN "DocumentVersion" ELSE NULL END AS "DocumentVersion",
-            TYPEOF("DocumentVersion") AS "VersionType", TYPEOF("Document") AS "DocumentType",
-            LENGTH("Document") AS "DocumentBytes",
-            CASE WHEN TYPEOF("Digest") = 'text' AND LENGTH(CAST("Digest" AS BLOB)) = 64
-                THEN "Digest" ELSE NULL END AS "BoundedDigest",
-            CASE WHEN TYPEOF("Document") = 'blob' AND LENGTH("Document") BETWEEN 1 AND ?
-                THEN "Document" ELSE NULL END AS "BoundedDocument"
-            FROM "TeletextDesignRevision" WHERE "DesignId" = ? AND "Revision" = ?"#,
-        )
-        .bind(maximum)
-        .bind(id)
-        .bind(revision)
-        .fetch_optional(&self.0)
-        .await
-        .repository()?;
-        row.as_ref().map(decode_revision).transpose()
+        revision_with_executor(&self.0, id, revision, max_document_bytes).await
     }
 
     async fn heads(
@@ -193,6 +161,71 @@ impl TeletextDesignRepository for SqliteTeletextDesignRepository {
         head.deleted = true;
         Ok(M::Saved(head))
     }
+}
+
+// The caller owns the snapshot/write exclusion. Never open a pooled read here.
+pub(super) async fn head_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    id: EntityId,
+) -> Result<Option<TeletextDesignHead>> {
+    head_with_executor(&mut **tx, id).await
+}
+
+async fn head_with_executor<'e>(
+    executor: impl Executor<'e, Database = Db>,
+    id: EntityId,
+) -> Result<Option<TeletextDesignHead>> {
+    validate_identity(id)?;
+    sqlx::query(head_sql!(r#"WHERE "Id" = ?"#))
+        .bind(id)
+        .fetch_optional(executor)
+        .await
+        .repository()?
+        .as_ref()
+        .map(decode_head)
+        .transpose()
+}
+
+pub(super) async fn revision_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    id: EntityId,
+    revision: i64,
+    max_document_bytes: usize,
+) -> Result<Option<TeletextDesignRevision>> {
+    revision_with_executor(&mut **tx, id, revision, max_document_bytes).await
+}
+
+async fn revision_with_executor<'e>(
+    executor: impl Executor<'e, Database = Db>,
+    id: EntityId,
+    revision: i64,
+    max_document_bytes: usize,
+) -> Result<Option<TeletextDesignRevision>> {
+    validate_identity(id)?;
+    if revision <= 0 {
+        return Err(invalid("revision"));
+    }
+    let maximum = i64::try_from(max_document_bytes).map_err(|_| invalid("document budget"))?;
+    // CASE prevents SQLx from receiving oversized bodies or malformed metadata.
+    let row = sqlx::query(
+        r#"SELECT "DesignId", "Revision",
+            CASE WHEN TYPEOF("DocumentVersion") = 'integer'
+                THEN "DocumentVersion" ELSE NULL END AS "DocumentVersion",
+            TYPEOF("DocumentVersion") AS "VersionType", TYPEOF("Document") AS "DocumentType",
+            LENGTH("Document") AS "DocumentBytes",
+            CASE WHEN TYPEOF("Digest") = 'text' AND LENGTH(CAST("Digest" AS BLOB)) = 64
+                THEN "Digest" ELSE NULL END AS "BoundedDigest",
+            CASE WHEN TYPEOF("Document") = 'blob' AND LENGTH("Document") BETWEEN 1 AND ?
+                THEN "Document" ELSE NULL END AS "BoundedDocument"
+            FROM "TeletextDesignRevision" WHERE "DesignId" = ? AND "Revision" = ?"#,
+    )
+    .bind(maximum)
+    .bind(id)
+    .bind(revision)
+    .fetch_optional(executor)
+    .await
+    .repository()?;
+    row.as_ref().map(decode_revision).transpose()
 }
 
 fn valid_name(name: &str) -> bool {

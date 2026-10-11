@@ -145,8 +145,7 @@ impl AppState {
         playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
-        let preview_hls_sessions: Arc<dyn HlsSessionRegistry> =
-            Arc::new(InMemoryHlsSessionRegistry::new());
+        let preview_hls_sessions = Arc::new(InMemoryHlsSessionRegistry::new());
         let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(
             InMemoryHlsSessionRegistry::with_playout_updates_to(preview_hls_sessions.clone()),
         );
@@ -162,7 +161,7 @@ impl AppState {
                 Arc::new(NativeChannelRuntime::new(
                     pool.clone(),
                     Arc::clone(&hls_sessions),
-                    Arc::clone(&preview_hls_sessions),
+                    preview_hls_sessions.clone(),
                 )),
                 Arc::new(repositories.addon_media_lists.clone()),
                 Arc::new(repositories.addon_media_lists.clone()),
@@ -219,7 +218,8 @@ impl AppState {
                 Arc::new(TokioScanWorkQueue::new(scan_work_tx)),
                 Arc::new(NativeScanRuntime::new(pool.clone())),
             )
-            .with_teletext_designs(Arc::new(repositories.teletext_designs.clone())),
+            .with_teletext_designs(Arc::new(repositories.teletext_designs.clone()))
+            .with_teletext_publications(Arc::new(repositories.teletext_publications.clone())),
             operations,
         ));
         Self {

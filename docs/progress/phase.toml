@@ -1148,8 +1148,11 @@ with candidates and the actual V1 lift region. The original-design API now captu
 bounded immutable documents/context/lifecycle with digest/CAS and reconstructs
 historical previews through the same complete compiler without package invocation;
 save never publishes. File-backed application reconstruction is distinct from
-whole server-process/publication restart acceptance. Next connect retained designs
-to fresh explicit publication and localized preview controls; original-only capture
+whole server-process/publication restart acceptance. Explicit pending publication
+requests now recompile exact retained revisions and atomically fence live head,
+whole-channel selection and request CAS. Pending persistence grants no accepted
+output or automatic startup activation. Next connect the promotion owner and
+localized preview controls; original-only capture
 is not an editor-permission or zone/template acceptance.
 Prioritize the existing synthetic profile-selection→validation→preview→explicit
 publication→suitable-client display/navigation flow next; P9A-04 owns its compact

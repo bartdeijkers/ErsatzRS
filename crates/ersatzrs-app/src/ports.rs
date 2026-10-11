@@ -11,8 +11,9 @@ use ersatzrs_core::repositories::{
     DecoRepository, FfmpegProfileRepository, FillerRepository, GraphicsRepository,
     LibraryRepository, ManagedLibraryOperationRepository, MediaItemRepository,
     MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository, SavedSearchRepository,
-    SettingsMutation, TeletextDesignRepository, TeletextProfileRepository, TelevisionRepository,
-    TemplateRepository, TroubleshootingRepository, WatermarkRepository,
+    SettingsMutation, TeletextDesignRepository, TeletextProfileRepository,
+    TeletextPublicationRepository, TelevisionRepository, TemplateRepository,
+    TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -997,6 +998,7 @@ pub struct ApplicationPorts {
     addons: Arc<dyn AddonRuntime>,
     teletext_profiles: Arc<dyn TeletextProfileRepository>,
     teletext_designs: Option<Arc<dyn TeletextDesignRepository>>,
+    teletext_publications: Option<Arc<dyn TeletextPublicationRepository>>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
     admin_search: Arc<dyn AdminSearchRepository>,
     block_previews: Arc<dyn BlockPreviewRepository>,
@@ -1081,6 +1083,7 @@ impl ApplicationPorts {
             addons,
             teletext_profiles,
             teletext_designs: None,
+            teletext_publications: None,
             media_source_runtime,
             admin_search,
             block_previews,
@@ -1366,5 +1369,22 @@ impl std::fmt::Debug for ApplicationPorts {
             .field("scan_work", &"dyn ScanWorkQueue")
             .field("scan_runtime", &"dyn ScanRuntime")
             .finish()
+    }
+}
+
+impl ApplicationPorts {
+    /// Inject durable pending publication requests without changing existing constructors.
+    #[must_use]
+    pub fn with_teletext_publications(
+        mut self,
+        repository: Arc<dyn TeletextPublicationRepository>,
+    ) -> Self {
+        self.teletext_publications = Some(repository);
+        self
+    }
+    /// Absent injection is unavailable; no configuration or draft fallback exists.
+    #[must_use]
+    pub fn teletext_publications(&self) -> Option<&(dyn TeletextPublicationRepository + 'static)> {
+        self.teletext_publications.as_deref()
     }
 }

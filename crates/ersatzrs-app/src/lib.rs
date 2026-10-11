@@ -22,6 +22,7 @@ pub mod teletext_pages;
 pub mod teletext_pages_v2;
 pub mod teletext_profile_documents;
 pub mod teletext_profiles;
+pub mod teletext_publications;
 
 pub use error::{ApplicationError, Result};
 pub use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};

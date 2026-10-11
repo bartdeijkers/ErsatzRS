@@ -26,7 +26,7 @@ use ersatzrs_web::host::{
 };
 use std::time::Instant;
 
-fn budget() -> TeletextDesignDocumentBudget {
+pub(super) fn budget() -> TeletextDesignDocumentBudget {
     TeletextDesignDocumentBudget {
         max_serialized_bytes: 262_144,
         max_documents: 8,
@@ -38,11 +38,11 @@ fn budget() -> TeletextDesignDocumentBudget {
     }
 }
 
-fn deadline() -> Instant {
+pub(super) fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(30)
 }
 
-async fn persistent_pair(second_kind: DocumentFixture) -> (Fixture, [Vec<u8>; 2]) {
+pub(super) async fn persistent_pair(second_kind: DocumentFixture) -> (Fixture, [Vec<u8>; 2]) {
     let fixture = Fixture::new_persistent().await;
     install_secondary(&fixture).await;
     // Save the actual private installation pins; only this new fixture uses
@@ -84,7 +84,7 @@ async fn persistent_pair(second_kind: DocumentFixture) -> (Fixture, [Vec<u8>; 2]
     (fixture, bytes)
 }
 
-async fn save(
+pub(super) async fn save(
     fixture: &Fixture,
     candidate: EncodedChannelTeletextDocumentCandidate,
     existing: Option<(i64, i64)>,
@@ -107,7 +107,7 @@ async fn save(
     }
 }
 
-fn units(encoded: &EncodedTeletextAuthoredService) -> Vec<Vec<[u8; 46]>> {
+pub(super) fn units(encoded: &EncodedTeletextAuthoredService) -> Vec<Vec<[u8; 46]>> {
     encoded
         .pages()
         .iter()
@@ -115,7 +115,7 @@ fn units(encoded: &EncodedTeletextAuthoredService) -> Vec<Vec<[u8; 46]>> {
         .collect()
 }
 
-async fn config(fixture: &Fixture) -> Vec<(Option<String>, Option<String>)> {
+pub(super) async fn config(fixture: &Fixture) -> Vec<(Option<String>, Option<String>)> {
     sqlx::query_as(r#"SELECT "Key", "Value" FROM "ConfigElement" ORDER BY "Key""#)
         .fetch_all(&fixture.state.pool)
         .await

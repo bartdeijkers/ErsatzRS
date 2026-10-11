@@ -107,39 +107,9 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         &self,
         channel_id: EntityId,
     ) -> Result<M<TeletextChannelSelectionSnapshot>> {
-        // Read-only transaction: capture complete enabled membership and effective settings.
+        // Read-only transaction: no publication or configuration writes.
         let mut tx = self.0.begin().await.repository()?;
-        if !channel_exists(&mut tx, channel_id).await? {
-            return Ok(M::Rejected(R::MissingChannel));
-        }
-        // Limit before decoding profiles/effective settings. Every enabled
-        // producer must contribute at least one page to the eventual union.
-        let limit = i64::try_from(MAX_TELETEXT_PAGE_RECORDS + 1)
-            .map_err(|_| decode_error("binding resource limit"))?;
-        let rows = sqlx::query(
-            r#"SELECT * FROM "ChannelTeletextBinding" WHERE "ChannelId" = ?
-                AND "Enabled" = 1 ORDER BY "AddonId" LIMIT ?"#,
-        )
-        .bind(channel_id)
-        .bind(limit)
-        .fetch_all(&mut *tx)
-        .await
-        .repository()?;
-        if rows.len() > MAX_TELETEXT_PAGE_RECORDS {
-            return Ok(M::Rejected(R::BindingLimit));
-        }
-        let mut bindings = Vec::with_capacity(rows.len());
-        for row in rows {
-            let binding = binding_from_row(&row)?;
-            match selection_for_binding(&mut tx, &binding).await? {
-                M::Saved(selection) => bindings.push(selection),
-                M::Rejected(reason) => return Ok(M::Rejected(reason)),
-            }
-        }
-        Ok(M::Saved(TeletextChannelSelectionSnapshot {
-            channel_id,
-            bindings,
-        }))
+        channel_snapshot_in_transaction(&mut tx, channel_id).await
     }
 
     async fn save_profile(
@@ -322,6 +292,46 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
             dependent_bindings_changed: affected,
         }))
     }
+}
+
+// One canonical snapshot policy for preparation and publication-request CAS.
+// The caller owns the transaction; publication uses BEGIN IMMEDIATE so no
+// writer can change membership, profiles or installed settings before commit.
+pub(super) async fn channel_snapshot_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    channel_id: EntityId,
+) -> Result<M<TeletextChannelSelectionSnapshot>> {
+    if !channel_exists(tx, channel_id).await? {
+        return Ok(M::Rejected(R::MissingChannel));
+    }
+    // Limit before decoding profiles/effective settings. Every enabled
+    // producer must contribute at least one page to the eventual union.
+    let limit = i64::try_from(MAX_TELETEXT_PAGE_RECORDS + 1)
+        .map_err(|_| decode_error("binding resource limit"))?;
+    let rows = sqlx::query(
+        r#"SELECT * FROM "ChannelTeletextBinding" WHERE "ChannelId" = ?
+            AND "Enabled" = 1 ORDER BY "AddonId" LIMIT ?"#,
+    )
+    .bind(channel_id)
+    .bind(limit)
+    .fetch_all(&mut **tx)
+    .await
+    .repository()?;
+    if rows.len() > MAX_TELETEXT_PAGE_RECORDS {
+        return Ok(M::Rejected(R::BindingLimit));
+    }
+    let mut bindings = Vec::with_capacity(rows.len());
+    for row in rows {
+        let binding = binding_from_row(&row)?;
+        match selection_for_binding(tx, &binding).await? {
+            M::Saved(selection) => bindings.push(selection),
+            M::Rejected(reason) => return Ok(M::Rejected(reason)),
+        }
+    }
+    Ok(M::Saved(TeletextChannelSelectionSnapshot {
+        channel_id,
+        bindings,
+    }))
 }
 
 async fn installation_rejection(

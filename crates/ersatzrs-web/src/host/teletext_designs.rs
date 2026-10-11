@@ -81,6 +81,8 @@ impl fmt::Debug for SavedOriginalTeletextDesign {
 /// Historical preview, independently recompiled without invoking any package.
 /// Historical settings and lifecycle describe originals, not current authority.
 pub struct RestoredOriginalTeletextDesign {
+    design_id: EntityId,
+    revision: i64,
     selection: TeletextChannelSelectionSnapshot,
     sources: Vec<TeletextSavedDocumentSource>,
     digest: String,
@@ -88,6 +90,14 @@ pub struct RestoredOriginalTeletextDesign {
     edit_policy: TeletextSavedEditPolicy,
 }
 impl RestoredOriginalTeletextDesign {
+    #[must_use]
+    pub const fn design_id(&self) -> EntityId {
+        self.design_id
+    }
+    #[must_use]
+    pub const fn revision(&self) -> i64 {
+        self.revision
+    }
     #[must_use]
     pub const fn selection(&self) -> &TeletextChannelSelectionSnapshot {
         &self.selection
@@ -314,6 +324,8 @@ pub async fn reload_original_teletext_design_revision(
         .map_err(|error| NativeTeletextDesignError::Encoding(Box::new(error)))?;
         check_deadline(deadline)?;
         Ok::<_, NativeTeletextDesignError>(RestoredOriginalTeletextDesign {
+            design_id: stored.design_id,
+            revision: stored.revision,
             selection: parts.selection,
             sources: parts.sources,
             digest: stored.digest,
@@ -324,4 +336,149 @@ pub async fn reload_original_teletext_design_revision(
     .await
     .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
     Ok(Some(restored))
+}
+
+/// Redacted errors before a durable pending request is admitted.
+#[derive(Debug, thiserror::Error)]
+pub enum NativeTeletextPublicationError {
+    #[error(transparent)]
+    Design(#[from] NativeTeletextDesignError),
+    #[error(transparent)]
+    Request(#[from] ersatzrs_app::teletext_publications::TeletextPublicationStoreError),
+}
+
+/// Pending intent and exact compiled originals; this is not accepted output.
+#[derive(Debug)]
+pub struct RequestedOriginalTeletextPublication {
+    request: ersatzrs_domain::TeletextPublicationRequest,
+    design: RestoredOriginalTeletextDesign,
+}
+impl RequestedOriginalTeletextPublication {
+    #[must_use]
+    pub const fn request(&self) -> &ersatzrs_domain::TeletextPublicationRequest {
+        &self.request
+    }
+    #[must_use]
+    pub const fn design(&self) -> &RestoredOriginalTeletextDesign {
+        &self.design
+    }
+}
+
+// The only production confirmation is borrowed from this operation's private
+// fully recompiled originals. A historical preview receipt is never sufficient.
+struct NativePublicationConfirmation<'a> {
+    design: &'a RestoredOriginalTeletextDesign,
+    deadline: Instant,
+}
+#[async_trait]
+impl ersatzrs_app::teletext_publications::TeletextPublicationValidator
+    for NativePublicationConfirmation<'_>
+{
+    async fn confirm_request(
+        &self,
+        request: &ersatzrs_core::repositories::TeletextPublicationRequestSave,
+    ) -> Result<(), ersatzrs_app::teletext_publications::TeletextPublicationValidationError> {
+        use ersatzrs_app::teletext_publications::TeletextPublicationValidationError as E;
+        if Instant::now() >= self.deadline {
+            return Err(E::TimedOut);
+        }
+        if self.design.encoded().is_none()
+            || request.design_id != self.design.design_id
+            || request.revision != self.design.revision
+            || request.digest != self.design.digest
+            || request.selection != self.design.selection
+        {
+            return Err(E::Association);
+        }
+        if Instant::now() >= self.deadline {
+            return Err(E::TimedOut);
+        }
+        Ok(())
+    }
+}
+
+/// Recompile an exact saved revision, then persist an explicitly pending intent.
+///
+/// No package is invoked. Historical selection is compared with fresh complete
+/// configuration inside the repository's immediate transaction. Expected head
+/// and target revision are independent, allowing a deliberate older revision.
+/// The deadline cuts off native admission, not an admitted database transaction.
+/// This does not promote output, recover receiver caches or alter Lua timing.
+/// # Errors
+/// Reports native/compiler/admission/storage failures; identity, digest and
+/// atomic CAS/configuration rejections remain explicit no-write results.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit target, two independent CAS fences and trusted native policies"
+)]
+pub async fn request_original_teletext_design_publication(
+    application: &ApplicationServices,
+    design_id: EntityId,
+    revision: i64,
+    expected_digest: String,
+    expected_design_head: i64,
+    expected_request_id: Option<EntityId>,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<
+    ersatzrs_core::repositories::TeletextPublicationMutation<RequestedOriginalTeletextPublication>,
+    NativeTeletextPublicationError,
+> {
+    use ersatzrs_core::repositories::{
+        TeletextPublicationMutation as M, TeletextPublicationRejection as R,
+        TeletextPublicationRequestSave,
+    };
+    if design_id <= 0
+        || revision <= 0
+        || expected_design_head <= 0
+        || expected_request_id.is_some_and(|id| id <= 0)
+        || expected_digest.len() != 64
+        || !expected_digest
+            .bytes()
+            .all(|value| value.is_ascii_digit() || (b'a'..=b'f').contains(&value))
+    {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
+    let Some(design) = reload_original_teletext_design_revision(
+        application,
+        design_id,
+        revision,
+        budget,
+        policy,
+        deadline,
+    )
+    .await?
+    else {
+        return Ok(M::Rejected(R::MissingRevision));
+    };
+    if design.digest != expected_digest {
+        return Ok(M::Rejected(R::DigestConflict));
+    }
+    if design.encoded().is_none() || design.selection.bindings.is_empty() {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
+    let request = TeletextPublicationRequestSave {
+        design_id,
+        revision,
+        digest: expected_digest,
+        expected_design_head,
+        expected_request_id,
+        selection: design.selection.clone(),
+    };
+    let validator = NativePublicationConfirmation {
+        design: &design,
+        deadline,
+    };
+    Ok(
+        match application
+            .request_teletext_design_publication(request, &validator, budget.max_serialized_bytes)
+            .await?
+        {
+            M::Requested(request) => {
+                M::Requested(RequestedOriginalTeletextPublication { request, design })
+            }
+            M::Rejected(reason) => M::Rejected(reason),
+        },
+    )
 }

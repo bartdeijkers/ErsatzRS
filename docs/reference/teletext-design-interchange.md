@@ -3591,3 +3591,34 @@ This API seam has no admin controls or automatic transmission. Explicit publicat
 still needs an immutable design/revision/digest, fresh whole-channel and resource
 ownership fences and the durable promotion owner. The representative localized
 preview/publication/client flow and full independent engine acceptance remain open.
+
+### Explicit pending publication requests
+
+`request_original_teletext_design_publication` reloads and completely recompiles
+an exact immutable design revision without invoking packages. Its private native
+confirmation associates design identity/revision/digest, complete original channel
+selection and encoded service under the admission deadline. The application
+`request_teletext_design_publication` then persists a pending intent through the
+injected `TeletextPublicationRepository`; missing injection reports unavailable.
+
+The immediate transaction verifies live design-head CAS, bounded target revision
+integrity, canonical complete current channel selection and current-request CAS.
+`expected_design_head` is independent of the selected revision; an explicitly
+chosen historical revision remains eligible when all original selection fences
+are current. `expected_request_id=None` requires no prior channel request; later
+requests require its exact current identity. Rejection preserves history and the
+current pointer. Request diagnostics omit digests, settings and authored content.
+
+`teletext_publication_request(channel_id)` reads retained pending intent only.
+Its immutable row records `(id, channel_id, design_id, revision, digest)` and the
+separate pointer selects the channel's newest successfully requested intent.
+No current channel/profile/package foreign key cascades these records. Imported
+or saved concepts never create requests. Corrupt metadata is an error, not absence.
+
+No stream route, startup recovery or Lua consumer uses this pointer yet. Requests
+are not accepted generations and do not change playback, bindings or broadcast.
+Safe runtime promotion, withdrawal, warm resource/M29 reconciliation and recovery
+remain separate required work. The deadline bounds native admission; an admitted
+SQLite transaction uses the existing timeout contract and is not falsely reported
+as undone after commit. These APIs are internal preparation, not a completed admin
+or external-editor workflow.

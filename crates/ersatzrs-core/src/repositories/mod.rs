@@ -27,6 +27,7 @@ mod program_schedule;
 mod saved_search;
 mod teletext_designs;
 mod teletext_profiles;
+mod teletext_publications;
 mod television;
 mod template;
 mod troubleshooting;
@@ -180,3 +181,8 @@ pub use troubleshooting::{
     TroubleshootingPreviewMediaAdmin, TroubleshootingRepository,
 };
 pub use watermark::WatermarkRepository;
+
+pub use teletext_publications::{
+    TeletextPublicationMutation, TeletextPublicationRejection, TeletextPublicationRepository,
+    TeletextPublicationRequestSave,
+};
