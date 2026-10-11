@@ -139,7 +139,9 @@ release section when tagging a release.
   exact slots/pixels and sparse undefined glyphs with explicit X28/3 modes.
   Checked resource headers preserve exact physical identities/lifecycle states;
   complete bounded MOT/DRCS sequences derive actual last rows and keep empty
-  DRCS undefined. Service scheduling and actual decoder proof remain open.
+  DRCS undefined. Nine pinned independent MOT/DRCS cases now prove exact pixels,
+  native cell rendering and isolated invalid-glyph fallback. X27 decoder limits,
+  full feature/client proof and service scheduling remain open.
   Bounded MOT/X27 derivation preserves provenance,
   original defaults and conflicting candidates. Effective defaults/presentation,
   complete enhanced-service compilation, editor

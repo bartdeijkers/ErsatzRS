@@ -987,6 +987,41 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 independent resource calibration checkpoint: the explicitly ignored
+Linux x64 diagnostic feeds actual encoded MOT/DRCS resources through the installed
+public libzvbi 0.2.42 decoder. Five positive cases verify exact scope/S1/slot,
+all 120 glyph pixels and native PAL8 cell rendering, including blank versus base
+fallback, asymmetric/corner patterns, global slots 0/1/46 and normal slot 47.
+The nonzero S1 case transmits all sixteen contiguous companions and accurate
+MOT accounting. Four negative cases isolate missing rows and SPACE halves with
+mode zero, one bad parity bit with mode zero, and F mode with intact bitmap data.
+Every case retains exact fallback/base-text assertions. Public event callbacks
+and fetched glyph buffers remain live until unref/deletion; each decoder is fresh.
+Inputs, ABI/version, subprocess time and output are strictly bounded/guarded.
+The actual native test passes in Nextest 07124e9b-f308-4883-8eea-9d2b34a28bd6
+(one diagnostic, nine internal cases, 408 skipped); direct helper replay passes.
+Fixture SHA256: 68a84487506433f674c233e5be656dd4bd83d836f911b4ae24caac08c1f1d230.
+Helper SHA256: 615bc0ceb7b24738e7cb7e8a6df076c8b58eb9968ecdc7e07d226f76f5d7a76d.
+Python syntax and four bounded malformed-input rejections pass. Existing unchanged
+426-test teletext baseline from 28ad9f78 is reused; strict affected Clippy,
+formatting, architecture-lint and progress validation pass. Independent normative
+and native ownership/verification reviews are closed after coherent MOT counts
+and independently isolated negative mode/row/parity controls.
+Original calibration exposed duplicate synthetic X26/0, reserved mode usage and
+local termination errors, corrected in the fixture only. Exact v0.2.42 source
+and runtime show C4-set resources need own-magazine closure before cross-magazine
+transitions. Valid FF:0 closes them without changing resource bytes/lifecycle.
+Normative X27 still fails after closure: an independently reproduced positive
+case falls back, matching audited decoder bit-extraction differences. The native
+proof therefore uses MOT routes; negative cases use those same successful routes
+and cannot pass merely because X27 is broken. The encoder remains standard-conformant.
+The interchange reference records exact source tag/hash provenance and limits.
+Handwritten synthetic display invocations are not production enhancement compiler
+proof. Actual client display/navigation, full feature decoding, X27/client
+calibration, partial/cache update cases, complete compiler/carousel/transport,
+TTI/editor/draft/publication/preview/admin/Lua/source/platform acceptance remain open.
+No milestone status/dependency/acceptance change, push or publication.
+
 2026-10-11 resource-header/full-page checkpoint: checked physical nn/S2/S1
 metadata preserves all six Annex B lifecycle states, strict nested map-only JSON,
 kind-specific last-packet bounds and explicit modulo-eight counter advance.

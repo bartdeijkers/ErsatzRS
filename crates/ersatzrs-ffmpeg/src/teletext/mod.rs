@@ -149,6 +149,9 @@ mod psi_monitor_tests;
 mod psi_tests;
 #[cfg(test)]
 mod resource_pages_tests;
+// Intentional opt-in Linux x64 decoder-ABI calibration, not platform acceptance.
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod resource_runtime_tests;
 #[cfg(test)]
 mod signalling_runtime_tests;
 #[cfg(test)]

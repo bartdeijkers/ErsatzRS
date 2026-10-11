@@ -38,7 +38,11 @@ glyphs, with an explicit X28/3 mode declaration. Checked resource-header metadat
 preserves all six lifecycle states, exact physical subcodes and kind-specific
 packet bounds. Full MOT/DRCS writers derive actual last rows and emit bounded DVB
 sequences, including a legal SPACE-only empty DRCS. Previous-content/update
-consistency, service carousel ordering and actual decoder/client proof remain open.
+consistency and service carousel ordering remain open. Nine opt-in MOT-based
+libzvbi 0.2.42 cases now prove exact glyph pixels, native offscreen cell rendering
+and independent invalid-glyph fallback. X27 native decoding has a separately
+reproduced version-specific gap; normative encoding is retained. Full external
+feature decoding and actual client display/navigation remain open.
 A bounded per-display MOT/X27 derivation now preserves selected context, exact
 mask/provenance and original default sources. Audited conflicting declarations
 remain explicit unresolved candidates. Effective default/presentation derivation,

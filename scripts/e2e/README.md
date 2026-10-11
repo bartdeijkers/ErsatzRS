@@ -434,3 +434,37 @@ errors, no hydration-signature console errors, and no fall-through to the 404
 catch-all. Add new island routes to the `ISLAND_ROUTES` table in the spec.
 Detail/editor routes that need a seeded `:id` are out of scope here — cover them
 in dedicated seeded specs.
+
+## Teletext resource decoder calibration
+
+Run the explicitly ignored native diagnostic on Linux x64 with Python 3 and
+installed libzvbi 0.2.42. Other platforms/versions require their own calibrated
+oracle; this helper is not a runtime dependency or a platform acceptance gate.
+
+```bash
+fixture_dir="$(mktemp -d)"
+ERSATZRS_TELETEXT_TEST_RESOURCE_FIXTURE="$fixture_dir/cases.json" \
+  ./run.sh test -p ersatzrs-ffmpeg resource_runtime_tests --lib \
+  --run-ignored ignored-only
+python3 scripts/e2e/teletext-resource-decoder.py < "$fixture_dir/cases.json"
+```
+
+`ERSATZRS_TELETEXT_TEST_PYTHON` optionally selects Python through the existing
+locator. The optional export contains only synthetic encoded units and expected
+pixels; replay returns compact JSON with the actual decoder version and passed
+case count. Inputs are bounded and strictly validated. Missing/mismatched native
+libraries or failed cases exit nonzero. The existing runner enforces process
+and output limits during the test.
+
+Nine MOT-based cases check exact global/normal DRCS identities, all glyph pixels,
+native PAL8 cell rendering, defined blank versus fallback, and independently
+isolated missing-row, SPACE-half, parity and undefined-mode failures. They also
+retain separate base-text checks. Resource units come from the actual encoder;
+display invocation triplets remain a synthetic fixture. The declared MOT extent
+is fully transmitted, including empty companion subtables and correct counts.
+Own-magazine closing headers avoid a version-specific 0.2.42 cache behavior.
+
+The [interchange reference](../../docs/reference/teletext-design-interchange.md#pinned-independent-resource-decoding)
+records source pins, coverage and the separately reproduced X27 limitation.
+This diagnostic does not establish client display/navigation, transport integrity,
+complete Level 2.5 compilation or the design/editor/publication workflow.

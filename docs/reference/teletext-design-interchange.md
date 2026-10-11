@@ -208,8 +208,8 @@ Pinned QTeletextMaker 1.0 decodes valid monochrome geometry but its Level 2.5 pa
 ignores X28/3 modes and does not validate parity or undefined SPACE halves. Use
 it only for the applicable valid-glyph proof. The inspected libzvbi source is
 0.2.45; the currently installed independent decoder reports 0.2.42. Source audit
-and exact-runtime execution must remain distinct. Calibrate the actual decoder
-with literal sparse, blank, corner and bad-parity cases before claiming its proof.
+and exact-runtime execution remain distinct. The calibration below records
+completed MOT-based pixel/fallback proof; full independent feature decoding remains open.
 The official pinned editor AppImage was downloaded and extracted for later GUI
 verification (SHA256 `d2d77e8285fbb8147fe5014fb7f592f333dfd6bdcbad4b831197f1ad7a3a04a7`);
 this preparation does not prove an operational editor or display workflow.
@@ -264,9 +264,72 @@ partial/fragment scheduling remains open, without declaring legal states unsuppo
 
 Static inspection of libzvbi 0.2.45 identified full-subcode partial-update lookup
 and decimal-looking resource cache behavior that need exact-version calibration.
-This is not runtime proof about installed 0.2.42 and does not justify restricting
-legal resource addresses. Actual independent decoding, suitable-client display,
-full enhanced compiler/carousel/transport and editor/publication acceptance remain open.
+These static cache findings still need additional exact-runtime calibration and
+do not justify restricting legal resource addresses. The full-resource proof below
+does not settle partial/multi-version cache behavior. Full independent feature
+decoding, suitable-client display, enhanced compilation/carousel/transport and
+editor/publication acceptance remain open.
+
+## Pinned independent resource decoding
+
+The opt-in Linux x64 calibration uses the installed public libzvbi API at
+version 0.2.42, checked through `vbi_version`. A fresh decoder per case registers
+a retained teletext event callback, feeds the actual authored resource units,
+fetches the exact display page at Level 2.5 and checks baseline text independently.
+The fetched page stays alive while its referenced glyph buffer is checked and
+rendered through public PAL8 drawing; it is unreferenced before decoder deletion.
+Native ABI sizes/offsets and Linux x64 little-endian layout are explicitly guarded.
+The existing bounded subprocess runner limits time to ten seconds and output to
+16 KiB, with separate bounded stderr. The helper bounds input to 2 MiB, sixteen
+cases and 256 units per case, with exact fields/byte/bitmap validation.
+
+| Cases | Exact evidence |
+| --- | --- |
+| Global slots 0/1, including S1=15 | Corner/asymmetric pixels, exact scope/S1/slot and native cell rendering |
+| Global slot 46 / normal slot 47 | Final packet/half, left/right pixel orientation and native rendering |
+| Defined blank | A real DRCS character and blank glyph buffer, distinguished from base fallback |
+| Missing row / SPACE-only half | Mode zero retained; missing bitmap alone preserves the base character |
+| Bad parity | Defined mode zero; only one D-byte parity bit changes |
+| Undefined mode | Valid bitmap bytes retained; mode F alone preserves the base character |
+
+Five positive cases check every one of the 120 pixels and corresponding PAL8
+output. Four negative cases require exact fallback T; all nine also require the
+independent base calibration B. MOT extents, transmitted subpages and advertised
+counts agree, including all sixteen S1 companions where S1=15 is selected.
+Resources come from the native encoders. Display invocations are explicitly
+handwritten synthetic X26 fixtures; this is not complete service-compiler proof.
+The test replaces the old base X26/0, uses Level 2.5 DRCS selection and local
+termination, and closes each resource within its own magazine.
+
+Exact source audit: official libzvbi tag v0.2.42,
+commit `3785481f51f41a49e28f2b7f6fd5bd9187d24ae1`. Audited files are
+[packet.c](https://github.com/zapping-vbi/zvbi/blob/3785481f51f41a49e28f2b7f6fd5bd9187d24ae1/src/packet.c),
+[teletext.c](https://github.com/zapping-vbi/zvbi/blob/3785481f51f41a49e28f2b7f6fd5bd9187d24ae1/src/teletext.c)
+and [the public header](https://github.com/zapping-vbi/zvbi/blob/3785481f51f41a49e28f2b7f6fd5bd9187d24ae1/src/libzvbi.h).
+Their SHA256 hashes are respectively
+`e41fa3c60308599ab6a008da21b793f18e86a5011fac32fe6f84befc9dd6db18`,
+`c0920093077fe80924e483bd6a61c76418b7c20f0418dcfc6b148b1986fae4b8` and
+`dc3cd31dbf5fab7a6d3d238fc3e3bc1a249546d87e3195cdd2f4678d72db61f0`.
+Source-tag correspondence is audit evidence, not certification of the installed
+binary's build. The public header layout matches audited 0.2.45 apart from version.
+
+Two limitations are separately observed/audited. Version 0.2.42 does not finalize
+a C4-set resource on a direct cross-magazine transition; own-magazine FF:0 closure
+makes MOT/DRCS decoding pass without changing resource bytes or lifecycle flags.
+Normative X27 linking still fails after that closure. Table 15's zero-based field
+shifts are 6/11/14/2 for units/relative magazine/tens/S1 mask; inspected 0.2.42
+and 0.2.45 extraction uses 7/12/15/3. The literal global link `29406/00004`
+means 8A0/mask1 but the inspected decoder reads 358/mask0. Inspected normal DRCS
+rendering also uses the POP link slot. Preserve the normative encoder; these
+observations do not restrict legal authored addresses or declare X27 unsupported
+by the engine. X27 external decoding, partial/multi-version cache behavior and
+full suitable-client feature coverage remain acceptance work.
+
+Run/export/replay instructions are in the
+[resource calibration workflow](../../scripts/e2e/README.md#teletext-resource-decoder-calibration).
+This proves representative independent decoding and offscreen native glyph
+rendering. It proves neither actual client display/navigation nor TS delivery,
+full Level 2.5 support, the QTeletextMaker GUI workflow or design publication.
 
 ## MOT/X27 preservation audit
 
