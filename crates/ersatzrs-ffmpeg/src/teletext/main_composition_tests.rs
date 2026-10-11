@@ -1928,3 +1928,79 @@ fn original_object_cannot_write_across_panels_but_may_invoke_a_separate_panel_ch
     }
     assert_eq!(valid, before);
 }
+
+fn simultaneous_object_fixture(count: u8) -> Fixture {
+    let types = [
+        TeletextObjectType::Active,
+        TeletextObjectType::Adaptive,
+        TeletextObjectType::Passive,
+    ];
+    let commands = (0..count)
+        .map(|column| {
+            let index = usize::from(column.min(14) / 5);
+            TeletextEnhancementCommand::InvokeObject {
+                target: local(u16::try_from(index).unwrap()),
+                object_type: types[index],
+                offset: Some(TeletextObjectOffset::new(1, column).unwrap()),
+            }
+        })
+        .collect();
+    let mut fixture = Fixture::new(vec![text(1, 8, "é")], Some(commands));
+    for (index, object_type) in types.into_iter().enumerate() {
+        fixture.objects.push(definition(
+            local(u16::try_from(index).unwrap()),
+            object_type,
+            vec![g0(0)],
+        ));
+    }
+    fixture
+}
+
+#[test]
+fn original_geometry_counts_all_object_types_and_rejects_sixteenth_with_call_provenance() {
+    let valid = simultaneous_object_fixture(15).build();
+    let before = valid.clone();
+    let plan = compose(&valid);
+    let count = plan.display_geometry().object_open_count();
+    assert_eq!(count.known_intervals(), 15);
+    assert_eq!(count.pending_intervals(), 0);
+    assert_eq!(count.maximum_known_open(), 15);
+    assert_eq!(plan.spatial_trace().invocations().len(), 15);
+    for index in 0..15 {
+        assert!(plan.display_geometry().records().iter().any(|record| {
+            record.candidate().position() == (1, index) && record.candidate().operation().is_some()
+        }));
+    }
+    assert_eq!(valid, before);
+    let invalid = simultaneous_object_fixture(16).build();
+    let before = invalid.clone();
+    let rejected = compose_teletext_main_program(&invalid, owner(), budget()).unwrap_err();
+    assert_eq!(
+        rejected.location,
+        Some(TeletextMainCompositionSource::OriginalPage { command: 15 })
+    );
+    let TeletextMainCompositionFailure::DisplayGeometry(error) = rejected.reason else {
+        panic!("located simultaneous-open rejection");
+    };
+    assert_eq!(error.position, Some((0, 0)));
+    assert_eq!(error.invocation.unwrap().get(), 15);
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 15
+        })
+    );
+    assert_eq!(
+        error.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 15 })
+    );
+    assert_eq!(
+        error.reason,
+        TeletextDisplayGeometryFailure::TooManyOpenObjects {
+            count: 16,
+            maximum: 15
+        }
+    );
+    assert_eq!(invalid, before);
+}

@@ -184,6 +184,9 @@ release section when tagging a release.
   Original DRCS glyphs now retain exact resource identities and checked bitmaps
   from the selected display's service, including losing object candidates.
   Full placement, rendering and publication acceptance remain open.
+  Known inclusive raw object intervals now reject sixteen simultaneous opens
+  across all object types with original call diagnostics; unresolved intervals
+  remain visible and full overlap/admission validation remains open.
   Selected panel geometry now preserves original addresses and visible positions,
   retaining unplaced candidates and original object-region provenance.
   Occupied footprints and complete rendering acceptance remain open.

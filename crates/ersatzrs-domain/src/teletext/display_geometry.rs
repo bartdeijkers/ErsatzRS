@@ -6,6 +6,10 @@
 
 use std::mem::size_of;
 
+use super::display_geometry_open_count::{
+    count_open_objects, endpoint_storage_bytes, endpoint_work,
+};
+
 use super::{
     TeletextBaseDisplay, TeletextBaseDisplayCellKind, TeletextCandidateNonplacement,
     TeletextCandidatePlacement, TeletextColumnOperation, TeletextDisplayGeometry,
@@ -59,6 +63,8 @@ pub enum TeletextDisplayGeometryFailure {
         previous: TeletextRawDisplayArea,
         requested: TeletextRawDisplayArea,
     },
+    #[error("{count} known simultaneously open objects exceed maximum {maximum}")]
+    TooManyOpenObjects { count: usize, maximum: usize },
 }
 
 /// Map exact raw candidates through the checked Base presentation's panel flags.
@@ -74,11 +80,13 @@ pub enum TeletextDisplayGeometryFailure {
 /// writes cannot cross selected areas (Annex A.4); a caller may invoke a separate
 /// child in another area. Address-only/unplaced evidence remains typed pending.
 /// Inclusive A.8 raw intervals preserve caller AP before offset and last direct
-/// address, without certifying A.7 occupied overlap/A.8 admission or C.3.
+/// address. More than fifteen known simultaneously open intervals fail across
+/// all object types, including inactive panels. Fifteen or fewer known intervals
+/// do not certify pending intervals, successive opens, A.7 occupied overlap or C.3.
 /// # Errors
 /// Rejects budgets/storage arithmetic, owner mismatch, or inconsistent original
-/// inputs, or definite own writes crossing selected areas. No partial result or
-/// caller mutation is returned.
+/// inputs, definite own writes crossing selected areas, or sixteen known open
+/// objects. No partial result or caller mutation is returned.
 pub fn resolve_teletext_display_geometry(
     base: &TeletextBaseDisplay,
     original: &TeletextSpatialTrace,
@@ -114,6 +122,7 @@ pub fn resolve_teletext_display_geometry(
     validate_completeness(base.owner(), original, &seen_events, &seen_base)?;
     let (object_regions, addresses, writes) =
         object_regions(base.owner(), original, left_width, right_width)?;
+    let object_open_count = count_open_objects(base.owner(), &object_regions)?;
     Ok(TeletextDisplayGeometry {
         owner: base.owner(),
         panels,
@@ -123,6 +132,7 @@ pub fn resolve_teletext_display_geometry(
         object_regions,
         addresses,
         writes,
+        object_open_count,
     })
 }
 
@@ -196,6 +206,10 @@ fn preflight(
                 .len()
                 .checked_mul(size_of::<TeletextObjectDisplayRegion>())
                 .and_then(|regions| bytes.checked_add(regions))
+        })
+        .and_then(|bytes| {
+            endpoint_storage_bytes(original.invocations().len())
+                .and_then(|endpoints| bytes.checked_add(endpoints))
         });
     let levels = usize::BITS - original.events().len().leading_zeros();
     let work = original
@@ -204,7 +218,11 @@ fn preflight(
         .checked_mul(levels as usize + 1)
         .and_then(|sort| sort.checked_mul(2))
         .and_then(|sort| sort.checked_add(layers.candidates().len()))
-        .and_then(|sort| sort.checked_add(original.invocations().len()));
+        .and_then(|sort| sort.checked_add(original.invocations().len()))
+        .and_then(|work| {
+            endpoint_work(original.invocations().len())
+                .and_then(|endpoints| work.checked_add(endpoints))
+        });
     if storage.is_none_or(|bytes| bytes > isize::MAX as usize) || work.is_none() {
         return Err(fail(TeletextDisplayGeometryFailure::AllocationSize));
     }

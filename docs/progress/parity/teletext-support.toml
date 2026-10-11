@@ -7,10 +7,10 @@ summary    = '''
 ADR 0120 requires independent synthetic engine acceptance at p9a-04 before one
 TV-guide add-on in ErsatzRS-Addons at p9b-01, inspired only by NOS pages 200–299.
 Add-ons own content; the host owns validation/publication,
-delivery and read-only guides. Source subtitle gates remain. ADR 0123
+delivery and read-only guides. Subtitle gates remain. ADR 0123
 reopens P9A-01 for full authored Level 2.5, base fallback and pinned QTeletextMaker
 TTI/sidecar interchange. TSDuck, independent decoding and actual suitable-client
-display/navigation are required; Kodi is optional. P9A-02 is In progress; four milestones remain Not started.
+display/navigation are required; Kodi is optional. P9A-02 In progress; four milestones Not started.
 
 Checked programs and bounded object/DRCS traversal underpin the immutable service.
 v1 lifting retains presence/bytes; resource writers preserve geometry, lifecycle,
@@ -27,9 +27,10 @@ DRCS references resolve exact resources/bitmaps from the same service, preservin
 losers and defined blank glyphs. Existing lowering owns private selector state.
 Selected geometry retains panel placement and direct own-instance address/write
 facts, rejecting definite own area crossing without merging child extents.
-Footprints, A7/A8 admission, C3, shapes, normalization and physical proof stay open.
+Known intervals reject sixteen simultaneous opens; unresolved ones survive.
+Full A7/A8/C3, shapes, normalization and physical proof stay open.
 X27 preserves masks/used S1; MOT retains full banks/defaults/raw fields and IDs.
-Derivation retains provenance/conflicts. A bounded compiled-header inventory fence
+Derivation keeps provenance/conflicts. Compiled-header fence
 rejects exact physical/logical-owner collisions.
 Effective defaults/presentation, selection, final semantics, compilation and
 editor interfaces remain open.
@@ -39,11 +40,11 @@ Shared app controls compose isolated channel drafts; native encoding retains the
 same pages; guide bounds pass. Acquisition, activation, regions, link CRC,
 UI/Lua and publication remain open.
 
-Report-only SQLite retains tracks/ownership/data/leases. Missing records prove
-no absence; revisions certify no bytes;
+Report-only SQLite retains tracks/ownership/data/leases. Missing records cannot
+prove absence; revisions certify no bytes;
 pages remain NotAcquired. Explicit-PID TS/PES/header parsing retains flags/subcodes/
 missing PTS, not source identity, readiness or inventory. Bounds follow JSON decode,
-not input/child RSS. Acquisition/revisions/selection remain open; auxiliary failure
+not input/child RSS. Acquisition/revisions/selection stay open; auxiliary failure
 preserves ordinary metadata, uncertain cleanup is fatal. P9A-03 owns proof.
 
 Carousel/PES/TS, all-program PSI/PMT monitoring, PCR/CBR checks and bounded
@@ -56,12 +57,12 @@ Linux x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission, tokens, reapi
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
-P9A-02 owns decoder Health, six-RID packaging, licensing and remaining proof.
+P9A-02 owns decoder Health, six-RID packaging and licensing proof.
 P9A-03/04 retain source persistence/rescans, exact page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage/passthrough and HLS/browser
-gates. Continuous slate handover, activation/publication/refresh/restart,
+gates. Slate handover, activation/publication/refresh/restart,
 localized management and full source/client/browser/smoke/TSDuck matrix remain
-open. Milestones own proof. UCU waives no gates. Content waits for p9a-04;
+open. Milestones own proof; UCU waives no gates. Content waits for p9a-04;
 Phase 10 waits for p9b-02.
 '''
 

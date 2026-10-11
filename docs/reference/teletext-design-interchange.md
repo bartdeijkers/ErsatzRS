@@ -654,9 +654,25 @@ before the invocation offset and ending inclusively at the last direct explicit
 addressing event, including non-glyph setup. An address-only body can establish an
 endpoint even without a written glyph. Missing, out-of-display and backwards
 endpoints remain typed pending evidence. Child endpoints are excluded. These
-intervals do not yet prove the fifteen-open/fifteen-successive-open admission
-limits, A.7 overlap admissibility or C.3 double-size footprint/attribute behavior.
-Those remain required before full geometry, renderer and engine acceptance.
+interval records alone do not prove all A.8 admission limits, A.7 overlap
+admissibility or C.3 double-size footprint/attribute behavior.
+A bounded inclusive endpoint sweep now checks the known intervals across all
+three object types together. Starts count before ends at a shared raw position;
+raw inactive panels and header AP are included, independently of visible writes.
+The sixteenth known open instance is rejected at its original call source/root
+and raw caller AP. Empty, out-of-plane and backwards intervals stay pending; they
+cannot hide a definite violation by sixteen known intervals. The immutable result
+reports known/pending interval counts and maximum known overlap. A maximum below
+sixteen alone does not certify full A.8 admission when unresolved intervals exist,
+and the separate successive-opening rule remains required. Final A.7 overlap,
+C.3 footprints and complete A.8 admission remain required before full geometry,
+renderer and engine acceptance.
+
+The successive-opening rule must not reset on arbitrary recursive trace writes.
+For example, calls at header AP can precede all child writes at a later display
+row even when logical preorder alternates calls and child glyphs. Final validation
+must use original call locations, definite write facts and explicit scan/equal-
+position ordering; pure AP/charset setup cannot certify a display write.
 
 ### Compatibility-aware composed packing
 

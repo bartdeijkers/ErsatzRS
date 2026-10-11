@@ -2,13 +2,18 @@
 
 use super::*;
 
-fn owner() -> TeletextPageAddress {
+pub(super) fn owner() -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(200).unwrap(),
         subcode: TeletextSubcode::new(0x1234).unwrap(),
     }
 }
-fn panels(left: bool, right: bool, width: u8, status: TeletextPanelStatus) -> TeletextSidePanels {
+pub(super) fn panels(
+    left: bool,
+    right: bool,
+    width: u8,
+    status: TeletextPanelStatus,
+) -> TeletextSidePanels {
     TeletextSidePanels {
         left,
         right,
@@ -16,7 +21,7 @@ fn panels(left: bool, right: bool, width: u8, status: TeletextPanelStatus) -> Te
         status,
     }
 }
-fn presentation(panels: TeletextSidePanels) -> TeletextLevel25PresentationDefaults {
+pub(super) fn presentation(panels: TeletextSidePanels) -> TeletextLevel25PresentationDefaults {
     TeletextLevel25PresentationDefaults {
         primary: TeletextPageCharsetDesignation::new(0).unwrap(),
         secondary: None,
@@ -104,15 +109,15 @@ fn base(
     )
     .unwrap()
 }
-fn local(id: u16) -> TeletextObjectIdentity {
+pub(super) fn local(id: u16) -> TeletextObjectIdentity {
     TeletextObjectIdentity::local(owner(), TeletextObjectId::new(id))
 }
-fn set(row: u8, column: u8) -> TeletextEnhancementCommand {
+pub(super) fn set(row: u8, column: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::SetPosition {
         position: TeletextEnhancementPosition::new(row, column).unwrap(),
     }
 }
-fn glyph(column: u8) -> TeletextEnhancementCommand {
+pub(super) fn glyph(column: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::AtColumn {
         column,
         operation: TeletextColumnOperation::G0 {
@@ -120,7 +125,7 @@ fn glyph(column: u8) -> TeletextEnhancementCommand {
         },
     }
 }
-fn invoke(
+pub(super) fn invoke(
     target: TeletextObjectIdentity,
     object_type: TeletextObjectType,
     offset: Option<(u8, u8)>,
@@ -131,7 +136,7 @@ fn invoke(
         offset: offset.map(|(row, column)| TeletextObjectOffset::new(row, column).unwrap()),
     }
 }
-fn definition(
+pub(super) fn definition(
     identity: TeletextObjectIdentity,
     object_type: TeletextObjectType,
     commands: Vec<TeletextEnhancementCommand>,
@@ -142,12 +147,12 @@ fn definition(
         program: TeletextEnhancementProgram::new(commands).unwrap(),
     }
 }
-struct Fixture {
-    base: TeletextBaseDisplay,
-    spatial: TeletextSpatialTrace,
-    glyphs: TeletextGlyphLayers,
+pub(super) struct Fixture {
+    pub(super) base: TeletextBaseDisplay,
+    pub(super) spatial: TeletextSpatialTrace,
+    pub(super) glyphs: TeletextGlyphLayers,
 }
-fn fixture(
+pub(super) fn fixture(
     presentation: Option<TeletextLevel25PresentationDefaults>,
     commands: Vec<TeletextEnhancementCommand>,
     objects: Vec<TeletextEnhancementObjectDefinition>,
@@ -235,7 +240,7 @@ fn samples(panels: TeletextSidePanels, row: u8, columns: &[u8]) -> Fixture {
         ],
     )
 }
-fn resolve(fixture: &Fixture) -> TeletextDisplayGeometry {
+pub(super) fn resolve(fixture: &Fixture) -> TeletextDisplayGeometry {
     resolve_teletext_display_geometry(
         &fixture.base,
         &fixture.spatial,

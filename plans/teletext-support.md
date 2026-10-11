@@ -201,7 +201,9 @@ physical order against both receiver views. Preview and publication remain gated
 Selected geometry now preserves raw/visual panel placement and original instance
 address/write facts in the same composition model. Definite own cross-area writes
 are rejected; separate panel children and pending endpoint evidence stay distinct.
-Next extend this result with A.7/A.8 admissibility and C.3 occupied footprints,
+Known raw inclusive intervals now reject sixteen simultaneous open instances
+across all types; unresolved endpoints remain explicit. Next complete A.8 pending
+interval and successive-opening rules, A.7 admissibility and C.3 footprints,
 origin/deferred attributes, then validated glyph rasterization and receiver-
 equivalent normalization. Point placement alone cannot close engine acceptance.
 A bounded physical inventory fence now compares exact compiled display/resource
