@@ -7,6 +7,8 @@
 //! Enhancement reference collection does not establish resolved object/display
 //! semantics, physical resource allocation or Level 2.5 encoding readiness.
 
+mod attribute_execution;
+mod attribute_values;
 mod base_display;
 mod charset_values;
 mod compositional_links;
@@ -29,6 +31,8 @@ mod service;
 mod source;
 mod spatial_trace;
 
+pub use attribute_execution::*;
+pub use attribute_values::*;
 pub use base_display::*;
 pub use charset_values::*;
 pub use compositional_links::*;
@@ -100,3 +104,6 @@ mod spatial_trace_tests;
 
 #[cfg(test)]
 mod glyph_layers_tests;
+
+#[cfg(test)]
+mod attribute_execution_tests;

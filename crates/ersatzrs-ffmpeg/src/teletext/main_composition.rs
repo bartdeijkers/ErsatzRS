@@ -10,9 +10,11 @@
 use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
-    build_teletext_glyph_layers, resolve_teletext_spatial_trace, TeletextBaseDisplay,
-    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
-    TeletextColumnOperation, TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
+    build_teletext_glyph_layers, resolve_teletext_attribute_execution,
+    resolve_teletext_spatial_trace, TeletextAttributeExecution, TeletextAttributeExecutionError,
+    TeletextBaseDisplay, TeletextCharsetPair, TeletextCharsetValueError,
+    TeletextCollectedEnhancementReferences, TeletextColumnOperation,
+    TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
     TeletextEnhancementCollectionBudget, TeletextEnhancementCollectionFailure,
     TeletextEnhancementCommand, TeletextEnhancementPosition, TeletextEnhancementProgram,
     TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextG3Compatibility,
@@ -86,6 +88,8 @@ pub enum TeletextMainCompositionFailure {
     #[error(transparent)]
     GlyphLayers(#[from] TeletextGlyphLayersError),
     #[error(transparent)]
+    AttributeExecution(#[from] TeletextAttributeExecutionError),
+    #[error(transparent)]
     Charset(#[from] TeletextCharsetValueError),
     #[error(transparent)]
     Program(#[from] TeletextEnhancementProgramError),
@@ -125,6 +129,7 @@ pub struct TeletextMainComposition {
     base_display: TeletextBaseDisplay,
     spatial_trace: TeletextSpatialTrace,
     glyph_layers: TeletextGlyphLayers,
+    attribute_execution: TeletextAttributeExecution,
     collected: TeletextCollectedEnhancementReferences,
 }
 
@@ -156,7 +161,7 @@ impl TeletextMainComposition {
         &self.base_display
     }
     /// Original command coordinates and repeated invocation identities, before
-    /// base-glyph insertion. Attribute inheritance and footprints remain unresolved.
+    /// base-glyph insertion. Final attribute arbitration and footprints remain open.
     #[must_use]
     pub const fn spatial_trace(&self) -> &TeletextSpatialTrace {
         &self.spatial_trace
@@ -166,6 +171,13 @@ impl TeletextMainComposition {
     #[must_use]
     pub const fn glyph_layers(&self) -> &TeletextGlyphLayers {
         &self.glyph_layers
+    }
+    /// Separate original-command attribute inheritance over the logical areas.
+    /// Pending arbitration and extent diagnostics prohibit treating this
+    /// intermediate as a completed display or a publication authorization.
+    #[must_use]
+    pub const fn attribute_execution(&self) -> &TeletextAttributeExecution {
+        &self.attribute_execution
     }
     #[must_use]
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
@@ -269,23 +281,10 @@ pub fn compose_teletext_main_program(
                 failure.reason.into(),
             )
         })?;
-    let spatial_trace = resolve_teletext_spatial_trace(
+    let (spatial_trace, glyph_layers, attribute_execution) = original_display_execution(
         service,
-        owner,
-        TeletextSpatialTraceBudget {
-            max_events: budget.collection.max_commands,
-            max_invocations: budget.collection.max_commands,
-        },
-    )
-    .map_err(|reason| {
-        let location = reason
-            .location
-            .and_then(|location| original_location(&source, location));
-        error(owner, location, reason.into())
-    })?;
-    let glyph_layers = original_glyph_layers(
         &base_display,
-        &spatial_trace,
+        &colour_context,
         &source,
         budget.collection.max_commands,
     )?;
@@ -298,8 +297,60 @@ pub fn compose_teletext_main_program(
         base_display,
         spatial_trace,
         glyph_layers,
+        attribute_execution,
         collected,
     })
+}
+
+fn original_display_execution(
+    service: &TeletextSemanticService,
+    base: &TeletextBaseDisplay,
+    colours: &TeletextColourContext,
+    source: &TeletextEffectiveProgramSource,
+    maximum: usize,
+) -> Result<
+    (
+        TeletextSpatialTrace,
+        TeletextGlyphLayers,
+        TeletextAttributeExecution,
+    ),
+    TeletextMainCompositionError,
+> {
+    let spatial = resolve_teletext_spatial_trace(
+        service,
+        base.owner(),
+        TeletextSpatialTraceBudget {
+            max_events: maximum,
+            max_invocations: maximum,
+        },
+    )
+    .map_err(|reason| {
+        let location = reason
+            .location
+            .and_then(|location| original_location(source, location));
+        error(base.owner(), location, reason.into())
+    })?;
+    let glyphs = original_glyph_layers(base, &spatial, source, maximum)?;
+    let attributes =
+        original_attribute_execution(base, &spatial, &glyphs, colours, source, maximum)?;
+    Ok((spatial, glyphs, attributes))
+}
+
+fn original_attribute_execution(
+    base: &TeletextBaseDisplay,
+    spatial: &TeletextSpatialTrace,
+    glyphs: &TeletextGlyphLayers,
+    colours: &TeletextColourContext,
+    source: &TeletextEffectiveProgramSource,
+    maximum: usize,
+) -> Result<TeletextAttributeExecution, TeletextMainCompositionError> {
+    resolve_teletext_attribute_execution(base, spatial, glyphs, colours.row_colours(), maximum)
+        .map_err(|reason| {
+            let location = reason
+                .location
+                .and_then(|location| original_location(source, location));
+            error(base.owner(), location, reason.into())
+        })
 }
 
 fn original_glyph_layers(

@@ -987,6 +987,52 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 original attribute-execution checkpoint:
+The same-service main factory now retains bounded original foreground, background,
+flash and Display Attributes execution separately from character priority. Actual
+checked Base spacing provenance and original full-row colours supply each cell;
+Active/Local area-tail scope, Adaptive per-type lower-context inheritance and
+fresh Passive invocation state remain distinct. Compound Display Attributes keep
+separate sources for spacing size, boxing and conceal cancellation. Normal Size/
+Double Height terminate earlier non-spacing width; D5 remains separate from Base
+spacing separation, and diagnostic inversion preserves logical colours/sources.
+The logical heap plane includes independent main/right/left areas, with panel
+CLUT0 white and original full-row background; potential widths are not acceptance.
+Original wide/header writes retain exact pending source/root/instance diagnostics.
+Legal noncell setup does not invent an invalid cell. C2 effective-start/placement
+comparisons resolve known cases; exact transmission ties retain both predecessor
+chains instead of guessing from logical event order. Adaptive AP-only tails retain
+known firm prefixes and per-field original/lower sources as explicit uncertainty.
+Command limits precede execution; checked fixed-area work/diagnostic bounds prevent
+unbounded per-cell contender allocation. Inputs remain immutable.
+Ninety selected domain/FFmpeg tests pass
+(43eb81d2-a557-441a-918a-e304fb4d8063; 702 skipped), including nineteen new domain
+oracles and five actual-layout integration cases. These prove the standard's three
+object colour examples, independent group inheritance, fresh/cross-row Passive
+state, glyphless Active attributes, C2 r1/r2/r3 provenance, partial spacing/D5/invert,
+exact budgets/blame, owner isolation, panels, wide/header diagnostics, legal setup,
+firm non-glyph endpoints and uncertainty source chains. Actual encoder integration
+also proves remapped Base versus fixed Passive/panel defaults, unchanged raw New
+Background semantics, Base Unicode/Active character rank and pending original ties.
+After lint-only borrowing/range/fixture cleanup, all forty directly affected tests
+pass again (9a28d809-c3df-4ddb-8084-e12e79053a55; 752 skipped). Final strict all-target
+domain/FFmpeg Clippy, workspace formatting and independent source/test/lint-delta
+reviews pass without new lint exemptions. Reviews corrected false noncell address
+diagnostics and lost Adaptive uncertainty provenance before final verification.
+Three final native tests pass (ea1f870d-975b-43aa-94c5-62376f521751; 547 skipped):
+all four Base and six composed encoder cases still decode at both receiver levels.
+The three fixture hashes and guarded pinned imager/helper remain unchanged from
+prior evidence. This reuses established decoder coverage; it does not prove the
+new logical attribute execution's pixels or final physical realization.
+Architecture/progress validation passes. Transmission ties, uncertain Adaptive
+endpoints, character-set execution/raster lookup, prohibited overlap/open-object
+limits, areas/size footprints, physical normalization and the full service,
+transport/client/editor/publication gates remain open. Next settle the remaining
+semantic rules and execute character-set lifetimes before geometry and shared
+physical realization. All six milestone contracts/status/dependencies remain unchanged.
+
+Earlier original glyph-layer evidence follows:
+
 2026-10-11 original glyph-layer checkpoint:
 Same-service main composition retains every non-header-owned Base cell and
 bounded original glyph contenders from its original spatial trace. Base Unicode/

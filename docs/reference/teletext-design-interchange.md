@@ -331,6 +331,50 @@ attribute bundle. Level 1.5 interpretation and physical equivalence still need
 separate proof. Full per-attribute inheritance/arbitration, geometry and both
 receiver views remain required before encoding/publication acceptance.
 
+### Original attribute execution
+
+`resolve_teletext_attribute_execution` keeps character precedence separate from
+the four attribute groups: foreground, background, flash and Display Attributes.
+Main composition supplies the checked base cells, original spatial trace, glyph
+layers and original full-row colours from the same immutable service. Standalone
+owner checks are exact page/subcode checks, not generation certification.
+
+Active and original Local attributes use the lower context at each affected
+cell, continuing to the end of that row's area even without an object glyph.
+Adaptive objects preserve only explicitly changed attribute types within their
+own addressed row extent; other types still inherit the lower cell context.
+Passive objects start with fresh standard defaults for each invocation, keep
+their private attributes across row changes and affect only their explicit
+character cells. Selecting a character contender never chooses an Active or
+Local attribute bundle.
+
+C2 compares where an attribute first takes effect, then where it is placed.
+Equal keys require actual transmission evidence: logical event order is not a
+substitute. Typed pending diagnostics retain the original contenders and their
+source, root and invocation rather than guessing a winner. Adaptive endpoints
+whose interpretation depends on AP-only or invocation-only addressing also
+remain explicit pending work. These diagnostics do not impose permanent authored
+feature restrictions.
+
+The bounded logical plane includes potential main, right-panel and left-panel
+areas independently. Panel defaults use CLUT 0 white and the pertaining full-row
+background; main-area attributes do not spill into either panel. Header-owned
+cells and header panels have no executable cell. Wider original positions remain
+located diagnostics rather than clipped content. Actual enabled panel widths,
+object-area validity and size footprints are separate required validation.
+
+Display Attributes retain separate field provenance for spacing size, boxing and
+conceal controls. Spacing Normal Size and Double Height also terminate earlier
+non-spacing width changes. Base spacing mosaic separation stays distinct from
+non-spacing D5; the latter also controls enhanced character underline/separation.
+Logical colours retain their sources when the diagnostic colour helper applies
+inversion. Flash mode and rate are retained without claiming timed animation.
+
+This intermediate does not execute character-set lifetimes, rasterize characters
+or DRCS, validate prohibited object overlap/open-object limits, normalize physical
+instructions or authorize rendering/publication. Final C2 transmission ties,
+Adaptive endpoints, geometry and both receiver views remain mandatory work.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

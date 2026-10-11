@@ -114,6 +114,7 @@ struct Fixture {
     objects: Vec<TeletextEnhancementObjectDefinition>,
     defaults: [Option<TeletextDefaultObjectSelection>; 4],
     primary: Option<u8>,
+    presentation: Option<TeletextLevel25PresentationDefaults>,
 }
 impl Fixture {
     fn new(rows: Vec<TeletextRow>, main: Option<Vec<TeletextEnhancementCommand>>) -> Self {
@@ -123,17 +124,20 @@ impl Fixture {
             objects: vec![],
             defaults: [None; 4],
             primary: None,
+            presentation: None,
         }
     }
     fn build(self) -> TeletextSemanticService {
         let language = TeletextLanguage::new("nld".into()).unwrap();
-        let presentation = self.primary.map(|primary| {
-            let mut result = super::presentation::western_latin_v1_presentation(
-                TeletextNationalOption::new(1).unwrap(),
-            )
-            .unwrap();
-            result.primary = TeletextPageCharsetDesignation::new(primary).unwrap();
-            result
+        let presentation = self.presentation.or_else(|| {
+            self.primary.map(|primary| {
+                let mut result = super::presentation::western_latin_v1_presentation(
+                    TeletextNationalOption::new(1).unwrap(),
+                )
+                .unwrap();
+                result.primary = TeletextPageCharsetDesignation::new(primary).unwrap();
+                result
+            })
         });
         let public = self.objects.iter().find_map(|object| {
             object
@@ -893,5 +897,311 @@ fn original_local_candidate_outranks_active_while_all_base_intent_survives() {
         local.root_source(),
         Some(TeletextSpatialRootSource::Local { command: 2 })
     );
+    assert_eq!(service, before);
+}
+
+fn coloured_run(column: u8, colour: TeletextColour, value: &str) -> TeletextRun {
+    TeletextRun {
+        column,
+        style: TeletextStyle {
+            foreground: colour,
+            ..TeletextStyle::default()
+        },
+        content: TeletextRunContent::Text { text: value.into() },
+    }
+}
+
+fn original_foreground(column: u8, colour: u8) -> TeletextEnhancementCommand {
+    at(
+        column,
+        TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::new(colour).unwrap(),
+        },
+    )
+}
+
+#[test]
+fn actual_layout_preserves_distinct_active_adaptive_and_passive_colour_inheritance() {
+    let expected = [
+        (TeletextObjectType::Active, [4, 4, 13, 13, 1, 3, 3]),
+        (TeletextObjectType::Adaptive, [4, 4, 13, 13, 13, 3, 2]),
+        (TeletextObjectType::Passive, [4, 7, 13, 4, 13, 3, 2]),
+    ];
+    for (object_type, colours) in expected {
+        let target = local(46);
+        let mut fixture = Fixture::new(
+            vec![TeletextRow {
+                row: 1,
+                runs: vec![
+                    coloured_run(1, TeletextColour::Blue, "THE FAST DOG AND"),
+                    coloured_run(18, TeletextColour::Red, "CAT"),
+                    coloured_run(22, TeletextColour::Green, "RAN IN"),
+                ],
+            }],
+            Some(vec![position(1, 0), invoke(target, object_type)]),
+        );
+        fixture.objects = vec![definition(
+            target,
+            object_type,
+            vec![
+                at(5, TeletextColumnOperation::G0 { code: code(b'L') }),
+                at(6, TeletextColumnOperation::G0 { code: code(b'A') }),
+                at(7, TeletextColumnOperation::G0 { code: code(b'Z') }),
+                at(8, TeletextColumnOperation::G0 { code: code(b'Y') }),
+                original_foreground(10, 13),
+                at(10, TeletextColumnOperation::G0 { code: code(b'C') }),
+                at(11, TeletextColumnOperation::G0 { code: code(b'O') }),
+                at(12, TeletextColumnOperation::G0 { code: code(b'W') }),
+                at(18, TeletextColumnOperation::G0 { code: code(b'F') }),
+                at(19, TeletextColumnOperation::G0 { code: code(b'O') }),
+                at(20, TeletextColumnOperation::G0 { code: code(b'X') }),
+                original_foreground(23, 3),
+                at(23, TeletextColumnOperation::G0 { code: code(b'S') }),
+                at(24, TeletextColumnOperation::G0 { code: code(b'A') }),
+                at(25, TeletextColumnOperation::G0 { code: code(b'T') }),
+            ],
+        )];
+        let service = fixture.build();
+        let before = service.clone();
+        let plan = compose(&service);
+        let base = plan.base_display();
+        assert_eq!(base.cell(1, 0).unwrap().code(), 0x04);
+        assert_eq!(base.cell(1, 17).unwrap().code(), 0x01);
+        assert_eq!(base.cell(1, 21).unwrap().code(), 0x02);
+        let attributes = plan.attribute_execution();
+        assert_eq!(attributes.owner(), owner());
+        for (column, colour) in [3, 5, 10, 14, 18, 23, 27].into_iter().zip(colours) {
+            assert_eq!(
+                attributes.cell(1, column).unwrap().foreground().value(),
+                Some(TeletextColourReference::new(colour).unwrap()),
+                "{object_type:?} at column {column}"
+            );
+        }
+        assert_eq!(service, before);
+    }
+}
+
+#[test]
+fn original_attribute_only_scope_keeps_base_spacing_and_unicode_character_rank_separate() {
+    let target = local(47);
+    let mut fixture = Fixture::new(
+        vec![TeletextRow {
+            row: 1,
+            runs: vec![coloured_run(18, TeletextColour::Red, "é")],
+        }],
+        Some(vec![
+            position(1, 0),
+            original_foreground(10, 13),
+            position(1, 18),
+            invoke(target, TeletextObjectType::Active),
+        ]),
+    );
+    fixture.objects = vec![definition(target, TeletextObjectType::Active, vec![g0(0)])];
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let attributes = plan.attribute_execution();
+    assert_eq!(
+        attributes.cell(1, 14).unwrap().foreground().value(),
+        Some(TeletextColourReference::new(13).unwrap())
+    );
+    assert_eq!(plan.base_display().cell(1, 17).unwrap().code(), 0x01);
+    assert_eq!(
+        attributes.cell(1, 18).unwrap().foreground().value(),
+        Some(TeletextColourReference::new(1).unwrap())
+    );
+    let contenders = plan.glyph_layers().candidates_at(1, 18);
+    assert_eq!(contenders.len(), 2);
+    assert_eq!(
+        contenders[0].base().unwrap().authored().unwrap().content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    assert_eq!(contenders[1].priority(), TeletextGlyphPriority::Active);
+    assert_eq!(service, before);
+}
+
+#[test]
+fn original_row_colour_initializes_independent_panel_defaults_without_main_attribute_spill() {
+    let target = local(48);
+    let mut fixture = Fixture::new(
+        vec![],
+        Some(vec![
+            TeletextEnhancementCommand::SetRowColour {
+                row: 1,
+                colour: TeletextColourReference::new(20).unwrap(),
+                following_rows: true,
+            },
+            invoke(target, TeletextObjectType::Passive),
+            original_foreground(10, 9),
+        ]),
+    );
+    let mut presentation =
+        super::presentation::western_latin_v1_presentation(TeletextNationalOption::new(1).unwrap())
+            .unwrap();
+    presentation.remapping = TeletextColourRemapping::FgClut2BgClut3;
+    presentation.black_background_substitution = false;
+    fixture.presentation = Some(presentation);
+    fixture.objects = vec![definition(target, TeletextObjectType::Passive, vec![g0(1)])];
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let attributes = plan.attribute_execution();
+    assert_eq!(
+        plan.base_display()
+            .cell(1, 5)
+            .unwrap()
+            .attributes()
+            .foreground()
+            .get(),
+        23
+    );
+    assert_eq!(
+        plan.base_display()
+            .cell(1, 5)
+            .unwrap()
+            .attributes()
+            .background()
+            .get(),
+        24
+    );
+    assert_eq!(
+        attributes.cell(1, 1).unwrap().foreground().value(),
+        Some(TeletextColourReference::WHITE)
+    );
+    assert_eq!(
+        attributes.cell(1, 1).unwrap().background().value(),
+        Some(TeletextColourReference::BLACK)
+    );
+    assert_eq!(
+        attributes.cell(1, 39).unwrap().foreground().value(),
+        Some(TeletextColourReference::new(9).unwrap())
+    );
+    for (row, column) in [(1, 40), (1, 55), (1, 56), (1, 71), (24, 71)] {
+        let cell = attributes.cell(row, column).unwrap();
+        assert_eq!(
+            cell.foreground().value(),
+            Some(TeletextColourReference::new(7).unwrap())
+        );
+        assert_eq!(
+            cell.background().value(),
+            Some(TeletextColourReference::new(20).unwrap())
+        );
+    }
+    assert!(attributes.cell(0, 7).is_none());
+    assert!(attributes.cell(0, 40).is_none());
+    assert!(attributes.cell(0, 71).is_none());
+    assert_eq!(service, before);
+}
+
+#[test]
+fn same_service_retains_unsettled_transmission_ties_instead_of_promoting_event_order() {
+    let service = Fixture::new(
+        vec![text(1, 18, "é")],
+        Some(vec![
+            position(1, 18),
+            original_foreground(18, 4),
+            original_foreground(18, 13),
+        ]),
+    )
+    .build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let attributes = plan.attribute_execution();
+    let foreground = attributes.cell(1, 18).unwrap().foreground();
+    assert_eq!(foreground.value(), None);
+    assert_eq!(foreground.source(), None);
+    let pending = attributes.pending()[foreground.pending().unwrap()];
+    assert_eq!(
+        pending.reason(),
+        TeletextAttributePendingReason::TransmissionOrder
+    );
+    assert_eq!(
+        pending.location(),
+        TeletextEnhancementSource {
+            object: None,
+            command: 2
+        }
+    );
+    assert_eq!(
+        pending.root_source(),
+        TeletextSpatialRootSource::Local { command: 2 }
+    );
+    assert_eq!(pending.invocation(), None);
+    assert_eq!(
+        plan.glyph_layers().candidates_at(1, 18)[0]
+            .base()
+            .unwrap()
+            .authored()
+            .unwrap()
+            .content(),
+        TeletextBaseAuthoredContent::Text { character: 'é' }
+    );
+    assert_eq!(service, before);
+}
+
+#[test]
+fn new_background_keeps_raw_base_foreground_when_nonspacing_colour_changes_display_foreground() {
+    let service = Fixture::new(
+        vec![TeletextRow {
+            row: 1,
+            runs: vec![TeletextRun {
+                column: 8,
+                style: TeletextStyle {
+                    foreground: TeletextColour::Red,
+                    background: TeletextColour::Blue,
+                    boxed: true,
+                    flash: true,
+                    conceal: true,
+                    ..TeletextStyle::default()
+                },
+                content: TeletextRunContent::Text { text: "A".into() },
+            }],
+        }],
+        Some(vec![position(1, 2), original_foreground(2, 11)]),
+    )
+    .build();
+    let before = service.clone();
+    let plan = compose(&service);
+    assert_eq!(plan.base_display().cell(1, 1).unwrap().code(), 0x04);
+    assert_eq!(plan.base_display().cell(1, 2).unwrap().code(), 0x1d);
+    assert_eq!(plan.base_display().cell(1, 3).unwrap().code(), 0x01);
+    let attributes = plan.attribute_execution();
+    for column in [2, 3] {
+        let cell = attributes.cell(1, column).unwrap();
+        assert_eq!(
+            cell.foreground().value(),
+            Some(TeletextColourReference::new(11).unwrap())
+        );
+        assert_eq!(
+            cell.background().value(),
+            Some(TeletextColourReference::new(4).unwrap())
+        );
+    }
+    let final_cell = attributes.cell(1, 8).unwrap();
+    assert_eq!(
+        final_cell.foreground().value(),
+        Some(TeletextColourReference::new(1).unwrap())
+    );
+    assert_eq!(
+        final_cell.background().value(),
+        Some(TeletextColourReference::new(4).unwrap())
+    );
+    assert_eq!(final_cell.boxed().value(), Some(true));
+    assert_eq!(final_cell.conceal().value(), Some(true));
+    assert_eq!(
+        final_cell.flash().value().unwrap().mode(),
+        TeletextFlashMode::Normal
+    );
+    assert!(matches!(
+        final_cell.background().source(),
+        Some(TeletextAttributeSource::Base {
+            source: TeletextBaseAttributeSource::Spacing {
+                position: origin,
+                control: TeletextBaseSpacingControl::NewBackground,
+                timing: TeletextSpacingTiming::SetAt,
+            },
+            ..
+        }) if origin == pos(1, 2)
+    ));
     assert_eq!(service, before);
 }

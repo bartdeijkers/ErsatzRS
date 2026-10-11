@@ -34,6 +34,8 @@ pub struct TeletextColourReference(u8);
 impl TeletextColourReference {
     /// Fixed CLUT0 black, independent of editable palette declarations.
     pub const BLACK: Self = Self(0);
+    /// Fixed CLUT 0 entry 7; object and panel defaults do not remap this colour.
+    pub const WHITE: Self = Self(7);
 
     /// Validate a reference without masking unknown high bits.
     /// # Errors

@@ -168,6 +168,9 @@ release section when tagging a release.
   Glyph layers now keep original base intent separate from object/local
   character precedence, retaining losing and out-of-area contenders explicitly
   for subsequent attribute, geometry and receiver-equivalence validation.
+  Separate original attribute execution now preserves per-cell inheritance,
+  private object state and independent panel defaults, retaining unresolved
+  transmission and Adaptive endpoint diagnostics without granting readiness.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

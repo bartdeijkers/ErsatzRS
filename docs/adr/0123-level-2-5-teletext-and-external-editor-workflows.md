@@ -111,6 +111,15 @@ with separate character ranks and invocation provenance. The diagnostic highest
 character contender does not choose an attribute bundle or approve overlap,
 panels, character-set execution, footprints or physical equivalence. Generated
 compatibility words cannot acquire original Local provenance in this model.
+Original attribute execution now keeps foreground, background, flash and compound
+Display Attributes separate from character precedence. The same-service factory
+supplies original row colours and checked spacing provenance. Active/Local
+row-area scope, Adaptive per-type inheritance and fresh Passive invocation state
+are retained independently; C2 ties requiring actual transmission order and
+uncertain Adaptive endpoints remain typed pending diagnostics. Potential panel
+areas use independent standard defaults. This is a bounded semantic intermediate,
+not character-set execution, geometry/overlap acceptance, physical normalization
+or publication authority; see the interchange reference and milestone evidence.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

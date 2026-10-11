@@ -162,11 +162,17 @@ attributes. Resolve footprints, panel areas and physical realization before
 granting full display or publication authority.
 The retained glyph layers now compare original character candidates by their
 standard-defined rank and invocation identity while keeping losing base intent.
-Next implement all four attribute groups with their distinct inheritance and
-scope rules, preserving C2 source evidence and unresolved transmission ties.
-Do not infer attributes from the highest character rank. The diagnostic layers
+Resolve all four attribute groups under their distinct inheritance and scope
+rules, preserving C2 source evidence and unresolved transmission ties. Do not
+infer attributes from the highest character rank. The diagnostic layers
 retain raw out-of-area/header/panel candidates for explicit geometry validation;
 no overlap, pixel rendering or wire equivalence acceptance is implied.
+The consumed original attribute executor now retains all four groups separately
+from character rank, with per-cell lower-context inheritance, independent panel
+defaults and located pending C2/Adaptive-extent diagnostics. Next settle pending
+transmission and endpoint rules, execute character-set lifetimes, validate object
+overlap/areas and size footprints, and normalize the physical instructions against
+both receiver views. Full display/publication acceptance remains open.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

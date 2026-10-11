@@ -19,14 +19,14 @@ POP/GPOP writers preserve pointers, metadata, fresh object state and companions.
 Local definitions share one bounded X26 sequence with exact forward references.
 Eight libzvbi 0.2.42 object cases
 decode all scope/type combinations and nested origins; nine DRCS cases retain
-identical bytes. Three local types fail .42 rendering; its separate diagnostic preserves identical
-units and the correct oracle.
+identical bytes. Local types fail .42 rendering; a same-byte diagnostic retains the oracle.
 Pinned teletextimager decodes direct types, high designations and nested origins
-with guarded sources. Ordered main composition preserves AP/charset/provenance;
-same-service packing restores rows with exact pointers/capacity. Base traces retain fallback, intent, spacing provenance, colours and size
-origins. Spatial/glyph layers retain intent, repeated instances, sources, defaults and
-coordinates. Attribute execution, geometry, header normalization, physical
-equivalence, X27 and scheduling remain open.
+with source guards. Main composition preserves AP/charset/provenance;
+same-service packing restores rows with exact pointers/capacity. Base/spatial/glyph traces retain fallback, intent, spacing, instances and sources.
+The consumed attribute executor separates four-group inheritance and panel
+defaults; C2/Adaptive endpoint diagnostics remain pending. Charset execution,
+overlap/geometry, header normalization, physical equivalence, X27 and scheduling
+remain open.
 X27 preserves masks/used S1; MOT retains full banks/defaults/raw fields and IDs.
 Derivation retains provenance/conflicts. A bounded compiled-header inventory fence
 rejects exact physical/logical-owner collisions.
