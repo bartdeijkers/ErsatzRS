@@ -987,6 +987,27 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 compiled physical page inventory checkpoint:
+validate_teletext_physical_page_inventory checks a supplied list of unique compiled
+display addresses and resource header metadata. Raw record count is fenced before
+map allocation. Physical keys preserve magazine 1-8, BCD/raw page byte and exact
+transmitted subcode; kind, control and lifecycle flags do not distinguish collisions.
+Resource owners additionally preserve exact raw page/S1 independently of counter/nn.
+Distinct kinds at different S1 remain legal; display subcodes are never truncated.
+Eleven focused tests pass in Nextest 65d9e1c0-08a0-47f9-9367-9591a37bc9ca
+(457 skipped). Actual empty DRCS/POP headers collide with display200:0100/0300;
+writer/header-reader tests also cover last rows, counters, MOT1500/1557, magazine
+eight/BCD, stable logical owners, raw budgets and unchanged borrowed input.
+Strict FFmpeg all-target Clippy, formatting, architecture/progress checks and
+independent review pass. No existing encoder bytes or runtime paths change;
+valid compiler/native evidence is reused. The final service compiler must supply
+all unique compiled pages including MOTs/empty companions. This primitive proves
+neither body correspondence, complete dependencies, generation ownership, carousel
+lifecycle nor publication readiness. Full composition, transport, client/editor/
+publication and Phase9 acceptance remain open. No milestone/dependency changes.
+
+Earlier second independent decoder checkpoint follows:
+
 2026-10-11 second independent local-object decoder checkpoint:
 The original correct three-case conformance request, including exact production
 units and glyph/colour expectations, passes teletextimager 0.2.0 at

@@ -71,7 +71,13 @@ The opt-in adapter verifies imported source hashes and uses the decoder's own
 packet reader; it adds no production dependency. This establishes representative
 direct local decoding, not full feature or interactive-client acceptance.
 Context-dependent row-zero positioning and base/enhancement composition remain
-required work. X27 native decoding has a separately
+required work. A bounded compiled-page identity fence now rejects exact physical
+display/resource header collisions and repeated logical resource owners, without
+reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions
+use actual empty DRCS/POP/MOT headers, counters/last rows and magazine-eight/BCD
+identities. The eventual complete compiler must supply every unique page; this
+primitive does not prove inventory completeness, lifecycle or publication.
+X27 native decoding has a separately
 reproduced version-specific gap; normative encoding is retained. Full external
 feature decoding and actual client display/navigation remain open.
 A bounded per-display MOT/X27 derivation now preserves selected context, exact

@@ -146,7 +146,10 @@ release section when tagging a release.
   and invocation offsets. Complete bounded POP/GPOP pages now retain exact
   pointers, definition markers, resource metadata and independent object state;
   local objects now share one bounded X26 sequence with exact forward selectors
-  and independent definition state. Complete service compilation remains open.
+  and independent definition state. A bounded compiled-page inventory check now
+  rejects exact display/resource header collisions and repeated logical resource
+  owners while preserving distinct-S1 identities. Complete service compilation
+  remains open.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

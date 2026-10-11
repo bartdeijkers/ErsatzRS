@@ -22,6 +22,7 @@ mod object_allocation;
 mod object_pages;
 mod output;
 mod packets;
+mod physical_inventory;
 mod pmt_install;
 mod presentation;
 mod psi;
@@ -72,6 +73,10 @@ pub use output::{
 };
 pub use packets::{
     encode_teletext_page, encode_teletext_page_set, EncodedTeletextPage, EncodedTeletextPageSet,
+};
+pub use physical_inventory::{
+    validate_teletext_physical_page_inventory, TeletextPhysicalPageInventoryError,
+    TeletextPhysicalPageInventoryRecord,
 };
 pub use pmt_install::{TeletextPmtInstallError, TeletextPmtInstallReport, TeletextPmtInstaller};
 pub use psi::{TeletextPsiDiscovery, TeletextPsiError};
@@ -176,6 +181,8 @@ mod object_pages_tests;
 // Intentional opt-in Linux x64 decoder-ABI calibration, not platform acceptance.
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod object_runtime_tests;
+#[cfg(test)]
+mod physical_inventory_tests;
 #[cfg(test)]
 mod pmt_install_tests;
 #[cfg(test)]

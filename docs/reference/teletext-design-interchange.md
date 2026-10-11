@@ -234,6 +234,35 @@ repertoires/expanded work and composition with base-derived glyph enhancements
 remain service obligations. This compiler does not replace or append to an
 arbitrary existing X26 sequence and carries no publication authority.
 
+### Compiled physical page inventory
+
+`validate_teletext_physical_page_inventory` fences an explicitly supplied list of
+unique compiled display addresses and resource header metadata. The trusted raw
+record count is checked before allocating collision indexes. Every physical key
+is logical magazine 1–8, the exact BCD/raw page byte and the complete transmitted
+subcode. Purpose, controls and lifecycle flags cannot distinguish colliding pages.
+Resources additionally retain one logical raw-page/S1 owner, independent of kind,
+update counter or last-packet `nn`. Different kinds at different S1 remain legal.
+
+The distinction matters after body compilation: an empty DRCS resource on raw
+page 200/S1=0 derives `nn=1` and physical subcode `0100`, colliding with display
+200:0100. Empty POP/GPOP derives `nn=3`, colliding with display 200:0300. Checking
+only logical S1 would miss both. MOT `nn=21` similarly produces `1500` at counter/
+S1 zero, rather than physical subcode zero. Nonzero MOT S1 remains supported.
+
+Callers supply each unique page once per generation, including MOTs and explicitly
+emitted empty companions; object references, retransmissions and continuation
+fragments are not additional inventory entries. Located diagnostics retain the
+two original record indices and exact collision identity without authored text.
+Eleven regressions use actual DRCS/POP/MOT writer headers and the independent
+header reader, covering exact subcodes, counters/last rows, logical owners,
+magazine eight, BCD and input-budget precedence.
+
+The fence does not verify body/header correspondence, dependency completeness,
+generation ownership, ordering or carousel timing, and returns no publication or
+readiness token. Wiring a complete compiled service through this fence remains
+required; the standalone semantic service does not synthesize these headers.
+
 ## Presentation and supplied service selection
 
 `TeletextLevel25PresentationDefaults` carries an assigned primary designation,
@@ -296,7 +325,7 @@ Input bytes remain bounded before parsing. Constructors return no partial servic
 and the checked result has no mutable/deserialization/publication bypass.
 
 MOT/X27 selection and default derivation, final display semantics,
-physical headers/pointers/collisions and enhanced encoding remain required later
+complete physical realization/inventory and enhanced encoding remain required later
 steps. A display subcode is not a resource logical S1. The existing base encoder
 must not be used to silently discard this aggregate's resources or override its
 non-Latin presentation. Operational v2 input, editor, preview and publication

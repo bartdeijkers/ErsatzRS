@@ -121,6 +121,11 @@ guarded; it is an opt-in proof tool, not a runtime dependency or navigation clie
 Full external feature decoding and suitable-client display/navigation remain due.
 Row-zero position lowering and base/enhancement composition remain required work,
 without permanent scope restrictions.
+A bounded physical inventory fence now compares exact compiled display/resource
+headers and stable logical resource owners. Eleven regressions cover actual
+empty-resource collisions, counter/last-row changes, magazine eight and MOTs.
+The final compiler must feed every unique page, including empty companions, into
+this check; service completeness and activation remain unimplemented.
 Bounded per-display MOT/X27 derivation now preserves role provenance, exact
 masks, original defaults/fallback and unresolved candidates for audited conflicts.
 It does not decide effective defaults or presentation.

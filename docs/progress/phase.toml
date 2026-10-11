@@ -1159,6 +1159,10 @@ pinned teletextimager 0.2.0 with guarded sources, exact type-specific glyph/colo
 behavior and unchanged base cells. It is an opt-in oracle, not a runtime dependency
 or client/navigation proof. Extended local/pointer decoding, row-zero lowering and base/enhancement
 composition remain required work.
+A bounded compiled-page inventory fence now rejects exact display/resource header
+collisions and repeated logical owners; eleven actual-header regressions pass.
+The final compiler must still supply all unique pages, including empty companions,
+and establish completeness/lifecycle before activation or publication.
 Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
 invocations and prove exact pixels/native
 offscreen rendering and isolated invalid-glyph fallback. X27 decoding limitations
