@@ -4,6 +4,9 @@ use ersatzrs_domain::*;
 
 use super::main_composition::*;
 
+#[path = "raster_tests.rs"]
+mod raster_tests;
+
 fn owner() -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(200).unwrap(),

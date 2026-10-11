@@ -195,8 +195,11 @@ release section when tagging a release.
   distinct. Agreeing contending size flags now establish geometry while keeping
   unresolved writer provenance. A bounded raw-position call/write scan rejects
   proven successive-opening overflow, retaining intervening child writes and
-  pending reset evidence. Pending boundaries/order and full rasterization, physical equivalence,
-  client/editor workflows and publication acceptance stay open.
+  pending reset evidence. Known cells now rasterize with pinned MIT teletext fonts,
+  exact DRCS, original fragments and selected palette/video planes. Authored
+  Unicode keeps Base priority; unresolved cells retain located diagnostics.
+  Complete rendering, physical equivalence, client/editor workflows and
+  publication acceptance stay open.
   Known inclusive raw object intervals now reject sixteen simultaneous opens
   across all object types with original call diagnostics; unresolved intervals
   remain visible and full overlap/admission validation remains open.

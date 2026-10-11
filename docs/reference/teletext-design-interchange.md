@@ -878,6 +878,74 @@ review pass. These results do not resolve mixed-source transmission order,
 plane-reset placement, complete A.8 admission or full renderer/editor/client/
 publication acceptance.
 
+### Diagnostic raster from the original composition
+
+`render_teletext_composition` consumes the same immutable unpublished
+`TeletextMainComposition` as composed packet lowering. Its host-only
+`TeletextRasterBudget` bounds pixels and diagnostics before output allocation.
+Known cells yield RGB4 or video pixels; unresolved cells refer to one original
+located diagnostic per visual cell. Page/subcode, visual and original positions,
+candidate, command/root and invocation remain separate. The first eight header
+cells currently remain unresolved because receiver-generated header fields have
+not been supplied. This diagnostic output is not an admitted browser page or a
+publication capability.
+
+The domain mask lookup embeds 28 pinned MIT bitmap tables: seven G0 families,
+thirteen Latin national subsets, four G2 families, G3, contiguous/separated G1
+and reduced Latin capitals. All masks are twelve by ten, matching exact DRCS
+bitmap geometry. G1 alphabetic identities use current G0, never a mosaic font.
+Base Unicode replacement masks reuse the existing Latin encoder mapping at Base
+priority; an Active glyph still overrides them. The selected fragment determines
+normal/double-width/double-height/double-size pixel sampling, independently of
+requested size flags. Sparse DRCS records must match the exact scope/subtable/
+slot from this composition. Coincident identities in another service cannot
+change retained masks or palettes.
+
+`TeletextColourComposition` retains fixed CLUT0/1, selected CLUT2/3, row and screen
+planes and page kind. CLUT1 uses seven-fifteenths intensity; its first entry is
+transparent. C.1 chooses foreground/background, row colour or video based on
+boxing and subtitle/newsflash flags; transparent is not an unconditional alpha
+clear. Colours already remapped by original execution are not remapped again.
+Conceal/reveal and supplied flash phase select pixels deterministically, without
+inventing a clock epoch. Steady inversion swaps final logical colour references.
+Joint inversion/non-steady flash remains a located unresolved interaction.
+Table 4's explicit-background requirement for window/colour-table-flash
+parameters still requires source-aware authoring proof; a materialized tuple
+alone is insufficient.
+
+Table 29 D5 separates G1 mosaics and underlines alphanumerics, including SPACE
+and spacing cells displayed as SPACE. This raster chooses the full bottom mask
+row before enlargement. G3/DRCS remain unchanged for their undefined D5 response;
+Annex G.2 permits decoder-specific non-DRCS/underline appearance. Exact atlas
+shapes are a font policy, not normative pixel geometry. Non-Latin/mixed-pair
+composite shaping remains an explicit unresolved support requirement; the actual
+current G0/G2 is preserved rather than substituted with a Latin mark.
+
+The [bitmap provenance](../../crates/ersatzrs-domain/src/teletext/font_data/PROVENANCE.md)
+records pin, input hashes, table ordering, license and reproducible stdlib import.
+The immutable 53,760-byte binary has SHA-256
+`34a8859adad3c488a03c4f8e53abe45bd7f25cb4926594f179d74bffc0e83c7a`.
+`import_glyph_masks.py --check` reproduces it without installing the decoder,
+Pillow or any production runtime dependency. Changed pinned source bytes reject
+before output creation. The root distribution license carries the complete MIT
+notice alongside the unchanged ErsatzRS zlib notice.
+
+All 765 selected domain/FFmpeg teletext tests pass
+(`6ba0fd90-22ce-49a7-8b89-2f196a73c58a`): nine new mask, eleven C.1/colour and
+nine actual-composition raster tests cover literal masks, both DRCS scopes,
+original/visual panel mapping, different palettes simultaneously, Unicode Base
+priority, fragment enlargement, D5 and bounded located diagnostics. Strict
+all-target Clippy, formatting, architecture/progress and independent source/test
+review pass. All eight native checks pass
+(`24496ffc-8e23-4036-bde4-0a857db0a899`), with the same nine producer requests and
+hashes recorded above. That reuses existing independent assignment/fragment
+proof, not an independent pixel proof for this new raster. Borrowed atlas versus
+teletextimager shape equality would only prove self-consistency. Full physical
+normalization, independent representative raster decoding, suitable-client
+actual display/navigation, localized headed preview, TTI editor/publication and
+engine acceptance remain open. No milestone contract or permanent restriction
+changes.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

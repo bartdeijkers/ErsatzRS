@@ -32,6 +32,7 @@ mod presentation;
 mod psi;
 mod psi_framing;
 mod psi_monitor;
+mod raster;
 mod resource_pages;
 mod signalling;
 pub mod source_assembly;
@@ -40,6 +41,8 @@ pub mod source_pes;
 mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
+
+pub use raster::*;
 
 pub use base_display::{TeletextBaseDisplayError, TeletextBaseDisplayFailure};
 pub use buffer::{TeletextBufferError, TeletextPacketBuffer};

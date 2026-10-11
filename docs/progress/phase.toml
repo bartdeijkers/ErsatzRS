@@ -1209,9 +1209,13 @@ older uncovered fragments intact; attribute-only work preserves background-only
 cells. Equal size flags now establish geometry without choosing a writer; a
 bounded raw-position call/write scan rejects proven successive overflow while
 preserving intervening child writes and ambiguous reset evidence.
-Next settle pending source/size/extent evidence, complete A.7/A.8 admission
-and glyph rasterization, then physical normalization and full engine/client/editor/
-publication proof. No milestone acceptance or permanent restriction is implied.
+Known original cells now produce bounded RGB4/video raster pixels using pinned
+MIT masks, exact DRCS, effective fragments and selected C.1 colour planes.
+Unicode replacements keep Base priority; pending cells retain located diagnostics.
+Next supply receiver headers, settle source/size/extent and composite evidence,
+verify joint invert/flash and explicit-background parameters, complete A.7/A.8
+admission, then normalize physical instructions and prove full engine/client/editor/
+publication workflows. No milestone acceptance or permanent restriction is implied.
 Checked G1 alphabet positions now preserve original mode 0x01, source/invocation
 and Base fallback. Selected Latin @/_ cells pass independent libzvbi 0.2.42;
 pinned imager's empty alphabet-font limitation is a separate diagnostic, with

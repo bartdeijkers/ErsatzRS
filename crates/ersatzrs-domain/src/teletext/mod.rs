@@ -160,5 +160,15 @@ mod display_resolution_writers;
 pub use display_resolution::*;
 pub use display_resolution_values::*;
 
+mod colour_composition;
+mod glyph_mask;
+pub use colour_composition::*;
+pub use glyph_mask::*;
+
+#[cfg(test)]
+mod colour_composition_tests;
+#[cfg(test)]
+mod glyph_mask_tests;
+
 #[cfg(test)]
 mod display_resolution_tests;

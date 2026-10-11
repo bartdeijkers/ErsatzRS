@@ -12,12 +12,13 @@ use std::collections::BTreeMap;
 use ersatzrs_domain::{
     build_teletext_glyph_layers, resolve_teletext_attribute_execution,
     resolve_teletext_base_footprints, resolve_teletext_charset_execution,
-    resolve_teletext_display_geometry, resolve_teletext_display_resolution,
-    resolve_teletext_drcs_execution, resolve_teletext_glyph_intent, resolve_teletext_spatial_trace,
-    TeletextAttributeExecution, TeletextAttributeExecutionError, TeletextBaseDisplay,
-    TeletextBaseFootprintError, TeletextBaseFootprints, TeletextCharsetExecution,
-    TeletextCharsetExecutionError, TeletextCharsetPair, TeletextCharsetValueError,
-    TeletextCollectedEnhancementReferences, TeletextColumnOperation, TeletextDisplayGeometry,
+    resolve_teletext_colour_composition, resolve_teletext_display_geometry,
+    resolve_teletext_display_resolution, resolve_teletext_drcs_execution,
+    resolve_teletext_glyph_intent, resolve_teletext_spatial_trace, TeletextAttributeExecution,
+    TeletextAttributeExecutionError, TeletextBaseDisplay, TeletextBaseFootprintError,
+    TeletextBaseFootprints, TeletextCharsetExecution, TeletextCharsetExecutionError,
+    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
+    TeletextColourComposition, TeletextColumnOperation, TeletextDisplayGeometry,
     TeletextDisplayGeometryBudget, TeletextDisplayGeometryError, TeletextDisplayResolution,
     TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
     TeletextDisplayResolutionInputs, TeletextDrcsExecution, TeletextDrcsExecutionBudget,
@@ -160,10 +161,27 @@ pub struct TeletextMainComposition {
     drcs_execution: TeletextDrcsExecution,
     display_geometry: TeletextDisplayGeometry,
     display_resolution: TeletextDisplayResolution,
+    colour_composition: TeletextColourComposition,
+    base_replacements: Vec<PositionedBaseGlyph>,
     collected: TeletextCollectedEnhancementReferences,
 }
 
 impl TeletextMainComposition {
+    /// The palette and C.1 planes selected by the same immutable service as
+    /// the original display. This does not grant publication authority.
+    #[must_use]
+    pub const fn colour_composition(&self) -> &TeletextColourComposition {
+        &self.colour_composition
+    }
+
+    pub(super) fn base_replacement(&self, row: u8, column: u8) -> Option<TeletextColumnOperation> {
+        self.base_replacements
+            .binary_search_by_key(&(row, column), |glyph| {
+                (glyph.position().row(), glyph.position().column())
+            })
+            .ok()
+            .map(|index| TeletextColumnOperation::from(&self.base_replacements[index]))
+    }
     #[must_use]
     pub const fn owner(&self) -> TeletextPageAddress {
         self.owner
@@ -296,27 +314,17 @@ pub fn compose_teletext_main_program(
         0,
         budget.max_input_commands,
     )?;
-    let page = service
-        .base()
-        .pages
-        .iter()
-        .find(|page| page.address == owner)
-        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
-    let layout = layout::compile_for_composition(page)
-        .map_err(|reason| error(owner, None, reason.into()))?;
-    check_input(
+    let BaseInputs {
+        page,
+        layout,
+        presentation,
+        primary,
+    } = checked_base_inputs(
+        service,
         owner,
         original.commands().len(),
-        layout.base_glyphs().len(),
         budget.max_input_commands,
     )?;
-    let presentation = service
-        .effective_presentation(owner)
-        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
-    let primary = presentation
-        .primary_designation()
-        .and_then(|value| TeletextEnhancementCharsetDesignation::new(value.get()))
-        .map_err(|reason| error(owner, None, reason.into()))?;
     let input = MergeInput {
         owner,
         original: &original,
@@ -369,6 +377,13 @@ pub fn compose_teletext_main_program(
         &source,
         budget.collection.max_commands,
     )?;
+    let colour_composition = resolve_teletext_colour_composition(
+        &display_resolution,
+        presentation,
+        colour_context.row_colours(),
+        colour_context.screen_colour(),
+        page.kind,
+    );
     Ok(TeletextMainComposition {
         owner,
         original_program_source: source,
@@ -385,7 +400,46 @@ pub fn compose_teletext_main_program(
         drcs_execution: original_display.drcs,
         display_geometry: original_display.geometry,
         display_resolution,
+        colour_composition,
+        base_replacements: layout.base_glyphs().to_vec(),
         collected,
+    })
+}
+
+struct BaseInputs<'a> {
+    page: &'a ersatzrs_domain::TeletextPageDraft,
+    layout: layout::Layout,
+    presentation: ersatzrs_domain::TeletextEffectivePresentation<'a>,
+    primary: TeletextEnhancementCharsetDesignation,
+}
+
+fn checked_base_inputs(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    command_count: usize,
+    maximum: usize,
+) -> Result<BaseInputs<'_>, TeletextMainCompositionError> {
+    let page = service
+        .base()
+        .pages
+        .iter()
+        .find(|page| page.address == owner)
+        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
+    let layout = layout::compile_for_composition(page)
+        .map_err(|reason| error(owner, None, reason.into()))?;
+    check_input(owner, command_count, layout.base_glyphs().len(), maximum)?;
+    let presentation = service
+        .effective_presentation(owner)
+        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
+    let primary = presentation
+        .primary_designation()
+        .and_then(|value| TeletextEnhancementCharsetDesignation::new(value.get()))
+        .map_err(|reason| error(owner, None, reason.into()))?;
+    Ok(BaseInputs {
+        page,
+        layout,
+        presentation,
+        primary,
     })
 }
 

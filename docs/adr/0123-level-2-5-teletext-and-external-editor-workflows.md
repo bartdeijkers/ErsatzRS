@@ -144,6 +144,21 @@ boundaries and ambiguous inherited Adaptive non-origin sizing remain located
 pending evidence. The interchange reference owns the precise API and decoder
 limitations. This does not accept glyph rasterization, full A.7/A.8 admission,
 physical equivalence, suitable-client display, editor workflow or publication.
+A consumed diagnostic raster now uses that exact unpublished composition's
+original glyph identities, fragments, DRCS records and selected colour planes.
+Pinned MIT font bitmap data supplies twelve-by-ten masks without an external
+renderer or runtime font acquisition. Base Unicode replacements retain Base
+priority; they never become Local contenders. Fixed/selected CLUTs and C.1
+transparency are distinct from video alpha. Pixel and diagnostic budgets are host
+policy; unresolved cells carry original locations instead of guessed glyphs.
+Annex G.2 permits font/underline shape choices; D5 separates G1 mosaics and
+underlines ordinary alphanumerics, with G3/DRCS unchanged as an explicit decoder
+policy for their undefined response. Missing receiver-generated header fields,
+unverified non-Latin/mixed composites, joint invert/flash ordering and Table 4's
+explicit-background parameter evidence remain open. Borrowed atlas/imager shape
+equality is self-consistency, not independent raster acceptance. The retained MIT
+notice is included in the root distribution license. This adds no publication
+permission, permanent feature restriction or milestone acceptance waiver.
 G1 alphabetic positions now have a separate checked operation, preserving mode
 0x01 rather than promoting them to a Level 1.5-compatible character command.
 Original glyph/Passive attribute execution retains this intent; composition keeps
