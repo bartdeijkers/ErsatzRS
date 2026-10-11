@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Add durable teletext original-design revisions with bounded, exact source
+  preservation, atomic revision checks and retained deletion tombstones. Restore
+  historical previews through the same complete native compiler without running
+  removed packages or changing the broadcast. This preparatory API grants no
+  editor permissions; localized editing and explicit publication remain open.
 - Add typed teletext page/subpage drafts with checked identities, literal text
   and mosaic runs, style and navigation. Validate layout and internal references
   without truncating content. Encode bounded Western Latin DVB page packets with

@@ -3545,3 +3545,49 @@ fixtures, results and limitations. Localized headed Chromium/Firefox, hydrated/
 no-JS and light/dark evidence is required for changed admin. A valid file, a draft,
 a browser preview, a transport check and a published client result are separate
 claims. Kodi is optional; TSDuck alone does not prove Level 2.5 display.
+
+
+### Durable original-document capture and historical preview
+
+The native host can capture a complete cold channel candidate as a named design
+without publishing it. The private version-1 envelope retains exact UTF-8 V1/V2
+response bytes in binding order, historical selection/install pins and unresolved
+settings, original correlation, exact entry, actual V1 lift region and explicit
+resource lifecycle. It is private database content, not an editor sidecar or a
+publication receipt. Debug/errors omit authored text, labels and settings.
+
+`save_original_teletext_design_candidate` only accepts the compiler-owned private
+candidate. Capture and exact-document SHA-256 confirmation run on joined blocking
+workers. The application requires that native confirmation before repository CAS.
+The fresh deadline bounds CPU/admission; after admission, SQLite waiting and commit
+use the existing transaction/timeout contract. A committed save is never reported
+as undone because the admission deadline elapsed during database I/O.
+
+The additive `TeletextDesign` head and immutable `TeletextDesignRevision` tables
+retain exact bounded documents and repository-computed digests. Creation starts at
+revision 1; editing requires the exact live head. Immediate transactions make
+head advancement and revision insertion atomic. Conflicts, revision overflow and
+insertion failures preserve the old head. Tombstones retain immutable revisions;
+profile, package and channel deletion do not cascade into designs. Reads bound
+text/body and type-check numeric fields in SQL before allocation. Corrupt,
+unsupported, digest-mismatched and oversized records are errors, not missing data.
+
+`reload_original_teletext_design_revision` reparses those original documents and
+uses the same cold producer composition and complete native encoder under a fresh
+CPU deadline. Saved exact entry/region/lifecycle override caller content defaults;
+caller policy still supplies trusted validation/composition/encoding bounds. Reload
+requires no installed package invocation and grants no current-selection or warm
+resource history authority. Existing migration checksum/dirty/downgrade health
+checks cover this additive migration through normal schema startup.
+
+The initial explicit edit policy is `policy_version: 1, kind: original_only`:
+capture grants no editing permissions. This is a preparatory original-preservation
+operation, not a permanent authoring restriction or TTI/editing acceptance. Free
+editing, zones, templates, dynamic-field boundaries, server-owned export receipts
+and the explicit addon-version workflow remain required implementation. No request
+flag, imported metadata or unresolved settings may broaden that policy.
+
+This API seam has no admin controls or automatic transmission. Explicit publication
+still needs an immutable design/revision/digest, fresh whole-channel and resource
+ownership fences and the durable promotion owner. The representative localized
+preview/publication/client flow and full independent engine acceptance remain open.

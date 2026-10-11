@@ -44,6 +44,8 @@ const GENERATION: &str = "native-profile-generation";
 
 #[path = "teletext_profile_preparation/channel_documents.rs"]
 mod channel_documents;
+#[path = "teletext_profile_preparation/designs.rs"]
+mod designs;
 #[path = "teletext_profile_preparation/documents.rs"]
 mod documents;
 const SCRIPT: &str = r#"case "$1" in
@@ -241,6 +243,75 @@ struct Fixture {
 }
 
 impl Fixture {
+    async fn new_persistent() -> Self {
+        let root = tempfile::tempdir().unwrap();
+        let pool = Self::open_persistent_pool(root.path()).await;
+        sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+        seed_channels(&pool).await;
+        seed_package(&pool, root.path()).await;
+        let (state, playout) = Self::state_from_pool(pool);
+        state
+            .application
+            .enable_addon(ADDON.to_owned())
+            .await
+            .unwrap();
+        Self {
+            root,
+            state,
+            playout,
+        }
+    }
+
+    async fn open_persistent_pool(root: &Path) -> SqlitePool {
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(root.join("designs.sqlite"))
+                    .create_if_missing(true)
+                    .foreign_keys(true),
+            )
+            .await
+            .unwrap()
+    }
+
+    fn state_from_pool(pool: SqlitePool) -> (AppState, UnboundedReceiver<PlayoutBuildRequest>) {
+        let (sender, playout) = mpsc::unbounded_channel();
+        let state = AppState::new(
+            pool,
+            DatabaseBackend::Sqlite,
+            SystemStartup {
+                database_ready: true,
+                schema_status: DatabaseSchemaStatus::default(),
+            },
+            ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
+            Uuid::nil(),
+            2,
+            IptvAccessTokenVerifier::disabled(),
+            sender,
+            EntityLocker::new(),
+        );
+        (state, playout)
+    }
+
+    async fn reopen(self) -> Self {
+        let Self {
+            root,
+            state,
+            playout,
+        } = self;
+        state.pool.close().await;
+        drop(state);
+        drop(playout);
+        let pool = Self::open_persistent_pool(root.path()).await;
+        let (state, playout) = Self::state_from_pool(pool);
+        Self {
+            root,
+            state,
+            playout,
+        }
+    }
+
     async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let pool = SqlitePoolOptions::new()

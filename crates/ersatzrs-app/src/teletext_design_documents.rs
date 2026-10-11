@@ -1,0 +1,1206 @@
+//! Private original-document storage for ADR 0123, without invocation authority.
+//!
+//! Structural acceptance is not native compiler, edit-policy or publication
+//! acceptance. Complete host validation before CAS/reload remains mandatory.
+
+use crate::{
+    teletext_pages::parse_page_set,
+    teletext_pages_v2::parse_declared_service,
+    teletext_profile_documents::{
+        TeletextProfileDocument, TeletextProfileDocumentBudget, TeletextValidatedDocumentSource,
+    },
+};
+use ersatzrs_domain::{
+    validate_teletext_profile_values, EntityId, TeletextChannelSelectionSnapshot,
+    TeletextInstallationSnapshot, TeletextPageAddress, TeletextPageContract, TeletextPageNumber,
+    TeletextProfileSetting, TeletextProfileValue, TeletextResourceIdentity,
+    TeletextResourceUpdateCounter, TeletextSecretReferenceKind, TeletextSelectionSnapshot,
+    TeletextSubcode, MAX_TELETEXT_PROFILE_SETTINGS, TELETEXT_DESIGN_DOCUMENT_VERSION,
+};
+use serde::{
+    de::{DeserializeSeed, MapAccess, SeqAccess, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
+use std::{collections::BTreeSet, fmt, io, marker::PhantomData, mem::size_of};
+
+const MAX_BINDINGS: usize = 1024;
+const MAX_DEPTH: usize = 32;
+
+/// Trusted storage limits, separate from producer/model and native admission.
+#[derive(Debug, Clone, Copy)]
+pub struct TeletextDesignDocumentBudget {
+    pub max_serialized_bytes: usize,
+    pub max_documents: usize,
+    pub max_response_bytes: usize,
+    pub max_context_bytes: usize,
+    pub max_context_field_bytes: usize,
+    pub max_resource_transmissions: usize,
+    pub validation: TeletextProfileDocumentBudget,
+}
+
+/// Explicit region actually used by original V1 lift, not a V2 restriction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TeletextSavedV1Region {
+    WesternLatin,
+}
+impl<'de> Deserialize<'de> for TeletextSavedV1Region {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match String::deserialize(deserializer)?.as_str() {
+            "western_latin" => Ok(Self::WesternLatin),
+            _ => Err(serde::de::Error::custom("unknown saved region")),
+        }
+    }
+}
+
+/// Explicit host encoding input, not evidence of warm receiver history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TeletextSavedResourceUpdate {
+    Changed,
+    Unchanged,
+}
+impl<'de> Deserialize<'de> for TeletextSavedResourceUpdate {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match String::deserialize(deserializer)?.as_str() {
+            "changed" => Ok(Self::Changed),
+            "unchanged" => Ok(Self::Unchanged),
+            _ => Err(serde::de::Error::custom("unknown saved update")),
+        }
+    }
+}
+
+/// Original host lifecycle record. Exact resource coverage belongs to the host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct TeletextSavedResourceTransmission {
+    pub resource: TeletextResourceIdentity,
+    pub counter: TeletextResourceUpdateCounter,
+    pub update: TeletextSavedResourceUpdate,
+    pub last_subpage: bool,
+}
+
+/// Original capture grants no editor/import/template/zone edit permissions.
+/// Full editing policies remain a separately implemented versioned requirement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeletextSavedEditPolicy {
+    OriginalOnly,
+}
+
+/// Borrow one complete candidate and its actual, explicit encoding inputs.
+/// Structural association checks do not certify a detached candidate pairing.
+#[derive(Clone, Copy)]
+pub struct TeletextDesignDocumentInput<'a> {
+    pub selection: &'a TeletextChannelSelectionSnapshot,
+    pub generation: &'a str,
+    pub sources: &'a [TeletextValidatedDocumentSource],
+    pub entry_addon_id: Option<&'a str>,
+    pub entry: Option<TeletextPageAddress>,
+    pub v1_region: Option<TeletextSavedV1Region>,
+    pub resource_transmissions: &'a [TeletextSavedResourceTransmission],
+}
+impl fmt::Debug for TeletextDesignDocumentInput<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextDesignDocumentInput")
+            .field("documents", &self.sources.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Private storage bytes, never an editor sidecar or publication token.
+pub struct EncodedTeletextDesignDocuments {
+    bytes: Vec<u8>,
+}
+impl EncodedTeletextDesignDocuments {
+    #[must_use]
+    pub const fn version(&self) -> u16 {
+        TELETEXT_DESIGN_DOCUMENT_VERSION
+    }
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+    #[must_use]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+impl fmt::Debug for EncodedTeletextDesignDocuments {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EncodedTeletextDesignDocuments")
+            .field("bytes", &self.bytes.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Historical source bytes, distinct from an authenticated invocation receipt.
+pub struct TeletextSavedDocumentSource {
+    contract: TeletextPageContract,
+    generation: String,
+    bytes: Vec<u8>,
+}
+impl TeletextSavedDocumentSource {
+    #[must_use]
+    pub const fn contract(&self) -> TeletextPageContract {
+        self.contract
+    }
+    #[must_use]
+    pub fn generation(&self) -> &str {
+        &self.generation
+    }
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+impl fmt::Debug for TeletextSavedDocumentSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextSavedDocumentSource")
+            .field("contract", &self.contract)
+            .field("bytes", &self.bytes.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Historical originals and context; no current selection/deadline authority.
+pub struct RestoredTeletextDesignDocuments {
+    parts: TeletextRestoredDesignDocumentParts,
+}
+/// Consuming native reconstruction inputs, still unpublished historical data.
+pub struct TeletextRestoredDesignDocumentParts {
+    pub selection: TeletextChannelSelectionSnapshot,
+    pub generation: String,
+    pub sources: Vec<TeletextSavedDocumentSource>,
+    pub documents: Vec<TeletextProfileDocument>,
+    pub entry_addon_id: Option<String>,
+    pub entry: Option<TeletextPageAddress>,
+    pub v1_region: Option<TeletextSavedV1Region>,
+    pub resource_transmissions: Vec<TeletextSavedResourceTransmission>,
+    pub edit_policy: TeletextSavedEditPolicy,
+}
+impl RestoredTeletextDesignDocuments {
+    #[must_use]
+    pub const fn selection(&self) -> &TeletextChannelSelectionSnapshot {
+        &self.parts.selection
+    }
+    #[must_use]
+    pub fn generation(&self) -> &str {
+        &self.parts.generation
+    }
+    #[must_use]
+    pub fn sources(&self) -> &[TeletextSavedDocumentSource] {
+        &self.parts.sources
+    }
+    #[must_use]
+    pub fn documents(&self) -> &[TeletextProfileDocument] {
+        &self.parts.documents
+    }
+    #[must_use]
+    pub fn entry_addon_id(&self) -> Option<&str> {
+        self.parts.entry_addon_id.as_deref()
+    }
+    #[must_use]
+    pub const fn entry(&self) -> Option<TeletextPageAddress> {
+        self.parts.entry
+    }
+    #[must_use]
+    pub const fn v1_region(&self) -> Option<TeletextSavedV1Region> {
+        self.parts.v1_region
+    }
+    #[must_use]
+    pub fn resource_transmissions(&self) -> &[TeletextSavedResourceTransmission] {
+        &self.parts.resource_transmissions
+    }
+    #[must_use]
+    pub const fn edit_policy(&self) -> TeletextSavedEditPolicy {
+        self.parts.edit_policy
+    }
+    #[must_use]
+    pub fn into_parts(self) -> TeletextRestoredDesignDocumentParts {
+        self.parts
+    }
+}
+impl fmt::Debug for TeletextRestoredDesignDocumentParts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextRestoredDesignDocumentParts")
+            .field("documents", &self.documents.len())
+            .field("resources", &self.resource_transmissions.len())
+            .finish_non_exhaustive()
+    }
+}
+impl fmt::Debug for RestoredTeletextDesignDocuments {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.parts.fmt(f)
+    }
+}
+
+/// Static/numeric failure, without raw JSON, keys, settings or source text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("saved teletext documents at binding {binding:?}: {reason}")]
+pub struct TeletextDesignDocumentError {
+    pub binding: Option<usize>,
+    pub reason: TeletextDesignDocumentFailure,
+}
+/// No raw parser messages or producer text escape this boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum TeletextDesignDocumentFailure {
+    #[error("invalid closed storage JSON")]
+    Json,
+    #[error("unknown saved document version")]
+    Version,
+    #[error("invalid original-only edit policy")]
+    EditPolicy,
+    #[error("invalid historical selection")]
+    Context,
+    #[error("original documents do not match historical selection")]
+    Association,
+    #[error("invalid original correlation or response")]
+    Source,
+    #[error("original document failed structural validation")]
+    Document,
+    #[error("invalid original entry")]
+    Entry,
+    #[error("invalid original V1 region presence")]
+    Region,
+    #[error("duplicate original resource lifecycle")]
+    Lifecycle,
+    #[error("saved document nesting is too deep")]
+    Depth,
+    #[error("saved document storage arithmetic overflow")]
+    Storage,
+    #[error("{dimension} count {count} exceeds maximum {maximum}")]
+    Budget {
+        dimension: &'static str,
+        count: usize,
+        maximum: usize,
+    },
+}
+fn failure(reason: TeletextDesignDocumentFailure) -> TeletextDesignDocumentError {
+    TeletextDesignDocumentError {
+        binding: None,
+        reason,
+    }
+}
+fn limit(
+    count: usize,
+    maximum: usize,
+    dimension: &'static str,
+) -> Result<(), TeletextDesignDocumentError> {
+    if count > maximum {
+        return Err(failure(TeletextDesignDocumentFailure::Budget {
+            dimension,
+            count,
+            maximum,
+        }));
+    }
+    Ok(())
+}
+fn storage<T>(count: usize) -> Result<(), TeletextDesignDocumentError> {
+    let bytes = count
+        .checked_mul(size_of::<T>())
+        .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
+    limit(bytes, isize::MAX as usize, "storage")
+}
+
+// Local map-only DTOs avoid adding Serde to invocation or checked snapshot types.
+macro_rules! stored_map {
+    ($name:ident { $($field:ident: $ty:ty),* $(,)? }) => {
+        #[derive(Serialize)] struct $name { $($field: $ty),* }
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                #[derive(Deserialize)] #[serde(deny_unknown_fields)] struct Fields { $($field: $ty),* }
+                let fields: Fields = map_only(deserializer)?;
+                Ok(Self { $($field: fields.$field),* })
+            }
+        }
+    };
+}
+fn map_only<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<T, D::Error> {
+    struct Object<T>(PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> Visitor<'de> for Object<T> {
+        type Value = T;
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a saved object")
+        }
+        fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<T, A::Error> {
+            T::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+        }
+    }
+    deserializer.deserialize_map(Object(PhantomData))
+}
+#[derive(Serialize)]
+struct Required<T>(Option<T>);
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Required<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Nullable<T>(PhantomData<T>);
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for Nullable<T> {
+            type Value = Required<T>;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a required null, string or object")
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(Required(None))
+            }
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                T::deserialize(serde::de::value::StrDeserializer::<E>::new(value))
+                    .map(|value| Required(Some(value)))
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                T::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+                    .map(|value| Required(Some(value)))
+            }
+        }
+        // deserialize_any (not deserialize_option) makes missing fields fail.
+        deserializer.deserialize_any(Nullable(PhantomData))
+    }
+}
+stored_map!(Envelope { format_version: u16, selection: Selection, generation: String,
+    entry_addon_id: Required<String>, entry: Required<Entry>, v1_region: Required<TeletextSavedV1Region>,
+    edit_policy: EditPolicy, resource_transmissions: Vec<Transmission>, documents: Vec<Document> });
+stored_map!(Selection { channel_id: EntityId, bindings: Vec<Member> });
+stored_map!(Member { contract: u32, channel_id: EntityId, addon_id: String, binding_revision: i64,
+    profile_id: EntityId, profile_revision: i64, installation: Installation, effective_settings: Vec<Setting> });
+stored_map!(Installation {
+    addon_id: String,
+    state_revision: String,
+    version: String,
+    package_sha256: String,
+    content_sha256: String,
+    manifest_sha256: String
+});
+stored_map!(Setting {
+    key: String,
+    value: SettingValue
+});
+stored_map!(SettingValue {
+    kind: String,
+    value: String
+});
+stored_map!(Document {
+    contract: u32,
+    generation: String,
+    response: String
+});
+stored_map!(Entry {
+    page: TeletextPageNumber,
+    subcode: TeletextSubcode
+});
+stored_map!(EditPolicy {
+    policy_version: u16,
+    kind: String
+});
+stored_map!(Transmission {
+    resource: TeletextResourceIdentity,
+    counter: TeletextResourceUpdateCounter,
+    update: TeletextSavedResourceUpdate,
+    last_subpage: bool
+});
+
+impl From<&TeletextInstallationSnapshot> for Installation {
+    fn from(v: &TeletextInstallationSnapshot) -> Self {
+        Self {
+            addon_id: v.addon_id.clone(),
+            state_revision: v.state_revision.clone(),
+            version: v.version.clone(),
+            package_sha256: v.package_sha256.clone(),
+            content_sha256: v.content_sha256.clone(),
+            manifest_sha256: v.manifest_sha256.clone(),
+        }
+    }
+}
+impl From<Installation> for TeletextInstallationSnapshot {
+    fn from(v: Installation) -> Self {
+        Self {
+            addon_id: v.addon_id,
+            state_revision: v.state_revision,
+            version: v.version,
+            package_sha256: v.package_sha256,
+            content_sha256: v.content_sha256,
+            manifest_sha256: v.manifest_sha256,
+        }
+    }
+}
+impl From<&TeletextProfileSetting> for Setting {
+    fn from(v: &TeletextProfileSetting) -> Self {
+        let (kind, text) = match &v.value {
+            TeletextProfileValue::Literal(text) => ("literal", text),
+            TeletextProfileValue::SecretReference {
+                kind: TeletextSecretReferenceKind::Environment,
+                reference,
+            } => ("environment", reference),
+            TeletextProfileValue::SecretReference {
+                kind: TeletextSecretReferenceKind::File,
+                reference,
+            } => ("file", reference),
+        };
+        Self {
+            key: v.key.clone(),
+            value: SettingValue {
+                kind: kind.to_owned(),
+                value: text.clone(),
+            },
+        }
+    }
+}
+impl Setting {
+    fn into_domain(self) -> Result<TeletextProfileSetting, TeletextDesignDocumentError> {
+        let value = match self.value.kind.as_str() {
+            "literal" => TeletextProfileValue::Literal(self.value.value),
+            "environment" => TeletextProfileValue::SecretReference {
+                kind: TeletextSecretReferenceKind::Environment,
+                reference: self.value.value,
+            },
+            "file" => TeletextProfileValue::SecretReference {
+                kind: TeletextSecretReferenceKind::File,
+                reference: self.value.value,
+            },
+            _ => return Err(failure(TeletextDesignDocumentFailure::Context)),
+        };
+        Ok(TeletextProfileSetting {
+            key: self.key,
+            value,
+        })
+    }
+}
+fn contract(value: u32) -> Result<TeletextPageContract, TeletextDesignDocumentError> {
+    match value {
+        1 => Ok(TeletextPageContract::V1),
+        2 => Ok(TeletextPageContract::V2),
+        _ => Err(failure(TeletextDesignDocumentFailure::Context)),
+    }
+}
+impl From<&TeletextSelectionSnapshot> for Member {
+    fn from(v: &TeletextSelectionSnapshot) -> Self {
+        Self {
+            contract: v.contract.schema_version(),
+            channel_id: v.channel_id,
+            addon_id: v.addon_id.clone(),
+            binding_revision: v.binding_revision,
+            profile_id: v.profile_id,
+            profile_revision: v.profile_revision,
+            installation: Installation::from(&v.installation),
+            effective_settings: v.effective_settings.iter().map(Setting::from).collect(),
+        }
+    }
+}
+impl Member {
+    fn into_domain(self) -> Result<TeletextSelectionSnapshot, TeletextDesignDocumentError> {
+        Ok(TeletextSelectionSnapshot {
+            contract: contract(self.contract)?,
+            channel_id: self.channel_id,
+            addon_id: self.addon_id,
+            binding_revision: self.binding_revision,
+            profile_id: self.profile_id,
+            profile_revision: self.profile_revision,
+            installation: self.installation.into(),
+            effective_settings: self
+                .effective_settings
+                .into_iter()
+                .map(Setting::into_domain)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+#[derive(Serialize)]
+struct BorrowedDocument<'a> {
+    contract: u32,
+    generation: &'a str,
+    response: &'a str,
+}
+#[derive(Serialize)]
+struct BorrowedEnvelope<'a> {
+    format_version: u16,
+    selection: Selection,
+    generation: &'a str,
+    entry_addon_id: Option<&'a str>,
+    entry: Option<Entry>,
+    v1_region: Option<TeletextSavedV1Region>,
+    edit_policy: EditPolicy,
+    resource_transmissions: &'a [TeletextSavedResourceTransmission],
+    documents: Vec<BorrowedDocument<'a>>,
+}
+
+/// Encode bounded structurally checked originals, without writes or packages.
+/// Complete native host validation before revision CAS remains mandatory.
+/// # Errors
+/// Rejects strict source/context/association failures and trusted limits.
+pub fn encode_teletext_design_documents(
+    input: TeletextDesignDocumentInput<'_>,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
+    validate_context(input.selection, input.generation, budget)?;
+    let documents = borrow_sources(&input, budget)?;
+    validate_transmissions(input.resource_transmissions, budget)?;
+    validate_capture_context(&input, budget)?;
+    let parsed = parse_sources(
+        input.selection,
+        input.generation,
+        &documents,
+        budget.validation,
+    )?;
+    validate_entry(
+        input.selection,
+        input.entry_addon_id,
+        input.entry,
+        input.v1_region,
+        &parsed,
+    )?;
+    let envelope = BorrowedEnvelope {
+        format_version: TELETEXT_DESIGN_DOCUMENT_VERSION,
+        selection: Selection {
+            channel_id: input.selection.channel_id,
+            bindings: input.selection.bindings.iter().map(Member::from).collect(),
+        },
+        generation: input.generation,
+        entry_addon_id: input.entry_addon_id,
+        entry: input.entry.map(|v| Entry {
+            page: v.page,
+            subcode: v.subcode,
+        }),
+        v1_region: input.v1_region,
+        edit_policy: EditPolicy {
+            policy_version: 1,
+            kind: "original_only".to_owned(),
+        },
+        resource_transmissions: input.resource_transmissions,
+        documents,
+    };
+    let mut writer = BoundedWriter {
+        bytes: Vec::new(),
+        maximum: budget.max_serialized_bytes,
+        exceeded: false,
+    };
+    serde_json::to_writer(&mut writer, &envelope).map_err(|_| {
+        if writer.exceeded {
+            failure(TeletextDesignDocumentFailure::Budget {
+                dimension: "serialized",
+                count: budget.max_serialized_bytes.saturating_add(1),
+                maximum: budget.max_serialized_bytes,
+            })
+        } else {
+            failure(TeletextDesignDocumentFailure::Json)
+        }
+    })?;
+    // Apply exactly the same context accounting/depth contract as the decoder.
+    preflight_json(&writer.bytes, budget)?;
+    Ok(EncodedTeletextDesignDocuments {
+        bytes: writer.bytes,
+    })
+}
+fn borrow_sources<'a>(
+    input: &TeletextDesignDocumentInput<'a>,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<Vec<BorrowedDocument<'a>>, TeletextDesignDocumentError> {
+    limit(
+        input.sources.len(),
+        budget.max_documents.min(MAX_BINDINGS),
+        "documents",
+    )?;
+    storage::<BorrowedDocument<'_>>(input.sources.len())?;
+    if input.sources.len() != input.selection.bindings.len() {
+        return Err(failure(TeletextDesignDocumentFailure::Association));
+    }
+    let mut bytes = 0_usize;
+    for source in input.sources {
+        bytes = bytes
+            .checked_add(source.bytes().len())
+            .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
+        limit(
+            source.bytes().len(),
+            ersatzrs_addon_contract::MAX_TELETEXT_PAGES_OUTPUT_BYTES,
+            "response",
+        )?;
+        limit(bytes, budget.max_response_bytes, "responses")?;
+    }
+    input
+        .sources
+        .iter()
+        .map(|source| {
+            Ok(BorrowedDocument {
+                contract: source.contract().schema_version(),
+                generation: source.generation(),
+                response: std::str::from_utf8(source.bytes())
+                    .map_err(|_| failure(TeletextDesignDocumentFailure::Source))?,
+            })
+        })
+        .collect()
+}
+
+/// Restore checked historical originals without packages or invocation receipts.
+/// The repository must first verify its digest over these exact bytes. Native
+/// compilation and fresh promotion fences remain separate host operations.
+/// # Errors
+/// Rejects unknown/closed format, original-only policy, context or trusted limits.
+pub fn decode_teletext_design_documents(
+    bytes: &[u8],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<RestoredTeletextDesignDocuments, TeletextDesignDocumentError> {
+    preflight_json(bytes, budget)?;
+    let envelope: Envelope =
+        serde_json::from_slice(bytes).map_err(|_| failure(TeletextDesignDocumentFailure::Json))?;
+    if envelope.format_version != TELETEXT_DESIGN_DOCUMENT_VERSION {
+        return Err(failure(TeletextDesignDocumentFailure::Version));
+    }
+    if envelope.edit_policy.policy_version != 1 || envelope.edit_policy.kind != "original_only" {
+        return Err(failure(TeletextDesignDocumentFailure::EditPolicy));
+    }
+    let selection = TeletextChannelSelectionSnapshot {
+        channel_id: envelope.selection.channel_id,
+        bindings: envelope
+            .selection
+            .bindings
+            .into_iter()
+            .map(Member::into_domain)
+            .collect::<Result<_, _>>()?,
+    };
+    validate_context(&selection, &envelope.generation, budget)?;
+    let borrowed = envelope
+        .documents
+        .iter()
+        .map(|v| BorrowedDocument {
+            contract: v.contract,
+            generation: &v.generation,
+            response: &v.response,
+        })
+        .collect::<Vec<_>>();
+    let documents = parse_sources(
+        &selection,
+        &envelope.generation,
+        &borrowed,
+        budget.validation,
+    )?;
+    let entry = envelope.entry.0.map(|v| TeletextPageAddress {
+        page: v.page,
+        subcode: v.subcode,
+    });
+    validate_entry(
+        &selection,
+        envelope.entry_addon_id.0.as_deref(),
+        entry,
+        envelope.v1_region.0,
+        &documents,
+    )?;
+    let transmissions = envelope
+        .resource_transmissions
+        .into_iter()
+        .map(|v| TeletextSavedResourceTransmission {
+            resource: v.resource,
+            counter: v.counter,
+            update: v.update,
+            last_subpage: v.last_subpage,
+        })
+        .collect::<Vec<_>>();
+    validate_transmissions(&transmissions, budget)?;
+    let sources = envelope
+        .documents
+        .into_iter()
+        .map(|v| {
+            Ok(TeletextSavedDocumentSource {
+                contract: contract(v.contract)?,
+                generation: v.generation,
+                bytes: v.response.into_bytes(),
+            })
+        })
+        .collect::<Result<_, TeletextDesignDocumentError>>()?;
+    Ok(RestoredTeletextDesignDocuments {
+        parts: TeletextRestoredDesignDocumentParts {
+            selection,
+            generation: envelope.generation,
+            sources,
+            documents,
+            entry_addon_id: envelope.entry_addon_id.0,
+            entry,
+            v1_region: envelope.v1_region.0,
+            resource_transmissions: transmissions,
+            edit_policy: TeletextSavedEditPolicy::OriginalOnly,
+        },
+    })
+}
+fn parse_sources(
+    selection: &TeletextChannelSelectionSnapshot,
+    generation: &str,
+    sources: &[BorrowedDocument<'_>],
+    budget: TeletextProfileDocumentBudget,
+) -> Result<Vec<TeletextProfileDocument>, TeletextDesignDocumentError> {
+    if selection.bindings.len() != sources.len() {
+        return Err(failure(TeletextDesignDocumentFailure::Association));
+    }
+    storage::<TeletextProfileDocument>(sources.len())?;
+    sources
+        .iter()
+        .enumerate()
+        .map(|(index, source)| {
+            let error = |reason| TeletextDesignDocumentError {
+                binding: Some(index),
+                reason,
+            };
+            let selected = selection.bindings[index].contract;
+            if source.contract != selected.schema_version() || source.generation != generation {
+                return Err(error(TeletextDesignDocumentFailure::Association));
+            }
+            match selected {
+                TeletextPageContract::V1 => {
+                    let base = parse_page_set(source.response.as_bytes(), generation)
+                        .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
+                    budget
+                        .service
+                        .validate_base_with_page_metadata(&base)
+                        .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
+                    Ok(TeletextProfileDocument::Base(base))
+                }
+                TeletextPageContract::V2 => parse_declared_service(
+                    source.response.as_bytes(),
+                    generation,
+                    budget.service,
+                    budget.declarations,
+                )
+                .map(|v| TeletextProfileDocument::Authored(Box::new(v)))
+                .map_err(|_| error(TeletextDesignDocumentFailure::Document)),
+            }
+        })
+        .collect()
+}
+fn validate_entry(
+    selection: &TeletextChannelSelectionSnapshot,
+    addon: Option<&str>,
+    entry: Option<TeletextPageAddress>,
+    region: Option<TeletextSavedV1Region>,
+    documents: &[TeletextProfileDocument],
+) -> Result<(), TeletextDesignDocumentError> {
+    let has_v1 = selection
+        .bindings
+        .iter()
+        .any(|v| v.contract == TeletextPageContract::V1);
+    if has_v1 != region.is_some() {
+        return Err(failure(TeletextDesignDocumentFailure::Region));
+    }
+    if selection.bindings.is_empty() {
+        return if addon.is_none() && entry.is_none() {
+            Ok(())
+        } else {
+            Err(failure(TeletextDesignDocumentFailure::Entry))
+        };
+    }
+    let index = addon
+        .and_then(|addon| selection.bindings.iter().position(|v| v.addon_id == addon))
+        .ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?;
+    let entry = entry.ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?;
+    let base = match &documents[index] {
+        TeletextProfileDocument::Base(base) => base,
+        TeletextProfileDocument::Authored(service) => service.semantic().base(),
+    };
+    if entry.page != base.initial_page || !base.pages.iter().any(|page| page.address == entry) {
+        return Err(TeletextDesignDocumentError {
+            binding: Some(index),
+            reason: TeletextDesignDocumentFailure::Entry,
+        });
+    }
+    Ok(())
+}
+fn validate_context(
+    selection: &TeletextChannelSelectionSnapshot,
+    generation: &str,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<(), TeletextDesignDocumentError> {
+    limit(
+        selection.bindings.len(),
+        budget.max_documents.min(MAX_BINDINGS),
+        "bindings",
+    )?;
+    storage::<Member>(selection.bindings.len())?;
+    if selection.channel_id <= 0
+        || generation.is_empty()
+        || generation.len() > ersatzrs_addon_contract::MAX_TELETEXT_PAGES_GENERATION_BYTES
+    {
+        return Err(failure(TeletextDesignDocumentFailure::Context));
+    }
+    let mut bytes = generation.len();
+    for (index, binding) in selection.bindings.iter().enumerate() {
+        // Raw settings storage is fenced before the duplicate-key set is created.
+        limit(
+            binding.effective_settings.len(),
+            MAX_TELETEXT_PROFILE_SETTINGS,
+            "settings",
+        )?;
+        storage::<Setting>(binding.effective_settings.len())?;
+        for value in binding_strings(binding) {
+            limit(value.len(), budget.max_context_field_bytes, "context field")?;
+            bytes = bytes
+                .checked_add(value.len())
+                .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
+        }
+        limit(bytes, budget.max_context_bytes, "context")?;
+        validate_binding(binding, selection.channel_id).map_err(|mut error| {
+            error.binding = Some(index);
+            error
+        })?;
+        if index > 0 && selection.bindings[index - 1].addon_id >= binding.addon_id {
+            return Err(failure(TeletextDesignDocumentFailure::Association));
+        }
+    }
+    limit(bytes, budget.max_context_bytes, "context")
+}
+fn binding_strings(binding: &TeletextSelectionSnapshot) -> impl Iterator<Item = &str> {
+    let v = &binding.installation;
+    [
+        &binding.addon_id,
+        &v.addon_id,
+        &v.state_revision,
+        &v.version,
+        &v.package_sha256,
+        &v.content_sha256,
+        &v.manifest_sha256,
+    ]
+    .into_iter()
+    .map(String::as_str)
+    .chain(binding.effective_settings.iter().flat_map(|setting| {
+        let value = match &setting.value {
+            TeletextProfileValue::Literal(v)
+            | TeletextProfileValue::SecretReference { reference: v, .. } => v,
+        };
+        [setting.key.as_str(), value.as_str()]
+    }))
+}
+fn validate_binding(
+    binding: &TeletextSelectionSnapshot,
+    channel_id: EntityId,
+) -> Result<(), TeletextDesignDocumentError> {
+    let v = &binding.installation;
+    if binding.channel_id != channel_id
+        || binding.profile_id <= 0
+        || binding.binding_revision <= 0
+        || binding.profile_revision <= 0
+        || v.addon_id != binding.addon_id
+        || v.state_revision.is_empty()
+        || v.version.is_empty()
+        || binding.addon_id.len() > 255
+        || ersatzrs_addon_contract::validate_addon_id(&binding.addon_id).is_err()
+        || [&v.package_sha256, &v.content_sha256, &v.manifest_sha256]
+            .iter()
+            .any(|value| value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        || validate_teletext_profile_values("saved originals", &binding.effective_settings).is_err()
+    {
+        return Err(failure(TeletextDesignDocumentFailure::Context));
+    }
+    Ok(())
+}
+fn validate_transmissions(
+    values: &[TeletextSavedResourceTransmission],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<(), TeletextDesignDocumentError> {
+    limit(
+        values.len(),
+        budget.max_resource_transmissions,
+        "resource transmissions",
+    )?;
+    storage::<TeletextSavedResourceTransmission>(values.len())?;
+    let mut unique = BTreeSet::new();
+    for value in values {
+        if !unique.insert(value.resource) {
+            return Err(failure(TeletextDesignDocumentFailure::Lifecycle));
+        }
+    }
+    Ok(())
+}
+
+fn validate_capture_context(
+    input: &TeletextDesignDocumentInput<'_>,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<(), TeletextDesignDocumentError> {
+    let mut bytes = input.generation.len();
+    let mut add = |text: &str| -> Result<(), TeletextDesignDocumentError> {
+        limit(text.len(), budget.max_context_field_bytes, "context field")?;
+        bytes = bytes
+            .checked_add(text.len())
+            .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
+        limit(bytes, budget.max_context_bytes, "context")
+    };
+    for binding in &input.selection.bindings {
+        for text in binding_strings(binding) {
+            add(text)?;
+        }
+        for setting in &binding.effective_settings {
+            add(match &setting.value {
+                TeletextProfileValue::Literal(_) => "literal",
+                TeletextProfileValue::SecretReference {
+                    kind: TeletextSecretReferenceKind::Environment,
+                    ..
+                } => "environment",
+                TeletextProfileValue::SecretReference {
+                    kind: TeletextSecretReferenceKind::File,
+                    ..
+                } => "file",
+            })?;
+        }
+    }
+    for source in input.sources {
+        add(source.generation())?;
+    }
+    if let Some(addon) = input.entry_addon_id {
+        add(addon)?;
+    }
+    if input.v1_region.is_some() {
+        add("western_latin")?;
+    }
+    add("original_only")?;
+    for record in input.resource_transmissions {
+        add(match record.update {
+            TeletextSavedResourceUpdate::Changed => "changed",
+            TeletextSavedResourceUpdate::Unchanged => "unchanged",
+        })?;
+        add(match record.resource.kind() {
+            ersatzrs_domain::TeletextResourceKind::Pop => "pop",
+            ersatzrs_domain::TeletextResourceKind::Gpop => "gpop",
+            ersatzrs_domain::TeletextResourceKind::Drcs => "drcs",
+            ersatzrs_domain::TeletextResourceKind::Gdrcs => "gdrcs",
+            ersatzrs_domain::TeletextResourceKind::Mot => "mot",
+            ersatzrs_domain::TeletextResourceKind::Mip => "mip",
+        })?;
+    }
+    limit(bytes, budget.max_context_bytes, "context")
+}
+
+struct BoundedWriter {
+    bytes: Vec<u8>,
+    maximum: usize,
+    exceeded: bool,
+}
+impl io::Write for BoundedWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let count = self.bytes.len().checked_add(bytes.len());
+        if count.is_none_or(|count| count > self.maximum || count > isize::MAX as usize) {
+            self.exceeded = true;
+            return Err(io::Error::other("saved output limit"));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+// Streaming preflight retains one key, not a JSON tree. Owned DTO allocation
+// follows its count/string/depth bounds. Escaped-string scratch remains within
+// the total input cap; no total process RSS or CPU-cycle bound is claimed.
+#[derive(Clone, Copy)]
+enum Path {
+    Other,
+    Root,
+    Selection,
+    Bindings,
+    Binding,
+    Settings,
+    Documents,
+    Document,
+    Response,
+    Transmissions,
+}
+struct Scan {
+    budget: TeletextDesignDocumentBudget,
+    responses: usize,
+    context: usize,
+    error: Option<TeletextDesignDocumentError>,
+}
+struct ScanSeed<'a> {
+    scan: &'a mut Scan,
+    path: Path,
+    depth: usize,
+}
+struct CountedSeed<'a> {
+    inner: ScanSeed<'a>,
+    count: usize,
+    maximum: usize,
+    dimension: &'static str,
+}
+impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
+    type Value = ();
+    fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+        self.inner
+            .scan
+            .check(limit(self.count, self.maximum, self.dimension))?;
+        self.inner.deserialize(deserializer)
+    }
+}
+impl Scan {
+    fn check<E: serde::de::Error>(
+        &mut self,
+        result: Result<(), TeletextDesignDocumentError>,
+    ) -> Result<(), E> {
+        result.map_err(|error| {
+            self.error = Some(error);
+            E::custom("saved input limit")
+        })
+    }
+    fn text<E: serde::de::Error>(&mut self, path: Path, text: &str) -> Result<(), E> {
+        if matches!(path, Path::Response) {
+            self.check(limit(
+                text.len(),
+                ersatzrs_addon_contract::MAX_TELETEXT_PAGES_OUTPUT_BYTES,
+                "response",
+            ))?;
+            self.responses = self
+                .responses
+                .checked_add(text.len())
+                .ok_or_else(|| E::custom("saved storage overflow"))?;
+            self.check(limit(
+                self.responses,
+                self.budget.max_response_bytes,
+                "responses",
+            ))
+        } else {
+            self.check(limit(
+                text.len(),
+                self.budget.max_context_field_bytes,
+                "context field",
+            ))?;
+            self.context = self
+                .context
+                .checked_add(text.len())
+                .ok_or_else(|| E::custom("saved storage overflow"))?;
+            self.check(limit(
+                self.context,
+                self.budget.max_context_bytes,
+                "context",
+            ))
+        }
+    }
+}
+impl<'de> DeserializeSeed<'de> for ScanSeed<'_> {
+    type Value = ();
+    fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+        if self.depth > MAX_DEPTH {
+            return self
+                .scan
+                .check(Err(failure(TeletextDesignDocumentFailure::Depth)));
+        }
+        deserializer.deserialize_any(self)
+    }
+}
+impl<'de> Visitor<'de> for ScanSeed<'_> {
+    type Value = ();
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("bounded saved JSON")
+    }
+    fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_unit<E: serde::de::Error>(self) -> Result<(), E> {
+        Ok(())
+    }
+    fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<(), E> {
+        self.scan.text(self.path, value)
+    }
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
+        let mut fields = 0;
+        while let Some(key) = map.next_key::<String>()? {
+            fields += 1;
+            self.scan.check(limit(fields, 32, "object fields"))?;
+            self.scan.check(limit(key.len(), 128, "key"))?;
+            let path = match (self.path, key.as_str()) {
+                (Path::Root, "selection") => Path::Selection,
+                (Path::Root, "documents") => Path::Documents,
+                (Path::Root, "resource_transmissions") => Path::Transmissions,
+                (Path::Selection, "bindings") => Path::Bindings,
+                (Path::Binding, "effective_settings") => Path::Settings,
+                (Path::Document, "response") => Path::Response,
+                _ => Path::Other,
+            };
+            map.next_value_seed(ScanSeed {
+                scan: self.scan,
+                path,
+                depth: self.depth + 1,
+            })?;
+        }
+        Ok(())
+    }
+    fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> Result<(), A::Error> {
+        let (maximum, path, dimension) = match self.path {
+            Path::Bindings => (
+                self.scan.budget.max_documents.min(MAX_BINDINGS),
+                Path::Binding,
+                "bindings",
+            ),
+            Path::Documents => (
+                self.scan.budget.max_documents.min(MAX_BINDINGS),
+                Path::Document,
+                "documents",
+            ),
+            Path::Settings => (MAX_TELETEXT_PROFILE_SETTINGS, Path::Other, "settings"),
+            Path::Transmissions => (
+                self.scan.budget.max_resource_transmissions,
+                Path::Other,
+                "resource transmissions",
+            ),
+            _ => (MAX_BINDINGS, Path::Other, "sequence"),
+        };
+        let mut count = 0_usize;
+        loop {
+            let next = count
+                .checked_add(1)
+                .ok_or_else(|| serde::de::Error::custom("saved count overflow"))?;
+            if sequence
+                .next_element_seed(CountedSeed {
+                    inner: ScanSeed {
+                        scan: self.scan,
+                        path,
+                        depth: self.depth + 1,
+                    },
+                    count: next,
+                    maximum,
+                    dimension,
+                })?
+                .is_none()
+            {
+                break;
+            }
+            count = next;
+        }
+        Ok(())
+    }
+}
+fn preflight_json(
+    bytes: &[u8],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<(), TeletextDesignDocumentError> {
+    limit(bytes.len(), budget.max_serialized_bytes, "serialized")?;
+    limit(bytes.len(), isize::MAX as usize, "storage")?;
+    storage::<Member>(budget.max_documents.min(MAX_BINDINGS))?;
+    storage::<Transmission>(budget.max_resource_transmissions)?;
+    let mut scan = Scan {
+        budget,
+        responses: 0,
+        context: 0,
+        error: None,
+    };
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    if (ScanSeed {
+        scan: &mut scan,
+        path: Path::Root,
+        depth: 0,
+    })
+    .deserialize(&mut deserializer)
+    .is_err()
+    {
+        return Err(scan
+            .error
+            .unwrap_or_else(|| failure(TeletextDesignDocumentFailure::Json)));
+    }
+    deserializer
+        .end()
+        .map_err(|_| failure(TeletextDesignDocumentFailure::Json))
+}
+
+#[cfg(test)]
+#[path = "teletext_design_documents_tests.rs"]
+mod tests;

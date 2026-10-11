@@ -15,11 +15,10 @@ use ersatzrs_app::{
 };
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextColdProducerComposition,
-    TeletextComposedProducerPage, TeletextPageAddress, TeletextPageContract,
-    TeletextProducerCompositionBudget, TeletextProducerCompositionError,
-    TeletextProducerCompositionFailure, TeletextProducerCompositionMetadata,
-    TeletextProducerPresentation, TeletextProducerPresentationBudget,
-    TeletextProducerPresentationError,
+    TeletextComposedProducerPage, TeletextPageAddress, TeletextProducerCompositionBudget,
+    TeletextProducerCompositionError, TeletextProducerCompositionFailure,
+    TeletextProducerCompositionMetadata, TeletextProducerPresentation,
+    TeletextProducerPresentationBudget, TeletextProducerPresentationError,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service, EncodedTeletextAuthoredService,
@@ -58,6 +57,7 @@ pub struct EncodedChannelTeletextDocumentCandidate {
     metadata: Option<TeletextProducerCompositionMetadata>,
     encoded: Option<EncodedTeletextAuthoredService>,
     descriptor: Option<TeletextServiceDescriptor>,
+    transmissions: Vec<TeletextServiceResourceTransmission>,
 }
 impl EncodedChannelTeletextDocumentCandidate {
     #[must_use]
@@ -103,6 +103,11 @@ impl EncodedChannelTeletextDocumentCandidate {
     #[must_use]
     pub const fn encoded(&self) -> Option<&EncodedTeletextAuthoredService> {
         self.encoded.as_ref()
+    }
+    /// Exact trusted lifecycle supplied to the complete compiler, never inferred.
+    #[must_use]
+    pub fn transmissions(&self) -> &[TeletextServiceResourceTransmission] {
+        &self.transmissions
     }
     #[must_use]
     pub const fn descriptor(&self) -> Option<&TeletextServiceDescriptor> {
@@ -178,7 +183,7 @@ pub async fn prepare_channel_teletext_document_candidate(
     let input = application
         .invoke_channel_teletext_documents(channel_id, entry_addon_id, context, policy.input)
         .await?;
-    let candidate = tokio::task::spawn_blocking(move || encode_channel(input, &policy))
+    let candidate = tokio::task::spawn_blocking(move || encode_channel(input, policy))
         .await
         .map_err(|_| ChannelTeletextDocumentEncodingError::WorkerFailed)??;
     application
@@ -188,9 +193,21 @@ pub async fn prepare_channel_teletext_document_candidate(
     Ok(candidate)
 }
 
+/// Checked original content shared by fresh preparation and historical reload.
+/// It carries no current selection, invocation receipt or publication authority.
+pub(super) struct EncodedChannelTeletextOriginals {
+    pub(super) v1_region: Option<TeletextEncodingRegion>,
+    pub(super) producers: Vec<TeletextProducerPresentation>,
+    pub(super) provenance: Vec<TeletextComposedProducerPage>,
+    pub(super) metadata: Option<TeletextProducerCompositionMetadata>,
+    pub(super) encoded: Option<EncodedTeletextAuthoredService>,
+    pub(super) descriptor: Option<TeletextServiceDescriptor>,
+    pub(super) transmissions: Vec<TeletextServiceResourceTransmission>,
+}
+
 fn encode_channel(
     input: BoundChannelTeletextDocumentInput,
-    policy: &TeletextChannelDocumentEncodingPolicy,
+    policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError> {
     check_deadline(input.deadline())?;
     let (selection, generation, documents, sources, entry_addon_id, deadline) =
@@ -199,31 +216,67 @@ fn encode_channel(
     if documents.len() != selection.bindings.len() || sources.len() != documents.len() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
-    let mut candidate = EncodedChannelTeletextDocumentCandidate {
+    let region = documents
+        .iter()
+        .any(|document| matches!(document, TeletextProfileDocument::Base(_)))
+        .then_some(policy.v1_region);
+    let originals = encode_original_channel_documents(
+        &selection,
+        entry_addon_id.as_deref(),
+        documents,
+        deadline,
+        region,
+        policy,
+    )?;
+    Ok(EncodedChannelTeletextDocumentCandidate {
         selection,
         generation,
         deadline,
         entry_addon_id,
         sources,
-        v1_region: None,
-        producers: Vec::new(),
-        provenance: Vec::new(),
-        metadata: None,
-        encoded: None,
-        descriptor: None,
-    };
+        v1_region: originals.v1_region,
+        producers: originals.producers,
+        provenance: originals.provenance,
+        metadata: originals.metadata,
+        encoded: originals.encoded,
+        descriptor: originals.descriptor,
+        transmissions: originals.transmissions,
+    })
+}
+
+/// Compile validated originals without invoking packages or fabricating receipts.
+/// Saved V1 region/lifecycle must be supplied explicitly by the historical owner.
+pub(super) fn encode_original_channel_documents(
+    selection: &TeletextChannelSelectionSnapshot,
+    entry_addon_id: Option<&str>,
+    documents: Vec<TeletextProfileDocument>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    check_deadline(deadline)?;
+    if documents.len() != selection.bindings.len() {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
     if documents.is_empty() {
-        return Ok(candidate);
+        return Ok(EncodedChannelTeletextOriginals {
+            v1_region: None,
+            producers: Vec::new(),
+            provenance: Vec::new(),
+            metadata: None,
+            encoded: None,
+            descriptor: None,
+            transmissions: Vec::new(),
+        });
     }
-    if candidate
-        .sources
+    let has_v1 = documents
         .iter()
-        .any(|source| source.contract() == TeletextPageContract::V1)
-    {
-        candidate.v1_region = Some(policy.v1_region);
+        .any(|document| matches!(document, TeletextProfileDocument::Base(_)));
+    if has_v1 != region.is_some() {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
     }
-    let producers = prepare_producers(documents, deadline, policy)?;
-    let metadata = entry_metadata(&candidate, &producers, policy.entry)?;
+    let producers = prepare_producers(documents, deadline, region, &policy)?;
+    let metadata = entry_metadata(selection, entry_addon_id, &producers, policy.entry)?;
     check_deadline(deadline)?;
     let (producers, provenance, metadata, declared) =
         TeletextColdProducerComposition::new(producers, metadata, policy.composition)
@@ -236,17 +289,21 @@ fn encode_channel(
     check_deadline(deadline)?;
     let descriptor = TeletextServiceDescriptor::from_authored_service(&encoded);
     check_deadline(deadline)?;
-    candidate.producers = producers;
-    candidate.provenance = provenance;
-    candidate.metadata = Some(metadata);
-    candidate.encoded = Some(encoded);
-    candidate.descriptor = Some(descriptor);
-    Ok(candidate)
+    Ok(EncodedChannelTeletextOriginals {
+        v1_region: region,
+        producers,
+        provenance,
+        metadata: Some(metadata),
+        encoded: Some(encoded),
+        descriptor: Some(descriptor),
+        transmissions: policy.transmissions,
+    })
 }
 
 fn prepare_producers(
     documents: Vec<TeletextProfileDocument>,
     deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
     policy: &TeletextChannelDocumentEncodingPolicy,
 ) -> Result<Vec<TeletextProducerPresentation>, ChannelTeletextDocumentEncodingError> {
     if documents.len() > policy.composition.max_producers {
@@ -262,7 +319,7 @@ fn prepare_producers(
         let declared = match document {
             TeletextProfileDocument::Base(base) => lift_base(
                 base,
-                policy.v1_region,
+                region.ok_or(ChannelTeletextDocumentEncodingError::Association)?,
                 policy.validation.service,
                 policy.validation.declarations,
             )
@@ -314,15 +371,13 @@ fn preflight_producer_storage(
 }
 
 fn entry_metadata(
-    candidate: &EncodedChannelTeletextDocumentCandidate,
+    selection: &TeletextChannelSelectionSnapshot,
+    entry_addon_id: Option<&str>,
     producers: &[TeletextProducerPresentation],
     requested: Option<TeletextPageAddress>,
 ) -> Result<TeletextProducerCompositionMetadata, ChannelTeletextDocumentEncodingError> {
-    let addon = candidate
-        .entry_addon_id()
-        .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
-    let binding = candidate
-        .selection
+    let addon = entry_addon_id.ok_or(ChannelTeletextDocumentEncodingError::Association)?;
+    let binding = selection
         .bindings
         .iter()
         .position(|binding| binding.addon_id == addon)

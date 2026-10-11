@@ -11,8 +11,8 @@ use ersatzrs_core::repositories::{
     DecoRepository, FfmpegProfileRepository, FillerRepository, GraphicsRepository,
     LibraryRepository, ManagedLibraryOperationRepository, MediaItemRepository,
     MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository, SavedSearchRepository,
-    SettingsMutation, TeletextProfileRepository, TelevisionRepository, TemplateRepository,
-    TroubleshootingRepository, WatermarkRepository,
+    SettingsMutation, TeletextDesignRepository, TeletextProfileRepository, TelevisionRepository,
+    TemplateRepository, TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -996,6 +996,7 @@ pub struct ApplicationPorts {
     remote_stream_playlists: Arc<dyn RemoteStreamPlaylistRuntime>,
     addons: Arc<dyn AddonRuntime>,
     teletext_profiles: Arc<dyn TeletextProfileRepository>,
+    teletext_designs: Option<Arc<dyn TeletextDesignRepository>>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
     admin_search: Arc<dyn AdminSearchRepository>,
     block_previews: Arc<dyn BlockPreviewRepository>,
@@ -1079,6 +1080,7 @@ impl ApplicationPorts {
             remote_stream_playlists,
             addons,
             teletext_profiles,
+            teletext_designs: None,
             media_source_runtime,
             admin_search,
             block_previews,
@@ -1266,6 +1268,20 @@ impl ApplicationPorts {
     #[must_use]
     pub fn teletext_profiles(&self) -> &(dyn TeletextProfileRepository + 'static) {
         self.teletext_profiles.as_ref()
+    }
+
+    /// Attach the native host's durable draft repository.
+    /// An absent port reports unavailable; it never stores drafts elsewhere.
+    #[must_use]
+    pub fn with_teletext_designs(mut self, repository: Arc<dyn TeletextDesignRepository>) -> Self {
+        self.teletext_designs = Some(repository);
+        self
+    }
+
+    /// Durable original drafts; stored data does not establish output readiness.
+    #[must_use]
+    pub fn teletext_designs(&self) -> Option<&(dyn TeletextDesignRepository + 'static)> {
+        self.teletext_designs.as_deref()
     }
 
     /// Remote media-source validation and synchronization effects.

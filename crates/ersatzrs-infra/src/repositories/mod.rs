@@ -27,6 +27,7 @@ mod playout;
 mod program_schedule;
 mod saved_search;
 mod scheduling;
+mod teletext_designs;
 mod teletext_profiles;
 mod television;
 mod template;
@@ -55,6 +56,7 @@ pub use program_schedule::SqliteProgramScheduleRepository;
 pub use saved_search::SqliteSavedSearchRepository;
 pub use scheduling::{ClassicMediaDependencies, SqliteSchedulingContentRepository};
 use sqlx::Pool;
+pub use teletext_designs::SqliteTeletextDesignRepository;
 pub use teletext_profiles::SqliteTeletextProfileRepository;
 pub use television::SqliteTelevisionRepository;
 pub use template::SqliteTemplateRepository;
@@ -102,6 +104,7 @@ pub struct Repositories {
     pub config: SqliteConfigRepository,
     pub scheduling: SqliteSchedulingContentRepository,
     pub television: SqliteTelevisionRepository,
+    pub teletext_designs: SqliteTeletextDesignRepository,
     pub teletext_profiles: SqliteTeletextProfileRepository,
     pub addon_media_lists: SqliteAddonMediaListRepository,
     pub troubleshooting: SqliteTroubleshootingRepository,
@@ -133,6 +136,7 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
         config: SqliteConfigRepository(pool.clone()),
         scheduling: SqliteSchedulingContentRepository::new(pool.clone()),
         television: SqliteTelevisionRepository(pool.clone()),
+        teletext_designs: SqliteTeletextDesignRepository(pool.clone()),
         teletext_profiles: SqliteTeletextProfileRepository(pool.clone()),
         addon_media_lists: SqliteAddonMediaListRepository(pool.clone()),
         troubleshooting: SqliteTroubleshootingRepository(pool.clone()),

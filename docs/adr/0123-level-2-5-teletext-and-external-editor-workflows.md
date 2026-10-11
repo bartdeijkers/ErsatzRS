@@ -840,6 +840,17 @@ owner, not as a substitute for it. After restart, drafts and receipts remain
 readable without automatic transmission; publication/restart must separately
 restore only accepted generations under the existing profile/Lua timing contract.
 
+The first implementation slice captures complete native originals into version-1
+private design documents and restores historical previews through the same cold
+compiler, without invoking installed packages. The initial explicit `original_only`
+policy grants zero editing permissions; it is not a permanent authoring limitation
+or external-editor acceptance. Export receipts, editable zone/template policies and
+durable explicit publication remain required next slices. Native confirmation
+precedes CAS. Its deadline is a CPU/admission cutoff; admitted SQLite transactions
+use the existing database timeout contract and do not pretend to undo committed
+saves. See the interchange reference for the implementation boundary and P9A-01
+for verified evidence; no milestone acceptance is changed.
+
 ### Evidence and delivery order
 
 P9A-01 is reopened for the expanded standards/interchange contract. P9A-04 accepts

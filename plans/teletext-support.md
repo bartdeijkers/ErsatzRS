@@ -572,6 +572,49 @@ installed package, actual guide pages and browser/stream generation comparison.
 Existing source-subtitle, alternate-audio, native/Next, six-RID and output gates
 remain required. NOS reference scope stays limited to TV-guide pages 200–299.
 
+### Synthetic operator flow: admin implementation map
+
+This is planned UI integration, not browser or engine acceptance. The operator's
+job is to choose each channel's existing addon/profile, validate its synthetic
+pages, inspect a saved revision and explicitly publish that revision. Initial
+setup is occasional; preview/publication is repeated and must keep the inspected
+revision distinct from the current broadcast. Existing decoder Health remains a
+capability report. Production TV-guide content still waits for generic acceptance.
+
+Use the existing `/channels/:id` SSR editor as the entry point. Add a sibling
+`section` with an `h2`, labelled addon/profile `fieldset`/`select` controls and
+separate POST forms; do not nest forms inside the channel multipart save or imply
+that saving ordinary channel fields publishes teletext. Binding/profile/install
+revisions use existing app CAS operations. Missing packages/profiles have explicit
+localized empty/error states and retain ordinary playback.
+
+Validation and concept saving delegate to the native preparation/capture boundary;
+server-owned guide context, budgets, entry and resource lifecycle are never request
+flags. List named design heads using keyset pagination. Preview uses an immutable
+revision and the same checked composition/raster as transmission, with labelled
+page/subpage navigation and positioned diagnostics. Keep private originals,
+settings and install pins out of browser DTOs. Distinguish original-only capture
+from editable-zone/template/import policies; existing capture grants no editing
+permission. Show published and inspected revisions separately, with one explicit
+Publish action that performs fresh whole-channel and design-head checks.
+
+Reuse stable resource-state wrappers and semantic token roles. Use native submit
+buttons because the current shared Button is `type=button`; reuse its focus and
+visual contract without introducing a client dependency or redesigning all buttons.
+Preview is a `figure` with a text alternative, exact page identity and navigational
+links/forms, not the existing AV player. Retain SSR/no-JS behavior and add a narrow
+island only where an interaction needs it. Loading, empty, unavailable, validation
+error, stale revision, successful save and publication are distinct announced states.
+
+Controls reflow at 320 CSS pixels, wrap long translations and retain visible focus
+at 200% zoom. Scale the bounded preview proportionally; do not cause page-level
+horizontal scrolling. Preserve light/dark tokens, keyboard order and at least
+24-pixel targets, preferring 44 pixels for primary touch actions. Localize every
+changed label/status/diagnostic in all nine supported cultures. Required headed
+Chromium/Firefox evidence covers no-JS/hydrated operation, both themes, persisted
+selection/save/reload, page navigation, stale/error recovery and browser errors.
+Actual encoded suitable-client display/navigation remains a separate required gate.
+
 ## Evidence from the 2026-10-07 planning review
 
 - ErsatzRS currently has no teletext-specific domain model, scanner branch,

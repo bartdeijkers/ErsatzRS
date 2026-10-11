@@ -24,7 +24,7 @@ printf '%s:%s\n' LABEL "$ERSATZRS_ADDON_CAPABILITY" >> ../channel-calls
 cat ../channel-response-LABEL.json
 "#;
 
-fn policy() -> TeletextChannelDocumentEncodingPolicy {
+pub(super) fn policy() -> TeletextChannelDocumentEncodingPolicy {
     let original = documents::policy();
     TeletextChannelDocumentEncodingPolicy {
         input: TeletextChannelDocumentInputBudget {
@@ -48,14 +48,20 @@ fn policy() -> TeletextChannelDocumentEncodingPolicy {
     }
 }
 
-fn address(page: u16, subcode: u16) -> TeletextPageAddress {
+pub(super) fn address(page: u16, subcode: u16) -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(page).unwrap(),
         subcode: TeletextSubcode::new(subcode).unwrap(),
     }
 }
 
-fn response(kind: DocumentFixture, theme: &str, page: u16, subcode: u16, language: &str) -> Value {
+pub(super) fn response(
+    kind: DocumentFixture,
+    theme: &str,
+    page: u16,
+    subcode: u16,
+    language: &str,
+) -> Value {
     let mut value = documents::document(kind, theme);
     let owner = json!({"page":page,"subcode":subcode});
     value["language"] = json!(language);
@@ -70,7 +76,7 @@ fn response(kind: DocumentFixture, theme: &str, page: u16, subcode: u16, languag
     value
 }
 
-fn write_response(fixture: &Fixture, label: &str, value: &Value) {
+pub(super) fn write_response(fixture: &Fixture, label: &str, value: &Value) {
     std::fs::write(
         fixture
             .root
@@ -81,7 +87,7 @@ fn write_response(fixture: &Fixture, label: &str, value: &Value) {
     .unwrap();
 }
 
-async fn install_contract(fixture: &Fixture, addon: &str, label: &str, schema: u32) {
+pub(super) async fn install_contract(fixture: &Fixture, addon: &str, label: &str, schema: u32) {
     let package = fixture.root.path().join(if addon == ADDON {
         "package"
     } else {
@@ -128,7 +134,7 @@ async fn configure_pair(fixture: &Fixture, first: &Value, second: &Value) {
     }
 }
 
-async fn candidate(
+pub(super) async fn candidate(
     fixture: &Fixture,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, Error> {
@@ -142,7 +148,7 @@ async fn candidate(
     .await
 }
 
-fn assert_requests(fixture: &Fixture, first: u32, second: u32) {
+pub(super) fn assert_requests(fixture: &Fixture, first: u32, second: u32) {
     for (label, schema) in [("first", first), ("second", second)] {
         assert_eq!(
             std::fs::read(

@@ -218,7 +218,8 @@ impl AppState {
                 }),
                 Arc::new(TokioScanWorkQueue::new(scan_work_tx)),
                 Arc::new(NativeScanRuntime::new(pool.clone())),
-            ),
+            )
+            .with_teletext_designs(Arc::new(repositories.teletext_designs.clone())),
             operations,
         ));
         Self {
