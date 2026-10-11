@@ -191,11 +191,13 @@ Known selected cells now rasterize from the same unpublished encoder
 composition: pinned MIT masks, exact original DRCS, effective C.3 fragments,
 fixed/selected CLUTs and C.1 video/row/window planes. Authored Unicode lifts at
 Base priority and retains higher-layer overrides. Bounded output retains located
-unresolved pixels; it does not authorize publication. Next supply receiver
-header fields, settle remaining source/extent and non-Latin composite evidence,
-verify joint flash/invert and explicit-background parameters, then consume this
-raster in the localized preview and prove physical equivalence and independent
-client display/navigation. Engine, external-editor and add-on acceptance stay open.
+unresolved pixels; it does not authorize publication. Receiver-owned header
+cells use a distinct marker and exact identity in preview navigation. Invert
+precedes supplied flash phase; enlarged bottom fragments retain origin-row planes.
+Eight opaque DRCS rectangles match independent libzvbi 0.2.42 pixels. Next settle
+remaining source/extent, non-Latin composite and explicit-background evidence,
+then consume this raster in the localized preview and prove physical equivalence
+and independent client display/navigation. Engine, external-editor and add-on acceptance stay open.
 The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
 selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
 alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.

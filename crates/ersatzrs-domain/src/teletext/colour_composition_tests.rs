@@ -425,7 +425,7 @@ fn unresolved_attributes_keep_full_original_pending_provenance() {
 }
 
 #[test]
-fn missing_cells_foreign_subcodes_and_joint_flash_invert_are_explicit_errors() {
+fn missing_cells_and_foreign_subcodes_are_explicit_errors() {
     let mut display = display();
     let plan = plan(&display, TeletextPageKind::FullPage);
     assert_eq!(
@@ -433,21 +433,6 @@ fn missing_cells_foreign_subcodes_and_joint_flash_invert_are_explicit_errors() {
             .unwrap_err()
             .reason,
         TeletextColourCompositionFailure::MissingCell
-    );
-    set_value(&mut display, INVERT, Value::Flag(true));
-    set_value(
-        &mut display,
-        FLASH,
-        Value::Flash(TeletextExecutedFlash {
-            mode: TeletextFlashMode::Normal,
-            rate: TeletextFlashRate::Slow1Hz,
-        }),
-    );
-    assert_eq!(
-        plan.pixel(&display, 1, 8, true, options(TeletextFlashPhase::Original))
-            .unwrap_err()
-            .reason,
-        TeletextColourCompositionFailure::UnverifiedInvertFlashOrder
     );
     display.owner.subcode = TeletextSubcode::new(0).unwrap();
     assert_eq!(
@@ -484,4 +469,298 @@ fn subtitle_foreground_and_transparent_background_follow_the_same_c1_rule() {
         );
         set_value(&mut display, BOXED, Value::Flag(false));
     }
+}
+
+#[test]
+fn joint_invert_flash_uses_the_exchanged_foreground_in_selected_cluts() {
+    let mut display = display();
+    set_value(&mut display, FG, Value::Colour(colour(17)));
+    set_value(&mut display, BG, Value::Colour(colour(24)));
+    set_value(&mut display, INVERT, Value::Flag(true));
+    let mut palette = TeletextLevel25Palette {
+        clut2: [TeletextRgb::new([1, 2, 3]).unwrap(); 8],
+        clut3: [TeletextRgb::new([4, 5, 6]).unwrap(); 8],
+    };
+    palette.clut2[0] = TeletextRgb::new([13, 2, 7]).unwrap();
+    let defaults = TeletextLevel25PresentationDefaults {
+        primary: TeletextPageCharsetDesignation::new(0).unwrap(),
+        secondary: None,
+        palette,
+        screen_colour: colour(0),
+        row_colour: colour(2),
+        black_background_substitution: false,
+        remapping: TeletextColourRemapping::FgClut2BgClut3,
+        panels: TeletextSidePanels {
+            left: false,
+            right: false,
+            status: TeletextPanelStatus::Level25And35,
+            width: TeletextPanelWidth::ZERO,
+        },
+    };
+    let plan = resolve_teletext_colour_composition(
+        &display,
+        TeletextEffectivePresentation::Extension {
+            source: TeletextPresentationSource::Page,
+            defaults: &defaults,
+        },
+        &[colour(2); 25],
+        colour(0),
+        TeletextPageKind::FullPage,
+    );
+    let cases = [
+        (TeletextFlashMode::Steady, [4, 5, 6], [4, 5, 6]),
+        (TeletextFlashMode::Normal, [4, 5, 6], [1, 2, 3]),
+        (TeletextFlashMode::Inverted, [1, 2, 3], [4, 5, 6]),
+        (TeletextFlashMode::AdjacentClut, [4, 5, 6], [13, 2, 7]),
+    ];
+    for (mode, original, alternate) in cases {
+        set_value(
+            &mut display,
+            FLASH,
+            Value::Flash(TeletextExecutedFlash {
+                mode,
+                rate: TeletextFlashRate::Slow1Hz,
+            }),
+        );
+        for (phase, expected) in [
+            (TeletextFlashPhase::Original, original),
+            (TeletextFlashPhase::Alternate, alternate),
+        ] {
+            assert_eq!(
+                rgb(plan.pixel(&display, 1, 8, true, options(phase)).unwrap()),
+                expected
+            );
+            assert_eq!(
+                rgb(plan.pixel(&display, 1, 8, false, options(phase)).unwrap()),
+                [1, 2, 3]
+            );
+        }
+    }
+    let attrs = display.cell(1, 8).unwrap().attributes();
+    assert_eq!(attrs.foreground().value(), Some(colour(17)));
+    assert_eq!(attrs.background().value(), Some(colour(24)));
+}
+
+#[test]
+fn joint_invert_adjacent_flash_applies_transparency_after_pair_selection() {
+    let mut display = display();
+    set_value(&mut display, INVERT, Value::Flag(true));
+    set_value(
+        &mut display,
+        FLASH,
+        Value::Flash(TeletextExecutedFlash {
+            mode: TeletextFlashMode::AdjacentClut,
+            rate: TeletextFlashRate::Slow1Hz,
+        }),
+    );
+    let full = plan(&display, TeletextPageKind::FullPage);
+    // Original BG becomes displayed FG. Its paired entry, not logical FG's,
+    // decides transparency. Imager 2b0125's raw-FG pairing cannot be this oracle.
+    for (background, original, alternate) in
+        [(0, [0, 0, 0], [0, 15, 0]), (8, [0, 15, 0], [0, 0, 0])]
+    {
+        set_value(&mut display, BG, Value::Colour(colour(background)));
+        assert_eq!(
+            rgb(full
+                .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Original))
+                .unwrap()),
+            original
+        );
+        assert_eq!(
+            rgb(full
+                .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+                .unwrap()),
+            alternate
+        );
+    }
+    set_value(&mut display, BG, Value::Colour(colour(0)));
+    set_value(&mut display, BOXED, Value::Flag(true));
+    assert_eq!(
+        full.pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+            .unwrap(),
+        TeletextColourPixel::Video
+    );
+    let subtitle = plan(&display, TeletextPageKind::Subtitle);
+    assert_eq!(
+        rgb(subtitle
+            .pixel(&display, 1, 8, true, options(TeletextFlashPhase::Alternate))
+            .unwrap()),
+        [0, 15, 0]
+    );
+}
+
+#[test]
+fn concealed_joint_flash_has_only_exchanged_background_until_revealed() {
+    let mut display = display();
+    set_value(&mut display, BG, Value::Colour(colour(2)));
+    set_value(&mut display, INVERT, Value::Flag(true));
+    set_value(&mut display, CONCEAL, Value::Flag(true));
+    let plan = plan(&display, TeletextPageKind::FullPage);
+    let cases = [
+        (TeletextFlashMode::Normal, [0, 15, 0], [15, 0, 0]),
+        (TeletextFlashMode::Inverted, [15, 0, 0], [0, 15, 0]),
+        (TeletextFlashMode::AdjacentClut, [0, 15, 0], [0, 7, 0]),
+    ];
+    for (mode, original, alternate) in cases {
+        set_value(
+            &mut display,
+            FLASH,
+            Value::Flash(TeletextExecutedFlash {
+                mode,
+                rate: TeletextFlashRate::Fast2HzPhase2,
+            }),
+        );
+        for (phase, expected) in [
+            (TeletextFlashPhase::Original, original),
+            (TeletextFlashPhase::Alternate, alternate),
+        ] {
+            let mut opts = options(phase);
+            assert_eq!(
+                rgb(plan.pixel(&display, 1, 8, true, opts).unwrap()),
+                [15, 0, 0]
+            );
+            opts.reveal_concealed = true;
+            assert_eq!(
+                rgb(plan.pixel(&display, 1, 8, true, opts).unwrap()),
+                expected
+            );
+        }
+    }
+}
+
+fn height_origin(candidate: usize, row: u8, column: u8) -> TeletextDisplayOrigin {
+    TeletextDisplayOrigin {
+        candidate,
+        visual: Some((row, column)),
+        requested: Some(TeletextDisplaySize::DoubleHeight),
+        effective: Some(TeletextDisplaySize::DoubleHeight),
+        attributes: 0,
+        pending: None,
+        obscured_by: None,
+    }
+}
+
+#[test]
+fn enlarged_bottom_parts_retain_top_row_plane_for_both_transparent_colours() {
+    let mut display = display();
+    set_value(&mut display, FG, Value::Colour(colour(8)));
+    set_value(&mut display, BG, Value::Colour(colour(8)));
+    display.origins.push(height_origin(48, 1, 8));
+    let mut rows = [colour(0); 25];
+    rows[1] = colour(1);
+    rows[2] = colour(4);
+    let plan = resolve_teletext_colour_composition(
+        &display,
+        TeletextEffectivePresentation::Header {
+            national_option: TeletextNationalOption::new(0).unwrap(),
+        },
+        &rows,
+        colour(0),
+        TeletextPageKind::FullPage,
+    );
+    for (top, bottom, column) in [
+        (
+            TeletextDisplayFragment::DoubleHeightTop,
+            TeletextDisplayFragment::DoubleHeightBottom,
+            8_u8,
+        ),
+        (
+            TeletextDisplayFragment::DoubleSizeTopLeft,
+            TeletextDisplayFragment::DoubleSizeBottomLeft,
+            8,
+        ),
+        (
+            TeletextDisplayFragment::DoubleSizeTopRight,
+            TeletextDisplayFragment::DoubleSizeBottomRight,
+            9,
+        ),
+    ] {
+        display.cells[40 + usize::from(column)] = Some(Cell {
+            origin: Some(0),
+            attributes: 0,
+            fragment: top,
+        });
+        display.cells[80 + usize::from(column)] = Some(Cell {
+            origin: Some(0),
+            attributes: 0,
+            fragment: bottom,
+        });
+        for foreground in [true, false] {
+            let options = options(TeletextFlashPhase::Original);
+            assert_eq!(
+                rgb(plan
+                    .pixel(&display, 1, column, foreground, options)
+                    .unwrap()),
+                [15, 0, 0]
+            );
+            assert_eq!(
+                rgb(plan
+                    .pixel(&display, 2, column, foreground, options)
+                    .unwrap()),
+                [15, 0, 0]
+            );
+        }
+    }
+    assert_eq!(rgb(plan.row_pixel(2).unwrap()), [0, 0, 15]);
+    display.cells[88].as_mut().unwrap().origin = None;
+    assert_eq!(
+        plan.pixel(&display, 2, 8, true, options(TeletextFlashPhase::Original))
+            .unwrap_err()
+            .reason,
+        TeletextColourCompositionFailure::MissingOrigin
+    );
+}
+
+#[test]
+fn appended_repaint_origin_selects_its_row_while_background_only_keeps_current_row() {
+    let mut display = display();
+    set_value(&mut display, FG, Value::Colour(colour(8)));
+    set_value(&mut display, BG, Value::Colour(colour(8)));
+    display.origins.push(height_origin(48, 1, 8));
+    // Same original candidate, distinct re-realized origin/attribute context.
+    display.origins.push(height_origin(48, 3, 8));
+    display.cells[128] = Some(Cell {
+        origin: Some(1),
+        attributes: 0,
+        fragment: TeletextDisplayFragment::DoubleHeightTop,
+    });
+    display.cells[168] = Some(Cell {
+        origin: Some(1),
+        attributes: 0,
+        fragment: TeletextDisplayFragment::DoubleHeightBottom,
+    });
+    let mut rows = [colour(0); 25];
+    rows[1] = colour(1);
+    rows[3] = colour(2);
+    rows[4] = colour(4);
+    let plan = resolve_teletext_colour_composition(
+        &display,
+        TeletextEffectivePresentation::Header {
+            national_option: TeletextNationalOption::new(0).unwrap(),
+        },
+        &rows,
+        colour(0),
+        TeletextPageKind::FullPage,
+    );
+    for row in [3, 4] {
+        assert_eq!(
+            rgb(plan
+                .pixel(
+                    &display,
+                    row,
+                    8,
+                    true,
+                    options(TeletextFlashPhase::Original)
+                )
+                .unwrap()),
+            [0, 15, 0]
+        );
+    }
+    display.cells[168].as_mut().unwrap().fragment = TeletextDisplayFragment::BackgroundOnly;
+    assert_eq!(
+        rgb(plan
+            .pixel(&display, 4, 8, true, options(TeletextFlashPhase::Original))
+            .unwrap()),
+        [0, 0, 15]
+    );
 }

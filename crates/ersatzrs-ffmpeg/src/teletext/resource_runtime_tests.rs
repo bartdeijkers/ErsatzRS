@@ -22,7 +22,7 @@ fn unused() -> TeletextX27LinkTarget {
     }
 }
 
-fn mot(table: TeletextResourceIdentity, normal: bool) -> TeletextMotLevel25Declaration {
+pub(super) fn mot(table: TeletextResourceIdentity, normal: bool) -> TeletextMotLevel25Declaration {
     let object = TeletextMotObjectLink::new(
         unused(),
         TeletextMotSubpageExtent::new(0).unwrap(),

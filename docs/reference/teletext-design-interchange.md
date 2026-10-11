@@ -885,10 +885,15 @@ publication acceptance.
 `TeletextRasterBudget` bounds pixels and diagnostics before output allocation.
 Known cells yield RGB4 or video pixels; unresolved cells refer to one original
 located diagnostic per visual cell. Page/subcode, visual and original positions,
-candidate, command/root and invocation remain separate. The first eight header
-cells currently remain unresolved because receiver-generated header fields have
-not been supplied. This diagnostic output is not an admitted browser page or a
-publication capability.
+candidate, command/root and invocation remain separate. Receiver-owned header
+cells carry `ReceiverHeader`, distinct from authored errors and RGB/video pixels.
+Section 9.3.1 transmits only columns 8..39 as display data; informative E.7(1)
+notes receiver use of the first eight columns without prescribing identifier glyphs.
+Section 12.5.2 permits wider-header reformatting. The preview can present the exact
+page/subcode from its owner in navigation; it must not copy libzvbi's low-byte
+subpage abbreviation. This marker supplies no clock/search/C7 runtime state or
+header-object admission. Authored header cells still rasterize normally. This
+diagnostic output is not an admitted browser page or publication capability.
 
 The domain mask lookup embeds 28 pinned MIT bitmap tables: seven G0 families,
 thirteen Latin national subsets, four G2 families, G3, contiguous/separated G1
@@ -907,8 +912,14 @@ transparent. C.1 chooses foreground/background, row colour or video based on
 boxing and subtitle/newsflash flags; transparent is not an unconditional alpha
 clear. Colours already remapped by original execution are not remapped again.
 Conceal/reveal and supplied flash phase select pixels deterministically, without
-inventing a clock epoch. Steady inversion swaps final logical colour references.
-Joint inversion/non-steady flash remains a located unresolved interaction.
+inventing a clock epoch. Table 29 D4 swaps final logical references before
+foreground flash selection and C.1. Adjacent-CLUT flashing therefore selects the
+exchanged foreground's paired CLUT. Pinned QTeletextMaker decode/render source
+corroborates this order; imager's adjacent-plus-invert path instead pairs the
+unswapped foreground, a recorded decoder discrepancy rather than an encoder rule.
+Enlarged bottom fragments use their exact retained origin's full-row plane,
+including appended repaint origins. C.3(4) and both pinned decoder sources agree;
+ordinary BackgroundOnly cells continue to use their own row plane.
 Table 4's explicit-background requirement for window/colour-table-flash
 parameters still requires source-aware authoring proof; a materialized tuple
 alone is insufficient.
@@ -930,21 +941,48 @@ Pillow or any production runtime dependency. Changed pinned source bytes reject
 before output creation. The root distribution license carries the complete MIT
 notice alongside the unchanged ErsatzRS zlib notice.
 
-All 765 selected domain/FFmpeg teletext tests pass
-(`6ba0fd90-22ce-49a7-8b89-2f196a73c58a`): nine new mask, eleven C.1/colour and
-nine actual-composition raster tests cover literal masks, both DRCS scopes,
-original/visual panel mapping, different palettes simultaneously, Unicode Base
-priority, fragment enlargement, D5 and bounded located diagnostics. Strict
-all-target Clippy, formatting, architecture/progress and independent source/test
-review pass. All eight native checks pass
-(`24496ffc-8e23-4036-bde4-0a857db0a899`), with the same nine producer requests and
-hashes recorded above. That reuses existing independent assignment/fragment
-proof, not an independent pixel proof for this new raster. Borrowed atlas versus
-teletextimager shape equality would only prove self-consistency. Full physical
-normalization, independent representative raster decoding, suitable-client
-actual display/navigation, localized headed preview, TTI editor/publication and
-engine acceptance remain open. No milestone contract or permanent restriction
-changes.
+All 771 selected domain/FFmpeg teletext tests pass
+(`0d88004d-4369-4c8e-82de-88ec096d245b`), including sixteen colour tests and ten
+actual-composition raster tests. Literal regressions cover joint invert/flash,
+origin-row transparency and receiver-owned header cells under a zero diagnostic
+budget. Earlier eight native assignment/fragment results and their nine request
+hashes remain valid; no affected producer logic changed.
+
+An additional actual-production pixel check passes with libzvbi 0.2.42
+(`579b2a42-45f6-41ea-986e-df8f3bee6fe2`): eight opaque steady DRCS rectangles
+cover Normal/Global scope, Normal/DW/DH/DS enlargement, invert, concealed and
+revealed output. The same compiled composition supplies the raster and production
+X26; its service supplies X28 palette, MOT and complete resource extent. The
+independent helper checks exact decoded identity, scope/S1/slot and 120 bitmap
+bits before comparing native RGBA32_LE and production RGB4 to a literal bitmap,
+colour and enlargement oracle. Full enlarged rectangles and continuation sizes
+are checked before native drawing; bounded canvases retain canaries. This does
+not use borrowed font shapes as an independent oracle.
+
+Replay the focused native check with:
+
+```sh
+ERSATZRS_TELETEXT_TEST_RASTER_FIXTURE=/tmp/teletext-raster.json \
+  ./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(composed_drcs_raster_matches_independent_native_pixels)'
+python3 scripts/e2e/teletext-raster-decoder.py < /tmp/teletext-raster.json
+python3 scripts/e2e/test_teletext_raster_decoder.py
+```
+
+The opt-in ABI calibration is Linux x86-64 only; portable raster tests remain on
+all supported platforms. The request SHA-256 is
+`7ecb654a044afe4d47019c8dab82be7eef1e3517deccac7d97533986ab12afb2`;
+helper SHA-256 is
+`7e0ff9475a01cb9f583f4c8de5b02e6499365e5eaa295f393d0ae10c53626cb5`.
+Four reproducible tests cover 35 malformed request rejection paths before native
+loading, with a valid-fixture control reaching the mocked native boundary. Strict all-target Clippy,
+formatting, architecture/progress and independent source/test review pass.
+This proves the named opaque steady rectangles, not transparency/video, flash
+clock/rates, non-DRCS shape conformance, TSDuck transport or suitable-client
+navigation. Full A.7/A.8/C.3, physical normalization, remaining composite and
+background-parameter evidence, suitable-client display/navigation, localized
+headed preview, TTI editor/publication and engine acceptance remain open. No
+milestone contract or permanent restriction changes.
 
 ### Compatibility-aware composed packing
 

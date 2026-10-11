@@ -67,16 +67,13 @@ fn selected_base_and_local_g0_use_same_composition_and_literal_masks() {
     assert_eq!(result.owner(), owner());
     assert_eq!((result.width(), result.height()), (480, 250));
     assert_eq!(result.pixels().len(), 120_000);
-    assert_eq!(result.diagnostics().len(), 8);
-    assert!(result
-        .diagnostics()
-        .iter()
-        .all(|diagnostic| diagnostic.visual_position.0 == 0
-            && diagnostic.visual_position.1 < 8
-            && matches!(
-                diagnostic.reason,
-                TeletextRasterCellFailure::MissingDisplayCell
-            )));
+    assert!(result.diagnostics().is_empty());
+    for x in 0..8 * 12 {
+        assert_eq!(
+            result.pixel(x, 0),
+            Some(TeletextRasterPixel::ReceiverHeader)
+        );
+    }
     assert!(result.pixel(480, 0).is_none());
     assert!(result.pixel(0, 250).is_none());
     assert!(result.pixel(usize::MAX, usize::MAX).is_none());
@@ -229,21 +226,61 @@ fn caller_pixel_and_diagnostic_budgets_return_no_partial_raster() {
             maximum: 119_999
         })
     ));
+    assert!(render_teletext_composition(
+        &plan,
+        options(),
+        TeletextRasterBudget {
+            max_pixels: 120_000,
+            max_diagnostics: 0,
+        }
+    )
+    .unwrap()
+    .diagnostics()
+    .is_empty());
+    let uncertain = compose(
+        &Fixture::new(
+            vec![],
+            Some(vec![
+                position(1, 8),
+                at(
+                    8,
+                    TeletextColumnOperation::G3 {
+                        code: code(0x6e),
+                        compatibility: TeletextG3Compatibility::Level25,
+                    },
+                ),
+            ]),
+        )
+        .build(),
+    );
     assert!(matches!(
         render_teletext_composition(
-            &plan,
+            &uncertain,
             options(),
             TeletextRasterBudget {
                 max_pixels: 120_000,
-                max_diagnostics: 7
+                max_diagnostics: 0,
             }
         ),
         Err(TeletextRasterError::DiagnosticBudget {
-            count: 8,
-            maximum: 7
+            count: 1,
+            maximum: 0
         })
     ));
-    assert_eq!(raster(&plan).diagnostics().len(), 8);
+    assert_eq!(
+        render_teletext_composition(
+            &uncertain,
+            options(),
+            TeletextRasterBudget {
+                max_pixels: 120_000,
+                max_diagnostics: 1,
+            }
+        )
+        .unwrap()
+        .diagnostics()
+        .len(),
+        1
+    );
     assert_eq!(plan, before);
 }
 
@@ -392,4 +429,36 @@ fn d5_underlines_authored_composites_and_spaces_but_separates_mosaics() {
         cell_rows(&raster(&plan), 1, 8, 1),
         [0, 0x79e, 0x79e, 0, 0x79e, 0x79e, 0x79e, 0, 0x79e, 0x79e]
     );
+}
+
+#[test]
+fn receiver_header_uses_exact_identity_without_inventing_authored_errors_or_glyphs() {
+    let mut fixture = split_panel_fixture(vec![]);
+    fixture.rows = vec![text(0, 8, "A")];
+    let plan = compose(&fixture.build());
+    let image = render_teletext_composition(
+        &plan,
+        options(),
+        TeletextRasterBudget {
+            max_pixels: 216_000,
+            max_diagnostics: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(image.owner().subcode.get(), 0x1234);
+    assert!(image.diagnostics().is_empty());
+    assert_eq!(cell_rows(&image, 0, 12, 1), A.map(u32::from));
+    for x in (0..12 * 12).chain(44 * 12..56 * 12) {
+        for y in 0..10 {
+            assert_eq!(image.pixel(x, y), Some(TeletextRasterPixel::ReceiverHeader));
+        }
+    }
+    assert!(matches!(
+        image.pixel(12 * 12, 0),
+        Some(TeletextRasterPixel::Colour(_))
+    ));
+    assert!(matches!(
+        image.pixel(0, 10),
+        Some(TeletextRasterPixel::Colour(_))
+    ));
 }

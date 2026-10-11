@@ -198,6 +198,9 @@ release section when tagging a release.
   pending reset evidence. Known cells now rasterize with pinned MIT teletext fonts,
   exact DRCS, original fragments and selected palette/video planes. Authored
   Unicode keeps Base priority; unresolved cells retain located diagnostics.
+  Receiver-owned headers use a distinct marker; invert precedes flash and
+  enlarged bottom parts retain origin-row colours. Eight production DRCS
+  rectangles match independent libzvbi pixels, including enlargement and reveal.
   Complete rendering, physical equivalence, client/editor workflows and
   publication acceptance stay open.
   Known inclusive raw object intervals now reject sixteen simultaneous opens

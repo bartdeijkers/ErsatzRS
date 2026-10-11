@@ -1,10 +1,10 @@
 //! EN 300 706 table 30 colours and C.1 planes, without glyph raster authority.
 
 use super::{
-    TeletextAttributeSource, TeletextColourReference, TeletextDisplayAttribute,
-    TeletextDisplayFragment, TeletextDisplayOrigin, TeletextDisplayPending,
-    TeletextDisplayResolution, TeletextEffectivePresentation, TeletextEnhancementSource,
-    TeletextFlashMode, TeletextLevel25Palette, TeletextPageAddress, TeletextPageKind,
+    TeletextColourReference, TeletextDisplayAttribute, TeletextDisplayFragment,
+    TeletextDisplayOrigin, TeletextDisplayPending, TeletextDisplayResolution,
+    TeletextEffectivePresentation, TeletextEnhancementSource, TeletextFlashMode,
+    TeletextLevel25Palette, TeletextPageAddress, TeletextPageKind,
 };
 
 /// Output-only four-bit components; device colour-space conversion is separate.
@@ -171,8 +171,7 @@ impl TeletextColourComposition {
     /// Coverage uses the effective fragment geometry, not requested size flags.
     /// Conceal substitutes SPACE before selecting foreground/background.
     /// # Errors
-    /// Preserves unresolved original provenance and reports absent/foreign cells
-    /// or the unverified joint invert/non-steady-flash ordering.
+    /// Preserves unresolved original provenance and reports absent/foreign cells.
     pub fn pixel(
         &self,
         display: &TeletextDisplayResolution,
@@ -223,18 +222,10 @@ impl TeletextColourComposition {
         let conceal = self.known(position, TeletextColourField::Conceal, attrs.conceal())?;
         let invert = self.known(position, TeletextColourField::Invert, attrs.invert())?;
         let flash = self.known(position, TeletextColourField::Flash, attrs.flash())?;
-        if invert && flash.mode() != TeletextFlashMode::Steady {
-            let mut error = self.error(
-                position,
-                None,
-                TeletextColourCompositionFailure::UnverifiedInvertFlashOrder,
-            );
-            error.location = attrs
-                .invert()
-                .writer()
-                .and_then(|writer| source_location(writer.source()));
-            return Err(error);
-        }
+        // EN 300 706 table 29 D4 exchanges the display colours; mode 07 affects
+        // foreground only. Select that exchanged foreground's flash colour
+        // before C.1 transparency. QTeletextMaker cac2167 decode.cpp 1481-1498
+        // corroborates the adjacent-CLUT case, render.cpp 337-360 normal/inverted.
         let (foreground, background) = if invert { (bg, fg) } else { (fg, bg) };
         let covered = glyph_foreground
             && (!conceal || options.reveal_concealed)
@@ -244,7 +235,32 @@ impl TeletextColourComposition {
         } else {
             background.get()
         };
-        Ok(self.compose_index(colour, self.rows[usize::from(row)], boxed))
+        // C.3(4) retains the origin's presentation for enlarged bottom parts.
+        // QTeletextMaker cac2167 decode.cpp 1508-1515 and imager 2b0125
+        // teletextdecoder.py 1426-1429 corroborate the full-row plane selection.
+        // BackgroundOnly is not an enlarged character part and keeps this row.
+        let plane_row = if matches!(
+            cell.fragment(),
+            TeletextDisplayFragment::DoubleHeightBottom
+                | TeletextDisplayFragment::DoubleSizeBottomLeft
+                | TeletextDisplayFragment::DoubleSizeBottomRight
+        ) {
+            cell.origin()
+                .and_then(|index| display.origins().get(index))
+                .and_then(TeletextDisplayOrigin::visual_position)
+                .map(|(origin_row, _)| origin_row)
+                .filter(|origin_row| *origin_row < 25)
+                .ok_or_else(|| {
+                    self.error(
+                        position,
+                        None,
+                        TeletextColourCompositionFailure::MissingOrigin,
+                    )
+                })?
+        } else {
+            row
+        };
+        Ok(self.compose_index(colour, self.rows[usize::from(plane_row)], boxed))
     }
 
     fn known<T: Copy>(
@@ -274,13 +290,6 @@ impl TeletextColourComposition {
             pending: pending.map(Box::new),
             reason,
         }
-    }
-}
-
-fn source_location(source: TeletextAttributeSource) -> Option<TeletextEnhancementSource> {
-    match source {
-        TeletextAttributeSource::Enhancement { location, .. } => Some(location),
-        _ => None,
     }
 }
 
@@ -314,12 +323,12 @@ pub enum TeletextColourCompositionFailure {
     OwnerMismatch,
     #[error("display cell is absent")]
     MissingCell,
+    #[error("enlarged bottom fragment has no checked visual origin")]
+    MissingOrigin,
     #[error("display fragment has unresolved original provenance")]
     DisplayPending,
     #[error("original colour attribute is unresolved: {field:?}")]
     AttributePending { field: TeletextColourField },
-    #[error("joint invert and non-steady flash ordering requires validation")]
-    UnverifiedInvertFlashOrder,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

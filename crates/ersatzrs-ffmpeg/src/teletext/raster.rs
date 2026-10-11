@@ -31,6 +31,9 @@ pub struct TeletextRasterBudget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextRasterPixel {
     Colour(TeletextColourPixel),
+    /// Receiver-owned header area. Exact page/subpage metadata comes from
+    /// `TeletextRaster::owner`; no authored glyph or missing-data claim.
+    ReceiverHeader,
     /// Index into this raster's original located diagnostic registry.
     Unresolved(usize),
 }
@@ -84,7 +87,7 @@ pub struct TeletextRasterDiagnostic {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextRasterCellFailure {
-    #[error("this cell requires receiver-generated header fields or missing display evidence")]
+    #[error("this ordinary display cell lacks its original display evidence")]
     MissingDisplayCell,
     #[error("display selection remains unresolved")]
     Display {
@@ -124,9 +127,10 @@ pub enum TeletextRasterError {
 /// Rasterize selected fragments without silently filling unresolved cells.
 ///
 /// Pixel/storage arithmetic, exact pixel allocation and maximum diagnostic
-/// storage are fenced before emission. At most one located diagnostic is retained per visual cell; its
-/// 120 pixels refer to that diagnostic. Header fields remain explicit pending
-/// because the broadcaster has not supplied receiver-generated header pixels.
+/// storage are fenced before emission. At most one located diagnostic is retained
+/// per visual cell; its 120 pixels refer to that diagnostic. Receiver-owned
+/// header areas remain a distinct role for client chrome. EN 300 706 section
+/// 12.5.2 permits header reformatting; E.7 does not mandate a page-ID glyph layout.
 /// # Errors
 /// Returns no partial raster on an exceeded host budget or allocation failure.
 pub fn render_teletext_composition(
@@ -206,9 +210,13 @@ fn render_cell(
     options: TeletextColourPixelOptions,
 ) -> Result<[TeletextRasterPixel; CELL_WIDTH * CELL_HEIGHT], TeletextRasterCellFailure> {
     let display = composition.display_resolution();
-    let cell = display
-        .cell(row, column)
-        .ok_or(TeletextRasterCellFailure::MissingDisplayCell)?;
+    let Some(cell) = display.cell(row, column) else {
+        return if row == 0 {
+            Ok([TeletextRasterPixel::ReceiverHeader; CELL_WIDTH * CELL_HEIGHT])
+        } else {
+            Err(TeletextRasterCellFailure::MissingDisplayCell)
+        };
+    };
     if cell.fragment() == TeletextDisplayFragment::Pending {
         let pending = cell
             .origin()

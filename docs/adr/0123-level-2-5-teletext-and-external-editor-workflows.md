@@ -153,10 +153,16 @@ transparency are distinct from video alpha. Pixel and diagnostic budgets are hos
 policy; unresolved cells carry original locations instead of guessed glyphs.
 Annex G.2 permits font/underline shape choices; D5 separates G1 mosaics and
 underlines ordinary alphanumerics, with G3/DRCS unchanged as an explicit decoder
-policy for their undefined response. Missing receiver-generated header fields,
-unverified non-Latin/mixed composites, joint invert/flash ordering and Table 4's
-explicit-background parameter evidence remain open. Borrowed atlas/imager shape
-equality is self-consistency, not independent raster acceptance. The retained MIT
+policy for their undefined response. Receiver-owned header cells are a distinct
+marker; exact identity belongs in preview navigation, without invented header
+errors or a decoder-specific subpage abbreviation. Invert exchanges references
+before supplied flash phase and C.1; enlarged bottom fragments retain the exact
+origin row plane. Eight actual-production opaque DRCS rectangles now match
+independent libzvbi 0.2.42 bitmap and RGBA rendering, covering enlargement,
+scope, invert and conceal/reveal. This is bounded representative pixel evidence,
+not full client/transport acceptance. Unverified non-Latin/mixed composites and
+Table 4's explicit-background parameter evidence remain open. Borrowed
+atlas/imager shape equality remains self-consistency only. The retained MIT
 notice is included in the root distribution license. This adds no publication
 permission, permanent feature restriction or milestone acceptance waiver.
 G1 alphabetic positions now have a separate checked operation, preserving mode
