@@ -650,3 +650,29 @@ protected-pointer regressions check restoration fields, high local pointers and
 exact physical capacity. This is partial wire/decoder evidence; complex header
 normalization, original default realization, final geometry/priority and suitable
 client navigation remain open. No successful result activates or publishes pages.
+
+## Teletext base display calibration
+
+Four additional synthetic cases use actual page and presentation encoders with
+the same pinned teletextimager checkout and unchanged guarded helper:
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_BASE_DISPLAY_FIXTURE="$fixture_dir/base-display.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  actual_base_spacing_cells_decode_with_pinned_independent_teletextimager --lib \
+  --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-main-composition-decoder.py \
+  < "$fixture_dir/base-display.json"
+```
+
+Literal code/repertoire/diacritic/foreground/background tuples at both levels
+cover control spaces, row reset, mosaics, asymmetric foreground/background CLUT
+remapping and existing base Unicode replacements. Internal trace tests separately
+check authored intent and attribute sources. These selected cells do not prove
+object priority, double-height rendering, complete enhanced semantics or actual
+client display/navigation. Import, preview and publication remain separate gates.
+The four-case fixture SHA256 is
+`2100d9bd163221cfa57617a5936ae780d6b174a895b48508c70bf536666e5d30`;
+the helper and earlier four/two-case composition fixtures remain unchanged.

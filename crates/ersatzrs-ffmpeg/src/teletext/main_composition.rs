@@ -10,14 +10,16 @@
 use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
-    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
-    TeletextColumnOperation, TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
+    TeletextBaseDisplay, TeletextCharsetPair, TeletextCharsetValueError,
+    TeletextCollectedEnhancementReferences, TeletextColumnOperation,
+    TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
     TeletextEnhancementCollectionBudget, TeletextEnhancementCollectionFailure,
     TeletextEnhancementCommand, TeletextEnhancementPosition, TeletextEnhancementProgram,
     TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextG3Compatibility,
     TeletextObjectIdentity, TeletextPageAddress, TeletextSemanticService, TeletextServiceError,
 };
 
+use super::base_display::{trace_teletext_base_display, TeletextBaseDisplayError};
 use super::colour_context::{
     resolve_teletext_colour_context, TeletextColourContext, TeletextColourContextError,
 };
@@ -76,6 +78,8 @@ pub enum TeletextMainCompositionFailure {
     #[error(transparent)]
     ColourContext(#[from] TeletextColourContextError),
     #[error(transparent)]
+    BaseDisplay(#[from] TeletextBaseDisplayError),
+    #[error(transparent)]
     Charset(#[from] TeletextCharsetValueError),
     #[error(transparent)]
     Program(#[from] TeletextEnhancementProgramError),
@@ -112,6 +116,7 @@ pub struct TeletextMainComposition {
     program: TeletextEnhancementProgram,
     provenance: Vec<TeletextMainCompositionSource>,
     colour_context: TeletextColourContext,
+    base_display: TeletextBaseDisplay,
     collected: TeletextCollectedEnhancementReferences,
 }
 
@@ -135,6 +140,12 @@ impl TeletextMainComposition {
     #[must_use]
     pub const fn colour_context(&self) -> &TeletextColourContext {
         &self.colour_context
+    }
+    /// Coded fallback and original base intent for subsequent display resolution.
+    /// This trace does not resolve object overlap or grant rendering readiness.
+    #[must_use]
+    pub const fn base_display(&self) -> &TeletextBaseDisplay {
+        &self.base_display
     }
     #[must_use]
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
@@ -223,6 +234,11 @@ pub fn compose_teletext_main_program(
                 error(owner, location, reason.into())
             },
         )?;
+    let presentation = service
+        .effective_presentation(owner)
+        .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
+    let base_display = trace_teletext_base_display(page, &layout, presentation, &colour_context)
+        .map_err(|reason| error(owner, None, reason.into()))?;
     let collected = service
         .objects()
         .collect_display_references(owner, &program, primary.pair(), budget.collection)
@@ -239,6 +255,7 @@ pub fn compose_teletext_main_program(
         program,
         provenance: built.provenance,
         colour_context,
+        base_display,
         collected,
     })
 }

@@ -987,6 +987,38 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 shared base-display checkpoint:
+Main composition retains an immutable domain-owned 25-by-40 trace from its actual
+checked layout, original presentation and colour context. Coded control/blank/
+glyph cells remain separate from authored Unicode/mosaic intent and base priority.
+Spacing Set-At/Set-After sources, paired box entry, row reset, raw/remapped colours
+and size origins are preserved. New Background uses raw foreground in the selected
+background CLUT; black substitution uses the original effective row colour.
+Aggregate validation now rejects fictitious coded-control references and missing
+box confirmation, correcting an independent review finding. Fixed maps allocate
+on the heap without large page-array stack temporaries.
+Final 56 focused tests pass (dfaf2177-02e3-4968-a828-970ec006a824; 485 skipped),
+including 14 new trace regressions, unchanged wire snapshot and composition/
+packing/layout baselines. Three native tests pass
+(040074f3-11b5-4146-a83c-cabebeffc0ff; 538 skipped): four new production-encoded
+base/control cases plus six unchanged composed cases at Levels 1.5/2.5 through
+guarded teletextimager 0.2.0. After allocation-only lint fixes, the new four-case
+test passes again (ff047aed-c97e-44c9-ba6d-cc9f20e23058; 540 skipped), with fixture
+SHA256 2100d9bd163221cfa57617a5936ae780d6b174a895b48508c70bf536666e5d30.
+The old bf458448.../a8e677ed... fixtures and e1cb2ad2... helper remain byte-identical;
+wrong Level 2.5 background goldens fail. Reference/e2e docs retain exact replay.
+The initial unit build failed on fixture-only missing Result unwraps/Debug use;
+invalid authored lower-row test data was also corrected without weakening existing
+double-height validation. Strict final domain/FFmpeg all-target Clippy, formatting
+and independent source/delta reviews pass. Architecture/progress validation is
+recorded at this checkpoint. Full object/attribute priority, lower-row suppression,
+panels, dual receiver rendering, physical normalization, complete service lifecycle,
+transport/client/editor/preview/publication acceptance remain open. Next trace
+original repeated object invocations before resolving inheritance and footprints.
+All six milestone acceptance/status/dependency records remain unchanged.
+
+Earlier compatibility-aware packing evidence follows:
+
 2026-10-11 compatibility-aware composed packing checkpoint:
 The same-service packing seam composes and encodes using one immutable exact-owner
 catalog, selected links and original header colour. Main compatibility-row state

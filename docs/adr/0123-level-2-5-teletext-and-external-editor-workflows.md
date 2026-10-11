@@ -94,6 +94,12 @@ restoration selectors; local invocation counts are independent of provisional
 pointer high bits. Complex header cases still require instruction normalization,
 not authoring exclusions. Selected native cells and literal wire/high-pointer
 evidence remain distinct from full decoder/client acceptance (see the reference).
+A domain-owned bounded base-cell trace is now retained by main composition from
+the actual checked fallback rows. Coded cells, authored Unicode/mosaic intent and
+spacing-attribute sources remain distinct, with separate raw and remapped colours
+and double-height origins. This supports the shared semantic resolver; it does
+not settle object priority, full footprints or browser rendering. Base-derived
+Unicode must still retain base priority in final semantic and physical views.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

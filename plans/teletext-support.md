@@ -144,6 +144,14 @@ Complex header normalization remains required: no neutral selector preserves bot
 receiver states after header column advancement. Pinned imager proves selected
 cells, not all historical Level 1.5 transitions; retain separate wire and final
 client/decoder acceptance evidence in the interchange reference.
+Main composition now retains a bounded domain-owned base display trace derived
+from the actual checked layout. It preserves authored intent separately from
+coded fallback, spacing-control timing and attribute provenance, raw/remapped
+colours and double-height origins. Next resolve original object invocations and
+attribute inheritance against this trace, then footprints and both receiver
+views before normalizing physical instructions. A base-derived Unicode glyph
+must not gain local-enhancement priority over an authored Active object. This
+intermediate grants neither rendering nor publication acceptance.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

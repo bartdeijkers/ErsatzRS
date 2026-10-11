@@ -228,6 +228,46 @@ decoder; its same-cell designation handling selects the restored repertoire for
 an earlier glyph. That observation neither changes the required engine scope nor
 establishes correctness of the final wire compiler.
 
+### Shared base display trace
+
+Main composition retains an immutable, domain-owned base display trace compiled
+from the same checked fallback rows as packet encoding. Its fixed 25-by-40 cells
+keep coded data, spacing controls and blank cells distinct from authored Unicode
+or mosaic intent. The first eight header cells remain host-owned. An authored
+Unicode replacement retains base provenance; retaining this trace does not make
+its current physical X26 insertion correct when an Active object replaces it.
+
+The trace records the spacing controls emitted by the existing layout compiler,
+including Set-At versus Set-After attribute sources, row resets and paired box
+entry. Raw Level 1 colour indices remain separate from Level 2.5 remapped colour
+references. New Background selects the current raw foreground entry in the
+background CLUT, rather than copying its remapped foreground reference. Implicit
+and Black Background substitution use the original effective row colour.
+Double-height origin information is retained for subsequent footprint resolution.
+
+This is an internal composition intermediate, without serialized authoring or
+publication authority. It is not a decoded enhanced page or a browser renderer.
+Complete object inheritance and attribute priority, lower-row suppression,
+panels, glyph rendering and equivalent Level 1.5/2.5 physical realization remain
+required. Controls not emitted by the checked layout are not silently interpreted
+as supported authored input. The final shared renderer must consume the resolved
+enhanced and fallback views of the same immutable validated service.
+
+Four production-encoded synthetic cases pass guarded teletextimager 0.2.0 at
+Levels 1.5 and 2.5, checking literal code/repertoire/diacritic/colour tuples for
+control spaces, row reset, mosaics, asymmetric remapping and existing Unicode
+replacements. The separate fixture SHA256 is
+`2100d9bd163221cfa57617a5936ae780d6b174a895b48508c70bf536666e5d30`.
+The frozen helper remains
+`e1cb2ad2b16e78a0f56baaae14434aa6d78f146d7e0173c7ade9f19db97228eb`;
+its decoder commit and source guards are unchanged. The earlier four-case and
+two-case composition fixtures retain their hashes below. A deliberately wrong
+Level 2.5 background is rejected. Internal trace regressions separately prove
+source integrity, paired-box confirmation, exact-subcode context rejection and
+same-service retention; these are not independent pixel or object-priority proof.
+Use the [base display calibration](../../scripts/e2e/README.md#teletext-base-display-calibration)
+to replay the cell evidence.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

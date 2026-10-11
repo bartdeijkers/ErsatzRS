@@ -1176,6 +1176,12 @@ initial header colour, including every selector in shared sizing and pointers.
 Local calls use pointer-independent restoration decisions in both passes. Complex
 header normalization, original default realization, final semantics and full
 historical/suitable-client decoding remain required before service publication.
+Main composition now retains a bounded base display trace from actual checked
+rows, preserving coded fallback, authored intent, spacing-attribute provenance,
+raw/remapped colours and double-height origins. Next resolve original object
+invocations and inherited attributes, then footprints and both receiver views;
+base-derived Unicode must retain base priority before physical normalization.
+This is not enhanced rendering or publication acceptance.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

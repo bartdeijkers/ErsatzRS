@@ -7,6 +7,7 @@
 //! publication: carousel timing, PES/PSI/PID capacity,
 //! output ownership and client acceptance remain separate transport obligations.
 
+mod base_display;
 mod buffer;
 mod carousel;
 mod charset;
@@ -40,6 +41,7 @@ mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 
+pub use base_display::{TeletextBaseDisplayError, TeletextBaseDisplayFailure};
 pub use buffer::{TeletextBufferError, TeletextPacketBuffer};
 pub use carousel::{TeletextCarousel, TeletextCarouselBatch, TeletextCarouselBatchKind};
 pub use clock::{
@@ -171,6 +173,10 @@ pub enum TeletextEncodingError {
     LinkSubcode { address: TeletextPageAddress },
 }
 
+#[cfg(test)]
+mod base_display_runtime_tests;
+#[cfg(test)]
+mod base_display_tests;
 #[cfg(test)]
 mod buffer_tests;
 #[cfg(test)]

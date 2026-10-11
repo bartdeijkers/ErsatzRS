@@ -159,6 +159,9 @@ release section when tagging a release.
   Same-service packing now retains original header colour, restores compatible
   body-row positioning and includes added selectors in exact local pointers and
   capacity. Complex header normalization and full receiver acceptance remain open.
+  Main composition now retains checked base cells, authored glyph intent and
+  spacing-attribute provenance with separate raw/remapped colours, preparing
+  shared display resolution without claiming enhanced rendering or publication.
   Nine pinned independent MOT/DRCS cases now prove exact pixels,
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and

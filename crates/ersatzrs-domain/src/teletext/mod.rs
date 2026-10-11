@@ -7,6 +7,7 @@
 //! Enhancement reference collection does not establish resolved object/display
 //! semantics, physical resource allocation or Level 2.5 encoding readiness.
 
+mod base_display;
 mod charset_values;
 mod compositional_links;
 mod drcs_resources;
@@ -26,6 +27,7 @@ mod resource_identity;
 mod service;
 mod source;
 
+pub use base_display::*;
 pub use charset_values::*;
 pub use compositional_links::*;
 pub use drcs_resources::*;
