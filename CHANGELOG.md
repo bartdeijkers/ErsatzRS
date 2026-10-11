@@ -157,7 +157,10 @@ release section when tagging a release.
   defaults beside native candidates. Prepare channel-wide original v1/v2 documents
   under one membership snapshot/deadline with cumulative raw response bounds;
   retain explicit Off without interpreting an unused guide. Mixed channel composition,
-  live publication, durable restart and broader client acceptance remain open. Final resource command spans now settle same-instance attributes
+  live publication, durable restart and broader client acceptance remain open.
+  Add a pinned persistent-decoder diagnostic confirming that M29 palette defaults
+  survive omission despite page erasure; safe replacement remains required.
+  Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all
   applicable charset aliases share one exact repertoire pair, retaining raw

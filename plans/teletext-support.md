@@ -88,7 +88,9 @@ selection fence. Producer-local full presentation snapshots now retain original
 declarations, exact packet presence and decoder-dependent second-language state.
 An additive channel input path invokes and validates ordered v1/v2 documents under
 one full membership snapshot/deadline and cumulative raw response bound. Equivalent
-mixed-service materialization/composition and live publication remain open; do not
+mixed-service materialization/composition and live publication remain open. A
+pinned persistent-decoder diagnostic confirms M29 defaults survive omission
+despite page C4; checked warm replacement remains required. Do not
 convert unspecified receiver defaults into authored sentinels. The global legacy
 API stays explicitly v1. See the
 [input reference](../docs/reference/teletext-design-interchange.md#preparatory-v2-authored-input).

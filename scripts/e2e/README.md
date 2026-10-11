@@ -570,6 +570,16 @@ pixel oracles and proof boundaries. The helper executes only its hash-verified
 ABI source bytes, ignoring cached bytecode. Runtime/playback/client navigation,
 restart, other resources and full Level 2.5 acceptance remain separate gates.
 
+## Teletext warm-cache magazine-default diagnostic
+
+For the separate pinned M29 cache-persistence trial, run
+`teletext-magazine-cache-decoder.py` against the closed archived-unit request
+and its `_test.py` contract suite. The
+[canonical reference](../../docs/reference/teletext-design-interchange.md#warm-magazine-default-cache-diagnostic)
+owns the reconstruction, hashes, three-checkpoint replay and proof boundaries.
+A passing trial confirms stale magazine defaults after omission; it does not
+prove safe removal or complete replacement/client conformance.
+
 ## Teletext object decoder calibration
 
 The separate explicitly ignored diagnostic uses the same Linux x64, Python 3

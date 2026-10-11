@@ -3239,6 +3239,91 @@ decoder without a channel reset, retaining exact original producer presentation
 and resource ownership. Existing fresh-decoder fixtures and the warm DRCS trial
 do not prove these removals; P9A-01 tracks that evidence gap.
 
+### Warm magazine-default cache diagnostic
+
+The opt-in Linux x64 `teletext-magazine-cache-decoder.py` diagnostic consumes
+two exact captures of production-encoded units under a closed 2 MiB input:
+`expected_version`, `seed_units` and `target_units`. It accepts no caller oracle,
+reset, replacement byte or expected palette. The frozen resource ABI is
+authenticated and executed from the same once-read source bytes; the actual
+mapped library must be the receipted original libzvbi 0.2.42 (`2991c13d…`).
+
+The seed is the actual magazine-2 M29/0 emitted by
+`complete_carousel_active_and_adaptive_resource_c2_decode` from the authored
+CLUT2[0] declaration `[1,2,3]`. Its exact 46-byte SHA256 is
+`cc165638bc162755447098e3f9f73748a8d80b3d0c1d610e77e4d54edd13e9d6`.
+The unchanged 28-unit target comes from
+`production_display_units_decode_active_override_and_original_fallback`:
+page 200, subcode 0x1234, C4=1, no X28/M29 and its ordinary closing FF header.
+Its concatenated-unit SHA256 is
+`3ac04da12333307f13f30850a159a1c49dd0dfd7cd490a6a8a9782d0b1ad5ba8`.
+
+One decoder receives these internally fixed checkpoints with increasing decode
+timestamps. Each fetch is released before the next feed; no channel reset occurs.
+
+| Checkpoint | Actual units fed | Independent CLUT2[0] RGB literal |
+| --- | --- | --- |
+| Initial cold page | Target's 28 unchanged units | `[255,0,85]` |
+| M29 declaration | Captured M29, then the same target | `[17,34,51]` |
+| M29 omitted | The same target, without M29 | Cached `[17,34,51]` |
+
+The default palette literal comes from pinned `packet.c` and the nibble-expanded
+M29 literal from the original authored declaration. The diagnostic separately
+checks unchanged Base Z at (1,9) and B at (2,1). It does not validate the older
+target's enhanced Active-A override: its unchanged positive oracle retains the
+known ordinary-compiler gap. No oracle or encoder is relaxed for this diagnostic.
+
+The bounded request is 3,235 bytes, SHA256
+`74209e42be63f8f04116834f860a4c72a299041763e46502c3e742a8887f326c`.
+Helper SHA256:
+`e8f211de3d0ecde0c880210d7ac0ba77dfb20614804dc32f3fac29788bbed55c`.
+Contract-test SHA256:
+`23f09e5addf8c94ee16eb93884a07c3ba053fb0889685a4ec2a3e70edf85717f`.
+The contract suite embeds those exact synthetic captured units. From the repo
+root, reconstruct the request without requiring earlier local artifacts:
+
+```python
+import json
+from pathlib import Path
+import runpy
+
+fixture = runpy.run_path("scripts/e2e/teletext-magazine-cache-decoder_test.py")
+request = fixture["request"]()
+Path("magazine-cache.json").write_text(json.dumps(request, separators=(",", ":")))
+```
+
+Alternatively, verify the archived source captures and retain their original bytes:
+
+```python
+import hashlib
+import json
+from pathlib import Path
+
+source = Path("resource-c2-request.json").read_bytes()
+target = Path("compiled-display-request.json").read_bytes()
+assert hashlib.sha256(source).hexdigest() == "0ee3aff7c8e60610dcbd6fe432080b559a437c57218cb142489ee2ecea4ba8cc"
+assert hashlib.sha256(target).hexdigest() == "577f0815b8e72e60c832fec6a2ad9aadee98d1c55c59ca7c9bda05786b1b2be3"
+request = {
+    "expected_version": "0.2.42",
+    "seed_units": [json.loads(source)["cases"][0]["units"][0]],
+    "target_units": json.loads(target)["cases"][0]["units"],
+}
+Path("magazine-cache.json").write_text(json.dumps(request, separators=(",", ":")))
+```
+
+```bash
+LD_LIBRARY_PATH="$proof_dir/original" \
+  python3 scripts/e2e/teletext-magazine-cache-decoder.py < "$fixture_dir/magazine-cache.json"
+python3 scripts/e2e/teletext-magazine-cache-decoder_test.py
+```
+
+Passing this diagnostic confirms cached M29 survives omission despite page C4.
+It does not prove safe removal, full service replacement, MOT/page-X28 removal,
+transport timing, client display/navigation or full Level 2.5 acceptance. The
+85-unit feed uses a captured M29 seed rather than pretending to publish a prior
+complete service. P9A-01 owns measured evidence and the remaining safe-replacement
+work; both `removal_safe_proven` and `client_conformance_proven` remain false.
+
 ### Channel-wide original document preparation
 
 `ApplicationServices::invoke_channel_teletext_documents` captures one ordered
