@@ -987,6 +987,30 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 second independent local-object decoder checkpoint:
+The original correct three-case conformance request, including exact production
+units and glyph/colour expectations, passes teletextimager 0.2.0 at
+2b0125b778c45ffdfa2df0b196870c093361f317. Its own T42 Hamming reader and independent
+formatter receive only framing-stripped/bit-reversed DVB bytes. All three direct
+local types produce A/red/blue with exact type-specific adjacent T attributes and
+unchanged base B; Latin repertoire/diacritic/no-DRCS checks prevent code-only matches.
+The opt-in helper reads a bounded detached HEAD and verifies all eight imported
+source/metadata hashes before executing verified bytes. It starts no subprocess,
+downloads or installs nothing, and adds no production dependency. Both original
+libzvbi helpers and diagnostic/conformance fixture hashes remain unchanged.
+Nextest 9e4bf1c0-7285-441e-bf1b-ddc885bb21da passes both opt-in checks (455 skipped):
+three positive independent local cases plus the unchanged three-case .42 fault
+reproducer. Wrong glyph expectations and modified upstream sources fail targeted
+negative checks. The valid 45-test compiler baseline is reused unchanged.
+Strict FFmpeg all-target Clippy, formatting, architecture/progress checks and
+independent review pass. This proves representative direct local cell decoding,
+not font pixels, automatic resource routing, full Level 2.5 or interactive client
+navigation. Extended local/pointer decoding, row-zero/base composition, final
+semantics/lifecycle, transport, actual client and editor/publication remain due.
+No milestone, acceptance, dependency or runtime behavior change; no push/publication.
+
+Earlier local-object packing checkpoint follows:
+
 2026-10-11 local-object packing checkpoint:
 compile_teletext_local_program_with_objects preserves full owner/raw-subcode,
 host ID and type. Raw catalog count and main/owned-command aggregates are checked

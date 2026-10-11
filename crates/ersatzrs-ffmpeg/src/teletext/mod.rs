@@ -164,8 +164,8 @@ mod enhancement_program_tests;
 mod lift_tests;
 #[cfg(test)]
 mod local_object_program_tests;
-// Intentional opt-in Linux x64 decoder-ABI calibration, not platform acceptance.
-#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+// Portable opt-in imager calibration; the libzvbi diagnostic guards its own ABI.
+#[cfg(test)]
 mod local_object_runtime_tests;
 #[cfg(test)]
 mod mot_tests;

@@ -513,7 +513,8 @@ object helper and complete production local-program bodies.
 fixture_dir="$(mktemp -d)"
 ERSATZRS_TELETEXT_TEST_LOCAL_OBJECT_FIXTURE="$fixture_dir/diagnostic.json" \
 ERSATZRS_TELETEXT_TEST_LOCAL_OBJECT_CONFORMANCE_FIXTURE="$fixture_dir/conformance.json" \
-  ./run.sh test -p ersatzrs-ffmpeg local_object_runtime_tests --lib \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  pinned_libzvbi_0_2_42_local_definition_marker_limitation_is_reproduced --lib \
   --run-ignored ignored-only
 python3 scripts/e2e/teletext-object-decoder.py < "$fixture_dir/diagnostic.json"
 # Expected to fail on this pinned decoder: correct authored glyph/colour oracle.
@@ -527,3 +528,41 @@ byte-identical; only expected decoder cells differ. A green diagnostic reproduce
 the limitation and cannot establish local-object rendering or Level 2.5 acceptance.
 The [local-decoder reference](../../docs/reference/teletext-design-interchange.md#local-object-decoder-limitation)
 records hashes, source findings and the still-required decoder/client evidence.
+
+## Teletext second local-object decoder calibration
+
+The separate opt-in cell oracle uses unmodified teletextimager 0.2.0 at
+`2b0125b778c45ffdfa2df0b196870c093361f317`. Supply an external checkout explicitly;
+the helper checks its commit and imported source hashes before executing it.
+It does not install packages or fetch sources. Python's standard library suffices
+for these cell checks; this workflow does not invoke the Pillow renderer.
+
+```bash
+decoder_dir="$(mktemp -d)"
+git clone https://github.com/gkthemac/teletextimager.git "$decoder_dir"
+git -C "$decoder_dir" checkout --detach 2b0125b778c45ffdfa2df0b196870c093361f317
+fixture_dir="$(mktemp -d)"
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_LOCAL_OBJECT_CONFORMANCE_FIXTURE="$fixture_dir/conformance.json" \
+  ./run.sh test -p ersatzrs-ffmpeg \
+  authored_local_objects_decode_with_pinned_independent_teletextimager --lib \
+  --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-imager-decoder.py < "$fixture_dir/conformance.json"
+```
+
+The original correct conformance request retains SHA256
+`11bfc143b8ad25d66433b7e8235cdede3fc39ab4cddae685547eb2c6c09bfe2c`.
+Its `expected_version` field identifies its original libzvbi provenance; the
+second helper guards and reports its own pinned decoder/version. All three local
+types must render A/red/blue, with exact type-specific adjacent T attributes and
+unchanged B. The decoder reads original production DVB bytes through its own
+Hamming reader, after framing removal and bit reversal only. Wrong expected cells
+or modified upstream sources fail rather than relaxing the oracle.
+
+This proves representative direct local-object decoding. It is neither full
+Level 2.5 acceptance nor actual interactive client/navigation or bitmap evidence.
+Non-Latin adaptive/passive G0/G2, side-panel edges, automatic MOT/X27 selection,
+higher local designations/nesting and resource pointer extensions remain separate
+proof obligations. See the
+[pinned source and acceptance boundaries](../../docs/reference/teletext-design-interchange.md#second-independent-local-object-decoder).

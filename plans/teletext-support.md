@@ -113,7 +113,12 @@ program and exact-owner definitions into one 208-slot sequence, including forwar
 and nested references; eleven new regressions bring the focused total to 45.
 Actual .42 local-object decoding fails the correct glyph/colour oracle. A separate
 fault diagnostic reproduces fallback without changing normative encoder bytes or
-rendering acceptance. Correct local decoding remains required.
+rendering acceptance. The unchanged correct three-case oracle now passes a second
+independent decoder, teletextimager 0.2.0 at the pinned commit recorded in the
+interchange reference. Its own T42 reader and formatter verify glyphs, colours,
+type-specific inheritance and unaffected base cells. Imported source hashes are
+guarded; it is an opt-in proof tool, not a runtime dependency or navigation client.
+Full external feature decoding and suitable-client display/navigation remain due.
 Row-zero position lowering and base/enhancement composition remain required work,
 without permanent scope restrictions.
 Bounded per-display MOT/X27 derivation now preserves role provenance, exact

@@ -64,7 +64,12 @@ Eleven new byte-oracle regressions bring the focused compiler total to 45.
 Actual .42 decoding leaves base text for all three correctly pointed local types;
 the separate pinned fault diagnostic reproduces this with unchanged encoded units
 and a separately exported correct conformance oracle. This is a decoder limitation,
-not local rendering acceptance or an engine restriction.
+not local rendering acceptance or an engine restriction. The same correct
+three-case oracle now passes independent local decoding through pinned
+teletextimager 0.2.0, with exact glyph/colour inheritance and unchanged base cells.
+The opt-in adapter verifies imported source hashes and uses the decoder's own
+packet reader; it adds no production dependency. This establishes representative
+direct local decoding, not full feature or interactive-client acceptance.
 Context-dependent row-zero positioning and base/enhancement composition remain
 required work. X27 native decoding has a separately
 reproduced version-specific gap; normative encoding is retained. Full external

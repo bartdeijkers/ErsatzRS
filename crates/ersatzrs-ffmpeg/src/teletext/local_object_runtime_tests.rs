@@ -1,9 +1,7 @@
-//! Opt-in reproducer for the demonstrated libzvbi 0.2.42 local-marker fault.
-//! Independent local-object rendering failed; conformance remains open. The
-//! normative compiler bytes stay unchanged, and a separate export retains the
-//! correct rendered-object oracle for replay against a conforming decoder.
-//! The reused ctypes oracle deliberately supports Linux x64 only. Other native
-//! targets skip this diagnostic; production compilation is platform independent.
+//! Opt-in independent local-object calibration using one immutable golden input.
+//! libzvbi 0.2.42 rendering failed: its limitation diagnostic is Linux x64 only.
+//! The portable teletextimager check verifies the original local glyph/attribute
+//! oracle. Neither check establishes full Level 2.5 or client acceptance.
 
 use ersatzrs_domain::*;
 
@@ -117,22 +115,34 @@ fn case(name: &str, kind: TeletextObjectType) -> serde_json::Value {
         "page":0x200,"subcode":0,"cells":[cell(8,b'A',1,4),cell(9,b'T',foreground,background)]})
 }
 
-#[tokio::test]
-#[ignore = "Requires Python 3 and the explicitly calibrated native libzvbi decoder"]
-async fn pinned_libzvbi_0_2_42_local_definition_marker_limitation_is_reproduced() {
-    let mut cases = vec![
+fn conformance_cases() -> Vec<serde_json::Value> {
+    vec![
         case("local_active", TeletextObjectType::Active),
         case("local_adaptive", TeletextObjectType::Adaptive),
         case("local_passive", TeletextObjectType::Passive),
-    ];
-    let conformance_request =
+    ]
+}
+
+fn conformance_request(cases: &[serde_json::Value]) -> Vec<u8> {
+    let request =
         serde_json::to_vec(&serde_json::json!({"expected_version":"0.2.42","cases":cases}))
             .unwrap();
     if let Some(path) = crate::locator::first_non_empty_env(&[
         "ERSATZRS_TELETEXT_TEST_LOCAL_OBJECT_CONFORMANCE_FIXTURE",
     ]) {
-        std::fs::write(path, &conformance_request).unwrap();
+        std::fs::write(path, &request).unwrap();
     }
+    request
+}
+
+// Intentional Linux x64 exception: the frozen public ctypes ABI oracle has
+// precisely that native calibration. The separate imager test has no ABI guard.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly calibrated native libzvbi decoder"]
+async fn pinned_libzvbi_0_2_42_local_definition_marker_limitation_is_reproduced() {
+    let mut cases = conformance_cases();
+    let _ = conformance_request(&cases);
     // The pinned decoder stops at the definition marker instead of executing
     // its body. These exact fallback cells diagnose that version-specific
     // failure; they are not a local-object support or conformance oracle.
@@ -159,4 +169,30 @@ async fn pinned_libzvbi_0_2_42_local_definition_marker_limitation_is_reproduced(
     assert_eq!(report["decoder_version"], "0.2.42");
     assert_eq!(report["cases_passed"], 3);
     println!("Pinned local-object decoder limitation reproduced: {report}");
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn authored_local_objects_decode_with_pinned_independent_teletextimager() {
+    let request = conformance_request(&conformance_cases());
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-imager-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let report =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&report).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({
+            "decoder": "teletextimager",
+            "decoder_version": "0.2.0",
+            "decoder_commit": "2b0125b778c45ffdfa2df0b196870c093361f317",
+            "fixture_provenance_version": "0.2.42",
+            "cases_passed": 3
+        })
+    );
+    println!("Independent local-object cells calibrated: {report}");
 }

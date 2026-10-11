@@ -151,7 +151,11 @@ release section when tagging a release.
   native cell rendering and isolated invalid-glyph fallback. Eight additional
   object cases prove representative public/global types, nested origins and
   exact glyph/colour behavior. A separate pinned diagnostic records a local-object
-  decoder limitation; it does not establish local rendering acceptance. X27 decoder limits,
+  decoder limitation; it does not establish local rendering acceptance. The same
+  correct three-case oracle also passes a second pinned independent decoder,
+  with guarded sources and exact local glyph/colour inheritance. This is an
+  opt-in verification tool, with no production dependency or client acceptance.
+  X27 decoder limits,
   full feature/client proof and service scheduling remain open.
   Bounded MOT/X27 derivation preserves provenance,
   original defaults and conflicting candidates. Effective defaults/presentation,

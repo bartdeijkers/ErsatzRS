@@ -1154,7 +1154,10 @@ relative origins with exact glyph/colour behavior and unchanged base cells.
 Local objects now share one bounded X26 sequence with forward/nested selectors
 and fresh definition state; 45 focused regressions pass. Correct local rendering
 fails on libzvbi 0.2.42 and a separate fault diagnostic reproduces exact fallback.
-External pointer-extension/local decoding, row-zero lowering and base/enhancement
+The unchanged correct three-case oracle passes independent local decoding through
+pinned teletextimager 0.2.0 with guarded sources, exact type-specific glyph/colour
+behavior and unchanged base cells. It is an opt-in oracle, not a runtime dependency
+or client/navigation proof. Extended local/pointer decoding, row-zero lowering and base/enhancement
 composition remain required work.
 Nine pinned libzvbi 0.2.42 MOT-based cases now use byte-identical compiled
 invocations and prove exact pixels/native

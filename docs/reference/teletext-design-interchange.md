@@ -528,8 +528,42 @@ enhancer, whose definition handler stops; the resource resolver instead advances
 past its checked marker. This explains the observed direct-local failure. The
 same source has an incorrect high-designation shift and rejects nested local
 invocations. Those additional limits are source findings, not runtime acceptance
-evidence. Independent local-object rendering still needs a corrected, versioned
-decoder and suitable-client proof; the engine does not ban these standard features.
+evidence. The engine does not ban these standard features.
+
+### Second independent local-object decoder
+
+The unchanged correct three-case conformance fixture also runs through
+[teletextimager 0.2.0](https://github.com/gkthemac/teletextimager/tree/2b0125b778c45ffdfa2df0b196870c093361f317),
+pinned to commit `2b0125b778c45ffdfa2df0b196870c093361f317`. Its own T42 reader
+decodes packet addresses and Hamming triplets before its independent Level 2.5
+formatter executes the local definitions. The adapter only removes DVB framing
+and reverses transmitted bits; it does not supply decoded words, object positions
+or host semantics to the oracle. Each case uses a fresh reader and decoder.
+
+All three direct local types produce A/red/blue at row 4, column 8. The adjacent
+T inherits red/blue only for active objects; adaptive/passive objects retain its
+white/black base attributes. The separate B remains unchanged. The original
+conformance request and production unit hashes are preserved, including its
+`expected_version: "0.2.42"` provenance field. This field identifies the original
+libzvbi fixture; the second helper independently guards and reports its own
+0.2.0 source version and exact commit. Both frozen libzvbi helpers remain unchanged.
+
+The opt-in helper requires an explicitly supplied external checkout and verifies
+SHA256 hashes of every imported upstream source before loading it. It never
+downloads, installs, edits or activates a package. The cell decoder needs only
+Python's standard library; no Pillow renderer is used in this proof. The existing
+bounded subprocess runner retains its ten-second deadline and output limits.
+Wrong glyph/colour expectations and changed decoder sources must fail.
+
+This is representative independent local-object decoding, not interactive client
+or font-pixel evidence. The upstream README documents missing non-Latin adaptive/
+passive G0/G2 support; inspected code also leaves side-panel sizing work and uses
+explicitly supplied external resources rather than automatic MOT/X27 routing.
+Higher designations, nested local calls, resource pointer extensions, all required
+repertoires, base/enhancement composition, transport and actual suitable-client
+display/navigation remain separate acceptance work. The libzvbi fault diagnostic
+retains its original meaning. See the
+[second-decoder workflow](../../scripts/e2e/README.md#teletext-second-local-object-decoder-calibration).
 
 ## MOT/X27 preservation audit
 
