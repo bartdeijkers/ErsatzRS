@@ -2015,6 +2015,21 @@ AP addresses. Out-of-display facts remain explicit and cannot silently create a
 certified occupied rectangle. The existing `CrossAreaWrite` diagnostic now covers
 address-only violations too.
 
+EN 300 706 section 12.5.3 additionally excludes full-screen/full-row colour
+selection from panel object data. Shared geometry admission retains the earliest
+original plane selector for each exact invocation and rejects it when the known
+own raw AP-address region is either panel, including disabled/inactive panels.
+Existing cross-area rejection runs first; child addresses are never folded into
+parent authority. A selector's transient AP does not determine the object's area.
+Legal main-area plane colours and independent panel foreground/background/glyph
+commands remain valid. Unknown/outside/no-own-address regions retain their
+existing pending diagnostics rather than guessing panel or global ownership.
+Checked storage/work bounds include this prepass. The complete composition,
+physical replay and immutable display/raster paths obtain this geometry before
+returning accepted output; the preliminary colour-only context API is not full
+page admission. P9A-01 owns the focused correction receipt. Complete encoded
+panel decoding and suitable-client display/navigation remain required.
+
 Annex A.7 compares cells directly addressed by each original invocation, rather
 than enlarged glyph rectangles. The validator uses the same AP-address membership
 as A.4, including setup and charset addresses; this is the host's explicit reading

@@ -66,6 +66,8 @@ pub enum TeletextDisplayGeometryFailure {
         previous: TeletextRawDisplayArea,
         requested: TeletextRawDisplayArea,
     },
+    #[error("{area:?} object data cannot select screen or full-row colour")]
+    PanelColour { area: TeletextRawDisplayArea },
     #[error("{count} known simultaneously open objects exceed maximum {maximum}")]
     TooManyOpenObjects { count: usize, maximum: usize },
     #[error("{count} known positioned successive object openings exceed maximum {maximum}")]
@@ -214,7 +216,7 @@ fn resources_fit(original: &TeletextSpatialTrace, layers: &TeletextGlyphLayers) 
             original
                 .invocations()
                 .len()
-                .checked_mul(size_of::<TeletextObjectDisplayRegion>())
+                .checked_mul(size_of::<TeletextObjectDisplayRegion>() + size_of::<Option<usize>>())
                 .and_then(|regions| bytes.checked_add(regions))
         })
         .and_then(|bytes| {
@@ -231,6 +233,7 @@ fn resources_fit(original: &TeletextSpatialTrace, layers: &TeletextGlyphLayers) 
         .len()
         .checked_mul(levels as usize + 1)
         .and_then(|sort| sort.checked_mul(2))
+        .and_then(|sort| sort.checked_add(original.events().len()))
         .and_then(|sort| sort.checked_add(layers.candidates().len()))
         .and_then(|sort| sort.checked_add(original.invocations().len()))
         .and_then(|work| {
@@ -461,8 +464,16 @@ fn object_regions(
         .count();
     let mut addresses = Vec::with_capacity(address_count);
     let mut writes = Vec::with_capacity(write_count);
+    let mut first_colours = vec![None; original.invocations().len()];
     for (event_ordinal, &event) in original.events().iter().enumerate() {
-        if event.invocation().is_some() {
+        if let Some(invocation) = event.invocation() {
+            if matches!(
+                event.command(),
+                TeletextEnhancementCommand::SetScreenColour { .. }
+                    | TeletextEnhancementCommand::SetRowColour { .. }
+            ) {
+                first_colours[invocation.get()].get_or_insert(event_ordinal);
+            }
             let fact = TeletextObjectGeometryFact {
                 event_ordinal,
                 event,
@@ -496,6 +507,9 @@ fn object_regions(
         let own_addresses = &addresses[address_start..address_finish];
         let own_writes = &writes[write_start..write_finish];
         validate_addressed_area(owner, own_addresses)?;
+        if let Some(command) = first_colours[instance.id().get()] {
+            validate_panel_colour(owner, own_addresses, original.events()[command])?;
+        }
         let written_area = written_area(owner, own_writes, left, right)?;
         regions.push(TeletextObjectDisplayRegion {
             instance,
@@ -556,6 +570,31 @@ fn validate_addressed_area(
             }
         }
         previous = Some(requested);
+    }
+    Ok(())
+}
+
+// A.4 already proves that all known own addresses belong to one raw area.
+// Use that evidence, including disabled panels, rather than descendant writes,
+// current visual widths or the AP-neutral colour command's transient position.
+// No known own address leaves existing unresolved-region diagnostics intact.
+fn validate_panel_colour(
+    owner: TeletextPageAddress,
+    addresses: &[TeletextObjectGeometryFact],
+    selector: TeletextSpatialEvent,
+) -> Result<(), TeletextDisplayGeometryError> {
+    let area = addresses
+        .iter()
+        .find_map(|fact| known_address_position(fact.event))
+        .map(|position| raw_area(position.1));
+    if let Some(area @ (TeletextRawDisplayArea::RightPanel | TeletextRawDisplayArea::LeftPanel)) =
+        area
+    {
+        return Err(event_error(
+            owner,
+            selector,
+            TeletextDisplayGeometryFailure::PanelColour { area },
+        ));
     }
     Ok(())
 }

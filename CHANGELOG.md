@@ -364,6 +364,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Reject full-screen and full-row colour selectors in authored teletext objects
+  addressing either side panel, with original command and invocation diagnostics.
+  Preserve legal main-page colours and independent panel glyph/cell attributes;
+  complete Level 2.5 client acceptance remains pending.
 - Fix enhanced teletext G1 mosaic separation and explicit D5 cancellation in the
   shared display model and raster. Keep original writer order and object scope;
   retain independent decoder limitations and full engine acceptance as open.

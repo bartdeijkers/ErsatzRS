@@ -1136,10 +1136,7 @@ fn screen_colour_and_child_calls_do_not_fabricate_parent_addressed_cells() {
             4,
             TeletextPanelStatus::Level25And35,
         ))),
-        vec![
-            set(1, 0),
-            invoke(parent, TeletextObjectType::Active, Some((0, 40))),
-        ],
+        vec![set(1, 0), invoke(parent, TeletextObjectType::Active, None)],
         vec![
             definition(
                 parent,
@@ -1148,7 +1145,7 @@ fn screen_colour_and_child_calls_do_not_fabricate_parent_addressed_cells() {
                     TeletextEnhancementCommand::SetScreenColour {
                         colour: TeletextColourReference::BLACK,
                     },
-                    invoke(child, TeletextObjectType::Passive, Some((0, 28))),
+                    invoke(child, TeletextObjectType::Passive, Some((0, 68))),
                     glyph(0),
                 ],
             ),
@@ -1159,7 +1156,7 @@ fn screen_colour_and_child_calls_do_not_fabricate_parent_addressed_cells() {
     let regions = geometry.object_regions();
     assert_eq!(
         regions[0].written_area(),
-        Some(TeletextRawDisplayArea::RightPanel)
+        Some(TeletextRawDisplayArea::Main)
     );
     assert_eq!(
         regions[1].written_area(),
@@ -1173,4 +1170,261 @@ fn screen_colour_and_child_calls_do_not_fabricate_parent_addressed_cells() {
         geometry.direct_addresses(regions[1].instance().id()).len(),
         1
     );
+}
+
+#[test]
+fn panel_screen_and_row_selectors_reject_exact_original_instance_even_when_disabled() {
+    let target = local(0xffff);
+    for (offset, raw, area) in [
+        (1, 40, TeletextRawDisplayArea::RightPanel),
+        (29, 68, TeletextRawDisplayArea::LeftPanel),
+    ] {
+        for enabled in [false, true] {
+            for selector in [
+                TeletextEnhancementCommand::SetScreenColour {
+                    colour: TeletextColourReference::new(1).unwrap(),
+                },
+                TeletextEnhancementCommand::SetRowColour {
+                    row: 0,
+                    colour: TeletextColourReference::new(2).unwrap(),
+                    following_rows: false,
+                },
+                TeletextEnhancementCommand::SetRowColour {
+                    row: 0,
+                    colour: TeletextColourReference::new(2).unwrap(),
+                    following_rows: true,
+                },
+            ] {
+                let fixture = fixture(
+                    Some(presentation(panels(
+                        enabled,
+                        enabled,
+                        4,
+                        TeletextPanelStatus::Level25And35,
+                    ))),
+                    vec![
+                        set(1, 39),
+                        invoke(target, TeletextObjectType::Active, Some((0, offset))),
+                    ],
+                    vec![definition(
+                        target,
+                        TeletextObjectType::Active,
+                        vec![set(0, 0), selector, glyph(0)],
+                    )],
+                );
+                let before = fixture.spatial.clone();
+                let error = resolve_teletext_display_geometry(
+                    &fixture.base,
+                    &fixture.spatial,
+                    &fixture.glyphs,
+                    TeletextDisplayGeometryBudget {
+                        max_candidates: fixture.glyphs.candidates().len(),
+                        max_events: fixture.spatial.events().len(),
+                        max_invocations: fixture.spatial.invocations().len(),
+                    },
+                )
+                .unwrap_err();
+                assert_eq!(
+                    error.reason,
+                    TeletextDisplayGeometryFailure::PanelColour { area }
+                );
+                assert_eq!(error.owner, owner());
+                assert_eq!(error.position, Some((1, raw)));
+                assert_eq!(
+                    error.location,
+                    Some(TeletextEnhancementSource {
+                        object: Some(target),
+                        command: 1
+                    })
+                );
+                assert_eq!(
+                    error.root_source,
+                    Some(TeletextSpatialRootSource::Local { command: 1 })
+                );
+                assert_eq!(error.invocation.unwrap().get(), 0);
+                assert_eq!(fixture.spatial, before);
+            }
+        }
+    }
+}
+
+#[test]
+fn earliest_plane_selector_uses_whole_own_region_not_its_transient_ap() {
+    let target = local(0xffff);
+    let fixture = fixture(
+        Some(presentation(panels(
+            false,
+            true,
+            0,
+            TeletextPanelStatus::Level25And35,
+        ))),
+        vec![set(1, 39), invoke(target, TeletextObjectType::Active, None)],
+        vec![definition(
+            target,
+            TeletextObjectType::Active,
+            vec![
+                TeletextEnhancementCommand::SetScreenColour {
+                    colour: TeletextColourReference::new(1).unwrap(),
+                },
+                TeletextEnhancementCommand::SetScreenColour {
+                    colour: TeletextColourReference::new(2).unwrap(),
+                },
+                glyph(1),
+            ],
+        )],
+    );
+    let error = resolve_teletext_display_geometry(
+        &fixture.base,
+        &fixture.spatial,
+        &fixture.glyphs,
+        TeletextDisplayGeometryBudget {
+            max_candidates: fixture.glyphs.candidates().len(),
+            max_events: fixture.spatial.events().len(),
+            max_invocations: fixture.spatial.invocations().len(),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextDisplayGeometryFailure::PanelColour {
+            area: TeletextRawDisplayArea::RightPanel
+        }
+    );
+    assert_eq!(error.position, Some((1, 39)));
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: Some(target),
+            command: 0
+        })
+    );
+    assert_eq!(error.invocation.unwrap().get(), 0);
+}
+
+#[test]
+fn main_plane_colours_and_panel_cell_colours_keep_separate_parent_child_regions() {
+    let parent = local(0xffff);
+    let child = local(0x0100);
+    let fg = TeletextEnhancementCommand::AtColumn {
+        column: 0,
+        operation: TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::new(16).unwrap(),
+        },
+    };
+    let bg = TeletextEnhancementCommand::AtColumn {
+        column: 0,
+        operation: TeletextColumnOperation::Background {
+            colour: TeletextColourReference::new(17).unwrap(),
+        },
+    };
+    let fixture = fixture(
+        Some(presentation(panels(
+            true,
+            true,
+            4,
+            TeletextPanelStatus::Level25And35,
+        ))),
+        vec![
+            TeletextEnhancementCommand::SetRowColour {
+                row: 1,
+                colour: TeletextColourReference::new(3).unwrap(),
+                following_rows: false,
+            },
+            TeletextEnhancementCommand::SetScreenColour {
+                colour: TeletextColourReference::new(4).unwrap(),
+            },
+            invoke(parent, TeletextObjectType::Active, None),
+        ],
+        vec![
+            definition(
+                parent,
+                TeletextObjectType::Active,
+                vec![
+                    TeletextEnhancementCommand::SetScreenColour {
+                        colour: TeletextColourReference::new(5).unwrap(),
+                    },
+                    TeletextEnhancementCommand::SetRowColour {
+                        row: 0,
+                        colour: TeletextColourReference::new(6).unwrap(),
+                        following_rows: false,
+                    },
+                    invoke(child, TeletextObjectType::Passive, Some((0, 68))),
+                    glyph(0),
+                ],
+            ),
+            definition(child, TeletextObjectType::Passive, vec![fg, bg, glyph(0)]),
+        ],
+    );
+    let geometry = resolve(&fixture);
+    assert_eq!(
+        geometry.object_regions()[0].written_area(),
+        Some(TeletextRawDisplayArea::Main)
+    );
+    assert_eq!(
+        geometry.object_regions()[1].written_area(),
+        Some(TeletextRawDisplayArea::LeftPanel)
+    );
+    let child_writes = geometry.direct_writes(geometry.object_regions()[1].instance().id());
+    assert_eq!(child_writes.len(), 3);
+    assert_eq!(child_writes[0].event().command(), fg);
+    assert_eq!(child_writes[1].event().command(), bg);
+    assert_eq!(
+        enhanced_at(&geometry, 1, 68).placement(),
+        TeletextCandidatePlacement::Placed { row: 1, column: 0 }
+    );
+}
+
+#[test]
+fn unknown_plane_object_regions_retain_pending_facts_without_guessing_panel_ownership() {
+    let target = local(0xffff);
+    for (commands, body, pending) in [
+        (
+            vec![
+                set(1, 39),
+                invoke(target, TeletextObjectType::Active, Some((0, 1))),
+            ],
+            vec![TeletextEnhancementCommand::SetScreenColour {
+                colour: TeletextColourReference::new(1).unwrap(),
+            }],
+            TeletextObjectAreaPending::NoDefiniteWrites,
+        ),
+        (
+            vec![
+                set(24, 39),
+                invoke(target, TeletextObjectType::Active, Some((1, 1))),
+            ],
+            vec![
+                TeletextEnhancementCommand::SetScreenColour {
+                    colour: TeletextColourReference::new(1).unwrap(),
+                },
+                glyph(0),
+            ],
+            TeletextObjectAreaPending::UnplacedAddress,
+        ),
+    ] {
+        let fixture = fixture(
+            Some(presentation(panels(
+                false,
+                true,
+                0,
+                TeletextPanelStatus::Level25And35,
+            ))),
+            commands,
+            vec![definition(target, TeletextObjectType::Active, body)],
+        );
+        let geometry = resolve(&fixture);
+        assert_eq!(geometry.object_regions()[0].written_area(), None);
+        assert_eq!(geometry.object_regions()[0].area_pending(), Some(pending));
+        assert_eq!(
+            fixture.spatial.events()[2].source(),
+            TeletextEnhancementSource {
+                object: Some(target),
+                command: 0
+            }
+        );
+        assert!(matches!(
+            fixture.spatial.events()[2].command(),
+            TeletextEnhancementCommand::SetScreenColour { .. }
+        ));
+    }
 }

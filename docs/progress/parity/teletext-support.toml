@@ -78,7 +78,8 @@ adr         = '0123'
 description = 'EN 300 706 V1.2.1 section 12.5.3 excludes full-screen and full-row colour selection from side-panel data. Reject these operations in Active objects placed in either raw panel region, retaining original command/invocation diagnostics. Preserve legal main-area plane colours, independent child regions and panel foreground/background attributes. No permanent authoring restriction or acceptance waiver is accepted.'
 discovered  = '2026-10-11'
 evidence    = 'Two independent read-only source audits locate a credible admission gap: an Active object invoked at raw column40 can remain wholly within the right panel while SetScreenColour or SetRowColour reaches the shared global colour prepass. Existing type/range/own-area checks and object encoders do not reject it. This is source-audit evidence, not a new runtime reproduction. Existing panel glyph composition/raster tests remain valid; complete encoded panel/native-decoder/client proof remains open. P9A-01 owns the correction evidence; P9A-04 owns the userflow gap map.'
-resolved    = false
+resolved    = true
+resolution  = 'The shared placement-aware geometry gate now rejects the earliest original screen/row selector in each known own panel region, including disabled panels, while preserving main/child/panel cell attributes and pending unknown facts. Four new regressions pass within the61-test geometry/encoder/native suite (e6385b65-1658-4237-b99b-049e516bf603); all127 composition/raster regressions pass (b05e15bb-27e1-4caf-b33c-ef46e8d2762b), including actual left/right glyph placement. Strict domain all-target Clippy, formatting and independent review pass. P9A-01 owns the full component receipt; full panel decoding/client acceptance remains open.'
 
 [[debt]]
 id          = 'teletext-default-secondary-materialization-is-unproven'
