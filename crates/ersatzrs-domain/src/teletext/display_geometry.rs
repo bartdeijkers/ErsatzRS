@@ -9,6 +9,9 @@ use std::mem::size_of;
 use super::display_geometry_open_count::{
     count_open_objects, endpoint_storage_bytes, endpoint_work,
 };
+use super::display_geometry_successive_count::{
+    count_successive_objects, successive_storage_bytes, successive_work,
+};
 
 use super::{
     TeletextBaseDisplay, TeletextBaseDisplayCellKind, TeletextCandidateNonplacement,
@@ -65,6 +68,8 @@ pub enum TeletextDisplayGeometryFailure {
     },
     #[error("{count} known simultaneously open objects exceed maximum {maximum}")]
     TooManyOpenObjects { count: usize, maximum: usize },
+    #[error("{count} known positioned successive object openings exceed maximum {maximum}")]
+    TooManySuccessiveObjectOpens { count: usize, maximum: usize },
 }
 
 /// Map exact raw candidates through the checked Base presentation's panel flags.
@@ -82,11 +87,17 @@ pub enum TeletextDisplayGeometryFailure {
 /// Inclusive A.8 raw intervals preserve caller AP before offset and last direct
 /// address. More than fifteen known simultaneously open intervals fail across
 /// all object types, including inactive panels. Fifteen or fewer known intervals
-/// do not certify pending intervals, successive opens, A.7 occupied overlap or C.3.
+/// do not certify pending intervals, cross-emitter successive-opening order,
+/// A.7 occupied overlap or C.3. Combined original calls and display writes use
+/// raw scan order. Original ordinal resolves same-position order only within
+/// one emitter; mixed-emitter reset ties conservatively break known runs.
+/// Plane-colour and unpositioned potential resets disable the combined lower-
+/// bound claim and retain original pending witnesses.
 /// # Errors
 /// Rejects budgets/storage arithmetic, owner mismatch, or inconsistent original
 /// inputs, definite own writes crossing selected areas, or sixteen known open
-/// objects. No partial result or caller mutation is returned.
+/// objects or sixteen known positioned successive calls. No partial result
+/// or caller mutation is returned.
 pub fn resolve_teletext_display_geometry(
     base: &TeletextBaseDisplay,
     original: &TeletextSpatialTrace,
@@ -111,6 +122,7 @@ pub fn resolve_teletext_display_geometry(
     let (object_regions, addresses, writes) =
         object_regions(base.owner(), original, left_width, right_width)?;
     let object_open_count = count_open_objects(base.owner(), &object_regions)?;
+    let successive_open_count = count_successive_objects(base.owner(), original)?;
     Ok(TeletextDisplayGeometry {
         owner: base.owner(),
         panels,
@@ -121,6 +133,7 @@ pub fn resolve_teletext_display_geometry(
         addresses,
         writes,
         object_open_count,
+        successive_open_count,
     })
 }
 
@@ -174,6 +187,13 @@ fn preflight(
             }));
         }
     }
+    if !resources_fit(original, layers) {
+        return Err(fail(TeletextDisplayGeometryFailure::AllocationSize));
+    }
+    Ok(())
+}
+
+fn resources_fit(original: &TeletextSpatialTrace, layers: &TeletextGlyphLayers) -> bool {
     let storage = layers
         .candidates()
         .len()
@@ -198,6 +218,10 @@ fn preflight(
         .and_then(|bytes| {
             endpoint_storage_bytes(original.invocations().len())
                 .and_then(|endpoints| bytes.checked_add(endpoints))
+        })
+        .and_then(|bytes| {
+            successive_storage_bytes(original.events().len(), original.invocations().len())
+                .and_then(|successive| bytes.checked_add(successive))
         });
     let levels = usize::BITS - original.events().len().leading_zeros();
     let work = original
@@ -210,11 +234,12 @@ fn preflight(
         .and_then(|work| {
             endpoint_work(original.invocations().len())
                 .and_then(|endpoints| work.checked_add(endpoints))
+        })
+        .and_then(|work| {
+            successive_work(original.events().len(), original.invocations().len())
+                .and_then(|successive| work.checked_add(successive))
         });
-    if storage.is_none_or(|bytes| bytes > isize::MAX as usize) || work.is_none() {
-        return Err(fail(TeletextDisplayGeometryFailure::AllocationSize));
-    }
-    Ok(())
+    storage.is_some_and(|bytes| isize::try_from(bytes).is_ok()) && work.is_some()
 }
 
 /// Shared original-input correspondence only, without geometry/admission gates.

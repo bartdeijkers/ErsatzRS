@@ -18,6 +18,7 @@ mod charset_values;
 mod compositional_links;
 mod display_geometry;
 mod display_geometry_open_count;
+mod display_geometry_successive_count;
 mod display_geometry_values;
 mod drcs_execution;
 mod drcs_resources;
@@ -52,6 +53,7 @@ pub use charset_values::*;
 pub use compositional_links::*;
 pub use display_geometry::*;
 pub use display_geometry_open_count::*;
+pub use display_geometry_successive_count::*;
 pub use display_geometry_values::*;
 pub use drcs_execution::*;
 pub use drcs_resources::*;
@@ -97,6 +99,9 @@ mod display_geometry_tests;
 
 #[cfg(test)]
 mod display_geometry_open_count_tests;
+
+#[cfg(test)]
+mod display_geometry_successive_count_tests;
 
 #[cfg(test)]
 mod charset_values_tests;

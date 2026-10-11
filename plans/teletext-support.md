@@ -216,7 +216,12 @@ Selected geometry now preserves raw/visual panel placement and original instance
 address/write facts in the same composition model. Definite own cross-area writes
 are rejected; separate panel children and pending endpoint evidence stay distinct.
 Known raw inclusive intervals now reject sixteen simultaneous open instances
-across all types; unresolved endpoints remain explicit. Next complete A.8 pending
+across all types; unresolved endpoints remain explicit. A combined raw-position
+call/write scan also rejects sixteen known successive openings, including empty
+objects. Descendant writes can reset between call positions; plane writes and
+mixed-source ties remain explicit rather than granting complete admission.
+Agreeing contending size flags establish geometry without discarding unresolved
+writer provenance. Next complete A.8 pending
 interval and successive-opening rules, A.7 admissibility and C.3 footprints,
 origin/deferred attributes, then validated glyph rasterization and receiver-
 equivalent normalization. Point placement alone cannot close engine acceptance.

@@ -192,7 +192,10 @@ release section when tagging a release.
   Layer-aware replay now retains shared and private execution, fragment origins,
   effective size and deferred writers without changing their original sources.
   Adaptive attribute-only repaint and partial higher-layer overlays remain
-  distinct. Pending boundaries/order and full rasterization, physical equivalence,
+  distinct. Agreeing contending size flags now establish geometry while keeping
+  unresolved writer provenance. A bounded raw-position call/write scan rejects
+  proven successive-opening overflow, retaining intervening child writes and
+  pending reset evidence. Pending boundaries/order and full rasterization, physical equivalence,
   client/editor workflows and publication acceptance stay open.
   Known inclusive raw object intervals now reject sixteen simultaneous opens
   across all object types with original call diagnostics; unresolved intervals

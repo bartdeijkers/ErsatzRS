@@ -1520,3 +1520,172 @@ fn later_adaptive_lower_origin_repaint_preserves_an_earlier_higher_right_fragmen
     );
     assert_ne!(left.origin(), right.origin());
 }
+
+fn tied_display_fixture(
+    first: (bool, bool),
+    active_flags: (bool, bool),
+    third: Option<(bool, bool)>,
+) -> Fixture {
+    let active = local(0xffff);
+    let mut main = vec![
+        set(1, 8),
+        size(8, first.0, first.1),
+        invoke(active, TeletextObjectType::Active, None),
+    ];
+    if let Some(flags) = third {
+        main.push(size(8, flags.0, flags.1));
+    }
+    main.extend([glyph(8, b'A'), size(10, false, false)]);
+    let service = service(
+        main,
+        vec![definition(
+            active,
+            TeletextObjectType::Active,
+            vec![size(0, active_flags.0, active_flags.1)],
+        )],
+    );
+    Fixture::new(blank(), &service)
+}
+
+fn pending_writer_sources(
+    result: &TeletextDisplayResolution,
+    pending: &TeletextDisplayPending,
+    seen: &mut Vec<usize>,
+    sources: &mut Vec<TeletextAttributeSource>,
+) {
+    for writer in [pending.first_writer(), pending.second_writer()]
+        .into_iter()
+        .flatten()
+    {
+        let source = result.writers()[writer].source();
+        if !sources.contains(&source) {
+            sources.push(source);
+        }
+    }
+    for index in [pending.previous(), pending.incoming_previous()]
+        .into_iter()
+        .flatten()
+    {
+        if !seen.contains(&index) {
+            seen.push(index);
+            pending_writer_sources(result, &result.pending()[index], seen, sources);
+        }
+    }
+}
+
+fn assert_display_contenders(result: &TeletextDisplayResolution, origin: usize, third: bool) {
+    let attributes = result.origin_attributes(origin).unwrap();
+    for field in [attributes.double_height(), attributes.double_width()] {
+        assert_eq!(field.value(), None);
+        assert_eq!(field.writer(), None);
+        let pending = field.pending().unwrap();
+        assert_eq!(
+            pending.reason(),
+            TeletextDisplayPendingReason::TransmissionOrder
+        );
+        let mut sources = vec![];
+        pending_writer_sources(result, pending, &mut vec![], &mut sources);
+        let mut commands = vec![];
+        for source in sources {
+            match source {
+                TeletextAttributeSource::Enhancement {
+                    location,
+                    root_source,
+                    invocation,
+                    ..
+                } => {
+                    commands.push(location);
+                    if location.object.is_some() {
+                        assert_eq!(root_source, TeletextSpatialRootSource::Local { command: 2 });
+                        assert_eq!(invocation.map(TeletextSpatialInvocationId::get), Some(0));
+                    } else {
+                        assert_eq!(invocation, None);
+                    }
+                }
+                unexpected => {
+                    panic!("default cannot compete with explicit display writers: {unexpected:?}")
+                }
+            }
+        }
+        assert!(commands.contains(&TeletextEnhancementSource {
+            object: None,
+            command: 1
+        }));
+        assert!(commands.contains(&TeletextEnhancementSource {
+            object: Some(local(0xffff)),
+            command: 0
+        }));
+        if third {
+            assert!(commands.contains(&TeletextEnhancementSource {
+                object: None,
+                command: 3
+            }));
+        }
+        assert_eq!(commands.len(), if third { 3 } else { 2 });
+    }
+}
+
+#[test]
+fn equal_display_size_contenders_keep_known_occupancy_and_unresolved_writer_order() {
+    for (flags, expected) in [
+        ((false, false), TeletextDisplaySize::Normal),
+        ((false, true), TeletextDisplaySize::DoubleWidth),
+        ((true, false), TeletextDisplaySize::DoubleHeight),
+        ((true, true), TeletextDisplaySize::DoubleSize),
+    ] {
+        for third in [false, true] {
+            let fixture = tied_display_fixture(flags, flags, third.then_some(flags));
+            let result = resolve(&fixture);
+            let origin = result.cell(1, 8).unwrap().origin().unwrap();
+            assert_eq!(result.origins()[origin].requested_size(), Some(expected));
+            assert_eq!(result.origins()[origin].effective_size(), Some(expected));
+            assert_display_contenders(&result, origin, third);
+            if flags.1 {
+                assert_eq!(result.cell(1, 9).unwrap().origin(), Some(origin));
+            }
+            if flags.0 {
+                assert_eq!(result.cell(2, 8).unwrap().origin(), Some(origin));
+            }
+            if flags.0 && flags.1 {
+                assert_eq!(result.cell(2, 9).unwrap().origin(), Some(origin));
+            }
+            assert!(!result
+                .pending()
+                .iter()
+                .any(|pending| pending.candidate_index() == Some(origin)
+                    && pending.reason() == TeletextDisplayPendingReason::UnknownSize));
+        }
+    }
+}
+
+#[test]
+fn any_disagreeing_predecessor_or_incoming_display_size_keeps_three_writer_size_unknown() {
+    for (first, active, third) in [
+        ((false, true), (false, false), (false, false)),
+        ((true, false), (false, false), (false, false)),
+        ((false, false), (false, true), (false, true)),
+        ((true, true), (false, true), (false, true)),
+    ] {
+        let fixture = tied_display_fixture(first, active, Some(third));
+        let result = resolve(&fixture);
+        let index = fixture
+            .layers
+            .candidates()
+            .iter()
+            .position(|candidate| {
+                candidate.source()
+                    == Some(TeletextEnhancementSource {
+                        object: None,
+                        command: 4,
+                    })
+            })
+            .unwrap();
+        assert_eq!(result.origins()[index].requested_size(), None);
+        assert_eq!(result.origins()[index].effective_size(), None);
+        assert_eq!(
+            result.pending()[result.origins()[index].pending().unwrap()].reason(),
+            TeletextDisplayPendingReason::UnknownSize
+        );
+        assert_display_contenders(&result, index, true);
+    }
+}

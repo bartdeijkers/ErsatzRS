@@ -566,6 +566,12 @@ Requested attributes remain distinct from effective footprint geometry. Use
 `effective_size()` and fragment identity for occupancy, never re-expand a cell
 from its requested Double Width/Height writer flags. A double-size request whose
 width conflicts with an earlier occupied part can retain legal double height.
+When every retained contending size flag agrees, requested/effective geometry
+can be known despite unresolved writer priority. Both predecessor chains are
+checked without selecting a fictitious winner: original pending field values,
+writer sources and diagnostics remain unchanged. Mixed or missing evidence
+still prevents a size decision. Checked iterative traversal charges the existing
+work budget before scratch allocation and retains original-candidate failures.
 Illegal boundaries and ambiguous inherited Adaptive sizing on a non-origin
 fragment retain located pending evidence rather than a universal clipping rule.
 
@@ -836,15 +842,41 @@ and raw caller AP. Empty, out-of-plane and backwards intervals stay pending; the
 cannot hide a definite violation by sixteen known intervals. The immutable result
 reports known/pending interval counts and maximum known overlap. A maximum below
 sixteen alone does not certify full A.8 admission when unresolved intervals exist,
-and the separate successive-opening rule remains required. Final A.7 overlap,
+and complete successive-opening admission remains required. Final A.7 overlap,
 C.3 footprints and complete A.8 admission remain required before full geometry,
 renderer and engine acceptance.
 
-The successive-opening rule must not reset on arbitrary recursive trace writes.
-For example, calls at header AP can precede all child writes at a later display
-row even when logical preorder alternates calls and child glyphs. Final validation
-must use original call locations, definite write facts and explicit scan/equal-
-position ordering; pure AP/charset setup cannot certify a display write.
+The separate bounded successive-opening scan combines original calls at caller
+AP before offset with actual glyph/four-group writes in raw main/right/left
+scan order. Sixteen known successive openings reject at the original call/root/
+child source even when all object endpoints are pending. Pure AP/charset setup
+is not a reset. A descendant write strictly between successive caller locations
+can reset a run; a later-row child write cannot erase earlier header calls merely
+because recursive preorder visited it. Blank characters, unresolved glyph
+assignments and inactive panels are not discarded as absent writes.
+
+Within one same-position emitter, original command order is known. A mixed-source
+position containing a potential reset retains all original witnesses and breaks
+the proven run conservatively instead of assigning transmission priority.
+Screen/row colour writes have planes rather than invented column addresses;
+these and out-of-display potential writes retain pending witnesses and disable
+the combined hard count claim. Unpositioned openings retain separate evidence.
+The result is a lower-bound check, not full A.8 or publication acceptance.
+
+The size-consensus/successive-opening checkpoint passes all 736 selected
+teletext tests (`b9084b38-ce41-4e0a-a166-cc9646b1e45e`), including two new
+multi-contender size tables and ten original-position call/write oracles. The
+existing twenty increasing-position calls with intervening child writes remain
+valid. The pending-interval fixture now includes an explicit original writer
+between fifteen calls and the additional empty call, preserving its separate
+simultaneous-count purpose. A row-colour test's backwards setup was corrected
+to a later legal row; production ordering checks were retained.
+All eight native checks pass (`8ab7c09b-1951-4403-88b2-f43db1e2c114`) and all nine
+existing producer requests remain byte-identical. Strict domain/FFmpeg all-target
+Clippy, formatting, architecture/progress checks and independent production/test
+review pass. These results do not resolve mixed-source transmission order,
+plane-reset placement, complete A.8 admission or full renderer/editor/client/
+publication acceptance.
 
 ### Compatibility-aware composed packing
 

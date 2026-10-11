@@ -135,7 +135,11 @@ These base facts feed a shared layer-aware display resolver. Base/Active/Local,
 per-instance Adaptive inheritance and private Passive overlays retain separate
 execution semantics. Compact origin/writer pools preserve every original
 candidate, requested/effective size and deferred obscured attribute source;
-effective fragments alone define occupancy. Physical-order ties, illegal size
+effective fragments alone define occupancy. Equal contending size values can
+establish geometry while preserving unresolved writer provenance. A separate
+bounded raw-position call/write scan rejects proven successive-opening overflow;
+child writes can intervene, while plane writes and mixed-source reset ties retain
+pending evidence without invented cells or ordering. Physical-order ties, illegal size
 boundaries and ambiguous inherited Adaptive non-origin sizing remain located
 pending evidence. The interchange reference owns the precise API and decoder
 limitations. This does not accept glyph rasterization, full A.7/A.8 admission,

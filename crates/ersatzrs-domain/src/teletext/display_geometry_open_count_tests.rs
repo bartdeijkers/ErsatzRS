@@ -32,7 +32,18 @@ fn mixed(count: usize, pending: bool) -> Fixture {
     if pending {
         let empty = local(1);
         objects.push(definition(empty, TeletextObjectType::Passive, vec![]));
-        commands.insert(15, invoke(empty, TeletextObjectType::Passive, None));
+        // Separate the pending call from the first fifteen openings with an
+        // actual original write, so this fixture isolates simultaneous opens.
+        commands.insert(
+            15,
+            TeletextEnhancementCommand::AtColumn {
+                column: 8,
+                operation: TeletextColumnOperation::Foreground {
+                    colour: TeletextColourReference::WHITE,
+                },
+            },
+        );
+        commands.insert(16, invoke(empty, TeletextObjectType::Passive, None));
     }
     fixture(None, commands, objects)
 }
@@ -287,7 +298,7 @@ fn pending_interval_is_retained_and_cannot_hide_sixteen_known_intervals() {
             endpoint: None
         }
     );
-    assert_sixteenth(&failure(&mixed(16, true)), 16, 16, (0, 0));
+    assert_sixteenth(&failure(&mixed(16, true)), 17, 16, (0, 8));
 }
 
 #[test]

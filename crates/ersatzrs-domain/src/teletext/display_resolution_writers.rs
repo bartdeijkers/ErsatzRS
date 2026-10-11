@@ -473,7 +473,7 @@ impl<'a> Builder<'a> {
             for &(_, index) in group {
                 let pool = self.store(state);
                 self.output.origins[index].attributes = pool;
-                self.output.origins[index].requested = size(&self.output, state);
+                self.output.origins[index].requested = self.size(state, index)?;
             }
             if hidden {
                 for &(_, index) in group {
@@ -738,7 +738,7 @@ impl<'a> Builder<'a> {
             }
             let pool = self.store(candidate_state);
             self.output.origins[index].attributes = pool;
-            self.output.origins[index].requested = size(&self.output, candidate_state);
+            self.output.origins[index].requested = self.size(candidate_state, index)?;
             if cell.hidden && !(lower_hidden && explicit_display) {
                 if !execution.private
                     && execution.coverage[cell.at].is_some_and(|origin| {
@@ -858,6 +858,84 @@ impl<'a> Builder<'a> {
         }
         Ok(())
     }
+    fn size(
+        &mut self,
+        state: State,
+        origin: usize,
+    ) -> Result<Option<TeletextDisplaySize>, TeletextDisplayResolutionError> {
+        let Some(width) = self.size_flag(state[DW], DW, origin)? else {
+            return Ok(None);
+        };
+        let Some(height) = self.size_flag(state[DH], DH, origin)? else {
+            return Ok(None);
+        };
+        Ok(Some(match (width, height) {
+            (false, false) => TeletextDisplaySize::Normal,
+            (true, false) => TeletextDisplaySize::DoubleWidth,
+            (false, true) => TeletextDisplaySize::DoubleHeight,
+            (true, true) => TeletextDisplaySize::DoubleSize,
+        }))
+    }
+    fn size_flag(
+        &mut self,
+        selection: Selection,
+        field: usize,
+        origin: usize,
+    ) -> Result<Option<bool>, TeletextDisplayResolutionError> {
+        let Some(value) = writer_flag(&self.output, selection.writer, field) else {
+            return Ok(None);
+        };
+        let Some(root) = selection.pending else {
+            return Ok(Some(value));
+        };
+        let candidate = self.output.origins[origin].candidate;
+        let count = self.output.pending.len();
+        if root >= count {
+            return Ok(None);
+        }
+        let bytes = count.checked_mul(std::mem::size_of::<bool>() + std::mem::size_of::<usize>());
+        if bytes.is_none_or(|bytes| bytes > isize::MAX as usize) {
+            return Err(self
+                .input
+                .candidate_error(candidate, TeletextDisplayResolutionFailure::AllocationSize));
+        }
+        // A winner can remain unknown even when every contender has the same
+        // size flag. Inspect both retained chains without changing provenance.
+        // Charge scratch initialization before allocation; visit shared DAG
+        // predecessors once, with each inspected node charged as update work.
+        self.charge_work(count)
+            .map_err(|error| self.input.candidate_error(candidate, error.reason))?;
+        let mut visited = vec![false; count];
+        let mut pending = Vec::with_capacity(count);
+        visited[root] = true;
+        pending.push(root);
+        while let Some(index) = pending.pop() {
+            self.charge()
+                .map_err(|error| self.input.candidate_error(candidate, error.reason))?;
+            let node = self.output.pending[index];
+            for writer in [node.first, node.second] {
+                if writer.and_then(|writer| writer_flag(&self.output, writer, field)) != Some(value)
+                {
+                    return Ok(None);
+                }
+            }
+            for predecessor in [node.previous, node.incoming_previous]
+                .into_iter()
+                .flatten()
+            {
+                // Constructed diagnostics refer only to earlier retained nodes.
+                // Missing or inconsistent evidence cannot establish consensus.
+                if predecessor >= index {
+                    return Ok(None);
+                }
+                if !visited[predecessor] {
+                    visited[predecessor] = true;
+                    pending.push(predecessor);
+                }
+            }
+        }
+        Ok(Some(value))
+    }
     fn charge_work(&mut self, count: usize) -> Result<(), TeletextDisplayResolutionError> {
         let Some(total) = self.updates.checked_add(count) else {
             return Err(self
@@ -907,7 +985,7 @@ impl<'a> Builder<'a> {
                 if event_index == ordinal {
                     let attributes = self.store(state);
                     self.output.origins[index].attributes = attributes;
-                    self.output.origins[index].requested = size(&self.output, state);
+                    self.output.origins[index].requested = self.size(state, index)?;
                     self.private_states[index] = Some(state);
                     next += 1;
                 }
@@ -1136,7 +1214,7 @@ impl<'a> Builder<'a> {
     ) -> Result<(), TeletextDisplayResolutionError> {
         let pool = self.store(state);
         self.output.origins[index].attributes = pool;
-        let requested = size(&self.output, state);
+        let requested = self.size(state, index)?;
         self.output.origins[index].requested = requested;
         let Some(requested) = requested else {
             self.origin_pending(index, TeletextDisplayPendingReason::UnknownSize);
@@ -1388,23 +1466,18 @@ fn source_location(
         (None, None, None)
     }
 }
-fn size(output: &TeletextDisplayResolution, state: State) -> Option<TeletextDisplaySize> {
-    let flag = |field: usize| {
-        if state[field].pending.is_some() {
-            None
-        } else {
-            match output.writers[state[field].writer].values[field] {
-                Some(Value::Flag(value)) => Some(value),
-                _ => None,
-            }
-        }
-    };
-    Some(match (flag(DW)?, flag(DH)?) {
-        (false, false) => TeletextDisplaySize::Normal,
-        (true, false) => TeletextDisplaySize::DoubleWidth,
-        (false, true) => TeletextDisplaySize::DoubleHeight,
-        (true, true) => TeletextDisplaySize::DoubleSize,
-    })
+fn writer_flag(output: &TeletextDisplayResolution, writer: usize, field: usize) -> Option<bool> {
+    match output
+        .writers
+        .get(writer)?
+        .values
+        .get(field)
+        .copied()
+        .flatten()?
+    {
+        Value::Flag(value) => Some(value),
+        _ => None,
+    }
 }
 fn fragment(size: TeletextDisplaySize, x: usize, y: usize) -> TeletextDisplayFragment {
     match (size, x, y) {

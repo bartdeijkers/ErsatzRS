@@ -1,8 +1,9 @@
 //! Immutable display placement values; no raster or publication authority.
 
 use super::{
-    TeletextGlyphCandidate, TeletextObjectOpenCount, TeletextPageAddress, TeletextSidePanels,
-    TeletextSpatialEvent, TeletextSpatialInvocation, TeletextSpatialInvocationId,
+    TeletextGlyphCandidate, TeletextObjectOpenCount, TeletextObjectSuccessiveCount,
+    TeletextPageAddress, TeletextSidePanels, TeletextSpatialEvent, TeletextSpatialInvocation,
+    TeletextSpatialInvocationId,
 };
 
 /// Raw address areas in EN 300 706 Annex A.4 scan order.
@@ -74,6 +75,7 @@ pub struct TeletextDisplayGeometry {
     pub(super) addresses: Vec<TeletextObjectGeometryFact>,
     pub(super) writes: Vec<TeletextObjectGeometryFact>,
     pub(super) object_open_count: TeletextObjectOpenCount,
+    pub(super) successive_open_count: TeletextObjectSuccessiveCount,
 }
 
 impl TeletextDisplayGeometry {
@@ -109,10 +111,17 @@ impl TeletextDisplayGeometry {
         &self.object_regions
     }
     /// Inclusive known-open lower bound across ALL object types. Pending
-    /// intervals and successive opens/A.7/C.3 still require final validation.
+    /// intervals and uncertain successive opens/A.7/C.3 still require final
+    /// validation.
     #[must_use]
     pub const fn object_open_count(&self) -> &TeletextObjectOpenCount {
         &self.object_open_count
+    }
+    /// Known positioned successive runs; pending resets and cross-emitter
+    /// ordering remain distinct from complete A.8/page admission.
+    #[must_use]
+    pub const fn successive_open_count(&self) -> &TeletextObjectSuccessiveCount {
+        &self.successive_open_count
     }
     /// Direct own addressing events only, in original command order; child
     /// endpoints and written regions are never folded into the caller.

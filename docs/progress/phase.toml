@@ -1206,7 +1206,10 @@ defaults and selected panels now feed layer-aware C.3 replay, with distinct
 Base/Active/Local, Adaptive and Passive execution, requested/effective sizes,
 fragment origins and deferred original writers. Additional repaint origins keep
 older uncovered fragments intact; attribute-only work preserves background-only
-cells. Next settle pending source/size/extent evidence, complete A.7/A.8 admission
+cells. Equal size flags now establish geometry without choosing a writer; a
+bounded raw-position call/write scan rejects proven successive overflow while
+preserving intervening child writes and ambiguous reset evidence.
+Next settle pending source/size/extent evidence, complete A.7/A.8 admission
 and glyph rasterization, then physical normalization and full engine/client/editor/
 publication proof. No milestone acceptance or permanent restriction is implied.
 Checked G1 alphabet positions now preserve original mode 0x01, source/invocation
