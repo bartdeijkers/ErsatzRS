@@ -96,7 +96,12 @@ defining glyphs. Body/history consistency, service ordering/repetition and actua
 client proof remain open. Nine opt-in libzvbi 0.2.42 MOT-based cases prove exact
 glyph pixels/native offscreen rendering and isolated invalid-glyph fallback.
 X27 decoding limitations are recorded without altering normative wire output.
-Full independent feature decoding remains open.
+Full independent feature decoding remains open. A bounded local X26 compiler
+now lowers typed commands with independent DRCS latches and located order/limit
+errors; twelve regressions cover every operation family and packet boundaries.
+The nine native cases pass with byte-identical production-compiled invocations.
+Object allocation, row-zero position lowering and base/enhancement composition
+remain required work, without permanent scope restrictions.
 Bounded per-display MOT/X27 derivation now preserves role provenance, exact
 masks, original defaults/fallback and unresolved candidates for audited conflicts.
 It does not decide effective defaults or presentation.

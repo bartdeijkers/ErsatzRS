@@ -4,7 +4,7 @@
 
 use ersatzrs_domain::*;
 
-use super::packets::{data_unit, hamming_24_18, hamming_8_4, terminator};
+use super::packets::{data_unit, hamming_24_18, terminator};
 use super::*;
 
 fn resource(kind: TeletextResourceKind, s1: u8) -> TeletextResourceIdentity {
@@ -69,20 +69,35 @@ fn mot(table: TeletextResourceIdentity, normal: bool) -> TeletextMotLevel25Decla
     .unwrap()
 }
 
-fn x26(s1: u8, slot: u8, normal: bool) -> [u8; 46] {
-    // Synthetic normative fixture only: the production enhancement compiler is
-    // still open. Select row one/column eight, scope/S1, invoke exact glyph.
-    let word = |address: u32, mode: u32, data: u32| address | (mode << 6) | (data << 11);
-    let mut words = [word(63, 0x1f, 7); 13];
-    words[0] = word(41, 4, 8);
-    words[1] = word(40, 0x18, 0x10 | u32::from(s1) | (u32::from(normal) << 6));
-    words[2] = word(8, 0x0d, u32::from(slot) | (u32::from(normal) << 6));
-    let mut body = [0; 40];
-    body[0] = hamming_8_4(0);
-    for (target, word) in body[1..].chunks_exact_mut(3).zip(words) {
-        target.copy_from_slice(&hamming_24_18(word));
-    }
-    data_unit(2, 26, &body, false)
+fn x26(owner: TeletextPageAddress, s1: u8, slot: u8, normal: bool) -> [u8; 46] {
+    let program = TeletextEnhancementProgram::new(vec![
+        TeletextEnhancementCommand::SetPosition {
+            position: TeletextEnhancementPosition::new(1, 8).unwrap(),
+        },
+        TeletextEnhancementCommand::AtColumn {
+            column: 8,
+            operation: TeletextColumnOperation::Drcs {
+                reference: TeletextDrcsGlyphReference {
+                    table: if normal {
+                        TeletextDrcsTableScope::Normal
+                    } else {
+                        TeletextDrcsTableScope::Global
+                    },
+                    subtable: TeletextDrcsSubtableIndex::new(s1).unwrap(),
+                    slot: TeletextDrcsGlyphSlot::new(slot).unwrap(),
+                },
+            },
+        },
+    ])
+    .unwrap();
+    let encoded = compile_teletext_local_program(owner, &program, 2).unwrap();
+    assert_eq!(encoded.packet_bodies().len(), 1);
+    data_unit(
+        owner.page.wire_magazine(),
+        26,
+        &encoded.packet_bodies()[0],
+        false,
+    )
 }
 
 fn display(table: TeletextResourceIdentity, slot: u8, normal: bool) -> Vec<[u8; 46]> {
@@ -109,7 +124,12 @@ fn display(table: TeletextResourceIdentity, slot: u8, normal: bool) -> Vec<[u8; 
     let base = encoded.data_units();
     let mut units = vec![base[0]];
     units.push(base[1]); // Presentation X28 before content.
-    units.push(x26(table.logical_subpage().get(), slot, normal));
+    units.push(x26(
+        draft.address,
+        table.logical_subpage().get(),
+        slot,
+        normal,
+    ));
     assert!(
         matches!(source_header::observe_dvb_teletext_header(&base[2]).unwrap(),
         source_header::TeletextHeaderObservation::NotHeader(address) if address.packet_number==26)

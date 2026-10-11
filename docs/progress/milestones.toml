@@ -987,6 +987,36 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 bounded local enhancement compilation checkpoint:
+compile_teletext_local_program preserves exact display owner, borrowed command
+order, assigned field values and independently latched normal/global DRCS S1.
+Len-budget preflight precedes scanning; complete lowering/order/physical-count
+preflight precedes body allocation. Immutable output has at most sixteen X26
+bodies, 207 payload triplets plus mandatory data-seven local termination, with
+repeated final padding. Row-zero colour is directly lowered; row-zero position
+and object invocation retain located unresolved-lowering diagnostics with exact
+coordinates/target/type/offset. Backwards active positions are located failures.
+These are outstanding required compiler steps, not permanent scope exclusions.
+Twelve independent field/parity/geometry/order/budget regressions pass in Nextest
+420cc4e7-1b95-4a73-884b-93011b8945a9 (409 skipped), including every operation
+family, all DRCS S1/slot combinations, reserved bits, inserted-selector capacity,
+split packet boundaries, input immutability and exact failure metadata.
+The actual pinned libzvbi 0.2.42 resource diagnostic now uses production-compiled
+local invocation bodies. All nine native cases pass again in Nextest
+059b7111-74dd-4c0f-98ab-83df8cf5fee3 (one diagnostic, 420 skipped).
+Regenerated fixture SHA256 remains exactly
+68a84487506433f674c233e5be656dd4bd83d836f911b4ae24caac08c1f1d230,
+byte-identical to the previous independent synthetic calibration. The unchanged
+helper/source pins and 426-test baseline remain valid. Strict FFmpeg all-target
+Clippy, final formatting, architecture and independent implementation/oracle
+reviews pass. Primitive packet bodies carry no complete-page/publication authority.
+Derived-v1/authored composition, resolved glyph/header/footprint semantics, object
+pointer allocation, full service/default/lifecycle compilation, independent full
+feature decoding, actual client navigation and editor/publication acceptance
+remain open. No acceptance/dependency/status change, push or publication.
+
+Earlier independent resource calibration follows:
+
 2026-10-11 independent resource calibration checkpoint: the explicitly ignored
 Linux x64 diagnostic feeds actual encoded MOT/DRCS resources through the installed
 public libzvbi 0.2.42 decoder. Five positive cases verify exact scope/S1/slot,

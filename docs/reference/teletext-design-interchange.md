@@ -91,6 +91,43 @@ resources nor establish an encoded or publishable generation. The two 15-object
 spatial limits in annex A are distinct from the strictly descending invocation
 type graph and remain compiler work.
 
+## Local enhancement packet bodies
+
+`compile_teletext_local_program` takes one exact display owner, a borrowed ordered
+program and a trusted command budget. It checks work, lowering requirements,
+active-position order and the 207-payload-triplet capacity before allocating any
+packet bodies. Successful output is immutable: at most sixteen X26 bodies, each
+with a Hamming-coded designation and thirteen Hamming 24/18 triplets. The payload
+count excludes the mandatory local-only terminator; unused final triplets repeat
+that terminator, including the last triplet. No DVB transport or publication
+permission is attached to these bodies.
+
+The directly lowered operations are screen/row colour, positions in rows 1–24,
+all typed column attributes/repertoires/diacritics and explicit normal/global
+DRCS invocations. Row-zero colour uses Address Display Row 0, which also sets
+both active coordinates to zero. Row 24 uses address 40. Screen colour uses the
+Annex A.5 compatibility recommendation of address 41. The normative initial
+active position is zero/zero; commands changing it must remain in screen order.
+Equal-position operations retain authored order; backwards moves are rejected
+at their original command. Normal and global DRCS selections use independent
+local latches; even the first selection of subtable zero is explicit. Usage bits
+select Level 2.5 and glyph slots retain their complete checked values.
+
+Explicit position-to-row-zero lowering still needs resolved row colour, and
+object invocation still needs checked physical pointer allocation. These produce
+located `NeedsRowZeroLowering`/`NeedsObjectAllocation` diagnostics, never invented
+triplets or truncated host IDs. They are outstanding required compiler steps,
+not permanent feature restrictions. This primitive also does not certify glyph
+assignment, header writability, repertoire limits, underlying spacing attributes,
+object geometry/inheritance, side panels or effective default resolution.
+
+The base encoder derives its own Level 1.5 glyph enhancements. A complete
+service compiler must compose those with authored enhancements without duplicate
+designations, backwards positions, glyph loss or altered fallback. Standalone
+bodies are not safe to append blindly to existing encoded pages. Synthetic native
+resource calibration replaces the known empty base X26 body explicitly; it does
+not establish general base/enhancement composition or complete Level 2.5 readiness.
+
 ## Presentation and supplied service selection
 
 `TeletextLevel25PresentationDefaults` carries an assigned primary designation,
@@ -296,8 +333,9 @@ Five positive cases check every one of the 120 pixels and corresponding PAL8
 output. Four negative cases require exact fallback T; all nine also require the
 independent base calibration B. MOT extents, transmitted subpages and advertised
 counts agree, including all sixteen S1 companions where S1=15 is selected.
-Resources come from the native encoders. Display invocations are explicitly
-handwritten synthetic X26 fixtures; this is not complete service-compiler proof.
+Resources and local display-invocation bodies now come from production encoders.
+The regenerated nine-case fixture is byte-identical to the previously calibrated
+synthetic fixture. This proves these lowering paths, not complete service compilation.
 The test replaces the old base X26/0, uses Level 2.5 DRCS selection and local
 termination, and closes each resource within its own magazine.
 

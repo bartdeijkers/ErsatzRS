@@ -459,9 +459,10 @@ and output limits during the test.
 Nine MOT-based cases check exact global/normal DRCS identities, all glyph pixels,
 native PAL8 cell rendering, defined blank versus fallback, and independently
 isolated missing-row, SPACE-half, parity and undefined-mode failures. They also
-retain separate base-text checks. Resource units come from the actual encoder;
-display invocation triplets remain a synthetic fixture. The declared MOT extent
-is fully transmitted, including empty companion subtables and correct counts.
+retain separate base-text checks. Resource units and local display-invocation
+bodies come from production encoders; the nine-case fixture remains byte-identical
+to the earlier synthetic calibration. The declared MOT extent is fully transmitted,
+including empty companion subtables and correct counts.
 Own-magazine closing headers avoid a version-specific 0.2.42 cache behavior.
 
 The [interchange reference](../../docs/reference/teletext-design-interchange.md#pinned-independent-resource-decoding)
