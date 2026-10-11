@@ -203,6 +203,10 @@ release section when tagging a release.
   rectangles match independent libzvbi pixels, including enlargement and reveal.
   Alphabetic composite fonts preserve current letter/mark families; defined
   substituted-background parameter failures retain their original writers.
+  Object area and overlap checks now include original position/charset setup
+  and inactive panels, retaining permitted object types and separate size fragments.
+  Actual packed command positions now resolve known same-emitter attribute ties
+  in the shared display/colour result; uncertain cross-instance order stays visible.
   Complete rendering, physical equivalence, client/editor workflows and
   publication acceptance stay open.
   Known inclusive raw object intervals now reject sixteen simultaneous opens

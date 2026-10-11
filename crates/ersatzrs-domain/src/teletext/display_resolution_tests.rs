@@ -1201,6 +1201,159 @@ fn same_address_object_rules_distinguish_types_and_active_attribute_groups() {
     }
 }
 
+fn charset_address(column: u8) -> TeletextEnhancementCommand {
+    at(
+        column,
+        TeletextColumnOperation::DesignateCharset {
+            designation: TeletextEnhancementCharsetDesignation::new(0).unwrap(),
+        },
+    )
+}
+
+fn addressed_admission(
+    first_type: TeletextObjectType,
+    second_type: TeletextObjectType,
+    first_body: Vec<TeletextEnhancementCommand>,
+    second_body: Vec<TeletextEnhancementCommand>,
+    offset: Option<(u8, u8)>,
+) -> Result<(), TeletextDisplayResolutionError> {
+    let first = local(0xffff);
+    let second = local(0x0100);
+    let service = service(
+        vec![
+            set(1, 0),
+            invoke(first, first_type, offset),
+            invoke(second, second_type, offset),
+        ],
+        vec![
+            definition(first, first_type, first_body),
+            definition(second, second_type, second_body),
+        ],
+    );
+    let fixture = Fixture::new(blank(), &service);
+    super::display_resolution_writers::validate_objects(fixture.inputs())
+}
+
+#[test]
+fn charset_and_position_only_overlap_use_addressed_cells_without_glyph_or_panel_filtering() {
+    for command in [
+        charset_address(5),
+        set(0, 5),
+        TeletextEnhancementCommand::SetRowColour {
+            row: 0,
+            colour: TeletextColourReference::BLACK,
+            following_rows: false,
+        },
+        TeletextEnhancementCommand::SetRowColour {
+            row: 1,
+            colour: TeletextColourReference::BLACK,
+            following_rows: true,
+        },
+    ] {
+        for offset in [None, Some((0, 40))] {
+            let error = addressed_admission(
+                TeletextObjectType::Adaptive,
+                TeletextObjectType::Adaptive,
+                vec![command],
+                vec![command],
+                offset,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(error.reason, TeletextDisplayResolutionFailure::ObjectOverlap { first, second }
+                if first.get() == 0 && second.get() == 1)
+            );
+            assert_eq!(
+                error.location,
+                Some(TeletextEnhancementSource {
+                    object: Some(local(0x0100)),
+                    command: 0
+                })
+            );
+            for (first, second) in [
+                (TeletextObjectType::Active, TeletextObjectType::Active),
+                (TeletextObjectType::Passive, TeletextObjectType::Passive),
+                (TeletextObjectType::Active, TeletextObjectType::Adaptive),
+            ] {
+                assert!(
+                    addressed_admission(first, second, vec![command], vec![command], offset)
+                        .is_ok()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn active_charset_overlap_uses_whole_instance_compound_attribute_type_masks() {
+    for (first_change, second_change, forbidden) in [
+        (foreground(6, 1), foreground(7, 2), true),
+        (foreground(6, 1), background(7, 2), false),
+        (size(6, true, false), size(7, false, true), true),
+    ] {
+        let result = addressed_admission(
+            TeletextObjectType::Active,
+            TeletextObjectType::Active,
+            vec![charset_address(5), first_change],
+            vec![charset_address(5), second_change],
+            None,
+        );
+        if forbidden {
+            let error = result.unwrap_err();
+            assert!(matches!(
+                error.reason,
+                TeletextDisplayResolutionFailure::ObjectOverlap { .. }
+            ));
+            assert_eq!(
+                error.location,
+                Some(TeletextEnhancementSource {
+                    object: Some(local(0x0100)),
+                    command: 0
+                })
+            );
+        } else {
+            assert!(result.is_ok());
+        }
+    }
+}
+
+#[test]
+fn charset_only_contained_interleaving_keeps_adaptive_group_rules_and_other_types_allowed() {
+    for object_type in [
+        TeletextObjectType::Active,
+        TeletextObjectType::Adaptive,
+        TeletextObjectType::Passive,
+    ] {
+        for changes in [false, true] {
+            let mut first = vec![charset_address(5)];
+            if changes {
+                first.push(foreground(6, 1));
+            }
+            first.push(charset_address(15));
+            let result = addressed_admission(
+                object_type,
+                object_type,
+                first,
+                vec![charset_address(10)],
+                None,
+            );
+            if changes && object_type == TeletextObjectType::Adaptive {
+                let error = result.unwrap_err();
+                assert!(
+                    matches!(error.reason, TeletextDisplayResolutionFailure::AdaptiveInterleaving { first, second }
+                    if first.get() == 0 && second.get() == 1)
+                );
+                assert_eq!(
+                    error.root_source,
+                    Some(TeletextSpatialRootSource::Local { command: 2 })
+                );
+            } else {
+                assert!(result.is_ok());
+            }
+        }
+    }
+}
+
 #[test]
 fn contained_adaptive_interleaving_is_forbidden_only_with_redefined_groups_on_the_same_row() {
     let first = local(0xffff);

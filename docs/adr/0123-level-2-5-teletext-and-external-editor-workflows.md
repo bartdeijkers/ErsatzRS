@@ -209,13 +209,22 @@ overlap, receiver-equivalent rendering or preview/publication readiness.
 Selected display geometry now maps original candidates through actual Level 2.5
 panel widths while preserving raw addressing, metadata, losers and nonplacements.
 Per-instance direct-address/write facts distinguish own area violations from legal
-separate child placement; caller AP and direct endpoints retain raw interval
-semantics. The same immutable composition owns these inputs. Extend this shared
+separate child placement. A.4 applies to known raw AP addresses, including position,
+charset setup and inactive panels. A.7 checks those same directly addressed cells
+with whole-instance attribute-type masks; enlarged footprints remain a separate
+C.3 concern. Repeated and nested calls retain exact identities. Caller AP and
+direct endpoints retain raw interval semantics. The same immutable composition
+owns these inputs. Extend this shared
 result with occupied footprints and geometry-aware attributes. A bounded raw
 inclusive sweep rejects sixteen known simultaneous open intervals across all
 object types, preserving unresolved intervals and original call diagnostics.
 Known-overlap counts grant no full admission certificate; A.7/A.8 admission,
 C.3, physical equivalence and complete renderer/preview/publication remain open.
+Known same-emitter C.2 ties may use the actual final packed word positions. The
+compiled factory must map them to original sources and executing instances and
+rebuild the shared immutable attribute/display/colour result. Standalone analysis
+and unsupported cross-instance comparisons stay pending; source ordinals, pointer
+values and definition storage order do not certify transmission order.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

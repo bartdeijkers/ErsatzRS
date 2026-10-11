@@ -184,9 +184,17 @@ origins and separate mapped lower-row default baselines. Ignored lower controls
 do not cascade. Replay retains requested/effective size and each obscured
 writer's original placement/source, with compact immutable fragment origins.
 Illegal height boundaries, physical-order ties and inherited Adaptive non-origin
-sizing remain pending. Next settle this evidence, complete A.7/A.8 admission and
+sizing remain pending. A.4 now checks known raw own AP addresses including setup,
+charset and disabled panels; children retain separate areas. A.7 uses that same
+address membership and whole-instance attribute-type masks, preserving permitted
+Passive/mixed pairs and separate C.3 size fragments. Next settle remaining
+physical-order evidence, complete A.7/A.8 admission and
 glyph rasterization, then normalize both receiver views. Fragment tests alone
 cannot accept the engine, client, editor or publication workflow.
+The final main/local packer supplies actual word positions for known same-emitter
+C.2 ties; compiled composition maps original sources/instances and rebuilds the
+shared attribute/display/colour result. Standalone and cross-instance ties remain
+pending, with no inferred resource or recursive-preorder chronology.
 Known selected cells now rasterize from the same unpublished encoder
 composition: pinned MIT masks, exact original DRCS, effective C.3 fragments,
 fixed/selected CLUTs and C.1 video/row/window planes. Authored Unicode lifts at

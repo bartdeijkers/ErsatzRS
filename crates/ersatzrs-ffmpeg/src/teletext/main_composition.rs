@@ -11,16 +11,17 @@ use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
     build_teletext_glyph_layers, resolve_teletext_attribute_execution,
-    resolve_teletext_base_footprints, resolve_teletext_charset_execution,
-    resolve_teletext_colour_composition, resolve_teletext_display_geometry,
-    resolve_teletext_display_resolution, resolve_teletext_drcs_execution,
-    resolve_teletext_glyph_intent, resolve_teletext_spatial_trace, TeletextAttributeExecution,
-    TeletextAttributeExecutionError, TeletextBaseDisplay, TeletextBaseFootprintError,
-    TeletextBaseFootprints, TeletextCharsetExecution, TeletextCharsetExecutionError,
-    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
-    TeletextColourComposition, TeletextColumnOperation, TeletextDisplayGeometry,
-    TeletextDisplayGeometryBudget, TeletextDisplayGeometryError, TeletextDisplayResolution,
-    TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
+    resolve_teletext_attribute_execution_with_transmission, resolve_teletext_base_footprints,
+    resolve_teletext_charset_execution, resolve_teletext_colour_composition,
+    resolve_teletext_display_geometry, resolve_teletext_display_resolution,
+    resolve_teletext_drcs_execution, resolve_teletext_glyph_intent, resolve_teletext_spatial_trace,
+    TeletextAttributeExecution, TeletextAttributeExecutionError,
+    TeletextAttributeTransmissionError, TeletextAttributeTransmissionEvidence, TeletextBaseDisplay,
+    TeletextBaseFootprintError, TeletextBaseFootprints, TeletextCharsetExecution,
+    TeletextCharsetExecutionError, TeletextCharsetPair, TeletextCharsetValueError,
+    TeletextCollectedEnhancementReferences, TeletextColourComposition, TeletextColumnOperation,
+    TeletextDisplayGeometry, TeletextDisplayGeometryBudget, TeletextDisplayGeometryError,
+    TeletextDisplayResolution, TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
     TeletextDisplayResolutionInputs, TeletextDrcsExecution, TeletextDrcsExecutionBudget,
     TeletextDrcsExecutionError, TeletextEffectiveProgramSource,
     TeletextEnhancementCharsetDesignation, TeletextEnhancementCollectionBudget,
@@ -100,6 +101,8 @@ pub enum TeletextMainCompositionFailure {
     GlyphLayers(#[from] TeletextGlyphLayersError),
     #[error(transparent)]
     AttributeExecution(#[from] TeletextAttributeExecutionError),
+    #[error(transparent)]
+    Transmission(#[from] TeletextAttributeTransmissionError),
     #[error(transparent)]
     CharsetExecution(#[from] TeletextCharsetExecutionError),
     #[error(transparent)]
@@ -273,6 +276,75 @@ impl TeletextMainComposition {
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
         &self.collected
     }
+    /// Recompute consumed display projections only after final packing has supplied
+    /// exact original-emitter positions. The service is the same immutable input.
+    pub(super) fn with_transmission(
+        mut self,
+        service: &TeletextSemanticService,
+        transmission: &TeletextAttributeTransmissionEvidence,
+        maximum: usize,
+    ) -> Result<Self, TeletextMainCompositionError> {
+        let source = &self.original_program_source;
+        let attributes = resolve_teletext_attribute_execution_with_transmission(
+            &self.base_display,
+            &self.spatial_trace,
+            &self.glyph_layers,
+            self.colour_context.row_colours(),
+            maximum,
+            transmission,
+        )
+        .map_err(|reason| {
+            let location = reason
+                .location
+                .and_then(|location| original_location(source, location));
+            error(self.owner, location, reason.into())
+        })?;
+        let display = original_display_resolution(
+            &self.base_display,
+            &self.base_footprints,
+            &self.colour_context,
+            OriginalDisplayBorrowed {
+                spatial: &self.spatial_trace,
+                glyphs: &self.glyph_layers,
+                attributes: &attributes,
+                intent: &self.glyph_intent,
+                drcs: &self.drcs_execution,
+                geometry: &self.display_geometry,
+            },
+            source,
+            maximum,
+        )?;
+        let presentation = service.effective_presentation(self.owner).ok_or_else(|| {
+            error(
+                self.owner,
+                None,
+                TeletextMainCompositionFailure::SelectionState,
+            )
+        })?;
+        let page = service
+            .base()
+            .pages
+            .iter()
+            .find(|page| page.address == self.owner)
+            .ok_or_else(|| {
+                error(
+                    self.owner,
+                    None,
+                    TeletextMainCompositionFailure::SelectionState,
+                )
+            })?;
+        self.colour_composition = resolve_teletext_colour_composition(
+            &display,
+            presentation,
+            self.colour_context.row_colours(),
+            self.colour_context.screen_colour(),
+            page.kind,
+        );
+        self.attribute_execution = attributes;
+        self.display_resolution = display;
+        Ok(self)
+    }
+
     /// Map a source from this plan's collected references without cloning them.
     /// Foreign root ordinals return `None`; nested body identities stay exact.
     #[must_use]
@@ -373,7 +445,7 @@ pub fn compose_teletext_main_program(
         &base_display,
         &base_footprints,
         &colour_context,
-        &original_display,
+        original_display.borrowed(),
         &source,
         budget.collection.max_commands,
     )?;
@@ -502,11 +574,33 @@ struct OriginalDisplayExecution {
     geometry: TeletextDisplayGeometry,
 }
 
+#[derive(Clone, Copy)]
+struct OriginalDisplayBorrowed<'a> {
+    spatial: &'a TeletextSpatialTrace,
+    glyphs: &'a TeletextGlyphLayers,
+    attributes: &'a TeletextAttributeExecution,
+    intent: &'a TeletextGlyphIntent,
+    drcs: &'a TeletextDrcsExecution,
+    geometry: &'a TeletextDisplayGeometry,
+}
+impl OriginalDisplayExecution {
+    fn borrowed(&self) -> OriginalDisplayBorrowed<'_> {
+        OriginalDisplayBorrowed {
+            spatial: &self.spatial,
+            glyphs: &self.glyphs,
+            attributes: &self.attributes,
+            intent: &self.intent,
+            drcs: &self.drcs,
+            geometry: &self.geometry,
+        }
+    }
+}
+
 fn original_display_resolution(
     base: &TeletextBaseDisplay,
     base_footprints: &TeletextBaseFootprints,
     colours: &TeletextColourContext,
-    original: &OriginalDisplayExecution,
+    original: OriginalDisplayBorrowed<'_>,
     source: &TeletextEffectiveProgramSource,
     maximum: usize,
 ) -> Result<TeletextDisplayResolution, TeletextMainCompositionError> {
@@ -538,12 +632,12 @@ fn original_display_resolution(
         TeletextDisplayResolutionInputs {
             base,
             base_footprints,
-            original: &original.spatial,
-            layers: &original.glyphs,
-            attributes: &original.attributes,
-            intent: &original.intent,
-            drcs: &original.drcs,
-            geometry: &original.geometry,
+            original: original.spatial,
+            layers: original.glyphs,
+            attributes: original.attributes,
+            intent: original.intent,
+            drcs: original.drcs,
+            geometry: original.geometry,
             row_colours: colours.row_colours(),
         },
         TeletextDisplayResolutionBudget {

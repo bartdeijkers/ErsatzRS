@@ -8,13 +8,13 @@ use super::attribute_observations::{observe_candidates, preflight_observations};
 
 use super::{
     TeletextAttributePending, TeletextAttributePendingReason, TeletextAttributeSource,
-    TeletextBaseAttributeSource, TeletextBaseDisplay, TeletextBaseDisplayCell,
-    TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
-    TeletextEnhancementSource, TeletextExecutedAttribute, TeletextExecutedAttributes,
-    TeletextExecutedFlash, TeletextExecutedGlyphAttributes, TeletextFlashMode, TeletextFlashRate,
-    TeletextGlyphLayers, TeletextGlyphPriority, TeletextObjectType, TeletextPageAddress,
-    TeletextSpatialEvent, TeletextSpatialInvocationId, TeletextSpatialRootSource,
-    TeletextSpatialTrace,
+    TeletextAttributeTransmissionEvidence, TeletextBaseAttributeSource, TeletextBaseDisplay,
+    TeletextBaseDisplayCell, TeletextColourReference, TeletextColumnOperation,
+    TeletextEnhancementCommand, TeletextEnhancementSource, TeletextExecutedAttribute,
+    TeletextExecutedAttributes, TeletextExecutedFlash, TeletextExecutedGlyphAttributes,
+    TeletextFlashMode, TeletextFlashRate, TeletextGlyphLayers, TeletextGlyphPriority,
+    TeletextObjectType, TeletextPageAddress, TeletextSpatialEvent, TeletextSpatialInvocationId,
+    TeletextSpatialRootSource, TeletextSpatialTrace,
 };
 use std::collections::BTreeMap;
 
@@ -25,6 +25,7 @@ const HEIGHT: usize = 25;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TeletextAttributeExecution {
     owner: TeletextPageAddress,
+    transmission: Option<TeletextAttributeTransmissionEvidence>,
     cells: Vec<Option<TeletextExecutedAttributes>>,
     before_adaptive: Vec<Option<TeletextExecutedAttributes>>,
     before_passive: Vec<Option<TeletextExecutedAttributes>>,
@@ -32,6 +33,12 @@ pub struct TeletextAttributeExecution {
     pending: Vec<TeletextAttributePending>,
 }
 impl TeletextAttributeExecution {
+    /// Final-emitter evidence, absent in standalone analysis. No cross-instance order.
+    #[must_use]
+    pub fn transmission_evidence(&self) -> Option<&TeletextAttributeTransmissionEvidence> {
+        self.transmission.as_ref()
+    }
+
     #[must_use]
     pub const fn owner(&self) -> TeletextPageAddress {
         self.owner
@@ -89,6 +96,8 @@ pub enum TeletextAttributeExecutionFailure {
     AllocationSize,
     #[error("original command budget {maximum} exhausted")]
     CommandBudget { maximum: usize },
+    #[error("transmission evidence does not match exact original trace")]
+    TransmissionMismatch,
     #[error("bounded attribute update budget exceeds storage range")]
     WorkBudget,
     #[error("missing original invocation {id:?}")]
@@ -114,6 +123,46 @@ pub fn resolve_teletext_attribute_execution(
     row_colours: &[TeletextColourReference; 25],
     max_commands: usize,
 ) -> Result<TeletextAttributeExecution, TeletextAttributeExecutionError> {
+    execute_attributes(
+        base,
+        original,
+        glyph_layers,
+        row_colours,
+        max_commands,
+        None,
+    )
+}
+
+/// Execute with actual final producer positions; unknown/sparse emitter ties stay pending.
+/// # Errors
+/// In addition to ordinary execution errors, rejects evidence from a different
+/// exact original trace. Matching page IDs alone never establish correspondence.
+pub fn resolve_teletext_attribute_execution_with_transmission(
+    base: &TeletextBaseDisplay,
+    original: &TeletextSpatialTrace,
+    glyph_layers: &TeletextGlyphLayers,
+    row_colours: &[TeletextColourReference; 25],
+    max_commands: usize,
+    transmission: &TeletextAttributeTransmissionEvidence,
+) -> Result<TeletextAttributeExecution, TeletextAttributeExecutionError> {
+    execute_attributes(
+        base,
+        original,
+        glyph_layers,
+        row_colours,
+        max_commands,
+        Some(transmission),
+    )
+}
+
+fn execute_attributes(
+    base: &TeletextBaseDisplay,
+    original: &TeletextSpatialTrace,
+    glyph_layers: &TeletextGlyphLayers,
+    row_colours: &[TeletextColourReference; 25],
+    max_commands: usize,
+    transmission: Option<&TeletextAttributeTransmissionEvidence>,
+) -> Result<TeletextAttributeExecution, TeletextAttributeExecutionError> {
     let owner = base.owner();
     let fail = |reason| TeletextAttributeExecutionError {
         owner,
@@ -138,6 +187,11 @@ pub fn resolve_teletext_attribute_execution(
             },
         ));
     }
+    if transmission.is_some_and(|evidence| !evidence.matches(original)) {
+        return Err(fail(
+            TeletextAttributeExecutionFailure::TransmissionMismatch,
+        ));
+    }
     let maximum = original
         .events()
         .len()
@@ -154,6 +208,7 @@ pub fn resolve_teletext_attribute_execution(
     preflight_observations(base, original, glyph_layers, max_commands)?;
     let cells = initial_cells(base, row_colours)?;
     let mut executor = Executor {
+        transmission,
         original,
         layers: glyph_layers,
         cells,
@@ -173,6 +228,7 @@ pub fn resolve_teletext_attribute_execution(
     }
     Ok(TeletextAttributeExecution {
         owner,
+        transmission: transmission.cloned(),
         cells: executor.cells,
         before_adaptive,
         before_passive,
@@ -393,6 +449,7 @@ struct Extent {
 }
 type ExtentKey = (usize, usize, usize);
 struct Executor<'a> {
+    transmission: Option<&'a TeletextAttributeTransmissionEvidence>,
     original: &'a TeletextSpatialTrace,
     layers: &'a TeletextGlyphLayers,
     cells: Vec<Option<TeletextExecutedAttributes>>,
@@ -445,7 +502,10 @@ impl Executor<'_> {
                                         event_source(ordinal, event),
                                         event,
                                         coordinate(row, col, self.original.owner(), event)?,
-                                        &mut self.pending,
+                                        &mut AttributeMerge {
+                                            pending: &mut self.pending,
+                                            transmission: self.transmission,
+                                        },
                                     );
                                     self.cells[index] = Some(cell);
                                 }
@@ -519,7 +579,10 @@ impl Executor<'_> {
                     event_source(ordinal, event),
                     event,
                     position(event),
-                    &mut self.pending,
+                    &mut AttributeMerge {
+                        pending: &mut self.pending,
+                        transmission: self.transmission,
+                    },
                 );
                 for col in column..=extent.last {
                     self.charge(event)?;
@@ -531,7 +594,10 @@ impl Executor<'_> {
                             self.original,
                             event,
                             coordinate(row, col, self.original.owner(), event)?,
-                            &mut self.pending,
+                            &mut AttributeMerge {
+                                pending: &mut self.pending,
+                                transmission: self.transmission,
+                            },
                         );
                         self.cells[index] = Some(cell);
                     }
@@ -607,7 +673,10 @@ impl Executor<'_> {
                         event_source(ordinal, event),
                         event,
                         position(event),
-                        &mut self.pending,
+                        &mut AttributeMerge {
+                            pending: &mut self.pending,
+                            transmission: self.transmission,
+                        },
                     );
                 }
                 if is_glyph(operation) {
@@ -656,26 +725,43 @@ fn is_glyph(operation: TeletextColumnOperation) -> bool {
     )
 }
 
+struct AttributeMerge<'a> {
+    pending: &'a mut Vec<TeletextAttributePending>,
+    transmission: Option<&'a TeletextAttributeTransmissionEvidence>,
+}
 fn merge<T: Copy>(
     current: &mut TeletextExecutedAttribute<T>,
     incoming: TeletextExecutedAttribute<T>,
     event: TeletextSpatialEvent,
     at: (u16, u16),
-    pending: &mut Vec<TeletextAttributePending>,
+    context: &mut AttributeMerge<'_>,
 ) {
     match incoming.source.key().cmp(&current.source.key()) {
         std::cmp::Ordering::Greater => *current = incoming,
         std::cmp::Ordering::Equal
             if current.source != incoming.source && incoming.source.key().is_some() =>
         {
-            let index = pending.len();
+            // Existing unresolved branches cannot be erased by resolving only
+            // the latest pair. A different emitter remains a genuine unknown.
+            if current.pending.is_none() && incoming.pending.is_none() {
+                if let Some(order) = context
+                    .transmission
+                    .and_then(|evidence| evidence.compare(incoming.source, current.source))
+                {
+                    if order.is_gt() {
+                        *current = incoming;
+                    }
+                    return;
+                }
+            }
+            let index = context.pending.len();
             let mut record =
                 pending_event(event, TeletextAttributePendingReason::TransmissionOrder, at);
             record.first_source = Some(current.source);
             record.second_source = Some(incoming.source);
             record.previous = current.pending;
             record.incoming_previous = incoming.pending;
-            pending.push(record);
+            context.pending.push(record);
             *current = TeletextExecutedAttribute {
                 value: None,
                 source: incoming.source,
@@ -691,7 +777,7 @@ fn apply_operation(
     source: TeletextAttributeSource,
     event: TeletextSpatialEvent,
     at: (u16, u16),
-    pending: &mut Vec<TeletextAttributePending>,
+    context: &mut AttributeMerge<'_>,
 ) {
     match operation {
         TeletextColumnOperation::Foreground { colour } => merge(
@@ -699,21 +785,21 @@ fn apply_operation(
             TeletextExecutedAttribute::known(colour, source),
             event,
             at,
-            pending,
+            context,
         ),
         TeletextColumnOperation::Background { colour } => merge(
             &mut cell.background,
             TeletextExecutedAttribute::known(colour, source),
             event,
             at,
-            pending,
+            context,
         ),
         TeletextColumnOperation::Flash { mode, rate } => merge(
             &mut cell.flash,
             TeletextExecutedAttribute::known(TeletextExecutedFlash { mode, rate }, source),
             event,
             at,
-            pending,
+            context,
         ),
         TeletextColumnOperation::Attributes {
             double_height,
@@ -739,7 +825,7 @@ fn apply_operation(
                     TeletextExecutedAttribute::known(value, source),
                     event,
                     at,
-                    pending,
+                    context,
                 );
             }
         }
@@ -752,7 +838,7 @@ fn update_overrides(
     source: TeletextAttributeSource,
     event: TeletextSpatialEvent,
     at: (u16, u16),
-    pending: &mut Vec<TeletextAttributePending>,
+    context: &mut AttributeMerge<'_>,
 ) {
     fn update<T: Copy>(
         field: &mut Option<TeletextExecutedAttribute<T>>,
@@ -760,21 +846,21 @@ fn update_overrides(
         source: TeletextAttributeSource,
         event: TeletextSpatialEvent,
         at: (u16, u16),
-        pending: &mut Vec<TeletextAttributePending>,
+        context: &mut AttributeMerge<'_>,
     ) {
         let next = TeletextExecutedAttribute::known(value, source);
         if let Some(current) = field {
-            merge(current, next, event, at, pending);
+            merge(current, next, event, at, context);
         } else {
             *field = Some(next);
         }
     }
     match operation {
         TeletextColumnOperation::Foreground { colour } => {
-            update(&mut state.foreground, colour, source, event, at, pending);
+            update(&mut state.foreground, colour, source, event, at, context);
         }
         TeletextColumnOperation::Background { colour } => {
-            update(&mut state.background, colour, source, event, at, pending);
+            update(&mut state.background, colour, source, event, at, context);
         }
         TeletextColumnOperation::Flash { mode, rate } => update(
             &mut state.flash,
@@ -782,7 +868,7 @@ fn update_overrides(
             source,
             event,
             at,
-            pending,
+            context,
         ),
         TeletextColumnOperation::Attributes {
             double_height,
@@ -800,7 +886,7 @@ fn update_overrides(
                 (&mut state.invert, invert),
                 (&mut state.d5, underline_or_separated_mosaics),
             ] {
-                update(field, value, source, event, at, pending);
+                update(field, value, source, event, at, context);
             }
         }
         _ => {}
@@ -812,7 +898,7 @@ fn project_overrides(
     original: &TeletextSpatialTrace,
     event: TeletextSpatialEvent,
     at: (u16, u16),
-    pending: &mut Vec<TeletextAttributePending>,
+    context: &mut AttributeMerge<'_>,
 ) {
     fn project<T: Copy>(
         field: &mut TeletextExecutedAttribute<T>,
@@ -820,7 +906,7 @@ fn project_overrides(
         original: &TeletextSpatialTrace,
         event: TeletextSpatialEvent,
         at: (u16, u16),
-        pending: &mut Vec<TeletextAttributePending>,
+        context: &mut AttributeMerge<'_>,
     ) {
         if let Some(value) = value {
             let adaptive = match field.source {
@@ -834,7 +920,7 @@ fn project_overrides(
                 _ => false,
             };
             if adaptive {
-                merge(field, value, event, at, pending);
+                merge(field, value, event, at, context);
             } else {
                 *field = value;
             }
@@ -846,7 +932,7 @@ fn project_overrides(
         original,
         event,
         at,
-        pending,
+        context,
     );
     project(
         &mut cell.background,
@@ -854,9 +940,9 @@ fn project_overrides(
         original,
         event,
         at,
-        pending,
+        context,
     );
-    project(&mut cell.flash, state.flash, original, event, at, pending);
+    project(&mut cell.flash, state.flash, original, event, at, context);
     for (field, value) in [
         (&mut cell.double_height, state.double_height),
         (&mut cell.double_width, state.double_width),
@@ -865,7 +951,7 @@ fn project_overrides(
         (&mut cell.invert, state.invert),
         (&mut cell.underline_or_separated_mosaics, state.d5),
     ] {
-        project(field, value, original, event, at, pending);
+        project(field, value, original, event, at, context);
     }
 }
 fn mark_overrides_pending(

@@ -191,8 +191,9 @@ pub enum TeletextObjectAddressInterval {
     },
 }
 
-/// Direct own-instance topology; whole-object occupied footprints, A.7 overlap,
-/// A.8 interval admission and C.3 final attributes remain required validation.
+/// Direct own-instance topology after raw A.4 addressed-area admission.
+/// A.7 addressed-cell admission, complete A.8 interval admission and C.3
+/// occupied footprints/final attributes remain distinct validation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextObjectDisplayRegion {
     pub(super) instance: TeletextSpatialInvocation,
@@ -211,6 +212,8 @@ impl TeletextObjectDisplayRegion {
         &self.instance
     }
     /// Area proved by definite placed own writes only, not setup or descendants.
+    /// This metadata is separate from A.4 admission, which checks all original
+    /// own AP-addressing cells, including charset/setup and inactive panels.
     #[must_use]
     pub const fn written_area(&self) -> Option<TeletextRawDisplayArea> {
         self.written_area

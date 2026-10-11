@@ -9,6 +9,7 @@
 
 mod attribute_execution;
 mod attribute_observations;
+mod attribute_transmission;
 mod attribute_values;
 mod base_display;
 mod base_footprints;
@@ -44,6 +45,7 @@ mod spatial_trace;
 
 pub use attribute_execution::*;
 pub use attribute_observations::*;
+pub use attribute_transmission::*;
 pub use attribute_values::*;
 pub use base_display::*;
 pub use base_footprints::*;

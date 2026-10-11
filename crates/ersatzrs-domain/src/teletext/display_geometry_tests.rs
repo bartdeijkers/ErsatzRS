@@ -979,7 +979,7 @@ fn definite_own_main_to_right_panel_write_is_located_without_blame_on_child_area
 }
 
 #[test]
-fn charset_only_cross_area_address_and_unplaced_panel_write_remain_pending_facts() {
+fn charset_only_cross_area_is_rejected_while_a_single_disabled_panel_address_is_retained() {
     let target = local(0xffff);
     let fixture = fixture(
         Some(presentation(panels(
@@ -1006,22 +1006,33 @@ fn charset_only_cross_area_address_and_unplaced_panel_write_remain_pending_facts
             ],
         )],
     );
-    let geometry = resolve(&fixture);
-    let region = &geometry.object_regions()[0];
-    assert_eq!(region.written_area(), Some(TeletextRawDisplayArea::Main));
+    let error = resolve_teletext_display_geometry(
+        &fixture.base,
+        &fixture.spatial,
+        &fixture.glyphs,
+        TeletextDisplayGeometryBudget {
+            max_candidates: 4096,
+            max_events: 128,
+            max_invocations: 32,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.position, Some((1, 40)));
     assert_eq!(
-        region.area_pending(),
-        Some(TeletextObjectAreaPending::AddressCrossesAreas)
-    );
-    assert_eq!(
-        region.interval(),
-        TeletextObjectAddressInterval::Known {
-            start: (1, 32),
-            finish: (1, 40)
+        error.reason,
+        TeletextDisplayGeometryFailure::CrossAreaWrite {
+            previous: TeletextRawDisplayArea::Main,
+            requested: TeletextRawDisplayArea::RightPanel,
         }
     );
-    assert_eq!(geometry.direct_addresses(region.instance().id()).len(), 2);
-    assert_eq!(geometry.direct_writes(region.instance().id()).len(), 1);
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: Some(target),
+            command: 1,
+        })
+    );
+    assert_eq!(error.invocation.unwrap().get(), 0);
     let disabled = samples(
         panels(false, false, 9, TeletextPanelStatus::Level25And35),
         1,
@@ -1045,5 +1056,121 @@ fn charset_only_cross_area_address_and_unplaced_panel_write_remain_pending_facts
     assert_eq!(
         enhanced_at(&geometry, 1, 40).placement(),
         unplaced(TeletextCandidateNonplacement::DisabledPanel)
+    );
+}
+
+#[test]
+fn position_and_row_colour_addresses_reject_own_area_changes_even_with_disabled_panels() {
+    let target = local(0xffff);
+    for (body, position, previous, requested) in [
+        (
+            vec![set(0, 0), set(0, 1)],
+            (1, 40),
+            TeletextRawDisplayArea::Main,
+            TeletextRawDisplayArea::RightPanel,
+        ),
+        (
+            vec![
+                set(0, 1),
+                TeletextEnhancementCommand::SetRowColour {
+                    row: 1,
+                    colour: TeletextColourReference::BLACK,
+                    following_rows: false,
+                },
+            ],
+            (2, 39),
+            TeletextRawDisplayArea::RightPanel,
+            TeletextRawDisplayArea::Main,
+        ),
+    ] {
+        let fixture = fixture(
+            Some(presentation(panels(
+                false,
+                false,
+                4,
+                TeletextPanelStatus::Level25And35,
+            ))),
+            vec![
+                set(1, 39),
+                invoke(target, TeletextObjectType::Passive, None),
+            ],
+            vec![definition(target, TeletextObjectType::Passive, body)],
+        );
+        let error = resolve_teletext_display_geometry(
+            &fixture.base,
+            &fixture.spatial,
+            &fixture.glyphs,
+            TeletextDisplayGeometryBudget {
+                max_candidates: 4096,
+                max_events: 128,
+                max_invocations: 32,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.position, Some(position));
+        assert_eq!(
+            error.reason,
+            TeletextDisplayGeometryFailure::CrossAreaWrite {
+                previous,
+                requested
+            }
+        );
+        assert_eq!(
+            error.location,
+            Some(TeletextEnhancementSource {
+                object: Some(target),
+                command: 1
+            })
+        );
+    }
+}
+
+#[test]
+fn screen_colour_and_child_calls_do_not_fabricate_parent_addressed_cells() {
+    let parent = local(0xffff);
+    let child = local(0x0100);
+    let fixture = fixture(
+        Some(presentation(panels(
+            true,
+            true,
+            4,
+            TeletextPanelStatus::Level25And35,
+        ))),
+        vec![
+            set(1, 0),
+            invoke(parent, TeletextObjectType::Active, Some((0, 40))),
+        ],
+        vec![
+            definition(
+                parent,
+                TeletextObjectType::Active,
+                vec![
+                    TeletextEnhancementCommand::SetScreenColour {
+                        colour: TeletextColourReference::BLACK,
+                    },
+                    invoke(child, TeletextObjectType::Passive, Some((0, 28))),
+                    glyph(0),
+                ],
+            ),
+            definition(child, TeletextObjectType::Passive, vec![glyph(0)]),
+        ],
+    );
+    let geometry = resolve(&fixture);
+    let regions = geometry.object_regions();
+    assert_eq!(
+        regions[0].written_area(),
+        Some(TeletextRawDisplayArea::RightPanel)
+    );
+    assert_eq!(
+        regions[1].written_area(),
+        Some(TeletextRawDisplayArea::LeftPanel)
+    );
+    assert_eq!(
+        geometry.direct_addresses(regions[0].instance().id()).len(),
+        1
+    );
+    assert_eq!(
+        geometry.direct_addresses(regions[1].instance().id()).len(),
+        1
     );
 }

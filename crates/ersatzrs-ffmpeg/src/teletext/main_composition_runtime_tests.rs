@@ -124,16 +124,21 @@ fn encoded_case_with_context(
         max_commands: 128,
     };
     let local = if compatibility {
-        compile_teletext_composed_main_program(
+        let compiled = compile_teletext_composed_main_program(
             &service,
             owner,
             &allocations,
             composition_budget,
             packing_budget,
         )
-        .unwrap()
-        .encoded()
-        .clone()
+        .unwrap();
+        if matches!(
+            name,
+            "compiled_local_colour_tie" | "compiled_adaptive_colour_tie"
+        ) {
+            assert_compiled_colour_tie(&compiled, name);
+        }
+        compiled.encoded().clone()
     } else {
         let composed = compose_teletext_main_program(&service, owner, composition_budget).unwrap();
         compile_teletext_local_program_with_objects(
@@ -185,6 +190,39 @@ fn encoded_case_with_context(
     units.push(terminator(2));
     serde_json::json!({"name":name,"page":0x200,"subcode":0,
         "units":units.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>(),"cells":cells})
+}
+
+fn assert_compiled_colour_tie(compiled: &super::EncodedTeletextComposedMainProgram, name: &str) {
+    let column = if name == "compiled_local_colour_tie" {
+        18
+    } else {
+        5
+    };
+    let composition = compiled.composition();
+    let display = composition.display_resolution();
+    let selected = display.cell(1, column).unwrap().attributes().foreground();
+    assert_eq!(
+        selected.value(),
+        Some(TeletextColourReference::new(5).unwrap())
+    );
+    assert_eq!(selected.pending(), None);
+    let pixel = composition
+        .colour_composition()
+        .pixel(
+            display,
+            1,
+            column,
+            true,
+            TeletextColourPixelOptions {
+                reveal_concealed: false,
+                flash_phase: TeletextFlashPhase::Original,
+            },
+        )
+        .unwrap();
+    let TeletextColourPixel::Rgb(rgb) = pixel else {
+        panic!("known magenta foreground");
+    };
+    assert_eq!(rgb.get(), [15, 0, 15]);
 }
 
 fn glyph_cases() -> Vec<serde_json::Value> {
@@ -247,6 +285,132 @@ fn glyph_cases() -> Vec<serde_json::Value> {
         ],
     );
     vec![derived, compatible, layering]
+}
+
+fn compiled_colour_tie_cases() -> Vec<serde_json::Value> {
+    let foreground = |column, colour| {
+        at(
+            column,
+            TeletextColumnOperation::Foreground {
+                colour: TeletextColourReference::new(colour).unwrap(),
+            },
+        )
+    };
+    let glyph = |column| {
+        at(
+            column,
+            TeletextColumnOperation::G0 {
+                code: TeletextGlyphCode::new(b'A').unwrap(),
+            },
+        )
+    };
+    let black_screen = TeletextEnhancementCommand::SetScreenColour {
+        colour: TeletextColourReference::BLACK,
+    };
+    let mut main = vec![black_screen; 11];
+    main.extend([
+        position(1, 18),
+        foreground(18, 4),
+        foreground(18, 5),
+        glyph(18),
+    ]);
+    let local = encoded_case_with_context(
+        "compiled_local_colour_tie",
+        vec![text(1, 18, "T"), text(2, 1, "B")],
+        main,
+        vec![],
+        &[cell(1, 18, [b'T', 15, 0, 7, 0], [b'A', 0, 0, 5, 0])],
+        true,
+    );
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let identity = TeletextObjectIdentity::local(owner, TeletextObjectId::new(0xffff));
+    let adaptive = encoded_case_with_context(
+        "compiled_adaptive_colour_tie",
+        vec![text(1, 5, "T"), text(2, 1, "B")],
+        vec![
+            position(1, 0),
+            TeletextEnhancementCommand::InvokeObject {
+                target: identity,
+                object_type: TeletextObjectType::Adaptive,
+                offset: None,
+            },
+        ],
+        vec![TeletextEnhancementObjectDefinition {
+            identity,
+            object_type: TeletextObjectType::Adaptive,
+            program: TeletextEnhancementProgram::new(vec![
+                foreground(5, 4),
+                foreground(5, 5),
+                glyph(5),
+            ])
+            .unwrap(),
+        }],
+        &[cell(1, 5, [b'T', 15, 0, 7, 0], [b'A', 0, 0, 5, 0])],
+        true,
+    );
+    vec![local, adaptive]
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn compiled_same_emitter_colour_ties_decode_with_pinned_imager() {
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.0", "cases":compiled_colour_tie_cases(),
+    }))
+    .unwrap();
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_COMPILED_COLOUR_TIE_IMAGER_FIXTURE",
+    ]) {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-main-composition-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({"decoder":"teletextimager","decoder_version":"0.2.0",
+        "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317","cases_passed":2,"levels":["1.5","2.5"]})
+    );
+}
+
+// Intentional Linux x64 calibration of the frozen public decoder ABI. This
+// checks a formatted main cell; it is not an interactive-client acceptance gate.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly calibrated native libzvbi decoder"]
+async fn compiled_local_colour_tie_decodes_with_libzvbi() {
+    let mut case = compiled_colour_tie_cases().remove(0);
+    case["cells"] = serde_json::json!([
+        {"row":1,"column":18,"unicode":65,"foreground":5,"background":0},
+    ]);
+    let request = serde_json::to_vec(&serde_json::json!({
+        "expected_version":"0.2.42", "cases":[case],
+    }))
+    .unwrap();
+    if let Some(path) = crate::locator::first_non_empty_env(&[
+        "ERSATZRS_TELETEXT_TEST_COMPILED_COLOUR_TIE_LIBZVBI_FIXTURE",
+    ]) {
+        std::fs::write(path, &request).unwrap();
+    }
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-object-decoder.py");
+    let python = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_PYTHON"])
+        .unwrap_or_else(|| "python3".into());
+    let output =
+        crate::teletext_probe::run_probe(&python, &[script.to_str().unwrap()], &request, 16 * 1024)
+            .await
+            .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        report,
+        serde_json::json!({"decoder_version":"0.2.42","cases_passed":1})
+    );
 }
 
 fn anchored_case() -> serde_json::Value {

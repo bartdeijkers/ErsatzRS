@@ -2096,6 +2096,107 @@ fn original_object_cannot_write_across_panels_but_may_invoke_a_separate_panel_ch
     assert_eq!(valid, before);
 }
 
+#[test]
+fn original_charset_addresses_crossing_areas_reject_with_unchanged_object_source() {
+    let target = local(0x1234);
+    let mut fixture = split_panel_fixture(vec![
+        position(1, 39),
+        invoke(target, TeletextObjectType::Active),
+    ]);
+    // Charset commands address cells even without writing glyphs or attributes.
+    fixture.objects.push(definition(
+        target,
+        TeletextObjectType::Active,
+        vec![charset(0, 0), charset(1, 0)],
+    ));
+    let service = fixture.build();
+    let before = service.clone();
+    let rejected = compose_teletext_main_program(&service, owner(), budget()).unwrap_err();
+    assert_eq!(
+        rejected.location,
+        Some(TeletextMainCompositionSource::Object {
+            identity: target,
+            command: 1,
+        })
+    );
+    let TeletextMainCompositionFailure::DisplayGeometry(error) = rejected.reason else {
+        panic!("original AP addressing must reach geometry admission");
+    };
+    assert_eq!(error.position, Some((1, 40)));
+    assert_eq!(error.invocation.unwrap().get(), 0);
+    assert_eq!(
+        error.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 1 })
+    );
+    assert_eq!(
+        error.reason,
+        TeletextDisplayGeometryFailure::CrossAreaWrite {
+            previous: TeletextRawDisplayArea::Main,
+            requested: TeletextRawDisplayArea::RightPanel,
+        }
+    );
+    assert_eq!(service, before);
+}
+
+#[test]
+fn original_charset_only_adaptive_overlap_rejects_but_passive_instances_remain_permitted() {
+    let first = local(0xffff);
+    let second = local(1);
+    for object_type in [TeletextObjectType::Adaptive, TeletextObjectType::Passive] {
+        let mut fixture = Fixture::new(
+            vec![],
+            Some(vec![
+                position(1, 8),
+                invoke(first, object_type),
+                invoke(second, object_type),
+            ]),
+        );
+        for identity in [first, second] {
+            fixture
+                .objects
+                .push(definition(identity, object_type, vec![charset(0, 0)]));
+        }
+        let service = fixture.build();
+        let before = service.clone();
+        let result = compose_teletext_main_program(&service, owner(), budget());
+        if object_type == TeletextObjectType::Adaptive {
+            let rejected = result.unwrap_err();
+            assert_eq!(
+                rejected.location,
+                Some(TeletextMainCompositionSource::Object {
+                    identity: second,
+                    command: 0,
+                })
+            );
+            let TeletextMainCompositionFailure::DisplayResolution(error) = rejected.reason else {
+                panic!("original addressed-cell overlap must reach display admission");
+            };
+            assert_eq!(
+                error.location,
+                Some(TeletextEnhancementSource {
+                    object: Some(second),
+                    command: 0,
+                })
+            );
+            assert_eq!(error.invocation.unwrap().get(), 1);
+            assert_eq!(
+                error.root_source,
+                Some(TeletextSpatialRootSource::Local { command: 2 })
+            );
+            let TeletextDisplayResolutionFailure::ObjectOverlap { first, second } = error.reason
+            else {
+                panic!("distinct Adaptive instances must remain distinct");
+            };
+            assert_eq!((first.get(), second.get()), (0, 1));
+        } else {
+            let plan = result.unwrap();
+            assert_eq!(plan.display_geometry().object_regions().len(), 2);
+            assert_eq!(plan.spatial_trace().invocations().len(), 2);
+        }
+        assert_eq!(service, before);
+    }
+}
+
 fn simultaneous_object_fixture(count: u8) -> Fixture {
     let types = [
         TeletextObjectType::Active,

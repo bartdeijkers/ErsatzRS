@@ -75,6 +75,29 @@ impl TeletextLocalObjectDefinitionPosition {
     }
 }
 
+/// Final physical words belonging to one original packing command. Compatibility
+/// selectors belong to its range; the semantic word is the last emitted word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextCompiledCommandPosition {
+    source: TeletextEnhancementSource,
+    first_word: usize,
+    semantic_word: usize,
+}
+impl TeletextCompiledCommandPosition {
+    #[must_use]
+    pub const fn source(&self) -> TeletextEnhancementSource {
+        self.source
+    }
+    #[must_use]
+    pub const fn first_word(&self) -> usize {
+        self.first_word
+    }
+    #[must_use]
+    pub const fn semantic_word(&self) -> usize {
+        self.semantic_word
+    }
+}
+
 /// Immutable main program and all supplied local definitions for this owner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncodedTeletextLocalObjectProgram {
@@ -82,9 +105,16 @@ pub struct EncodedTeletextLocalObjectProgram {
     packet_bodies: Vec<[u8; 40]>,
     main_triplet_count: usize,
     positions: Vec<TeletextLocalObjectDefinitionPosition>,
+    commands: Vec<TeletextCompiledCommandPosition>,
 }
 
 impl EncodedTeletextLocalObjectProgram {
+    /// Actual final emission positions, never the placeholder sizing pass.
+    #[must_use]
+    pub fn command_positions(&self) -> &[TeletextCompiledCommandPosition] {
+        &self.commands
+    }
+
     #[must_use]
     pub const fn owner(&self) -> TeletextPageAddress {
         self.owner
@@ -168,10 +198,11 @@ pub(super) fn compile_with_context(
         .iter()
         .map(|item| (item.target, item.object_type, item.object_number))
         .collect();
-    let packet_bodies = input.encode(&numbers, &plan)?;
+    let (packet_bodies, commands) = input.encode(&numbers, &plan)?;
     Ok(EncodedTeletextLocalObjectProgram {
         owner,
         packet_bodies,
+        commands,
         main_triplet_count: plan.main_count,
         positions: plan.positions,
     })
@@ -371,7 +402,10 @@ impl Input<'_> {
         &self,
         numbers: &[(TeletextObjectIdentity, TeletextObjectType, u8)],
         plan: &Plan,
-    ) -> Result<Vec<[u8; 40]>, TeletextLocalObjectProgramEncodingError> {
+    ) -> Result<
+        (Vec<[u8; 40]>, Vec<TeletextCompiledCommandPosition>),
+        TeletextLocalObjectProgramEncodingError,
+    > {
         let final_marker = terminator(if numbers.is_empty() { 7 } else { 5 });
         let mut bodies = vec![[0; 40]; plan.word_count.div_ceil(PER_PACKET)];
         for (designation, body) in (0_u8..16).zip(&mut bodies) {
@@ -380,11 +414,14 @@ impl Input<'_> {
                 triplet.copy_from_slice(&hamming_24_18(final_marker));
             }
         }
-        let mut index = 0;
-        self.write_program(self.program, None, numbers, &mut bodies, &mut index)?;
+        let mut emission = Emission {
+            index: 0,
+            commands: Vec::new(),
+        };
+        self.write_program(self.program, None, numbers, &mut bodies, &mut emission)?;
         write_word(
             &mut bodies,
-            &mut index,
+            &mut emission.index,
             terminator(if numbers.is_empty() { 7 } else { 6 }),
         );
         for (item, position) in self.locals().zip(&plan.positions) {
@@ -396,15 +433,21 @@ impl Input<'_> {
             };
             write_word(
                 &mut bodies,
-                &mut index,
+                &mut emission.index,
                 (0x28 | (number >> 7)) | ((0x14 | object_type) << 6) | ((number & 127) << 11),
             );
-            self.write_program(&item.program, Some(item), numbers, &mut bodies, &mut index)?;
+            self.write_program(
+                &item.program,
+                Some(item),
+                numbers,
+                &mut bodies,
+                &mut emission,
+            )?;
         }
         if !numbers.is_empty() {
-            write_word(&mut bodies, &mut index, final_marker);
+            write_word(&mut bodies, &mut emission.index, final_marker);
         }
-        Ok(bodies)
+        Ok((bodies, emission.commands))
     }
 
     fn write_program(
@@ -413,7 +456,7 @@ impl Input<'_> {
         object: Option<&TeletextEnhancementObjectDefinition>,
         numbers: &[(TeletextObjectIdentity, TeletextObjectType, u8)],
         bodies: &mut [[u8; 40]],
-        index: &mut usize,
+        emission: &mut Emission,
     ) -> Result<(), TeletextLocalObjectProgramEncodingError> {
         let mut state = if object.is_none() {
             self.main_state()
@@ -432,12 +475,23 @@ impl Input<'_> {
                 object.map(|item| item.object_type),
                 numbers,
             )?;
+            let first_word = emission.index;
             for &word in words.words() {
-                write_word(bodies, index, word);
+                write_word(bodies, &mut emission.index, word);
             }
+            emission.commands.push(TeletextCompiledCommandPosition {
+                source: location,
+                first_word,
+                semantic_word: emission.index - 1,
+            });
         }
         Ok(())
     }
+}
+
+struct Emission {
+    index: usize,
+    commands: Vec<TeletextCompiledCommandPosition>,
 }
 
 const fn terminator(data: u32) -> u32 {

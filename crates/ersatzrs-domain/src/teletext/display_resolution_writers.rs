@@ -345,6 +345,25 @@ impl<'a> Builder<'a> {
                 && writer != previous.writer
                 && incoming.explicit
             {
+                // Only final positions from this exact original execution can
+                // settle C.2 r3. An older unknown branch cannot be discarded by
+                // comparing merely the newest pair of contenders.
+                if previous.pending.is_none() {
+                    if let Some(order) = self
+                        .input
+                        .attributes
+                        .transmission_evidence()
+                        .and_then(|evidence| evidence.compare(incoming.source, current.source))
+                    {
+                        if order.is_gt() {
+                            *selection = Selection {
+                                writer,
+                                pending: None,
+                            };
+                        }
+                        continue;
+                    }
+                }
                 let (location, root_source, invocation) = source_location(incoming.source);
                 let index = self.output.pending.len();
                 self.output.pending.push(TeletextDisplayPending {
@@ -1496,36 +1515,28 @@ fn fragment(size: TeletextDisplaySize, x: usize, y: usize) -> TeletextDisplayFra
 pub(super) fn validate_objects(
     input: TeletextDisplayResolutionInputs<'_>,
 ) -> Result<(), TeletextDisplayResolutionError> {
-    // Actual addressed cells, never occupied-size rectangles or descendants.
-    let mut facts = Vec::new();
+    // A.7 membership follows the original A.4 AP-addressing facts, including
+    // charset/setup cells and inactive panels. Never use occupied-size
+    // rectangles, visual placement, implicit initial AP or child addresses.
+    // Attribute masks remain whole-instance types, with compound Display as
+    // ONE type. Unresolved wide facts remain in the geometry's pending regions.
+    let mut facts = Vec::with_capacity(input.original.events().len());
     let mut masks = vec![0u8; input.original.invocations().len()];
     for (ordinal, event) in input.original.events().iter().enumerate() {
         let Some(id) = event.invocation() else {
             continue;
         };
-        let TeletextEnhancementCommand::AtColumn { operation, .. } = event.command() else {
-            continue;
-        };
-        masks[id.get()] |= match operation {
-            TeletextColumnOperation::Foreground { .. } => 1,
-            TeletextColumnOperation::Background { .. } => 2,
-            TeletextColumnOperation::Flash { .. } => 4,
-            TeletextColumnOperation::Attributes { .. } => 8,
-            _ => 0,
-        };
-        let definite = operation_values(operation).iter().any(Option::is_some)
-            || matches!(
-                operation,
-                TeletextColumnOperation::G0 { .. }
-                    | TeletextColumnOperation::G1 { .. }
-                    | TeletextColumnOperation::G1Alpha { .. }
-                    | TeletextColumnOperation::G2 { .. }
-                    | TeletextColumnOperation::G3 { .. }
-                    | TeletextColumnOperation::G0Diacritic { .. }
-                    | TeletextColumnOperation::Drcs { .. }
-            );
-        if definite && visual(input.geometry, position(event.absolute_after())).is_some() {
-            facts.push((position(event.absolute_after()), id.get(), ordinal));
+        if let TeletextEnhancementCommand::AtColumn { operation, .. } = event.command() {
+            masks[id.get()] |= match operation {
+                TeletextColumnOperation::Foreground { .. } => 1,
+                TeletextColumnOperation::Background { .. } => 2,
+                TeletextColumnOperation::Flash { .. } => 4,
+                TeletextColumnOperation::Attributes { .. } => 8,
+                _ => 0,
+            };
+        }
+        if let Some(position) = super::display_geometry::known_address_position(*event) {
+            facts.push((position, id.get(), ordinal));
         }
     }
     facts.sort_unstable();

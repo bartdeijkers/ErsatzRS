@@ -407,7 +407,16 @@ Local attribute bundle.
 
 C2 compares where an attribute first takes effect, then where it is placed.
 Equal keys require actual transmission evidence: logical event order is not a
-substitute. Typed pending diagnostics retain the original contenders and their
+substitute. The final main/local-definition packer retains each command's actual
+word position after compatibility selectors and restores have been inserted.
+The same-service compiled factory maps those positions back to original sources
+and exact executing instances, then rebuilds attribute execution, display
+resolution and colour composition before returning the immutable result.
+Only comparisons within the same original Local main or the same exact object
+invocation use this evidence. Resource order, definition storage order, pointer
+values and recursive preorder do not establish cross-instance transmission order.
+Standalone composition has no physical evidence and keeps equal-key contention
+pending. Typed pending diagnostics retain the original contenders and their
 source, root and invocation rather than guessing a winner. Adaptive endpoints
 whose interpretation depends on AP-only or invocation-only addressing also
 remain explicit pending work. These diagnostics do not impose permanent authored
@@ -429,8 +438,38 @@ inversion. Flash mode and rate are retained without claiming timed animation.
 
 This intermediate does not execute character-set lifetimes, rasterize characters
 or DRCS, validate prohibited object overlap/open-object limits, normalize physical
-instructions or authorize rendering/publication. Final C2 transmission ties,
+instructions or authorize rendering/publication. Unresolved C2 transmission ties,
 Adaptive endpoints, geometry and both receiver views remain mandatory work.
+
+### Final packed attribute-order proof
+
+The portable physical-order regressions independently read Hamming data bits and
+check parity. They cover a Local tie across X26/0 triplet12 and X26/1 triplet0,
+one exact Adaptive instance, compatibility words shifting the semantic command,
+sparse/stale/duplicate evidence and preservation of an older cross-instance
+unknown. Both original attributes and final display/colour are checked.
+
+Two opt-in production fixtures use the unchanged frozen external helpers:
+teletextimager 0.2.0 at `2b0125b778c45ffdfa2df0b196870c093361f317` checks
+Local and Adaptive magenta cells and unchanged Level 1.5 fallback; libzvbi 0.2.42
+checks the Local cell. This does not claim libzvbi's local-Adaptive support or
+interactive client navigation. The prior eight-case DRCS raster request remains
+byte-identical. Exact run results belong to P9A-01 evidence.
+
+| Request | SHA256 |
+| --- | --- |
+| Local/Adaptive C.2 imager | `be4fc2735981f664c22058a9219fc78cc598d40be0ae9b9c5ec61b29b9cca9e3` |
+| Local C.2 libzvbi | `5d49e42cf8b1d53da849712c0dd5a8257f48c59ef1f929f867e283f5d295fd99` |
+| Reused eight-case raster | `7ecb654a044afe4d47019c8dab82be7eef1e3517deccac7d97533986ab12afb2` |
+
+```sh
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$TELETEXT_IMAGER_DIR" \
+ERSATZRS_TELETEXT_TEST_COMPILED_COLOUR_TIE_IMAGER_FIXTURE="$TELETEXT_EVIDENCE_DIR/c2-imager.json" \
+ERSATZRS_TELETEXT_TEST_COMPILED_COLOUR_TIE_LIBZVBI_FIXTURE="$TELETEXT_EVIDENCE_DIR/c2-libzvbi.json" \
+ERSATZRS_TELETEXT_TEST_RASTER_FIXTURE="$TELETEXT_EVIDENCE_DIR/c2-raster.json" \
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored all \
+  -E 'test(physical_order_tests::) | test(compiled_same_emitter_colour_ties_decode_with_pinned_imager) | test(compiled_local_colour_tie_decodes_with_libzvbi) | test(composed_drcs_raster_matches_independent_native_pixels)'
+```
 
 ### Coded-base height fragments and suppression
 
@@ -824,11 +863,34 @@ mismatched projections. Matching identifiers alone cannot certify generation.
 
 Per-instance region facts separate direct AP-addressing instructions from definite
 own glyph/four-attribute-group writes. Pure position and charset setup is not a
-written glyph. Descendant addresses/writes never become parent extents. Definite
-selected-cell writes by one object across main and a side panel are rejected with
-the offending original source/instance. A main-area parent can instead invoke a
-separate panel child. Setup-only or unplaced area evidence remains explicit;
-it cannot silently create a certified occupied rectangle.
+written glyph. Annex A.4 nevertheless applies to all own AP-addressing commands:
+column functions, position and row-colour addressing. Known raw addresses crossing
+main/right/left areas reject with the offending original source/instance, including
+charset-only bodies and disabled panels. Descendant addresses/writes never become
+parent extents; a main-area parent can invoke a separate panel child. Screen colour,
+private DRCS selector state and invocation/origin modifiers do not create additional
+AP addresses. Out-of-display facts remain explicit and cannot silently create a
+certified occupied rectangle. The existing `CrossAreaWrite` diagnostic now covers
+address-only violations too.
+
+Annex A.7 compares cells directly addressed by each original invocation, rather
+than enlarged glyph rectangles. The validator uses the same AP-address membership
+as A.4, including setup and charset addresses; this is the host's explicit reading
+of A.7's addressed-cell rule. Raw inactive panels are included. Each invocation
+retains a whole-instance mask of foreground, background, flash and compound
+display attributes; Double Height and Double Width belong to the same type.
+
+| Original object types | Shared addressed cell | Same-row A/B/A interleaving |
+| --- | --- | --- |
+| Active / Active | Allowed with disjoint attribute-type masks | Allowed |
+| Adaptive / Adaptive | Rejected | Allowed only if neither instance redefines attributes |
+| Passive / Passive | Allowed; later invocation has priority | Allowed |
+| Different types | Allowed under normal layer precedence | Allowed |
+
+Nested and repeated calls retain distinct instance identities. Character-size
+fragments are resolved separately under C.3; a fragment collision does not create
+an A.7 addressed-cell overlap. These checks do not settle pending A.8 intervals,
+physical normalization or complete publication/client acceptance.
 
 Known Annex A.8 intervals use raw row/column order, starting at the caller AP
 before the invocation offset and ending inclusively at the last direct explicit

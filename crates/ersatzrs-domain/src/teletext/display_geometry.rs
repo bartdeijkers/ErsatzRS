@@ -61,7 +61,7 @@ pub enum TeletextDisplayGeometryFailure {
     EventMismatch { event: usize },
     #[error("original candidate {candidate} has inconsistent Base/event source")]
     CandidateMismatch { candidate: usize },
-    #[error("own object writes cross from {previous:?} to {requested:?}")]
+    #[error("own object addresses cross from {previous:?} to {requested:?}")]
     CrossAreaWrite {
         previous: TeletextRawDisplayArea,
         requested: TeletextRawDisplayArea,
@@ -81,21 +81,23 @@ pub enum TeletextDisplayGeometryFailure {
 /// generation certificate: the authoritative caller supplies the same service's
 /// traces. Unsupported/out-of-display positions remain typed nonplacements,
 /// not authoring prohibitions. No visual clipping, bounding rectangle, child
-/// extent substitution or panel charset reset is inferred. Direct definite own
-/// writes cannot cross selected areas (Annex A.4); a caller may invoke a separate
-/// child in another area. Address-only/unplaced evidence remains typed pending.
+/// extent substitution or panel charset reset is inferred. Own AP-addressing
+/// triplets cannot cross raw areas (Annex A.4), including charset/position-only
+/// data and inactive panels; a caller may invoke a separate child in another
+/// area. Out-of-display evidence remains typed pending.
 /// Inclusive A.8 raw intervals preserve caller AP before offset and last direct
 /// address. More than fifteen known simultaneously open intervals fail across
 /// all object types, including inactive panels. Fifteen or fewer known intervals
 /// do not certify pending intervals, cross-emitter successive-opening order,
-/// A.7 occupied overlap or C.3. Combined original calls and display writes use
+/// complete A.7 addressed-cell admission or C.3. Combined original calls and
+/// display writes use
 /// raw scan order. Original ordinal resolves same-position order only within
 /// one emitter; mixed-emitter reset ties conservatively break known runs.
 /// Plane-colour and unpositioned potential resets disable the combined lower-
 /// bound claim and retain original pending witnesses.
 /// # Errors
 /// Rejects budgets/storage arithmetic, owner mismatch, or inconsistent original
-/// inputs, definite own writes crossing selected areas, or sixteen known open
+/// inputs, own addresses crossing raw areas, or sixteen known open
 /// objects or sixteen known positioned successive calls. No partial result
 /// or caller mutation is returned.
 pub fn resolve_teletext_display_geometry(
@@ -493,6 +495,7 @@ fn object_regions(
         let (write_start, write_finish) = fact_span(&writes, &mut write_cursor, instance.id());
         let own_addresses = &addresses[address_start..address_finish];
         let own_writes = &writes[write_start..write_finish];
+        validate_addressed_area(owner, own_addresses)?;
         let written_area = written_area(owner, own_writes, left, right)?;
         regions.push(TeletextObjectDisplayRegion {
             instance,
@@ -515,6 +518,46 @@ fn is_address(command: TeletextEnhancementCommand) -> bool {
             | TeletextEnhancementCommand::SetRowColour { .. }
             | TeletextEnhancementCommand::AtColumn { .. }
     )
+}
+
+/// Annex A.4 AP-addressing facts shared with A.7 admission. Raw addressing is
+/// independent of enabled panels, selected widths and enlarged glyph coverage.
+/// Row modes 1/4/7 and all columns address cells; calls/screen/latches do not.
+pub(super) fn known_address_position(event: TeletextSpatialEvent) -> Option<(u16, u16)> {
+    if !is_address(event.command()) {
+        return None;
+    }
+    let position = event.absolute_after();
+    let position = (position.row(), position.column());
+    (position.0 <= 24 && position.1 <= 71).then_some(position)
+}
+
+fn validate_addressed_area(
+    owner: TeletextPageAddress,
+    facts: &[TeletextObjectGeometryFact],
+) -> Result<(), TeletextDisplayGeometryError> {
+    let mut previous = None;
+    for fact in facts {
+        let Some(position) = known_address_position(fact.event) else {
+            // The unchanged region retains this exact unresolved address.
+            continue;
+        };
+        let requested = raw_area(position.1);
+        if let Some(previous) = previous {
+            if previous != requested {
+                return Err(event_error(
+                    owner,
+                    fact.event,
+                    TeletextDisplayGeometryFailure::CrossAreaWrite {
+                        previous,
+                        requested,
+                    },
+                ));
+            }
+        }
+        previous = Some(requested);
+    }
+    Ok(())
 }
 
 fn is_write(command: TeletextEnhancementCommand) -> bool {

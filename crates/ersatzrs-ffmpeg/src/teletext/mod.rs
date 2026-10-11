@@ -68,8 +68,8 @@ pub use enhancement_program::{
 pub use lift::lift_teletext_v1_page_set;
 pub use local_object_program::{
     compile_teletext_local_program_with_objects, EncodedTeletextLocalObjectProgram,
-    TeletextLocalObjectDefinitionPosition, TeletextLocalObjectProgramEncodingError,
-    TeletextLocalObjectProgramEncodingFailure,
+    TeletextCompiledCommandPosition, TeletextLocalObjectDefinitionPosition,
+    TeletextLocalObjectProgramEncodingError, TeletextLocalObjectProgramEncodingFailure,
 };
 pub use main_composition::{
     compose_teletext_main_program, TeletextBaseCellCommandKind, TeletextMainComposition,

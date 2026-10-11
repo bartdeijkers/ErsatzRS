@@ -4,6 +4,7 @@
 //! lowering do not resolve final display geometry, overlap or service lifecycle.
 
 use ersatzrs_domain::{
+    TeletextAttributeTransmissionEvidence, TeletextAttributeTransmissionPosition,
     TeletextObjectCatalogBudget, TeletextPageAddress, TeletextResolvedObjectPageLinks,
     TeletextSemanticService,
 };
@@ -14,7 +15,7 @@ use super::local_object_program::{
 };
 use super::main_composition::{
     compose_teletext_main_program, TeletextMainComposition, TeletextMainCompositionBudget,
-    TeletextMainCompositionError, TeletextMainCompositionSource,
+    TeletextMainCompositionError, TeletextMainCompositionFailure, TeletextMainCompositionSource,
 };
 use super::TeletextResourceObjectAllocations;
 
@@ -100,8 +101,100 @@ pub fn compile_teletext_composed_main_program(
             .and_then(|location| composition.source_location(location)),
         reason: error.reason,
     })?;
+    let transmission = transmission_evidence(
+        &composition,
+        &encoded,
+        composition_budget.collection.max_commands,
+    )?;
+    let composition = composition.with_transmission(
+        service,
+        &transmission,
+        composition_budget.collection.max_commands,
+    )?;
     Ok(EncodedTeletextComposedMainProgram {
         composition,
         encoded,
     })
 }
+
+fn transmission_evidence(
+    composition: &TeletextMainComposition,
+    encoded: &EncodedTeletextLocalObjectProgram,
+    maximum: usize,
+) -> Result<TeletextAttributeTransmissionEvidence, TeletextMainCompositionError> {
+    let original = composition.spatial_trace();
+    let fail = |reason| TeletextMainCompositionError {
+        owner: composition.owner(),
+        location: None,
+        reason,
+    };
+    // Both inputs have already passed their exact trusted/physical bounds. Fence
+    // again before building the provenance index: no producer-sized allocation.
+    if original.events().len() > maximum {
+        return Err(fail(TeletextMainCompositionFailure::InputBudget {
+            maximum,
+        }));
+    }
+    if original
+        .events()
+        .len()
+        .checked_mul(encoded.command_positions().len())
+        .is_none()
+        || original
+            .events()
+            .len()
+            .checked_mul(std::mem::size_of::<TeletextAttributeTransmissionPosition>())
+            .is_none_or(|bytes| bytes > isize::MAX as usize)
+    {
+        return Err(fail(
+            ersatzrs_domain::TeletextAttributeTransmissionError::AllocationSize.into(),
+        ));
+    }
+    let mut positions = Vec::new();
+    for (event_ordinal, event) in original.events().iter().enumerate() {
+        let expected = if let Some(identity) = event.source().object {
+            TeletextMainCompositionSource::Object {
+                identity,
+                command: event.source().command,
+            }
+        } else {
+            match original.original_program_source() {
+                ersatzrs_domain::TeletextEffectiveProgramSource::Local => {
+                    TeletextMainCompositionSource::OriginalPage {
+                        command: event.source().command,
+                    }
+                }
+                ersatzrs_domain::TeletextEffectiveProgramSource::Defaults { slots } => {
+                    let Some(&slot) = slots.get(event.source().command) else {
+                        return Err(fail(TeletextMainCompositionFailure::SelectionState));
+                    };
+                    TeletextMainCompositionSource::DefaultSlot { slot }
+                }
+                ersatzrs_domain::TeletextEffectiveProgramSource::BaseOnly => continue,
+            }
+        };
+        // Only the original command's final emitted semantic word is evidence.
+        // Synthetic BaseCell commands and unmapped resource bodies stay absent.
+        let mut matches = encoded
+            .command_positions()
+            .iter()
+            .filter(|position| composition.source_location(position.source()) == Some(expected));
+        if let Some(position) = matches.next() {
+            if matches.next().is_some() {
+                return Err(fail(TeletextMainCompositionFailure::SelectionState));
+            }
+            positions.push(TeletextAttributeTransmissionPosition {
+                event_ordinal,
+                source: event.source(),
+                invocation: event.invocation(),
+                word: position.semantic_word(),
+            });
+        }
+    }
+    TeletextAttributeTransmissionEvidence::new(original, &positions, maximum)
+        .map_err(|reason| fail(reason.into()))
+}
+
+#[cfg(test)]
+#[path = "physical_order_tests.rs"]
+mod physical_order_tests;
