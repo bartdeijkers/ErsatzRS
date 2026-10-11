@@ -1142,7 +1142,10 @@ seventeen-row body coding preserve explicit ownership, full banks, original
 defaults and ignored fields; supplied allocations never truncate semantic IDs.
 Monochrome DRCS bodies preserve exact slots/pixels and sparse undefined modes;
 actual decoder, header and client proof remain open.
-MOT selection, actual pointer/program realization and header/carousel lifecycle,
+Bounded MOT/X27 role derivation preserves exact context/provenance, original
+defaults/fallback and unresolved conflicts. Effective default/presentation
+derivation, audited edge-policy calibration, actual pointer/program realization
+and header/carousel lifecycle,
 declaration-to-selection consistency and audited edge policies,
 final display/object semantics, physical service allocation, the enhanced compiler
 and operational draft/publication workflow remain open.

@@ -91,8 +91,11 @@ this does not prove object allocation or header/carousel lifecycle.
 Native monochrome DRCS bodies preserve slot/pixel geometry and sparse undefined
 glyphs; X28/3 declares modes explicitly. Actual decoder/client and resource
 header proof remain open.
-Next implement resource selection, resolve audited edge policies and prove
-declaration-to-selection consistency, then final display/object
+Bounded per-display MOT/X27 derivation now preserves role provenance, exact
+masks, original defaults/fallback and unresolved candidates for audited conflicts.
+It does not decide effective defaults or presentation.
+Next integrate derivation with catalog/effective-default checks, finish audited
+edge policies and prove declaration-to-selection consistency, then final display/object
 semantics, physical service allocation and the native compiler.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export

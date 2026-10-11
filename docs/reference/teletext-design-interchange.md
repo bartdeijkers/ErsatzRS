@@ -287,6 +287,29 @@ and optional MOT X28 function-six/coding-three declarations are not emitted here
 Header/update/partial lifecycle, MOT selection, transport/carousel and actual
 client proof remain open. A body-only API carries no publication authority.
 
+`TeletextMotLevel25Resolution::resolve` derives four fixed role results for an
+explicitly selected same-magazine MOT and exact display/subcode, retaining its
+logical S1, copied full bank, actual optional BCD association and original X27.
+Missing sparse association means no MOT selection; raw hexadecimal/FF metadata
+cannot shadow a decimal display. Absent or Level-3.5-only X27 retains associated
+MOT selection. Applicable real X27 selects its exact target/mask when no active
+associated MOT exists or its supersedable flag is set. Same-page flag zero
+preserves the MOT owner and exact X27 mask with the original extent retained
+separately, never intersected.
+
+Different-page flag zero and null over associated active MOT return `Unresolved`
+with both original candidates. Cleared global association diagnoses only active
+original global defaults, including when X27 selects a global page. Ignored and
+dormant selectors stay preserved without false conflicts. Global and associated
+public default sources remain independently owned; even an associated unused
+POP link retains dormant defaults and conditional fallback flags. These flags
+assert no activation; effective application still requires valid linkage and
+presentation context. No local-X26/X28/M29 presence is supplied, so the result
+cannot decide default suppression or presentation. No catalog acquisition,
+readiness or publication authority is granted. Role results and two default
+conflict slots are fixed-size; association lookup scans at most 256 records.
+The immutable authored declaration remains authoritative for interchange.
+
 Null-X27 fallback, conflicting MOT supersedable flags and global-default
 association and mixed-default nested-call edge cases still need a documented,
 independently calibrated policy.

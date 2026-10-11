@@ -987,6 +987,32 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+2026-10-11 MOT/X27 derivation checkpoint: an immutable bounded per-display
+result preserves explicit selected MOT identity/S1, exact display/subcode,
+actual optional BCD association, copied complete original bank and raw X27.
+Four fixed role results retain original candidates/provenance. Absent/3.5-only
+X27 keeps associated MOT; an applicable real superseding declaration uses its
+exact target/mask. Same-page flag zero preserves original owner/extent and
+uses the exact X27 mask, never an extent intersection. Different-page flag zero
+or null over active associated MOT keeps both candidates explicitly unresolved.
+Original global/associated public defaults and conditional POP fallback remain
+independent; cleared-global diagnostics apply only to active original defaults.
+Ignored/dormant slots and associated unused links retain their fields. No
+local-X26/X28/M29 presence, effective default/presentation decision or readiness.
+Thirteen focused domain regressions pass in Nextest
+b0967b12-f0ac-4f1f-a03b-1132e65ee09f (174 skipped), covering all four roles,
+validity/flags, zero/8000/FFFF masks, unresolved candidates, original defaults,
+conditional/ignored fields, sparse/hex/FF associations, exact S1/subcodes and
+unchanged input after owner rejection. Existing applicable 395-test baseline
+and four DRCS body checks are reused for unchanged code. Strict domain
+all-target Clippy, formatting and architecture-lint pass; independent normative
+ownership/boundedness/preservation review is clean. Derivation does not bind
+resources to effective commands or claim publication. Finish audited edge
+policies and integrate catalog/effective-default/presentation checks before
+acceptance; physical allocation, complete compiler/v2/editor/preview/publication
+and actual decoder/client/browser/source/platform proof remain open. No milestone
+status/dependency/acceptance change, push or publication.
+
 2026-10-11 monochrome DRCS body checkpoint: the native pure encoder preserves
 exact checked resource identity, all 48 glyph slots and twelve-by-ten pixel
 orientation in fixed optional row bodies. Undefined rows remain omitted;

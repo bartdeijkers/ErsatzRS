@@ -36,7 +36,10 @@ checks supplied default allocations before emitting any of its seventeen rows.
 Native monochrome DRCS bodies preserve exact slots/pixels and sparse undefined
 glyphs, with an explicit X28/3 mode declaration. Resource headers, physical
 realization and actual decoder/client proof remain separate.
-MOT resolution, resolved display semantics, physical allocation, complete
+A bounded per-display MOT/X27 derivation now preserves selected context, exact
+mask/provenance and original default sources. Audited conflicting declarations
+remain explicit unresolved candidates. Effective default/presentation derivation,
+resolved display semantics, physical allocation, complete
 enhanced-service compilation and editor/publication workflows remain unimplemented. Existing
 Western Latin Level 1/1.5 encoding and unpublished channel composition are
 reusable baseline evidence, not Level 2.5 acceptance.
@@ -152,6 +155,15 @@ physical pointer realization require separate catalog/compiler proof.
 Canonical reserved padding in generated packet bodies is a writer convention;
 lossless raw import must preserve ignored bytes externally rather than normalize
 them silently.
+Retain each role's original MOT extent when selecting a real superseding X27
+page/mask. For a non-supersedable same-page declaration, preserve the owner and
+use the exact X27 mask rather than intersecting it with the MOT extent. Different
+non-supersedable pages and null-over-associated-MOT combinations remain explicit
+unresolved candidates until their policy is calibrated; do not erase either.
+Cleared global associations preserve active default declarations with separate
+diagnostics. No derivation without local-X26/X28/M29 presence may claim effective
+default application or presentation. These intermediate diagnostics do not declare
+legal authored inputs permanently unsupported.
 The mixed-default/X27 nested-call policy still requires authored resolution proof.
 
 Collect DRCS references and charset-pair designations over all invoked programs

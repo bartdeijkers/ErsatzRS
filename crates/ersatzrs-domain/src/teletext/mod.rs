@@ -16,6 +16,7 @@ mod enhancement_values;
 mod enhancements;
 mod identity;
 mod mot;
+mod mot_resolution;
 mod objects;
 mod pages;
 mod presentation;
@@ -33,6 +34,7 @@ pub use enhancement_values::*;
 pub use enhancements::*;
 pub use identity::*;
 pub use mot::*;
+pub use mot_resolution::*;
 pub use objects::*;
 pub use pages::*;
 pub use presentation::*;
@@ -61,6 +63,9 @@ mod compositional_links_tests;
 
 #[cfg(test)]
 mod mot_tests;
+
+#[cfg(test)]
+mod mot_resolution_tests;
 
 #[cfg(test)]
 mod enhancement_values_tests;
