@@ -743,6 +743,72 @@ C implementation. It does not establish an official fixed release, complete
 Level 2.5 support, transport integrity, suitable-client display/navigation or
 QTeletextMaker/editor/admin/publication acceptance. Those requirements remain open.
 
+### Complete normalized display packets
+
+`encode_teletext_normalized_display_page` now builds complete owned display units
+from the same immutable service, exact owner and checked normalization result.
+The shared packet writer accepts the actual packed X26 bodies once, alongside
+original editorial links, actual page X27/4 and X28/0 presence, and unchanged
+header/fallback rows. It does not reinsert legacy Unicode X26 or synthesize a
+page override from effective magazine/header presentation. M29 remains separate,
+including when an actual page override exists. This diagnostic result grants no
+whole-service admission, publication or runtime capability.
+
+The public constructor uses the existing ordinary allocation policy. A private
+service constructor accepts one bounded list of original MOT-default reservations;
+original and augmented allocation passes use that identical list. Resource
+pointer changes therefore correspond to exact semantic targets, rather than
+truncating IDs or rebinding owners. Raw repeated default inputs still consume
+the trusted budget. Final X26 capacity is sixteen bodies, checked before page
+storage. Failed owner, normalization, metadata or comparison checks return no
+partial owned page and leave the source unchanged.
+
+Seven new regressions cover packet order and literal header/fallback retention,
+actual metadata presence, separate M29, real pointer reservation0→16, raw budget
+and late-failure isolation. Fifty-one selected regressions pass
+(`451724b2-e219-422e-8df8-3398246b4bf1`), including prior native-page, ordinary
+packet/transport, allocation and normalization tests. Strict all-target FFmpeg
+Clippy and formatting pass. Private budget arguments were mechanically borrowed
+after the initial lint identified large by-value copies; public signatures and
+semantic control/data flow remain unchanged.
+
+The production complete page—not a fixture loop replacing legacy packets—passes
+pinned teletextimager 0.2.0 at `2b0125b778c45ffdfa2df0b196870c093361f317`
+(`08c43d55-d7ac-4e43-8f5b-ef5def5aa3ce`). Actual owner200/subcode1234, no
+invented X28, the Active `A` over derived pound, ordinary `Z` and `B` sentinel
+have literal Level1.5/2.5 tuple checks. This valid native evidence predates only
+the equivalent private budget-reference correction. It proves this display
+packet seam; it does not certify resource-only transport, full glyph pixels,
+client navigation, TTI editing, publication or every Level2.5 feature.
+
+Request SHA256:
+`577f0815b8e72e60c832fec6a2ad9aadee98d1c55c59ca7c9bda05786b1b2be3`.
+The strict composition helper remains unchanged at
+`e1cb2ad2b16e78a0f56baaae14434aa6d78f146d7e0173c7ade9f19db97228eb`.
+
+```bash
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+ERSATZRS_TELETEXT_TEST_COMPILED_DISPLAY_IMAGER_FIXTURE="$fixture_dir/compiled-display.json" \
+  ./run.sh test -p ersatzrs-ffmpeg production_display_units_decode_active_override \
+  --lib --run-ignored ignored-only
+ERSATZRS_TELETEXT_TEST_IMAGER_DIR="$decoder_dir" \
+  python3 scripts/e2e/teletext-main-composition-decoder.py \
+  < "$fixture_dir/compiled-display.json"
+```
+
+The next full-service compiler must bind actual MOT declarations and exact
+per-display MOT selections to this same service. Recompute declaration resolution
+and compare selected roles and original sparse default slots; Local X26 suppresses
+execution, not authored declaration ownership. Reserve active defaults in every
+emitted MOT bank, including unassociated or suppressed defaults. Require explicit
+empty POP/GPOP companions and contiguous declared MOT subpage extents, preserve
+original requirements after X27 supersession, and apply presence-aware conditional
+POP presentation flags. Unresolved declaration/default conflicts reject complete
+service claims. Compile each resource and M29 once, check every actual physical
+header and service-wide transmission mode, and retain trusted aggregate bounds.
+Existing supplied inventory checks alone cannot prove this completeness or
+lifecycle history. These obligations remain required before engine acceptance.
+
 ### National-option carrier conversion
 
 `resolve_teletext_national_conversion` is a finite Table 36 identity relation,

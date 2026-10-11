@@ -8,7 +8,7 @@ use ersatzrs_domain::{
     TeletextSemanticService,
 };
 
-use super::packets::{self, LegacyEnhancements, PagePacketMetadata};
+use super::packets::{self, PageEnhancements, PagePacketMetadata};
 use super::{
     layout, presentation, EncodedTeletextPage, TeletextEncodingError, TeletextEncodingRegion,
 };
@@ -112,7 +112,7 @@ pub fn encode_teletext_native_default_page(
             presentation: metadata.and_then(|metadata| metadata.presentation.as_ref()),
             compositional_links: metadata
                 .and_then(|metadata| metadata.compositional_links.as_ref()),
-            enhancements: LegacyEnhancements::Omit,
+            enhancements: PageEnhancements::Omit,
         },
     )
     .map_err(|reason| {

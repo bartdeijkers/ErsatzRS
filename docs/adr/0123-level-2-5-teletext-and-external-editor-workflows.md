@@ -218,6 +218,18 @@ compatibility-row tracking and both DRCS latches unchanged. Raw command budgets
 still count every command. This supports redundant initial/identity positioning
 in all object types; other row-zero positions and moves remain required/open.
 
+Complete normalized display packets now come from the same immutable service
+and owned comparison result. Emit its actual X26 once, retaining literal header/
+fallback rows and actual page X27/X28 presence; return M29 separately. Shared
+MOT-default reservations must feed both original and augmented allocation passes.
+The public diagnostic wrapper accepts no detached allocation/default authority.
+Bound raw defaults and final packet count; failures expose no partial page.
+This boundary carries no complete-service or publication authority. The service
+compiler must authenticate caller-resolved resource/default metadata against
+actual MOT/X27 declarations, including explicit exact MOT selections, empty
+companions, declared extents and conditional POP presentation. Preserve unresolved
+conflicts as blockers; do not convert them to successful unselected roles.
+
 Foreign MOT defaults require two explicit producer paths. Without local X26,
 retain native MOT activation, sparse slots and exact owner/type/S1 plus original
 nested-resource context. When X26 is required, defaults are suppressed (§13.8,

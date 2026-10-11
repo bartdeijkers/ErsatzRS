@@ -17,6 +17,7 @@ mod carousel;
 mod charset;
 mod clock;
 mod colour_context;
+mod compiled_display_page;
 mod composed_main;
 mod compositional;
 mod drcs;
@@ -54,6 +55,7 @@ use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 pub use augmented_origin_comparison::*;
 pub use augmented_origin_compilation::*;
 pub use augmented_origin_program::*;
+pub use compiled_display_page::*;
 pub use native_default_page::*;
 pub use normalized_main_program::*;
 pub use origin_carrier::*;
@@ -235,6 +237,8 @@ mod main_composition_tests;
 #[cfg(test)]
 mod origin_carrier_runtime_tests;
 // Portable opt-in imager calibration; the libzvbi diagnostic guards its own ABI.
+#[cfg(test)]
+mod compiled_display_page_tests;
 #[cfg(test)]
 mod local_object_runtime_tests;
 #[cfg(test)]

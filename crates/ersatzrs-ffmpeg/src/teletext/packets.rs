@@ -122,21 +122,24 @@ pub fn encode_teletext_page(
         &PagePacketMetadata {
             presentation: Some(&presentation),
             compositional_links: None,
-            enhancements: LegacyEnhancements::Emit,
+            enhancements: PageEnhancements::Emit,
         },
     )
 }
 
-pub(super) enum LegacyEnhancements {
+#[derive(Clone, Copy)]
+pub(super) enum PageEnhancements<'a> {
     Emit,
     Omit,
+    /// Bodies from the checked actual main-program packer, not legacy layout.
+    Compiled(&'a [[u8; 40]]),
 }
 
 /// Exact packet presence, independent of effective receiver fallback metadata.
 pub(super) struct PagePacketMetadata<'a> {
     pub presentation: Option<&'a TeletextLevel25PresentationDefaults>,
     pub compositional_links: Option<&'a TeletextX27Level25Links>,
-    pub enhancements: LegacyEnhancements,
+    pub enhancements: PageEnhancements<'a>,
 }
 
 /// Share header, editorial links and fallback rows between both authored paths.
@@ -145,6 +148,11 @@ pub(super) fn encode_compiled_page(
     compiled: &layout::Layout,
     metadata: &PagePacketMetadata<'_>,
 ) -> Result<EncodedTeletextPage, TeletextEncodingError> {
+    if matches!(metadata.enhancements, PageEnhancements::Compiled(bodies) if bodies.len() > 16) {
+        return Err(TeletextEncodingError::Enhancements {
+            address: page.address,
+        });
+    }
     let subtitle = page.kind == TeletextPageKind::Subtitle;
     let mut rows = compiled.rows.map(|row| row.map(odd_parity));
     let address = page.address;
@@ -167,7 +175,7 @@ pub(super) fn encode_compiled_page(
         1 | (page.national_option.get().reverse_bits() >> 4),
     ];
     rows[0][..8].copy_from_slice(&nibbles.map(hamming_8_4));
-    let mut units = Vec::with_capacity(TELETEXT_ROWS + 18);
+    let mut units = Vec::with_capacity(TELETEXT_ROWS + 19);
     units.push(data_unit(
         address.page.wire_magazine(),
         0,
@@ -200,8 +208,14 @@ pub(super) fn encode_compiled_page(
             subtitle,
         ));
     }
-    if matches!(metadata.enhancements, LegacyEnhancements::Emit) {
-        append_legacy_enhancements(page, compiled, &mut units);
+    match metadata.enhancements {
+        PageEnhancements::Emit => append_legacy_enhancements(page, compiled, &mut units),
+        PageEnhancements::Omit => {}
+        PageEnhancements::Compiled(bodies) => {
+            for body in bodies {
+                units.push(data_unit(address.page.wire_magazine(), 26, body, subtitle));
+            }
+        }
     }
     // Transmit blank body rows too: no stale pixels survive an authored update.
     for (packet, row) in (1_u8..25).zip(&rows[1..]) {

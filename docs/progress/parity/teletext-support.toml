@@ -17,10 +17,11 @@ Replay/raster retain fallback; recipes/placement retain lineage/DAG/AP.
 Assembly retains originals/IDs/maps; encoding checks unique call ancestry.
 AP00 retains pointers/C2; native pages retain no-X26/default owners/X27/X28/M29.
 Corrected X27 mixed decoding passes; client proof stays open.
+Display units keep X26/metadata; dual-level decoding passes.
 C2 uses packed words; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.
 165 national recipes; four pending. Hebrew private-charset decoder gap remains.
-Charset/glyph/DRCS keep aliases/bans/resources/losers/blanks. Lowering owns selectors.
+Glyph/DRCS keep aliases/bans/resources/losers/blanks; lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
 Intervals reject sixteen simultaneous opens; unknown ones survive.
@@ -34,7 +35,7 @@ Enhanced G1 uses D5 only; native later-spacing discrepancy stays open.
 Explicit same-service normalization passes the Unicode/Active wire oracle;
 foreign X26 realization, row-zero and full A7/A8/C3/client proof stay open.
 X27/MOT retain masks, S1, banks/defaults/raw fields/IDs and derivation provenance/conflicts.
-Compiled-header fence rejects exact physical/logical-owner collisions.
+Headers reject physical/logical-owner collisions.
 Defaults/selection/compiler/editor remain open.
 
 ADR 0122 profiles/themes/zones and admin/Lua remain preparatory.
@@ -42,9 +43,8 @@ App controls compose isolated channel drafts; native encoding retains the
 same pages; guide bounds pass. Acquisition, activation, regions, link CRC,
 UI/Lua and publication remain open.
 
-Report-only SQLite retains tracks/ownership/data/leases. Missing records cannot
-prove absence; revisions certify no bytes;
-pages remain NotAcquired. Explicit-PID TS/PES/header parsing retains flags/subcodes/
+SQLite reports retain tracks/ownership/data/leases; missing records prove no
+absence, revisions no bytes. Pages stay NotAcquired. Explicit-PID TS/PES/header parsing retains flags/subcodes/
 missing PTS, not source identity, readiness or inventory. Bounds follow JSON decode,
 not input/child RSS. Acquisition/revisions/selection stay open; auxiliary failure
 preserves ordinary metadata, uncertain cleanup is fatal. P9A-03 owns proof.
@@ -64,7 +64,7 @@ P9A-03/04 retain source persistence/rescans, exact page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage/passthrough and HLS/browser
 gates. Slate handover, activation/publication/refresh/restart,
 localized management and full source/client/browser/smoke/TSDuck matrix remain
-open. Milestones own proof; UCU waives no gates. Content waits for p9a-04;
+open. UCU waives no gates. Content waits for p9a-04;
 Phase 10 waits for p9b-02.
 '''
 
@@ -73,7 +73,7 @@ id          = 'teletext-generated-unicode-base-priority-is-not-preserved-on-wire
 adr         = '0123'
 description = 'The ordinary composed compiler generates Local X26 fallback that outranks an original Active glyph. The explicit normalized engine candidate now passes the unchanged representative dual-level oracle, but broad integration and remaining standards coverage are unproven. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
 discovered  = '2026-10-11'
-evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The new explicit same-service normalization entry passes the unchanged positive oracle with pinned teletextimager (af44fcf5-1934-4899-8d06-59172060d9f1), after both bounded comparisons and original C2 settlement. P9A-01 and the interchange reference retain the original failure and new request hash. This does not change ordinary compiler paths or grant publication readiness. Foreign default ownership, row-zero/national conversion, broad integration and full dual-receiver/service/client proof remain open.'
+evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The new explicit same-service normalization entry passes the unchanged positive oracle with pinned teletextimager (af44fcf5-1934-4899-8d06-59172060d9f1), after both bounded comparisons and original C2 settlement. P9A-01 and the interchange reference retain the original failure and new request hash. Complete normalized display packets also pass the pinned dual-level Active override case (08c43d55-d7ac-4e43-8f5b-ef5def5aa3ce), preserving actual metadata and fallback. This does not change ordinary compiler paths or grant publication readiness. Foreign default ownership, row-zero/national conversion, broad integration and full dual-receiver/service/client proof remain open.'
 resolved    = false
 
 [[debt]]

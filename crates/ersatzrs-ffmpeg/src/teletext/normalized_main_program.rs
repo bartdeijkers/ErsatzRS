@@ -16,8 +16,8 @@ use super::{
     TeletextPhysicalComparisonDiagnostic, TeletextPhysicalComparisonError,
 };
 use ersatzrs_domain::{
-    TeletextEnhancementCollectionBudget, TeletextObjectCatalogBudget, TeletextPageAddress,
-    TeletextSemanticService,
+    TeletextDefaultObjectSelection, TeletextEnhancementCollectionBudget,
+    TeletextObjectCatalogBudget, TeletextPageAddress, TeletextSemanticService,
 };
 
 /// Trusted per-stage bounds. Original and actual packing each use `packing`;
@@ -115,14 +115,30 @@ pub fn compile_teletext_normalized_main_program(
     owner: TeletextPageAddress,
     budget: TeletextNormalizedMainProgramBudget,
 ) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
+    compile_teletext_normalized_main_program_with_defaults(service, owner, &[], &budget)
+}
+
+/// Same-service MOT defaults reserve identical resource pointers in both passes.
+/// The raw list is bounded by the existing allocator before validation/scanning.
+/// Callers inside this module derive this list from their immutable service
+/// declarations; it is not a detached external allocation or source authority.
+pub(super) fn compile_teletext_normalized_main_program_with_defaults(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    defaults: &[TeletextDefaultObjectSelection],
+    budget: &TeletextNormalizedMainProgramBudget,
+) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
     let fail = |reason| TeletextNormalizedMainProgramError { owner, reason };
-    let original_allocations =
-        allocate_teletext_resource_objects(service.objects(), &[], budget.max_resource_objects)
-            .map_err(|error| {
-                fail(TeletextNormalizedMainProgramFailure::Allocation(Box::new(
-                    error,
-                )))
-            })?;
+    let original_allocations = allocate_teletext_resource_objects(
+        service.objects(),
+        defaults,
+        budget.max_resource_objects,
+    )
+    .map_err(|error| {
+        fail(TeletextNormalizedMainProgramFailure::Allocation(Box::new(
+            error,
+        )))
+    })?;
     let original = compile_teletext_composed_main_program(
         service,
         owner,
@@ -158,7 +174,7 @@ pub fn compile_teletext_normalized_main_program(
             })?;
         let allocations = allocate_teletext_resource_objects(
             augmented.catalog(),
-            &[],
+            defaults,
             budget.max_resource_objects,
         )
         .map_err(|error| {
@@ -179,7 +195,7 @@ pub fn compile_teletext_normalized_main_program(
                 error,
             )))
         })?;
-        check_candidate(&compiled, &budget)?;
+        check_candidate(&compiled, budget)?;
         compiled.into_physical()
     };
     Ok(EncodedTeletextNormalizedMainProgram { original, physical })

@@ -729,6 +729,14 @@ pinned imager oracle because private object charset designation is omitted.
 `conformance:false`; they do not certify Level2.5 decoding. The linked reference
 contains both strict-failure and negative-calibration replay commands and hashes.
 
+The complete-display calibration feeds `encode_teletext_normalized_display_page`
+output directly to the unchanged decoder, retaining exact owner/subcode, original
+fallback and actual metadata presence. Run
+`production_display_units_decode_active_override_and_original_fallback` with
+`ERSATZRS_TELETEXT_TEST_COMPILED_DISPLAY_IMAGER_FIXTURE` to export the request.
+[Complete packet evidence and replay](../../docs/reference/teletext-design-interchange.md#complete-normalized-display-packets)
+record its hash, three dual-level selected cells and remaining service/client gates.
+
 ## Teletext base display calibration
 
 Four additional synthetic cases use actual page and presentation encoders with

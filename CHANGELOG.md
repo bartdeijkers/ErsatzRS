@@ -164,6 +164,9 @@ release section when tagging a release.
   side effects, preserving raw budgets, pointers, source ordinals and both DRCS
   latches. Other row-zero lowering remains required. Document native MOT versus
   X26 foreign-default realization obligations without weakening owner checks.
+  Build complete normalized display packets from checked models, retaining actual
+  metadata and original fallback, with shared MOT reservations and independent
+  dual-level decoding. Whole-service and publication acceptance remain open.
   Realize proven national-option glyphs through explicit standard-table carrier
   operations while preserving original identities, provenance and fallback bytes.
   Validate an enlarged German section-sign overlap through complete model checks

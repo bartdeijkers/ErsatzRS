@@ -263,7 +263,13 @@ positions/reset normalization remain required; this is no full header acceptance
 The native page packet primitive now preserves absent X26, original sparse defaults
 and actual X27/X28 presence, with original M29 returned separately. It rejects local
 program presence and locates fallback replacements requiring X26 before output;
-legacy packet bytes remain unchanged. Complete native service generation and a
+legacy packet bytes remain unchanged. Complete normalized display packets now use actual checked X26 plus unchanged
+header/fallback and actual page metadata; a production full-page independent
+Level1.5/2.5 case passes. Shared MOT reservations feed both packing passes.
+Next bind actual MOT declarations and exact display selections, authenticate
+resolved metadata/default slots, require empty companions and extent completeness,
+apply conditional POP presentation and check all actual resource headers/modes.
+Complete native service generation and a
 distinct X26 realization path remain required: even compatibility-only X26
 suppresses MOT roots. Explicit calls address only
 the selected resource; retain strict owner checks. Materialize foreign contributions
