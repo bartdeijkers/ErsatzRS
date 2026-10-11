@@ -1,0 +1,419 @@
+//! Unpublished channel-wide V1/V2 documents under one selection and deadline.
+//!
+//! Preparation neither merges services nor lifts, encodes or publishes pages.
+//! The host must run synchronous validation off its async workers and recheck
+//! the complete channel selection after CPU/native work and before promotion.
+
+use crate::{
+    teletext_guide::{
+        build_request_for_schema, SuppliedTeletextGuideContext, TeletextGuideRequestError,
+    },
+    teletext_profile_documents::{
+        BoundTeletextDocumentError, BoundTeletextDocumentInput, TeletextProfileDocument,
+        TeletextProfileDocumentBudget,
+    },
+    teletext_profiles::{TeletextProfileRuntimeError, TeletextProfileRuntimeReceipt},
+    ApplicationServices,
+};
+use ersatzrs_addon_contract as wire;
+use ersatzrs_core::repositories::{
+    TeletextProfileMutation as Mutation, TeletextProfileRejection, TeletextProfileRepository,
+};
+use ersatzrs_domain::{
+    EntityId, TeletextChannelSelectionSnapshot, TeletextPageContract, TeletextSelectionSnapshot,
+};
+use std::{
+    collections::BTreeSet,
+    fmt,
+    future::Future,
+    time::{Duration, Instant},
+};
+
+const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_BINDINGS: usize = 1024;
+
+type RequestTemplates = (Option<Vec<u8>>, Option<Vec<u8>>);
+
+/// Trusted cumulative retained producer-response budget, independent of wire caps.
+/// At most two guide templates additionally obey the existing 4 MiB request cap.
+/// This does not bound total process memory or parsed models; validation uses the
+/// caller's separate semantic and declaration budgets.
+#[derive(Debug, Clone, Copy)]
+pub struct TeletextChannelDocumentInputBudget {
+    pub max_response_bytes: usize,
+}
+
+/// Private, complete raw receipts. Validation has not yet interpreted documents.
+pub struct BoundChannelTeletextDocumentInput {
+    selection: TeletextChannelSelectionSnapshot,
+    generation: String,
+    receipts: Vec<TeletextProfileRuntimeReceipt>,
+    entry_addon_id: Option<String>,
+    deadline: Instant,
+}
+
+impl BoundChannelTeletextDocumentInput {
+    #[must_use]
+    pub const fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
+    /// Validate every original document once, retaining its ordered association.
+    /// An empty vector is the explicit fenced Off state. No partial success escapes.
+    /// # Errors
+    /// Rejects expiry, any selected-contract conversion or trusted semantic budget.
+    pub fn validate(
+        self,
+        budget: TeletextProfileDocumentBudget,
+    ) -> Result<PreparedChannelTeletextDocuments, ChannelTeletextDocumentError> {
+        check_deadline(Instant::now(), self.deadline)?;
+        let mut documents = Vec::with_capacity(self.receipts.len());
+        for (binding, receipt) in self.receipts.into_iter().enumerate() {
+            let prepared = BoundTeletextDocumentInput::from_channel_receipt(receipt, self.deadline)
+                .validate(budget)
+                .map_err(|error| ChannelTeletextDocumentError::Document {
+                    binding,
+                    error: Box::new(error),
+                })?;
+            let (_, _, document, _) = prepared.into_parts();
+            documents.push(document);
+        }
+        check_deadline(Instant::now(), self.deadline)?;
+        Ok(PreparedChannelTeletextDocuments {
+            selection: self.selection,
+            generation: self.generation,
+            documents,
+            entry_addon_id: self.entry_addon_id,
+            deadline: self.deadline,
+        })
+    }
+}
+
+impl fmt::Debug for BoundChannelTeletextDocumentInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BoundChannelTeletextDocumentInput")
+            .field("selection", &self.selection)
+            .field("response_count", &self.receipts.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Complete immutable original documents; this is not a composed generation.
+/// `documents()[i]` belongs exactly to `selection().bindings[i]`.
+pub struct PreparedChannelTeletextDocuments {
+    selection: TeletextChannelSelectionSnapshot,
+    generation: String,
+    documents: Vec<TeletextProfileDocument>,
+    entry_addon_id: Option<String>,
+    deadline: Instant,
+}
+
+impl PreparedChannelTeletextDocuments {
+    #[must_use]
+    pub const fn selection(&self) -> &TeletextChannelSelectionSnapshot {
+        &self.selection
+    }
+    #[must_use]
+    pub fn generation(&self) -> &str {
+        &self.generation
+    }
+    #[must_use]
+    pub fn documents(&self) -> &[TeletextProfileDocument] {
+        &self.documents
+    }
+    #[must_use]
+    pub fn entry_addon_id(&self) -> Option<&str> {
+        self.entry_addon_id.as_deref()
+    }
+    #[must_use]
+    pub const fn deadline(&self) -> Instant {
+        self.deadline
+    }
+    /// Move the whole association into host work; another channel fence is required.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        TeletextChannelSelectionSnapshot,
+        String,
+        Vec<TeletextProfileDocument>,
+        Option<String>,
+        Instant,
+    ) {
+        (
+            self.selection,
+            self.generation,
+            self.documents,
+            self.entry_addon_id,
+            self.deadline,
+        )
+    }
+}
+
+impl fmt::Debug for PreparedChannelTeletextDocuments {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PreparedChannelTeletextDocuments")
+            .field("selection", &self.selection)
+            .field("entry_addon_id", &self.entry_addon_id)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Static failures retain a numeric binding ordinal, never guide/producer text.
+#[derive(Debug, thiserror::Error)]
+pub enum ChannelTeletextDocumentError {
+    #[error(transparent)]
+    Request(#[from] TeletextGuideRequestError),
+    #[error("teletext channel selection storage is unavailable")]
+    StorageUnavailable,
+    #[error("teletext channel selection was rejected: {0:?}")]
+    SelectionRejected(TeletextProfileRejection),
+    #[error("teletext channel selection changed during preparation")]
+    SelectionChanged,
+    #[error("teletext channel selection has invalid owner or repeated membership")]
+    SelectionShape,
+    #[error("teletext channel selection exceeds its binding limit")]
+    BindingCount,
+    #[error("teletext channel requires an explicit entry add-on")]
+    EntryAddonRequired,
+    #[error("teletext channel entry add-on is not selected")]
+    EntryAddonNotSelected,
+    #[error("teletext channel preparation exceeded its original deadline")]
+    TimedOut,
+    #[error("teletext binding {binding} runtime: {error}")]
+    Runtime {
+        binding: usize,
+        error: TeletextProfileRuntimeError,
+    },
+    #[error("teletext binding {binding} receipt does not match selection/correlation")]
+    ReceiptMismatch { binding: usize },
+    #[error("teletext binding {binding} response exceeds its raw wire cap")]
+    ResponseTooLarge { binding: usize },
+    #[error("teletext binding {binding} exceeds aggregate response budget {maximum}")]
+    AggregateResponseBudget { binding: usize, maximum: usize },
+    #[error("teletext binding {binding} document: {error}")]
+    Document {
+        binding: usize,
+        error: Box<BoundTeletextDocumentError>,
+    },
+}
+
+impl ApplicationServices {
+    /// Invoke all enabled contracts serially under one full snapshot and deadline.
+    /// # Errors
+    /// Rejects invalid selection/requests, producer failures, raw response limits,
+    /// receipt mismatch, expiry or changed complete channel membership.
+    pub async fn invoke_channel_teletext_documents(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+    ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
+        prepare_with_ports(
+            self.ports().teletext_profiles(),
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            |selected, input, deadline| {
+                self.ports()
+                    .addons()
+                    .invoke_teletext_profile_before(selected, input, deadline)
+            },
+            Instant::now,
+        )
+        .await
+    }
+
+    /// Observe the complete channel again after validation/native work, without
+    /// authorizing publication or resetting the original preparation deadline.
+    /// # Errors
+    /// Rejects expiry, unavailable storage or any changed channel selection.
+    pub async fn recheck_channel_teletext_document_selection(
+        &self,
+        selection: &TeletextChannelSelectionSnapshot,
+        deadline: Instant,
+    ) -> Result<(), ChannelTeletextDocumentError> {
+        recheck_with_ports(
+            self.ports().teletext_profiles(),
+            selection,
+            deadline,
+            Instant::now,
+        )
+        .await
+    }
+}
+
+async fn prepare_with_ports<F, Fut, Clock>(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    budget: TeletextChannelDocumentInputBudget,
+    mut invoke: F,
+    mut now: Clock,
+) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError>
+where
+    F: FnMut(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
+    Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
+    Clock: FnMut() -> Instant,
+{
+    let deadline = now()
+        .checked_add(PREPARATION_TIMEOUT)
+        .ok_or(ChannelTeletextDocumentError::TimedOut)?;
+    let selection = snapshot(repository, channel_id).await?;
+    check_deadline(now(), deadline)?;
+    validate_selection(&selection, channel_id)?;
+    let entry = select_entry(&selection, entry_addon_id)?;
+    let requests = preflight_requests(&selection, context)?;
+    check_deadline(now(), deadline)?;
+    let mut receipts = Vec::with_capacity(selection.bindings.len());
+    let mut remaining = budget.max_response_bytes;
+    for (binding, selected) in selection.bindings.iter().enumerate() {
+        check_deadline(now(), deadline)?;
+        let input = match selected.contract {
+            TeletextPageContract::V1 => &requests.0,
+            TeletextPageContract::V2 => &requests.1,
+        }
+        .as_ref()
+        .ok_or(ChannelTeletextDocumentError::SelectionShape)?
+        .clone();
+        let receipt = invoke(selected.clone(), input, deadline)
+            .await
+            .map_err(|error| ChannelTeletextDocumentError::Runtime { binding, error })?;
+        check_deadline(now(), deadline)?;
+        if receipt.selection != *selected || receipt.generation != context.generation {
+            return Err(ChannelTeletextDocumentError::ReceiptMismatch { binding });
+        }
+        if receipt.stdout.len() > wire::MAX_TELETEXT_PAGES_OUTPUT_BYTES {
+            return Err(ChannelTeletextDocumentError::ResponseTooLarge { binding });
+        }
+        remaining = remaining.checked_sub(receipt.stdout.len()).ok_or(
+            ChannelTeletextDocumentError::AggregateResponseBudget {
+                binding,
+                maximum: budget.max_response_bytes,
+            },
+        )?;
+        receipts.push(receipt);
+    }
+    recheck_with_ports(repository, &selection, deadline, &mut now).await?;
+    Ok(BoundChannelTeletextDocumentInput {
+        selection,
+        generation: context.generation.to_owned(),
+        receipts,
+        entry_addon_id: entry,
+        deadline,
+    })
+}
+
+async fn snapshot(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+) -> Result<TeletextChannelSelectionSnapshot, ChannelTeletextDocumentError> {
+    match repository
+        .channel_invocation_snapshot(channel_id)
+        .await
+        .map_err(|_| ChannelTeletextDocumentError::StorageUnavailable)?
+    {
+        Mutation::Saved(selection) => Ok(selection),
+        Mutation::Rejected(reason) => Err(ChannelTeletextDocumentError::SelectionRejected(reason)),
+    }
+}
+
+fn validate_selection(
+    selection: &TeletextChannelSelectionSnapshot,
+    channel_id: EntityId,
+) -> Result<(), ChannelTeletextDocumentError> {
+    if selection.bindings.len() > MAX_BINDINGS {
+        return Err(ChannelTeletextDocumentError::BindingCount);
+    }
+    let mut seen = BTreeSet::new();
+    if selection.channel_id != channel_id
+        || selection
+            .bindings
+            .iter()
+            .any(|binding| binding.channel_id != channel_id || !seen.insert(&binding.addon_id))
+    {
+        return Err(ChannelTeletextDocumentError::SelectionShape);
+    }
+    Ok(())
+}
+
+fn select_entry(
+    selection: &TeletextChannelSelectionSnapshot,
+    entry: Option<&str>,
+) -> Result<Option<String>, ChannelTeletextDocumentError> {
+    if selection.bindings.is_empty() {
+        return Ok(None);
+    }
+    let entry = entry.ok_or(ChannelTeletextDocumentError::EntryAddonRequired)?;
+    if !selection
+        .bindings
+        .iter()
+        .any(|binding| binding.addon_id == entry)
+    {
+        return Err(ChannelTeletextDocumentError::EntryAddonNotSelected);
+    }
+    Ok(Some(entry.to_owned()))
+}
+
+fn preflight_requests(
+    selection: &TeletextChannelSelectionSnapshot,
+    context: &SuppliedTeletextGuideContext<'_>,
+) -> Result<RequestTemplates, ChannelTeletextDocumentError> {
+    // Off still retains this opaque correlation value, but builds no guide.
+    if context.generation.is_empty()
+        || context.generation.len() > wire::MAX_TELETEXT_PAGES_GENERATION_BYTES
+    {
+        return Err(TeletextGuideRequestError::from(
+            wire::TeletextPagesRequestError::InvalidGeneration,
+        )
+        .into());
+    }
+    let mut requests = (None, None);
+    for contract in [TeletextPageContract::V1, TeletextPageContract::V2] {
+        if selection
+            .bindings
+            .iter()
+            .any(|binding| binding.contract == contract)
+        {
+            let input = build_request_for_schema(context, contract.schema_version())?;
+            match contract {
+                TeletextPageContract::V1 => requests.0 = Some(input),
+                TeletextPageContract::V2 => requests.1 = Some(input),
+            }
+        }
+    }
+    Ok(requests)
+}
+
+async fn recheck_with_ports<Clock: FnMut() -> Instant>(
+    repository: &dyn TeletextProfileRepository,
+    selection: &TeletextChannelSelectionSnapshot,
+    deadline: Instant,
+    mut now: Clock,
+) -> Result<(), ChannelTeletextDocumentError> {
+    check_deadline(now(), deadline)?;
+    let current = repository
+        .channel_invocation_snapshot(selection.channel_id)
+        .await
+        .map_err(|_| ChannelTeletextDocumentError::StorageUnavailable)?;
+    check_deadline(now(), deadline)?;
+    if current != Mutation::Saved(selection.clone()) {
+        return Err(ChannelTeletextDocumentError::SelectionChanged);
+    }
+    Ok(())
+}
+
+fn check_deadline(now: Instant, deadline: Instant) -> Result<(), ChannelTeletextDocumentError> {
+    if now >= deadline {
+        Err(ChannelTeletextDocumentError::TimedOut)
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "teletext_channel_documents_tests.rs"]
+mod tests;

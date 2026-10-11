@@ -12,7 +12,7 @@ and client display/navigation; Kodi optional.
 
 v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
 metadata/fresh state. Local X26 retains forward references.
-Replay/raster retain fallback; assembly/encoding keep lineage, IDs and call ancestry.
+Replay/raster keep fallback; encoding keeps lineage, IDs and call ancestry.
 AP00 retains pointers/C2; native pages retain no-X26/default owners/X27/X28/M29.
 Corrected X27 mixed decoding passes; client proof open.
 Display X26/metadata and dual decoding pass.
@@ -29,20 +29,21 @@ MIT masks/C1 rasterize fragments/DRCS; Unicode keeps Base priority.
 Header/flash/bottom origins remain; eight DRCS rectangles match native RGBA.
 Composites/BBS retain masks/writers; D5 cancels spacing with original scope.
 Enhanced G1 uses D5 only; native later-spacing discrepancy stays open.
-Same-service normalization passes the Unicode/Active wire oracle;
-foreign X26 realization, row-zero and full A7/A8/C3/client proof stay open.
+Same-service Unicode/Active wire normalization passes;
+foreign X26, row-zero and full A7/A8/C3/client proof stay open.
 X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
 Headers reject physical/logical-owner collisions.
 Declarations check roles/defaults/extents/empty owners, one MOT/magazine.
 Compiler keeps resources/M29; paced sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/corrected nested pass.
-QTM headed edit/save/reopen proves renumber/loss; host roundtrip open.
+QTM edit/save/reopen proves renumber/loss; host roundtrip open.
 
 Strict v2 authenticates declarations with host budgets;
-Installed profiles pin v2 before v1 through request/env/receipt/manifest fences.
-Base prep rejects v2; bound full encoding retains model/deadline/fresh fences.
-Mixed composition/publication open.
+Profiles pin v2 before v1 through request/env/receipt/manifest fences.
+Base prep rejects v2; encoding keeps model/deadline/fences.
+Producer defaults keep provenance/unknown secondary; channel input shares fences.
+Composition/publication open.
 ADR0122 profiles/themes/zones/admin/Lua stay preparatory.
 App keeps drafts/guide bounds; acquisition,
 activation, regions, link CRC,
@@ -63,14 +64,22 @@ x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission, tokens, reaping,
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
-P9A-02 owns decoder Health/six-RID packaging/licensing.
+P9A-02: decoder Health/six-RID packaging/licensing.
 P9A-03/04 retain persistence/rescans, page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage and HLS/browser
 gates. Slate handover, activation/publication/refresh/restart,
 localized management and source/client/browser/smoke/TSDuck matrix remain
 open. UCU waives no gates. Content waits for p9a-04;
-Phase 10 waits for p9b-02.
+Phase10 waits for p9b-02.
 '''
+
+[[debt]]
+id          = 'teletext-default-secondary-materialization-is-unproven'
+adr         = '0123'
+description = 'Preserve producer-local presentation before mixing magazine state. EN 300 706 Annex D.2.1(2) leaves the second-language default decoder dependent without X28/M29. The existing Header/POP no-secondary engine policy is not an authored no-second-G0 declaration and cannot silently become a Table33 sentinel in a derived X28 override. Retain exact original source/presence, full defaults and typed uncertainty; prove equivalent materialization under trusted policy with independent decoding and suitable-client evidence. No permanent authoring restriction or acceptance waiver is accepted.'
+discovered  = '2026-10-11'
+evidence    = 'A fresh official EN 300 706 V1.2.1 audit confirms Annex D.2.1(2), printed133, and Table33 no-second-G0 coding. The existing mot_presentation.rs fallback uses secondary:None, while Header carries only national-option bits. Pinned original libzvbi0.2.42/source3785481f source inspection also finds magazine M29 cache reuse when X28 is absent; page C4 does not reset magazine state. Stopping transmission alone is not verified removal. Persistent-decoder M29/MOT/X28 replacement trials remain required; existing fresh-decoder and warm DRCS receipts do not prove them. The interchange reference and ADR0123 own these boundaries; P9A-01 owns implementation evidence and remaining engine gates.'
+resolved    = false
 
 [[debt]]
 id          = 'teletext-generated-unicode-base-priority-is-not-preserved-on-wire'

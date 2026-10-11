@@ -173,6 +173,8 @@ fn document(kind: DocumentFixture, theme: &str) -> Value {
     }
     value["mot_selections"] = json!([{"display":{"page":123,"subcode":16},"mot":null}]);
     if matches!(kind, DocumentFixture::Companion) {
+        value["magazines"] = json!([]);
+        value["page_enhancements"][0]["local_program"] = Value::Null;
         let unused = json!({"target":{"kind":"unspecified","magazine":1},
             "validity":"level25_only","required_subpages":65535});
         value["page_enhancements"][0]["compositional_links"] = json!({
@@ -254,6 +256,29 @@ fn assert_compiled(candidate: &EncodedBoundTeletextDocumentCandidate, rgb: [u8; 
     assert_eq!(candidate.generation(), GENERATION);
     assert_eq!(candidate.selection().contract, TeletextPageContract::V2);
     let encoded = candidate.encoded();
+    let original = encoded.declared().semantic();
+    let presentations = candidate.producer_presentations();
+    assert_eq!(presentations.len(), 1);
+    let presentation = &presentations[0];
+    assert_eq!(presentation.address(), original.base().pages[0].address);
+    assert_eq!(
+        presentation.source(),
+        TeletextProducerPresentationSource::Magazine { magazine: 1 }
+    );
+    assert_eq!(
+        presentation.effective_defaults(),
+        &original.magazine_presentations()[&1]
+    );
+    assert_eq!(
+        presentation.secondary_selection(),
+        TeletextProducerSecondarySelection::Declared(
+            original.magazine_presentations()[&1].secondary
+        )
+    );
+    assert_eq!(
+        presentation.local_program_presence(),
+        TeletextProducerLocalProgramPresence::PresentNonEmpty
+    );
     assert_eq!(encoded.pages().len(), 1);
     assert_eq!(packet_numbers(encoded.magazine_units()), [29]);
     let EncodedTeletextAuthoredPage::CompiledDisplay(page) = &encoded.pages()[0] else {
@@ -489,6 +514,25 @@ async fn actual_empty_resource_requires_explicit_lifecycle_and_never_invents_mis
     let mut complete = policy();
     complete.transmissions.push(companion_transmission());
     let result = candidate(&fixture, 1, complete).await.unwrap();
+    let presentation = &result.producer_presentations()[0];
+    assert_eq!(
+        presentation.source(),
+        TeletextProducerPresentationSource::Header {
+            national_option: TeletextNationalOption::new(1).unwrap()
+        }
+    );
+    assert_eq!(
+        presentation.secondary_selection(),
+        TeletextProducerSecondarySelection::DecoderDependent
+    );
+    assert_eq!(
+        presentation.local_program_presence(),
+        TeletextProducerLocalProgramPresence::Absent
+    );
+    let EncodedTeletextAuthoredPage::NativeDisplay(display) = &result.encoded().pages()[0] else {
+        panic!("snapshot must not synthesize a local program or presentation packet");
+    };
+    assert!(!packet_numbers(display.encoded().page().data_units()).contains(&28));
     assert_eq!(result.encoded().pages().len(), 2);
     let EncodedTeletextAuthoredPage::Object(resource) = &result.encoded().pages()[1] else {
         panic!("empty original POP companion must have its real object-page body")
@@ -535,6 +579,24 @@ async fn actual_v1_document_is_lifted_losslessly_with_explicit_isolation() {
     let service = result.encoded().declared().semantic();
     assert_eq!(service.base(), &expected);
     let metadata = &service.page_enhancements()[&expected.pages[0].address];
+    let presentation = &result.producer_presentations()[0];
+    assert_eq!(presentation.address(), expected.pages[0].address);
+    assert_eq!(
+        presentation.source(),
+        TeletextProducerPresentationSource::Page
+    );
+    assert_eq!(
+        presentation.effective_defaults(),
+        metadata.presentation.as_ref().unwrap()
+    );
+    assert_eq!(
+        presentation.secondary_selection(),
+        TeletextProducerSecondarySelection::Declared(metadata.presentation.unwrap().secondary)
+    );
+    assert_eq!(
+        presentation.local_program_presence(),
+        TeletextProducerLocalProgramPresence::PresentEmpty
+    );
     assert!(metadata.presentation.is_some());
     assert!(metadata
         .local_program

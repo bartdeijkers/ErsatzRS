@@ -84,8 +84,13 @@ contract; request preflights, process environment, manifest rechecks and receipt
 retain it. Base-only preparation rejects v2 before any producer starts; complete
 authored preparation now has an additive bound validation/complete-encoding path
 with an original deadline, explicit host lifecycle and fresh post-encoding
-selection fence. Producer-isolated channel composition and live publication
-remain open. The global legacy API stays explicitly v1. See the
+selection fence. Producer-local full presentation snapshots now retain original
+declarations, exact packet presence and decoder-dependent second-language state.
+An additive channel input path invokes and validates ordered v1/v2 documents under
+one full membership snapshot/deadline and cumulative raw response bound. Equivalent
+mixed-service materialization/composition and live publication remain open; do not
+convert unspecified receiver defaults into authored sentinels. The global legacy
+API stays explicitly v1. See the
 [input reference](../docs/reference/teletext-design-interchange.md#preparatory-v2-authored-input).
 The presentation packet-body encoder and bounded v1 lift preserve explicit
 page/X26 presence and unchanged v1 bytes. Full mixed-v1/v2 compiler convergence

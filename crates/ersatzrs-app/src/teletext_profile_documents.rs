@@ -49,6 +49,15 @@ pub struct BoundTeletextDocumentInput {
 }
 
 impl BoundTeletextDocumentInput {
+    // Channel preparation authenticates the complete receipt and membership first.
+    // This internal constructor is not detached public receipt authority.
+    pub(super) const fn from_channel_receipt(
+        receipt: TeletextProfileRuntimeReceipt,
+        deadline: Instant,
+    ) -> Self {
+        Self { receipt, deadline }
+    }
+
     /// The original budget includes invocation, validation and native encoding.
     #[must_use]
     pub const fn deadline(&self) -> Instant {

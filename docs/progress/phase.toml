@@ -1130,9 +1130,13 @@ the highest supported declared contract, exact request/environment/receipt and
 manifest fences; base-only preparation rejects v2 before any producer starts.
 Bound document preparation now validates and fully encodes one selected producer
 off async workers, retaining the original deadline, explicit host lifecycle and
-fresh post-encoding selection check. Resolve producer-local inheritance before
-channel composition next; preserve original resource identities/default suppression
-and aggregate limits. No activation or
+fresh post-encoding selection check. Producer-local snapshots now retain full
+defaults, original source/presence and decoder-dependent second-language state;
+channel-wide original v1/v2 input keeps one selection/deadline and cumulative raw
+response bounds. Next materialize equivalent producer-isolated presentation and
+compose complete mixed services, preserving original resource identities/default
+suppression and aggregate limits. Do not replace unspecified receiver defaults
+with authored sentinels. No activation or
 publication authority follows from this input checkpoint.
 Owned service candidates now authenticate actual MOT/X27 selections, all original
 sparse defaults and advertised resource subpages, including empty companions.

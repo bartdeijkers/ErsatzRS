@@ -152,7 +152,11 @@ release section when tagging a release.
   manifest and receipt checks; base-only preparation rejects enhanced selections
   before any producer starts. Add bound authored validation and complete native
   encoding with explicit host lifecycle, shared deadlines and fresh selection
-  checks; the same checked model remains available for preview. Channel composition,
+  checks; the same checked model remains available for preview. Preserve complete
+  producer-local presentation/provenance and decoder-dependent second-language
+  defaults beside native candidates. Prepare channel-wide original v1/v2 documents
+  under one membership snapshot/deadline with cumulative raw response bounds;
+  retain explicit Off without interpreting an unused guide. Mixed channel composition,
   live publication, durable restart and broader client acceptance remain open. Final resource command spans now settle same-instance attributes
   in native preview and both normalization passes, with exact body/allocation
   correspondence and original default provenance. Resolve glyphs when all

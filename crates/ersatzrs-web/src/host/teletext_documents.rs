@@ -12,8 +12,10 @@ use ersatzrs_app::{
 };
 use ersatzrs_domain::{
     EntityId, TeletextDeclaredService, TeletextDeclaredServiceBudget, TeletextDeclaredServiceError,
-    TeletextDisplayMotSelection, TeletextPageSetDraft, TeletextSelectionSnapshot,
-    TeletextServiceBudget, TeletextServiceError,
+    TeletextDisplayMotSelection, TeletextPageSetDraft, TeletextProducerPagePresentation,
+    TeletextProducerPresentation, TeletextProducerPresentationBudget,
+    TeletextProducerPresentationError, TeletextSelectionSnapshot, TeletextServiceBudget,
+    TeletextServiceError,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service, lift_teletext_v1_page_set, EncodedTeletextAuthoredService,
@@ -38,6 +40,7 @@ pub struct EncodedBoundTeletextDocumentCandidate {
     deadline: Instant,
     encoded: EncodedTeletextAuthoredService,
     descriptor: TeletextServiceDescriptor,
+    presentations: Vec<TeletextProducerPagePresentation>,
 }
 
 impl EncodedBoundTeletextDocumentCandidate {
@@ -62,6 +65,12 @@ impl EncodedBoundTeletextDocumentCandidate {
     pub const fn descriptor(&self) -> &TeletextServiceDescriptor {
         &self.descriptor
     }
+    /// Original producer-local defaults and uncertainty, captured before encoding.
+    /// These snapshots are not permission to emit derived presentation packets.
+    #[must_use]
+    pub fn producer_presentations(&self) -> &[TeletextProducerPagePresentation] {
+        &self.presentations
+    }
 }
 
 impl fmt::Debug for EncodedBoundTeletextDocumentCandidate {
@@ -83,6 +92,8 @@ pub enum TeletextDocumentEncodingError {
     Lift(Box<TeletextServiceError>),
     #[error("v1 declaration authentication failed: {0}")]
     Declaration(Box<TeletextDeclaredServiceError>),
+    #[error(transparent)]
+    Presentation(#[from] TeletextProducerPresentationError),
     #[error("v1 display declarations {count} exceed trusted budget {maximum}")]
     DeclarationBudget { count: usize, maximum: usize },
     #[error("native document encoding failed: {0}")]
@@ -139,6 +150,14 @@ fn encode_document(
         TeletextProfileDocument::Authored(declared) => *declared,
     };
     check_deadline(deadline)?;
+    let (declared, presentations) = TeletextProducerPresentation::new(
+        declared,
+        TeletextProducerPresentationBudget {
+            max_pages: policy.validation.declarations.max_displays,
+        },
+    )?
+    .into_parts();
+    check_deadline(deadline)?;
     let encoded =
         encode_teletext_authored_service(declared, &policy.transmissions, &policy.encoding)
             .map_err(|error| TeletextDocumentEncodingError::Encoding(Box::new(error)))?;
@@ -150,6 +169,7 @@ fn encode_document(
         deadline,
         encoded,
         descriptor,
+        presentations,
     })
 }
 

@@ -235,7 +235,24 @@ opt out of an emitted bank or invent a receiver MOT-S1 selector. Annex A.1's
 recommended zero S1 is not an unconditional rejection of a single nonzero S1.
 Subpage-specific resource overrides remain actual X27/4 declarations.
 Page X28 precedes magazine M29, then original associated POP fallback flags;
-never promote these effective defaults into synthetic transmitted declarations.
+ordinary single-producer compilation must not relabel these effective defaults
+as authored X28/M29 declarations. Mixed-producer composition must first capture
+each producer's complete effective presentation and original presence/provenance
+before combining magazine state. Any necessary equivalent page override is a
+separately checked derived representation, retaining its original source.
+Annex D.2.1(2), printed page133, leaves the second-language default decoder
+dependent when X28/M29 are absent. Preserve that uncertainty for Header/POP
+fallback; the existing engine's `None` policy is not an authored no-second-G0
+declaration. Do not silently materialize it as the Table33 sentinel. Trusted
+policy and independent client/decoder evidence remain required before that
+materialization can establish equivalent mixed-producer output. No permanent
+authoring restriction or acceptance waiver follows from this open gap.
+Stopping magazine declarations is not proof of safe replacement in a warm
+receiver. Preserve producer-local defaults without relying on a fresh decoder;
+prove removal/replacement of M29 and MOT state with consecutive generations in
+one persistent decoder, alongside page-X28 removal. Display C4 erasure cannot
+be assumed to reset magazine state. P9A-01 owns the pinned source audit and the
+remaining runtime proof; this does not narrow the accepted authoring contract.
 The complete candidate compiler uses one original reservation list for display
 and resource allocation, retains native absent-X26 versus compiled present-X26
 paths and emits every authenticated resource, including explicit empty pages.

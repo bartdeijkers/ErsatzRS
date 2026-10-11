@@ -2491,6 +2491,16 @@ options 0–6 select primary codes 0x00–0x06; reserved fallback 0x07 is diagno
 Explicit assigned aliases ending in seven are accepted. Language codes do not
 silently select another repertoire. Unknown page lookups return no presentation.
 
+Annex D.2.1(2), printed page133 of
+[EN 300 706 V1.2.1](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf#page=133),
+leaves the second-language default decoder dependent when X28/M29 are absent.
+The existing Header/POP engine policy uses no secondary G0; that is not evidence
+of an authored Table33 no-second-G0 declaration. Producer-local presentation
+snapshots must retain that uncertainty separately from the engine policy, full
+palette/panel/charset defaults and original packet presence. They must not turn
+it into a transmitted X28 override while combining unrelated M29 declarations.
+Equivalent materialization and suitable-client evidence remain open.
+
 The supplied resource selection is already resolved. Optional `compositional_links`
 retain a checked X27/4 declaration on the exact display metadata owner, independently
 of that selection. Every set mask bit on a real, Level-2.5-applicable target requires
@@ -3182,11 +3192,82 @@ same compiled candidate. Before returning it, the host calls
 the fresh repository read. Publication must still recheck eligibility and use
 trusted generation ownership; these observations grant no live admission.
 
+Native preparation also captures producer-local presentation before encoding,
+bounded by the trusted declaration display limit. Its private result retains
+immutable `producer_presentations()` beside the compiler-owned original model;
+capturing defaults does not insert X28, M29 or Local X26 declarations.
+
 This supports one explicit output-channel/addon binding. Channel-wide mixed
-producer inheritance/composition, durable drafts and TTI import/export, localized
+producer composition, durable drafts and TTI import/export, localized
 admin/browser workflows, source acquisition, refresh/restart, hosted transport
 and explicit publication remain open. Base-only preparation continues to reject
 v2; it cannot silently discard authored content. P9A-01 owns current evidence.
+
+### Producer-local presentation snapshots
+
+`TeletextProducerPresentation::new` consumes one original checked declaration
+under `TeletextProducerPresentationBudget::max_pages`. It preflights count and
+addressable snapshot storage before allocation, retaining the original complete
+service without cloning it. Snapshots follow original base-page order and exact
+raw subcodes; `page(address)` never substitutes another subpage.
+
+Each snapshot retains the complete effective presentation, its original Page,
+Magazine, Header or conditional POP source, and Local X26 presence as Absent,
+PresentEmpty or PresentNonEmpty. Page and magazine second-language values are
+`Declared`, including actual no-second-G0 declarations. Header/POP second-language
+selection remains `DecoderDependent`, separately from the existing engine's
+no-secondary policy. The source model retains all packet presence, sparse
+defaults, object/DRCS/MOT bodies, resource identities and navigation unchanged.
+`into_parts` moves that model and its associated snapshots into native work;
+`into_original` recovers only the original model. Neither grants materialization
+or publication authority. Debug output omits authored content.
+
+These snapshots precede cross-producer magazine handling. Equivalent derived
+overrides, whole-service resource/MOT ownership and final aggregate validation
+remain required. The second-language materialization gap described above must
+remain explicit; copying engine policy into an X28 sentinel does not close it.
+
+Warm replacement also requires a persistent decoder. The pinned original
+[libzvbi source](https://github.com/zapping-vbi/zvbi/tree/3785481f51f41a49e28f2b7f6fd5bd9187d24ae1/src)
+stores M29 in the magazine extension (`packet.c`, `parse_28_29`), which page
+fetch can reuse when X28 is absent (`teletext.c`). Display C4 clears page
+extensions, while an explicit channel-switch reset initializes magazine state.
+Source inspection therefore does not support assuming that omission of old
+M29 clears receiver defaults. MOT removal and page-X28 removal are separate
+cases. Required runtime proof feeds prior and replacement generations into one
+decoder without a channel reset, retaining exact original producer presentation
+and resource ownership. Existing fresh-decoder fixtures and the warm DRCS trial
+do not prove these removals; P9A-01 tracks that evidence gap.
+
+### Channel-wide original document preparation
+
+`ApplicationServices::invoke_channel_teletext_documents` captures one ordered
+enabled-channel snapshot under one original 30-second deadline. An On selection
+requires an explicitly selected entry addon; an empty selection returns private
+Off input. Channel identity and unique addon membership are checked before any
+producer starts. At most two guide templates are preflighted under their exact
+selected v1/v2 schemas before serial invocation. Correlation remains opaque and
+subject to the existing byte limit, including Off preparation.
+
+Each producer uses the existing installed-profile invocation with that original
+deadline. Exact binding/contract/installation/settings and generation must match
+the returned receipt. The per-response wire cap and trusted cumulative retained
+stdout limit (`TeletextChannelDocumentInputBudget::max_response_bytes`) are
+checked before retaining a response; failure stops later producers. This raw
+response budget is distinct from the separately capped guide templates, semantic
+validation budgets and total process memory. A fresh complete channel read fences
+membership, including additions, removals and reordered bindings.
+
+The private input's synchronous `validate` returns ordered original documents
+under their respective contracts, without lifting or merging them. Hosts run
+validation off async workers. Any failure rejects the complete result, with a
+numeric binding ordinal and no raw producer text. Prepared values retain the
+whole selection, generation, entry, deadline and document correspondence; empty
+documents remain Off. `recheck_channel_teletext_document_selection` observes the
+complete snapshot again after CPU/native work without resetting the deadline.
+Mixed native composition, aggregate semantic/encoding budgets, generation
+ownership and explicit publication remain separate required steps. The existing
+base-only channel API still rejects v2 before starting any producer.
 
 ## Planned validation and evidence sequence
 
