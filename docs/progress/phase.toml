@@ -1144,8 +1144,10 @@ Bounded whole-page comparison now observes fragments, logical colours, masks and
 both reveal/flash responses while retaining histories and per-origin uncertainty.
 One-origin Passive recipes now retain exact original lineage, effective context
 and original C1 dependencies. A representative retained-AP placement passes both
-native receiver levels and complete selected-model comparison. Next build bounded
-augmented source mapping/DAG/unchanged-anchor placement and realize Unicode/Active
+native receiver levels and complete selected-model comparison. Candidate placement
+now derives whole-component DAG order and unchanged main gaps from actual root
+events, retaining typed pending and checked panel/offset mapping. Next build
+bounded augmented source mapping/distinct-ID assembly and realize Unicode/Active
 physical priority with the existing collector. Explicit
 resource calls lack page addresses; default-owner preservation needs a proven
 encoding strategy rather than relaxing selected-page checks;

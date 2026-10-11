@@ -26,6 +26,7 @@ mod mot;
 mod object_allocation;
 mod object_pages;
 mod origin_carrier;
+mod origin_carrier_placement;
 mod output;
 mod packets;
 mod physical_comparison;
@@ -46,6 +47,7 @@ mod transport;
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 
 pub use origin_carrier::*;
+pub use origin_carrier_placement::*;
 pub use physical_comparison::*;
 pub use raster::*;
 

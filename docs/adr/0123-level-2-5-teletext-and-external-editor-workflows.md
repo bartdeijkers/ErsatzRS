@@ -158,6 +158,16 @@ backgrounds explicit. Unproven national conversion, temporal phase and undefined
 spacing remain located derivation gaps; they are not permanent authoring limits.
 Recipes alone do not prove augmented source correspondence, unchanged-anchor/DAG
 placement, whole-program admission, receiver equivalence or publication.
+Carrier candidate placement now borrows the exact compatibility plan/catalog,
+forms whole-overlap components and preserves DAG order. Derive unchanged main
+gaps from root-only events in the actual composed program, including Base words;
+child events are not caller anchors. Inverse selected panel geometry and checked
+componentwise offsets choose the latest viable gap without changing original
+commands. Unknown/cyclic/unrepresentable components remain pending, with original
+global histories retained even without seeds. Generated order alone cannot
+settle later original paints. Full augmented source/instance correspondence,
+distinct generated IDs and whole-page typed/display equivalence remain required;
+placement does not certify admission or readiness.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

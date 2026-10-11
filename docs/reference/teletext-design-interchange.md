@@ -449,10 +449,38 @@ by guessed glyphs, colours or geometry.
 The representative derived Active-`A` recipe at the retained `£` collision has
 actual factory packing, an actual replay anchor and complete selected-model
 comparison. Pinned teletextimager checks unchanged literal Level 1.5 `£` and
-Level 2.5 `A`, adjacent `Z` and calibration `B`. This manually placed representative
-component is not automatic normalization, a global lineage proof, full receiver
+Level 2.5 `A`, adjacent `Z` and calibration `B`. This representative component
+now consumes its derived unchanged-main gap; it is not automatic normalization,
+a global lineage proof, full receiver
 equivalence, display/navigation or publication acceptance. The original automatic
 composition path's correct Unicode/Active conformance oracle remains failing.
+
+`plan_teletext_origin_carrier_placement` privately borrows the exact compatibility
+plan and supplied catalog. Connected whole rectangles and undirected precedence
+edges form components; deterministic topological order remains distinct from
+cyclic/pending membership. Trace the actual composed program, including generated
+Base words, through the shared spatial executor. Only root main events provide
+gaps, using their unchanged absolute AP after the exact command; recursive child
+events never become main insertion positions. Include the initial `(0,0)` gap.
+
+Map known visual origins back to raw main/right/left coordinates using selected
+Level 2.5 panel widths and preserve receiver-owned header cells. Choose the latest
+unchanged gap whose AP is componentwise no greater than every raw origin, with
+nonnegative checked row `0..23`/column `0..71` offsets. Calls within one component
+remain contiguous in its DAG order. Unknown rectangles, original selected
+pending, cycles and missing representable gaps stay typed pending; even zero
+components retain global original histories. Raw counts/storage and explicit
+placement scans/graph work are bounded before allocation; expanded tracing has
+its own budgets. Spatial failures retain their actual composed-main namespace.
+
+Placement does not allocate IDs, assemble a program, create a source map or prove
+whole-page equivalence. Later retained Passive paints can still redraw fragments;
+the producer must compare the complete actual augmented page and preserve typed
+identity plus original/actual invocation ancestry separately. Repeated per-origin
+recipes require distinct lowest-free IDs against the growing catalog. The pinned
+representative decoder fixture now uses this derived gap, retaining the original
+literal dual-level oracle and complete selected-model comparison. General batch
+correspondence, physical admission and full client navigation remain open.
 
 ### Shared base display trace
 
