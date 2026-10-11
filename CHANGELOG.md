@@ -141,6 +141,9 @@ release section when tagging a release.
   Render physical replay with shared glyph/fragment/colour helpers, showing raw
   Base fallback when authored Unicode instructions are absent and retaining
   actual located diagnostics; whole-page equivalence remains unproven.
+  Compare full original/physical visual planes under host budgets, retaining
+  fragment/colour/flash/glyph differences and separate uncertainty histories;
+  equal host masks do not certify authored identity or receiver equivalence.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

@@ -987,6 +987,31 @@ independent decoding and actual display/navigation in a suitable versioned clien
 with recorded feature coverage and limitations. TSDuck alone is insufficient.
 '''
 evidence = '''
+Bounded whole-page comparison now borrows original and actual projections, scans all25 visual
+rows and retains each side's own origin/candidate/source/root/instance space. Shared sided masks
+preserve authored Base replacements versus physical raw fallback; effective C3 fragment/origin
+geometry, logical FG/BG, full flash mode/rate, box/conceal/invert, canonical G1/alpha effects and
+raw undefined G3/DRCS flags remain observable. Palette/plane values and both reveal/flash responses
+are checked only over actual fragment coverage. Aggregate records/cells/work and fallible bounded
+diagnostics reject without partial output. Full histories remain separate from selected/per-origin
+uncertainty. Eleven regressions prove missing/restored Unicode, original ActiveA/current Local-pound,
+invisible flags and RGB aliases, C3/far-page changes, original/actual uncertainty with no seeds,
+superseded C2 history, equal Latin/Cyrillic shapes without identity assertion, canonical Base versus
+enhanced mosaic separation, undefined G3 flags, unused palette entries and immutable budget fences.
+All31 comparison/new/legacy raster tests pass (c9b8395c-59fe-457b-81f0-63f4ad322665); all471 FFmpeg
+teletext tests pass (0c5e62f4-1421-48db-89a8-11f73c32fc85). Eight mechanical Clippy corrections
+preserve behavior/failure order under independent final review; all11 comparison tests pass again
+(e578f54d-cb31-4dfe-8ea0-d54496522b45) and strict FFmpeg all-target Clippy passes on final source.
+Other valid test/native wire/pixel evidence is reused; encoding and raster behavior are unchanged.
+Absent-coverage C1 avoidance is reviewed in source rather than a dedicated independent fixture.
+Zero findings cannot certify authored glyph identity, producer lineage, service generation,
+independent receiver equivalence, admission or readiness/publication. Next bind generated carriers
+to exact original display origins and realize the actual Unicode/Active correction. Base national-
+subset conversion, unchanged anchors, temporal flash and original colour dependencies remain
+derivation/proof tasks, without accepted permanent exclusions. All milestone contracts/status/
+dependencies are unchanged; full engine/client/editor/localized browser/publication gates stay open.
+Earlier evidence follows unchanged:
+
 Physical raster now consumes one immutable actual replay through shared fragment/mask/DRCS/C1
 helpers. The original design retains authored Base replacements; actual replay renders raw
 transmitted fallback when X26 restoration is absent. Six regressions prove dropped/present

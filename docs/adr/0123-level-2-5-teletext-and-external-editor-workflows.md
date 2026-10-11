@@ -142,6 +142,14 @@ must render the transmitted Base fallback when its enhancement is absent. Do not
 restore original replacements or target ownership into the physical projection.
 Located unresolved cells and host budgets remain explicit. Raster diagnostics
 alone do not establish authored identity, whole-page equivalence or readiness.
+Whole-page diagnostic comparison now observes every visual cell, effective
+origin/fragment geometry, palette and plane response, logical colour references,
+full flash mode/rate and glyph effects through shared sided mask helpers. Test
+both reveal states and flash phases over coverage actually present in each
+fragment. Retain full pending histories separately from selected uncertainties.
+Equal masks cannot certify authored identities or producer lineage; a generated
+carrier must retain an exact original display-origin mapping before equivalence
+can be accepted. Same-owner pairing alone cannot certify a service generation.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional

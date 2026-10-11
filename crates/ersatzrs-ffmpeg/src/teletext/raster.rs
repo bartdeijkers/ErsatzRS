@@ -353,20 +353,12 @@ fn selected_mask(
     let identity = intent
         .glyph()
         .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
-    let spacing = cell.attributes().spacing_separated();
-    let separated = if matches!(identity, TeletextGlyphIdentity::G1Mosaic { .. }) {
-        // Table 26 notes 11/12 limit spacing separation to Level 1/1.5
-        // characters. Enhanced mode-01 mosaics use the non-spacing D5 only.
-        d5_value
-            || (intent.context().candidate().base().is_some()
-                && spacing
-                    .value()
-                    .ok_or(TeletextRasterCellFailure::GlyphAttribute {
-                        pending: spacing.pending().copied().map(Box::new),
-                    })?)
-    } else {
-        false
-    };
+    let (separated, underlined) = mask_effects(
+        identity,
+        intent.context().candidate().base().is_some(),
+        d5_value,
+        cell,
+    )?;
     let drcs = inputs
         .drcs
         .records()
@@ -380,26 +372,158 @@ fn selected_mask(
     // Table 29 leaves G3/DRCS D5 response undefined: keep their masks unchanged.
     // Annex G.2 permits decoder-specific underline shaping. Alphanumerics use
     // the bottom row of this raster's selected 12x10 bitmap grid.
-    Ok(
-        if d5_value
-            && matches!(
-                identity,
-                TeletextGlyphIdentity::G0 { .. }
-                    | TeletextGlyphIdentity::G2 { .. }
-                    | TeletextGlyphIdentity::Composite { .. }
-                    | TeletextGlyphIdentity::AtSymbol
-                    | TeletextGlyphIdentity::Blank
-                    | TeletextGlyphIdentity::SpacingControl { .. }
-            )
-        {
-            mask.with_underline()
-        } else {
-            mask
+    Ok(if underlined {
+        mask.with_underline()
+    } else {
+        mask
+    })
+}
+
+fn mask_effects(
+    identity: TeletextGlyphIdentity,
+    base: bool,
+    d5: bool,
+    cell: ersatzrs_domain::TeletextDisplayCell<'_>,
+) -> Result<(bool, bool), TeletextRasterCellFailure> {
+    let spacing = cell.attributes().spacing_separated();
+    // Table 26 notes 11/12: enhanced G1 uses D5 only; Base also uses spacing.
+    let separated = matches!(identity, TeletextGlyphIdentity::G1Mosaic { .. })
+        && (d5
+            || (base
+                && spacing
+                    .value()
+                    .ok_or(TeletextRasterCellFailure::GlyphAttribute {
+                        pending: spacing.pending().copied().map(Box::new),
+                    })?));
+    let underlined = d5
+        && matches!(
+            identity,
+            TeletextGlyphIdentity::G0 { .. }
+                | TeletextGlyphIdentity::G2 { .. }
+                | TeletextGlyphIdentity::Composite { .. }
+                | TeletextGlyphIdentity::AtSymbol
+                | TeletextGlyphIdentity::Blank
+                | TeletextGlyphIdentity::SpacingControl { .. }
+        );
+    Ok((separated, underlined))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct ComparisonGlyph {
+    pub mask: Option<TeletextGlyphMask>,
+    pub effects: ComparisonGlyphEffects,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ComparisonGlyphEffects {
+    BackgroundOnly,
+    Mosaic { separated: bool },
+    Alphanumeric { underlined: bool },
+    // Table 29 leaves these effects undefined: comparison retains both flags.
+    Undefined { d5: bool, spacing_separated: bool },
+}
+
+pub(super) fn comparison_original_glyph(
+    original: &TeletextMainComposition,
+    cell: ersatzrs_domain::TeletextDisplayCell<'_>,
+) -> Result<ComparisonGlyph, TeletextRasterCellFailure> {
+    comparison_glyph(
+        RasterInputs {
+            owner: original.owner(),
+            authored: Some(original),
+            display: original.display_resolution(),
+            intent: original.glyph_intent(),
+            drcs: original.drcs_execution(),
+            colours: original.colour_composition(),
         },
+        cell,
     )
 }
 
-fn fragment_position(fragment: TeletextDisplayFragment, x: u8, y: u8) -> (u8, u8) {
+pub(super) fn comparison_physical_glyph(
+    physical: &TeletextPhysicalDisplayReplay,
+    cell: ersatzrs_domain::TeletextDisplayCell<'_>,
+) -> Result<ComparisonGlyph, TeletextRasterCellFailure> {
+    comparison_glyph(
+        RasterInputs {
+            owner: physical.owner(),
+            authored: None,
+            display: physical.display_resolution(),
+            intent: physical.glyph_intent(),
+            drcs: physical.drcs_execution(),
+            colours: physical.colour_composition(),
+        },
+        cell,
+    )
+}
+
+fn comparison_glyph(
+    inputs: RasterInputs<'_>,
+    cell: ersatzrs_domain::TeletextDisplayCell<'_>,
+) -> Result<ComparisonGlyph, TeletextRasterCellFailure> {
+    if cell.fragment() == TeletextDisplayFragment::BackgroundOnly {
+        return Ok(ComparisonGlyph {
+            mask: None,
+            effects: ComparisonGlyphEffects::BackgroundOnly,
+        });
+    }
+    let mask = selected_mask(inputs, cell)?;
+    let intent = cell
+        .origin()
+        .and_then(|index| inputs.display.origins().get(index))
+        .and_then(|origin| inputs.intent.records().get(origin.candidate_index()))
+        .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
+    // selected_mask already checked D5 (and authored replacement precedence).
+    let d5 = cell
+        .attributes()
+        .underline_or_separated_mosaics()
+        .value()
+        .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
+    let authored = inputs
+        .authored
+        .zip(intent.context().candidate().base())
+        .is_some_and(|(original, base)| {
+            original
+                .base_replacement(base.position().row(), base.position().column())
+                .is_some()
+        });
+    let effects = if authored {
+        ComparisonGlyphEffects::Alphanumeric { underlined: d5 }
+    } else {
+        let identity = intent
+            .glyph()
+            .ok_or(TeletextRasterCellFailure::MissingGlyph)?;
+        let (separated, underlined) = mask_effects(
+            identity,
+            intent.context().candidate().base().is_some(),
+            d5,
+            cell,
+        )?;
+        match identity {
+            TeletextGlyphIdentity::G1Mosaic { .. } => ComparisonGlyphEffects::Mosaic { separated },
+            TeletextGlyphIdentity::G3 { .. } | TeletextGlyphIdentity::Drcs { .. } => {
+                // This extra raw flag check belongs only to comparison; the
+                // renderer does not assign an undefined spacing effect.
+                let spacing = cell.attributes().spacing_separated();
+                ComparisonGlyphEffects::Undefined {
+                    d5,
+                    spacing_separated: spacing.value().ok_or(
+                        TeletextRasterCellFailure::GlyphAttribute {
+                            pending: spacing.pending().copied().map(Box::new),
+                        },
+                    )?,
+                }
+            }
+            _ => ComparisonGlyphEffects::Alphanumeric { underlined },
+        }
+    };
+    Ok(ComparisonGlyph {
+        mask: Some(mask),
+        effects,
+    })
+}
+
+pub(super) fn fragment_position(fragment: TeletextDisplayFragment, x: u8, y: u8) -> (u8, u8) {
     use TeletextDisplayFragment as F;
     match fragment {
         F::DoubleWidthLeft => (x / 2, y),

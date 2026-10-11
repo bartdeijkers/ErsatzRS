@@ -17,7 +17,7 @@ v1 lifting retains bytes; resources preserve geometry, lifecycle,
 pointers/metadata/fresh definition state. Local definitions share bounded
 X26 with forward references. Decoders prove selected
 DRCS/object/main cells; recorded local/G1 font gaps do not establish rendering.
-Physical replay/raster share resolvers; raw Base fallback stays visible.
+Physical replay/raster/comparison retain fallback and uncertainty.
 C3 retains private/shared fragments and deferred writers.
 Actual C2 uses packed words within emitters; other order/size/extent pending.
 G1 mode/fallback and Latin decoder gaps survive.
@@ -72,7 +72,7 @@ Phase 10 waits for p9b-02.
 [[debt]]
 id          = 'teletext-generated-unicode-base-priority-is-not-preserved-on-wire'
 adr         = '0123'
-description = 'Generated Unicode fallback currently becomes Local X26 glyph data and outranks an original Active glyph, although the retained semantic/raster result correctly keeps Unicode at Base priority. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. No permanent authoring restriction is accepted.'
+description = 'Generated Unicode fallback currently becomes Local X26 glyph data and outranks an original Active glyph, although the retained semantic/raster result correctly keeps Unicode at Base priority. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
 discovered  = '2026-10-11'
 evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The bounded realization intermediate retains affected final origins/fragments and unresolved evidence; it does not correct the encoder or grant publication readiness. Actual lowering, generated-resource accounting and independent dual-receiver proof remain open.'
 resolved    = false

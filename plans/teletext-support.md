@@ -215,6 +215,15 @@ Physical raster now uses that actual replay through the shared renderer, retaini
 raw transmitted Base fallback instead of restoring absent authored Unicode.
 Located unresolved cells and budgets remain explicit; host pixel comparison alone
 cannot prove glyph lineage, whole-page semantics or independent receiver behavior.
+Bounded whole-page comparison now observes every cell, effective fragment/origin
+geometry, colour references and both reveal/flash responses through shared mask
+helpers. Histories remain separate from selected uncertainty; zero findings cannot
+certify authored identity or matching generations. Next bind generated carriers to
+exact original display origins, then prove the actual normalization with decoding.
+Carrier derivation still needs identity-preserving Base national-subset conversion,
+unchanged-anchor placement and temporal flash context. Preserve original colour
+dependencies before explicit carrier backgrounds; no permanent exclusions are
+accepted for these remaining tasks.
 Preserve original-source mapping and bind C.2 evidence to final physical words.
 Complete remaining physical-order, A.7/A.8 and glyph evidence before normalizing
 both receiver views. Fragment tests alone

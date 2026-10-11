@@ -27,6 +27,7 @@ mod object_allocation;
 mod object_pages;
 mod output;
 mod packets;
+mod physical_comparison;
 mod physical_inventory;
 mod pmt_install;
 mod presentation;
@@ -43,6 +44,7 @@ mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 
+pub use physical_comparison::*;
 pub use raster::*;
 
 pub use base_compatibility_realization::*;

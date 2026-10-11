@@ -398,6 +398,34 @@ pixel/diagnostic limits reject without returning partial output. This host
 diagnostic is not an independent receiver, a glyph-lineage comparison, whole-page
 equivalence or publication authority.
 
+`compare_teletext_physical_display` borrows the original composition and actual
+replay under aggregate record, cell, diagnostic and work budgets. It scans the
+entire 25-row visual plane, including cells outside a prospective carrier's
+footprint. Findings retain each side's own source ordinals, full object identities,
+origin/candidate indices and invocation IDs; those ID spaces are not equated.
+The comparison observes effective fragments, origin anchors/sizes, logical
+foreground/background references, all palette values, composed screen/row planes,
+full flash mode/rate, boxing/conceal/invert, canonical glyph masks and effects.
+Base/enhanced G1 use their respective separation rules; undefined G3/DRCS effects
+retain exact D5 and spacing flags. C.1 observes both reveal states and flash phases
+only over ink/background coverage present in each actual fragment, preserving
+consumed transparency/adjacent-palette diagnostics without manufacturing pixels.
+
+Pending display histories remain accessible alongside per-origin, charset/glyph
+and selected-cell uncertainty. Superseded history is not a readiness predicate.
+Zero findings cannot establish authored glyph identity, source lineage, service
+generation, independent receiver equivalence, admission or publication: equal font
+masks may represent different coded identities. Plane getters expose RGB/video,
+while the replay factory guards its original raw plane context. Generated carriers
+still need producer-owned exact origin/source mappings and whole-page validation.
+Carrier derivation must also preserve coded identity rather than copy a Base
+national-subset byte into enhancement G0, and establish temporal context for
+incremental/decremental flash. The current model retains raw flash rate; copying
+it to a fresh one-glyph Passive object does not yet prove equivalent timing.
+Validate original colour-writer dependencies before materializing explicit carrier
+backgrounds. These are remaining derivation/verification tasks, not accepted
+authoring restrictions.
+
 ### Shared base display trace
 
 Main composition retains an immutable, domain-owned base display trace compiled

@@ -10,6 +10,8 @@ mod raster_tests;
 #[path = "physical_replay_tests.rs"]
 mod physical_replay_tests;
 
+#[path = "physical_comparison_tests.rs"]
+mod physical_comparison_tests;
 #[path = "physical_raster_tests.rs"]
 mod physical_raster_tests;
 
