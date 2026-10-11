@@ -1245,3 +1245,134 @@ fn enhanced_g1_alphabet_preserves_unicode_base_replacement_before_original_mode_
     );
     assert_eq!(service, before);
 }
+
+#[test]
+fn original_charset_context_does_not_promote_generated_base_designations() {
+    let alpha = at(
+        8,
+        TeletextColumnOperation::G1Alpha {
+            code: TeletextG1AlphaCode::new(0x40).unwrap(),
+        },
+    );
+    let mut fixture = Fixture::new(vec![text(1, 8, "é")], Some(vec![position(1, 8), alpha]));
+    fixture.primary = Some(0x37);
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let execution = plan.charset_execution();
+    let primary = TeletextPageCharsetDesignation::new(0x37).unwrap();
+    assert_eq!(execution.owner(), owner());
+    assert_eq!(execution.primary(), primary);
+    assert_eq!(execution.secondary(), None);
+    assert_eq!(
+        execution.national_option(),
+        plan.base_display().national_option()
+    );
+    assert!(execution.declarations().is_empty());
+    assert!(execution.pending().is_empty());
+    assert_eq!(
+        execution.records().len(),
+        plan.glyph_layers().candidates().len()
+    );
+    for (record, candidate) in execution
+        .records()
+        .iter()
+        .zip(plan.glyph_layers().candidates())
+    {
+        assert_eq!(record.candidate(), candidate);
+    }
+    let contenders: Vec<_> = execution
+        .records()
+        .iter()
+        .filter(|record| record.candidate().position() == (1, 8))
+        .collect();
+    assert_eq!(contenders.len(), 2);
+    assert_eq!(
+        contenders[0].candidate().priority(),
+        TeletextGlyphPriority::Base
+    );
+    assert_eq!(
+        contenders[1].candidate().operation(),
+        Some(TeletextColumnOperation::G1Alpha {
+            code: TeletextG1AlphaCode::new(0x40).unwrap(),
+        })
+    );
+    assert!(contenders[0].national_substitution());
+    assert!(!contenders[1].national_substitution());
+    for record in contenders {
+        assert_eq!(
+            record.selection().unwrap().value(),
+            Some(TeletextCharsetSelection::PagePrimary(primary))
+        );
+    }
+    assert!(plan.program().commands().contains(&charset(8, 0)));
+    assert_eq!(originals(&plan), &[position(1, 8), alpha]);
+    assert_eq!(service, before);
+}
+
+#[test]
+fn same_service_charset_execution_uses_spatial_shared_state_for_active_glyphs() {
+    let target = local(90);
+    let mut fixture = Fixture::new(
+        vec![text(1, 20, "Z")],
+        Some(vec![
+            position(1, 5),
+            charset(5, 0x37),
+            position(1, 8),
+            invoke(target, TeletextObjectType::Active),
+            charset(10, 0x1f),
+            g2(21),
+        ]),
+    );
+    fixture.objects.push(definition(
+        target,
+        TeletextObjectType::Active,
+        vec![position(0, 12), g0(12)],
+    ));
+    let service = fixture.build();
+    let before = service.clone();
+    let plan = compose(&service);
+    let execution = plan.charset_execution();
+    let enhanced: Vec<_> = execution
+        .records()
+        .iter()
+        .filter(|record| {
+            matches!(record.candidate().position(), (1, 20 | 21))
+                && record.candidate().operation().is_some()
+        })
+        .collect();
+    assert_eq!(enhanced.len(), 2);
+    for record in enhanced {
+        assert_eq!(
+            record.selection().unwrap().value(),
+            Some(TeletextCharsetSelection::Enhancement(
+                TeletextEnhancementCharsetDesignation::new(0x1f).unwrap(),
+            ))
+        );
+    }
+    let active = execution
+        .records()
+        .iter()
+        .find(|record| {
+            record.candidate().position() == (1, 20)
+                && record.candidate().priority() == TeletextGlyphPriority::Active
+        })
+        .unwrap();
+    assert_eq!(
+        active.candidate().source(),
+        Some(TeletextEnhancementSource {
+            object: Some(target),
+            command: 1
+        })
+    );
+    let writer = &execution.declarations()[active.selection().unwrap().declaration().unwrap()];
+    assert_eq!(
+        writer.source(),
+        TeletextEnhancementSource {
+            object: None,
+            command: 4
+        }
+    );
+    assert!(active.candidate().invocation().is_some());
+    assert_eq!(service, before);
+}

@@ -176,9 +176,14 @@ both receiver views. Full display/publication acceptance remains open.
 The checked G1 alphabet operation now preserves mode 0x01 and base fallback;
 selected Latin positions decode correctly with libzvbi 0.2.42. Pinned imager's
 alphabet-font gap is a separate diagnostic, not positive Level 2.5 evidence.
-Next execute current G0/G2 designation lifetimes for every original contender,
-including shared spatial Local/Active state and fresh private object state. Prove
+Complete current G0/G2 resolution for every original contender. Prove
 non-Latin G1 and D5 underline separately; do not rewrite G1 as a compatible glyph.
+The consumed original charset executor now keeps a context for every contender,
+with shared spatial Local/Active state, fresh private Adaptive/Passive state and
+exact declaration provenance. Equal-position cross-source order stays pending;
+secondary metadata creates no ESC or new G2. Next settle source-order questions,
+execute glyph/mark tables and supported ESC semantics, then prove non-Latin Base
+fallback and normalize both receiver views with geometry/footprint validation.
 A bounded physical inventory fence now compares exact compiled display/resource
 headers and stable logical resource owners. Eleven regressions cover actual
 empty-resource collisions, counter/last-row changes, magazine eight and MOTs.

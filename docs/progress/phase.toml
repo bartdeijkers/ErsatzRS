@@ -1203,10 +1203,16 @@ views. This does not close rendering, publication or engine acceptance.
 Checked G1 alphabet positions now preserve original mode 0x01, source/invocation
 and Base fallback. Selected Latin @/_ cells pass independent libzvbi 0.2.42;
 pinned imager's empty alphabet-font limitation is a separate diagnostic, with
-unchanged Level 1.5 fallback. Next execute G0/G2 lifetimes for all contenders,
-including shared spatial Local/Active designation state and fresh private object
-state, then prove non-Latin alphabets and D5 underline. No engine restriction or
+unchanged Level 1.5 fallback. Complete G0/G2 resolution, non-Latin alphabets and
+D5 underline. No engine restriction or
 rendering/publication acceptance is implied.
+The same-service composer now consumes original charset contexts for every
+candidate, retaining shared spatial row state, fresh private instance state,
+exact declaration sources and pending equal-position physical order. Secondary
+G0 metadata never changes G2 or invents ESC. Next settle pending order and execute
+character/mark tables and supported ESC semantics, validate footprints/geometry,
+and prove non-Latin fallback and physical equivalence in both receiver views.
+This remains an unpublished semantic intermediate, not full Level 2.5 acceptance.
 A bounded compiled-page inventory fence now rejects exact display/resource header
 collisions and repeated logical owners; eleven actual-header regressions pass.
 The final compiler must still supply all unique pages, including empty companions,

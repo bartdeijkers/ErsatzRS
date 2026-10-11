@@ -23,8 +23,9 @@ with source guards. Main composition preserves AP/charset/provenance;
 same-service packing restores rows with exact pointers/capacity. Base/spatial/glyph traces retain fallback, intent, spacing, instances and sources.
 The attribute executor separates four-group inheritance/panel defaults;
 C2/Adaptive endpoints remain pending. G1 alphabets preserve mode/base fallback;
-Latin cells pass libzvbi, with a separate imager font-gap diagnostic. Charset execution,
-overlap/geometry, header normalization, physical equivalence, X27 and scheduling
+Latin cells pass libzvbi; imager has a font-gap diagnostic. Charset contexts retain
+shared/private state and pending source order; tables, geometry, normalization,
+physical equivalence, X27 and scheduling
 remain open.
 X27 preserves masks/used S1; MOT retains full banks/defaults/raw fields and IDs.
 Derivation retains provenance/conflicts. A bounded compiled-header inventory fence
@@ -37,7 +38,8 @@ Shared app controls compose isolated channel drafts; native encoding retains the
 same pages. Guide bounds pass. Acquisition, activation, other
 regions, link CRC, UI/Lua and publication remain open.
 
-Report-only SQLite retains tracks, exact ownership/raw data and scan leases. Missing records prove no absence; revisions certify no bytes;
+Report-only SQLite retains tracks/ownership/raw data/leases. Missing records prove
+no absence; revisions certify no bytes;
 pages remain NotAcquired. Explicit-PID TS/PES/header parsing retains flags/subcodes/
 missing PTS, not source identity, readiness or inventory. Bounds follow JSON decode,
 not input/child RSS. Acquisition/revisions/selection remain open; auxiliary failure
@@ -47,9 +49,8 @@ Carousel/PES/TS, all-program PSI/PMT monitoring, PCR/CBR checks and bounded
 retention preserve AV, packet timing and epoch-bound acknowledgement. Finite EOF
 drains validated output; changed/malformed input is terminal. P9A-04 owns proof.
 
-Authored bindings apply only to final MPEG-TS roles. Legacy wrapper/first-encoder
-admission reserves distinct leases; owner-bound transfer, startup/disposal/retries
-and Health preserve capacity/cleanup failures. Linux-hosted route proof covers
+Authored bindings apply to final MPEG-TS roles. Legacy wrapper/first encoder
+reserve distinct leases; transfer/lifecycle and Health preserve capacity/cleanup. Linux-hosted route proof covers
 Linux x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission, tokens, reaping,
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.

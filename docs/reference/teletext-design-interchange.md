@@ -432,6 +432,48 @@ or DRCS, validate prohibited object overlap/open-object limits, normalize physic
 instructions or authorize rendering/publication. Final C2 transmission ties,
 Adaptive endpoints, geometry and both receiver views remain mandatory work.
 
+### Original charset contexts
+
+`resolve_teletext_charset_execution` retains exactly one immutable record per
+original glyph-layer candidate, in the same order, including losing glyphs.
+Main composition supplies Base, spatial events and candidates from the same
+immutable service. Exact owner and candidate/event checks reject inconsistent
+inputs; matching identities alone do not certify a generation.
+
+Local and Active mode-eight declarations share the absolute row. Spatial
+column order, including the standard's main/right/left address order, determines
+which preceding declaration applies; returning from a call does not restore a
+private caller charset. In particular, an Active glyph at absolute column 20
+uses a main declaration at column 10 even when recursive event preorder lists
+the glyph first. A new row starts with the selected primary. Adaptive and
+Passive instances instead start fresh at primary, retain their own declaration
+across row changes and affect only their own glyphs.
+
+Each glyph retains its own original definition order. An earlier glyph at the
+same position cannot acquire a later declaration in its own definition. Equal
+positions involving different instances retain a typed pending choice with all
+original source/root/invocation contenders and previous context; logical event
+preorder is not physical transmission evidence. Known enhancement choices retain
+the exact original declaration index. Shared spans and linked pending choices
+avoid a contender vector per cell. Trusted original-event and checked storage/
+search bounds precede allocation; no input mutation or partial result escapes.
+
+The record distinguishes G0, G1 alphabet, G2, G0-with-diacritic and independent
+mosaic/G3/DRCS usage. Enhanced G0/G1 alphabet/diacritic glyphs omit national
+substitution. Diacritics retain current G0/G2 and the explicit zero-diacritic
+`0x2A` exception. Secondary G0 metadata never designates G2; no ESC is inferred
+from its presence. Base retains its exact coded role, authored Unicode intent,
+selected primary, extension presence and separate header national bits. National
+substitution is applicable only to actual coded Base G0 glyphs, including G0
+alphabet positions in graphics mode, rather than mosaics or spacing controls.
+
+This is repertoire-context execution, not character-table lookup or certification
+that non-Latin presentation preserves authored Unicode in the current Western
+Latin fallback bytes. ESC authoring, glyph/mark assignment, DRCS selector
+execution, footprint/panel geometry, final physical normalization and complete
+Level 1.5/2.5 receiver proof remain open. No partial result grants preview,
+publication or engine acceptance authority, or imposes a permanent feature limit.
+
 ### Compatibility-aware composed packing
 
 `compile_teletext_composed_main_program` composes and packs one exact owner from

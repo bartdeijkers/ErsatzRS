@@ -128,6 +128,14 @@ without national substitution. A separate teletextimager 0.2.0 diagnostic record
 its empty-G1-font limitation while proving unchanged Level 1.5 fallback. Current
 G0 selection, non-Latin alphabets and D5 underline still require full execution
 and receiver proof; the interchange reference records the distinct evidence.
+Original charset contexts are now consumed alongside the same-service Base,
+spatial, glyph and attribute projections. Local/Active declarations share spatial
+absolute-row state; Adaptive/Passive instances keep fresh private state across
+rows. Every contender retains its own context, original writer provenance and
+pending equal-position source order. Primary/secondary/header national metadata,
+Base Unicode intent and actual coded role remain separate. This does not execute
+character tables/ESC, resolve full geometry or prove physical receiver equivalence;
+the interchange reference defines the boundary. Full acceptance remains open.
 A bounded compiled-page identity fence now rejects exact physical
 display/resource header collisions and repeated logical resource owners, without
 reducing display subcodes to S1 or banning distinct-S1 kinds. Eleven regressions

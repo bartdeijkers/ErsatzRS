@@ -11,8 +11,9 @@ use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
     build_teletext_glyph_layers, resolve_teletext_attribute_execution,
-    resolve_teletext_spatial_trace, TeletextAttributeExecution, TeletextAttributeExecutionError,
-    TeletextBaseDisplay, TeletextCharsetPair, TeletextCharsetValueError,
+    resolve_teletext_charset_execution, resolve_teletext_spatial_trace, TeletextAttributeExecution,
+    TeletextAttributeExecutionError, TeletextBaseDisplay, TeletextCharsetExecution,
+    TeletextCharsetExecutionError, TeletextCharsetPair, TeletextCharsetValueError,
     TeletextCollectedEnhancementReferences, TeletextColumnOperation,
     TeletextEffectiveProgramSource, TeletextEnhancementCharsetDesignation,
     TeletextEnhancementCollectionBudget, TeletextEnhancementCollectionFailure,
@@ -90,6 +91,8 @@ pub enum TeletextMainCompositionFailure {
     #[error(transparent)]
     AttributeExecution(#[from] TeletextAttributeExecutionError),
     #[error(transparent)]
+    CharsetExecution(#[from] TeletextCharsetExecutionError),
+    #[error(transparent)]
     Charset(#[from] TeletextCharsetValueError),
     #[error(transparent)]
     Program(#[from] TeletextEnhancementProgramError),
@@ -130,6 +133,7 @@ pub struct TeletextMainComposition {
     spatial_trace: TeletextSpatialTrace,
     glyph_layers: TeletextGlyphLayers,
     attribute_execution: TeletextAttributeExecution,
+    charset_execution: TeletextCharsetExecution,
     collected: TeletextCollectedEnhancementReferences,
 }
 
@@ -178,6 +182,13 @@ impl TeletextMainComposition {
     #[must_use]
     pub const fn attribute_execution(&self) -> &TeletextAttributeExecution {
         &self.attribute_execution
+    }
+    /// Original per-contender repertoire context, separate from coded Base
+    /// fallback and generated compatibility words. Pending source order,
+    /// glyph lookup, geometry and physical receiver equivalence remain open.
+    #[must_use]
+    pub const fn charset_execution(&self) -> &TeletextCharsetExecution {
+        &self.charset_execution
     }
     #[must_use]
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
@@ -281,13 +292,14 @@ pub fn compose_teletext_main_program(
                 failure.reason.into(),
             )
         })?;
-    let (spatial_trace, glyph_layers, attribute_execution) = original_display_execution(
-        service,
-        &base_display,
-        &colour_context,
-        &source,
-        budget.collection.max_commands,
-    )?;
+    let (spatial_trace, glyph_layers, attribute_execution, charset_execution) =
+        original_display_execution(
+            service,
+            &base_display,
+            &colour_context,
+            &source,
+            budget.collection.max_commands,
+        )?;
     Ok(TeletextMainComposition {
         owner,
         original_program_source: source,
@@ -298,6 +310,7 @@ pub fn compose_teletext_main_program(
         spatial_trace,
         glyph_layers,
         attribute_execution,
+        charset_execution,
         collected,
     })
 }
@@ -313,6 +326,7 @@ fn original_display_execution(
         TeletextSpatialTrace,
         TeletextGlyphLayers,
         TeletextAttributeExecution,
+        TeletextCharsetExecution,
     ),
     TeletextMainCompositionError,
 > {
@@ -333,7 +347,14 @@ fn original_display_execution(
     let glyphs = original_glyph_layers(base, &spatial, source, maximum)?;
     let attributes =
         original_attribute_execution(base, &spatial, &glyphs, colours, source, maximum)?;
-    Ok((spatial, glyphs, attributes))
+    let charsets =
+        resolve_teletext_charset_execution(base, &spatial, &glyphs, maximum).map_err(|reason| {
+            let location = reason
+                .location
+                .and_then(|location| original_location(source, location));
+            error(base.owner(), location, reason.into())
+        })?;
+    Ok((spatial, glyphs, attributes, charsets))
 }
 
 fn original_attribute_execution(
