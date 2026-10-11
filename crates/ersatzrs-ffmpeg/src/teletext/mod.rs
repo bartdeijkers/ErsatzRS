@@ -294,6 +294,9 @@ mod tests;
 mod authored_service_tests;
 
 #[cfg(test)]
+mod producer_composition_tests;
+
+#[cfg(test)]
 mod authored_service_transport_runtime_tests;
 #[cfg(test)]
 mod transport_tests;

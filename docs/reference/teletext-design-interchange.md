@@ -3222,10 +3222,9 @@ defaults, object/DRCS/MOT bodies, resource identities and navigation unchanged.
 `into_original` recovers only the original model. Neither grants materialization
 or publication authority. Debug output omits authored content.
 
-These snapshots precede cross-producer magazine handling. Equivalent derived
-overrides, whole-service resource/MOT ownership and final aggregate validation
-remain required. The second-language materialization gap described above must
-remain explicit; copying engine policy into an X28 sentinel does not close it.
+These snapshots precede the checked cold composition below. The second-language
+materialization gap remains explicit; copying engine policy into an X28 sentinel
+does not close it. Warm replacement and publication require separate proof.
 
 Warm replacement also requires a persistent decoder. The pinned original
 [libzvbi source](https://github.com/zapping-vbi/zvbi/tree/3785481f51f41a49e28f2b7f6fd5bd9187d24ae1/src)
@@ -3238,6 +3237,53 @@ cases. Required runtime proof feeds prior and replacement generations into one
 decoder without a channel reset, retaining exact original producer presentation
 and resource ownership. Existing fresh-decoder fixtures and the warm DRCS trial
 do not prove these removals; P9A-01 tracks that evidence gap.
+
+### Checked cold producer composition
+
+`TeletextColdProducerComposition::new` consumes an ordered vector of checked
+producer snapshots and explicit host language/exact entry address. It retains
+every original service unchanged beside the composed declaration and private
+page provenance: producer ordinal, original page ordinal, exact address and
+whether original Magazine presentation became a derived Page override.
+Read-only accessors and `into_parts` preserve that association; callers cannot
+forge the original provenance. Debug and errors omit authored text.
+
+One common complete M29 declaration survives per magazine only when all original
+declarations agree and no page originally relies on Header or POP fallback.
+Otherwise original Magazine-dependent pages receive complete derived X28
+presentation, including raw charset selections, all palette colours, remapping,
+background substitution and panels. Actual page presentation retains precedence.
+Header/POP pages keep absent presentation and decoder-dependent secondary state;
+no receiver-dependent value becomes an authored sentinel. Local X26 keeps its
+Absent, PresentEmpty or PresentNonEmpty state.
+
+Duplicate exact display addresses fail, including identical bodies. Shared
+resources coalesce only with identical complete identities and bodies; collisions
+use raw page plus logical S1 independently of kind. Distinct S1 remains valid.
+One actual MOT bank binds every display in its magazine; differing banks fail
+without renumbering or inventing a receiver selector. A previously unassociated
+page can adopt the common bank only when all original resolved effects survive.
+The existing semantic and declaration constructors validate the complete result,
+then original sparse defaults, roles, conditional POP fallback, presentation and
+Local presence are checked again. Failure returns no partial candidate.
+
+`TeletextProducerCompositionBudget` bounds raw producers, nested input items,
+content bytes, commands, clone/index storage and composition work before copies;
+duplicate banks still consume raw limits. Its separate semantic and declaration
+budgets count the actual coalesced output. The complete encoder must subsequently
+validate lifecycle records, aggregate encoding limits and actual physical headers.
+Logical composition does not guess a resource header's counter/nn subcode or ban
+every shared raw page number.
+
+The focused domain/FFmpeg regressions cover contrasting complete M29 themes,
+native common M29, Header/POP absence, exact identities/navigation, resource and
+MOT conflicts, unchanged sparse defaults and raw/output bounds. Complete encoding
+of two synthetic themes preserves each original shared-model raster exactly,
+including different palette/panel output, without adding Local X26. A logically
+valid shared raw page is rejected by the final physical header collision check.
+This is cold, unpublished model/encoder evidence. Host channel integration,
+independent decoding of the mixed result, suitable-client display/navigation,
+safe warm replacement and explicit publication remain required.
 
 ### Warm magazine-default cache diagnostic
 

@@ -156,8 +156,10 @@ release section when tagging a release.
   producer-local presentation/provenance and decoder-dependent second-language
   defaults beside native candidates. Prepare channel-wide original v1/v2 documents
   under one membership snapshot/deadline with cumulative raw response bounds;
-  retain explicit Off without interpreting an unused guide. Mixed channel composition,
-  live publication, durable restart and broader client acceptance remain open.
+  retain explicit Off without interpreting an unused guide. Add bounded cold
+  producer composition with complete derived page themes, preserved originals,
+  shared resource authentication and unchanged preview. Host integration, warm
+  replacement, live publication, durable restart and client acceptance remain open.
   Add a pinned persistent-decoder diagnostic confirming that M29 palette defaults
   survive omission despite page erasure; safe replacement remains required.
   Final resource command spans now settle same-instance attributes

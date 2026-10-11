@@ -4,21 +4,19 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
-Engine acceptance p9a-04 precedes one ErsatzRS-Addons TV-guide add-on
-at p9b-01, inspired only by NOS200–299 (ADR0120).
-ADR 0123 requires authored
-Level2.5/fallback, pinned QTeletextMaker TTI/sidecar, TSDuck/independent decoding
-and client display/navigation; Kodi optional.
+p9a-04 precedes one ErsatzRS-Addons guide (NOS200–299), p9b-01.
+ADR0123: authored Level2.5/fallback, pinned QTeletextMaker TTI/sidecar,
+TSDuck/independent decoding and actual client display/navigation; Kodi optional.
 
 v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
 metadata/fresh state. Local X26 retains forward references.
 Replay/raster keep fallback; encoding keeps lineage, IDs and call ancestry.
 AP00 retains pointers/C2; native pages retain no-X26/default owners/X27/X28/M29.
-Corrected X27 mixed decoding passes; client proof open.
-Display X26/metadata and dual decoding pass.
+Corrected X27 decoding passes; client open.
+X26/metadata dual decoding pass.
 C2 uses final words per instance. Charset aliases keep raw pending; differing pairs stay pending.
 G1 mode/fallback and Latin decoder gaps survive.
-165 national recipes; four pending. Hebrew private-charset decoder gap remains.
+165 national recipes; 4 pending. Hebrew private-charset decoder gap remains.
 Glyph/DRCS keep original resources and loser/blank lineage; lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
@@ -42,8 +40,9 @@ QTM edit/save/reopen proves renumber/loss; host roundtrip open.
 Strict v2 authenticates declarations with host budgets;
 Profiles pin v2 before v1 through request/env/receipt/manifest fences.
 Base prep rejects v2; encoding keeps model/deadline/fences.
-Producer defaults keep provenance/unknown secondary; channel input shares fences.
-Composition/publication open.
+Original defaults/unknown secondary and channel fences remain.
+Cold composition isolates M29, coalesces full resources and rechecks MOT effects.
+Host integration/warm replacement/publication open.
 ADR0122 profiles/themes/zones/admin/Lua stay preparatory.
 App keeps drafts/guide bounds; acquisition,
 activation, regions, link CRC,
@@ -78,7 +77,7 @@ id          = 'teletext-default-secondary-materialization-is-unproven'
 adr         = '0123'
 description = 'Preserve producer-local presentation before mixing magazine state. EN 300 706 Annex D.2.1(2) leaves the second-language default decoder dependent without X28/M29. The existing Header/POP no-secondary engine policy is not an authored no-second-G0 declaration and cannot silently become a Table33 sentinel in a derived X28 override. Retain exact original source/presence, full defaults and typed uncertainty; prove equivalent materialization under trusted policy with independent decoding and suitable-client evidence. No permanent authoring restriction or acceptance waiver is accepted.'
 discovered  = '2026-10-11'
-evidence    = 'A fresh official EN 300 706 V1.2.1 audit confirms Annex D.2.1(2), printed133, and Table33 no-second-G0 coding. The existing mot_presentation.rs fallback uses secondary:None, while Header carries only national-option bits. Pinned original libzvbi0.2.42/source3785481f source inspection also finds magazine M29 cache reuse when X28 is absent; page C4 does not reset magazine state. A captured-unit one-decoder trial now confirms M29 CLUT2[0] stays17/34/51 after omission despite target C4, following cold255/0/85. All85 actual feeds, three fetches, fixed baseline Z/B and mapped original-library/ABI/artifact guards pass; nine contract tests and independent review pass. The old enhanced-A oracle is unchanged and excluded from this palette diagnostic. Checked safe M29 replacement and MOT/page-X28 removal trials remain required; existing fresh-decoder and warm DRCS receipts do not prove them. The interchange reference and ADR0123 own these boundaries; P9A-01 owns implementation evidence and remaining engine gates.'
+evidence    = 'The checked cold factory now preserves originals, derives full X28 only from original Magazine declarations, leaves Header/POP uncertainty unchanged and rechecks full MOT/resource effects under raw and output bounds. Eleven domain and two complete-encoder regressions pass; contrasting themes retain exact preview and actual header collision rejects. Host integration, independent mixed decoding and warm/client/publication proof remain open; P9A-01 owns details. A fresh official EN 300 706 V1.2.1 audit confirms Annex D.2.1(2), printed133, and Table33 no-second-G0 coding. The existing mot_presentation.rs fallback uses secondary:None, while Header carries only national-option bits. Pinned original libzvbi0.2.42/source3785481f source inspection also finds magazine M29 cache reuse when X28 is absent; page C4 does not reset magazine state. A captured-unit one-decoder trial now confirms M29 CLUT2[0] stays17/34/51 after omission despite target C4, following cold255/0/85. All85 actual feeds, three fetches, fixed baseline Z/B and mapped original-library/ABI/artifact guards pass; nine contract tests and independent review pass. The old enhanced-A oracle is unchanged and excluded from this palette diagnostic. Checked safe M29 replacement and MOT/page-X28 removal trials remain required; existing fresh-decoder and warm DRCS receipts do not prove them. The interchange reference and ADR0123 own these boundaries; P9A-01 owns implementation evidence and remaining engine gates.'
 resolved    = false
 
 [[debt]]

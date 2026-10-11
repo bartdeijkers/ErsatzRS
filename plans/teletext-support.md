@@ -512,6 +512,14 @@ It is required Phase 9 work, with implementation and independent acceptance open
   serial invocation under one shared deadline. Validate the whole native encoding
   and retain the same immutable logical pages for future browser delivery;
   service admission, persisted entry policy and atomic publication remain gates.
+  The bounded cold domain factory now preserves original producer contexts,
+  derives complete Page overrides only from declared Magazine defaults, coalesces
+  identical full resources and rechecks every original MOT/default effect. Two
+  synthetic contrasting themes compile with unchanged shared-model rasters;
+  actual physical-header collisions still reject after logical composition.
+  Next integrate this factory into selection-bound native channel preparation
+  and prove mixed output with independent decoding. Warm magazine/resource
+  replacement, client/editor workflows and explicit publication remain required.
 - The TV-guide add-on declares named colour/layout themes, permitted overrides
   and defined page zones accepting custom values. A profile selects those values.
   Presentation and zone semantics stay in the add-on; the host validates complete

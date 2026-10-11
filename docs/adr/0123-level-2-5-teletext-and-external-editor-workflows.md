@@ -708,8 +708,16 @@ must not restyle another addon's pages. When producer defaults differ within the
 same magazine, materialize equivalent page overrides in the composed service;
 retain original declarations in design/export metadata. Package/profile receipts,
 ownership and stale-selection fences still belong to the application boundary.
-This composition step remains unimplemented; a standalone semantic service does
-not establish multi-producer publication or profile acceptance.
+The checked cold factory now retains original producer contexts and private page
+provenance. Preserve a common full M29 only without Header/POP-dependent pages;
+otherwise derive full Page presentation only from original Magazine defaults.
+Keep Header/POP absence and decoder-dependent secondary selection unchanged.
+Coalesce only identical complete resource banks; validate one actual MOT per
+magazine and recheck every original default/role/conditional fallback effect.
+Raw input/copy/work bounds precede final coalesced semantic/declaration budgets.
+Actual physical headers still require complete encoding. This unpublished cold
+candidate does not establish warm replacement, host channel integration,
+multi-producer publication or profile acceptance.
 
 A preparatory strict v2 response DTO and direct application conversion now retain
 the mandatory base fallback and original enhanced declarations. The application
