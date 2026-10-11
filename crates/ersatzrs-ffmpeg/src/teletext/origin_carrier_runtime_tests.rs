@@ -163,27 +163,30 @@ fn compiled(
     assert!(augmented.program().commands().iter().any(|command| matches!(command,
         TeletextEnhancementCommand::InvokeObject { target, object_type: TeletextObjectType::Active, offset: None } if *target == active)));
     let allocations = allocate_teletext_resource_objects(augmented.catalog(), &[], 4).unwrap();
-    let actual = compile_teletext_physical_display_program(
+    let compiled = compile_teletext_augmented_origin_program(
         service,
-        &original,
-        augmented.program(),
-        augmented.catalog(),
+        &augmented,
         &allocations,
         collection,
         packing,
+        TeletextAugmentedInvocationBudget {
+            max_original_invocations: 16,
+            max_actual_invocations: 16,
+            max_carriers: 4,
+            max_work: 100_000,
+        },
     )
     .unwrap();
-    assert_carrier_replay(&augmented, &actual);
-    assert_selected_model_matches(&original, actual.replay());
-    actual
+    assert_carrier_replay(&compiled);
+    assert_selected_model_matches(&original, compiled.physical().replay());
+    compiled.into_physical()
 }
 
-fn assert_carrier_replay(
-    augmented: &TeletextAugmentedOriginProgram<'_>,
-    actual: &EncodedTeletextPhysicalDisplayProgram,
-) {
+fn assert_carrier_replay(compiled: &EncodedTeletextAugmentedOriginProgram<'_>) {
+    let augmented = compiled.augmented();
     let carrier = &augmented.carriers()[0];
-    let invocation = actual
+    let invocation = compiled
+        .physical()
         .replay()
         .spatial_trace()
         .invocations()
@@ -205,8 +208,13 @@ fn assert_carrier_replay(
         augmented.emitter_source(invocation.source()),
         Some(TeletextAugmentedOriginSource::CarrierCall { carrier: 0 })
     );
-    // This fixture observes distinct original/actual IDs without treating their
-    // numeric values as general invocation-ancestry correspondence.
+    assert_eq!(compiled.actual_for_carrier(0), Some(invocation.id()));
+    assert_eq!(compiled.invocations().len(), 2);
+    let original_instance = carrier.original_invocation().unwrap();
+    let retained = compiled.actual_for_original(original_instance).unwrap();
+    assert_ne!(retained, invocation.id());
+    // The checked producer maps exact call sites and facts; numeric equality is
+    // neither assumed nor a substitute for original/actual ancestry.
     assert_ne!(carrier.original_invocation(), Some(invocation.id()));
 }
 

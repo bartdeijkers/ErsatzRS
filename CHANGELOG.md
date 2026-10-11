@@ -151,8 +151,9 @@ release section when tagging a release.
   events, with checked panel/offset mapping and explicit pending components;
   build bounded candidates retaining original commands/bodies, distinct generated
   IDs and private emitter maps. The representative dual-level decoder proof now
-  consumes this producer; actual invocation ancestry, full-page typed equivalence
-  and automatic normalization remain open.
+  consumes this producer and a paired physical factory now checks complete unique
+  original/carrier invocation ancestry across nested calls and sparse defaults.
+  Full-page typed equivalence and automatic normalization remain open.
   Native presentation-body coding and bounded v1 lifting preserve existing packet bytes
   and isolate page defaults. Checked X27 declarations, body coding and required
   inventory validation retain exact masks and original default-object ownership.

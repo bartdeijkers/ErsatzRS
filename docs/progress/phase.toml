@@ -1150,8 +1150,10 @@ events, retaining typed pending and checked panel/offset mapping. Bounded augmen
 assembly now retains originals, distinct IDs and private emitter maps, with exact
 body sizing, aggregate scan/storage bounds and blocking-origin diagnostics. Its
 native representative still passes both literal levels and all1000 model cells.
-Next pair the physical factory with original/actual invocation ancestry and realize
-Unicode/Active physical priority with the existing collector. Explicit
+The paired physical factory now owns bounded original/actual invocation ancestry,
+checking roots, nested callsites, geometry, offsets and unique coverage. Next prove
+resolved typed glyph/origin correspondence and realize Unicode/Active physical
+priority with the existing collector. Explicit
 resource calls lack page addresses; default-owner preservation needs a proven
 encoding strategy rather than relaxing selected-page checks;
 full engine/client/editor/publication acceptance remains open.

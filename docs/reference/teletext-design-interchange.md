@@ -487,9 +487,30 @@ facts separately and cannot certify actual invocation ancestry or a service
 generation. The pinned representative fixture now consumes this producer through
 actual allocation, encoding and replay; its complete 1,000-cell selected-model
 comparison and literal dual-level decoding still pass. Later retained Passive
-paints can redraw fragments. Next pair the existing physical factory with bounded
-original/actual invocation correspondence and prove typed/display equivalence;
-automatic normalization, physical admission and full client navigation stay open.
+paints can redraw fragments.
+
+`compile_teletext_augmented_origin_program` calls the unchanged physical factory
+with that private candidate and owns the encoded replay beside bounded ancestry
+maps. It accepts no detached trace or source map. Retained roots match original
+main commands or exact sparse default slots; nested calls match the already-mapped
+original parent and full body identity/ordinal. Check target/type/origin/caller
+and absent versus explicit offset, plus actual parent/root/source context. Each
+original invocation and generated carrier must occur exactly once. Generated
+carriers must be root Passive calls at their exact private gap/raw origin/offset;
+generated descendants have no permitted mapping. Separate actual-instance facts
+from the carrier's original display-origin facts; never infer a numeric ID shift.
+
+Raw original/carrier fences precede physical compilation, whose replay/packing
+retain their own budgets. Actual count, checked storage/work arithmetic and minimum
+unavoidable visits are fenced before ancestry allocation; detailed scans charge
+visited work. Eight regressions cover repeated three-deep calls, sparse slot3,
+offsets, empty/absent programs, no-seed pending, altered geometry and budgets.
+The same pinned native fixture now consumes this paired factory and proves its
+separate retained/carrier mappings before the unchanged model/literal oracles.
+Matching service/composition generations remain a caller invariant. Ancestry is
+not typed glyph/display equivalence, receiver acceptance or admission. Next check
+resolved typed identities against exact original display origins; automatic
+normalization, physical admission and full client navigation remain open.
 
 ### Shared base display trace
 

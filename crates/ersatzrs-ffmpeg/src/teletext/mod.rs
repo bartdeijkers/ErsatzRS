@@ -7,6 +7,7 @@
 //! publication: carousel timing, PES/PSI/PID capacity,
 //! output ownership and client acceptance remain separate transport obligations.
 
+mod augmented_origin_compilation;
 mod augmented_origin_program;
 mod base_compatibility_realization;
 mod base_display;
@@ -47,6 +48,7 @@ mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};
 
+pub use augmented_origin_compilation::*;
 pub use augmented_origin_program::*;
 pub use origin_carrier::*;
 pub use origin_carrier_placement::*;

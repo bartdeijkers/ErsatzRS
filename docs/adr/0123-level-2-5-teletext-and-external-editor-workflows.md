@@ -173,8 +173,16 @@ original source, root and instance facts remain separate. Bound both recipe
 passes, aggregate ID scans, assembly work and storage before copying originals.
 Pending components reject with the blocking origin, including when it differs
 from the first component member. This is producer assembly, not actual invocation
-ancestry. Pair the existing physical factory with exact original/actual ancestry
-before proving whole-page typed/display equivalence, admission or readiness.
+ancestry. A paired factory now encodes that exact private candidate through the
+existing physical factory and owns its replay beside checked invocation maps.
+Retained roots map through original commands or sparse default slots; nested
+calls map through the checked original parent and exact body callsite. Check
+target/type/origin/caller/offset, actual root context and complete unique coverage.
+Generated carriers require their exact placement and separate actual instances;
+numeric ID shifts never establish ancestry. Bound raw counts, storage arithmetic
+and unavoidable work before allocation, then charge visited scans. This proves
+call correspondence only; typed/display equivalence, same-generation authority,
+receiver equivalence, admission and readiness remain separate obligations.
 A same-service packing seam now uses original header colour and separately tracks
 historical compatibility rows. Final main/definition sizing includes inserted body
 restoration selectors; local invocation counts are independent of provisional
