@@ -225,6 +225,28 @@ impl TeletextEnhancementObjectCatalog {
         primary_pair: TeletextCharsetPair,
         budget: TeletextEnhancementCollectionBudget,
     ) -> Result<TeletextCollectedEnhancementReferences, TeletextEnhancementCollectionError> {
+        self.collect_display_references_with_usage(display, program, primary_pair, budget)
+            .0
+    }
+
+    /// Collect references while retaining admitted work on either outcome.
+    ///
+    /// Repeated object calls consume their command bodies again. A command is
+    /// admitted before its semantic checks; an exhausted command or reference
+    /// ceiling excludes the denied admission but retains all earlier work.
+    /// # Errors
+    /// Returns the unchanged located collection failure without partial output.
+    /// Usage measures this collector's admissions, not total CPU or memory.
+    pub fn collect_display_references_with_usage(
+        &self,
+        display: TeletextPageAddress,
+        program: &TeletextEnhancementProgram,
+        primary_pair: TeletextCharsetPair,
+        budget: TeletextEnhancementCollectionBudget,
+    ) -> (
+        Result<TeletextCollectedEnhancementReferences, TeletextEnhancementCollectionError>,
+        TeletextEnhancementCollectionUsage,
+    ) {
         let mut state = CollectionState {
             display,
             budget,
@@ -235,8 +257,12 @@ impl TeletextEnhancementObjectCatalog {
             sources: Vec::new(),
             object_references: Vec::new(),
         };
-        self.collect_program(program, None, &mut state)?;
-        Ok(TeletextCollectedEnhancementReferences {
+        let result = self.collect_program(program, None, &mut state);
+        let usage = TeletextEnhancementCollectionUsage {
+            commands: state.commands,
+            drcs_references: state.references.len(),
+        };
+        let result = result.map(|()| TeletextCollectedEnhancementReferences {
             display,
             references: state.references,
             sources: state.sources,
@@ -244,7 +270,8 @@ impl TeletextEnhancementObjectCatalog {
             commands: state.commands,
             invocations: state.invocations,
             object_references: state.object_references,
-        })
+        });
+        (result, usage)
     }
 
     fn collect_program(
@@ -349,6 +376,16 @@ const fn object_type_index(value: TeletextObjectType) -> usize {
 pub struct TeletextEnhancementCollectionBudget {
     pub max_commands: usize,
     pub max_drcs_references: usize,
+}
+
+/// Existing collector admissions, retained after success or failure.
+/// This is host accounting and carries no page or publication authority.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TeletextEnhancementCollectionUsage {
+    /// Expanded commands admitted before their semantic checks.
+    pub commands: usize,
+    /// DRCS occurrences appended after passing the reference ceiling.
+    pub drcs_references: usize,
 }
 
 /// Failed collection; no partially collected result escapes to a publisher.

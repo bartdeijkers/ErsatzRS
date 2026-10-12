@@ -2,8 +2,9 @@
 
 use super::*;
 use crate::teletext::{
-    build_teletext_origin_carrier, TeletextOriginCarrierBudget,
-    TeletextOriginCarrierCommandRole as Role, TeletextOriginCarrierFailure as Failure,
+    build_teletext_origin_carrier, build_teletext_origin_carrier_with_usage,
+    TeletextOriginCarrierBudget, TeletextOriginCarrierCommandRole as Role,
+    TeletextOriginCarrierFailure as Failure,
 };
 
 fn limits() -> TeletextOriginCarrierBudget {
@@ -196,8 +197,27 @@ fn lowest_free_id_uses_full_exact_owner_namespace_and_charges_scan_plus_probes()
     budget.max_id_checks = 7; // Four actual catalogue entries plus probes0/1/2.
     let recipe = build_teletext_origin_carrier(&composition, index, &catalog, budget).unwrap();
     assert_eq!(recipe.definition().identity, local(2));
+    let (result, admitted) =
+        build_teletext_origin_carrier_with_usage(&composition, index, &catalog, budget);
+    let metered = result.unwrap();
+    assert_eq!(admitted, 7);
+    assert_eq!(metered.definition(), recipe.definition());
+    assert_eq!(metered.command_roles(), recipe.command_roles());
+    assert_eq!(metered.candidate(), recipe.candidate());
+    assert_eq!(metered.original_origin(), recipe.original_origin());
+    assert_eq!(metered.candidate_index(), recipe.candidate_index());
+    assert_eq!(metered.location(), recipe.location());
+    assert_eq!(metered.root_source(), recipe.root_source());
+    assert_eq!(metered.invocation(), recipe.invocation());
     budget.max_id_checks = 6;
     let error = build_teletext_origin_carrier(&composition, index, &catalog, budget).unwrap_err();
+    let (result, admitted) =
+        build_teletext_origin_carrier_with_usage(&composition, index, &catalog, budget);
+    assert_eq!(result.unwrap_err(), error);
+    assert_eq!(
+        admitted, 6,
+        "denied probe2 keeps admitted scan and probes0/1"
+    );
     assert_eq!(
         error.reason,
         Failure::InputBudget {
@@ -213,6 +233,51 @@ fn lowest_free_id_uses_full_exact_owner_namespace_and_charges_scan_plus_probes()
             command: 0
         })
     );
+    for (maximum, admitted) in [(3, 0), (4, 4)] {
+        budget.max_id_checks = maximum;
+        let ordinary =
+            build_teletext_origin_carrier(&composition, index, &catalog, budget).unwrap_err();
+        let (result, used) =
+            build_teletext_origin_carrier_with_usage(&composition, index, &catalog, budget);
+        assert_eq!(used, admitted);
+        assert_eq!(result.unwrap_err(), ordinary);
+    }
+}
+
+#[test]
+fn exhausted_exact_owner_namespace_retains_all_admitted_scans_and_probes() {
+    let service = active_fixture().build();
+    let composition = compose(&service);
+    let saved = composition.clone();
+    let mut definitions = (0..u16::MAX)
+        .map(|id| definition(local(id), TeletextObjectType::Passive, vec![]))
+        .collect::<Vec<_>>();
+    definitions.extend_from_slice(service.objects().definitions());
+    let mut budget = limits();
+    budget.catalog.max_objects = 65_536;
+    budget.max_id_checks = 131_072;
+    let catalog = TeletextEnhancementObjectCatalog::new(definitions, budget.catalog).unwrap();
+    let index = origin(&composition, 1, 8);
+    let (result, admitted) =
+        build_teletext_origin_carrier_with_usage(&composition, index, &catalog, budget);
+    assert_eq!(admitted, 131_072);
+    assert_eq!(result.unwrap_err().reason, Failure::IdentityExhausted);
+    budget.max_id_checks -= 1;
+    let ordinary =
+        build_teletext_origin_carrier(&composition, index, &catalog, budget).unwrap_err();
+    let (result, admitted) =
+        build_teletext_origin_carrier_with_usage(&composition, index, &catalog, budget);
+    assert_eq!(admitted, 131_071);
+    assert_eq!(result.unwrap_err(), ordinary);
+    assert_eq!(
+        ordinary.reason,
+        Failure::InputBudget {
+            kind: "identity checks",
+            count: 131_072,
+            maximum: 131_071,
+        }
+    );
+    assert_eq!(composition, saved);
 }
 
 #[test]
@@ -652,6 +717,14 @@ fn raw_input_output_and_id_budgets_fence_work_with_original_blame_and_no_mutatio
         }
         let error = build_teletext_origin_carrier(&composition, index, service.objects(), budget)
             .unwrap_err();
+        let (result, admitted) = build_teletext_origin_carrier_with_usage(
+            &composition,
+            index,
+            service.objects(),
+            budget,
+        );
+        assert_eq!(result.unwrap_err(), error);
+        assert_eq!(admitted, usize::from(kind == "identity checks"));
         assert!(
             matches!(error.reason, Failure::InputBudget { kind: actual, .. } if actual == kind)
         );

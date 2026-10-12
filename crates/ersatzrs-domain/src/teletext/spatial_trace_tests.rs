@@ -147,6 +147,357 @@ fn absolute(position: TeletextSpatialPosition) -> (u16, u16) {
     (position.row(), position.column())
 }
 
+fn usage_service() -> TeletextSemanticService {
+    let target = local(0xffff);
+    service(
+        Some(vec![
+            position(2, 8),
+            invoke(target, TeletextObjectType::Passive, None),
+            glyph(9, b'B'),
+        ]),
+        vec![definition(
+            target,
+            TeletextObjectType::Passive,
+            vec![position(1, 3), glyph(4, b'A')],
+        )],
+        [None; 4],
+        None,
+    )
+}
+
+fn usage_stage_budget() -> TeletextSpatialTraceBudget {
+    TeletextSpatialTraceBudget {
+        max_events: 5,
+        max_invocations: 1,
+    }
+}
+
+fn usage_work_budget() -> TeletextSpatialTraceWorkBudget {
+    TeletextSpatialTraceWorkBudget {
+        max_event_visits: Some(10),
+        max_invocation_visits: Some(2),
+    }
+}
+
+#[test]
+fn combined_trace_visit_exact_and_one_less_include_both_passes_without_changing_ids() {
+    let service = usage_service();
+    let retained = service.clone();
+    let (_, program) = service.effective_program(owner()).unwrap();
+    let expected = resolve(&service);
+    let (selected, selected_usage) = resolve_teletext_spatial_trace_with_usage(
+        &service,
+        owner(),
+        usage_stage_budget(),
+        usage_work_budget(),
+    );
+    let (supplied, supplied_usage) = resolve_teletext_spatial_program_with_usage(
+        owner(),
+        &program,
+        service.objects(),
+        usage_stage_budget(),
+        usage_work_budget(),
+    );
+    assert_eq!(selected.unwrap(), expected);
+    assert_eq!(supplied.unwrap(), expected);
+    assert_eq!(
+        selected_usage,
+        TeletextSpatialTraceUsage {
+            event_visits: 10,
+            invocation_visits: 2
+        }
+    );
+    assert_eq!(supplied_usage, selected_usage);
+    assert_eq!(expected.invocations()[0].id().get(), 0);
+    for (work, visits, expected_reason, command) in [
+        (
+            TeletextSpatialTraceWorkBudget {
+                max_event_visits: Some(9),
+                ..usage_work_budget()
+            },
+            TeletextSpatialTraceUsage {
+                event_visits: 9,
+                invocation_visits: 2,
+            },
+            TeletextSpatialTraceFailure::EventBudget { maximum: 4 },
+            2,
+        ),
+        (
+            TeletextSpatialTraceWorkBudget {
+                max_invocation_visits: Some(1),
+                ..usage_work_budget()
+            },
+            TeletextSpatialTraceUsage {
+                event_visits: 7,
+                invocation_visits: 1,
+            },
+            TeletextSpatialTraceFailure::InvocationBudget { maximum: 0 },
+            1,
+        ),
+    ] {
+        let (selected, selected_usage) = resolve_teletext_spatial_trace_with_usage(
+            &service,
+            owner(),
+            usage_stage_budget(),
+            work,
+        );
+        let (supplied, supplied_usage) = resolve_teletext_spatial_program_with_usage(
+            owner(),
+            &program,
+            service.objects(),
+            usage_stage_budget(),
+            work,
+        );
+        let error = selected.unwrap_err();
+        assert_eq!(supplied.unwrap_err(), error);
+        assert_eq!(selected_usage, visits);
+        assert_eq!(supplied_usage, visits);
+        assert_eq!(error.reason, expected_reason);
+        assert_eq!(
+            error.location,
+            Some(TeletextEnhancementSource {
+                object: None,
+                command
+            })
+        );
+        assert_eq!(
+            error.root_source,
+            Some(TeletextSpatialRootSource::Local { command })
+        );
+        assert_eq!(error.invocation, None);
+    }
+    assert_eq!(service, retained);
+}
+
+#[test]
+fn emission_visit_cutoff_keeps_child_id_and_root_provenance_from_fresh_pass() {
+    let service = usage_service();
+    let work = TeletextSpatialTraceWorkBudget {
+        max_event_visits: Some(8),
+        ..usage_work_budget()
+    };
+    let (result, usage) =
+        resolve_teletext_spatial_trace_with_usage(&service, owner(), usage_stage_budget(), work);
+    let error = result.unwrap_err();
+    assert_eq!(
+        usage,
+        TeletextSpatialTraceUsage {
+            event_visits: 8,
+            invocation_visits: 2
+        }
+    );
+    assert_eq!(error.owner, owner());
+    assert_eq!(
+        error.reason,
+        TeletextSpatialTraceFailure::EventBudget { maximum: 3 }
+    );
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: Some(local(0xffff)),
+            command: 1
+        })
+    );
+    assert_eq!(error.invocation.unwrap().get(), 0);
+    assert_eq!(
+        error.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 1 })
+    );
+}
+
+#[test]
+fn disabled_visit_budget_preserves_stage_failures_and_admitted_count_pass_work() {
+    let service = usage_service();
+    let (_, program) = service.effective_program(owner()).unwrap();
+    for (stage, expected) in [
+        (
+            TeletextSpatialTraceBudget {
+                max_events: 4,
+                max_invocations: 1,
+            },
+            TeletextSpatialTraceUsage {
+                event_visits: 4,
+                invocation_visits: 1,
+            },
+        ),
+        (
+            TeletextSpatialTraceBudget {
+                max_events: 5,
+                max_invocations: 0,
+            },
+            TeletextSpatialTraceUsage {
+                event_visits: 2,
+                invocation_visits: 0,
+            },
+        ),
+    ] {
+        let (selected, selected_usage) = resolve_teletext_spatial_trace_with_usage(
+            &service,
+            owner(),
+            stage,
+            TeletextSpatialTraceWorkBudget::default(),
+        );
+        assert_eq!(
+            selected.unwrap_err(),
+            resolve_teletext_spatial_trace(&service, owner(), stage).unwrap_err()
+        );
+        assert_eq!(selected_usage, expected);
+        let (supplied, supplied_usage) = resolve_teletext_spatial_program_with_usage(
+            owner(),
+            &program,
+            service.objects(),
+            stage,
+            TeletextSpatialTraceWorkBudget::default(),
+        );
+        assert_eq!(
+            supplied.unwrap_err(),
+            resolve_teletext_spatial_program(owner(), &program, service.objects(), stage)
+                .unwrap_err()
+        );
+        assert_eq!(supplied_usage, expected);
+    }
+}
+
+#[test]
+fn zero_visit_credit_accepts_empty_traces_and_rejects_first_nonempty_event() {
+    let zero = TeletextSpatialTraceWorkBudget {
+        max_event_visits: Some(0),
+        max_invocation_visits: Some(0),
+    };
+    let stage = TeletextSpatialTraceBudget {
+        max_events: 0,
+        max_invocations: 0,
+    };
+    for main in [None, Some(vec![])] {
+        let service = service(main, vec![], [None; 4], None);
+        let (selected, usage) =
+            resolve_teletext_spatial_trace_with_usage(&service, owner(), stage, zero);
+        assert_eq!(selected.unwrap(), resolve(&service));
+        assert_eq!(usage, TeletextSpatialTraceUsage::default());
+        let (_, program) = service.effective_program(owner()).unwrap();
+        let (supplied, usage) = resolve_teletext_spatial_program_with_usage(
+            owner(),
+            &program,
+            service.objects(),
+            stage,
+            zero,
+        );
+        assert!(supplied.unwrap().events().is_empty());
+        assert_eq!(usage, TeletextSpatialTraceUsage::default());
+    }
+    let service = service(Some(vec![glyph(1, b'A')]), vec![], [None; 4], None);
+    let (result, usage) =
+        resolve_teletext_spatial_trace_with_usage(&service, owner(), usage_stage_budget(), zero);
+    let error = result.unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextSpatialTraceFailure::EventBudget { maximum: 0 }
+    );
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 0
+        })
+    );
+    assert_eq!(usage, TeletextSpatialTraceUsage::default());
+    let calls_zero = TeletextSpatialTraceWorkBudget {
+        max_event_visits: Some(2),
+        max_invocation_visits: Some(0),
+    };
+    let (result, usage) = resolve_teletext_spatial_trace_with_usage(
+        &service,
+        owner(),
+        usage_stage_budget(),
+        calls_zero,
+    );
+    assert_eq!(result.unwrap(), resolve(&service));
+    assert_eq!(
+        usage,
+        TeletextSpatialTraceUsage {
+            event_visits: 2,
+            invocation_visits: 0
+        }
+    );
+}
+
+#[test]
+fn selected_preflight_and_supplied_semantic_failures_report_only_admitted_visits() {
+    let service = usage_service();
+    let mut absent = owner();
+    absent.subcode = TeletextSubcode::new(0x1235).unwrap();
+    let (result, usage) = resolve_teletext_spatial_trace_with_usage(
+        &service,
+        absent,
+        usage_stage_budget(),
+        usage_work_budget(),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        resolve_teletext_spatial_trace(&service, absent, usage_stage_budget()).unwrap_err()
+    );
+    assert_eq!(usage, TeletextSpatialTraceUsage::default());
+    let catalog = TeletextEnhancementObjectCatalog::new(
+        vec![],
+        TeletextObjectCatalogBudget {
+            max_objects: 0,
+            max_commands: 0,
+        },
+    )
+    .unwrap();
+    let program = TeletextEnhancementProgram::new(vec![invoke(
+        local(0xffff),
+        TeletextObjectType::Passive,
+        None,
+    )])
+    .unwrap();
+    let retained = (program.clone(), catalog.clone());
+    let (result, usage) = resolve_teletext_spatial_program_with_usage(
+        owner(),
+        &program,
+        &catalog,
+        usage_stage_budget(),
+        usage_work_budget(),
+    );
+    let error = result.unwrap_err();
+    assert_eq!(
+        error,
+        resolve_teletext_spatial_program(owner(), &program, &catalog, usage_stage_budget())
+            .unwrap_err()
+    );
+    assert!(
+        matches!(error.reason, TeletextSpatialTraceFailure::Invocation(TeletextObjectInvocationError::Missing {target}) if target == local(0xffff))
+    );
+    assert_eq!(
+        usage,
+        TeletextSpatialTraceUsage {
+            event_visits: 1,
+            invocation_visits: 1
+        }
+    );
+    let backwards = TeletextEnhancementProgram::new(vec![position(2, 8), position(1, 9)]).unwrap();
+    let (result, usage) = resolve_teletext_spatial_program_with_usage(
+        owner(),
+        &backwards,
+        &catalog,
+        usage_stage_budget(),
+        usage_work_budget(),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        resolve_teletext_spatial_program(owner(), &backwards, &catalog, usage_stage_budget())
+            .unwrap_err()
+    );
+    assert_eq!(
+        usage,
+        TeletextSpatialTraceUsage {
+            event_visits: 2,
+            invocation_visits: 0
+        }
+    );
+    assert_eq!((program, catalog), retained);
+}
+
 #[test]
 fn repeated_full_identity_uses_distinct_invocations_and_exact_offsets_without_moving_caller() {
     let target = local(0xffff);
@@ -819,6 +1170,29 @@ fn service_default_slots_remain_original_while_supplied_program_ordinals_are_loc
     let replay =
         resolve_teletext_spatial_program(owner(), &program, service.objects(), replay_budget())
             .unwrap();
+    let work = TeletextSpatialTraceWorkBudget {
+        max_event_visits: Some(8),
+        max_invocation_visits: Some(4),
+    };
+    let (selected, selected_usage) =
+        resolve_teletext_spatial_trace_with_usage(&service, owner(), replay_budget(), work);
+    let (supplied, supplied_usage) = resolve_teletext_spatial_program_with_usage(
+        owner(),
+        &program,
+        service.objects(),
+        replay_budget(),
+        work,
+    );
+    assert_eq!(selected.unwrap(), original);
+    assert_eq!(supplied.unwrap(), replay);
+    assert_eq!(
+        selected_usage,
+        TeletextSpatialTraceUsage {
+            event_visits: 8,
+            invocation_visits: 4
+        }
+    );
+    assert_eq!(supplied_usage, selected_usage);
     assert_eq!(
         original.original_program_source(),
         &TeletextEffectiveProgramSource::Defaults { slots: vec![0, 3] }

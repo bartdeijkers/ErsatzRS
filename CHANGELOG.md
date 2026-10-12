@@ -16,7 +16,9 @@ release section when tagging a release.
 ### Added
 
 - Add separate optional whole-service teletext quotas for resolution, planning,
-  placement, assembly, ancestry and comparison work. Failed work retains its
+  placement, assembly, ancestry, comparison, collection, spatial traversal and
+  carrier-ID search work. Both spatial passes share credit; failed recipes retain
+  their actual admitted searches. Failed work retains its
   admitted charges; exhaustion preserves the prior accepted generation. Existing
   model and wire identities remain unchanged. Production policy and complete
   compiler CPU/memory bounds remain open.

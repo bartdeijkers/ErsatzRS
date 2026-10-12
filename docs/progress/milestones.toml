@@ -2724,6 +2724,90 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-12 shared collection/two-pass spatial/identity credit checkpoint:
+Five additional optional inclusive buckets share the same non-clone service
+context: collected commands, DRCS occurrences, spatial event/invocation visits
+and carrier-ID checks. Existing stage ceilings still apply. Debit admitted work
+before returning either outcome; denied work consumes no credit. Disabled caps
+report None; genuinely unvisited buckets report zero, including native identity
+search. Collection usage survives later supplied-program DRCS source/dependency
+errors. Carrier recipes retain admitted catalogue scans/ID probes on failure;
+assembly debits both recipe passes instead of inferring only successful ID cost.
+Models, source identity, trace-local IDs, units and artifact fingerprints stay
+unchanged. No new dependency, production default or authoring restriction added.
+
+Independent review caught a real missed seam: carrier placement independently
+traces the composed program, in addition to original and physical execution.
+Its internal context entry now shares both count/emit visits after the same
+placement preflight. The exact oracle independently reconstructs that trace;
+a cutoff case proves original-pass exhaustion rejects placement with exact
+source/root/invocation provenance before physical compilation or comparisons.
+Counting discarded work from final retained trace size alone would miss this.
+
+276 unique selected cases have valid passing evidence, including 17 new cases.
+Initial Nextest b7c589bc-4edc-4920-9756-a779acb712cc passes 258/263 on
+./run.sh test -p ersatzrs-domain -p ersatzrs-ffmpeg -p ersatzrs-web --lib
+--test teletext_profile_preparation --test-threads 2 --success-output immediate.
+Its 54 domain successes (enhancement_objects_tests, drcs_execution_tests and
+spatial_trace_tests) remain valid and unchanged. Five new fixture failures
+correctly reject semantic_limits' existing zero-DRCS-reference ceiling. Give
+only the richer test fixture one authored reference/display and bounded physical
+replay credit; retain actual DRCS, Active POP, British fallback and strict
+semantic/declaration validation. Shared baseline and production limits stay
+unchanged. A placement cutoff test is added after the missed seam correction.
+
+Final Nextest 86b0f7c5-7ca9-4385-9740-2ca5935090b6 passes 222/222 on that same
+graph, with -E 'test(origin_carrier_tests::) | test(origin_carrier_placement::tests::) |
+test(augmented_origin_program_tests::) | test(authored_service_tests::) |
+test(main_composition_tests::) | test(normalized_main_program_tests::) |
+test(compiled_display_page_tests::) | test(channel_documents::) | test(documents::) |
+test(generations::compiler_and_deadline_failures) | test(generations::ancestry_quota_failure_) |
+test(generations::zero_ancestry_quota_)'. This replaces affected compiler/web
+results after placement correction and reuses only 54 unchanged domain cases.
+Exact/one-less bounds, repeated references and pages, both spatial passes,
+namespace holes/full u16 exhaustion, preflight/late failure, original diagnostic
+provenance, legacy wrappers and retained model/wire equality are proved.
+The existing accepted-generation failure case now also exhausts collection and
+spatial-event credit, preserving exact prior output, config, producer calls and
+playout silence. Empty ancestry remains valid; actual invocation exhaustion
+keeps its separate safety proof.
+
+The existing 16-display/eight populated-resource/two-theme durable native flow
+meters all 12 buckets and retains source/storage/packet/raster/pending/explicit
+acceptance/reload oracles. New admissions: collected commands 384, DRCS 64,
+spatial events 1,152, spatial invocations 192, identity 0 (no generated carriers in
+this Passive fixture). The smaller Active/fallback/DRCS fixture proves positive
+identity/reference limits. Prior seven amounts, 482 units/22,172 bytes and
+44,773-byte saved document remain unchanged. Initial spatial counts 768/128
+excluded placement; corrected 1152/192 include it. These are separate admitted
+units, not summed CPU/RSS costs, worst-case resource pressure or runtime defaults.
+Pinned FFmpeg 2.0.6/n9.0-20261006 tool identity stays unchanged. No new browser,
+client/transport or whole-executable restart evidence is claimed.
+
+Strict affected domain/FFmpeg/web all-target Clippy passes after extracting
+unchanged collection/preflight helpers and preserving equivalent error priority.
+Final Nextest 8adcaa5b-c133-4e95-8ca1-1efb34321b5a passes 197/197 on the same
+graph after those helper-only refactors, selecting the changed DRCS preflight
+case, main composition, authored services, normalization, compiled pages, rich
+native resource flow and accepted-output failure protection. All remaining
+unchanged successes stay valid; this repeats affected proof, not new cases.
+Formatting, architecture/progress and explicit staging/new-allow verification
+are required for the authorized local checkpoint. All milestone contracts,
+statuses and dependencies remain unchanged; engine-first delivery and full
+Level2.5/editor/themes/zones/Lua/localized-admin/client/restart/playback/platform
+acceptance remain open. No milestone closes or push/tag/release occurs.
+
+Next concrete action: expose domain attribute_execution.rs::Executor::charge
+usage (admitted cell updates, not event scans/snapshots) and share it through
+main_composition.rs::original_attribute_execution and display_after_transmission
+for original/physical execution and both settlement paths. Then add actual
+catalogue indexing/closure-validation admission during cold semantic
+construction AND repeated carrier reconstruction; conservative clone/body
+reservations are not observed validation cost. Colour inspection, allocation
+searches and other native work need explicit accounting before production
+compiler/output policy via existing settings, normal-route lookup and Health.
+The existing representative user-flow/client receipts remain partial acceptance.
+
 2026-10-12 shared planning/placement/assembly/ancestry credit checkpoint:
 Four additional inclusive optional buckets use the existing admitted meters,
 separately from the three resolution/comparison buckets. One non-clone service
@@ -3519,7 +3603,7 @@ Next reuse this reader inside one complete grouped XMLTV snapshot, with aggregat
 - Full authored Level2.5: existing model/encoder/raster and representative independent decoding are partial evidence. The source-audited Active panel screen/row-colour admission path is now rejected by the shared geometry gate with located regressions and legal main/panel cases; P9A-01 owns the receipt and the specific parity debt is resolved. Complete encoded panel decoding/client display remains unproven. Complete repertoire/attribute/object/DRCS/panel coverage, known correctness debts, warm M29/MOT/page-X28 transitions and the full transport/client matrix remain required. A successful representative flow does not close engine acceptance.
 - QTeletextMaker: pinned actual editor edit/save/reopen calibration exists; host TTI/sidecar export/import-as-draft/validation/preview/explicit-publication roundtrip and protected template/theme/zone/dynamic-field boundaries remain unproven.
 - Profiles/themes/zones/Lua/restart/admin/safety: profile storage and isolated synthetic themes are component proof. Addon-owned named themes/zones, shared admin/Lua commands and timing/error/expiry, restart/Refresh/Reset, every supported admin culture/headed proof and the complete ordinary playback/alternate-audio/subtitle/six-platform safety gates remain open.
-The original deadline and optional admitted display-resolution/glyph-lookup/display-comparison quotas now reach complete-service passes. The newest receipt measures a sixteen-display populated-resource native preview/save/accept/reload flow beside the hundred sparse pages. Seven separately admitted resolution/planning/placement/assembly/ancestry/comparison buckets now have model/wire/failure proof and richer-flow measurements. Next connect failed-recipe identity usage and collection/spatial/catalogue meters before choosing explicit production compiler/output policy through existing settings. Connect ordinary final-route lookup/active Health and retained first-byte attempt provenance; exercise accepted retries and whole-process restart. Extend the receipted cold accepted-generation AV/client trial to remaining link/subpage/resource/panel and warm coverage. Continue live-source ownership/current-freshness and legacy mutable-file capture/recheck, active Health, safe carousel/PMT/lifecycle promotion and localized exact-address preview controls into one synthetic profile→validation→preview→explicit publication→suitable-client display/navigation flow. Record exact candidate/client/decoder versions and coverage; existing pending/cold client receipts remain representative proof. Resolve demonstrated correctness or persistence gaps that block it; explicitly propose necessary limitations instead of accepting them silently. Keep all agreed acceptance criteria and engine-first delivery: independent generic engine acceptance precedes the sole production TV-guide addon inspired only by NOS200–299. The maintainer authorizes a push to remote/main after each fully verified Phase 9 milestone; preparatory checkpoints remain local. Releases and other external publication are not authorized.
+The original deadline and optional admitted display-resolution/glyph-lookup/display-comparison quotas now reach complete-service passes. The newest receipt measures a sixteen-display populated-resource native preview/save/accept/reload flow beside the hundred sparse pages. Seven separately admitted resolution/planning/placement/assembly/ancestry/comparison buckets now have model/wire/failure proof and richer-flow measurements. Shared collection, both spatial passes and failed-recipe identity quotas now connect actual usage seams. Next connect the existing attribute cell-update meter across original/physical execution and transmission settlement; cover catalogue indexing/graph validation in both cold semantic construction and carrier reconstruction before choosing explicit production compiler/output policy through existing settings. Connect ordinary final-route lookup/active Health and retained first-byte attempt provenance; exercise accepted retries and whole-process restart. Extend the receipted cold accepted-generation AV/client trial to remaining link/subpage/resource/panel and warm coverage. Continue live-source ownership/current-freshness and legacy mutable-file capture/recheck, active Health, safe carousel/PMT/lifecycle promotion and localized exact-address preview controls into one synthetic profile→validation→preview→explicit publication→suitable-client display/navigation flow. Record exact candidate/client/decoder versions and coverage; existing pending/cold client receipts remain representative proof. Resolve demonstrated correctness or persistence gaps that block it; explicitly propose necessary limitations instead of accepting them silently. Keep all agreed acceptance criteria and engine-first delivery: independent generic engine acceptance precedes the sole production TV-guide addon inspired only by NOS200–299. The maintainer authorizes a push to remote/main after each fully verified Phase 9 milestone; preparatory checkpoints remain local. Releases and other external publication are not authorized.
 
 2026-10-11 preparatory channel-composition checkpoint: one read transaction
 captures the complete enabled channel binding membership and every effective

@@ -1,5 +1,7 @@
 //! Original DRCS resource/pixel oracles; no decoder, placement or readiness claim.
 
+use super::drcs_execution::resolve_teletext_drcs_program_with_usage;
+use super::enhancement_objects::TeletextEnhancementCollectionUsage;
 use super::*;
 
 const NORMAL: [u16; 10] = [
@@ -1105,4 +1107,198 @@ fn replay_exact_collection_budget_and_one_short_failure_preserve_original_body_b
         if error.reason == TeletextEnhancementCollectionFailure::CommandBudget {maximum:3})
     );
     assert_eq!((service, program, catalog, input), before);
+}
+
+fn assert_drcs_collection_preflight_usage_is_zero(
+    service: &TeletextSemanticService,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    input: &TeletextGlyphIntent,
+    limits: TeletextDrcsExecutionBudget,
+) {
+    let (result, usage) = resolve_teletext_drcs_program_with_usage(
+        service,
+        program,
+        catalog,
+        input,
+        replay_collection_budget(),
+        TeletextDrcsExecutionBudget {
+            max_candidates: input.records().len() - 1,
+            ..limits
+        },
+    );
+    assert!(
+        matches!(result.unwrap_err(), TeletextDrcsProgramExecutionError::Execution(error) if matches!(error.reason, TeletextDrcsExecutionFailure::CandidateBudget { .. }))
+    );
+    assert_eq!(usage, TeletextEnhancementCollectionUsage::default());
+    let (result, usage) = resolve_teletext_drcs_program_with_usage(
+        service,
+        program,
+        catalog,
+        input,
+        replay_collection_budget(),
+        TeletextDrcsExecutionBudget {
+            max_references: 1,
+            ..limits
+        },
+    );
+    assert!(
+        matches!(result.unwrap_err(), TeletextDrcsProgramExecutionError::Execution(error) if matches!(error.reason, TeletextDrcsExecutionFailure::ReferenceBudget { .. }))
+    );
+    assert_eq!(usage, TeletextEnhancementCollectionUsage::default());
+}
+
+#[test]
+fn supplied_drcs_collection_usage_survives_exact_short_and_preflight_outcomes() {
+    let service = service(draft(vec![], vec![], tables(NORMAL)));
+    let program = TeletextEnhancementProgram::new(vec![
+        set(1, 8),
+        invoke(local(0xffff), TeletextObjectType::Passive, None),
+    ])
+    .unwrap();
+    let catalog = replay_catalog(vec![
+        drcs(0, TeletextDrcsTableScope::Normal, 7),
+        drcs(0, TeletextDrcsTableScope::Global, 47),
+    ]);
+    let input = replay_intent(&program, &catalog);
+    let saved = (
+        service.clone(),
+        program.clone(),
+        catalog.clone(),
+        input.clone(),
+    );
+    let limits = TeletextDrcsExecutionBudget {
+        max_candidates: input.records().len(),
+        max_references: 2,
+    };
+    let ordinary = replay(&service, &program, &catalog, &input).unwrap();
+    let (result, usage) = resolve_teletext_drcs_program_with_usage(
+        &service,
+        &program,
+        &catalog,
+        &input,
+        TeletextEnhancementCollectionBudget {
+            max_commands: 4,
+            max_drcs_references: 2,
+        },
+        limits,
+    );
+    assert_eq!(result.unwrap(), ordinary);
+    assert_eq!(
+        usage,
+        TeletextEnhancementCollectionUsage {
+            commands: 4,
+            drcs_references: 2
+        }
+    );
+    for (collection, expected) in [
+        (
+            TeletextEnhancementCollectionBudget {
+                max_commands: 3,
+                max_drcs_references: 2,
+            },
+            TeletextEnhancementCollectionUsage {
+                commands: 3,
+                drcs_references: 1,
+            },
+        ),
+        (
+            TeletextEnhancementCollectionBudget {
+                max_commands: 4,
+                max_drcs_references: 1,
+            },
+            TeletextEnhancementCollectionUsage {
+                commands: 4,
+                drcs_references: 1,
+            },
+        ),
+    ] {
+        let ordinary =
+            resolve_teletext_drcs_program(&service, &program, &catalog, &input, collection, limits)
+                .unwrap_err();
+        let (result, usage) = resolve_teletext_drcs_program_with_usage(
+            &service, &program, &catalog, &input, collection, limits,
+        );
+        let error = result.unwrap_err();
+        assert_eq!(error.to_string(), ordinary.to_string());
+        assert_eq!(
+            error.location(),
+            Some(TeletextEnhancementSource {
+                object: Some(local(0xffff)),
+                command: 1
+            })
+        );
+        assert_eq!(usage, expected);
+    }
+    assert_drcs_collection_preflight_usage_is_zero(&service, &program, &catalog, &input, limits);
+    assert_eq!((service, program, catalog, input), saved);
+}
+
+#[test]
+fn supplied_drcs_collection_usage_survives_source_and_dependency_failure() {
+    let service = service(draft(vec![], vec![], tables(NORMAL)));
+    let program = TeletextEnhancementProgram::new(vec![
+        set(1, 8),
+        invoke(local(0xffff), TeletextObjectType::Passive, None),
+    ])
+    .unwrap();
+    let original = replay_catalog(vec![drcs(0, TeletextDrcsTableScope::Normal, 7)]);
+    let input = replay_intent(&program, &original);
+    let stale = replay_catalog(vec![drcs(0, TeletextDrcsTableScope::Normal, 8)]);
+    let limits = TeletextDrcsExecutionBudget {
+        max_candidates: input.records().len(),
+        max_references: 128,
+    };
+    let ordinary = replay(&service, &program, &stale, &input).unwrap_err();
+    let (result, usage) = resolve_teletext_drcs_program_with_usage(
+        &service,
+        &program,
+        &stale,
+        &input,
+        replay_collection_budget(),
+        limits,
+    );
+    let error = result.unwrap_err();
+    assert_eq!(error.to_string(), ordinary.to_string());
+    assert!(
+        matches!(error, TeletextDrcsProgramExecutionError::Execution(error) if error.reason == TeletextDrcsExecutionFailure::CandidateMismatch)
+    );
+    assert_eq!(
+        usage,
+        TeletextEnhancementCollectionUsage {
+            commands: 3,
+            drcs_references: 1
+        }
+    );
+    let empty_intent = intent(&service);
+    let invalid = TeletextEnhancementProgram::new(vec![
+        set(1, 8),
+        drcs(8, TeletextDrcsTableScope::Normal, 9),
+    ])
+    .unwrap();
+    let ordinary = replay(&service, &invalid, service.objects(), &empty_intent).unwrap_err();
+    let (result, usage) = resolve_teletext_drcs_program_with_usage(
+        &service,
+        &invalid,
+        service.objects(),
+        &empty_intent,
+        replay_collection_budget(),
+        TeletextDrcsExecutionBudget {
+            max_candidates: empty_intent.records().len(),
+            max_references: 128,
+        },
+    );
+    let error = result.unwrap_err();
+    assert_eq!(error.to_string(), ordinary.to_string());
+    assert!(matches!(
+        error,
+        TeletextDrcsProgramExecutionError::Dependencies { .. }
+    ));
+    assert_eq!(
+        usage,
+        TeletextEnhancementCollectionUsage {
+            commands: 2,
+            drcs_references: 1
+        }
+    );
 }

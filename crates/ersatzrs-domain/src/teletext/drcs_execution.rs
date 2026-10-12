@@ -6,6 +6,7 @@
 
 use std::mem::size_of;
 
+use super::enhancement_objects::TeletextEnhancementCollectionUsage;
 use super::{
     TeletextCharsetValueError, TeletextCollectedDrcsError, TeletextCollectedEnhancementReferences,
     TeletextColumnOperation, TeletextDrcsBitmap, TeletextDrcsGlyphReference, TeletextDrcsGlyphSlot,
@@ -214,39 +215,79 @@ pub fn resolve_teletext_drcs_program(
     collection_budget: TeletextEnhancementCollectionBudget,
     budget: TeletextDrcsExecutionBudget,
 ) -> Result<TeletextDrcsExecution, TeletextDrcsProgramExecutionError> {
-    let count = preflight(service, intent, budget, 2)?;
-    let owner = intent.owner();
-    let primary = service
-        .effective_presentation(owner)
-        .ok_or_else(|| execution_error(owner, None, TeletextDrcsExecutionFailure::MissingPage))?
-        .primary_designation()
-        .map_err(|error| TeletextDrcsProgramExecutionError::Primary { owner, error })?;
-    let collected = catalog
-        .collect_display_references(owner, program, primary.pair(), collection_budget)
-        .map_err(|error| TeletextDrcsProgramExecutionError::Collection(Box::new(error)))?;
-    let sources = SourceContext {
-        program: Some(program),
+    resolve_teletext_drcs_program_with_usage(
+        service,
+        program,
         catalog,
-        collected: &collected,
-    };
-    // Reject contradicted original operations before consulting dependencies.
-    // This is the same source guard as the service entry, using actual replay IDs.
-    for record in intent.records() {
-        if let Some(TeletextGlyphIdentity::Drcs { reference }) = record.glyph() {
-            validate_source(sources, owner, *record.context().candidate(), reference)?;
-        }
-    }
-    let links = service
-        .page_enhancements()
-        .get(&owner)
-        .map_or_else(TeletextDrcsPageLinks::unlinked, |page| page.resources.drcs);
-    collected
-        .validate_drcs(service.drcs(), links)
-        .map_err(|error| TeletextDrcsProgramExecutionError::Dependencies {
+        intent,
+        collection_budget,
+        budget,
+    )
+    .0
+}
+
+/// Resolve the same supplied program and retain its collector admissions.
+///
+/// Preflight and primary-selection failures precede collection and report zero.
+/// A failed collector or later source, dependency or execution check retains
+/// earlier admitted commands and references without returning partial execution.
+/// # Errors
+/// Returns the existing located errors in their original order. Collection usage
+/// does not account for the separate DRCS lookup/execution work.
+pub fn resolve_teletext_drcs_program_with_usage(
+    service: &TeletextSemanticService,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    intent: &TeletextGlyphIntent,
+    collection_budget: TeletextEnhancementCollectionBudget,
+    budget: TeletextDrcsExecutionBudget,
+) -> (
+    Result<TeletextDrcsExecution, TeletextDrcsProgramExecutionError>,
+    TeletextEnhancementCollectionUsage,
+) {
+    let mut usage = TeletextEnhancementCollectionUsage::default();
+    let result = (|| {
+        let count = preflight(service, intent, budget, 2)?;
+        let owner = intent.owner();
+        let primary = service
+            .effective_presentation(owner)
+            .ok_or_else(|| execution_error(owner, None, TeletextDrcsExecutionFailure::MissingPage))?
+            .primary_designation()
+            .map_err(|error| TeletextDrcsProgramExecutionError::Primary { owner, error })?;
+        let (collected, admitted) = catalog.collect_display_references_with_usage(
             owner,
-            error: Box::new(error),
-        })?;
-    resolve_sources(service, intent, sources, count).map_err(Into::into)
+            program,
+            primary.pair(),
+            collection_budget,
+        );
+        usage = admitted;
+        let collected = collected
+            .map_err(|error| TeletextDrcsProgramExecutionError::Collection(Box::new(error)))?;
+        let sources = SourceContext {
+            program: Some(program),
+            catalog,
+            collected: &collected,
+        };
+        // Reject contradicted original operations before consulting dependencies.
+        // This is the same source guard as the service entry, using actual replay IDs.
+        for record in intent.records() {
+            if let Some(TeletextGlyphIdentity::Drcs { reference }) = record.glyph() {
+                validate_source(sources, owner, *record.context().candidate(), reference)?;
+            }
+        }
+        let links = service
+            .page_enhancements()
+            .get(&owner)
+            .map_or_else(TeletextDrcsPageLinks::unlinked, |page| page.resources.drcs);
+        collected
+            .validate_drcs(service.drcs(), links)
+            .map_err(|error| TeletextDrcsProgramExecutionError::Dependencies {
+                owner,
+                error: Box::new(error),
+            })?;
+        resolve_sources(service, intent, sources, count).map_err(Into::into)
+    })();
+    (result, usage)
 }
 
 #[derive(Clone, Copy)]

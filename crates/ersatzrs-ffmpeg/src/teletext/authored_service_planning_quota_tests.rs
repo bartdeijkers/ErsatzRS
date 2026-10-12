@@ -70,7 +70,7 @@ impl Bucket {
     }
 }
 
-fn calling_displays(count: u16) -> TeletextDeclaredService {
+pub(super) fn calling_displays(count: u16) -> TeletextDeclaredService {
     let mut draft = input();
     draft
         .base

@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use serde_json::json;
 
+use super::enhancement_objects::TeletextEnhancementCollectionUsage;
 use super::*;
 
 fn display(page: u16, subcode: u16) -> TeletextPageAddress {
@@ -901,4 +902,120 @@ fn nested_definition_json_cannot_bypass_program_values_or_object_identity_checks
     let mut changed = fixture;
     changed["max_commands"] = json!(usize::MAX);
     assert!(serde_json::from_value::<TeletextEnhancementObjectDefinition>(changed).is_err());
+}
+
+#[test]
+fn collection_usage_repeated_calls_exact_and_one_short_keep_original_model_and_blame() {
+    let owner = display(200, 0x1234);
+    let target = local(owner, 42);
+    let unused = local(owner, 43);
+    let objects = catalog(vec![
+        definition(target, TeletextObjectType::Active, vec![drcs(1), drcs(2)]),
+        definition(unused, TeletextObjectType::Passive, vec![drcs(3)]),
+    ]);
+    let main = program(vec![
+        invoke(target, TeletextObjectType::Active),
+        invoke(target, TeletextObjectType::Active),
+    ]);
+    let saved = (objects.clone(), main.clone());
+    let ordinary = objects
+        .collect_display_references(owner, &main, TeletextCharsetPair::LatinLatin, budget(6, 4))
+        .unwrap();
+    let (result, usage) = objects.collect_display_references_with_usage(
+        owner,
+        &main,
+        TeletextCharsetPair::LatinLatin,
+        budget(6, 4),
+    );
+    assert_eq!(result.unwrap(), ordinary);
+    assert_eq!(
+        usage,
+        TeletextEnhancementCollectionUsage {
+            commands: 6,
+            drcs_references: 4
+        }
+    );
+    for (limits, expected_usage, expected_reason) in [
+        (
+            budget(5, 4),
+            TeletextEnhancementCollectionUsage {
+                commands: 5,
+                drcs_references: 3,
+            },
+            TeletextEnhancementCollectionFailure::CommandBudget { maximum: 5 },
+        ),
+        (
+            budget(6, 3),
+            TeletextEnhancementCollectionUsage {
+                commands: 6,
+                drcs_references: 3,
+            },
+            TeletextEnhancementCollectionFailure::ReferenceBudget { maximum: 3 },
+        ),
+    ] {
+        let ordinary = objects
+            .collect_display_references(owner, &main, TeletextCharsetPair::LatinLatin, limits)
+            .unwrap_err();
+        let (result, usage) = objects.collect_display_references_with_usage(
+            owner,
+            &main,
+            TeletextCharsetPair::LatinLatin,
+            limits,
+        );
+        let error = result.unwrap_err();
+        assert_eq!(error, ordinary);
+        assert_eq!(error.source_location, source(Some(target), 1));
+        assert_eq!(error.reason, expected_reason);
+        assert_eq!(usage, expected_usage);
+    }
+    assert_eq!((objects, main), saved);
+}
+
+#[test]
+fn collection_usage_semantic_failure_admits_command_but_denied_command_does_not() {
+    let owner = display(200, 0);
+    let target = local(owner, 42);
+    let objects = catalog(vec![]);
+    let main = program(vec![invoke(target, TeletextObjectType::Active)]);
+    let (result, usage) = objects.collect_display_references_with_usage(
+        owner,
+        &main,
+        TeletextCharsetPair::LatinLatin,
+        budget(1, 0),
+    );
+    let error = result.unwrap_err();
+    assert_eq!(error.source_location, source(None, 0));
+    assert_eq!(
+        error.reason,
+        TeletextEnhancementCollectionFailure::Invocation(TeletextObjectInvocationError::Missing {
+            target
+        })
+    );
+    assert_eq!(
+        usage,
+        TeletextEnhancementCollectionUsage {
+            commands: 1,
+            drcs_references: 0
+        }
+    );
+    let (result, usage) = objects.collect_display_references_with_usage(
+        owner,
+        &main,
+        TeletextCharsetPair::LatinLatin,
+        budget(0, 0),
+    );
+    assert!(matches!(
+        result.unwrap_err().reason,
+        TeletextEnhancementCollectionFailure::CommandBudget { maximum: 0 }
+    ));
+    assert_eq!(usage, TeletextEnhancementCollectionUsage::default());
+    let empty = program(vec![]);
+    let (result, usage) = objects.collect_display_references_with_usage(
+        owner,
+        &empty,
+        TeletextCharsetPair::LatinLatin,
+        budget(0, 0),
+    );
+    assert_eq!(result.unwrap().command_count(), 0);
+    assert_eq!(usage, TeletextEnhancementCollectionUsage::default());
 }

@@ -372,13 +372,15 @@ async fn compiler_and_deadline_failures_preserve_the_exact_accepted_pointer() {
             NativeTeletextDesignError::Encoding(_)
         ))
     ));
-    let exhaust: [fn(&mut ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget); 6] = [
+    let exhaust: [fn(&mut ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget); 8] = [
         |budget| budget.max_display_updates = Some(0),
         |budget| budget.max_glyph_comparison_work = Some(0),
         |budget| budget.max_display_comparison_updates = Some(0),
         |budget| budget.max_realization_updates = Some(0),
         |budget| budget.max_placement_work = Some(0),
         |budget| budget.max_assembly_work = Some(0),
+        |budget| budget.max_collected_commands = Some(0),
+        |budget| budget.max_spatial_event_visits = Some(0),
     ];
     for exhaust in exhaust {
         let mut policy = channel_documents::policy();

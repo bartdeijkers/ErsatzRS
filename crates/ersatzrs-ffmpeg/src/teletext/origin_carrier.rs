@@ -158,46 +158,73 @@ pub fn build_teletext_origin_carrier<'a>(
     catalog: &'a TeletextEnhancementObjectCatalog,
     budget: TeletextOriginCarrierBudget,
 ) -> Result<TeletextOriginCarrier<'a>, TeletextOriginCarrierError> {
-    let fail = |reason| located(composition, origin_index, reason);
-    preflight(composition, catalog, budget).map_err(fail)?;
-    let recipe = derive_recipe(composition, origin_index).map_err(fail)?;
-    let count = 5 + usize::from(recipe.charset.is_some());
-    bound("output commands", count, budget.max_output_commands).map_err(fail)?;
-    let identity =
-        free_identity(composition.owner(), catalog, budget.max_id_checks).map_err(fail)?;
-    let mut commands = Vec::with_capacity(count);
-    let mut roles = Vec::with_capacity(count);
-    let tail = recipe.charset.map(|designation| {
-        (
-            Role::Charset,
-            TeletextColumnOperation::DesignateCharset { designation },
+    build_teletext_origin_carrier_with_usage(composition, origin_index, catalog, budget).0
+}
+
+/// Derive the same recipe and report admitted catalogue scans and exact-ID probes.
+/// Earlier checks remain charged on failure; a denied check adds no usage.
+/// The counter is separate from output/model identity and does not measure CPU/RSS.
+/// # Errors
+/// Returns the original located derivation result without a partial recipe.
+pub fn build_teletext_origin_carrier_with_usage<'a>(
+    composition: &'a TeletextMainComposition,
+    origin_index: usize,
+    catalog: &'a TeletextEnhancementObjectCatalog,
+    budget: TeletextOriginCarrierBudget,
+) -> (
+    Result<TeletextOriginCarrier<'a>, TeletextOriginCarrierError>,
+    usize,
+) {
+    let mut admitted = 0;
+    let result = (|| {
+        let fail = |reason| located(composition, origin_index, reason);
+        preflight(composition, catalog, budget).map_err(fail)?;
+        let recipe = derive_recipe(composition, origin_index).map_err(fail)?;
+        let count = 5 + usize::from(recipe.charset.is_some());
+        bound("output commands", count, budget.max_output_commands).map_err(fail)?;
+        let identity = free_identity(
+            composition.owner(),
+            catalog,
+            budget.max_id_checks,
+            &mut admitted,
         )
-    });
-    for (role, operation) in recipe
-        .prefix
-        .into_iter()
-        .chain(tail)
-        .chain([(Role::Glyph, recipe.glyph)])
-    {
-        roles.push(role);
-        commands.push(TeletextEnhancementCommand::AtColumn {
-            column: 0,
-            operation,
+        .map_err(fail)?;
+        let mut commands = Vec::with_capacity(count);
+        let mut roles = Vec::with_capacity(count);
+        let tail = recipe.charset.map(|designation| {
+            (
+                Role::Charset,
+                TeletextColumnOperation::DesignateCharset { designation },
+            )
         });
-    }
-    let definition = TeletextEnhancementObjectDefinition {
-        identity,
-        object_type: TeletextObjectType::Passive,
-        program: TeletextEnhancementProgram::new(commands).map_err(|error| fail(error.into()))?,
-    };
-    Ok(TeletextOriginCarrier {
-        composition,
-        catalog,
-        origin_index,
-        candidate: recipe.candidate,
-        definition,
-        roles,
-    })
+        for (role, operation) in recipe
+            .prefix
+            .into_iter()
+            .chain(tail)
+            .chain([(Role::Glyph, recipe.glyph)])
+        {
+            roles.push(role);
+            commands.push(TeletextEnhancementCommand::AtColumn {
+                column: 0,
+                operation,
+            });
+        }
+        let definition = TeletextEnhancementObjectDefinition {
+            identity,
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(commands)
+                .map_err(|error| fail(error.into()))?,
+        };
+        Ok(TeletextOriginCarrier {
+            composition,
+            catalog,
+            origin_index,
+            candidate: recipe.candidate,
+            definition,
+            roles,
+        })
+    })();
+    (result, admitted)
 }
 
 use TeletextOriginCarrierCommandRole as Role;
@@ -415,9 +442,11 @@ fn free_identity(
     owner: TeletextPageAddress,
     catalog: &TeletextEnhancementObjectCatalog,
     maximum: usize,
+    admitted: &mut usize,
 ) -> Result<TeletextObjectIdentity, Failure> {
     // Finite exact u16 namespace: 1024 words = 8 KiB, no reserved ID range.
     bound("identity checks", catalog.definitions().len(), maximum)?;
+    *admitted = catalog.definitions().len();
     let mut occupied = [0_u64; 1024];
     for definition in catalog.definitions() {
         if definition.identity.owner() == Some(owner) {
@@ -432,6 +461,7 @@ fn free_identity(
             .checked_add(usize::from(id) + 1)
             .ok_or(Failure::AllocationSize)?;
         bound("identity checks", checks, maximum)?;
+        *admitted = checks;
         if occupied[usize::from(id) / 64] & (1 << (usize::from(id) % 64)) == 0 {
             return Ok(TeletextObjectIdentity::local(
                 owner,

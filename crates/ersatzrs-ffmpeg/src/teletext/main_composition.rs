@@ -14,8 +14,7 @@ use ersatzrs_domain::{
     resolve_teletext_attribute_execution_with_transmission, resolve_teletext_base_footprints,
     resolve_teletext_charset_execution, resolve_teletext_colour_composition,
     resolve_teletext_display_geometry, resolve_teletext_drcs_execution,
-    resolve_teletext_drcs_program, resolve_teletext_glyph_intent, resolve_teletext_spatial_program,
-    resolve_teletext_spatial_trace, TeletextAttributeExecution, TeletextAttributeExecutionError,
+    resolve_teletext_glyph_intent, TeletextAttributeExecution, TeletextAttributeExecutionError,
     TeletextAttributeTransmissionError, TeletextAttributeTransmissionEvidence, TeletextBaseDisplay,
     TeletextBaseFootprintError, TeletextBaseFootprints, TeletextCharsetExecution,
     TeletextCharsetExecutionError, TeletextCharsetPair, TeletextCharsetValueError,
@@ -435,22 +434,22 @@ pub(super) fn compose_teletext_main_program_with_context(
     let base_footprints =
         resolve_teletext_base_footprints(&base_display, colour_context.row_colours())
             .map_err(|reason| error(owner, None, reason.into()))?;
-    let collected = service
-        .objects()
-        .collect_display_references(owner, &program, primary.pair(), budget.collection)
-        .map_err(|failure| {
-            error(
-                owner,
-                mapped_location(&built.provenance, failure.source_location),
-                failure.reason.into(),
-            )
-        })?;
+    let collected = collect_composed_program(
+        context,
+        service,
+        owner,
+        &program,
+        primary.pair(),
+        budget.collection,
+        &built.provenance,
+    )?;
     let original_display = original_display_execution(
         service,
         &base_display,
         &colour_context,
         &source,
         budget.collection,
+        context,
     )?;
     let display_resolution = original_display_resolution(
         &base_display,
@@ -687,21 +686,22 @@ pub(super) fn replay_teletext_physical_display_with_context(
         check_input(owner, program.commands().len(), 0, maximum)?;
         let source = TeletextEffectiveProgramSource::Local;
         check_physical_colour_context(service, composition, program, catalog, maximum)?;
-        let spatial = resolve_teletext_spatial_program(
-            owner,
-            program,
-            catalog,
-            TeletextSpatialTraceBudget {
-                max_events: maximum,
-                max_invocations: maximum,
-            },
-        )
-        .map_err(|reason| {
-            let location = reason
-                .location
-                .and_then(|value| original_location(&source, value));
-            error(owner, location, reason.into())
-        })?;
+        let spatial = context
+            .resolve_spatial_program(
+                owner,
+                program,
+                catalog,
+                TeletextSpatialTraceBudget {
+                    max_events: maximum,
+                    max_invocations: maximum,
+                },
+            )
+            .map_err(|reason| {
+                let location = reason
+                    .location
+                    .and_then(|value| original_location(&source, value));
+                error(owner, location, reason.into())
+            })?;
         let execution = display_execution_from_spatial(
             &composition.base_display,
             &composition.colour_context,
@@ -713,6 +713,7 @@ pub(super) fn replay_teletext_physical_display_with_context(
                 program,
                 catalog,
             },
+            context,
         )?;
         let display_resolution = original_display_resolution(
             &composition.base_display,
@@ -866,17 +867,18 @@ fn original_candidate_budget(
 }
 
 fn original_drcs_execution(
-    context: DrcsContext<'_>,
+    drcs_context: DrcsContext<'_>,
     intent: &TeletextGlyphIntent,
     source: &TeletextEffectiveProgramSource,
     budget: TeletextEnhancementCollectionBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<TeletextDrcsExecution, TeletextMainCompositionError> {
     let owner = intent.owner();
     let limits = TeletextDrcsExecutionBudget {
         max_candidates: original_candidate_budget(owner, budget.max_commands)?,
         max_references: budget.max_drcs_references,
     };
-    match context {
+    match drcs_context {
         DrcsContext::SelectedService(service) => {
             resolve_teletext_drcs_execution(service, intent, limits).map_err(|reason| {
                 let location = reason
@@ -889,7 +891,8 @@ fn original_drcs_execution(
             service,
             program,
             catalog,
-        } => resolve_teletext_drcs_program(service, program, catalog, intent, budget, limits)
+        } => context
+            .resolve_drcs_program(service, program, catalog, intent, budget, limits)
             .map_err(|reason| {
                 let location = reason
                     .location()
@@ -1033,28 +1036,50 @@ fn original_display_resolution(
         })
 }
 
+fn collect_composed_program(
+    context: &mut TeletextCompileContext<'_, '_>,
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    primary: TeletextCharsetPair,
+    budget: TeletextEnhancementCollectionBudget,
+    provenance: &[TeletextMainCompositionSource],
+) -> Result<TeletextCollectedEnhancementReferences, TeletextMainCompositionError> {
+    context
+        .collect_display_references(service.objects(), owner, program, primary, budget)
+        .map_err(|failure| {
+            error(
+                owner,
+                mapped_location(provenance, failure.source_location),
+                failure.reason.into(),
+            )
+        })
+}
+
 fn original_display_execution(
     service: &TeletextSemanticService,
     base: &TeletextBaseDisplay,
     colours: &TeletextColourContext,
     source: &TeletextEffectiveProgramSource,
     budget: TeletextEnhancementCollectionBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<OriginalDisplayExecution, TeletextMainCompositionError> {
     let maximum = budget.max_commands;
-    let spatial = resolve_teletext_spatial_trace(
-        service,
-        base.owner(),
-        TeletextSpatialTraceBudget {
-            max_events: maximum,
-            max_invocations: maximum,
-        },
-    )
-    .map_err(|reason| {
-        let location = reason
-            .location
-            .and_then(|location| original_location(source, location));
-        error(base.owner(), location, reason.into())
-    })?;
+    let spatial = context
+        .resolve_spatial_trace(
+            service,
+            base.owner(),
+            TeletextSpatialTraceBudget {
+                max_events: maximum,
+                max_invocations: maximum,
+            },
+        )
+        .map_err(|reason| {
+            let location = reason
+                .location
+                .and_then(|location| original_location(source, location));
+            error(base.owner(), location, reason.into())
+        })?;
     display_execution_from_spatial(
         base,
         colours,
@@ -1062,6 +1087,7 @@ fn original_display_execution(
         source,
         budget,
         DrcsContext::SelectedService(service),
+        context,
     )
 }
 
@@ -1082,6 +1108,7 @@ fn display_execution_from_spatial(
     source: &TeletextEffectiveProgramSource,
     budget: TeletextEnhancementCollectionBudget,
     drcs_context: DrcsContext<'_>,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<OriginalDisplayExecution, TeletextMainCompositionError> {
     let maximum = budget.max_commands;
     let glyphs = original_glyph_layers(base, &spatial, source, maximum)?;
@@ -1095,7 +1122,7 @@ fn display_execution_from_spatial(
             error(base.owner(), location, reason.into())
         })?;
     let intent = original_glyph_intent(&charsets, source, maximum)?;
-    let drcs = original_drcs_execution(drcs_context, &intent, source, budget)?;
+    let drcs = original_drcs_execution(drcs_context, &intent, source, budget, context)?;
     let geometry = original_display_geometry(base, &spatial, &glyphs, source, maximum)?;
     Ok(OriginalDisplayExecution {
         spatial,

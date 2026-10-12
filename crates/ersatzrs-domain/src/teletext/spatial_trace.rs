@@ -21,6 +21,29 @@ pub struct TeletextSpatialTraceBudget {
     pub max_invocations: usize,
 }
 
+/// Optional admitted traversal credits across both deterministic trace passes.
+/// These are separate event/call visit units, not CPU time or total memory.
+/// Zero is exhausted credit; absence retains the independent stage limits.
+/// Cumulative reported visits must remain representable as `usize`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextSpatialTraceWorkBudget {
+    /// Includes counting and emission, repeated bodies and their invocation commands.
+    pub max_event_visits: Option<usize>,
+    /// Includes both passes' admitted call visits, even with empty object bodies.
+    pub max_invocation_visits: Option<usize>,
+}
+
+/// Admitted event/call visits, including the counting and emission passes.
+/// Earlier admitted visits survive semantic failure; a denied visit is excluded.
+/// These counters are not part of trace identity, coordinates or invocation IDs.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextSpatialTraceUsage {
+    /// Commands admitted before their semantic validation in either pass.
+    pub event_visits: usize,
+    /// Calls admitted before target/type/owner validation in either pass.
+    pub invocation_visits: usize,
+}
+
 /// Original coordinate, potentially outside the eventual display area.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextSpatialPosition {
@@ -271,17 +294,53 @@ pub fn resolve_teletext_spatial_trace(
     owner: TeletextPageAddress,
     budget: TeletextSpatialTraceBudget,
 ) -> Result<TeletextSpatialTrace, TeletextSpatialTraceError> {
-    let (selection, program) =
-        service
-            .effective_program(owner)
-            .map_err(|error| TeletextSpatialTraceError {
-                owner,
-                location: None,
-                invocation: None,
-                root_source: None,
-                reason: TeletextSpatialTraceFailure::Service(Box::new(error)),
-            })?;
-    resolve_program(owner, &program, service.objects(), selection, budget)
+    resolve_teletext_spatial_trace_with_usage(
+        service,
+        owner,
+        budget,
+        TeletextSpatialTraceWorkBudget::default(),
+    )
+    .0
+}
+
+/// Trace the selected program with cumulative visit credit and failure usage.
+/// Both passes retain their independent stage caps and restart trace-local IDs.
+/// Their admitted visits consume one cumulative budget; no partial trace escapes.
+/// # Errors
+/// The embedded result preserves existing selection, located traversal and
+/// arithmetic failures. Work exhaustion uses the remaining pass's existing cap.
+pub fn resolve_teletext_spatial_trace_with_usage(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    budget: TeletextSpatialTraceBudget,
+    work_budget: TeletextSpatialTraceWorkBudget,
+) -> (
+    Result<TeletextSpatialTrace, TeletextSpatialTraceError>,
+    TeletextSpatialTraceUsage,
+) {
+    let (selection, program) = match service.effective_program(owner) {
+        Ok(selected) => selected,
+        Err(error) => {
+            return (
+                Err(TeletextSpatialTraceError {
+                    owner,
+                    location: None,
+                    invocation: None,
+                    root_source: None,
+                    reason: TeletextSpatialTraceFailure::Service(Box::new(error)),
+                }),
+                TeletextSpatialTraceUsage::default(),
+            );
+        }
+    };
+    resolve_program_with_usage(
+        owner,
+        &program,
+        service.objects(),
+        selection,
+        budget,
+        work_budget,
+    )
 }
 
 /// Trace a supplied host program and checked catalog as one physical Local main.
@@ -303,45 +362,138 @@ pub fn resolve_teletext_spatial_program(
     catalog: &TeletextEnhancementObjectCatalog,
     budget: TeletextSpatialTraceBudget,
 ) -> Result<TeletextSpatialTrace, TeletextSpatialTraceError> {
-    resolve_program(
+    resolve_teletext_spatial_program_with_usage(
+        owner,
+        program,
+        catalog,
+        budget,
+        TeletextSpatialTraceWorkBudget::default(),
+    )
+    .0
+}
+
+/// Trace an unchanged supplied Local main and report both passes' admitted visits.
+/// The emission pass restarts IDs at zero while retaining cumulative work credit.
+/// Visit counters include a command/call whose later semantic validation fails.
+/// # Errors
+/// The embedded result retains existing located stage/semantic errors and returns
+/// no partial trace. Independent event/call limits remain enforced in each pass.
+pub fn resolve_teletext_spatial_program_with_usage(
+    owner: TeletextPageAddress,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    budget: TeletextSpatialTraceBudget,
+    work_budget: TeletextSpatialTraceWorkBudget,
+) -> (
+    Result<TeletextSpatialTrace, TeletextSpatialTraceError>,
+    TeletextSpatialTraceUsage,
+) {
+    resolve_program_with_usage(
         owner,
         program,
         catalog,
         TeletextEffectiveProgramSource::Local,
         budget,
+        work_budget,
     )
 }
 
-fn resolve_program(
+fn resolve_program_with_usage(
     owner: TeletextPageAddress,
     program: &TeletextEnhancementProgram,
     catalog: &TeletextEnhancementObjectCatalog,
     selection: TeletextEffectiveProgramSource,
     budget: TeletextSpatialTraceBudget,
-) -> Result<TeletextSpatialTrace, TeletextSpatialTraceError> {
-    let mut count = Walker::new(owner, catalog, &selection, budget, None);
-    count.walk(program, Context::main())?;
+    work_budget: TeletextSpatialTraceWorkBudget,
+) -> (
+    Result<TeletextSpatialTrace, TeletextSpatialTraceError>,
+    TeletextSpatialTraceUsage,
+) {
+    let mut usage = TeletextSpatialTraceUsage::default();
+    let mut count = Walker::new(
+        owner,
+        catalog,
+        &selection,
+        pass_budget(budget, work_budget, usage),
+        None,
+    );
+    let counted = count.walk(program, Context::main());
+    usage = TeletextSpatialTraceUsage {
+        event_visits: count.events,
+        invocation_visits: count.invocations,
+    };
+    if let Err(error) = counted {
+        return (Err(error), usage);
+    }
     let output = Output {
         events: Vec::with_capacity(count.events),
         invocations: Vec::with_capacity(count.invocations),
     };
-    let mut emit = Walker::new(owner, catalog, &selection, budget, Some(output));
-    emit.walk(program, Context::main())?;
-    // Output is absent only for the counting pass; preserve a static error rather
-    // than relying on a runtime panic if the internal pass contract ever changes.
-    let output = emit.output.ok_or(TeletextSpatialTraceError {
+    let mut emit = Walker::new(
+        owner,
+        catalog,
+        &selection,
+        pass_budget(budget, work_budget, usage),
+        Some(output),
+    );
+    let emitted = emit.walk(program, Context::main());
+    let failure = || TeletextSpatialTraceError {
         owner,
         location: None,
         invocation: None,
         root_source: None,
         reason: TeletextSpatialTraceFailure::SelectionState,
-    })?;
-    Ok(TeletextSpatialTrace {
-        owner,
-        original_program_source: selection,
-        events: output.events,
-        invocations: output.invocations,
-    })
+    };
+    let (Some(event_visits), Some(invocation_visits)) = (
+        usage.event_visits.checked_add(emit.events),
+        usage.invocation_visits.checked_add(emit.invocations),
+    ) else {
+        // Pass caps include representable remaining usage, so a future walker
+        // contract violation must fail closed rather than wrap these counters.
+        return (Err(failure()), usage);
+    };
+    usage = TeletextSpatialTraceUsage {
+        event_visits,
+        invocation_visits,
+    };
+    if let Err(error) = emitted {
+        return (Err(error), usage);
+    }
+    // Output is absent only for the counting pass; preserve a static error rather
+    // than relying on a runtime panic if the internal pass contract ever changes.
+    let Some(output) = emit.output else {
+        return (Err(failure()), usage);
+    };
+    (
+        Ok(TeletextSpatialTrace {
+            owner,
+            original_program_source: selection,
+            events: output.events,
+            invocations: output.invocations,
+        }),
+        usage,
+    )
+}
+
+fn pass_budget(
+    stage: TeletextSpatialTraceBudget,
+    work: TeletextSpatialTraceWorkBudget,
+    used: TeletextSpatialTraceUsage,
+) -> TeletextSpatialTraceBudget {
+    // Reported counters must remain representable even without an explicit
+    // cumulative limit; this is a storage bound, not an authoring restriction.
+    TeletextSpatialTraceBudget {
+        max_events: stage.max_events.min(
+            work.max_event_visits
+                .unwrap_or(usize::MAX)
+                .saturating_sub(used.event_visits),
+        ),
+        max_invocations: stage.max_invocations.min(
+            work.max_invocation_visits
+                .unwrap_or(usize::MAX)
+                .saturating_sub(used.invocation_visits),
+        ),
+    }
 }
 
 #[derive(Clone, Copy)]

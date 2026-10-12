@@ -2,6 +2,7 @@
 use super::*;
 use crate::teletext::{
     build_teletext_augmented_origin_program, build_teletext_augmented_origin_program_with_usage,
+    build_teletext_augmented_origin_program_with_work_usage,
     plan_teletext_base_compatibility_realization, plan_teletext_origin_carrier_placement,
     TeletextAugmentedOriginProgramBudget, TeletextAugmentedOriginProgramFailure as Failure,
     TeletextAugmentedOriginSource as Source, TeletextBaseCompatibilityRealizationBudget,
@@ -263,6 +264,14 @@ fn repeated_origins_receive_unique_lowest_free_ids_and_exact_two_pass_identity_b
     exact.recipe.catalog.max_objects = 3;
     exact.recipe.catalog.max_commands = 13;
     let candidate = build_teletext_augmented_origin_program(&placement, exact).unwrap();
+    let (metered, usage) =
+        build_teletext_augmented_origin_program_with_work_usage(&placement, exact);
+    let metered = metered.unwrap();
+    assert_eq!(usage.identity_checks, 10);
+    assert!(usage.work > 0);
+    assert_eq!(metered.program(), candidate.program());
+    assert_eq!(metered.catalog(), candidate.catalog());
+    assert_eq!(metered.main_sources(), candidate.main_sources());
     assert_eq!(
         candidate
             .carriers()
@@ -289,6 +298,19 @@ fn repeated_origins_receive_unique_lowest_free_ids_and_exact_two_pass_identity_b
     );
     exact.max_identity_checks = 9;
     let error = build_teletext_augmented_origin_program(&placement, exact).unwrap_err();
+    let (result, usage) =
+        build_teletext_augmented_origin_program_with_work_usage(&placement, exact);
+    let metered = result.unwrap_err();
+    assert_eq!(
+        usage.identity_checks, 9,
+        "failed second-pass probe retains admitted checks"
+    );
+    assert_eq!(metered.to_string(), error.to_string());
+    assert_eq!(metered.owner, error.owner);
+    assert_eq!(metered.origin, error.origin);
+    assert_eq!(metered.location, error.location);
+    assert_eq!(metered.root_source, error.root_source);
+    assert_eq!(metered.invocation, error.invocation);
     let Failure::Carrier(error) = error.reason else {
         panic!("aggregate ID cutoff lost recipe diagnostics");
     };
@@ -813,7 +835,12 @@ fn assembly_usage_exact_credit_preserves_candidate_and_rejected_reservation() {
     let ordinary = build_teletext_augmented_origin_program(&placement, limits()).unwrap();
     let (result, admitted) =
         build_teletext_augmented_origin_program_with_usage(&placement, limits());
+    assert_eq!(result.unwrap().program(), ordinary.program());
+    let (result, all_usage) =
+        build_teletext_augmented_origin_program_with_work_usage(&placement, limits());
     let metered = result.unwrap();
+    assert_eq!(all_usage.work, admitted);
+    assert_eq!(all_usage.identity_checks, 10);
     assert!(admitted > 0);
     assert_eq!(metered.program(), ordinary.program());
     assert_eq!(metered.catalog(), ordinary.catalog());
@@ -841,6 +868,7 @@ fn assembly_usage_exact_credit_preserves_candidate_and_rejected_reservation() {
     }
     let exact = TeletextAugmentedOriginProgramBudget {
         max_work: admitted,
+        max_identity_checks: all_usage.identity_checks,
         ..limits()
     };
     let (result, exact_used) =
@@ -864,6 +892,77 @@ fn assembly_usage_exact_credit_preserves_candidate_and_rejected_reservation() {
             .to_string()
     );
     assert_eq!((service.clone(), composition.clone()), saved);
+}
+
+#[test]
+fn later_uncertain_recipe_preserves_prior_identity_admission_and_original_failure() {
+    let mut fixture = repeated_fixture();
+    fixture.objects.push(definition(
+        local(0xfffe),
+        TeletextObjectType::Active,
+        vec![
+            at(
+                0,
+                TeletextColumnOperation::Foreground {
+                    colour: TeletextColourReference::new(4).unwrap(),
+                },
+            ),
+            at(
+                0,
+                TeletextColumnOperation::Foreground {
+                    colour: TeletextColourReference::new(13).unwrap(),
+                },
+            ),
+            g0(0),
+        ],
+    ));
+    fixture.main = Some(vec![
+        position(1, 8),
+        invoke(local(0xffff), TeletextObjectType::Active),
+        position(2, 8),
+        invoke(local(0xfffe), TeletextObjectType::Active),
+    ]);
+    let service = fixture.build();
+    let composition = compose(&service);
+    let saved = (service.clone(), composition.clone());
+    let closure =
+        plan_teletext_base_compatibility_realization(&composition, closure_limits()).unwrap();
+    let placement =
+        plan_teletext_origin_carrier_placement(&closure, service.objects(), placement_limits())
+            .unwrap();
+    let ordinary = build_teletext_augmented_origin_program(&placement, limits()).unwrap_err();
+    let (result, usage) =
+        build_teletext_augmented_origin_program_with_work_usage(&placement, limits());
+    let error = result.unwrap_err();
+    assert_eq!(error.to_string(), ordinary.to_string());
+    assert_eq!(error.owner, ordinary.owner);
+    assert_eq!(error.origin, ordinary.origin);
+    assert_eq!(error.location, ordinary.location);
+    assert_eq!(error.root_source, ordinary.root_source);
+    assert_eq!(error.invocation, ordinary.invocation);
+    assert_eq!(
+        usage.identity_checks, 3,
+        "successful first recipe scanned two entries and probed ID0"
+    );
+    assert!(usage.work > 0);
+    let Failure::Carrier(error) = error.reason else {
+        panic!("late recipe uncertainty must retain carrier diagnostics");
+    };
+    assert_eq!(
+        error.reason,
+        TeletextOriginCarrierFailure::Attribute {
+            field: "foreground"
+        }
+    );
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: Some(local(0xfffe)),
+            command: 2
+        })
+    );
+    assert_eq!(error.invocation.unwrap().get(), 1);
+    assert_eq!((service, composition), saved);
 }
 
 #[test]

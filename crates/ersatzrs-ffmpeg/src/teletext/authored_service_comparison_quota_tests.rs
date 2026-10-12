@@ -204,6 +204,11 @@ fn legacy_encoder_honors_comparison_quotas_while_disabled_usage_remains_none() {
             placement_work: None,
             assembly_work: None,
             ancestry_work: None,
+            collected_commands: None,
+            collected_drcs_references: None,
+            spatial_event_visits: None,
+            spatial_invocation_visits: None,
+            identity_checks: None,
         }
     );
     let mut budget = limits();

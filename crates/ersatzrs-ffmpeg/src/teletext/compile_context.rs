@@ -4,20 +4,28 @@ use std::time::Instant;
 
 use ersatzrs_domain::{
     resolve_teletext_display_resolution, resolve_teletext_display_resolution_with_usage,
-    TeletextDisplayResolution, TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
-    TeletextDisplayResolutionFailure, TeletextDisplayResolutionInputs,
-    TeletextEnhancementCollectionBudget, TeletextEnhancementObjectCatalog,
-    TeletextObjectCatalogBudget, TeletextSemanticService,
+    resolve_teletext_drcs_program_with_usage, resolve_teletext_spatial_program_with_usage,
+    resolve_teletext_spatial_trace_with_usage, TeletextCharsetPair,
+    TeletextCollectedEnhancementReferences, TeletextDisplayResolution,
+    TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
+    TeletextDisplayResolutionFailure, TeletextDisplayResolutionInputs, TeletextDrcsExecution,
+    TeletextDrcsExecutionBudget, TeletextDrcsExecutionError, TeletextDrcsExecutionFailure,
+    TeletextDrcsProgramExecutionError, TeletextEnhancementCollectionBudget,
+    TeletextEnhancementCollectionError, TeletextEnhancementCollectionFailure,
+    TeletextEnhancementObjectCatalog, TeletextEnhancementProgram, TeletextEnhancementSource,
+    TeletextGlyphIntent, TeletextObjectCatalogBudget, TeletextPageAddress, TeletextSemanticService,
+    TeletextSpatialTrace, TeletextSpatialTraceBudget, TeletextSpatialTraceError,
+    TeletextSpatialTraceFailure, TeletextSpatialTraceUsage, TeletextSpatialTraceWorkBudget,
 };
 
 use super::augmented_origin_compilation::compile_augmented_with_context_and_usage;
+use super::origin_carrier_placement::plan_teletext_origin_carrier_placement_with_context_and_usage;
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
-    build_teletext_augmented_origin_program_with_usage, compare_teletext_augmented_origin_glyphs,
-    compare_teletext_augmented_origin_glyphs_with_usage, compare_teletext_physical_display,
-    compare_teletext_physical_display_with_usage,
-    plan_teletext_base_compatibility_realization_with_usage,
-    plan_teletext_origin_carrier_placement_with_usage, EncodedTeletextAugmentedOriginProgram,
+    build_teletext_augmented_origin_program_with_work_usage,
+    compare_teletext_augmented_origin_glyphs, compare_teletext_augmented_origin_glyphs_with_usage,
+    compare_teletext_physical_display, compare_teletext_physical_display_with_usage,
+    plan_teletext_base_compatibility_realization_with_usage, EncodedTeletextAugmentedOriginProgram,
     TeletextAugmentedGlyphComparison, TeletextAugmentedGlyphComparisonBudget,
     TeletextAugmentedGlyphComparisonError, TeletextAugmentedGlyphComparisonFailure,
     TeletextAugmentedInvocationBudget, TeletextAugmentedOriginCompilationError,
@@ -47,6 +55,11 @@ pub(super) struct TeletextCompileContext<'a, 'service> {
     placement: WorkCredit,
     assembly: WorkCredit,
     ancestry: WorkCredit,
+    collected_commands: WorkCredit,
+    collected_drcs_references: WorkCredit,
+    spatial_event_visits: WorkCredit,
+    spatial_invocation_visits: WorkCredit,
+    identity_checks: WorkCredit,
 }
 
 // One non-clone credit per existing meter; these units are never summed.
@@ -102,6 +115,11 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
             placement: WorkCredit::new(None),
             assembly: WorkCredit::new(None),
             ancestry: WorkCredit::new(None),
+            collected_commands: WorkCredit::new(None),
+            collected_drcs_references: WorkCredit::new(None),
+            spatial_event_visits: WorkCredit::new(None),
+            spatial_invocation_visits: WorkCredit::new(None),
+            identity_checks: WorkCredit::new(None),
         }
     }
 
@@ -119,6 +137,11 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         context.placement = WorkCredit::new(budget.max_placement_work);
         context.assembly = WorkCredit::new(budget.max_assembly_work);
         context.ancestry = WorkCredit::new(budget.max_ancestry_work);
+        context.collected_commands = WorkCredit::new(budget.max_collected_commands);
+        context.collected_drcs_references = WorkCredit::new(budget.max_collected_drcs_references);
+        context.spatial_event_visits = WorkCredit::new(budget.max_spatial_event_visits);
+        context.spatial_invocation_visits = WorkCredit::new(budget.max_spatial_invocation_visits);
+        context.identity_checks = WorkCredit::new(budget.max_identity_checks);
         context
     }
 
@@ -142,7 +165,155 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
             placement_work: self.placement.used(),
             assembly_work: self.assembly.used(),
             ancestry_work: self.ancestry.used(),
+            collected_commands: self.collected_commands.used(),
+            collected_drcs_references: self.collected_drcs_references.used(),
+            spatial_event_visits: self.spatial_event_visits.used(),
+            spatial_invocation_visits: self.spatial_invocation_visits.used(),
+            identity_checks: self.identity_checks.used(),
         }
+    }
+
+    pub(super) fn collect_display_references(
+        &mut self,
+        catalog: &TeletextEnhancementObjectCatalog,
+        owner: TeletextPageAddress,
+        program: &TeletextEnhancementProgram,
+        primary_pair: TeletextCharsetPair,
+        mut budget: TeletextEnhancementCollectionBudget,
+    ) -> Result<TeletextCollectedEnhancementReferences, TeletextEnhancementCollectionError> {
+        budget.max_commands = self.collected_commands.cap(budget.max_commands);
+        budget.max_drcs_references = self
+            .collected_drcs_references
+            .cap(budget.max_drcs_references);
+        let (result, admitted) =
+            catalog.collect_display_references_with_usage(owner, program, primary_pair, budget);
+        let commands_ok = self.collected_commands.debit(admitted.commands);
+        let references_ok = self
+            .collected_drcs_references
+            .debit(admitted.drcs_references);
+        if !commands_ok || !references_ok {
+            return Err(TeletextEnhancementCollectionError {
+                display: owner,
+                source_location: TeletextEnhancementSource {
+                    object: None,
+                    command: 0,
+                },
+                reason: if commands_ok {
+                    TeletextEnhancementCollectionFailure::ReferenceBudget {
+                        maximum: budget.max_drcs_references,
+                    }
+                } else {
+                    TeletextEnhancementCollectionFailure::CommandBudget {
+                        maximum: budget.max_commands,
+                    }
+                },
+            });
+        }
+        result
+    }
+
+    pub(super) fn resolve_drcs_program(
+        &mut self,
+        service: &TeletextSemanticService,
+        program: &TeletextEnhancementProgram,
+        catalog: &TeletextEnhancementObjectCatalog,
+        intent: &TeletextGlyphIntent,
+        mut collection_budget: TeletextEnhancementCollectionBudget,
+        drcs_budget: TeletextDrcsExecutionBudget,
+    ) -> Result<TeletextDrcsExecution, TeletextDrcsProgramExecutionError> {
+        collection_budget.max_commands =
+            self.collected_commands.cap(collection_budget.max_commands);
+        collection_budget.max_drcs_references = self
+            .collected_drcs_references
+            .cap(collection_budget.max_drcs_references);
+        let (result, admitted) = resolve_teletext_drcs_program_with_usage(
+            service,
+            program,
+            catalog,
+            intent,
+            collection_budget,
+            drcs_budget,
+        );
+        let commands_ok = self.collected_commands.debit(admitted.commands);
+        let references_ok = self
+            .collected_drcs_references
+            .debit(admitted.drcs_references);
+        if !commands_ok || !references_ok {
+            return Err(TeletextDrcsExecutionError {
+                owner: intent.owner(),
+                position: None,
+                location: None,
+                root_source: None,
+                invocation: None,
+                reason: TeletextDrcsExecutionFailure::WorkSize,
+            }
+            .into());
+        }
+        result
+    }
+
+    pub(super) fn resolve_spatial_trace(
+        &mut self,
+        service: &TeletextSemanticService,
+        owner: TeletextPageAddress,
+        budget: TeletextSpatialTraceBudget,
+    ) -> Result<TeletextSpatialTrace, TeletextSpatialTraceError> {
+        let (result, admitted) = resolve_teletext_spatial_trace_with_usage(
+            service,
+            owner,
+            budget,
+            self.spatial_work_budget(),
+        );
+        self.debit_spatial(owner, admitted)?;
+        result
+    }
+
+    pub(super) fn resolve_spatial_program(
+        &mut self,
+        owner: TeletextPageAddress,
+        program: &TeletextEnhancementProgram,
+        catalog: &TeletextEnhancementObjectCatalog,
+        budget: TeletextSpatialTraceBudget,
+    ) -> Result<TeletextSpatialTrace, TeletextSpatialTraceError> {
+        let (result, admitted) = resolve_teletext_spatial_program_with_usage(
+            owner,
+            program,
+            catalog,
+            budget,
+            self.spatial_work_budget(),
+        );
+        self.debit_spatial(owner, admitted)?;
+        result
+    }
+
+    fn spatial_work_budget(&self) -> TeletextSpatialTraceWorkBudget {
+        // The domain shares these remaining credits across its count and emit
+        // passes while retaining each pass's independent event/call ceilings.
+        TeletextSpatialTraceWorkBudget {
+            max_event_visits: self.spatial_event_visits.remaining,
+            max_invocation_visits: self.spatial_invocation_visits.remaining,
+        }
+    }
+
+    fn debit_spatial(
+        &mut self,
+        owner: TeletextPageAddress,
+        admitted: TeletextSpatialTraceUsage,
+    ) -> Result<(), TeletextSpatialTraceError> {
+        let events_ok = self.spatial_event_visits.debit(admitted.event_visits);
+        let invocations_ok = self
+            .spatial_invocation_visits
+            .debit(admitted.invocation_visits);
+        if !events_ok || !invocations_ok {
+            return Err(TeletextSpatialTraceError {
+                owner,
+                location: None,
+                root_source: None,
+                invocation: None,
+                reason: TeletextSpatialTraceFailure::SelectionState,
+            });
+        }
+        Ok(())
     }
 
     pub(super) fn realization<'b>(
@@ -176,8 +347,9 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         mut budget: TeletextOriginCarrierPlacementBudget,
     ) -> Result<TeletextOriginCarrierPlacement<'b>, TeletextOriginCarrierPlacementError> {
         budget.max_work = self.placement.cap(budget.max_work);
-        let (result, admitted) =
-            plan_teletext_origin_carrier_placement_with_usage(plan, catalog, budget);
+        let (result, admitted) = plan_teletext_origin_carrier_placement_with_context_and_usage(
+            plan, catalog, budget, self,
+        );
         if !self.placement.debit(admitted) {
             return Err(TeletextOriginCarrierPlacementError {
                 owner: plan.composition().owner(),
@@ -197,9 +369,12 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         mut budget: TeletextAugmentedOriginProgramBudget,
     ) -> Result<TeletextAugmentedOriginProgram<'b>, TeletextAugmentedOriginProgramError> {
         budget.max_work = self.assembly.cap(budget.max_work);
+        budget.max_identity_checks = self.identity_checks.cap(budget.max_identity_checks);
         let (result, admitted) =
-            build_teletext_augmented_origin_program_with_usage(placement, budget);
-        if !self.assembly.debit(admitted) {
+            build_teletext_augmented_origin_program_with_work_usage(placement, budget);
+        let assembly_ok = self.assembly.debit(admitted.work);
+        let identity_ok = self.identity_checks.debit(admitted.identity_checks);
+        if !assembly_ok || !identity_ok {
             return Err(TeletextAugmentedOriginProgramError {
                 owner: placement.plan().composition().owner(),
                 origin: None,

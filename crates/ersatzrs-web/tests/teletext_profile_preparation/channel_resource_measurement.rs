@@ -298,6 +298,12 @@ fn metered_reencode(
     policy.encoding.max_placement_work = Some(usize::MAX);
     policy.encoding.max_assembly_work = Some(usize::MAX);
     policy.encoding.max_ancestry_work = Some(usize::MAX);
+    policy.encoding.max_collected_commands = Some(usize::MAX);
+    policy.encoding.max_collected_drcs_references = Some(usize::MAX);
+    policy.encoding.max_spatial_event_visits = Some(usize::MAX);
+    policy.encoding.max_spatial_invocation_visits = Some(usize::MAX);
+    policy.encoding.max_identity_checks = Some(usize::MAX);
+
     let started = Instant::now();
     let (metered, usage) = encode_teletext_authored_service_with_work_usage(
         prepared.encoded().unwrap().declared().clone(),
@@ -314,6 +320,11 @@ fn metered_reencode(
     assert!(usage.placement_work.unwrap() > 0);
     assert!(usage.assembly_work.unwrap() > 0);
     assert!(usage.ancestry_work.unwrap() > 0);
+    assert!(usage.collected_commands.unwrap() > 0);
+    assert!(usage.collected_drcs_references.unwrap() > 0);
+    assert!(usage.spatial_event_visits.unwrap() > 0);
+    assert!(usage.spatial_invocation_visits.unwrap() > 0);
+
     (usage, micros)
 }
 
@@ -480,7 +491,12 @@ async fn sixteen_authored_pages_with_shared_objects_and_drcs_preserve_native_flo
                 "realization_updates":usage.realization_updates.unwrap(),
                 "placement_work":usage.placement_work.unwrap(),
                 "assembly_work":usage.assembly_work.unwrap(),
-                "ancestry_work":usage.ancestry_work.unwrap()},
+                "ancestry_work":usage.ancestry_work.unwrap(),
+                "collected_commands":usage.collected_commands.unwrap(),
+                "collected_drcs_references":usage.collected_drcs_references.unwrap(),
+                "spatial_event_visits":usage.spatial_event_visits.unwrap(),
+                "spatial_invocation_visits":usage.spatial_invocation_visits.unwrap(),
+                "identity_checks":usage.identity_checks.unwrap()},
             "timings_micros":{"prepare_and_encode":prepare_micros,"metered_reencode":metered_encode_micros,"save":save_micros,"historical_preview_reload":preview_micros,"request_and_accept":publication_micros,"accepted_reload":reload_micros}
         })
     );

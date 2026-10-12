@@ -1,12 +1,12 @@
 //! Bounded unchanged-main anchors, not augmented wire or whole-plane equivalence.
 //! Generated DAG order does not settle retained later paints; a subsequent
 //! producer must compare its complete augmented display against the original.
+use super::compile_context::TeletextCompileContext;
 use super::TeletextBaseCompatibilityRealizationPlan;
 use ersatzrs_domain::{
-    resolve_teletext_spatial_program, TeletextEnhancementObjectCatalog, TeletextEnhancementSource,
-    TeletextObjectCatalogBudget, TeletextObjectOffset, TeletextPageAddress,
-    TeletextSpatialInvocationId, TeletextSpatialRootSource, TeletextSpatialTraceBudget,
-    TeletextSpatialTraceError,
+    TeletextEnhancementObjectCatalog, TeletextEnhancementSource, TeletextObjectCatalogBudget,
+    TeletextObjectOffset, TeletextPageAddress, TeletextSpatialInvocationId,
+    TeletextSpatialRootSource, TeletextSpatialTraceBudget, TeletextSpatialTraceError,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +163,24 @@ pub fn plan_teletext_origin_carrier_placement_with_usage<'a>(
     Result<TeletextOriginCarrierPlacement<'a>, TeletextOriginCarrierPlacementError>,
     usize,
 ) {
+    plan_teletext_origin_carrier_placement_with_context_and_usage(
+        plan,
+        catalog,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
+}
+
+/// Keep placement admissions separate while sharing both spatial traversal passes.
+pub(super) fn plan_teletext_origin_carrier_placement_with_context_and_usage<'a>(
+    plan: &'a TeletextBaseCompatibilityRealizationPlan<'a>,
+    catalog: &'a TeletextEnhancementObjectCatalog,
+    budget: TeletextOriginCarrierPlacementBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> (
+    Result<TeletextOriginCarrierPlacement<'a>, TeletextOriginCarrierPlacementError>,
+    usize,
+) {
     let mut planner = PlacementPlanner {
         plan,
         catalog,
@@ -172,20 +190,21 @@ pub fn plan_teletext_origin_carrier_placement_with_usage<'a>(
     let outcome = (|| {
         planner.preflight()?;
         let composition = plan.composition();
-        let trace = resolve_teletext_spatial_program(
-            composition.owner(),
-            composition.program(),
-            catalog,
-            budget.spatial,
-        )
-        .map_err(|error| TeletextOriginCarrierPlacementError {
-            owner: composition.owner(),
-            origin: None,
-            location: error.location,
-            root_source: error.root_source,
-            invocation: error.invocation,
-            reason: Failure::Spatial(Box::new(error)),
-        })?;
+        let trace = context
+            .resolve_spatial_program(
+                composition.owner(),
+                composition.program(),
+                catalog,
+                budget.spatial,
+            )
+            .map_err(|error| TeletextOriginCarrierPlacementError {
+                owner: composition.owner(),
+                origin: None,
+                location: error.location,
+                root_source: error.root_source,
+                invocation: error.invocation,
+                reason: Failure::Spatial(Box::new(error)),
+            })?;
         let mut gaps = vec![TeletextOriginCarrierGap {
             after_command: None,
             caller: (0, 0),

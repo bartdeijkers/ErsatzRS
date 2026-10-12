@@ -4332,10 +4332,27 @@ same context through physical replay, and commits prospective charges only after
 admission. A genuinely empty ancestry pass consumes zero and is valid with zero
 credit; a real invocation must fit its minimum and correspondence visits.
 
-Assembly work does not measure identity searches whose failed recipe cost is
-still unreported. Collection/spatial, identity and catalogue costs remain separate
-unfinished admission work. These meters cannot be summed into an invented total
-CPU/RSS cost.
+Five further optional inclusive fields share the same context:
+`max_collected_commands`, `max_collected_drcs_references`,
+`max_spatial_event_visits`, `max_spatial_invocation_visits` and
+`max_identity_checks`. The usage fields drop the `max_` prefix. Collection charges
+expanded commands and appended DRCS occurrences, including supplied physical
+program collection inside DRCS resolution. Spatial counts include both count and
+emit passes of original execution, carrier placement and physical replay;
+trace-local IDs still restart for emission. Earlier admissions
+survive semantic failures; denied visits consume no credit.
+
+The domain collection, DRCS-program and spatial `*_with_usage` siblings preserve
+the original result and report admitted visits even on error. Carrier recipe
+`build_teletext_origin_carrier_with_usage` reports admitted catalogue scans and ID
+candidate probes; assembly's `*_with_work_usage` reports separate work and
+identity checks across both recipe passes. Failed recipes debit before returning
+failure, without inferring their cost from a successful final ID.
+
+These meters cannot be summed into an invented total CPU/RSS cost. Catalogue
+indexing/graph validation, attribute execution and other native work still need
+separate admission analysis; structural reservation is not full validation cost.
+No production limits or full engine acceptance are inferred.
 Resource-rich measurement and the canonical P9A-04 receipt determine the next
 production-policy step; no production defaults are inferred here.
 

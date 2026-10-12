@@ -3,9 +3,9 @@
 //! only within their placement component; packing and whole-display comparison
 //! (including original pending and actual invocation ancestry) remain required.
 use super::{
-    build_teletext_origin_carrier, TeletextMainCompositionSource, TeletextOriginCarrierBudget,
-    TeletextOriginCarrierCommandRole, TeletextOriginCarrierError, TeletextOriginCarrierPlacement,
-    TeletextOriginCarrierPlacementPending,
+    build_teletext_origin_carrier_with_usage, TeletextMainCompositionSource,
+    TeletextOriginCarrierBudget, TeletextOriginCarrierCommandRole, TeletextOriginCarrierError,
+    TeletextOriginCarrierPlacement, TeletextOriginCarrierPlacementPending,
 };
 use ersatzrs_domain::{
     TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
@@ -25,6 +25,14 @@ pub struct TeletextAugmentedOriginProgramBudget {
     /// Assembly scans and catalogue entry/command visits, not a CPU-time guarantee.
     pub max_work: usize,
     pub recipe: TeletextOriginCarrierBudget,
+}
+
+/// Separate admitted assembly reservations and catalogue/ID checks across both
+/// recipe passes, including failed recipes. These are not total CPU/RSS costs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextAugmentedOriginProgramUsage {
+    pub work: usize,
+    pub identity_checks: usize,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextAugmentedOriginSource {
@@ -226,6 +234,23 @@ pub fn build_teletext_augmented_origin_program_with_usage<'a>(
     Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
     usize,
 ) {
+    let (result, usage) =
+        build_teletext_augmented_origin_program_with_work_usage(placement, budget);
+    (result, usage.work)
+}
+
+/// Build the ordinary candidate with independent admitted assembly and ID usage.
+/// Both derivation passes debit successful checks before propagating any recipe
+/// failure. Denied reservations consume no credit; previous usage is retained.
+/// # Errors
+/// Preserves the original located failure and never returns a partial candidate.
+pub fn build_teletext_augmented_origin_program_with_work_usage<'a>(
+    placement: &'a TeletextOriginCarrierPlacement<'a>,
+    budget: TeletextAugmentedOriginProgramBudget,
+) -> (
+    Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
+    TeletextAugmentedOriginProgramUsage,
+) {
     let mut builder = Builder {
         placement,
         budget,
@@ -262,7 +287,13 @@ pub fn build_teletext_augmented_origin_program_with_usage<'a>(
             carriers,
         })
     })();
-    (result, budget.max_work - builder.work)
+    (
+        result,
+        TeletextAugmentedOriginProgramUsage {
+            work: budget.max_work - builder.work,
+            identity_checks: budget.max_identity_checks - builder.ids,
+        },
+    )
 }
 type Failure = TeletextAugmentedOriginProgramFailure;
 type Error = TeletextAugmentedOriginProgramError;
@@ -476,23 +507,17 @@ impl<'a> Builder<'a> {
         self.catalog_work(catalog.definitions().len(), commands, 1, Some(origin))?;
         let mut budget = self.budget.recipe;
         budget.max_id_checks = budget.max_id_checks.min(self.ids);
-        let recipe = build_teletext_origin_carrier(
+        let (result, admitted) = build_teletext_origin_carrier_with_usage(
             self.placement.plan().composition(),
             origin,
             catalog,
             budget,
-        )
-        .map_err(|error| self.error(Some(origin), Failure::Carrier(Box::new(error))))?;
-        let cost = catalog
-            .definitions()
-            .len()
-            .checked_add(usize::from(recipe.definition().identity.object_id().get()) + 1)
-            .ok_or_else(|| self.error(Some(origin), Failure::AllocationSize))?;
+        );
         self.ids = self
             .ids
-            .checked_sub(cost)
+            .checked_sub(admitted)
             .ok_or_else(|| self.error(Some(origin), Failure::AllocationSize))?;
-        Ok(recipe)
+        result.map_err(|error| self.error(Some(origin), Failure::Carrier(Box::new(error))))
     }
     fn preflight(&mut self) -> Result<(usize, usize), Error> {
         let composition = self.placement.plan().composition();

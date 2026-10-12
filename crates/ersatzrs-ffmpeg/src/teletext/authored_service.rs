@@ -70,10 +70,20 @@ pub struct TeletextAuthoredServiceEncodingBudget {
     /// Optional cumulative admitted carrier-placement visits.
     pub max_placement_work: Option<usize>,
     /// Optional cumulative assembly visits and conservative clone reservations;
-    /// carrier identity search has a separate unfinished accounting boundary.
+    /// carrier identity search is independently bounded below.
     pub max_assembly_work: Option<usize>,
     /// Optional cumulative admitted invocation-correspondence visits/reservations.
     pub max_ancestry_work: Option<usize>,
+    /// Optional cumulative admitted command visits in original and supplied-program collection.
+    pub max_collected_commands: Option<usize>,
+    /// Optional cumulative admitted DRCS reference occurrences in those collections.
+    pub max_collected_drcs_references: Option<usize>,
+    /// Optional cumulative admitted event visits across count and emit spatial passes.
+    pub max_spatial_event_visits: Option<usize>,
+    /// Optional cumulative admitted invocation visits across both spatial passes.
+    pub max_spatial_invocation_visits: Option<usize>,
+    /// Optional cumulative admitted catalogue scans and carrier-ID candidate probes.
+    pub max_identity_checks: Option<usize>,
     /// Independent stage bounds applied to each display candidate.
     pub normalization: TeletextNormalizedMainProgramBudget,
 }
@@ -90,6 +100,11 @@ pub struct TeletextAuthoredServiceEncodingUsage {
     pub placement_work: Option<usize>,
     pub assembly_work: Option<usize>,
     pub ancestry_work: Option<usize>,
+    pub collected_commands: Option<usize>,
+    pub collected_drcs_references: Option<usize>,
+    pub spatial_event_visits: Option<usize>,
+    pub spatial_invocation_visits: Option<usize>,
+    pub identity_checks: Option<usize>,
 }
 
 impl TeletextAuthoredServiceEncodingUsage {
@@ -102,6 +117,11 @@ impl TeletextAuthoredServiceEncodingUsage {
             placement_work: budget.max_placement_work.map(|_| 0),
             assembly_work: budget.max_assembly_work.map(|_| 0),
             ancestry_work: budget.max_ancestry_work.map(|_| 0),
+            collected_commands: budget.max_collected_commands.map(|_| 0),
+            collected_drcs_references: budget.max_collected_drcs_references.map(|_| 0),
+            spatial_event_visits: budget.max_spatial_event_visits.map(|_| 0),
+            spatial_invocation_visits: budget.max_spatial_invocation_visits.map(|_| 0),
+            identity_checks: budget.max_identity_checks.map(|_| 0),
         }
     }
 }
