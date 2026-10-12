@@ -412,6 +412,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Bound concurrent large teletext test fixtures and release complete services
+  between lifecycle cases, preventing test runs from exhausting runner memory.
+
+- Align teletext overlap and scan-continuity test fixtures with panel-colour
+  validation and managed probe cleanup ownership. Allow explicitly selected
+  Rust-only CI runs on repaired revisions without treating them as full CI proof.
 - Reject full-screen and full-row colour selectors in authored teletext objects
   addressing either side panel, with original command and invocation diagnostics.
   Preserve legal main-page colours and independent panel glyph/cell attributes;
@@ -444,6 +450,10 @@ release section when tagging a release.
 
 - Keep Health links readable in both themes by using the table's text colour
   and an underline instead of an accent colour with insufficient dark contrast.
+- Keep XMLTV guides readable when metadata contains XML-forbidden characters.
+  Preserve rich guide fields, strictly validate custom template fragments before
+  appending them, sanitize per-item fallbacks, and validate the complete document
+  before returning a successful XML response.
 - Keep the on-demand checkpoint regression test's virtual clock stationary
   during SQLite I/O, avoiding intermittent CI write timeouts while preserving
   its checkpoint timing and viewer-position assertions.

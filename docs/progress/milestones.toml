@@ -2724,6 +2724,55 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-12 authorized checkpoint-backup integration:
+The maintainer separately authorizes pushing the completed f677902d/b8b9bcef
+checkpoints to origin/main without CI. Integrate remote9fc16c5e first, retaining
+its XMLTV validation, bounded fixture lifetime/concurrency and all session records.
+Every original-age runtime source and prior output-facts/PSI/stream source remains
+byte-identical to b8b9bcef; reuse its93 and the prior136 focused-case receipts
+within their original scopes. No fresh client, transport or full-engine proof is
+inferred from this merge.
+
+All19 additional merged cases pass in Nextest
+ae036a85-2aec-4ada-b53e-92fcc2b90f14: the16 guide regressions and three remote
+fixture corrections, under one sequential --lib graph for domain/FFmpeg/web.
+Command: ./run.sh test -p ersatzrs-domain -p ersatzrs-ffmpeg -p ersatzrs-web
+--lib -E 'test(transport::iptv::guide::) |
+test(charset_and_position_only_overlap_use_addressed_cells_without_glyph_or_panel_filtering) |
+test(intrinsic_acquisition_capacity_failure_is_atomic_at_replacement) |
+test(first_long_cycle_resource_repeat_clears_c4_c8_without_erasing_later_displays)'
+--test-threads 1. The changed nextest configuration parses and selects these cases.
+Strict web all-target Clippy, formatting, progress/architecture and scoped
+Clippy-allowance validation pass. Read-only independent integration review verifies
+remote implementation changes are disjoint; retain the resolved session union.
+Seven unrelated worktree changes are separately preserved and excluded from the
+backup commit. Use [skip ci] on the integration commit, no force/tags/releases;
+confirm exact remote SHA and Actions separately after pushing. All six Phase9
+milestone contracts/statuses/dependencies remain unchanged. Next implement the
+source-independent accepted-intent factory described below; Health/live ownership
+and every full authored/editor/client/admin/Lua/playback/platform gate stay open.
+
+2026-10-12 ordinary-route integration audit:
+The next synthetic flow must reload accepted state for the resolved output
+channel under the original absolute route deadline, qualify the actual generated
+command, discover ownership on the same stdout, then construct the real binding
+and pass its original-age prefix to the existing optional pump. No placeholder
+program/PCR, producer reinvocation or latest-draft promotion supplies authority.
+Retained late binding needs a memory preflight before its constructor allocates
+a validation gate; reserve, cancellation and pre-write raw fallback remain intact.
+
+Native design/encoding budget constructors currently exist only in test fixtures.
+Do not promote their eight-display/sixteen-record limits to production policy.
+Existing wire caps (8MiB response, 1,024 records per collection, 4MiB request) do not establish
+semantic/normalization allocation bounds. Define explicit host limits with checked
+arithmetic; rate/PCR-period hints come from the actual generated command and
+program/PCR identifiers from actual PSI. The configured PCR period alone does
+not establish maximum observed gap. Missing authority must preserve ordinary
+playback and expose the rejection through the existing Health/status mechanisms.
+This is an implementation gap, not an accepted authored-feature restriction.
+Production Health/live ownership, the full synthetic user flow and all existing
+engine/editor/admin/Lua/platform requirements remain open.
+
 2026-10-12 preparatory original-age source-discovery checkpoint:
 explicit final-output bindings can now discover the sole actual program/PCR using
 bounded reads over the same stdout. All complete packets of each read precede

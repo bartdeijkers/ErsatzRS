@@ -67,3 +67,10 @@ description = 'External JSON playouts previously produced no guide items. The sh
 discovered = '2026-09-29'
 evidence = 'UCU-09 milestone evidence records reader and SQLite guide tests for episode/movie metadata, minimum guide duration, mirror offsets, invalid start times and exclusion of stale persisted items. The remote HTTP fixture also verifies the external title in XMLTV without provider paths or tokens (nextest 5ea77904-42e4-451e-9d74-a2b973e3d6ba). Remaining transport acceptance is tracked separately in streaming debt ucu09-row145-external-json-consumption.'
 resolved = true
+
+[[debt]]
+id = 'xmltv-xml10-output-validity'
+description = 'A live guide contained three U+FFFE characters and failed strict XML parsing. The old quick-xml event-only check also accepted malformed references and attributes. Output now replaces forbidden literal characters with U+FFFD, validates fragments before appending, sanitizes fallback text/attributes and validates the complete document. Validation combines roxmltree structure/namespace checks with quick-xml numeric-reference checks; metadata whitespace and legal Unicode are preserved.'
+discovered = '2026-10-10'
+evidence = 'The 16 focused guide regressions pass, covering all six programme kinds, malformed templates, atomic fallback, XML character boundaries, entities, attributes, namespaces, CDATA and an empty guide. The captured response was processed with the production XML boundary and independently parsed with Python Expat: 12 channels and 2629 programmes survive, with every byte except the three forbidden characters preserved. Snapshot semantic comparison and dependency audit pass. Full Rust closeout passes: 4030 tests plus the workspace doctest phase (no runnable doctests); 216 tests are skipped by the canonical selection. Strict web Clippy (`cargo clippy -p ersatzrs-web --all-targets -- -D warnings`), `cargo deny check`, formatting and progress validation pass. Deployment to the reported instance remains separate.'
+resolved = true
