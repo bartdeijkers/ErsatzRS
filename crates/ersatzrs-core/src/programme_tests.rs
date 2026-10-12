@@ -388,3 +388,20 @@ fn civil_window_rejects_leap_second_capture_without_shifting_its_date() {
         "civil calendar capture cannot represent a leap second"
     );
 }
+
+#[test]
+fn clock_identity_preserves_resolved_names_and_never_invents_a_fixed_or_posix_name() {
+    for name in ["Europe/Amsterdam", "America/New_York", "UTC"] {
+        let clock = ProgrammeClock::named(name).unwrap();
+        assert_eq!(clock.iana_name(), Some(name));
+    }
+    let case_alias = ProgrammeClock::named("europe/AMSTERDAM").unwrap();
+    assert_eq!(case_alias.iana_name(), Some("Europe/Amsterdam"));
+    for timezone in [
+        TimeZone::fixed(jiff::tz::Offset::constant(2)),
+        TimeZone::posix("EST5EDT,M3.2.0,M11.1.0").unwrap(),
+        TimeZone::unknown(),
+    ] {
+        assert_eq!(ProgrammeClock(timezone).iana_name(), None);
+    }
+}

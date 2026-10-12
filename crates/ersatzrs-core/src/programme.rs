@@ -326,6 +326,14 @@ impl ProgrammeClock {
         TimeZone::get(name).map(Self)
     }
 
+    /// Genuine resolved IANA identity, including an explicitly resolved UTC clock.
+    /// Unnamed `TZif`, nonzero fixed offsets, POSIX and unknown clocks return `None`;
+    /// callers requiring a named request context must reject rather than guess.
+    #[must_use]
+    pub fn iana_name(&self) -> Option<&str> {
+        self.0.iana_name()
+    }
+
     /// Return UTC boundaries of the instant's local calendar day.
     ///
     /// # Errors

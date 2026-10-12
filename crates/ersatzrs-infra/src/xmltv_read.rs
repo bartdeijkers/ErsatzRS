@@ -90,7 +90,36 @@ impl GuideReadBudget {
         self.expansion.as_ref().map(|budget| budget.usage)
     }
 
-    fn reserve_expansion(&mut self, nodes: usize, bytes: usize) -> Result<(), sqlx::Error> {
+    pub(crate) const fn remaining_source_limits(&self) -> GuideReadLimits {
+        // Successful admission always keeps usage within both immutable limits.
+        GuideReadLimits {
+            max_records: self.limits.max_records - self.usage.records,
+            max_source_bytes: self.limits.max_source_bytes - self.usage.source_bytes,
+        }
+    }
+
+    pub(crate) fn require_expansion(&self) -> Result<(), sqlx::Error> {
+        if self.expansion.is_none() {
+            return Err(sqlx::Error::Decode(
+                "guide snapshot requires an explicit metadata expansion policy".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn charge_source(
+        &mut self,
+        records: usize,
+        source_bytes: usize,
+    ) -> Result<(), sqlx::Error> {
+        self.charge(records, source_bytes)
+    }
+
+    pub(crate) fn reserve_expansion(
+        &mut self,
+        nodes: usize,
+        bytes: usize,
+    ) -> Result<(), sqlx::Error> {
         let Some(expansion) = &mut self.expansion else {
             return Ok(());
         };

@@ -114,7 +114,7 @@ pub(super) async fn install_contract(fixture: &Fixture, addon: &str, label: &str
     .unwrap();
 }
 
-async fn configure_pair(fixture: &Fixture, first: &Value, second: &Value) {
+pub(super) async fn configure_pair(fixture: &Fixture, first: &Value, second: &Value) {
     install_secondary(fixture).await;
     for (addon, label, response) in [(ADDON, "first", first), (SECONDARY, "second", second)] {
         install_contract(

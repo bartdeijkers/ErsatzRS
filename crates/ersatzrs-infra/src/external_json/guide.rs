@@ -131,7 +131,7 @@ fn shift(time: DateTime<Utc>, offset: Duration) -> Result<DateTime<Utc>, sqlx::E
         .ok_or_else(|| sqlx::Error::Decode(Box::new(super::ExternalJsonError::TimeRange)))
 }
 
-fn content(
+pub(crate) fn content(
     program: super::ExternalJsonProgram,
     programme_context: bool,
 ) -> (String, XmltvProgrammeContent) {

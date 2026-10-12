@@ -1161,10 +1161,13 @@ Accepted-source reads now borrow one transaction and bound document/path bytes p
 all raw programme records. Typed-transaction metadata batches now bound aggregate
 raw rows/value bytes while preserving legacy hydration. An explicit expansion policy
 now admits decoded-list slots/buffers, intermediate model slots and metadata copies
-before allocation, separately from source costs. Next compose main SQL, metadata,
-accepted external sources and retained projection/occurrence/segment costs in one
-complete grouped guide snapshot, capturing raw locale and a genuine named system clock; then connect
-safe promotion and localized preview controls. Original-only capture
+before allocation, separately from source costs. A new transaction-owned grouped
+snapshot composes main SQL, metadata, accepted sources and conservative projection/
+occurrence/segment costs across channels. Host composition captures the actual named
+system clock and strict catalog locale and feeds installed-profile native preparation;
+verification is recorded in P9A-04. Mutable-file capture/recheck and source freshness,
+trusted generation ownership, safe promotion and localized preview controls remain next.
+Original-only capture
 is not an editor-permission or zone/template acceptance.
 Prioritize the existing synthetic profile-selection→validation→preview→explicit
 publication→suitable-client display/navigation flow next; P9A-04 owns its compact

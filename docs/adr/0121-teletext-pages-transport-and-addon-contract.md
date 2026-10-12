@@ -461,14 +461,27 @@ intervals differing from actual segments remain intact. Explicit unknown
 None-media zero offsets do not become invented source timing. The builder cannot
 prove acquisition completeness, source revision or generation ownership.
 
+Preparatory host acquisition now captures selected channel/source identities,
+raw settings, all-time SQL items, rich metadata and accepted External JSON
+revisions through one caller-owned read transaction. Separate aggregate source
+and modeled expansion admission precede retrieval, decoding and copies; complete
+channel-local grouping precedes window filtering. The actual system clock must
+supply a genuine IANA name, and page-language codes/aliases resolve only against
+the generated host catalog. The same captured context feeds V1/V2 installed-profile
+invocation and native unpublished candidates. Missing accepted revisions do not
+confer mutable-file authority. This proves the bounded accepted-source subset,
+not complete source lifecycle, freshness or generation ownership. P9A-04 owns
+the canonical component evidence and remaining integration gaps.
+
 Response parsing checks 8 MiB, the exact opaque generation echo and 1,024-record
 bound. Application conversion checks values and the whole page-set structure
 before returning an unpublished draft, preserving literal text, mosaics, styles
 and links without partial results. The 1,024-byte generation-token bound is host
-resource policy. Authoritative locale composition and guide acquisition,
-projection completeness, source association, generation ownership, capability
-profile-specific service activation, native encoding and publication
-remain open host gates.
+resource policy. Complete source lifecycle/provenance and fresh source
+association, trusted generation ownership, full encoding/standards acceptance,
+profile-specific service activation, localized administration and safe publication
+remain open host gates. The bounded acquisition/native preparation checkpoint
+does not waive those requirements or independently accept the engine.
 
 A preparatory infrastructure command primitive accepts an already host-resolved
 command and strict request bytes. An owned worker retains the managed native

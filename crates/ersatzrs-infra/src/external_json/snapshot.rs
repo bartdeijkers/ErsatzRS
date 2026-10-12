@@ -123,6 +123,47 @@ pub async fn accepted_on(
     playout_id: i64,
     budget: AcceptedSnapshotBudget,
 ) -> Result<Option<BoundedSnapshot>, AcceptedSnapshotError> {
+    checked_accepted_on(connection, playout_id, budget)
+        .await?
+        .map(CheckedAcceptedDocument::parse)
+        .transpose()
+}
+
+/// Exact bounded storage/count facts; only this module can construct them.
+pub(crate) struct CheckedAcceptedDocument {
+    revision: i64,
+    schedule_file: String,
+    document: String,
+    usage: AcceptedSnapshotUsage,
+}
+
+impl CheckedAcceptedDocument {
+    pub(crate) const fn usage(&self) -> AcceptedSnapshotUsage {
+        self.usage
+    }
+
+    pub(crate) fn parse(self) -> Result<BoundedSnapshot, AcceptedSnapshotError> {
+        let schedule = super::parse(self.document.as_bytes())
+            .map_err(|_| SnapshotError::Invalid)?
+            .ok_or(SnapshotError::Invalid)?;
+        Ok(BoundedSnapshot {
+            snapshot: Snapshot {
+                revision: self.revision,
+                schedule_file: self.schedule_file,
+                schedule,
+            },
+            usage: self.usage,
+        })
+    }
+}
+
+/// Internal preparse admission point; callers must admit modeled parse costs
+/// before consuming the checked source. No semantic snapshot exists yet.
+pub(crate) async fn checked_accepted_on(
+    connection: &mut sqlx::SqliteConnection,
+    playout_id: i64,
+    budget: AcceptedSnapshotBudget,
+) -> Result<Option<CheckedAcceptedDocument>, AcceptedSnapshotError> {
     let document_limit =
         i64::try_from(MAX_SCHEDULE_BYTES).map_err(|_| AcceptedSnapshotError::Size)?;
     let row = sqlx::query(
@@ -166,15 +207,10 @@ pub async fn accepted_on(
         .checked_mul(std::mem::size_of::<ExternalJsonItem>())
         .filter(|bytes| isize::try_from(*bytes).is_ok())
         .ok_or(AcceptedSnapshotError::Size)?;
-    let schedule = super::parse(document.as_bytes())
-        .map_err(|_| SnapshotError::Invalid)?
-        .ok_or(SnapshotError::Invalid)?;
-    Ok(Some(BoundedSnapshot {
-        snapshot: Snapshot {
-            revision,
-            schedule_file,
-            schedule,
-        },
+    Ok(Some(CheckedAcceptedDocument {
+        revision,
+        schedule_file,
+        document,
         usage,
     }))
 }

@@ -15,7 +15,7 @@ release section when tagging a release.
 
 ### Added
 
-- Teletext guide acquisition can explicitly limit decoded metadata lists, intermediate model slots and copied show/song/remote content before allocation, alongside transaction-owned source-row/byte limits. Full guide snapshot and publication acceptance remain open.
+- Preparatory teletext guide capture keeps channel settings, SQL metadata and accepted External JSON in one bounded read transaction, checks decoded/copied/projection model costs, resolves the actual clock and catalog locale, and feeds installed-profile native preparation without publishing. Source freshness, runtime and complete engine acceptance remain open.
 - Add transaction-owned XMLTV metadata reads with aggregate row/value limits
   before retrieval, including oversized data in corrupted numeric fields.
   Existing guide hydration is preserved; complete guide admission remains open.

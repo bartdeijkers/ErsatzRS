@@ -17,6 +17,10 @@ use crate::xmltv_metadata::load_content_cache;
 pub use crate::xmltv_read::{
     GuideExpansionLimits, GuideExpansionUsage, GuideReadBudget, GuideReadLimits, GuideReadUsage,
 };
+pub use crate::xmltv_snapshot::{
+    capture_guide_snapshot, CapturedGuideChannel, GuideSnapshot, GuideSnapshotError,
+    GuideSnapshotFailure, GuideSnapshotSource,
+};
 
 /// Metadata cache under the existing XMLTV hydration semantics.
 pub type ProgrammeContentCache =
@@ -162,91 +166,7 @@ async fn load_guide_items(
 
     let mut items = Vec::with_capacity(rows.len());
     for row in rows {
-        let start_text: String = row.try_get("Start")?;
-        let finish_text: String = row.try_get("Finish")?;
-        let custom_title = row
-            .try_get::<Option<String>, _>("CustomTitle")?
-            .filter(|value| !value.trim().is_empty());
-        let media_item_id: i64 = row.try_get("MediaItemId")?;
-
-        let source_start = parse_datetime(&start_text).ok_or_else(|| {
-            sqlx::Error::Decode(format!("invalid PlayoutItem Start: {start_text}").into())
-        })?;
-        let source_finish = parse_datetime(&finish_text).ok_or_else(|| {
-            sqlx::Error::Decode(format!("invalid PlayoutItem Finish: {finish_text}").into())
-        })?;
-
-        let (metadata_title, content) = content_cache
-            .get(&media_item_id)
-            .cloned()
-            .unwrap_or_else(|| (None, XmltvProgrammeContent::default()));
-        let title = metadata_title
-            .filter(|title| !title.trim().is_empty())
-            .unwrap_or_default();
-
-        let filler_kind: FillerKind =
-            decode_enum_column("xmltv filler_kind", &row, "FillerKind")
-                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
-
-        let playout_source: i32 = row.try_get("PlayoutSource")?;
-        let offset = if playout_source == 1 {
-            row.try_get::<Option<String>, _>("PlayoutOffset")?
-                .as_deref()
-                .map(try_decode_signed_duration_text)
-                .transpose()
-                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?
-                .unwrap_or_default()
-        } else {
-            Duration::zero()
-        };
-        let start_at = source_start.checked_add_signed(offset).ok_or_else(|| {
-            sqlx::Error::Decode("XMLTV mirror start overflows supported range".into())
-        })?;
-        let finish_at = source_finish.checked_add_signed(offset).ok_or_else(|| {
-            sqlx::Error::Decode("XMLTV mirror finish overflows supported range".into())
-        })?;
-        // Retain the padding rows until grouping is complete. Discarding them
-        // here truncates split films and moves their guide start during previews.
-        let project_optional = |value: Option<DateTime<Utc>>| {
-            value
-                .map(|value| {
-                    value.checked_add_signed(offset).ok_or_else(|| {
-                        sqlx::Error::Decode(
-                            "XMLTV mirror guide time overflows supported range".into(),
-                        )
-                    })
-                })
-                .transpose()
-        };
-        let guide_start = decode_optional_datetime("xmltv guide_start", row.try_get("GuideStart")?)
-            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
-        let guide_finish =
-            decode_optional_datetime("xmltv guide_finish", row.try_get("GuideFinish")?)
-                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
-
-        items.push(ProgrammeGuideItem {
-            playout_id: row.try_get("PlayoutId")?,
-            item_id: row.try_get("ItemId")?,
-            media_item_id: Some(media_item_id),
-            schedule_kind: decode_enum_column("programme schedule kind", &row, "ScheduleKind")
-                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
-            in_point: try_decode_signed_duration_text(&row.try_get::<String, _>("InPoint")?)
-                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
-            out_point: try_decode_signed_duration_text(&row.try_get::<String, _>("OutPoint")?)
-                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
-            guide: XmltvGuideItem {
-                channel_number: row.try_get("Number")?,
-                start: start_at,
-                finish: finish_at,
-                guide_start: project_optional(guide_start)?,
-                guide_finish: project_optional(guide_finish)?,
-                guide_group: row.try_get("GuideGroup")?,
-                filler_kind,
-                custom_title,
-                title,
-                content,
-            },
-        });
+        items.push(materialize_guide_row(&row, &content_cache)?);
     }
 
     items.extend(
@@ -255,7 +175,94 @@ async fn load_guide_items(
     Ok(items)
 }
 
-fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
+pub(crate) fn materialize_guide_row(
+    row: &crate::db::DbRow,
+    content_cache: &crate::xmltv_metadata::ContentCache,
+) -> Result<ProgrammeGuideItem, sqlx::Error> {
+    let start_text: String = row.try_get("Start")?;
+    let finish_text: String = row.try_get("Finish")?;
+    let custom_title = row
+        .try_get::<Option<String>, _>("CustomTitle")?
+        .filter(|value| !value.trim().is_empty());
+    let media_item_id: i64 = row.try_get("MediaItemId")?;
+
+    let source_start = parse_datetime(&start_text).ok_or_else(|| {
+        sqlx::Error::Decode(format!("invalid PlayoutItem Start: {start_text}").into())
+    })?;
+    let source_finish = parse_datetime(&finish_text).ok_or_else(|| {
+        sqlx::Error::Decode(format!("invalid PlayoutItem Finish: {finish_text}").into())
+    })?;
+
+    let (metadata_title, content) = content_cache
+        .get(&media_item_id)
+        .cloned()
+        .unwrap_or_else(|| (None, XmltvProgrammeContent::default()));
+    let title = metadata_title
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_default();
+
+    let filler_kind: FillerKind = decode_enum_column("xmltv filler_kind", row, "FillerKind")
+        .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
+
+    let playout_source: i32 = row.try_get("PlayoutSource")?;
+    let offset = if playout_source == 1 {
+        row.try_get::<Option<String>, _>("PlayoutOffset")?
+            .as_deref()
+            .map(try_decode_signed_duration_text)
+            .transpose()
+            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?
+            .unwrap_or_default()
+    } else {
+        Duration::zero()
+    };
+    let start_at = source_start.checked_add_signed(offset).ok_or_else(|| {
+        sqlx::Error::Decode("XMLTV mirror start overflows supported range".into())
+    })?;
+    let finish_at = source_finish.checked_add_signed(offset).ok_or_else(|| {
+        sqlx::Error::Decode("XMLTV mirror finish overflows supported range".into())
+    })?;
+    // Retain the padding rows until grouping is complete. Discarding them
+    // here truncates split films and moves their guide start during previews.
+    let project_optional = |value: Option<DateTime<Utc>>| {
+        value
+            .map(|value| {
+                value.checked_add_signed(offset).ok_or_else(|| {
+                    sqlx::Error::Decode("XMLTV mirror guide time overflows supported range".into())
+                })
+            })
+            .transpose()
+    };
+    let guide_start = decode_optional_datetime("xmltv guide_start", row.try_get("GuideStart")?)
+        .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
+    let guide_finish = decode_optional_datetime("xmltv guide_finish", row.try_get("GuideFinish")?)
+        .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
+
+    Ok(ProgrammeGuideItem {
+        playout_id: row.try_get("PlayoutId")?,
+        item_id: row.try_get("ItemId")?,
+        media_item_id: Some(media_item_id),
+        schedule_kind: decode_enum_column("programme schedule kind", row, "ScheduleKind")
+            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
+        in_point: try_decode_signed_duration_text(&row.try_get::<String, _>("InPoint")?)
+            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
+        out_point: try_decode_signed_duration_text(&row.try_get::<String, _>("OutPoint")?)
+            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
+        guide: XmltvGuideItem {
+            channel_number: row.try_get("Number")?,
+            start: start_at,
+            finish: finish_at,
+            guide_start: project_optional(guide_start)?,
+            guide_finish: project_optional(guide_finish)?,
+            guide_group: row.try_get("GuideGroup")?,
+            filler_kind,
+            custom_title,
+            title,
+            content,
+        },
+    })
+}
+
+pub(crate) fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
     chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
         .or_else(|_| chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S"))
         .or_else(|_| chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S%.f"))

@@ -103,6 +103,7 @@ pub mod tsduck;
 pub mod xmltv;
 pub(crate) mod xmltv_metadata;
 mod xmltv_read;
+mod xmltv_snapshot;
 pub mod xmltv_templates;
 
 pub use repositories::map_repository_error;

@@ -3807,3 +3807,52 @@ SQL/accepted-source/channel/setting ownership and retained projection/occurrence
 segment costs still require admission by one full guide caller. No publication
 or source freshness authority follows from this cache. P9A-04 owns the focused
 evidence and remaining host acquisition work.
+
+### Captured grouped guide context
+
+`xmltv::capture_guide_snapshot` requires an actual caller-owned transaction,
+explicit selected channel IDs, a half-open UTC window and an expansion-enabled
+`GuideReadBudget`. It retains channel identities, numbers/names, resolved source
+channel and mirror offset, raw `pages.language` and block policy, effective block
+behavior, whole grouped occurrences/segments and numeric source receipts. It
+projects channels independently and groups all stored SQL rows before applying
+the window; no time padding truncates long split programmes. Source IDs and
+settings remain captured facts, without freshness or promotion authority.
+
+Selected channels/settings/playouts/items use the same raw preflight as metadata.
+Accepted External JSON acquisition retains checked document/path/count facts
+before parsing: the shared caller charges one stored record plus every raw
+programme, including duration-filtered records. Before typed parsing it admits
+both programme/item vector slots, conservative optional string-buffer nodes and
+a document-sized decoded-payload ceiling. Missing/corrupt accepted revisions
+fail at located channel/playout coordinates and never invoke mutable-file
+fallback. That legacy capture/recheck workflow still requires integration.
+
+Modeled admission covers intermediate/item/output slots, per-row metadata clones,
+external title/channel-number copies and conservative core grouping/projection/
+segment/sort costs before their operations. The rich content walk names every
+field, so added fields require an explicit accounting decision. Borrowed date
+validation reuses the unchanged legacy parser before error formatting; raw block
+normalization is admitted before parsing. Limits measure slots/new buffers rather
+than container spare capacity, SQLite/driver internals, parser scratch or RSS.
+The legacy XMLTV/source loaders retain their existing behavior.
+
+`host::teletext_guide::capture_teletext_guide` composes the snapshot with the actual
+system `ProgrammeClock` and its genuine IANA identity. Unnamed clocks reject;
+`xmltv.time_zone` never substitutes for the scheduling clock. Three civil dates
+use the existing DST-safe helper. Raw page-language codes/aliases resolve only
+against the generated host catalog; missing or unknown values reject without
+English fallback. The read transaction rolls back after capture without writing.
+The caller's absolute deadline bounds capture and subsequent request/preparation
+awaits.
+
+`CapturedTeletextGuide::request_bytes` uses the existing complete V1/V2 request
+validator and serialization bound. `prepare_document_candidate` feeds the same
+captured facts through installed-profile invocation and the existing native
+compiler, returning an unpublished candidate. Source channels do not acquire
+output binding authority. Its returned candidate lifetime is shortened to the
+earlier original capture/inner preparation deadline and never renewed. The outer
+timeout does not synchronously settle existing producer/CPU jobs; they retain
+existing bounded abandonment ownership. Snapshot costs and the separately
+bounded request/encoding stages do not certify total operation RSS, source
+freshness, trusted generation ownership, safe publication or runtime activation.

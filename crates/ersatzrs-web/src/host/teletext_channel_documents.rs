@@ -72,6 +72,11 @@ impl EncodedChannelTeletextDocumentCandidate {
     pub const fn deadline(&self) -> Instant {
         self.deadline
     }
+    /// Host composition may only shorten the preparation lifetime, never renew it.
+    pub(super) fn restrict_deadline(mut self, deadline: Instant) -> Self {
+        self.deadline = self.deadline.min(deadline);
+        self
+    }
     #[must_use]
     pub fn entry_addon_id(&self) -> Option<&str> {
         self.entry_addon_id.as_deref()
