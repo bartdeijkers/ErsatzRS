@@ -30,11 +30,17 @@ release section when tagging a release.
   PSI, recheck current channel selection and retain the exact shared native
   service. An explicit direct stream route now carries recovered accepted
   generations through the actual producer, with checked channel identity and
-  command ownership across retries. Automatic normal-route lookup, retained
-  accepted-generation routing and full live acceptance remain open.
+  command ownership across retries. Ordinary final direct MPEG-TS responses can
+  now select accepted originals under explicit versioned host policy, with
+  isolated per-channel profiles and bounded recovery. Invalid, missing, busy or
+  exhausted optional recovery preserves ordinary playback; pending drafts do
+  not enter broadcasts. Health reports fresh policy validity in all nine
+  languages without claiming delivery or full Level 2.5 acceptance. Automatic
+  attachment also falls back for unsupported retained sources and capacity-slate
+  joins. Retained accepted-generation routing and full live acceptance remain open.
 - Add durable, independently fenced teletext generation selection and native
   reconstruction of exact frozen originals. Drafts and pending requests remain
-  separate from accepted output; dynamic guide freshness and ordinary stream
+  separate from accepted output; dynamic guide freshness and ongoing generation
   activation remain open.
 - Strengthen preparatory teletext guide fingerprints with the exact accepted
   External JSON document bytes, including changes outside the projected window.

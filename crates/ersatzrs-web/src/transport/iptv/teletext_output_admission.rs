@@ -24,6 +24,7 @@ pub struct TeletextOutputAdmission {
     binding: Option<Arc<TeletextOutputBinding>>,
     accepted: Option<Arc<AcceptedTeletextAdmission>>,
     command: Option<Arc<FfmpegCommand>>,
+    optional_accepted: bool,
 }
 
 impl TeletextOutputAdmission {
@@ -35,6 +36,7 @@ impl TeletextOutputAdmission {
             binding: None,
             accepted: None,
             command: None,
+            optional_accepted: false,
         }
     }
 
@@ -76,6 +78,33 @@ impl TeletextOutputAdmission {
             })),
             ..Self::plain(role)
         })
+    }
+
+    /// Ordinary output may abandon automatic authored attachment when actual
+    /// source discovery finds a role whose provenance is not supported yet.
+    pub(crate) fn with_optional_accepted(
+        intent: Arc<TeletextAcceptedOutputIntent>,
+        application: Arc<ApplicationServices>,
+        deadline: Instant,
+    ) -> Result<Self, TeletextPumpError> {
+        let mut output = Self::with_accepted(
+            TeletextOutputRole::FinalDirectMpegTs,
+            intent,
+            application,
+            deadline,
+        )?;
+        output.optional_accepted = true;
+        Ok(output)
+    }
+
+    /// Preserve explicit accepted/fixed contracts; only automatic attachment
+    /// can become plain before starting an unsupported source epoch.
+    pub(crate) fn without_optional_accepted(self) -> Self {
+        if self.optional_accepted {
+            Self::plain(self.role)
+        } else {
+            self
+        }
     }
 
     /// Explicit boundary identity supplied by the process owner.

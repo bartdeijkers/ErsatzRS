@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-01: finalize the expanded Level 2.5 and QTeletextMaker interchange contract'
+current_focus = 'P9A-01 contract remains open; prioritize the P9A-04 preparatory synthetic ordinary-stream user flow'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1219,11 +1219,17 @@ Catalogue indexing/closure work is already finite under structural caps and
 shared assembly reservations; missing telemetry does not prove unbounded work.
 The finite 100-number/102-display resource workload and cancellation-safe shared
 worker admission are now checkpointed in P9A-04; neither establishes production
-RSS/compiler defaults. Next connect ordinary final-direct MPEG-TS lookup using
-explicit runtime policy and existing accepted admission, then prove one installed
-synthetic addon on two channels with distinct profiles/themes and actual client
-navigation. Missing admin profile/preview/publication handlers and ordinary-route
-accepted lookup are the concrete connection gaps. Retained first-byte command
+RSS/compiler defaults. Ordinary final-direct MPEG-TS lookup and fresh localized
+policy Health are connected under explicit closed version-1 runtime policy.
+One installed synthetic addon is now proven on two channels with distinct
+profiles/themes through native preview/save/explicit acceptance, concurrent
+ordinary Router HTTP streams, TSDuck/independent decoding and headed VLC200->201
+with separate simultaneous red/blue profiles. Fresh policy Health is proven in
+all nine cultures, both themes, JS/no-JS and both headed browsers; in-order SSR
+corrects the demonstrated asynchronous no-JS gap. Missing admin profile/preview/publication
+handlers and explicit trusted preparation/preview policy remain the concrete
+end-user connection gap; native flow proof does not
+close the milestone. Retained first-byte command
 provenance remains required for retained/hybrid output. Accepted-specific retry execution and whole-process restart remain
 unproven. Warm publisher ownership and
 localized preview controls remain open. Dynamic or provenance-unknown originals cannot bypass missing current-role proof.

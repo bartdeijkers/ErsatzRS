@@ -277,6 +277,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("system"), StaticSegment("health"))
                 view=HealthPage
+                ssr=SsrMode::InOrder
             />
             <Route path=(StaticSegment("system"), StaticSegment("logs")) view=LogsPage/>
             <Route

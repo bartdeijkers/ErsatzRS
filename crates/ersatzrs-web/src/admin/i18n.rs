@@ -1488,6 +1488,15 @@ pub enum TextKey {
     TeletextWorkDefault,
     TeletextWorkConfigured,
     TeletextWorkInvalid,
+    TeletextOutputTitle,
+    TeletextOutputAbsentBrief,
+    TeletextOutputAbsentHelp,
+    TeletextOutputConfiguredBrief,
+    TeletextOutputConfiguredHelp,
+    TeletextOutputInvalidBrief,
+    TeletextOutputInvalidHelp,
+    TeletextOutputUnreadableBrief,
+    TeletextOutputUnreadableHelp,
     TeletextDecoderReady,
     TeletextDecoderMissing,
     TeletextDecoderOptions,
@@ -3691,6 +3700,15 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TeletextWorkDefault,
     TextKey::TeletextWorkConfigured,
     TextKey::TeletextWorkInvalid,
+    TextKey::TeletextOutputTitle,
+    TextKey::TeletextOutputAbsentBrief,
+    TextKey::TeletextOutputAbsentHelp,
+    TextKey::TeletextOutputConfiguredBrief,
+    TextKey::TeletextOutputConfiguredHelp,
+    TextKey::TeletextOutputInvalidBrief,
+    TextKey::TeletextOutputInvalidHelp,
+    TextKey::TeletextOutputUnreadableBrief,
+    TextKey::TeletextOutputUnreadableHelp,
     TextKey::TeletextDecoderReady,
     TextKey::TeletextDecoderMissing,
     TextKey::TeletextDecoderOptions,
@@ -4988,6 +5006,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         "Scanner worker" => text(language, TextKey::ScanWorkerTitle).to_owned(),
         "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
         "Teletext work configuration" => text(language, TextKey::TeletextWorkTitle).to_owned(),
+        "Teletext output configuration" => text(language, TextKey::TeletextOutputTitle).to_owned(),
         "Next Runtime Availability" => text(language, TextKey::NextRuntimeAvailability).to_owned(),
         "JavaScript Audio Selection" => {
             text(language, TextKey::JavascriptAudioSelectionTitle).to_owned()
@@ -5343,6 +5362,40 @@ fn teletext_work_health_message(language: UiLanguage, message: &str) -> Option<S
     }
 }
 
+fn teletext_output_health_message(language: UiLanguage, message: &str) -> Option<&'static str> {
+    [
+        TextKey::TeletextOutputAbsentBrief,
+        TextKey::TeletextOutputAbsentHelp,
+        TextKey::TeletextOutputConfiguredBrief,
+        TextKey::TeletextOutputConfiguredHelp,
+        TextKey::TeletextOutputInvalidBrief,
+        TextKey::TeletextOutputInvalidHelp,
+        TextKey::TeletextOutputUnreadableBrief,
+        TextKey::TeletextOutputUnreadableHelp,
+    ]
+    .into_iter()
+    .find(|&key| message == text(UiLanguage::English, key))
+    .map(|key| text(language, key))
+}
+
+fn teletext_configuration_health_message(
+    language: UiLanguage,
+    title: &str,
+    message: &str,
+) -> Option<String> {
+    match title {
+        "Teletext work configuration" => Some(
+            teletext_work_health_message(language, message).unwrap_or_else(|| message.to_owned()),
+        ),
+        "Teletext output configuration" => Some(
+            teletext_output_health_message(language, message)
+                .unwrap_or(message)
+                .to_owned(),
+        ),
+        _ => None,
+    }
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -5367,9 +5420,10 @@ pub fn health_check_message_text(
             .unwrap_or(displayed_message)
             .to_owned();
     }
-    if title == "Teletext work configuration" {
-        return teletext_work_health_message(language, displayed_message)
-            .unwrap_or_else(|| displayed_message.to_owned());
+    if let Some(localized) =
+        teletext_configuration_health_message(language, title, displayed_message)
+    {
+        return localized;
     }
     if title == "Teletext decoding" {
         let key = match displayed_message {
@@ -6377,6 +6431,43 @@ mod tests {
                 );
                 assert_eq!(
                     health_check_message_text(language, "Teletext decoding", "", canonical),
+                    localized
+                );
+                if language != UiLanguage::English {
+                    assert_ne!(localized, canonical);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn teletext_output_health_is_localized_for_every_language_without_runtime_acceptance_claims() {
+        let title = "Teletext output configuration";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            assert_eq!(
+                health_check_title_text(language, title),
+                text(language, TextKey::TeletextOutputTitle)
+            );
+            for key in [
+                TextKey::TeletextOutputAbsentBrief,
+                TextKey::TeletextOutputAbsentHelp,
+                TextKey::TeletextOutputConfiguredBrief,
+                TextKey::TeletextOutputConfiguredHelp,
+                TextKey::TeletextOutputInvalidBrief,
+                TextKey::TeletextOutputInvalidHelp,
+                TextKey::TeletextOutputUnreadableBrief,
+                TextKey::TeletextOutputUnreadableHelp,
+            ] {
+                let canonical = text(UiLanguage::English, key);
+                let localized = text(language, key);
+                assert!(!localized.is_empty());
+                assert_eq!(
+                    health_check_message_text(language, title, canonical, canonical),
+                    localized
+                );
+                assert_eq!(
+                    health_check_message_text(language, title, "", canonical),
                     localized
                 );
                 if language != UiLanguage::English {

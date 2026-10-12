@@ -330,7 +330,7 @@ notes  = '`tests/e2e/collection-detail.spec.ts` seeds a movies-only collection a
 name   = 'HealthPage'
 status = '✅'
 routes = ['/system/health']
-notes  = '`tests/e2e/support-pages.spec.ts` covers Support health rows. `tests/e2e/health-refresh.spec.ts` proves cached navigation, explicit persisted refresh with and without JavaScript, automatic media-state refresh, navigation and Dutch labels in Chromium and Firefox. SSR resolves the initial snapshot before emitting the island; the old rule-2 exemption is removed (UCU-09 row136).'
+notes  = '`tests/e2e/support-pages.spec.ts` covers Support health rows. `tests/e2e/health-refresh.spec.ts` proves cached navigation, explicit persisted refresh with and without JavaScript, automatic media-state refresh, navigation and Dutch labels in Chromium and Firefox. SSR resolves the initial snapshot before emitting the island; the old rule-2 exemption is removed (UCU-09 row136). Phase 9 fresh output-policy reads exposed an out-of-order no-JS gap; in-order SSR now completes that snapshot as HTML. teletext-output-policy-health.spec.ts proves nine cultures, both themes, hydrated/no-JS configuration states and actual Save/Refresh in both headed browsers; P9A-04 owns the exact receipt.'
 
 [[page]]
 name   = 'LogsPage'

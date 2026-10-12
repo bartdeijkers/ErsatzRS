@@ -4429,6 +4429,46 @@ The [versioned Qt controller](https://github.com/videolan/vlc/blob/3.0.20/module
 defines those activation/page controls. P9A-04 owns exact capture/screenshot
 identities, versions, successful rendering and remaining coverage.
 
-Next connect normal-route lookup and Health under explicit production policy. Full warm-resource retirement,
+Ordinary `/iptv/hls-direct/{channel}.ts` now permits selected accepted originals
+when that route owns a final direct MPEG-TS response and
+`ConfigElement["teletext.output.policy"]` is present. This is a version-1 closed
+JSON policy, not a compiler-default preset. Its required fields mirror the
+design, validation, input, composition, encoding and source bounds; every one of
+the thirteen service-wide work credits must be explicit, with zero meaning
+exhausted credit. `recovery_timeout_ms` must be positive and representable.
+The synthetic test fixture `crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json`
+documents the schema and a finite test envelope; it is not a deployment recommendation.
+Unknown fields, duplicate fields, missing/null work credits, invalid source
+limits and configuration larger than 65,536 UTF-8 bytes are rejected.
+Entry, resource lifecycle and saved V1 encoding region cannot be overridden;
+the saved revision supplies them. Actual source PSI supplies program/PCR IDs.
+
+Recovery reads only accepted originals without invoking addons, publishing
+pending revisions or changing configuration. The ordinary owner's original
+twenty-second startup deadline is retained. Optional configuration/recovery
+receives at most half its remaining time, additionally limited by the explicit
+recovery timeout; ordinary playback keeps the other half. Unsupported output
+roles skip automatic lookup. Missing/invalid policy, unavailable/stale accepted
+selection, timeout, exhausted work credit or occupied admission falls back to
+ordinary playback. Existing final-child command qualification, selection checks
+and optional raw-prefix forwarding still own output safety.
+The existing localized Health page reads policy afresh over its cached baseline;
+in-order SSR completes that asynchronous snapshot without JavaScript. Valid
+configuration is not evidence of delivery, full Level 2.5 or memory bounds.
+
+The opt-in `ordinary_stream_flow::` native tests connect one installed synthetic
+addon's separate profiles on two channels to exact validation/native previews,
+saved originals, explicit acceptance, reopened services and concurrent ordinary
+Router requests/actual FFmpeg stdout. Captures use the same create-new prefix
+recipe as above and append `.channel-1.ts` and `.channel-2.ts`. This is not a
+whole executable/TCP/admin-flow restart trial. The exact emitted-unit oracle
+includes first and repeat complete carousel cycles, preserving C4 lifecycle and
+the reserved mFF terminator alongside every page, palette and navigation unit.
+TSDuck, independent page decoding and source AV checks remain separate oracles.
+Use the receipted VLC command above with matching replay/playback rate; merely
+changing the page-entry widget is not rendering/navigation evidence. P9A-04 owns
+the simultaneous red/blue 200->201 capture/image identities and remaining gaps.
+
+Full warm-resource retirement,
 active Health, current generation ownership and all existing engine/client/editor/
 admin/Lua/platform acceptance remain open. P9A-04 owns the canonical proof.

@@ -1,6 +1,9 @@
 #[path = "stream_external.rs"]
 mod external;
 
+#[path = "stream_ordinary_teletext.rs"]
+mod ordinary_teletext;
+
 // POSIX process fixtures complement, but do not replace, native Windows acceptance.
 #[cfg(all(test, unix))]
 #[path = "stream_teletext_tests.rs"]
@@ -236,7 +239,21 @@ pub async fn serve_channel_stream(
     channel_number: &str,
     output_format: OutputFormat,
 ) -> Response {
-    serve_channel_stream_with_binding(state, channel_number, output_format, None).await
+    let role = if output_format == OutputFormat::MpegTs {
+        TeletextOutputRole::FinalDirectMpegTs
+    } else {
+        TeletextOutputRole::OtherContainer
+    };
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    serve_channel_stream_with_output(
+        state,
+        channel_number,
+        output_format,
+        TeletextOutputAdmission::plain(role),
+        deadline,
+        true,
+    )
+    .await
 }
 
 /// Serve a final direct stream with an immutable authored-page snapshot.
@@ -251,7 +268,7 @@ pub async fn serve_channel_stream_with_teletext(
 }
 
 /// Serve accepted native originals through the actual final direct producer.
-/// No package is invoked and ordinary routes still perform no automatic lookup.
+/// No package is invoked. Ordinary routes require explicit host policy to opt in.
 /// Channel identity is checked before startup; current selection, command policy
 /// and actual PSI are checked again by the final stdout owner. Retained and
 /// hybrid output need a separate command-provenance seam and are rejected here.
@@ -270,7 +287,15 @@ pub async fn serve_channel_stream_with_accepted_teletext(
     ) else {
         return teletext_output_unavailable();
     };
-    serve_channel_stream_with_output(state, channel_number, output_format, output, deadline).await
+    serve_channel_stream_with_output(
+        state,
+        channel_number,
+        output_format,
+        output,
+        deadline,
+        false,
+    )
+    .await
 }
 
 async fn serve_channel_stream_with_binding(
@@ -288,15 +313,24 @@ async fn serve_channel_stream_with_binding(
         return teletext_output_unavailable();
     };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-    serve_channel_stream_with_output(state, channel_number, output_format, output, deadline).await
+    serve_channel_stream_with_output(
+        state,
+        channel_number,
+        output_format,
+        output,
+        deadline,
+        false,
+    )
+    .await
 }
 
 async fn serve_channel_stream_with_output(
     state: &AppState,
     channel_number: &str,
     output_format: OutputFormat,
-    output: TeletextOutputAdmission,
+    mut output: TeletextOutputAdmission,
     deadline: tokio::time::Instant,
+    recover_selected_teletext: bool,
 ) -> Response {
     if output.validate_format(output_format).is_err() {
         return teletext_output_unavailable();
@@ -327,6 +361,17 @@ async fn serve_channel_stream_with_output(
     }
 
     let effective_streaming_mode = channel.streaming_mode;
+    if recover_selected_teletext
+        && output_format == OutputFormat::MpegTs
+        && effective_streaming_mode != StreamingMode::TransportStreamHybrid
+        && channel.streaming_engine != ersatzrs_domain::StreamingEngine::Next
+    {
+        if let Some(accepted) =
+            ordinary_teletext::recover_optional_output(state, channel.id, deadline).await
+        {
+            output = accepted;
+        }
+    }
     serve_channel_stream_with_channel(
         state,
         channel,
@@ -908,7 +953,7 @@ async fn serve_channel_stream_admitted_inner(
     effective_streaming_mode: StreamingMode,
     startup_deadline: tokio::time::Instant,
     mut interval_admission: Option<IntervalStreamAdmission>,
-    output: TeletextOutputAdmission,
+    mut output: TeletextOutputAdmission,
 ) -> Response {
     if output.validate_format(output_format).is_err() {
         return teletext_output_unavailable();
@@ -992,6 +1037,9 @@ async fn serve_channel_stream_admitted_inner(
     // Accepted originals need the actual retained attempt's first-byte command
     // identity. The current extension certifies only the initial rate, so never
     // attach an intent to its outer response or start a producer on that claim.
+    if interval_source.is_some() {
+        output = output.without_optional_accepted();
+    }
     if interval_source.is_some() && output.accepted().is_some() {
         return teletext_output_unavailable();
     }
@@ -2190,6 +2238,7 @@ async fn serve_channel_stream_admitted_inner(
         match reserve_mpeg_ts_capacity(state, &channel.number).await {
             Ok(Some(reservation)) => Some(reservation),
             Ok(None) => {
+                output = output.without_optional_accepted();
                 if output.accepted().is_some() {
                     // A slate and the later media command are distinct source
                     // epochs; this explicit accepted owner cannot join them.

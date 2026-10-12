@@ -49,7 +49,7 @@ const AUDIO_KBPS: u32 = 128;
     clippy::disallowed_methods,
     reason = "Explicit opt-in exact-runtime and create-new synthetic capture selection"
 )]
-fn selected(name: &str) -> String {
+pub(super) fn selected(name: &str) -> String {
     std::env::var(name)
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -104,7 +104,7 @@ fn source_policy() -> TeletextSourcePolicy {
     .unwrap()
 }
 
-fn preview_budget() -> TeletextPreviewBudget {
+pub(super) fn preview_budget() -> TeletextPreviewBudget {
     TeletextPreviewBudget {
         max_pages: 16,
         max_model_records: 32_768,
@@ -141,6 +141,14 @@ async fn installed_main_only_pair() -> Fixture {
 }
 
 async fn configure_source(fixture: &Fixture, source: &Path) {
+    configure_source_for_channels(fixture, source, &[1]).await;
+}
+
+pub(super) async fn configure_source_for_channels(
+    fixture: &Fixture,
+    source: &Path,
+    channels: &[i64],
+) {
     fixture.state.pool.execute(r#"
         UPDATE "Resolution" SET "Width"=160,"Height"=90 WHERE "Id"=1;
         INSERT INTO "MediaSource" ("Id") VALUES (10);
@@ -170,11 +178,17 @@ async fn configure_source(fixture: &Fixture, source: &Path) {
         })
         .await
         .unwrap();
-    let mut channel = repositories.channel.get_with_profile(1).await.unwrap();
-    channel.streaming_mode = StreamingMode::TransportStream;
-    channel.preferred_audio_language_code = Some("eng".to_owned());
-    channel.subtitle_mode = ChannelSubtitleMode::None;
-    repositories.channel.upsert(&channel).await.unwrap();
+    for channel_id in channels {
+        let mut channel = repositories
+            .channel
+            .get_with_profile(*channel_id)
+            .await
+            .unwrap();
+        channel.streaming_mode = StreamingMode::TransportStream;
+        channel.preferred_audio_language_code = Some("eng".to_owned());
+        channel.subtitle_mode = ChannelSubtitleMode::None;
+        repositories.channel.upsert(&channel).await.unwrap();
+    }
     let schedule = fixture.root.path().join("synthetic-client-schedule.json");
     let body = serde_json::to_vec(&json!({"startTime":Utc::now().to_rfc3339(),"programs":[{
         "title":"Synthetic local clip", "serverKey":"Synthetic", "duration":60000,
@@ -182,11 +196,14 @@ async fn configure_source(fixture: &Fixture, source: &Path) {
     }]}))
     .unwrap();
     tokio::fs::write(&schedule, body).await.unwrap();
-    sqlx::query(r#"INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","ScheduleFile","Seed") VALUES (1,1,20,?,0)"#)
-        .bind(schedule.to_str().unwrap()).execute(&fixture.state.pool).await.unwrap();
+    for channel_id in channels {
+        sqlx::query(r#"INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","ScheduleFile","Seed") VALUES (?,?,20,?,0)"#)
+            .bind(channel_id).bind(channel_id)
+            .bind(schedule.to_str().unwrap()).execute(&fixture.state.pool).await.unwrap();
+    }
 }
 
-async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
+pub(super) async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
     let rate = muxrate().to_string();
     let args = [
         "-hide_banner",
@@ -240,7 +257,7 @@ async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
     path
 }
 
-async fn check_tools(ffmpeg: &str, ffprobe: &str) {
+pub(super) async fn check_tools(ffmpeg: &str, ffprobe: &str) {
     assert_eq!(ersatzrs_ffmpeg::ffmpeg_path(), ffmpeg);
     assert_eq!(ersatzrs_ffmpeg::ffprobe_path(), ffprobe);
     for tool in [ffmpeg, ffprobe] {
@@ -296,7 +313,7 @@ async fn capture(fixture: &Fixture, binding: Arc<TeletextOutputBinding>) -> Vec<
     capture_response(response).await
 }
 
-async fn capture_response(response: axum::response::Response) -> Vec<u8> {
+pub(super) async fn capture_response(response: axum::response::Response) -> Vec<u8> {
     assert_eq!(response.status(), StatusCode::OK);
     let mut body = response.into_body().into_data_stream();
     tokio::time::timeout(Duration::from_secs(35), async {
@@ -380,7 +397,7 @@ fn redacted_stderr(bytes: &[u8]) -> String {
     output
 }
 
-async fn probe(executable: &str, args: &[&str], input: &[u8], limit: usize) -> Vec<u8> {
+pub(super) async fn probe(executable: &str, args: &[&str], input: &[u8], limit: usize) -> Vec<u8> {
     probe_with_input(executable, args, input, limit, ToolInput::Complete).await
 }
 
@@ -578,7 +595,7 @@ async fn accepted_direct_route_rejects_wrong_channel_and_other_container_before_
     fixture.state.pool.close().await;
 }
 
-async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8]) {
+pub(super) async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8]) {
     let report: Value =
         serde_json::from_slice(&probe(tsanalyze, &["--json"], bytes, 262_144).await).unwrap();
     assert!(
@@ -652,7 +669,7 @@ async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8]) {
         .any(|stream| stream["codec_name"] == "dvb_teletext" && stream["id"] == "0x200"));
 }
 
-async fn decode_page(ffmpeg: &str, bytes: &[u8], page: &str) {
+pub(super) async fn decode_page(ffmpeg: &str, bytes: &[u8], page: &str) {
     let output = probe(
         ffmpeg,
         &[
@@ -721,7 +738,7 @@ async fn video_hashes(ffmpeg: &str, bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
-async fn verify_av(ffmpeg: &str, source: &[u8], delivered: &[u8]) {
+pub(super) async fn verify_av(ffmpeg: &str, source: &[u8], delivered: &[u8]) {
     let hashes: BTreeSet<_> = video_hashes(ffmpeg, source).await.into_iter().collect();
     let actual = video_hashes(ffmpeg, delivered).await;
     assert!(actual.len() >= 20);

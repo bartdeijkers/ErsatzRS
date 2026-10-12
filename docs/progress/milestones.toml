@@ -2724,6 +2724,127 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-12 ordinary selected-original stream connection checkpoint:
+Requirement mapping: synthetic profile selection -> native validation/preview ->
+immutable original save -> explicit pending request/acceptance -> ordinary Router
+HTTP route -> actual final-child MPEG-TS -> independent decoding/client navigation.
+The in-process Router request uses /iptv/hls-direct/{1,2}.ts and real FFmpeg
+stdout, not a private binding API. It is not a whole executable/TCP/admin-flow
+restart trial. One installed synthetic V2 addon serves two channels with different
+profiles, independent accepted identities and different M29 palettes/raster results.
+Both services survive pool/AppState reopen and concurrent ordinary-route captures
+without invoking the addon again or mutating settings, publication or playout.
+
+The host's closed version-1 ConfigElement teletext.output.policy requires explicit
+design/validation/input/composition/encoding/source bounds and all thirteen work
+credits; zero remains an exhausted quota. There are no production defaults or
+saved-content overrides. Optional configuration/recovery receives at most half
+the remaining original twenty-second startup deadline and the configured recovery
+timeout. Missing/invalid policy, pending-only content, exhausted credit, tiny
+deadline, occupied work capacity and shared-application Off retain source AV and
+accepted pointers. Actual retained-source discovery and capacity-slate joins strip
+only automatic accepted attachment; explicit accepted/fixed contracts stay intact.
+This fixes a credible ordinary retained-source 503 regression before producer
+startup. Actual retained-route AV proof remains missing: existing retained fixtures
+bypass published-source discovery or deliberately lack a usable producer.
+
+Nextest 264694f3-514b-465f-9a62-0c052b75db5e passes 28/28 focused policy, Health,
+localization, startup-deadline and existing direct-owner cases. Native run
+7a4a7638-c8b1-4130-832b-d427f453df78 passes the missing-policy/pending-only case;
+two positive unit-set assertions fail because their initial-only oracle excludes
+two repeat C4 headers and the reserved mFF terminator. There are no missing units.
+The corrected oracle compares the entire exact set from first and repeat complete
+carousel cycles; no palette/navigation/row assertion is relaxed. Native rerun
+6f45bcbb-8967-40f3-b0f3-2a655f573aae passes both affected cases (88.025 seconds).
+The passing original raw-AV case is reused. These three native identities use
+the pinned 2.0.6/n9.0 FFmpeg/ffprobe hashes already recorded below and TSDuck
+3.44-4676. Checks cover source-video frame hashes, literal 440 Hz audio, transport
+sync/TEI/continuity/PCR/PTS/PSI/PID ownership, exact generation/carousel units and
+independent libzvbi text decoding for pages 200/201.
+
+Ordinary captures contain 7,437,468 bytes each. SHA256 channel1 is
+93cadec57d9f6697f07ec09638cb143092369c77a09648e2c30ef6c7c119df22;
+channel2 is 96f9a9023bebdf5d407ac96dec409824f75314e69867042b7f52c7b2c8d3b2b1.
+Two isolated headed WSLg VLC3.0.20-3build6 clients use libzvbi0.2.42-2,
+Level2.5 opaque RGBA and matching quarter-rate replay/playback with 100 ms caching.
+Native activation and numeric page entry produce rendered 200.00 -> 201.00:
+channel1 retains red AZ, channel2 blue AZ. The clients overlap, consume separate
+byte-identical captures and do not remux or loop transport. Earlier wrong-rate
+screenshots display only video and are negative evidence; matching the documented
+client rate fixes that trial without a Rust/transport change. These representative
+glyph/palette/navigation images do not prove full resources/panels/client conformance.
+Positive ignored artifacts under test-results/phase9-ordinary-client have hashes:
+channel-1-paced-page200.png 617ee34ab8b8133445ac6406c53e9fefc0c8d58958e0b25367c737800c07750f;
+channel-1-paced-page201.png 414e613f8bc43c40094b0f43fdbea79a9546f00f75d64d6ac9ec067a46f6499d;
+channel-2-paced-page200.png 2f627ec30deb2e2cc1b83b0fd91806a3bb924b590dbba724d3fb7fad4e907bdb;
+channel-2-paced-page201.png b7050055818a21f693bea37055e61cbee21b8854abd3af62b7b0353fbe6e4f3e.
+Client binary/plugin/library SHA256 are respectively
+1fbb0287954bfb1669927eb8542e82af01508b1fd96cce0cf1ada05a6980bb43,
+b87f42fb841588fe68c0845f4cd56dd1062b287eb92faa5f9a086e5ce5fefd00,
+134705a7ef4d982eb57bf71a9378f3eb0d95237c8dcb686d684e35471ae834b0.
+
+Health reads the same parser afresh over cached results; absent Info, schema-valid
+Pass and invalid/unreadable Warning make no delivery/full-Level2.5/RSS claim.
+Private DTO Clippy renames preserve exact JSON keys and quotas. Localized Health
+source map: /system/health -> HealthPage -> existing HealthIsland; shared
+load_health_snapshot/RefreshHealthSnapshot, SSR fallback POST
+/admin-api/system/health/refresh; no DOM/island/shared-primitive changes.
+The new headed spec targets all nine cultures, both themes, JS/no-JS and sequential
+Chromium/Firefox with actual UI Save/Refresh and disposable state restoration.
+Nextest 145f32cc-e240-4058-b977-92e19cf4b21d passes 11/11 after the private DTO
+renames and shared configuration-message lookup extraction, including all nine
+policy cases and both new/existing configuration localization cases. Together
+with reused unchanged results there are 32 unique successful Rust identities.
+Strict cargo clippy -p ersatzrs-web --all-targets -- -D warnings passes after
+those corrections and again after the route correction; no lint exemption or
+new dependency is added. The existing future-incompatibility note is not a failure.
+
+The first headed run has two passing, two failed and four skipped cases. Its
+no-JS failure exposes a concrete product gap: fresh asynchronous configuration
+access suspends the Health snapshot, and out-of-order SSR needs a replacement
+script. Health now uses in-order SSR, preserving the existing island/HTML shape
+and fully emitting the initial snapshot without JavaScript. The corrected run
+passes all four Chromium cases. Firefox still reports an AbortError because
+the test submits the settings form while initial WASM loading is unfinished.
+The trace locates that error at the native Save redirect, not the Health callback.
+The test now awaits hydration before interacting and after the real redirect;
+no error filter, assertion relaxation or arbitrary sleep is introduced.
+Final Firefox runs 4/4 (2.2 minutes), Chromium hydrated runs 2/2 (43.1 seconds);
+the two unchanged corrected Chromium no-JS cases are reused. All eight unique
+headed combinations cover nine cultures and absent/invalid/configured rows,
+actual UI settings Save and Health Refresh, cache preservation, redaction,
+restored disposable settings and no page/console errors. Canonical ignored result
+JSONs are test-results/phase9-ordinary-policy-health-corrected/playwright-results.json
+(only its two Chromium no-JS identities reused),
+test-results/phase9-ordinary-policy-health-firefox/playwright-results.json and
+test-results/phase9-ordinary-policy-health-chromium/playwright-results.json.
+The wrapper builds and snapshots matched SSR/WASM; unchanged candidates are
+reused after test-only changes. Headed proof covers Health, not authored-page admin.
+Formatting, architecture/progress and hydration checks pass. Canonical
+cargo xtask smoke passes on an isolated host/database with the pinned runtime:
+public internal callbacks remain 404; legacy/hybrid MPEG-TS routes return200
+and source bytes; segmenter variant and session playlists have initial segments.
+Its ordinary playback configuration has no teletext policy. This is regression
+proof, not source/Next/six-platform or complete TSDuck playback-gate acceptance.
+
+Next criterion and concrete blocker: connect the missing localized admin handlers
+for per-channel profile selection, validated preview and explicit publication to
+this same native application flow, then prove the served host/ordinary URL flow.
+Use dedicated profile/binding application commands rather than global addon
+configuration or the generic SaveChannel transaction. Saved draft ID/revision is
+the preview navigation handle; viewing never reinvokes producers or publishes.
+The runtime output policy supplies recovery limits, not trusted preview limits or
+fresh entry/resource lifecycle: these explicit native-policy seams must be connected
+before admin preview can use the same validated model without fixture defaults.
+Show base selection separately from requested/accepted/applied state; effective
+Lua and ongoing output ownership remain unproven. Real-guide promotion still needs
+current-role freshness and cannot inherit the synthetic zero-guide receipt.
+Full Level2.5/fallback, QTeletextMaker/metadata/ownership boundaries, zones/themes,
+Lua timing/error/Continue/Refresh/Reset, whole-process restart, ongoing publication,
+retained/hybrid provenance, native/source/Next playback and all six platforms
+remain required. No milestone status/acceptance/dependency changes or production
+TV-guide addon work; engine-first and NOS200-299-only content boundaries remain.
+
 2026-10-12 finite resource-rich workload and actual-worker admission checkpoint:
 Requirement mapping: bounded synthetic native flow, isolated rejection, original
 operation lifetime and cleanup ownership; this is preparatory engineering proof,

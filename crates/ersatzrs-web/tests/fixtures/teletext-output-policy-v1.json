@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "recovery_timeout_ms": 5000,
+  "design": {
+    "max_serialized_bytes": 262144,
+    "max_documents": 8,
+    "max_response_bytes": 65536,
+    "max_context_bytes": 65536,
+    "max_context_field_bytes": 4096,
+    "max_resource_transmissions": 16
+  },
+  "input": {
+    "max_producers": 8,
+    "max_response_bytes": 32768
+  },
+  "validation": {
+    "service": {
+      "max_records": 16,
+      "max_objects": 16,
+      "max_structure_items": 4096,
+      "max_base_content_bytes": 8192,
+      "max_commands": 8192,
+      "max_collected_commands": 16384,
+      "max_collected_drcs_references": 16
+    },
+    "declarations": {
+      "max_mots": 4,
+      "max_displays": 8,
+      "max_resources": 16,
+      "max_defaults": 16,
+      "max_objects": 16
+    }
+  },
+  "composition": {
+    "max_producers": 8,
+    "max_input_items": 16384,
+    "max_input_content_bytes": 65536,
+    "max_input_commands": 16384,
+    "max_storage_bytes": 16777216,
+    "max_work": 1000000,
+    "service": {
+      "max_records": 16,
+      "max_objects": 16,
+      "max_structure_items": 4096,
+      "max_base_content_bytes": 8192,
+      "max_commands": 8192,
+      "max_collected_commands": 16384,
+      "max_collected_drcs_references": 16
+    },
+    "declarations": {
+      "max_mots": 4,
+      "max_displays": 8,
+      "max_resources": 16,
+      "max_defaults": 16,
+      "max_objects": 16
+    }
+  },
+  "encoding": {
+    "max_pages": 16,
+    "max_units": 1024,
+    "max_commands": 8192,
+    "max_display_updates": 134217728,
+    "max_glyph_comparison_work": 262144,
+    "max_display_comparison_updates": 33554432,
+    "max_realization_updates": 131072,
+    "max_placement_work": 4096,
+    "max_assembly_work": 8192,
+    "max_ancestry_work": 4096,
+    "max_collected_commands": 8192,
+    "max_collected_drcs_references": 1024,
+    "max_spatial_event_visits": 16384,
+    "max_spatial_invocation_visits": 4096,
+    "max_identity_checks": 131072,
+    "max_attribute_cell_updates": 32768,
+    "normalization": {
+      "max_resource_objects": 64,
+      "composition": {
+        "max_input_commands": 4096,
+        "max_output_commands": 4096,
+        "collection": {
+          "max_commands": 8192,
+          "max_drcs_references": 16
+        }
+      },
+      "realization": {
+        "max_commands": 4096,
+        "max_candidates": 4096,
+        "max_origins": 8192,
+        "max_seeds": 64,
+        "max_edges": 4096,
+        "max_updates": 100000
+      },
+      "placement": {
+        "max_commands": 4096,
+        "max_origins": 8192,
+        "max_edges": 4096,
+        "max_work": 100000,
+        "catalog": {
+          "max_objects": 64,
+          "max_commands": 8192
+        },
+        "spatial": {
+          "max_events": 8192,
+          "max_invocations": 512
+        }
+      },
+      "assembly": {
+        "max_input_commands": 4096,
+        "max_output_commands": 4096,
+        "max_carriers": 64,
+        "max_identity_checks": 100000,
+        "max_work": 100000,
+        "recipe": {
+          "max_candidates": 4096,
+          "max_origins": 8192,
+          "max_id_checks": 65600,
+          "max_output_commands": 6,
+          "catalog": {
+            "max_objects": 64,
+            "max_commands": 8192
+          }
+        }
+      },
+      "packing": {
+        "max_objects": 64,
+        "max_commands": 8192
+      },
+      "replay": {
+        "max_commands": 8192,
+        "max_drcs_references": 16
+      },
+      "ancestry": {
+        "max_original_invocations": 256,
+        "max_actual_invocations": 512,
+        "max_carriers": 64,
+        "max_work": 100000
+      },
+      "glyph_comparison": {
+        "max_records": 100000,
+        "max_cells": 1800,
+        "max_diagnostics": 4096,
+        "max_work": 1000000
+      },
+      "display_comparison": {
+        "max_records": 100000,
+        "max_cells": 1800,
+        "max_diagnostics": 32000,
+        "max_updates": 1000000
+      }
+    }
+  },
+  "source": {
+    "elementary_pid": 512,
+    "rate_tolerance_ppm": 1000,
+    "pcr_jitter_ticks": 14,
+    "pcr_gap_slack_ticks": 540000,
+    "pcr_gap_slack_packets": 36,
+    "min_pcr_intervals": 2,
+    "max_window_packets": 1024,
+    "max_buffer_packets": 8192,
+    "probe_maximum_bytes": 192512,
+    "startup_maximum_bytes": 1540096,
+    "max_hold_ms": 2000,
+    "playout_delay_ms": 100,
+    "max_lateness_ms": 100,
+    "first_byte_timeout_ms": 5000,
+    "probe_maximum_time_ms": 5000
+  }
+}

@@ -65,8 +65,21 @@ is an experiment, not production compiler defaults or full engine acceptance.
 Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact
-pre-write fallback. Normal-route lookup, production compiler limits, live Health,
-ongoing publication ownership and complete client acceptance remain open.
+pre-write fallback. Ordinary final-direct MPEG-TS lookup now opts in only through
+the existing ConfigElement key teletext.output.policy. Its closed version-1 JSON
+requires every design, validation, input, composition, encoding and source limit,
+including all thirteen service-work credits. There are no production defaults.
+Saved originals supply entry, resource lifecycle and V1 region; configuration
+cannot replace them or invent source program/PCR identities. Recovery never
+invokes packages or accepts pending drafts. Configuration access and recovery
+together receive at most half of the remaining original twenty-second startup
+deadline, additionally capped by the configured positive recovery timeout.
+Missing/invalid policy, unavailable/stale selection, exhausted credit or busy work
+preserves ordinary playback. Unsupported retained/hybrid/container roles skip
+this automatic recovery. The existing Health view reads this policy afresh and
+reports configuration validity, not delivery or complete authored readiness.
+Production compiler limits, ongoing publication ownership and complete client
+acceptance remain open; P9A-04 owns the scoped ordinary-route receipt.
 The explicit direct route now associates the accepted intent with its resolved
 channel and actual child command, refreshing the snapshot after each successful
 hardware retry. Terminal authored supervision also covers optional raw fallback.
@@ -75,7 +88,7 @@ actual first-byte attempt provenance is implemented; existing fixed/plain routes
 retain their behavior. A real accepted-original/reopen/AV transport capture and
 headed representative palette/glyph/page-navigation trial are recorded in
 P9A-04. They do not certify accepted-specific retries, whole-process restart,
-normal automatic publication or full Level 2.5/client coverage.
+ongoing automatic publication or full Level 2.5/client coverage.
 This preparatory explicit API does not waive full authored/editor/Lua/admin or
 platform acceptance. P9A-04 owns the canonical evidence and next integration step.
 
