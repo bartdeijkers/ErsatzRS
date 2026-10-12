@@ -1484,6 +1484,10 @@ pub enum TextKey {
     ScanWorkerUnavailableBrief,
     ScanWorkerUnavailableHelp,
     TeletextDecoderTitle,
+    TeletextWorkTitle,
+    TeletextWorkDefault,
+    TeletextWorkConfigured,
+    TeletextWorkInvalid,
     TeletextDecoderReady,
     TeletextDecoderMissing,
     TeletextDecoderOptions,
@@ -3683,6 +3687,10 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ScanWorkerUnavailableBrief,
     TextKey::ScanWorkerUnavailableHelp,
     TextKey::TeletextDecoderTitle,
+    TextKey::TeletextWorkTitle,
+    TextKey::TeletextWorkDefault,
+    TextKey::TeletextWorkConfigured,
+    TextKey::TeletextWorkInvalid,
     TextKey::TeletextDecoderReady,
     TextKey::TeletextDecoderMissing,
     TextKey::TeletextDecoderOptions,
@@ -4979,6 +4987,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         "Playback Data Access" => text(language, TextKey::PlaybackDataAccessTitle).to_owned(),
         "Scanner worker" => text(language, TextKey::ScanWorkerTitle).to_owned(),
         "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
+        "Teletext work configuration" => text(language, TextKey::TeletextWorkTitle).to_owned(),
         "Next Runtime Availability" => text(language, TextKey::NextRuntimeAvailability).to_owned(),
         "JavaScript Audio Selection" => {
             text(language, TextKey::JavascriptAudioSelectionTitle).to_owned()
@@ -5319,6 +5328,21 @@ fn scan_and_playback_health_message(
     Some(text(language, key))
 }
 
+fn teletext_work_health_message(language: UiLanguage, message: &str) -> Option<String> {
+    match message {
+        "Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready." =>
+            Some(text(language, TextKey::TeletextWorkDefault).to_owned()),
+        "Teletext work concurrency must be a positive integer. Native teletext operations are unavailable until this setting is corrected." =>
+            Some(text(language, TextKey::TeletextWorkInvalid).to_owned()),
+        _ => {
+            let count = message.strip_prefix("The configured limit is ")?
+                .strip_suffix(" concurrent native teletext operations. This is not a memory limit or proof that authored pages are ready.")?
+                .parse::<u64>().ok().filter(|count|*count>0)?;
+            Some(text(language, TextKey::TeletextWorkConfigured).replace("{count}", &count.to_string()))
+        }
+    }
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -5342,6 +5366,10 @@ pub fn health_check_message_text(
         return scan_and_playback_health_message(language, title, displayed_message)
             .unwrap_or(displayed_message)
             .to_owned();
+    }
+    if title == "Teletext work configuration" {
+        return teletext_work_health_message(language, displayed_message)
+            .unwrap_or_else(|| displayed_message.to_owned());
     }
     if title == "Teletext decoding" {
         let key = match displayed_message {
@@ -6269,6 +6297,58 @@ mod tests {
                 "unrecognized diagnostic"
             );
         }
+    }
+
+    #[test]
+    fn teletext_work_configuration_health_is_localized_for_every_language() {
+        let title = "Teletext work configuration";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            assert_eq!(
+                health_check_title_text(language, title),
+                text(language, TextKey::TeletextWorkTitle)
+            );
+            for key in [TextKey::TeletextWorkDefault, TextKey::TeletextWorkInvalid] {
+                let canonical = text(UiLanguage::English, key);
+                let localized = text(language, key);
+                assert!(!localized.is_empty());
+                assert_eq!(
+                    health_check_message_text(language, title, canonical, canonical),
+                    localized
+                );
+                assert_eq!(
+                    health_check_message_text(language, title, "", canonical),
+                    localized
+                );
+                if language != UiLanguage::English {
+                    assert_ne!(localized, canonical);
+                }
+            }
+            // u64 parsing also localizes native 64-bit settings in WASM32 admin.
+            for count in [1_u64, 3, 4_294_967_296] {
+                let canonical = text(UiLanguage::English, TextKey::TeletextWorkConfigured)
+                    .replace("{count}", &count.to_string());
+                let localized = text(language, TextKey::TeletextWorkConfigured)
+                    .replace("{count}", &count.to_string());
+                assert_eq!(
+                    health_check_message_text(language, title, &canonical, &canonical),
+                    localized
+                );
+                assert_eq!(
+                    health_check_message_text(language, title, "", &canonical),
+                    localized
+                );
+                assert!(localized.contains(&count.to_string()));
+                if language != UiLanguage::English {
+                    assert_ne!(localized, canonical);
+                }
+            }
+        }
+        let unknown = "The configured limit is 0 concurrent native teletext operations. This is not a memory limit or proof that authored pages are ready.";
+        assert_eq!(
+            health_check_message_text(UiLanguage::Dutch, title, unknown, unknown),
+            unknown
+        );
     }
 
     #[test]

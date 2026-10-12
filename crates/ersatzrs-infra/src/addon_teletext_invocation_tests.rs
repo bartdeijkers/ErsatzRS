@@ -115,6 +115,38 @@ fn fence_and_static_error_mapping_preserve_cleanup_uncertainty() {
     assert!(!error.to_string().contains("private package path"));
 }
 
+#[test]
+fn only_genuine_resolution_cleanup_uncertainty_quarantines_capacity() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+
+    for (error, uncertain) in [
+        (AddonError::ToolCleanupRequired, true),
+        (AddonError::TerminationUnconfirmed, true),
+        (
+            AddonError::Process("package resolution stopped".to_owned()),
+            false,
+        ),
+        (
+            AddonError::Validation("ordinary admission rejection".to_owned()),
+            false,
+        ),
+    ] {
+        let locker = EntityLocker::new();
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let hold = guard.hold_work();
+        let result = Err(error);
+        assert_eq!(retain_resolution_cleanup(Some(&hold), &result), uncertain);
+        assert_eq!(retain_resolution_cleanup(Some(&hold), &result), uncertain);
+        drop(guard);
+        drop(hold);
+        assert_eq!(locker.active_teletext_work(), usize::from(uncertain));
+        assert_eq!(
+            TeletextWorkGuard::try_acquire(&locker, 1).is_none(),
+            uncertain
+        );
+    }
+}
+
 #[tokio::test]
 async fn request_preflight_precedes_even_an_unavailable_database_or_filesystem() {
     let pool = DbPool::connect_lazy("sqlite::memory:").unwrap();
@@ -134,6 +166,7 @@ async fn request_preflight_precedes_even_an_unavailable_database_or_filesystem()
             input,
             cancellation: None,
             selection: None,
+            hold: None,
         };
         assert_eq!(
             invoke_with_fence(invocation, fence, Duration::from_secs(1)).await,
@@ -256,6 +289,7 @@ mod unix {
                 input: request_bytes(),
                 cancellation,
                 selection: None,
+                hold: None,
             }
         }
 
@@ -866,16 +900,13 @@ mod unix {
     }
     // Isolate the durable tool receipt store in a subprocess. Mutating process
     // environment in this test process could affect concurrently running tests.
-    async fn isolate_profile_tool_receipts() -> bool {
+    async fn isolate_profile_tool_receipts(test_name: &str) -> bool {
         const HELPER: &str = "ERSATZRS_TEST_TELETEXT_PROFILE_TOOL_RECEIPTS";
         if crate::startup_config::environment_variable(HELPER).is_some() {
             return false;
         }
         let temp = tempfile::tempdir().unwrap();
-        let name = concat!(
-            module_path!(),
-            "::two_channels_one_package_use_distinct_effective_profiles_and_exact_receipts"
-        );
+        let name = format!("{}::{test_name}", module_path!());
         let mut process = tokio::process::Command::new(std::env::current_exe().unwrap());
         process
             .args([
@@ -905,7 +936,11 @@ mod unix {
 
     #[tokio::test]
     async fn two_channels_one_package_use_distinct_effective_profiles_and_exact_receipts() {
-        if isolate_profile_tool_receipts().await {
+        if isolate_profile_tool_receipts(
+            "two_channels_one_package_use_distinct_effective_profiles_and_exact_receipts",
+        )
+        .await
+        {
             return;
         }
         let fixture =
@@ -954,6 +989,62 @@ mod unix {
                 .await
                 .unwrap();
         assert_eq!(settings, 0);
+    }
+
+    #[tokio::test]
+    async fn genuine_command_cleanup_uncertainty_quarantines_shared_work_capacity() {
+        use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+
+        if isolate_profile_tool_receipts(
+            "genuine_command_cleanup_uncertainty_quarantines_shared_work_capacity",
+        )
+        .await
+        {
+            return;
+        }
+        let fixture = Fixture::new("exec cat").await;
+        let [selection, _] = fixture.profile_selections(true).await;
+        let command = resolve_profile_for_launch(
+            &fixture.pool,
+            &selection,
+            &AddonRuntimeContext::default(),
+            &ResolutionFence::new(Instant::now() + EXECUTION_TIMEOUT),
+        )
+        .await
+        .unwrap();
+        assert_eq!(command.tool_paths.len(), 1);
+        let root = crate::file_system_layout::app_state_folder()
+            .join("addons")
+            .join("tool-leases");
+        let unresolved = crate::addon_tool_gate::ToolLease::try_acquire(
+            &root,
+            &command.tool_paths,
+            crate::addon_tool_gate::ToolLeaseMode::Update,
+        )
+        .unwrap()
+        .unwrap();
+        // A retained Update receipt is actual durable cleanup uncertainty.
+        // Profile resolution succeeds; managed command admission must reject it.
+        drop(unresolved);
+        let locker = EntityLocker::new();
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let hold = guard.hold_work();
+        drop(guard);
+        let result = invoke_profile_with_deadline_and_hold(
+            fixture.pool.clone(),
+            selection,
+            AddonRuntimeContext::default(),
+            request_bytes(),
+            std::time::Instant::now() + EXECUTION_TIMEOUT,
+            None,
+            hold,
+        )
+        .await;
+        assert_eq!(result, Err(TeletextInvocationError::CleanupUnconfirmed));
+        assert!(!fixture.marker.exists());
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        assert_eq!(EntityLocker::new().active_teletext_work(), 0);
     }
 
     #[tokio::test]
@@ -1067,6 +1158,81 @@ mod unix {
             assert!(!fixture.marker.exists());
         }
     }
+    #[tokio::test]
+    async fn profile_work_hold_survives_requester_abort_until_resolution_join() {
+        use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+
+        let fixture = Fixture::new("exec cat").await;
+        let [selection, _] = fixture.profile_selections(false).await;
+        let blocker = Blocker::new("hash", 1);
+        let _release = ReleaseOnDrop(Arc::clone(&blocker));
+        let fence = fenced(&blocker, Instant::now() + EXECUTION_TIMEOUT);
+        let stopped = Arc::clone(&fence.stopped);
+        let completed = Arc::clone(&fence.worker_completed);
+        let locker = EntityLocker::new();
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let mut invocation = fixture.invocation(None);
+        invocation.selection = Some(selection);
+        invocation.hold = Some(guard.hold_work());
+        drop(guard);
+        let task = tokio::spawn(invoke_with_fence(invocation, fence, Duration::from_secs(5)));
+        blocker.wait_entered().await;
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        wait_true(&stopped).await;
+        assert!(!completed.load(Ordering::Acquire));
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        let stages = blocker.stages.lock().unwrap().len();
+        blocker.release();
+        wait_true(&completed).await;
+        assert!(blocker.finished.load(Ordering::Acquire));
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_some());
+        assert_eq!(blocker.stages.lock().unwrap().len(), stages);
+        assert!(!fixture.marker.exists());
+    }
+
+    #[tokio::test]
+    async fn profile_work_hold_survives_early_cleanup_error_until_resolution_join() {
+        use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+
+        let fixture = Fixture::new("exec cat").await;
+        let [selection, _] = fixture.profile_selections(false).await;
+        let blocker = Blocker::new("hash", 1);
+        let _release = ReleaseOnDrop(Arc::clone(&blocker));
+        let fence = fenced(&blocker, Instant::now() + EXECUTION_TIMEOUT);
+        let completed = Arc::clone(&fence.worker_completed);
+        let locker = EntityLocker::new();
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let (cancel, cancelled) = oneshot::channel();
+        let mut invocation = fixture.invocation(Some(cancelled));
+        invocation.selection = Some(selection);
+        invocation.hold = Some(guard.hold_work());
+        drop(guard);
+        let task = tokio::spawn(invoke_with_fence(
+            invocation,
+            fence,
+            Duration::from_millis(20),
+        ));
+        blocker.wait_entered().await;
+        cancel.send(()).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, Err(TeletextInvocationError::CleanupUnconfirmed));
+        assert!(!blocker.finished.load(Ordering::Acquire));
+        assert!(!completed.load(Ordering::Acquire));
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        let stages = blocker.stages.lock().unwrap().len();
+        blocker.release();
+        wait_true(&completed).await;
+        assert!(blocker.finished.load(Ordering::Acquire));
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_some());
+        assert_eq!(blocker.stages.lock().unwrap().len(), stages);
+        assert!(!fixture.marker.exists());
+    }
+
     #[tokio::test]
     async fn expired_shared_profile_deadline_prevents_native_work() {
         let fixture = Fixture::new("exec cat").await;

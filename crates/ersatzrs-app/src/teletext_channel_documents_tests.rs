@@ -1121,3 +1121,54 @@ async fn static_binding_ceiling_and_original_deadline_precede_trusted_producer_c
     assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
     assert_eq!(*repo.selection.lock().unwrap(), before);
 }
+
+#[tokio::test]
+async fn supplied_admission_deadline_shortens_channel_work_without_renewal() {
+    let start = Instant::now();
+    for supplied in [
+        start + Duration::from_secs(15),
+        start + Duration::from_mins(1),
+    ] {
+        let repo = mixed_repository();
+        let before = repo.selection.lock().unwrap().clone();
+        let expected = supplied.min(start + PREPARATION_TIMEOUT);
+        let calls = Cell::new(0);
+        let input = prepare_with_ports_before(
+            &repo,
+            9,
+            Some(A),
+            &context(),
+            input_budget(),
+            |selected, _, deadline| {
+                assert_eq!(deadline, expected);
+                calls.set(calls.get() + 1);
+                async move { Ok(mixed_receipt(selected)) }
+            },
+            (|| start, Some(supplied)),
+        )
+        .await
+        .unwrap();
+        assert_eq!(input.deadline(), expected);
+        assert_eq!(calls.get(), 2);
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(*repo.selection.lock().unwrap(), before);
+    }
+    let repo = mixed_repository();
+    let mut invalid = context();
+    invalid.generation = "";
+    let result = prepare_with_ports_before(
+        &repo,
+        9,
+        None,
+        &invalid,
+        input_budget(),
+        |_, _, _| async { panic!("expired admission invoked producer") },
+        (|| start, Some(start)),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(ChannelTeletextDocumentError::TimedOut)
+    ));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 0);
+}

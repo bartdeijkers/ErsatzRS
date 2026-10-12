@@ -105,6 +105,37 @@ impl AddonRuntime for NativeAddonRuntime {
         )
     }
 
+    async fn invoke_teletext_profile_before_with_hold(
+        &self,
+        selection: ersatzrs_domain::TeletextSelectionSnapshot,
+        input: Vec<u8>,
+        deadline: std::time::Instant,
+        hold: ersatzrs_core::locking::TeletextWorkHold,
+    ) -> Result<
+        ersatzrs_app::teletext_profiles::TeletextProfileRuntimeReceipt,
+        ersatzrs_app::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        let receipt =
+            ersatzrs_infra::addons::teletext_invocation::invoke_profile_with_deadline_and_hold(
+                self.pool.clone(),
+                selection,
+                runtime_context(),
+                input,
+                deadline,
+                None,
+                hold,
+            )
+            .await
+            .map_err(teletext_runtime_error)?;
+        Ok(
+            ersatzrs_app::teletext_profiles::TeletextProfileRuntimeReceipt {
+                stdout: receipt.stdout,
+                selection: receipt.selection,
+                generation: receipt.generation,
+            },
+        )
+    }
+
     async fn invoke_teletext_profile(
         &self,
         selection: ersatzrs_domain::TeletextSelectionSnapshot,

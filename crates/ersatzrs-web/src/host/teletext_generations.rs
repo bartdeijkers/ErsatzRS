@@ -27,7 +27,7 @@ use sha2::{Digest as _, Sha256};
 use super::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
     teletext_designs::{
-        reload_original_teletext_design_revision, NativeTeletextDesignError,
+        reload_original_teletext_design_revision_with_hold, NativeTeletextDesignError,
         RestoredOriginalTeletextDesign,
     },
 };
@@ -207,8 +207,9 @@ impl TeletextGenerationValidator for NativeGenerationConfirmation<'_> {
 async fn fingerprint(
     design: RestoredOriginalTeletextDesign,
     deadline: Instant,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
 ) -> Result<(RestoredOriginalTeletextDesign, String), NativeTeletextGenerationError> {
-    tokio::task::spawn_blocking(move || {
+    super::teletext_work::spawn_blocking(hold, move || {
         let digest = artifact_digest(
             design
                 .encoded()
@@ -235,13 +236,18 @@ pub async fn accept_original_teletext_generation(
     deadline: Instant,
 ) -> Result<M<AcceptedTeletextOutputCandidate>, NativeTeletextGenerationError> {
     check_deadline(deadline)?;
-    let Some(design) = reload_original_teletext_design_revision(
+    let guard = super::teletext_work::begin(application, Some(deadline))
+        .await
+        .map_err(NativeTeletextDesignError::from)?;
+    let hold = guard.hold_work();
+    let Some(design) = reload_original_teletext_design_revision_with_hold(
         application,
         target.request.design_id,
         target.request.revision,
         budget,
         policy,
         deadline,
+        hold.clone(),
     )
     .await?
     else {
@@ -256,7 +262,7 @@ pub async fn accept_original_teletext_generation(
     if design.encoded().is_none() {
         return Ok(M::Rejected(R::Publication(P::InvalidValues)));
     }
-    let (design, artifact_digest) = fingerprint(design, deadline).await?;
+    let (design, artifact_digest) = fingerprint(design, deadline, hold).await?;
     let save = TeletextGenerationSave {
         request: target.request,
         expected_design_head: target.expected_design_head,
@@ -303,19 +309,24 @@ pub async fn reload_accepted_teletext_generation(
     deadline: Instant,
 ) -> Result<Option<AcceptedTeletextOutputCandidate>, NativeTeletextGenerationError> {
     check_deadline(deadline)?;
+    let guard = super::teletext_work::begin(application, Some(deadline))
+        .await
+        .map_err(NativeTeletextDesignError::from)?;
+    let hold = guard.hold_work();
     let Some(generation) = application.accepted_teletext_generation(channel_id).await? else {
         return Ok(None);
     };
     if generation.artifact_version != TELETEXT_GENERATION_ARTIFACT_VERSION {
         return Err(NativeTeletextGenerationError::ArtifactMismatch);
     }
-    let Some(design) = reload_original_teletext_design_revision(
+    let Some(design) = reload_original_teletext_design_revision_with_hold(
         application,
         generation.request.design_id,
         generation.request.revision,
         budget,
         policy,
         deadline,
+        hold.clone(),
     )
     .await?
     else {
@@ -327,7 +338,7 @@ pub async fn reload_accepted_teletext_generation(
     if !frozen_original(&design) {
         return Err(NativeTeletextGenerationError::GuideFreshnessRequired);
     }
-    let (design, actual) = fingerprint(design, deadline).await?;
+    let (design, actual) = fingerprint(design, deadline, hold).await?;
     if actual != generation.artifact_digest {
         return Err(NativeTeletextGenerationError::ArtifactMismatch);
     }

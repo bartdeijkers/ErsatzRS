@@ -2724,6 +2724,157 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-12 finite resource-rich workload and actual-worker admission checkpoint:
+Requirement mapping: bounded synthetic native flow, isolated rejection, original
+operation lifetime and cleanup ownership; this is preparatory engineering proof,
+not full P9A-04 acceptance. channel_documents/workload connects installed profiles
+-> validation/native preview -> immutable save -> explicit pending request ->
+accepted generation -> original and accepted reload. Two producers/themes share
+one channel; simultaneous same-addon/two-channel output remains the next proof.
+
+Nextest bf481fb0-0992-48e1-ba30-e45e72b59d1b passes 3/3 (two new workload cases,
+one unchanged 16-display rich case), on ./run.sh test -p ersatzrs-app
+-p ersatzrs-web --lib --test teletext_profile_preparation --test-threads 1
+--success-output immediate -E 'test(channel_documents::workload::) |
+test(channel_documents::resource_measurement::)'. The 100 distinct page numbers
+have 102 display/subpage records, eight populated POP/GPOP/DRCS/GDRCS resource
+records, four object definitions, four DRCS subtables/glyphs, two palettes/themes
+and exact-subpage/red/index navigation. Source responses are 104,745 bytes each;
+request-v2 is 230 bytes; saved originals are 249,487 bytes; the encoded service
+has 2,890 units (132,940 bytes), including two M29 units. Original/physical models,
+units and every exact-page raster agree after save/accept/reloads. Per-pair raster
+comparison retains no full-bank raster vectors.
+
+The test-only envelope is two producers, 1 MiB aggregate responses, 4 MiB saved
+originals, 144 service records/128 displays, 32 MiB composition clone/index
+reservation, 160 encoded records/6,400 units, with existing per-page stage caps.
+Its 13 finite inclusive caps and measured rich usage (cap/usage) are:
+display updates 134217728/95835528; glyph comparison 262144/147186;
+display comparison 33554432/26245620; realization 131072/103326;
+placement 4096/1632; assembly 8192/3366; ancestry 4096/1836;
+collected commands 8192/2448; collected DRCS references 1024/408;
+spatial events 16384/7344; spatial invocations 4096/1224;
+identity 131072/0; attribute cell updates 32768/13872.
+Each positive rich credit passes its exact measured inclusive cap and rejects
+one-less without partial service. The separate two-display Active-over-British
+fallback resource case measures positive identity pressure (10) and proves exact
+and one-less boundaries for all thirteen credits. Early producer overflow,
+first-producer-only display credit and late merged object overflow preserve the
+exact accepted pointer, configuration, producer-call association and playout
+silence. The resource-rich case does not certify maximal standard banks or
+production defaults, and its page numbers are synthetic, not NOS content.
+
+External Linux /proc sampling every 50 ms during that canonical test process
+observes peak RSS 7,326,260 KiB for the 102-display test, 1,184,020 KiB for the
+16-display fixture and 195,724 KiB for the Active case. The rich test retains
+multiple complete original/accepted/historical services; sampling is a lower
+bound on that process's peak, not per-candidate attribution or worst-case capacity.
+No supported platform/RAM limit is inferred and no authoring requirement waived.
+Single-work admission below prevents cancelled requesters from multiplying active
+operations; it does not bound retained candidates/active services or solve this
+outstanding native capacity evidence.
+
+Process-wide native admission reuses OperationCoordinator/EntityLocker. One
+private Arc lease counts once; nested holds retain the slot through actual
+package filesystem resolution, uncertain early replies and final native joins,
+and queued/running host blocking closures. Saturation is immediate before
+producer invocation or original-byte retrieval, with no admission waiting queue.
+Preparation/save/reload/request/accept/recover/source-fingerprint boundaries share
+this mechanism; nested acceptance/recovery and save confirmation do not readmit.
+Fresh host preparation establishes the existing thirty-second deadline before
+configuration lookup; lease-aware application preparation takes the earlier
+absolute deadline, with no renewal. ConfigElement teletext.work.max_concurrent
+is strictly positive, absent=one; malformed/zero/unavailable policy rejects work.
+Lowered limits block new admissions without preempting existing workers.
+Genuinely unconfirmed native process termination quarantines its slot until host
+restart using the existing fail-closed retention pattern; at one slot this stops
+new teletext work. Early uncertainty after which the resolver conclusively joins
+releases normally. This explicit safety restriction is not proof of native
+restart cleanup, and ordinary playback capacity is untouched. Config validity
+is visible through the existing Health engine with all nine translations;
+Health makes no actual-worker idleness, RSS or authored-readiness claim. Ordinary
+playback/entity reservations remain independent. Compatibility unheld app/runtime
+APIs remain, but native host paths require held adapters and fail Unsupported
+rather than silently dropping ownership.
+
+Ownership/source verification: Nextest 327cf339-d04c-4b68-8f0c-ff6fc8b6baef
+runs 163 selected cases: 160 pass, three existing connection assertions fail.
+The concurrent profile fixture had assumed unlimited work and now explicitly
+configures two slots before its unchanged no-write snapshot. Pending publication
+now keeps its previous native TimedOut category on expired entry. Accepted intent
+recovery checks the original absolute deadline before propagating a nested result,
+so an inner configuration timeout cannot escape as a different public error.
+No assertion or acceptance criterion is weakened.
+
+Nextest f0f46415-6140-4c4b-b170-2554cf30cd08 passes 56/56 ownership/bound-document
+cases using the same compiled five-binary graph through the canonical wrapper's
+cargo-metadata/binaries-metadata reuse options. Actual module filters are
+addons::teletext_invocation::, addons::teletext_command::,
+teletext_profiles::tests::documents_tests:: and the exact core quarantine case;
+file-name filters in the earlier run did not select these modules.
+After the corrections and lint-only scope/duration/control-flow refinements,
+Nextest a0a61b85-ce80-4d8b-83c9-2b7d9532d1a9 passes 62/62 on
+./run.sh test -p ersatzrs-app -p ersatzrs-core -p ersatzrs-infra -p ersatzrs-web
+--lib --test teletext_profile_preparation --test-threads 1 --success-output immediate
+-E 'test(supplied_admission_deadline_shortens_) |
+test(teletext_error_and_worker_panic_release) | test(addons::teletext_invocation::) |
+(binary(teletext_profile_preparation) & (test(publications::) |
+test(guide_publications::) | test(documents::) | test(accepted_transport_flow::)))'.
+The substring document filter also re-executes all channel-document fixtures,
+including the 102-display case (111.806 seconds, slow report only). Every earlier
+failed identity passes. The union has 219 unique successful identities, including
+all 28 new tests; unchanged results are reused rather than called a green first run.
+
+Deterministic barriers prove shared inclusive capacity under eight-way contention,
+one lease across clones/nested stages, caller-drop retention until actual native
+thread/filesystem join, early uncertainty followed by conclusive join release,
+ordinary error/panic release, and genuinely unconfirmed exit retention until locker
+reconstruction. Actual managed command abort verifies process-group disappearance
+before capacity is observed free. A real isolated retained tool-update receipt
+reaches installed command admission, returns CleanupUnconfirmed without launching
+its producer and keeps the shared slot charged. Command-owner unwind also retains
+its admission. Registry reconstruction is not native server-restart acceptance.
+Native saturation precedes invocation/missing revision lookup and preserves exact
+accepted identity/models, configuration, calls and playout silence. Malformed/zero
+policy, lowered inclusive limits and expired entry are explicit no-admission cases.
+The two actual V2 profiles on separate channels still compile concurrently with
+different palettes under their explicit two-slot policy. Published/streamed
+same-addon two-channel isolation remains the next integrated proof.
+
+Three SQL-backed Health regressions and the all-nine-culture message/brief-message
+routing test pass; the registered set remains ordered with 50 checks. This proves
+configuration validity/localization, not headed authoring/admin acceptance.
+Strict cargo clippy -p ersatzrs-app -p ersatzrs-core -p ersatzrs-infra
+-p ersatzrs-web --all-targets -- -D warnings passes, as do formatting and the
+architecture/progress checks. The pre-existing proc-macro-error2 future-
+incompatibility note is not a current lint failure. No new broad lint allowances
+or dependencies are introduced.
+
+The corrected rich test frees its completed historical comparison before the next
+reconstruction. External sampling in the 327cf339 run observes 5,885,068 KiB peak
+for the 102-display case, 1,204,976 KiB for sixteen displays and 197,756 KiB for
+Active resources. These are process-sampling observations from successful workload
+cases, despite the separate three failed connection assertions. The earlier
+7,326,260 KiB observation above belongs to the pre-release fixture. Neither figure
+is a per-candidate/worst-case bound or six-platform capacity proof. The existing
+large-service Nextest group now serializes sparse/rich/workload native fixtures
+alongside heavy service suites in local/CI profiles; full CI is not claimed.
+
+Next criterion and concrete action: connect existing accepted generation lookup
+to the ordinary final-direct MPEG-TS owner under explicit trusted runtime policy,
+then exercise the same installed synthetic addon on two channels with different
+profiles/themes, separate preview/save/explicit publication and concurrent normal
+stream captures plus suitable-client display/navigation. Current ordinary routes
+pass no accepted binding; authored admin profile/preview/publication handlers are
+also absent. The existing explicit direct/reopen/TSDuck/independent decode and
+headed VLC200->201 evidence below remains valid within its narrower scope.
+No new general metering audit follows this checkpoint. Further foundation work
+must resolve a demonstrated connection/acceptance/correctness/safety gap.
+Retained/hybrid actual-child provenance, full authored Level2.5/fallback, pinned
+QTeletextMaker/metadata/edit boundaries, Lua timing/error/restart, localized headed
+admin and playback/six-platform evidence all remain open. No milestone closes;
+engine-first/NOS200-299-only addon order and every acceptance contract stay intact.
+
 2026-10-12 early producer-admission checkpoint:
 A trusted inclusive max_producers joins the existing application channel input
 budget. After the original snapshot/deadline and static 1,024 ceiling, reject
@@ -2777,15 +2928,10 @@ contracts and engine-first order remain unchanged; full authored Level2.5,
 QTeletextMaker/metadata/themes/zones/Lua/localized-admin/client/restart/playback/
 platform acceptance stay open. No milestone closes or push/tag/release occurs.
 
-Next concrete action: prove a finite production-shaped approximately 100-page
-workload with representative resources, subpages, themes and multiple producers/
-channels against explicit inclusive quotas, including deliberate over-budget
-amplification. Confirm existing concurrent-work ownership/permits for native
-prepare/recover before selecting host policy and connecting ordinary final-route
-lookup/Health. Catalogue construction already has finite structural bounds and
-rebuild reservations; further instrumentation needs demonstrated workload need.
-Keep the same complete synthetic profile→validation→preview→explicit publication→
-suitable-client display/navigation acceptance target and every remaining gate.
+The finite workload and actual-worker ownership follow-up is recorded above.
+Two-channel/client/admin/ordinary-route flow remains separate acceptance work.
+Catalogue construction already has finite structural bounds and rebuild
+reservations; further instrumentation needs demonstrated workload need.
 
 2026-10-12 shared attribute cell-update credit checkpoint:
 The thirteenth optional inclusive service bucket, max_attribute_cell_updates,

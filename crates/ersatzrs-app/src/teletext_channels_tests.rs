@@ -26,6 +26,60 @@ const A: &str = "org.example.a";
 const B: &str = "org.example.b";
 const C: &str = "org.example.c";
 
+#[tokio::test]
+async fn supplied_admission_deadline_shortens_base_channel_work_without_renewal() {
+    let start = Instant::now();
+    for supplied in [
+        start + Duration::from_secs(15),
+        start + Duration::from_mins(1),
+    ] {
+        let repo = Repository::two();
+        let before = repo.selection.lock().unwrap().clone();
+        let expected = supplied.min(start + PREPARATION_TIMEOUT);
+        let calls = Cell::new(0);
+        let prepared = prepare_with_ports_before(
+            &repo,
+            9,
+            Some(A),
+            &context(),
+            |selected, _, deadline| {
+                assert_eq!(deadline, expected);
+                calls.set(calls.get() + 1);
+                async move {
+                    let number = if selected.addon_id == A { 200 } else { 201 };
+                    Ok(receipt(
+                        selected,
+                        output("nld", number, &[page(number, 0, "nld", 5)]),
+                    ))
+                }
+            },
+            (|| start, Some(supplied)),
+        )
+        .await
+        .unwrap();
+        assert_eq!(prepared.deadline(), expected);
+        assert_eq!(prepared.selection(), &before);
+        assert_eq!(prepared.draft().unwrap().pages.len(), 2);
+        assert_eq!(calls.get(), 2);
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(*repo.selection.lock().unwrap(), before);
+    }
+    let repo = Repository::two();
+    let mut invalid = context();
+    invalid.generation = "";
+    let result = prepare_with_ports_before(
+        &repo,
+        9,
+        None,
+        &invalid,
+        |_, _, _| async { panic!("expired admission invoked producer") },
+        (|| start, Some(start)),
+    )
+    .await;
+    assert!(matches!(result, Err(ChannelTeletextPagesError::TimedOut)));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 0);
+}
+
 fn binding(addon: &str, profile_id: i64) -> TeletextSelectionSnapshot {
     TeletextSelectionSnapshot {
         contract: ersatzrs_domain::TeletextPageContract::V1,

@@ -26,7 +26,7 @@ use ersatzrs_web::host::{
 #[path = "accepted_transport_flow.rs"]
 mod accepted_transport_flow;
 
-async fn request(
+pub(super) async fn request(
     fixture: &Fixture,
     saved: &SavedOriginalTeletextDesign,
     previous: Option<i64>,
@@ -80,7 +80,7 @@ pub(super) fn accepted(
     }
 }
 
-async fn recover(fixture: &Fixture) -> Option<AcceptedTeletextOutputCandidate> {
+pub(super) async fn recover(fixture: &Fixture) -> Option<AcceptedTeletextOutputCandidate> {
     reload_accepted_teletext_generation(
         &fixture.state.application,
         1,
@@ -103,7 +103,7 @@ fn calls(fixture: &Fixture) -> Vec<u8> {
     std::fs::read(fixture.root.path().join("channel-calls")).unwrap()
 }
 
-fn assert_same_output(
+pub(super) fn assert_same_output(
     actual: &AcceptedTeletextOutputCandidate,
     expected: &AcceptedTeletextOutputCandidate,
 ) {
@@ -654,6 +654,7 @@ async fn historical_source_bound_pending_requires_current_guide_role_before_acce
     };
     let mut read = super::guide_capture::read_budget();
     let captured = capture_source_bound_teletext_guide(
+        &fixture.state.application,
         &fixture.state.pool,
         &[2],
         guide(&[]).captured_at,

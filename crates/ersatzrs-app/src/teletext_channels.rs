@@ -10,6 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_core::repositories::{
     TeletextProfileMutation as Mutation, TeletextProfileRejection, TeletextProfileRepository,
 };
@@ -25,7 +26,8 @@ use crate::{
     ApplicationServices,
 };
 
-const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
+/// Existing maximum lifetime of a complete base-channel preparation.
+pub const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Complete unpublished candidate. `None` draft is an explicitly fenced Off state.
 /// Private fields retain the association; no member grants publication authority.
@@ -119,19 +121,91 @@ impl ApplicationServices {
         entry_addon_id: Option<&str>,
         context: &SuppliedTeletextGuideContext<'_>,
     ) -> Result<PreparedChannelTeletextPages, ChannelTeletextPagesError> {
-        prepare_with_ports(
-            self.ports().teletext_profiles(),
+        self.prepare_channel_teletext_pages_with_optional_hold(
             channel_id,
             entry_addon_id,
             context,
-            |selection, input, deadline| {
-                self.ports()
-                    .addons()
-                    .invoke_teletext_profile_before(selection, input, deadline)
-            },
-            Instant::now,
+            None,
+            None,
         )
         .await
+    }
+
+    /// Prepare base pages under one existing admission without another slot.
+    /// Native adapters must retain their hold through actual resolution/cleanup.
+    /// # Errors
+    /// Preserves original channel errors and rejects incapable adapters.
+    pub async fn prepare_channel_teletext_pages_with_hold(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<PreparedChannelTeletextPages, ChannelTeletextPagesError> {
+        self.prepare_channel_teletext_pages_with_optional_hold(
+            channel_id,
+            entry_addon_id,
+            context,
+            Some(deadline),
+            Some(hold),
+        )
+        .await
+    }
+
+    async fn prepare_channel_teletext_pages_with_optional_hold(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        deadline: Option<Instant>,
+        hold: Option<TeletextWorkHold>,
+    ) -> Result<PreparedChannelTeletextPages, ChannelTeletextPagesError> {
+        let invoke = |selection, input, deadline| {
+            let hold = hold.clone();
+            async move {
+                match hold {
+                    Some(hold) => {
+                        self.ports()
+                            .addons()
+                            .invoke_teletext_profile_before_with_hold(
+                                selection, input, deadline, hold,
+                            )
+                            .await
+                    }
+                    None => {
+                        self.ports()
+                            .addons()
+                            .invoke_teletext_profile_before(selection, input, deadline)
+                            .await
+                    }
+                }
+            }
+        };
+        match deadline {
+            None => {
+                prepare_with_ports(
+                    self.ports().teletext_profiles(),
+                    channel_id,
+                    entry_addon_id,
+                    context,
+                    invoke,
+                    Instant::now,
+                )
+                .await
+            }
+            Some(deadline) => {
+                prepare_with_ports_before(
+                    self.ports().teletext_profiles(),
+                    channel_id,
+                    entry_addon_id,
+                    context,
+                    invoke,
+                    (Instant::now, Some(deadline)),
+                )
+                .await
+            }
+        }
     }
 }
 
@@ -140,17 +214,47 @@ async fn prepare_with_ports<F, Fut, Clock>(
     channel_id: EntityId,
     entry_addon_id: Option<&str>,
     context: &SuppliedTeletextGuideContext<'_>,
-    mut invoke: F,
-    mut now: Clock,
+    invoke: F,
+    now: Clock,
 ) -> Result<PreparedChannelTeletextPages, ChannelTeletextPagesError>
 where
     F: FnMut(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
     Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
     Clock: FnMut() -> Instant,
 {
-    let deadline = now()
+    prepare_with_ports_before(
+        repository,
+        channel_id,
+        entry_addon_id,
+        context,
+        invoke,
+        (now, None),
+    )
+    .await
+}
+
+async fn prepare_with_ports_before<F, Fut, Clock>(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    mut invoke: F,
+    timing: (Clock, Option<Instant>),
+) -> Result<PreparedChannelTeletextPages, ChannelTeletextPagesError>
+where
+    F: FnMut(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
+    Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
+    Clock: FnMut() -> Instant,
+{
+    let (mut now, supplied_deadline) = timing;
+    let started = now();
+    let maximum = started
         .checked_add(PREPARATION_TIMEOUT)
         .ok_or(ChannelTeletextPagesError::TimedOut)?;
+    let deadline = supplied_deadline.map_or(maximum, |deadline| maximum.min(deadline));
+    if supplied_deadline.is_some() {
+        check_deadline(started, deadline)?;
+    }
     let input = build_request(context)?;
     check_deadline(now(), deadline)?;
     let selection = match repository

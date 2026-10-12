@@ -64,6 +64,8 @@ mod preview;
 mod producer_admission;
 #[path = "teletext_profile_preparation/publications.rs"]
 mod publications;
+#[path = "teletext_profile_preparation/work_admission.rs"]
+mod work_admission;
 const SCRIPT: &str = r#"case "$1" in
 check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
 pages) ;;

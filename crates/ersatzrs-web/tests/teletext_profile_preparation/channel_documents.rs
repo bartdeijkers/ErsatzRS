@@ -20,6 +20,9 @@ mod measurement;
 #[path = "channel_resource_measurement.rs"]
 mod resource_measurement;
 
+#[path = "channel_workload.rs"]
+mod workload;
+
 const CHANNEL_SCRIPT: &str = r#"case "$1" in
 check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
 pages) ;;

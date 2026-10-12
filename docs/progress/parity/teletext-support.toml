@@ -40,9 +40,9 @@ Budgeted v2 stays pinned through invocation; Base refuses v2. Encoding retains
 original defaults, secondary uncertainty and channel/model/deadline fences.
 Cold composition isolates M29/resources and rechecks MOT effects.
 Originals/pending/frozen persist; raw v2/historical v1.
-Early producer admission; 13 work quotas; RSS policy open.
-Direct/reopen AV,200→201 pass;100 sparse/16 rich pages counted.
-Normal routes/retained/Health/production bounds open; ADR0122/legacy/regions/link CRC/UI/Lua open.
+Producer caps;13 quotas;100-number rich flow;workers survive cancellation.
+Direct/reopen AV,200→201 pass;RSS/production bounds open.
+Next ordinary direct lookup,two-channel themes;admin/retained/Health/Lua/regions/link CRC open.
 
 SQLite retains tracks/owners/data/leases; missing reports/revisions prove no bytes
 or absence. Pages stay NotAcquired. Explicit-PID parsing keeps flags/subcodes/PTS,

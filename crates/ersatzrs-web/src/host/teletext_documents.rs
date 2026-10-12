@@ -88,6 +88,8 @@ impl fmt::Debug for EncodedBoundTeletextDocumentCandidate {
 #[derive(Debug, thiserror::Error)]
 pub enum TeletextDocumentEncodingError {
     #[error(transparent)]
+    Work(#[from] super::teletext_work::TeletextWorkError),
+    #[error(transparent)]
     Document(#[from] BoundTeletextDocumentError),
     #[error("v1 semantic lift failed: {0}")]
     Lift(Box<TeletextServiceError>),
@@ -123,12 +125,25 @@ pub async fn prepare_bound_teletext_document_candidate(
     context: &SuppliedTeletextGuideContext<'_>,
     policy: TeletextDocumentEncodingPolicy,
 ) -> Result<EncodedBoundTeletextDocumentCandidate, TeletextDocumentEncodingError> {
+    let deadline = Instant::now()
+        .checked_add(ersatzrs_app::teletext_profile_documents::PREPARATION_TIMEOUT)
+        .ok_or(TeletextDocumentEncodingError::TimedOut)?;
+    let guard = super::teletext_work::begin(application, Some(deadline)).await?;
+    let hold = guard.hold_work();
     let input = application
-        .invoke_bound_teletext_document(channel_id, addon_id, expected_binding_revision, context)
+        .invoke_bound_teletext_document_with_hold(
+            channel_id,
+            addon_id,
+            expected_binding_revision,
+            context,
+            deadline,
+            hold.clone(),
+        )
         .await?;
-    let candidate = tokio::task::spawn_blocking(move || encode_document(input, &policy))
-        .await
-        .map_err(|_| TeletextDocumentEncodingError::WorkerFailed)??;
+    let candidate =
+        super::teletext_work::spawn_blocking(hold, move || encode_document(input, &policy))
+            .await
+            .map_err(|_| TeletextDocumentEncodingError::WorkerFailed)??;
     application
         .recheck_teletext_document_selection(candidate.selection(), candidate.deadline())
         .await?;

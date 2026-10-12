@@ -423,6 +423,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Retain teletext work capacity until the actual addon-resolution and native
+  workers finish, including after requester cancellation or an early cleanup
+  error. Nested publication/recovery shares one slot and the original deadline;
+  saturated or invalid resource policy leaves accepted output and playback intact.
+  Unconfirmed process termination retains its teletext slot until restart; Health
+  reports invalid concurrency settings in every admin language.
 - Enforce teletext producer limits before addon invocation and original-document
   validation, including saved-design reconstruction. Over-limit work leaves the
   stored revision, accepted generation and ordinary playback unchanged.

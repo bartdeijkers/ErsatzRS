@@ -78,6 +78,8 @@ impl fmt::Debug for EncodedChannelTeletextCandidate {
 #[derive(Debug, thiserror::Error)]
 pub enum ChannelTeletextEncodingError {
     #[error(transparent)]
+    Work(#[from] super::teletext_work::TeletextWorkError),
+    #[error(transparent)]
     Preparation(#[from] ChannelTeletextPagesError),
     #[error(transparent)]
     Encoding(#[from] TeletextEncodingError),
@@ -104,10 +106,21 @@ pub async fn prepare_channel_teletext_candidate(
     context: &SuppliedTeletextGuideContext<'_>,
     region: TeletextEncodingRegion,
 ) -> Result<EncodedChannelTeletextCandidate, ChannelTeletextEncodingError> {
+    let deadline = Instant::now()
+        .checked_add(ersatzrs_app::teletext_channels::PREPARATION_TIMEOUT)
+        .ok_or(ChannelTeletextEncodingError::TimedOut)?;
+    let guard = super::teletext_work::begin(application, Some(deadline)).await?;
+    let hold = guard.hold_work();
     let prepared = application
-        .prepare_channel_teletext_pages(channel_id, entry_addon_id, context)
+        .prepare_channel_teletext_pages_with_hold(
+            channel_id,
+            entry_addon_id,
+            context,
+            deadline,
+            hold.clone(),
+        )
         .await?;
-    tokio::task::spawn_blocking(move || encode_prepared(prepared, region))
+    super::teletext_work::spawn_blocking(hold, move || encode_prepared(prepared, region))
         .await
         .map_err(|_| ChannelTeletextEncodingError::WorkerFailed)?
 }

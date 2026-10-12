@@ -155,6 +155,8 @@ impl fmt::Debug for EncodedChannelTeletextDocumentCandidate {
 #[derive(Debug, thiserror::Error)]
 pub enum ChannelTeletextDocumentEncodingError {
     #[error(transparent)]
+    Work(#[from] super::teletext_work::TeletextWorkError),
+    #[error(transparent)]
     Preparation(#[from] ChannelTeletextDocumentError),
     #[error("teletext channel documents do not match original binding association")]
     Association,
@@ -206,14 +208,27 @@ pub async fn prepare_channel_teletext_document_candidate(
     context: &SuppliedTeletextGuideContext<'_>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError> {
+    let deadline = Instant::now()
+        .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT)
+        .ok_or(ChannelTeletextDocumentEncodingError::TimedOut)?;
+    let guard = super::teletext_work::begin(application, Some(deadline)).await?;
+    let hold = guard.hold_work();
     let mut input_budget = policy.input;
     input_budget.max_producers = maximum_producers(&policy);
     let input = application
-        .invoke_channel_teletext_documents(channel_id, entry_addon_id, context, input_budget)
+        .invoke_channel_teletext_documents_with_hold(
+            channel_id,
+            entry_addon_id,
+            context,
+            input_budget,
+            deadline,
+            hold.clone(),
+        )
         .await?;
-    let candidate = tokio::task::spawn_blocking(move || encode_channel(input, policy))
-        .await
-        .map_err(|_| ChannelTeletextDocumentEncodingError::WorkerFailed)??;
+    let candidate =
+        super::teletext_work::spawn_blocking(hold, move || encode_channel(input, policy))
+            .await
+            .map_err(|_| ChannelTeletextDocumentEncodingError::WorkerFailed)??;
     application
         .recheck_channel_teletext_document_selection(candidate.selection(), candidate.deadline())
         .await?;

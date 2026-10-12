@@ -26,7 +26,10 @@
 //! `BuildPlayoutHandler` and friends.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex, MutexGuard, PoisonError,
+};
 
 use ersatzrs_domain::EntityId;
 
@@ -261,6 +264,7 @@ fn stronger_build_mode(left: PlayoutBuildMode, right: PlayoutBuildMode) -> Playo
 struct EntityLockerInner {
     locked_playouts: Mutex<HashMap<EntityId, PlayoutLockState>>,
     locked_libraries: Mutex<HashSet<EntityId>>,
+    active_teletext_work: Mutex<usize>,
 }
 
 #[derive(Debug, Default)]
@@ -275,6 +279,13 @@ impl EntityLocker {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Observe admitted teletext operations, including workers retained after
+    /// caller abandonment. This is independent of playout/library admission.
+    #[must_use]
+    pub fn active_teletext_work(&self) -> usize {
+        *recover(self.inner.active_teletext_work.lock())
     }
 
     /// Try to acquire the lock for a playout.
@@ -370,6 +381,81 @@ fn recover<'a, T>(
     // inner guard is safe and avoids cascading the panic into unrelated
     // maintenance work.
     result.unwrap_or_else(PoisonError::into_inner)
+}
+
+/// One admitted teletext operation, independent of playback and entity locks.
+/// Admission is immediate with no waiting queue. The caller supplies a trusted
+/// process policy; this count is not a CPU-time or memory-consumption guarantee.
+#[must_use = "retain the guard or a worker hold until admitted work has settled"]
+pub struct TeletextWorkGuard {
+    lease: Arc<TeletextWorkLease>,
+}
+
+/// Shared retention of an already admitted operation, without new admission.
+/// Owned native workers retain a hold until actual cleanup/join completes, even
+/// after the caller is dropped or receives an early uncertain-cleanup result.
+#[derive(Clone)]
+#[must_use = "retain the hold until the owned worker has actually exited"]
+pub struct TeletextWorkHold {
+    lease: Arc<TeletextWorkLease>,
+}
+
+struct TeletextWorkLease {
+    locker: EntityLocker,
+    release_on_drop: AtomicBool,
+}
+
+impl TeletextWorkGuard {
+    /// Admit one operation under the supplied inclusive process-wide maximum.
+    /// Zero rejects all admission. Clones of the same locker share its count;
+    /// lowering the maximum never cancels already admitted operations.
+    #[must_use]
+    pub fn try_acquire(locker: &EntityLocker, maximum: usize) -> Option<Self> {
+        let mut active = recover(locker.inner.active_teletext_work.lock());
+        if *active >= maximum {
+            return None;
+        }
+        let next = active.checked_add(1)?;
+        *active = next;
+        Some(Self {
+            lease: Arc::new(TeletextWorkLease {
+                locker: locker.clone(),
+                release_on_drop: AtomicBool::new(true),
+            }),
+        })
+    }
+
+    /// Retain this admission across nested stages and caller cancellation.
+    /// A hold shares one lease; it never consumes another capacity slot.
+    pub fn hold_work(&self) -> TeletextWorkHold {
+        TeletextWorkHold {
+            lease: self.lease.clone(),
+        }
+    }
+}
+
+impl TeletextWorkHold {
+    /// Preserve admission when native process/tree exit cannot be confirmed.
+    /// All clones share one idempotent quarantine; no final drop frees its slot.
+    /// A new process locker after host restart starts with an empty count.
+    /// Ordinary joined cancellation must not use this irreversible operation.
+    pub fn retain_until_restart(&self) {
+        self.lease.release_on_drop.store(false, Ordering::Release);
+    }
+}
+
+impl Drop for TeletextWorkLease {
+    fn drop(&mut self) {
+        if !self.release_on_drop.load(Ordering::Acquire) {
+            return;
+        }
+        let mut active = recover(self.locker.inner.active_teletext_work.lock());
+        // Only a successful admission can construct a lease, and its private
+        // Arc releases once. Preserve nonnegative state if that invariant changes.
+        if let Some(remaining) = active.checked_sub(1) {
+            *active = remaining;
+        }
+    }
 }
 
 /// RAII-style guard that releases a playout lock on drop. Acquire via
@@ -507,6 +593,134 @@ mod tests {
     use std::convert::Infallible;
 
     use super::*;
+
+    #[test]
+    fn teletext_capacity_is_inclusive_shared_and_holds_do_not_readmit() {
+        let locker = EntityLocker::new();
+        let cloned = locker.clone();
+        assert!(TeletextWorkGuard::try_acquire(&locker, 0).is_none());
+        let first = TeletextWorkGuard::try_acquire(&locker, 2).unwrap();
+        let second = TeletextWorkGuard::try_acquire(&cloned, 2).unwrap();
+        assert_eq!(locker.active_teletext_work(), 2);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 2).is_none());
+        let first_hold = first.hold_work();
+        let nested = first_hold.clone();
+        drop(first);
+        assert_eq!(cloned.active_teletext_work(), 2);
+        drop(second);
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        drop(first_hold);
+        assert_eq!(locker.active_teletext_work(), 1);
+        drop(nested);
+        assert_eq!(cloned.active_teletext_work(), 0);
+        let next = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        assert_eq!(locker.active_teletext_work(), 1);
+        drop(next);
+        assert_eq!(locker.active_teletext_work(), 0);
+    }
+
+    #[test]
+    fn abandoned_teletext_caller_retains_capacity_until_actual_worker_exit() {
+        let locker = EntityLocker::new();
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let hold = guard.hold_work();
+        let (ready, started) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let _hold = hold;
+            ready.send(()).unwrap();
+            released.recv().unwrap();
+        });
+        started.recv().unwrap();
+        drop(guard);
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        release.send(()).unwrap();
+        worker.join().unwrap();
+        assert_eq!(locker.active_teletext_work(), 0);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_some());
+    }
+
+    #[test]
+    fn teletext_error_and_worker_panic_release_admission_exactly_once() {
+        let locker = EntityLocker::new();
+        let result: Result<(), ()> = {
+            let _guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+            Err(())
+        };
+        assert!(result.is_err());
+        assert_eq!(locker.active_teletext_work(), 0);
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let hold = guard.hold_work();
+        drop(guard);
+        let result = std::panic::catch_unwind(move || {
+            let _hold = hold;
+            panic!("synthetic admitted worker panic");
+        });
+        assert!(result.is_err());
+        assert_eq!(locker.active_teletext_work(), 0);
+        let next = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        drop(next);
+        assert_eq!(locker.active_teletext_work(), 0);
+    }
+
+    #[test]
+    fn teletext_admission_is_independent_of_playout_and_library_locks() {
+        let locker = EntityLocker::new();
+        let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let playout = PlayoutLockGuard::try_acquire(&locker, 7).unwrap();
+        let library = LibraryLockGuard::try_acquire(&locker, 7).unwrap();
+        assert!(locker.is_playout_locked(7));
+        assert!(locker.is_library_locked(7));
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        drop(work);
+        assert_eq!(locker.active_teletext_work(), 0);
+        assert!(locker.is_playout_locked(7));
+        assert!(locker.is_library_locked(7));
+        let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        drop(playout);
+        drop(library);
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(locker.locked_playouts().is_empty());
+        assert!(locker.locked_libraries().is_empty());
+        drop(work);
+        assert_eq!(locker.active_teletext_work(), 0);
+    }
+
+    #[test]
+    fn unconfirmed_teletext_exit_quarantines_one_shared_slot_until_locker_restart() {
+        let locker = EntityLocker::new();
+        let shared = locker.clone();
+        let quarantined = TeletextWorkGuard::try_acquire(&locker, 2).unwrap();
+        let normal = TeletextWorkGuard::try_acquire(&shared, 2).unwrap();
+        let hold = quarantined.hold_work();
+        let worker = hold.clone();
+        worker.retain_until_restart();
+        hold.retain_until_restart();
+        assert_eq!(locker.active_teletext_work(), 2);
+        drop(quarantined);
+        drop(hold);
+        drop(worker);
+        assert_eq!(shared.active_teletext_work(), 2);
+        drop(normal);
+        assert_eq!(locker.active_teletext_work(), 1);
+        assert!(TeletextWorkGuard::try_acquire(&shared, 1).is_none());
+        let replacement = TeletextWorkGuard::try_acquire(&shared, 2).unwrap();
+        assert_eq!(locker.active_teletext_work(), 2);
+        drop(replacement);
+        assert_eq!(shared.active_teletext_work(), 1);
+        assert!(locker.lock_playout(7));
+        assert!(locker.unlock_playout(7));
+        let restarted = EntityLocker::new();
+        assert_eq!(restarted.active_teletext_work(), 0);
+        let admitted = TeletextWorkGuard::try_acquire(&restarted, 1).unwrap();
+        drop(admitted);
+        assert_eq!(restarted.active_teletext_work(), 0);
+        assert_eq!(shared.active_teletext_work(), 1);
+    }
 
     #[test]
     fn finalizer_keeps_mutation_exclusive_after_caller_is_dropped() {

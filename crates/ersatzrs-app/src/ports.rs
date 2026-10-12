@@ -781,6 +781,23 @@ pub trait AddonRuntime: Send + Sync {
         Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
     }
 
+    /// Invoke under an existing admission and the original absolute deadline.
+    /// Native adapters transfer the hold into their owned resolver/process worker
+    /// until actual cleanup completes; an early uncertain response cannot release
+    /// it. Incapable adapters reject instead of falling back to the unheld API.
+    async fn invoke_teletext_profile_before_with_hold(
+        &self,
+        _selection: ersatzrs_domain::TeletextSelectionSnapshot,
+        _input: Vec<u8>,
+        _deadline: std::time::Instant,
+        _hold: ersatzrs_core::locking::TeletextWorkHold,
+    ) -> Result<
+        crate::teletext_profiles::TeletextProfileRuntimeReceipt,
+        crate::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
+    }
+
     /// Whether the enabled package provides access checking and runtime identity.
     async fn supports_media_list_access_check(
         &self,

@@ -25,7 +25,7 @@ deadline. The same native deadline now reaches service/resource/display,
 normalization and packet-assembly checkpoints. Timeout returns no partial
 candidate and maps to the existing host timeout; untimed standalone callers and
 encoded identities retain their behavior. Checks are cooperative between bounded
-stages, not mid-stage preemption or aggregate CPU/RSS admission. An explicit
+stages, not mid-stage preemption or a CPU/RSS bound. An explicit
 optional whole-service quota now debits actual admitted display-resolution updates
 across original, physical and transmission-settlement passes, including failures.
 Usage is separate from model/wire identity; disabled metering keeps prior stage
@@ -46,6 +46,22 @@ producer limits now intersect before request preparation/invocation, with defens
 native checks before validation/lifting. Saved reload restricts the existing
 bounded document-count decoder before native original parsing. Rejection retains
 immutable revisions and accepted output; bounded storage reads/outer scans remain.
+Native channel/base/bound preparation, original save/reload, pending publication,
+acceptance/recovery and source fingerprinting now use immediate process-wide
+admission through the existing application coordinator and core EntityLocker.
+A private shared lease survives requester cancellation in actual package-resolution
+owners and queued/running native closures, including early cleanup-uncertainty
+replies. Only final owner release makes the slot available; nested stages share
+one admission and the original deadline. There is no teletext admission queue or
+use of ordinary playback reservations. Genuinely unconfirmed native process
+termination quarantines its slot until host restart, following the existing
+transcode retention pattern. An early resolution uncertainty reply alone does
+not quarantine after the actual resolver conclusively joins. The existing ConfigElement key
+teletext.work.max_concurrent must be a positive integer; absence conservatively
+serializes these operations. Lowering it affects new work without preemption.
+This bounds admitted operation count, not retained candidates/active services,
+peak RSS or complete platform capacity. The resource-rich 100-number workload
+is an experiment, not production compiler defaults or full engine acceptance.
 Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact

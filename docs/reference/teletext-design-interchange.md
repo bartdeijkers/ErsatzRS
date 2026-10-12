@@ -4264,6 +4264,28 @@ including actual retained prefix capacity; original reserve/startup/cancellation
 and commitment rules still apply. These APIs do not supply production compiler
 defaults, an ongoing publication owner or normal-route registration.
 
+Native teletext operations share process admission through
+`ApplicationServices::operations()` and `EntityLocker`.
+`ConfigElement["teletext.work.max_concurrent"]` is a strictly positive integer;
+absence uses one slot. Invalid/unavailable configuration or occupied capacity
+rejects before producer invocation or saved-original retrieval. There is no
+waiting queue. A changed lower limit blocks subsequent admission without
+cancelling existing work. Package-resolution owners and each queued/running
+native closure retain shared `TeletextWorkHold` values until actual completion,
+even after requester abandonment or an early cleanup-uncertainty reply.
+Genuinely unconfirmed native process termination retains that slot until host
+restart. This fail-closed restriction can make teletext work unavailable at a
+one-slot limit; ordinary playback reservations stay independent. An early
+resolution uncertainty reply followed by a conclusive join releases normally.
+Save confirmation and nested publication/acceptance/recovery reuse one lease.
+Fresh operations establish their existing 30-second deadline before configuration
+lookup; no nested stage renews it. Original public unheld application/runtime
+adapters remain compatible, but native host paths require held adapters and reject
+unsupported ones. Admission never consumes ordinary playback reservations.
+This is an operation-count bound; returned candidates, accepted services and
+native model memory require separate capacity proof. It does not establish
+production encoding budgets, full authored readiness or a peak-RSS guarantee.
+
 Native preparation/recovery now calls `encode_teletext_authored_service_before`
 with the same absolute operation deadline. The existing untimed encoder remains
 available. Checks bracket shared preflight/allocation, resource writers/context,

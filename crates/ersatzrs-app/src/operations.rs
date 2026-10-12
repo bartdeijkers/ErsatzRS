@@ -3,7 +3,9 @@
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity, PlayoutLockGuard};
+use ersatzrs_core::locking::{
+    EntityLocker, PlayoutBuildActivity, PlayoutLockGuard, TeletextWorkGuard,
+};
 use ersatzrs_domain::EntityId;
 
 use crate::commands::{BeginOperation, ScanOperationId, ScanRequest, ScanWorkRequest};
@@ -166,6 +168,14 @@ impl OperationCoordinator {
             scan_activity: ScanOperationRegistry::default(),
             inner: Arc::new(OperationCoordinatorInner::default()),
         }
+    }
+
+    /// Immediately admit native teletext work under a trusted process policy.
+    /// Coordinator clones share the same independent count. Workers must retain
+    /// a guard hold until actual completion, including caller abandonment.
+    #[must_use]
+    pub fn try_begin_teletext_work(&self, maximum: usize) -> Option<TeletextWorkGuard> {
+        TeletextWorkGuard::try_acquire(&self.locker, maximum)
     }
 
     /// Attempt to acquire one operation command.
@@ -580,6 +590,52 @@ mod tests {
     };
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
     use ersatzrs_domain::MediaSourceKind;
+
+    #[test]
+    fn coordinator_clones_share_teletext_admission_under_contention_and_nested_holds() {
+        use std::sync::{Arc, Barrier};
+
+        let coordinator =
+            OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());
+        let start = Arc::new(Barrier::new(8));
+        let attempted = Arc::new(Barrier::new(8));
+        let guards = std::thread::scope(|scope| {
+            let workers = (0..8)
+                .map(|_| {
+                    let coordinator = coordinator.clone();
+                    let start = start.clone();
+                    let attempted = attempted.clone();
+                    scope.spawn(move || {
+                        start.wait();
+                        let guard = coordinator.try_begin_teletext_work(2);
+                        attempted.wait();
+                        guard
+                    })
+                })
+                .collect::<Vec<_>>();
+            workers
+                .into_iter()
+                .filter_map(|worker| worker.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(guards.len(), 2);
+        assert_eq!(coordinator.entity_locker().active_teletext_work(), 2);
+        assert!(coordinator.clone().try_begin_teletext_work(2).is_none());
+        let nested = guards[0].hold_work();
+        drop(guards);
+        assert_eq!(coordinator.entity_locker().active_teletext_work(), 1);
+        assert!(coordinator.try_begin_teletext_work(1).is_none());
+        let playout = coordinator
+            .begin(BeginOperation::new(OperationKey::PlayoutBuild(9)))
+            .into_guard()
+            .unwrap();
+        assert_eq!(coordinator.active_playout_builds(), [9]);
+        drop(nested);
+        assert_eq!(coordinator.entity_locker().active_teletext_work(), 0);
+        assert_eq!(coordinator.active_playout_builds(), [9]);
+        assert!(coordinator.try_begin_teletext_work(1).is_some());
+        drop(playout);
+    }
 
     #[test]
     fn one_coordinator_excludes_playout_operations() {

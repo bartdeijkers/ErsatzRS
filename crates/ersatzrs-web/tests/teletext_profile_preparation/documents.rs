@@ -361,6 +361,16 @@ async fn two_actual_v2_profiles_compile_isolated_complete_candidates_without_wri
     let night = fixture.profile("Night document", "night", "good").await;
     let first = fixture.bind(1, &day, None).await;
     let second = fixture.bind(2, &night, None).await;
+    // This simultaneous preparation explicitly admits two independent workers.
+    fixture
+        .state
+        .application
+        .set_admin_setting(ersatzrs_app::commands::SetAdminSetting {
+            key: ersatzrs_web::host::teletext_work::MAX_CONCURRENT_SETTING,
+            value: "2".to_owned(),
+        })
+        .await
+        .unwrap();
     let config_before: Vec<(Option<String>, Option<String>)> =
         sqlx::query_as("SELECT \"Key\", \"Value\" FROM \"ConfigElement\" ORDER BY \"Key\"")
             .fetch_all(&fixture.state.pool)

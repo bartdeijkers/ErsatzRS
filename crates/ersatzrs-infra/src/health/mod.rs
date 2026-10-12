@@ -38,8 +38,9 @@ use checks::{
     RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
     ScanRefreshStateHealthCheck, ScriptedPlayoutStateHealthCheck, SearchProjectionHealthCheck,
     SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck, SubtitleCleanupHealthCheck,
-    TeletextDecoderHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
-    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    TeletextDecoderHealthCheck, TeletextWorkHealthCheck, TsduckAvailabilityHealthCheck,
+    UnavailableHealthCheck, VaapiDeviceHealthCheck, VaapiDriverHealthCheck,
+    ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -63,7 +64,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 49] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 50] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -73,6 +74,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 49] = [
     "FFmpeg Runtime",
     "FFmpeg Capabilities",
     "Teletext decoding",
+    "Teletext work configuration",
     "FFmpeg Reports",
     "Dynamic Text Graphics",
     "Next Runtime Availability",
@@ -267,6 +269,7 @@ fn registered_health_checks(
         Box::new(TeletextDecoderHealthCheck::new(
             ffmpeg_runtime.capabilities.teletext_decoder.clone(),
         )),
+        Box::new(TeletextWorkHealthCheck::new(pool.clone())),
         Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
         Box::new(DynamicTextGraphicsHealthCheck::new(pool.clone())),
         Box::new(NextRuntimeHealthCheck::new(pool.clone())),

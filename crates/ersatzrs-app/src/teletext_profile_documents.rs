@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_core::repositories::{TeletextProfileMutation as Mutation, TeletextProfileRepository};
 use ersatzrs_domain::{
     EntityId, TeletextDeclaredService, TeletextDeclaredServiceBudget, TeletextPageContract,
@@ -25,7 +26,8 @@ use crate::{
     ApplicationServices,
 };
 
-const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
+/// Existing maximum lifetime of a bound document preparation.
+pub const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Trusted host policy, separate from producer payloads and wire limits.
 #[derive(Clone, Copy, Debug)]
@@ -284,20 +286,97 @@ impl ApplicationServices {
         expected_binding_revision: i64,
         context: &SuppliedTeletextGuideContext<'_>,
     ) -> Result<BoundTeletextDocumentInput, BoundTeletextDocumentError> {
-        prepare_input_with_ports(
-            self.ports().teletext_profiles(),
+        self.invoke_bound_teletext_document_with_optional_hold(
             channel_id,
             addon_id,
             expected_binding_revision,
             context,
-            |selection, input, deadline| {
-                self.ports()
-                    .addons()
-                    .invoke_teletext_profile_before(selection, input, deadline)
-            },
-            Instant::now,
+            None,
+            None,
         )
         .await
+    }
+
+    /// Invoke under an existing host admission and original operation deadline.
+    /// The native adapter retains the hold until its owned cleanup has settled.
+    /// # Errors
+    /// Preserves original bound preparation errors and rejects incapable adapters.
+    pub async fn invoke_bound_teletext_document_with_hold(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+        expected_binding_revision: i64,
+        context: &SuppliedTeletextGuideContext<'_>,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<BoundTeletextDocumentInput, BoundTeletextDocumentError> {
+        self.invoke_bound_teletext_document_with_optional_hold(
+            channel_id,
+            addon_id,
+            expected_binding_revision,
+            context,
+            Some(deadline),
+            Some(hold),
+        )
+        .await
+    }
+
+    async fn invoke_bound_teletext_document_with_optional_hold(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+        expected_binding_revision: i64,
+        context: &SuppliedTeletextGuideContext<'_>,
+        deadline: Option<Instant>,
+        hold: Option<TeletextWorkHold>,
+    ) -> Result<BoundTeletextDocumentInput, BoundTeletextDocumentError> {
+        let invoke = |selection, input, deadline| {
+            let hold = hold.clone();
+            async move {
+                match hold {
+                    Some(hold) => {
+                        self.ports()
+                            .addons()
+                            .invoke_teletext_profile_before_with_hold(
+                                selection, input, deadline, hold,
+                            )
+                            .await
+                    }
+                    None => {
+                        self.ports()
+                            .addons()
+                            .invoke_teletext_profile_before(selection, input, deadline)
+                            .await
+                    }
+                }
+            }
+        };
+        match deadline {
+            None => {
+                prepare_input_with_ports(
+                    self.ports().teletext_profiles(),
+                    channel_id,
+                    addon_id,
+                    expected_binding_revision,
+                    context,
+                    invoke,
+                    Instant::now,
+                )
+                .await
+            }
+            Some(deadline) => {
+                prepare_input_with_ports_before(
+                    self.ports().teletext_profiles(),
+                    channel_id,
+                    addon_id,
+                    expected_binding_revision,
+                    context,
+                    invoke,
+                    (Instant::now, Some(deadline)),
+                )
+                .await
+            }
+        }
     }
 }
 
@@ -308,16 +387,48 @@ pub(super) async fn prepare_input_with_ports<F, Fut, Clock>(
     expected_revision: i64,
     context: &SuppliedTeletextGuideContext<'_>,
     invoke: F,
-    mut now: Clock,
+    now: Clock,
 ) -> Result<BoundTeletextDocumentInput, BoundTeletextDocumentError>
 where
     F: FnOnce(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
     Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
     Clock: FnMut() -> Instant,
 {
-    let deadline = now()
+    prepare_input_with_ports_before(
+        repository,
+        channel_id,
+        addon_id,
+        expected_revision,
+        context,
+        invoke,
+        (now, None),
+    )
+    .await
+}
+
+pub(super) async fn prepare_input_with_ports_before<F, Fut, Clock>(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+    addon_id: &str,
+    expected_revision: i64,
+    context: &SuppliedTeletextGuideContext<'_>,
+    invoke: F,
+    timing: (Clock, Option<Instant>),
+) -> Result<BoundTeletextDocumentInput, BoundTeletextDocumentError>
+where
+    F: FnOnce(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
+    Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
+    Clock: FnMut() -> Instant,
+{
+    let (mut now, supplied_deadline) = timing;
+    let started = now();
+    let maximum = started
         .checked_add(PREPARATION_TIMEOUT)
         .ok_or(BoundTeletextDocumentError::TimedOut)?;
+    let deadline = supplied_deadline.map_or(maximum, |deadline| maximum.min(deadline));
+    if supplied_deadline.is_some() {
+        check_deadline(started, deadline)?;
+    }
     let selection = match repository
         .invocation_snapshot(channel_id, addon_id, expected_revision)
         .await

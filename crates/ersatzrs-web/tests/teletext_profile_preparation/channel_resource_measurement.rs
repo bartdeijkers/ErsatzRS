@@ -28,7 +28,7 @@ fn resource(magazine: u8, kind: TeletextResourceKind, page: u8) -> TeletextResou
     .unwrap()
 }
 
-fn resources(magazine: u8) -> [TeletextResourceIdentity; 4] {
+pub(super) fn resources(magazine: u8) -> [TeletextResourceIdentity; 4] {
     [
         resource(magazine, TeletextResourceKind::Pop, 0xa0),
         resource(magazine, TeletextResourceKind::Gpop, 0xa1),
@@ -49,7 +49,7 @@ fn object_wire(identity: TeletextObjectIdentity) -> Value {
         "object_id":identity.object_id().get()})
 }
 
-fn resource_policy() -> TeletextChannelDocumentEncodingPolicy {
+pub(super) fn resource_policy() -> TeletextChannelDocumentEncodingPolicy {
     let mut policy = policy();
     // Finite fixture bounds admit 16 displays/eight resources. Normalization
     // limits remain unchanged; no production policy is inferred.
@@ -121,6 +121,10 @@ fn drcs(identity: TeletextResourceIdentity, bits: u16) -> Value {
 }
 
 fn eight_pages(first: u16, theme: &str, magazine: u8) -> Value {
+    pages(first, 8, theme, magazine)
+}
+
+pub(super) fn pages(first: u16, count: u16, theme: &str, magazine: u8) -> Value {
     let [pop, gpop, normal, global] = resources(magazine);
     let public_object = TeletextObjectIdentity::public(pop, TeletextObjectId::new(10)).unwrap();
     let global_object = TeletextObjectIdentity::global(gpop, TeletextObjectId::new(20)).unwrap();
@@ -135,10 +139,10 @@ fn eight_pages(first: u16, theme: &str, magazine: u8) -> Value {
         document[field] = json!([]);
     }
     let link = |identity: TeletextResourceIdentity| json!({"target":{"kind":"page","page":identity.page()}, "validity":"level25_only","required_subpages":1});
-    for number in first..first + 8 {
+    for number in first..first + count {
         let mut page = response(DocumentFixture::Authored, theme, number, 0, "nld");
         page["pages"][0]["navigation"][0]["target"]["page"] =
-            json!(first + (number - first + 1) % 8);
+            json!(first + (number - first + 1) % count);
         let enhancement = &mut page["page_enhancements"][0];
         enhancement["compositional_links"] =
             json!({"pop":link(pop),"gpop":link(gpop),"drcs":link(normal),"gdrcs":link(global)});
@@ -165,12 +169,24 @@ fn eight_pages(first: u16, theme: &str, magazine: u8) -> Value {
 }
 
 async fn installed_service() -> Fixture {
+    installed_documents(
+        [eight_pages(200, "day", 2), eight_pages(300, "night", 3)],
+        ["day", "night"],
+    )
+    .await
+}
+
+pub(super) async fn installed_documents(documents: [Value; 2], themes: [&str; 2]) -> Fixture {
     let fixture = Fixture::new_persistent().await;
     install_secondary(&fixture).await;
-    for (addon, label, first, theme, magazine, hash) in [
-        (ADDON, "first", 200, "day", 2, "a".repeat(64)),
-        (SECONDARY, "second", 300, "night", 3, "b".repeat(64)),
-    ] {
+    for (((addon, label, hash), document), theme) in [
+        (ADDON, "first", "a".repeat(64)),
+        (SECONDARY, "second", "b".repeat(64)),
+    ]
+    .into_iter()
+    .zip(documents)
+    .zip(themes)
+    {
         sqlx::query(r#"UPDATE "AddonInstallation" SET "PackageSha256"=? WHERE "AddonId"=?"#)
             .bind(hash)
             .bind(addon)
@@ -178,7 +194,6 @@ async fn installed_service() -> Fixture {
             .await
             .unwrap();
         install_contract(&fixture, addon, label, 2).await;
-        let document = eight_pages(first, theme, magazine);
         serde_json::from_value::<TeletextPagesV2Response>(document.clone())
             .expect("generated resource fixture must match the actual producer V2 DTO");
         write_response(&fixture, label, &document);
@@ -188,7 +203,7 @@ async fn installed_service() -> Fixture {
     fixture
 }
 
-fn counts(candidate: &EncodedChannelTeletextDocumentCandidate) -> Value {
+pub(super) fn counts(candidate: &EncodedChannelTeletextDocumentCandidate) -> Value {
     let encoded = candidate.encoded().unwrap();
     let semantic = encoded.declared().semantic();
     let mut normalized_commands = 0;
@@ -236,31 +251,35 @@ fn counts(candidate: &EncodedChannelTeletextDocumentCandidate) -> Value {
     })
 }
 
+fn raster(composition: &TeletextMainComposition) -> TeletextRaster {
+    render_teletext_composition(
+        composition,
+        TeletextColourPixelOptions {
+            reveal_concealed: false,
+            flash_phase: TeletextFlashPhase::Original,
+        },
+        TeletextRasterBudget {
+            max_pixels: 168_000,
+            max_diagnostics: 1400,
+        },
+    )
+    .unwrap()
+}
+
 fn previews(encoded: &EncodedTeletextAuthoredService) -> Vec<TeletextRaster> {
     encoded
         .pages()
         .iter()
         .filter_map(|page| match page {
-            EncodedTeletextAuthoredPage::CompiledDisplay(page) => Some(
-                render_teletext_composition(
-                    page.normalized().original(),
-                    TeletextColourPixelOptions {
-                        reveal_concealed: false,
-                        flash_phase: TeletextFlashPhase::Original,
-                    },
-                    TeletextRasterBudget {
-                        max_pixels: 168_000,
-                        max_diagnostics: 1400,
-                    },
-                )
-                .unwrap(),
-            ),
+            EncodedTeletextAuthoredPage::CompiledDisplay(page) => {
+                Some(raster(page.normalized().original()))
+            }
             _ => None,
         })
         .collect()
 }
 
-fn assert_same_service(
+pub(super) fn assert_same_service(
     actual: &EncodedTeletextAuthoredService,
     expected: &EncodedTeletextAuthoredService,
 ) {
@@ -269,6 +288,10 @@ fn assert_same_service(
     assert_eq!(actual.magazine_units(), expected.magazine_units());
     assert_eq!(units(actual), units(expected));
     for (actual, expected) in actual.pages().iter().zip(expected.pages()) {
+        assert_eq!(
+            std::mem::discriminant(actual),
+            std::mem::discriminant(expected)
+        );
         if let (
             EncodedTeletextAuthoredPage::CompiledDisplay(actual),
             EncodedTeletextAuthoredPage::CompiledDisplay(expected),
@@ -278,13 +301,17 @@ fn assert_same_service(
                 actual.normalized().original(),
                 expected.normalized().original()
             );
+            // Compare every same-model raster while retaining only one pair.
+            assert_eq!(
+                raster(actual.normalized().original()),
+                raster(expected.normalized().original())
+            );
             assert_eq!(
                 actual.normalized().physical(),
                 expected.normalized().physical()
             );
         }
     }
-    assert_eq!(previews(actual), previews(expected));
 }
 
 fn metered_reencode(

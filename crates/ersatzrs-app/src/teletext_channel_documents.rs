@@ -16,6 +16,7 @@ use crate::{
     ApplicationServices,
 };
 use ersatzrs_addon_contract as wire;
+use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_core::repositories::{
     TeletextProfileMutation as Mutation, TeletextProfileRejection, TeletextProfileRepository,
 };
@@ -29,7 +30,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
+/// Existing maximum lifetime of a complete channel preparation.
+pub const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BINDINGS: usize = 1024;
 
 /// Exact preflight request bytes for the contracts selected by one channel.
@@ -333,20 +335,97 @@ impl ApplicationServices {
         context: &SuppliedTeletextGuideContext<'_>,
         budget: TeletextChannelDocumentInputBudget,
     ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
-        prepare_with_ports(
-            self.ports().teletext_profiles(),
+        self.invoke_channel_teletext_documents_with_optional_hold(
             channel_id,
             entry_addon_id,
             context,
             budget,
-            |selected, input, deadline| {
-                self.ports()
-                    .addons()
-                    .invoke_teletext_profile_before(selected, input, deadline)
-            },
-            Instant::now,
+            None,
+            None,
         )
         .await
+    }
+
+    /// Invoke under the host's existing admission without consuming a new slot.
+    /// Owned adapters retain cloned holds through actual native cleanup.
+    /// # Errors
+    /// Preserves original preparation errors and rejects incapable adapters.
+    pub async fn invoke_channel_teletext_documents_with_hold(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
+        self.invoke_channel_teletext_documents_with_optional_hold(
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            Some(deadline),
+            Some(hold),
+        )
+        .await
+    }
+
+    async fn invoke_channel_teletext_documents_with_optional_hold(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+        deadline: Option<Instant>,
+        hold: Option<TeletextWorkHold>,
+    ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
+        let invoke = |selected, input, deadline| {
+            let hold = hold.clone();
+            async move {
+                match hold {
+                    Some(hold) => {
+                        self.ports()
+                            .addons()
+                            .invoke_teletext_profile_before_with_hold(
+                                selected, input, deadline, hold,
+                            )
+                            .await
+                    }
+                    None => {
+                        self.ports()
+                            .addons()
+                            .invoke_teletext_profile_before(selected, input, deadline)
+                            .await
+                    }
+                }
+            }
+        };
+        match deadline {
+            None => {
+                prepare_with_ports(
+                    self.ports().teletext_profiles(),
+                    channel_id,
+                    entry_addon_id,
+                    context,
+                    budget,
+                    invoke,
+                    Instant::now,
+                )
+                .await
+            }
+            Some(deadline) => {
+                prepare_with_ports_before(
+                    self.ports().teletext_profiles(),
+                    channel_id,
+                    entry_addon_id,
+                    context,
+                    budget,
+                    invoke,
+                    (Instant::now, Some(deadline)),
+                )
+                .await
+            }
+        }
     }
 
     /// Observe the complete channel again after validation/native work, without
@@ -374,17 +453,49 @@ async fn prepare_with_ports<F, Fut, Clock>(
     entry_addon_id: Option<&str>,
     context: &SuppliedTeletextGuideContext<'_>,
     budget: TeletextChannelDocumentInputBudget,
-    mut invoke: F,
-    mut now: Clock,
+    invoke: F,
+    now: Clock,
 ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError>
 where
     F: FnMut(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
     Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
     Clock: FnMut() -> Instant,
 {
-    let deadline = now()
+    prepare_with_ports_before(
+        repository,
+        channel_id,
+        entry_addon_id,
+        context,
+        budget,
+        invoke,
+        (now, None),
+    )
+    .await
+}
+
+async fn prepare_with_ports_before<F, Fut, Clock>(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    budget: TeletextChannelDocumentInputBudget,
+    mut invoke: F,
+    timing: (Clock, Option<Instant>),
+) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError>
+where
+    F: FnMut(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
+    Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
+    Clock: FnMut() -> Instant,
+{
+    let (mut now, supplied_deadline) = timing;
+    let started = now();
+    let maximum = started
         .checked_add(PREPARATION_TIMEOUT)
         .ok_or(ChannelTeletextDocumentError::TimedOut)?;
+    let deadline = supplied_deadline.map_or(maximum, |deadline| maximum.min(deadline));
+    if supplied_deadline.is_some() {
+        check_deadline(started, deadline)?;
+    }
     let selection = snapshot(repository, channel_id).await?;
     check_deadline(now(), deadline)?;
     validate_selection(&selection, channel_id, budget.max_producers)?;

@@ -39,6 +39,8 @@ use super::teletext_channel_documents::{
 #[derive(Debug, thiserror::Error)]
 pub enum NativeTeletextDesignError {
     #[error(transparent)]
+    Work(#[from] super::teletext_work::TeletextWorkError),
+    #[error(transparent)]
     Storage(#[from] TeletextDesignStoreError),
     #[error(transparent)]
     Document(#[from] TeletextDesignDocumentError),
@@ -183,6 +185,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 struct NativeOriginalDesignConfirmation {
     digest: String,
     deadline: Instant,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
 }
 #[async_trait]
 impl TeletextOriginalDesignValidator for NativeOriginalDesignConfirmation {
@@ -192,7 +195,7 @@ impl TeletextOriginalDesignValidator for NativeOriginalDesignConfirmation {
     ) -> Result<EncodedTeletextDesignDocuments, TeletextOriginalDesignValidationError> {
         let expected = self.digest.clone();
         let deadline = self.deadline;
-        tokio::task::spawn_blocking(move || {
+        super::teletext_work::spawn_blocking(self.hold.clone(), move || {
             if Instant::now() >= deadline {
                 return Err(TeletextOriginalDesignValidationError::TimedOut);
             }
@@ -227,55 +230,63 @@ pub async fn save_original_teletext_design_candidate(
     deadline: Instant,
 ) -> Result<TeletextDesignMutation<SavedOriginalTeletextDesign>, NativeTeletextDesignError> {
     check_deadline(deadline)?;
-    let (candidate, document, digest) = tokio::task::spawn_blocking(move || {
-        check_deadline(deadline)?;
-        if candidate.transmissions().len() > budget.max_resource_transmissions {
-            return Err(NativeTeletextDesignError::LifecycleBudget);
-        }
-        let transmissions: Vec<_> = candidate
-            .transmissions()
-            .iter()
-            .map(|record| TeletextSavedResourceTransmission {
-                resource: record.resource,
-                counter: record.counter,
-                last_subpage: record.last_subpage,
-                update: match record.update {
-                    TeletextResourceFullUpdate::Changed => TeletextSavedResourceUpdate::Changed,
-                    TeletextResourceFullUpdate::Unchanged => TeletextSavedResourceUpdate::Unchanged,
-                },
-            })
-            .collect();
-        let input = TeletextDesignDocumentInput {
-            selection: candidate.selection(),
-            generation: candidate.generation(),
-            sources: candidate.sources(),
-            entry_addon_id: candidate.entry_addon_id(),
-            entry: candidate.metadata().map(|metadata| metadata.entry),
-            v1_region: candidate.v1_region().map(|region| match region {
-                TeletextEncodingRegion::WesternLatin => TeletextSavedV1Region::WesternLatin,
-            }),
-            resource_transmissions: &transmissions,
-        };
-        let document = match candidate.guide_source() {
-            Some(source) => encode_teletext_design_documents_with_source(
-                input,
-                candidate.requests(),
-                source,
-                budget,
-            ),
-            None => {
-                encode_teletext_design_documents_with_requests(input, candidate.requests(), budget)
+    let guard = super::teletext_work::begin(application, Some(deadline)).await?;
+    let hold = guard.hold_work();
+    let (candidate, document, digest) =
+        super::teletext_work::spawn_blocking(hold.clone(), move || {
+            check_deadline(deadline)?;
+            if candidate.transmissions().len() > budget.max_resource_transmissions {
+                return Err(NativeTeletextDesignError::LifecycleBudget);
             }
-        }?;
-        let digest = sha256_hex(document.bytes());
-        check_deadline(deadline)?;
-        Ok::<_, NativeTeletextDesignError>((candidate, document, digest))
-    })
-    .await
-    .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
+            let transmissions: Vec<_> = candidate
+                .transmissions()
+                .iter()
+                .map(|record| TeletextSavedResourceTransmission {
+                    resource: record.resource,
+                    counter: record.counter,
+                    last_subpage: record.last_subpage,
+                    update: match record.update {
+                        TeletextResourceFullUpdate::Changed => TeletextSavedResourceUpdate::Changed,
+                        TeletextResourceFullUpdate::Unchanged => {
+                            TeletextSavedResourceUpdate::Unchanged
+                        }
+                    },
+                })
+                .collect();
+            let input = TeletextDesignDocumentInput {
+                selection: candidate.selection(),
+                generation: candidate.generation(),
+                sources: candidate.sources(),
+                entry_addon_id: candidate.entry_addon_id(),
+                entry: candidate.metadata().map(|metadata| metadata.entry),
+                v1_region: candidate.v1_region().map(|region| match region {
+                    TeletextEncodingRegion::WesternLatin => TeletextSavedV1Region::WesternLatin,
+                }),
+                resource_transmissions: &transmissions,
+            };
+            let document = match candidate.guide_source() {
+                Some(source) => encode_teletext_design_documents_with_source(
+                    input,
+                    candidate.requests(),
+                    source,
+                    budget,
+                ),
+                None => encode_teletext_design_documents_with_requests(
+                    input,
+                    candidate.requests(),
+                    budget,
+                ),
+            }?;
+            let digest = sha256_hex(document.bytes());
+            check_deadline(deadline)?;
+            Ok::<_, NativeTeletextDesignError>((candidate, document, digest))
+        })
+        .await
+        .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
     let confirmation = NativeOriginalDesignConfirmation {
         digest: digest.clone(),
         deadline,
+        hold,
     };
     Ok(
         match application
@@ -309,9 +320,32 @@ pub async fn reload_original_teletext_design_revision(
     application: &ApplicationServices,
     id: EntityId,
     revision: i64,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<Option<RestoredOriginalTeletextDesign>, NativeTeletextDesignError> {
+    check_deadline(deadline)?;
+    let guard = super::teletext_work::begin(application, Some(deadline)).await?;
+    reload_original_teletext_design_revision_with_hold(
+        application,
+        id,
+        revision,
+        budget,
+        policy,
+        deadline,
+        guard.hold_work(),
+    )
+    .await
+}
+
+pub(super) async fn reload_original_teletext_design_revision_with_hold(
+    application: &ApplicationServices,
+    id: EntityId,
+    revision: i64,
     mut budget: TeletextDesignDocumentBudget,
     mut policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
 ) -> Result<Option<RestoredOriginalTeletextDesign>, NativeTeletextDesignError> {
     check_deadline(deadline)?;
     // Restrict the decoder's existing streaming document-count admission before
@@ -324,7 +358,7 @@ pub async fn reload_original_teletext_design_revision(
     else {
         return Ok(None);
     };
-    let restored = tokio::task::spawn_blocking(move || {
+    let restored = super::teletext_work::spawn_blocking(hold, move || {
         check_deadline(deadline)?;
         let parts = decode_teletext_design_documents(&stored.document, budget)?.into_parts();
         drop(stored.document);
@@ -613,13 +647,18 @@ async fn request_original_publication(
     {
         return Ok(M::Rejected(R::InvalidValues));
     }
-    let Some(design) = reload_original_teletext_design_revision(
+    check_deadline(deadline)?;
+    let guard = super::teletext_work::begin(application, Some(deadline))
+        .await
+        .map_err(NativeTeletextDesignError::from)?;
+    let Some(design) = reload_original_teletext_design_revision_with_hold(
         application,
         design_id,
         revision,
         budget,
         policy,
         deadline,
+        guard.hold_work(),
     )
     .await?
     else {

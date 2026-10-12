@@ -5,6 +5,7 @@
 //! producer output, or authorizes publication. A worker owns the managed process
 //! and all pipe tasks even after the caller abandons its response future.
 
+use ersatzrs_core::locking::TeletextWorkHold;
 use std::time::Duration;
 
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
@@ -103,6 +104,19 @@ pub(super) async fn run_with_contract_deadline(
     deadline: Instant,
     contract: TeletextPageContract,
 ) -> Result<Vec<u8>, TeletextCommandError> {
+    run_with_contract_deadline_and_hold(command, input, cancellation, deadline, contract, None)
+        .await
+}
+
+/// Retain shared admission in the actual command owner through process cleanup.
+pub(super) async fn run_with_contract_deadline_and_hold(
+    command: ResolvedAddonCommand,
+    input: Vec<u8>,
+    cancellation: Option<oneshot::Receiver<()>>,
+    deadline: Instant,
+    contract: TeletextPageContract,
+    hold: Option<TeletextWorkHold>,
+) -> Result<Vec<u8>, TeletextCommandError> {
     if input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES
         || TeletextPagesRequest::from_json_for_schema(&input, contract.schema_version()).is_err()
     {
@@ -110,6 +124,10 @@ pub(super) async fn run_with_contract_deadline(
     }
     let (response, result) = oneshot::channel();
     tokio::spawn(async move {
+        let mut ownership = CommandWorkHold {
+            hold,
+            confirmed: false,
+        };
         let mut response = response;
         let outcome = run_owned(
             command,
@@ -120,11 +138,30 @@ pub(super) async fn run_with_contract_deadline(
             &mut response,
         )
         .await;
+        ownership.confirmed = !matches!(&outcome, Err(TeletextCommandError::CleanupUnconfirmed));
         let _ = response.send(outcome);
     });
     result
         .await
         .unwrap_or(Err(TeletextCommandError::CleanupUnconfirmed))
+}
+
+// A command owner may unwind or be dropped before run_owned returns. Its
+// managed child then owns fallback cleanup rather than confirmed exit evidence.
+// Retain that admission conservatively, independently of caller survival.
+struct CommandWorkHold {
+    hold: Option<TeletextWorkHold>,
+    confirmed: bool,
+}
+
+impl Drop for CommandWorkHold {
+    fn drop(&mut self) {
+        if !self.confirmed {
+            if let Some(hold) = &self.hold {
+                hold.retain_until_restart();
+            }
+        }
+    }
 }
 
 type PipeTask = JoinHandle<Result<Vec<u8>, PipeFailure>>;

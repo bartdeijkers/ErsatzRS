@@ -35,6 +35,8 @@ use super::teletext_channel_documents::{
 /// Static/numeric failures; no source text, paths or unsupported settings escape.
 #[derive(Debug, thiserror::Error)]
 pub enum TeletextGuideCaptureError {
+    #[error(transparent)]
+    Work(#[from] super::teletext_work::TeletextWorkError),
     #[error("teletext guide capture exceeded its original deadline")]
     TimedOut,
     #[error("teletext guide capture requires at most 256 selected channels")]
@@ -263,6 +265,7 @@ pub async fn capture_teletext_guide(
 /// Rejects capture, fingerprint bounds, invalid association or the original
 /// deadline. Abandoned CPU work retains bounded ownership until completion.
 pub async fn capture_source_bound_teletext_guide(
+    application: &ersatzrs_app::ApplicationServices,
     pool: &DbPool,
     channel_ids: &[i64],
     captured_at: DateTime<Utc>,
@@ -270,10 +273,11 @@ pub async fn capture_source_bound_teletext_guide(
     deadline: Instant,
     digest_limits: GuideSnapshotDigestLimits,
 ) -> Result<CapturedTeletextGuide, TeletextGuideCaptureError> {
+    let guard = super::teletext_work::begin(application, Some(deadline)).await?;
     let captured = capture_teletext_guide(pool, channel_ids, captured_at, budget, deadline).await?;
     let captured = tokio::time::timeout_at(
         tokio::time::Instant::from_std(deadline),
-        tokio::task::spawn_blocking(move || {
+        super::teletext_work::spawn_blocking(guard.hold_work(), move || {
             check_deadline(deadline)?;
             let context_digest = captured.snapshot.context_digest(digest_limits)?;
             let source = TeletextGuideSourceFence {

@@ -38,6 +38,26 @@ async fn bounded_reader_maps_io_failure_without_raw_diagnostics() {
         .contains("private producer content"));
 }
 
+#[test]
+fn command_owner_unwind_retains_admission_until_restart() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+
+    let locker = EntityLocker::new();
+    let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let hold = guard.hold_work();
+    drop(guard);
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        let _ownership = CommandWorkHold {
+            hold: Some(hold),
+            confirmed: false,
+        };
+        panic!("synthetic command owner unwind before exit confirmation");
+    }));
+    assert!(outcome.is_err());
+    assert_eq!(locker.active_teletext_work(), 1);
+    assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+}
+
 // Synthetic shell fixtures exercise the managed Unix owner; native Windows
 // JobObject acceptance is separate and is not inferred from these tests.
 #[cfg(unix)]
@@ -69,6 +89,53 @@ mod unix {
         })
         .await
         .expect("synthetic command became ready");
+    }
+
+    #[tokio::test]
+    async fn held_command_requester_abort_releases_only_after_confirmed_process_cleanup() {
+        use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+
+        let temp = tempfile::tempdir().unwrap();
+        let ready = temp.path().join("ready");
+        let supplied = command(temp.path(), "printf '%s\\n' \"$$\" > ready; exec sleep 30");
+        let locker = EntityLocker::new();
+        let guard = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let hold = guard.hold_work();
+        drop(guard);
+        let requester = tokio::spawn(run_with_contract_deadline_and_hold(
+            supplied,
+            request_bytes(),
+            None,
+            Instant::now() + EXECUTION_TIMEOUT,
+            TeletextPageContract::V1,
+            Some(hold),
+        ));
+        wait_ready(&ready).await;
+        let pid: i32 = tokio::fs::read_to_string(&ready)
+            .await
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+        requester.abort();
+        assert!(requester.await.unwrap_err().is_cancelled());
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(guard) = TeletextWorkGuard::try_acquire(&locker, 1) {
+                    drop(guard);
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            nix::sys::signal::killpg(nix::unistd::Pid::from_raw(pid), None),
+            Err(nix::errno::Errno::ESRCH),
+        );
+        assert_eq!(locker.active_teletext_work(), 0);
     }
 
     #[tokio::test]

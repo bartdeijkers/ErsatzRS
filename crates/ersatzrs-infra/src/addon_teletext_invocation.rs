@@ -14,6 +14,7 @@ use std::{
 };
 
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
+use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_core::repositories::{TeletextProfileMutation, TeletextProfileRepository as _};
 use ersatzrs_domain::{TeletextPageContract, TeletextSelectionSnapshot};
 use sqlx::Row;
@@ -126,6 +127,7 @@ pub async fn invoke(
             input,
             cancellation,
             selection: None,
+            hold: None,
         },
         fence,
         RESOLUTION_SETTLEMENT_TIMEOUT,
@@ -178,6 +180,53 @@ pub async fn invoke_profile_with_deadline(
     deadline: std::time::Instant,
     cancellation: Option<oneshot::Receiver<()>>,
 ) -> Result<TeletextProfileInvocationReceipt, TeletextInvocationError> {
+    invoke_profile_before_owned(
+        pool,
+        selection,
+        runtime,
+        input,
+        deadline,
+        cancellation,
+        None,
+    )
+    .await
+}
+
+/// Invoke under a shared work hold retained by the actual resolution owner.
+/// Early cleanup uncertainty does not release admission while a native join is
+/// still pending. The hold carries no selection or publication authority.
+/// # Errors
+/// Returns the same static invocation and cleanup errors as the deadline API.
+pub async fn invoke_profile_with_deadline_and_hold(
+    pool: DbPool,
+    selection: TeletextSelectionSnapshot,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    deadline: std::time::Instant,
+    cancellation: Option<oneshot::Receiver<()>>,
+    hold: TeletextWorkHold,
+) -> Result<TeletextProfileInvocationReceipt, TeletextInvocationError> {
+    invoke_profile_before_owned(
+        pool,
+        selection,
+        runtime,
+        input,
+        deadline,
+        cancellation,
+        Some(hold),
+    )
+    .await
+}
+
+async fn invoke_profile_before_owned(
+    pool: DbPool,
+    selection: TeletextSelectionSnapshot,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    deadline: std::time::Instant,
+    cancellation: Option<oneshot::Receiver<()>>,
+    hold: Option<TeletextWorkHold>,
+) -> Result<TeletextProfileInvocationReceipt, TeletextInvocationError> {
     let fence =
         ResolutionFence::new(Instant::from_std(deadline).min(Instant::now() + EXECUTION_TIMEOUT));
     let receipt = invoke_with_fence(
@@ -188,6 +237,7 @@ pub async fn invoke_profile_with_deadline(
             input,
             cancellation,
             selection: Some(selection),
+            hold,
         },
         fence,
         RESOLUTION_SETTLEMENT_TIMEOUT,
@@ -209,6 +259,7 @@ struct Invocation {
     input: Vec<u8>,
     cancellation: Option<oneshot::Receiver<()>>,
     selection: Option<TeletextSelectionSnapshot>,
+    hold: Option<TeletextWorkHold>,
 }
 
 type Response = oneshot::Sender<Result<InvocationReceipt, TeletextInvocationError>>;
@@ -331,6 +382,10 @@ async fn invoke_owned(
     settlement_timeout: Duration,
     response: &mut Option<Response>,
 ) -> Result<InvocationReceipt, TeletextInvocationError> {
+    // Move the hold into this actual worker before any resolution or command
+    // stage. It stays here through early uncertainty responses and native joins,
+    // independently of whether the requesting future is still alive.
+    let work_hold = invocation.hold.take();
     if response.as_ref().is_none_or(Response::is_closed)
         || already_cancelled(&mut invocation.cancellation)
     {
@@ -356,10 +411,7 @@ async fn invoke_owned(
     };
     let command = match selected {
         Ok(result) => {
-            if matches!(
-                &result,
-                Err(AddonError::ToolCleanupRequired | AddonError::TerminationUnconfirmed)
-            ) {
+            if retain_resolution_cleanup(work_hold.as_ref(), &result) {
                 return Err(TeletextInvocationError::CleanupUnconfirmed);
             }
             if response.as_ref().is_none_or(Response::is_closed)
@@ -374,40 +426,65 @@ async fn invoke_owned(
         }
         Err(reason) => {
             fence.stop();
-            match tokio::time::timeout(settlement_timeout, &mut resolution).await {
-                Ok(Err(AddonError::ToolCleanupRequired | AddonError::TerminationUnconfirmed)) => {
+            if let Ok(result) = tokio::time::timeout(settlement_timeout, &mut resolution).await {
+                if retain_resolution_cleanup(work_hold.as_ref(), &result) {
                     return Err(TeletextInvocationError::CleanupUnconfirmed);
                 }
-                Ok(_) => return Err(reason),
-                Err(_) => {
-                    if let Some(response) = response.take() {
-                        let _ = response.send(Err(TeletextInvocationError::CleanupUnconfirmed));
-                    }
-                    // Never abandon an in-flight blocking job. Its cooperative
-                    // fence prevents further stages when the native call returns.
-                    let _ = resolution.await;
-                    return Err(TeletextInvocationError::CleanupUnconfirmed);
-                }
+                return Err(reason);
             }
+            if let Some(response) = response.take() {
+                let _ = response.send(Err(TeletextInvocationError::CleanupUnconfirmed));
+            }
+            // Never abandon an in-flight blocking job. Its cooperative
+            // fence prevents further stages when the native call returns.
+            let result = resolution.await;
+            retain_resolution_cleanup(work_hold.as_ref(), &result);
+            return Err(TeletextInvocationError::CleanupUnconfirmed);
         }
     };
     // The resolution future borrows only read-only inputs; its complete result
     // is retained before moving the raw request into the command owner.
-    let receipt = execute(
+    let outcome = execute(
         command,
         invocation.input,
         &mut invocation.cancellation,
         fence.deadline,
         contract,
         response,
+        work_hold.clone(),
     )
-    .await?;
+    .await;
+    // The command error is emitted only after its owned cleanup attempts. An
+    // unproved process exit may still own Drop fallback work; never recycle
+    // this admission based solely on the requesting future having returned.
+    if matches!(&outcome, Err(TeletextInvocationError::CleanupUnconfirmed)) {
+        if let Some(hold) = &work_hold {
+            hold.retain_until_restart();
+        }
+    }
+    let receipt = outcome?;
     Ok(InvocationReceipt {
         stdout: receipt.stdout,
         state_revision: receipt.state_revision,
         selection: invocation.selection.clone(),
         generation,
     })
+}
+
+fn retain_resolution_cleanup(
+    hold: Option<&TeletextWorkHold>,
+    result: &Result<ResolvedAddonCommand, AddonError>,
+) -> bool {
+    let uncertain = matches!(
+        result,
+        Err(AddonError::ToolCleanupRequired | AddonError::TerminationUnconfirmed)
+    );
+    if uncertain {
+        if let Some(hold) = hold {
+            hold.retain_until_restart();
+        }
+    }
+    uncertain
 }
 
 async fn resolve_invocation_for_launch(
@@ -563,15 +640,17 @@ async fn execute(
     deadline: Instant,
     contract: TeletextPageContract,
     response: &mut Option<Response>,
+    hold: Option<TeletextWorkHold>,
 ) -> Result<TeletextInvocationReceipt, TeletextInvocationError> {
     let revision = command.state_revision.clone();
     let (cancel_command, command_cancelled) = oneshot::channel();
-    let execution = teletext_command::run_with_contract_deadline(
+    let execution = teletext_command::run_with_contract_deadline_and_hold(
         command,
         input,
         Some(command_cancelled),
         deadline,
         contract,
+        hold,
     );
     tokio::pin!(execution);
     let selected = tokio::select! {

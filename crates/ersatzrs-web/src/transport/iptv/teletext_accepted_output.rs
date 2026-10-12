@@ -95,15 +95,18 @@ pub async fn load_accepted_teletext_output_intent(
     if budget.max_serialized_bytes == 0 {
         return Err(TeletextPumpError::Configuration.into());
     }
-    let candidate = timeout_at(
+    let recovered = timeout_at(
         owner_deadline,
         reload_accepted_teletext_generation(application, channel_id, budget, encoding, deadline),
     )
     .await
-    .map_err(|_| AcceptedTeletextIntentLoadError::TimedOut)??;
+    .map_err(|_| AcceptedTeletextIntentLoadError::TimedOut)?;
+    // Nested admission can observe the same expired instant first. Retain one
+    // public timeout category before propagating any nested recovery result.
     if Instant::now() >= owner_deadline {
         return Err(AcceptedTeletextIntentLoadError::TimedOut);
     }
+    let candidate = recovered?;
     candidate
         .map(|candidate| {
             TeletextAcceptedOutputIntent::new(

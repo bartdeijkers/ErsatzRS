@@ -22,5 +22,6 @@ pub mod teletext_documents;
 pub mod teletext_generations;
 pub mod teletext_guide;
 pub mod teletext_preview;
+pub mod teletext_work;
 pub mod tool_recovery;
 pub mod troubleshooting;

@@ -33,6 +33,7 @@ async fn source_design() -> (Fixture, SavedOriginalTeletextDesign) {
     guide_capture::seed_guide(&fixture).await;
     let mut budget = guide_capture::read_budget();
     let captured = capture_source_bound_teletext_guide(
+        &fixture.state.application,
         &fixture.state.pool,
         &[2],
         guide(&[]).captured_at,
@@ -301,6 +302,7 @@ async fn source_fingerprint_and_fresh_admission_limits_fail_without_pending_writ
     }
     let mut read = guide_capture::read_budget();
     let failed = capture_source_bound_teletext_guide(
+        &fixture.state.application,
         &fixture.state.pool,
         &[2],
         guide(&[]).captured_at,

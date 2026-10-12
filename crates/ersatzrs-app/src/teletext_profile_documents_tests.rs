@@ -613,6 +613,56 @@ async fn original_deadline_is_checked_before_invocation_after_receipt_and_after_
 }
 
 #[tokio::test]
+async fn supplied_admission_deadline_shortens_bound_document_work_without_renewal() {
+    use crate::teletext_profile_documents::{prepare_input_with_ports_before, PREPARATION_TIMEOUT};
+
+    let start = Instant::now();
+    for supplied in [
+        start + Duration::from_secs(15),
+        start + Duration::from_mins(1),
+    ] {
+        let repo = authored_repository();
+        let before = repo.selections.lock().unwrap().clone();
+        let expected = supplied.min(start + PREPARATION_TIMEOUT);
+        let invoked = AtomicUsize::new(0);
+        let input = prepare_input_with_ports_before(
+            &repo,
+            1,
+            ADDON,
+            3,
+            &context(&[]),
+            |selected, _, deadline| {
+                assert_eq!(deadline, expected);
+                invoked.fetch_add(1, Ordering::SeqCst);
+                async move { Ok(document_receipt(selected, authored_output())) }
+            },
+            (|| start, Some(supplied)),
+        )
+        .await
+        .unwrap();
+        assert_eq!(input.deadline(), expected);
+        assert_eq!(invoked.load(Ordering::SeqCst), 1);
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(*repo.selections.lock().unwrap(), before);
+    }
+    let repo = authored_repository();
+    let mut invalid = context(&[]);
+    invalid.generation = "";
+    let result = prepare_input_with_ports_before(
+        &repo,
+        1,
+        ADDON,
+        3,
+        &invalid,
+        |_, _, _| async { panic!("expired admission invoked producer") },
+        (|| start, Some(start)),
+    )
+    .await;
+    assert!(matches!(result, Err(BoundTeletextDocumentError::TimedOut)));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn synchronous_validation_rejects_expired_original_input_before_parsing_without_sleep() {
     let repo = authored_repository();
     let past = Instant::now().checked_sub(Duration::from_mins(1)).unwrap();
