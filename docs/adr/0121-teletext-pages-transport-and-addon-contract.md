@@ -15,8 +15,11 @@ Partial.
 
 The preparatory guide/native bridge now rejects changed effective guide context
 before and after producer preparation, with cumulative read limits and the original
-deadline. These observations do not fence uncaptured raw source/path changes or
-an intervening change and restoration. Durable guide-input association and a
+deadline, including exact stored configured/accepted source-path associations.
+Original bounded V1/V2 request buffers now move through validation into the native
+candidate separately from response-only source DTOs. These facts do not validate
+configured-to-accepted path ownership, fence live-file/projected-away raw changes
+or an intervening change and restoration. Durable guide-input association and a
 fresh, atomic publication-time source check remain required; the interchange
 reference and P9A-04 own API details, proof and the remaining integration gaps.
 

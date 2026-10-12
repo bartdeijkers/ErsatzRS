@@ -32,7 +32,33 @@ use std::{
 const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BINDINGS: usize = 1024;
 
-type RequestTemplates = (Option<Vec<u8>>, Option<Vec<u8>>);
+/// Exact preflight request bytes for the contracts selected by one channel.
+/// At most two independently capped 4 MiB templates are retained, separately
+/// from the response budget. These bytes convey no durable guide authority.
+pub struct TeletextChannelRequestTemplates {
+    v1: Option<Vec<u8>>,
+    v2: Option<Vec<u8>>,
+}
+
+impl TeletextChannelRequestTemplates {
+    /// Borrow the exact template; unselected contracts and Off return `None`.
+    #[must_use]
+    pub fn request(&self, contract: TeletextPageContract) -> Option<&[u8]> {
+        match contract {
+            TeletextPageContract::V1 => self.v1.as_deref(),
+            TeletextPageContract::V2 => self.v2.as_deref(),
+        }
+    }
+}
+
+impl fmt::Debug for TeletextChannelRequestTemplates {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextChannelRequestTemplates")
+            .field("v1_bytes", &self.v1.as_ref().map(Vec::len))
+            .field("v2_bytes", &self.v2.as_ref().map(Vec::len))
+            .finish()
+    }
+}
 
 /// Trusted cumulative retained producer-response budget, independent of wire caps.
 /// At most two guide templates additionally obey the existing 4 MiB request cap.
@@ -48,11 +74,18 @@ pub struct BoundChannelTeletextDocumentInput {
     selection: TeletextChannelSelectionSnapshot,
     generation: String,
     receipts: Vec<TeletextProfileRuntimeReceipt>,
+    requests: TeletextChannelRequestTemplates,
     entry_addon_id: Option<String>,
     deadline: Instant,
 }
 
 impl BoundChannelTeletextDocumentInput {
+    /// Borrow retained preflight bytes before synchronous document validation.
+    #[must_use]
+    pub const fn requests(&self) -> &TeletextChannelRequestTemplates {
+        &self.requests
+    }
+
     #[must_use]
     pub const fn deadline(&self) -> Instant {
         self.deadline
@@ -86,6 +119,7 @@ impl BoundChannelTeletextDocumentInput {
             generation: self.generation,
             documents,
             sources,
+            requests: self.requests,
             entry_addon_id: self.entry_addon_id,
             deadline: self.deadline,
         })
@@ -108,13 +142,36 @@ pub struct PreparedChannelTeletextDocuments {
     generation: String,
     documents: Vec<TeletextProfileDocument>,
     sources: Vec<TeletextValidatedDocumentSource>,
+    requests: TeletextChannelRequestTemplates,
     entry_addon_id: Option<String>,
     deadline: Instant,
 }
 
 impl PreparedChannelTeletextDocuments {
+    /// Borrow exact request templates retained through validation.
+    #[must_use]
+    pub const fn requests(&self) -> &TeletextChannelRequestTemplates {
+        &self.requests
+    }
+
+    /// Move originals, responses and exact requests together into host work.
+    /// This association remains unpublished and requires another channel fence.
+    #[must_use]
+    pub fn into_parts_with_requests(self) -> PreparedChannelTeletextDocumentParts {
+        PreparedChannelTeletextDocumentParts {
+            selection: self.selection,
+            generation: self.generation,
+            documents: self.documents,
+            sources: self.sources,
+            requests: self.requests,
+            entry_addon_id: self.entry_addon_id,
+            deadline: self.deadline,
+        }
+    }
+
     /// Move ordered originals and sources under their complete observed selection.
     /// Both vectors have one element per binding in the original binding order.
+    /// This compatibility projection drops request templates.
     #[must_use]
     pub fn into_parts_with_sources(
         self,
@@ -161,8 +218,8 @@ impl PreparedChannelTeletextDocuments {
         self.deadline
     }
     /// Move the whole association into host work; another channel fence is required.
-    /// This compatibility projection drops sources; use `into_parts_with_sources`
-    /// when retaining original producer responses.
+    /// This compatibility projection drops sources and request templates; use
+    /// `into_parts_with_requests` to retain the complete original association.
     #[must_use]
     pub fn into_parts(
         self,
@@ -180,6 +237,28 @@ impl PreparedChannelTeletextDocuments {
             self.entry_addon_id,
             self.deadline,
         )
+    }
+}
+
+/// Owned move projection of validated channel documents and exact wire inputs.
+/// Public fields support host transfer, not construction of validated authority.
+pub struct PreparedChannelTeletextDocumentParts {
+    pub selection: TeletextChannelSelectionSnapshot,
+    pub generation: String,
+    pub documents: Vec<TeletextProfileDocument>,
+    pub sources: Vec<TeletextValidatedDocumentSource>,
+    pub requests: TeletextChannelRequestTemplates,
+    pub entry_addon_id: Option<String>,
+    pub deadline: Instant,
+}
+
+impl fmt::Debug for PreparedChannelTeletextDocumentParts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PreparedChannelTeletextDocumentParts")
+            .field("documents", &self.documents.len())
+            .field("sources", &self.sources.len())
+            .field("requests", &self.requests)
+            .finish_non_exhaustive()
     }
 }
 
@@ -305,13 +384,10 @@ where
     let mut remaining = budget.max_response_bytes;
     for (binding, selected) in selection.bindings.iter().enumerate() {
         check_deadline(now(), deadline)?;
-        let input = match selected.contract {
-            TeletextPageContract::V1 => &requests.0,
-            TeletextPageContract::V2 => &requests.1,
-        }
-        .as_ref()
-        .ok_or(ChannelTeletextDocumentError::SelectionShape)?
-        .clone();
+        let input = requests
+            .request(selected.contract)
+            .ok_or(ChannelTeletextDocumentError::SelectionShape)?
+            .to_vec();
         let receipt = invoke(selected.clone(), input, deadline)
             .await
             .map_err(|error| ChannelTeletextDocumentError::Runtime { binding, error })?;
@@ -335,6 +411,7 @@ where
         selection,
         generation: context.generation.to_owned(),
         receipts,
+        requests,
         entry_addon_id: entry,
         deadline,
     })
@@ -394,7 +471,7 @@ fn select_entry(
 fn preflight_requests(
     selection: &TeletextChannelSelectionSnapshot,
     context: &SuppliedTeletextGuideContext<'_>,
-) -> Result<RequestTemplates, ChannelTeletextDocumentError> {
+) -> Result<TeletextChannelRequestTemplates, ChannelTeletextDocumentError> {
     // Off still retains this opaque correlation value, but builds no guide.
     if context.generation.is_empty()
         || context.generation.len() > wire::MAX_TELETEXT_PAGES_GENERATION_BYTES
@@ -404,7 +481,7 @@ fn preflight_requests(
         )
         .into());
     }
-    let mut requests = (None, None);
+    let mut requests = TeletextChannelRequestTemplates { v1: None, v2: None };
     for contract in [TeletextPageContract::V1, TeletextPageContract::V2] {
         if selection
             .bindings
@@ -413,8 +490,8 @@ fn preflight_requests(
         {
             let input = build_request_for_schema(context, contract.schema_version())?;
             match contract {
-                TeletextPageContract::V1 => requests.0 = Some(input),
-                TeletextPageContract::V2 => requests.1 = Some(input),
+                TeletextPageContract::V1 => requests.v1 = Some(input),
+                TeletextPageContract::V2 => requests.v2 = Some(input),
             }
         }
     }

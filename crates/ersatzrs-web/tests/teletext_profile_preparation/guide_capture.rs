@@ -95,6 +95,15 @@ async fn captured_sql_guide_reaches_installed_mixed_profiles_without_publication
         )
         .unwrap();
         assert_eq!(bytes, captured.request_bytes(GENERATION, schema).unwrap());
+        let contract = match schema {
+            1 => ersatzrs_domain::TeletextPageContract::V1,
+            2 => ersatzrs_domain::TeletextPageContract::V2,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            candidate.requests().request(contract),
+            Some(bytes.as_slice())
+        );
         let request: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(request["locale"], "nl");
         assert_eq!(request["timezone"], captured.timezone());

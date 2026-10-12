@@ -1168,10 +1168,13 @@ system clock and strict catalog locale and feeds installed-profile native prepar
 verification is recorded in P9A-04. The same database/context is now recaptured before
 and after installed producer/native preparation under cumulative read limits and the
 original deadline; changed raw/effective settings, channel facts, source receipts or
-complete occurrences reject. This is point-in-time semantic comparison, not a raw
-source/path or atomic publication fence. Mutable-file capture/recheck, durable input
-association and publication-time source freshness, trusted generation ownership, safe
-promotion and localized preview controls remain next.
+complete occurrences or exact stored configured/accepted path associations reject.
+The original bounded V1/V2 request buffers now move through validation/native
+preparation without reserialization, separately from response source records. This is
+point-in-time semantic comparison and input retention, not a live-file or atomic
+publication fence. Mutable-file capture/recheck, durable guide-input/context association
+and publication-time source freshness, trusted generation ownership, safe promotion
+and localized preview controls remain next.
 Original-only capture
 is not an editor-permission or zone/template acceptance.
 Prioritize the existing synthetic profile-selection→validation→preview→explicit

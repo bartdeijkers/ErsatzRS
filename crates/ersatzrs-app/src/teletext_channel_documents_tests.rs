@@ -248,6 +248,114 @@ fn mixed_receipt(selected: TeletextSelectionSnapshot) -> TeletextProfileRuntimeR
 }
 
 #[tokio::test]
+async fn exact_request_templates_move_through_validation_and_named_host_transfer() {
+    let repo = mixed_repository();
+    let channels = [crate::teletext_guide::TeletextGuideChannel {
+        id: 9,
+        number: "private-channel-number",
+        name: "private-guide-name",
+        programmes: &[],
+    }];
+    let context = SuppliedTeletextGuideContext {
+        channels: &channels,
+        ..context()
+    };
+    let input = prepare_with_ports(
+        &repo,
+        9,
+        Some(B),
+        &context,
+        input_budget(),
+        |selected, bytes, _| {
+            assert_eq!(
+                bytes,
+                build_request_for_schema(&context, selected.contract.schema_version()).unwrap()
+            );
+            async move { Ok(mixed_receipt(selected)) }
+        },
+        Instant::now,
+    )
+    .await
+    .unwrap();
+    let contracts = [TeletextPageContract::V1, TeletextPageContract::V2];
+    let pointers =
+        contracts.map(|contract| input.requests().request(contract).unwrap().as_ptr() as usize);
+    let deadline = input.deadline();
+    let prepared = input.validate(document_budget()).unwrap();
+    for (contract, pointer) in contracts.into_iter().zip(pointers) {
+        let bytes = prepared.requests().request(contract).unwrap();
+        assert_eq!(bytes.as_ptr() as usize, pointer);
+        assert_eq!(
+            bytes,
+            build_request_for_schema(&context, contract.schema_version()).unwrap()
+        );
+        assert!(bytes.len() <= wire::MAX_TELETEXT_PAGES_INPUT_BYTES);
+    }
+    let parts = prepared.into_parts_with_requests();
+    for (contract, pointer) in contracts.into_iter().zip(pointers) {
+        assert_eq!(
+            parts.requests.request(contract).unwrap().as_ptr() as usize,
+            pointer
+        );
+    }
+    assert_eq!(parts.generation, GENERATION);
+    assert_eq!(parts.selection, *repo.selection.lock().unwrap());
+    assert_eq!(parts.documents.len(), 2);
+    assert_eq!(parts.sources[0].bytes(), basic(binding(A, 1)).stdout);
+    assert_eq!(parts.sources[1].bytes(), authored_output());
+    assert_eq!(parts.entry_addon_id.as_deref(), Some(B));
+    assert_eq!(parts.deadline, deadline);
+    for debug in [format!("{:?}", parts.requests), format!("{parts:?}")] {
+        for private in [
+            GENERATION,
+            "private-channel-number",
+            "private-guide-name",
+            "Europe/Amsterdam",
+        ] {
+            assert!(!debug.contains(private));
+        }
+        assert!(debug.contains("v1_bytes"));
+        assert!(debug.contains("v2_bytes"));
+    }
+}
+
+#[tokio::test]
+async fn only_selected_contract_template_is_retained_without_building_the_other_schema() {
+    for contract in [TeletextPageContract::V1, TeletextPageContract::V2] {
+        let mut selected = binding(A, 1);
+        selected.contract = contract;
+        let repo = Repository::new(vec![selected]);
+        let context = context();
+        let input = prepare_with_ports(
+            &repo,
+            9,
+            Some(A),
+            &context,
+            input_budget(),
+            |selected, _, _| async move { Ok(mixed_receipt(selected)) },
+            Instant::now,
+        )
+        .await
+        .unwrap();
+        let prepared = input.validate(document_budget()).unwrap();
+        assert_eq!(
+            prepared.requests().request(contract).unwrap(),
+            build_request_for_schema(&context, contract.schema_version()).unwrap()
+        );
+        let other = if contract == TeletextPageContract::V1 {
+            TeletextPageContract::V2
+        } else {
+            TeletextPageContract::V1
+        };
+        assert!(prepared.requests().request(other).is_none());
+        let parts = prepared.into_parts_with_requests();
+        assert!(parts.requests.request(contract).is_some());
+        assert!(parts.requests.request(other).is_none());
+        assert_eq!(parts.sources[0].contract(), contract);
+    }
+}
+
+#[tokio::test]
 async fn mixed_documents_keep_exact_requests_order_deadline_and_authored_metadata() {
     use ersatzrs_domain::teletext as d;
     let repo = mixed_repository();
@@ -360,10 +468,16 @@ async fn off_is_fenced_empty_and_on_requires_selected_entry_without_writes() {
     )
     .await
     .unwrap();
+    assert!(input.requests().request(TeletextPageContract::V1).is_none());
+    assert!(input.requests().request(TeletextPageContract::V2).is_none());
     let prepared = input.validate(document_budget()).unwrap();
     assert!(prepared.documents().is_empty());
     assert!(prepared.sources().is_empty());
     assert!(prepared.entry_addon_id().is_none());
+    let parts = prepared.into_parts_with_requests();
+    assert!(parts.requests.request(TeletextPageContract::V1).is_none());
+    assert!(parts.requests.request(TeletextPageContract::V2).is_none());
+    assert!(!format!("{:?}", parts.requests).contains(GENERATION));
     assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
     for (entry, missing) in [(None, true), (Some(C), false)] {
         let result = prepare_with_ports(

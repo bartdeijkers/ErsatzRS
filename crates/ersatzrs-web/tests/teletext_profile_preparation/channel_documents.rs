@@ -183,6 +183,15 @@ fn assert_original_sources(result: &EncodedChannelTeletextDocumentCandidate, val
         let source = &result.sources()[index];
         assert_eq!(source.bytes(), serde_json::to_vec(value).unwrap());
         assert_eq!(source.generation(), GENERATION);
+        let expected = ersatzrs_app::teletext_guide::build_request_for_schema(
+            &guide(&[]),
+            source.contract().schema_version(),
+        )
+        .unwrap();
+        assert_eq!(
+            result.requests().request(source.contract()),
+            Some(expected.as_slice())
+        );
         assert_eq!(
             source.contract(),
             result.selection().bindings[index].contract
@@ -296,6 +305,10 @@ async fn different_full_magazine_themes_become_page_packets_without_changing_ori
     configure_pair(&fixture, &first, &second).await;
     let result = candidate(&fixture, policy()).await.unwrap();
     assert!(result.v1_region().is_none());
+    assert!(result
+        .requests()
+        .request(ersatzrs_domain::TeletextPageContract::V1)
+        .is_none());
     assert_original_sources(&result, &[&first, &second]);
     let encoded = result.encoded().unwrap();
     assert!(encoded.magazine_units().is_empty());
@@ -429,6 +442,12 @@ async fn off_invokes_nobody_and_has_no_composed_or_native_partial_result() {
     unused.entry = Some(address(124, 0));
     let result = candidate(&fixture, unused).await.unwrap();
     assert!(result.selection().bindings.is_empty());
+    for contract in [
+        ersatzrs_domain::TeletextPageContract::V1,
+        ersatzrs_domain::TeletextPageContract::V2,
+    ] {
+        assert!(result.requests().request(contract).is_none());
+    }
     assert!(result.entry_addon_id().is_none());
     assert!(result.producers().is_empty());
     assert!(result.sources().is_empty());

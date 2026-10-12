@@ -19,7 +19,7 @@ pub use crate::xmltv_read::{
 };
 pub use crate::xmltv_snapshot::{
     capture_guide_snapshot, CapturedGuideChannel, GuideSnapshot, GuideSnapshotComparison,
-    GuideSnapshotError, GuideSnapshotFailure, GuideSnapshotSource,
+    GuideSnapshotError, GuideSnapshotFailure, GuideSnapshotPathAssociation, GuideSnapshotSource,
 };
 
 /// Metadata cache under the existing XMLTV hydration semantics.

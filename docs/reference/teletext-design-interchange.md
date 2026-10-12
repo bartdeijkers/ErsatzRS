@@ -3865,16 +3865,48 @@ charges the same cumulative source/model budget under the original deadline.
 `GuideSnapshot::compare_context` compares the exact UTC window, raw/effective
 language/block policy, all ordered channel facts, source receipts (including
 accepted revision) and full occurrences/content/segments. It ignores admission
-usage. Resolved host locale and actual named timezone must also match.
+usage. Ordered configured/accepted source-path associations must also match,
+including `None` versus empty text. Resolved host locale and actual named timezone
+must also match.
 `SourceChanged` reports only an optional numeric channel ID; rejected preparation
 returns no candidate, writes no publication and cannot alter the owned original.
 
 These checks prove equality at the observed boundaries, not absence of an
-intervening change and restoration. Projected-away raw rows or uncaptured
-configured/accepted source paths are not fenced; source-path association remains
-required. An unchanged historical capture instant does not establish current
+intervening change and restoration. Projected-away raw rows and live-file contents
+are not fenced. Capturing configured and accepted paths does not by itself validate
+their ownership relationship or prove that either file still has the accepted bytes. An unchanged historical capture instant does not establish current
 Now/Next accuracy. Human preview/publication must use a fresh operation deadline,
 retain durable input/source-context association and recheck within the existing
 publication write transaction before its insert. A host precheck followed by a
 separate publication CAS leaves a race and cannot satisfy this requirement.
 This is an additional preparatory fence, not a weakened freshness criterion.
+
+
+### Retained invocation inputs and stored path associations
+
+`TeletextChannelRequestTemplates` is an opaque, non-cloneable pair of the exact
+preflight request buffers for selected V1/V2 contracts. Each retains the existing
+4 MiB cap, at most 8 MiB total independently of producer response/model budgets.
+Off builds neither; unused schemas remain absent. Existing owned stdin copies
+remain per invocation, while the original templates move through bound-input
+validation, prepared documents and `PreparedChannelTeletextDocumentParts` into
+the private native candidate. No extra serialization or template copy is needed.
+Borrowed `request(contract)` exposes exact bytes; Debug exposes lengths only.
+The compatibility tuple transfers keep their signatures and explicitly discard
+requests. Response-only source DTOs and wire contracts remain unchanged.
+
+`GuideSnapshotPathAssociation` retains an ordered playout ID, the exact configured
+optional ScheduleFile and the accepted optional snapshot path. Already admitted
+source strings move into the captured channel; association vector/Option headers
+are admitted before allocation. SQL-only sources retain no accepted path, and
+mirrors independently capture/charge their selected source as before. Numeric
+source receipts remain Copy; the opaque path type exposes borrowed getters and
+presence-only Debug. Exact association equality joins context comparison.
+
+These are preparatory input facts. They do not read/hash live files, reconstruct
+raw projected-away source data, confer durable guide provenance or authorize a
+publication. Next bind versioned request/context/source data to the exact saved
+revision in the existing private envelope, preserving legacy/manual/static
+records, then recheck its effective context within the publication transaction.
+The storage envelope/version remains unchanged in this checkpoint. P9A-04 owns
+verification and the remaining engine/vertical-flow gaps.

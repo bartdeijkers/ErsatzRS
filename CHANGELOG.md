@@ -15,7 +15,7 @@ release section when tagging a release.
 
 ### Added
 
-- Preparatory teletext guide capture keeps channel settings, SQL metadata and accepted External JSON in one bounded read transaction, checks decoded/copied/projection model costs, resolves the actual clock and catalog locale, and rejects effective guide changes before or after installed-profile native preparation without publishing. Atomic source freshness at publication, runtime and complete engine acceptance remain open.
+- Preparatory teletext guide capture keeps channel settings, SQL metadata, accepted External JSON and stored source-path associations in one bounded read transaction, checks model costs, resolves the actual clock and catalog locale, retains exact addon request bytes, and rejects effective guide changes before or after native preparation without publishing. Atomic source freshness at publication, runtime and complete engine acceptance remain open.
 - Add transaction-owned XMLTV metadata reads with aggregate row/value limits
   before retrieval, including oversized data in corrupted numeric fields.
   Existing guide hydration is preserved; complete guide admission remains open.

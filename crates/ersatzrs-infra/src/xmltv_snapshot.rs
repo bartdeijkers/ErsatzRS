@@ -38,6 +38,37 @@ pub enum GuideSnapshotSource {
     },
 }
 
+/// Exact stored path associations, without live-file or freshness authority.
+#[derive(PartialEq, Eq)]
+pub struct GuideSnapshotPathAssociation {
+    playout_id: i64,
+    configured_schedule_file: Option<String>,
+    accepted_schedule_file: Option<String>,
+}
+impl GuideSnapshotPathAssociation {
+    #[must_use]
+    pub const fn playout_id(&self) -> i64 {
+        self.playout_id
+    }
+    #[must_use]
+    pub fn configured_schedule_file(&self) -> Option<&str> {
+        self.configured_schedule_file.as_deref()
+    }
+    #[must_use]
+    pub fn accepted_schedule_file(&self) -> Option<&str> {
+        self.accepted_schedule_file.as_deref()
+    }
+}
+impl std::fmt::Debug for GuideSnapshotPathAssociation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuideSnapshotPathAssociation")
+            .field("playout_id", &self.playout_id)
+            .field("configured", &self.configured_schedule_file.is_some())
+            .field("accepted", &self.accepted_schedule_file.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 /// One exact selected channel; names and programme fields are not Debug.
 pub struct CapturedGuideChannel {
     id: i64,
@@ -48,6 +79,7 @@ pub struct CapturedGuideChannel {
     playout_offset: Duration,
     occurrences: Vec<ProgrammeOccurrence>,
     sources: Vec<GuideSnapshotSource>,
+    path_associations: Vec<GuideSnapshotPathAssociation>,
 }
 impl CapturedGuideChannel {
     fn same_context(&self, other: &Self) -> bool {
@@ -58,6 +90,7 @@ impl CapturedGuideChannel {
             && self.source_channel_id == other.source_channel_id
             && self.playout_offset == other.playout_offset
             && self.sources == other.sources
+            && self.path_associations == other.path_associations
             && self.occurrences == other.occurrences
     }
     #[must_use]
@@ -91,6 +124,10 @@ impl CapturedGuideChannel {
     #[must_use]
     pub fn sources(&self) -> &[GuideSnapshotSource] {
         &self.sources
+    }
+    #[must_use]
+    pub fn path_associations(&self) -> &[GuideSnapshotPathAssociation] {
+        &self.path_associations
     }
 }
 
@@ -412,6 +449,7 @@ async fn capture_channel(
         playout_offset: offset,
         occurrences: Vec::new(),
         sources: Vec::new(),
+        path_associations: Vec::new(),
     };
     let items = sources::load(transaction, budget, &mut channel, source_id).await?;
     admitted(allocation::core_projection(budget, &items), Some(id), None)?;

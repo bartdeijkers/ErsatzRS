@@ -267,6 +267,102 @@ async fn context_comparison_retains_raw_configuration_and_accepted_revision_iden
 }
 
 #[tokio::test]
+async fn path_associations_retain_distinct_configured_and_accepted_paths_for_mirrors() {
+    let (root, pool) = fixture().await;
+    external_fixture(
+        &pool,
+        &root.path().join("accepted-original.json"),
+        r#"{"startTime":"2026-04-15T10:00:00Z","programs":[{"title":"First","duration":60000}]}"#,
+    )
+    .await;
+    let original = context(&pool, &[1, 2], &mut budget()).await;
+    let first = &original.channel(1).unwrap().path_associations()[0];
+    let mirror = &original.channel(2).unwrap().path_associations()[0];
+    assert_eq!(first, mirror);
+    assert_eq!(first.playout_id(), 1);
+    assert_eq!(
+        first.configured_schedule_file(),
+        first.accepted_schedule_file()
+    );
+    assert!(!format!("{first:?}").contains("accepted-original"));
+    pool.execute(r#"UPDATE "Playout" SET "ScheduleFile"='configured-only.json' WHERE "Id"=1"#)
+        .await
+        .unwrap();
+    let configured = context(&pool, &[1, 2], &mut budget()).await;
+    assert_eq!(
+        original.compare_context(&configured),
+        GuideSnapshotComparison::ChannelChanged(1)
+    );
+    for id in [1, 2] {
+        assert_eq!(
+            original.channel(id).unwrap().sources(),
+            configured.channel(id).unwrap().sources()
+        );
+        assert_eq!(
+            original.channel(id).unwrap().occurrences(),
+            configured.channel(id).unwrap().occurrences()
+        );
+        let path = &configured.channel(id).unwrap().path_associations()[0];
+        assert_eq!(
+            path.configured_schedule_file(),
+            Some("configured-only.json")
+        );
+        assert_eq!(
+            path.accepted_schedule_file(),
+            first.accepted_schedule_file()
+        );
+    }
+    pool.execute(r#"UPDATE "PlayoutExternalJsonSnapshot" SET "ScheduleFile"='accepted-only.json' WHERE "PlayoutId"=1"#).await.unwrap();
+    let accepted = context(&pool, &[1, 2], &mut budget()).await;
+    assert_eq!(
+        configured.compare_context(&accepted),
+        GuideSnapshotComparison::ChannelChanged(1)
+    );
+    for id in [1, 2] {
+        assert_eq!(
+            configured.channel(id).unwrap().sources(),
+            accepted.channel(id).unwrap().sources()
+        );
+        assert_eq!(
+            configured.channel(id).unwrap().occurrences(),
+            accepted.channel(id).unwrap().occurrences()
+        );
+        let path = &accepted.channel(id).unwrap().path_associations()[0];
+        assert_eq!(
+            path.configured_schedule_file(),
+            Some("configured-only.json")
+        );
+        assert_eq!(path.accepted_schedule_file(), Some("accepted-only.json"));
+        assert!(!format!("{path:?}").contains("only.json"));
+    }
+}
+
+#[tokio::test]
+async fn path_associations_preserve_absent_and_empty_configured_sql_paths() {
+    let (_root, pool) = fixture().await;
+    segments(&pool).await;
+    let absent = context(&pool, &[1], &mut budget()).await;
+    let path = &absent.channel(1).unwrap().path_associations()[0];
+    assert_eq!(path.configured_schedule_file(), None);
+    assert_eq!(path.accepted_schedule_file(), None);
+    pool.execute(r#"UPDATE "Playout" SET "ScheduleFile"='' WHERE "Id"=1"#)
+        .await
+        .unwrap();
+    let empty = context(&pool, &[1], &mut budget()).await;
+    let path = &empty.channel(1).unwrap().path_associations()[0];
+    assert_eq!(path.configured_schedule_file(), Some(""));
+    assert_eq!(path.accepted_schedule_file(), None);
+    assert_eq!(
+        absent.channel(1).unwrap().occurrences(),
+        empty.channel(1).unwrap().occurrences()
+    );
+    assert_eq!(
+        absent.compare_context(&empty),
+        GuideSnapshotComparison::ChannelChanged(1)
+    );
+}
+
+#[tokio::test]
 async fn full_split_sources_mirrors_and_same_media_repeats_survive_before_half_open_window() {
     let (_root, pool) = fixture().await;
     segments(&pool).await;
@@ -490,7 +586,8 @@ async fn accepted_parse_is_admitted_before_allocating_invalid_semantic_programs(
             max_source_bytes: 100_000,
         },
         GuideExpansionLimits {
-            max_nodes: 3,
+            // Configuration normalization, channel, receipt and path association.
+            max_nodes: 4,
             max_bytes: usize::MAX,
         },
     );

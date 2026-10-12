@@ -127,6 +127,15 @@ pub(super) fn slots<T>(budget: &mut GuideReadBudget, count: usize) -> Result<(),
     cost.reserve(budget)
 }
 
+pub(super) fn path_associations(
+    budget: &mut GuideReadBudget,
+    count: usize,
+) -> Result<(), sqlx::Error> {
+    // Payload strings move from source-admitted rows/snapshots. Model each
+    // additional record and both String headers before allocating the vector.
+    slots::<super::GuideSnapshotPathAssociation>(budget, count)
+}
+
 pub(super) fn accepted_parse(
     budget: &mut GuideReadBudget,
     programs: usize,

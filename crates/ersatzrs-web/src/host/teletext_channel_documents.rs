@@ -5,7 +5,8 @@ use std::{fmt, mem::size_of, time::Instant};
 use ersatzrs_app::{
     teletext_channel_documents::{
         BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError,
-        TeletextChannelDocumentInputBudget,
+        PreparedChannelTeletextDocumentParts, TeletextChannelDocumentInputBudget,
+        TeletextChannelRequestTemplates,
     },
     teletext_guide::SuppliedTeletextGuideContext,
     teletext_profile_documents::{
@@ -51,6 +52,7 @@ pub struct EncodedChannelTeletextDocumentCandidate {
     deadline: Instant,
     entry_addon_id: Option<String>,
     sources: Vec<TeletextValidatedDocumentSource>,
+    requests: TeletextChannelRequestTemplates,
     v1_region: Option<TeletextEncodingRegion>,
     producers: Vec<TeletextProducerPresentation>,
     provenance: Vec<TeletextComposedProducerPage>,
@@ -91,6 +93,12 @@ impl EncodedChannelTeletextDocumentCandidate {
     #[must_use]
     pub fn sources(&self) -> &[TeletextValidatedDocumentSource] {
         &self.sources
+    }
+    /// Exact bounded guide requests used by installed producers, keyed by contract.
+    /// These are input data, not durable source provenance or generation authority.
+    #[must_use]
+    pub const fn requests(&self) -> &TeletextChannelRequestTemplates {
+        &self.requests
     }
     /// Explicit host region actually used for V1 lift; absent for V2-only/Off.
     #[must_use]
@@ -215,8 +223,17 @@ fn encode_channel(
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError> {
     check_deadline(input.deadline())?;
-    let (selection, generation, documents, sources, entry_addon_id, deadline) =
-        input.validate(policy.validation)?.into_parts_with_sources();
+    let PreparedChannelTeletextDocumentParts {
+        selection,
+        generation,
+        documents,
+        sources,
+        requests,
+        entry_addon_id,
+        deadline,
+    } = input
+        .validate(policy.validation)?
+        .into_parts_with_requests();
     check_deadline(deadline)?;
     if documents.len() != selection.bindings.len() || sources.len() != documents.len() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
@@ -239,6 +256,7 @@ fn encode_channel(
         deadline,
         entry_addon_id,
         sources,
+        requests,
         v1_region: originals.v1_region,
         producers: originals.producers,
         provenance: originals.provenance,

@@ -1,6 +1,6 @@
 use super::{
     admitted, allocation, failure, rows, CapturedGuideChannel, GuideSnapshotError,
-    GuideSnapshotFailure, GuideSnapshotSource,
+    GuideSnapshotFailure, GuideSnapshotPathAssociation, GuideSnapshotSource,
 };
 use crate::{
     db::Db,
@@ -54,6 +54,12 @@ pub(super) async fn load(
         Some(channel.id),
         None,
     )?;
+    admitted(
+        allocation::path_associations(budget, playouts.len()),
+        Some(channel.id),
+        None,
+    )?;
+    channel.path_associations = Vec::with_capacity(playouts.len());
     let mut items = Vec::new();
     for row in playouts {
         let id = admitted(row.try_get("Id"), Some(channel.id), None)?;
@@ -69,17 +75,21 @@ pub(super) async fn load(
                 GuideSnapshotFailure::InvalidValue,
             )
         })?;
-        let (incoming, receipt) = if kind == PlayoutScheduleKind::ExternalJson {
-            external(transaction, budget, channel, id).await?
-        } else {
-            let incoming = sql(transaction, budget, channel.id, id).await?;
-            let receipt = GuideSnapshotSource::Sql {
-                playout_id: id,
-                schedule_kind: kind,
-                raw_rows: incoming.len(),
+        let configured_schedule_file =
+            admitted(row.try_get("ScheduleFile"), Some(channel.id), Some(id))?;
+        let (incoming, receipt, accepted_schedule_file) =
+            if kind == PlayoutScheduleKind::ExternalJson {
+                let (incoming, receipt, path) = external(transaction, budget, channel, id).await?;
+                (incoming, receipt, Some(path))
+            } else {
+                let incoming = sql(transaction, budget, channel.id, id).await?;
+                let receipt = GuideSnapshotSource::Sql {
+                    playout_id: id,
+                    schedule_kind: kind,
+                    raw_rows: incoming.len(),
+                };
+                (incoming, receipt, None)
             };
-            (incoming, receipt)
-        };
         admitted(
             allocation::slots::<ProgrammeGuideItem>(budget, incoming.len()),
             Some(channel.id),
@@ -87,6 +97,13 @@ pub(super) async fn load(
         )?;
         items.extend(incoming);
         channel.sources.push(receipt);
+        channel
+            .path_associations
+            .push(GuideSnapshotPathAssociation {
+                playout_id: id,
+                configured_schedule_file,
+                accepted_schedule_file,
+            });
     }
     Ok(items)
 }
@@ -180,7 +197,7 @@ async fn external(
     budget: &mut GuideReadBudget,
     channel: &CapturedGuideChannel,
     playout: i64,
-) -> Result<(Vec<ProgrammeGuideItem>, GuideSnapshotSource), GuideSnapshotError> {
+) -> Result<(Vec<ProgrammeGuideItem>, GuideSnapshotSource, String), GuideSnapshotError> {
     let remaining = budget.remaining_source_limits();
     if remaining.max_records < 1 {
         return Err(failure(
@@ -270,7 +287,7 @@ async fn external(
         }
         items.push(external_item(budget, channel, playout, index, item)?);
     }
-    Ok((items, receipt))
+    Ok((items, receipt, snapshot.schedule_file))
 }
 
 fn external_item(
