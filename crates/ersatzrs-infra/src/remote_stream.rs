@@ -1800,6 +1800,7 @@ mod tests {
                 environment: BTreeMap::new(),
             },
             FfmpegCommand {
+                mpegts_output: None,
                 executable: "sh".to_owned(),
                 environment: Vec::new(),
                 arguments: vec!["-c".to_owned(), "cat".to_owned()],
@@ -1998,6 +1999,7 @@ mod tests {
                 environment: BTreeMap::new(),
             },
             FfmpegCommand {
+                mpegts_output: None,
                 executable: "sh".to_owned(),
                 environment: Vec::new(),
                 arguments: vec!["-c".to_owned(), "cat".to_owned()],
@@ -2021,6 +2023,7 @@ mod tests {
                 environment: BTreeMap::new(),
             },
             FfmpegCommand {
+                mpegts_output: None,
                 executable: "cmd.exe".to_owned(),
                 environment: Vec::new(),
                 arguments: vec![
@@ -2049,6 +2052,7 @@ mod tests {
                 environment: BTreeMap::new(),
             },
             FfmpegCommand {
+                mpegts_output: None,
                 executable: "cmd.exe".to_owned(),
                 environment: Vec::new(),
                 arguments: vec![
@@ -2209,6 +2213,7 @@ content_rating: PG
             environment: BTreeMap::new(),
         };
         let consumer = FfmpegCommand {
+            mpegts_output: None,
             executable: "ffmpeg".to_owned(),
             environment: Vec::new(),
             arguments: vec![
@@ -2252,6 +2257,7 @@ content_rating: PG
     #[test]
     fn unmarked_producer_keeps_consumer_seek_and_marked_zero_start_gets_zero() {
         let consumer = FfmpegCommand {
+            mpegts_output: None,
             executable: "ffmpeg".to_owned(),
             environment: Vec::new(),
             arguments: vec!["-i".to_owned(), "pipe:0".to_owned()],

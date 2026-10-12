@@ -2,8 +2,8 @@ use crate::{
     closed_gop, copy_all_streams, fast_start, format_time_limit, hide_banner, loglevel_error,
     map_all_streams, mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_demux_decode_delay,
     no_scene_detect, no_standard_input, no_stats, pipe_output, standard_format_flags,
-    EnvironmentVariable, InputFile, InputKind, MpegTsMuxingOptions, OutputMetadata, PipelineStep,
-    MPEGTS_PCR_PERIOD_MS,
+    EnvironmentVariable, InputFile, InputKind, MpegTsMuxingOptions, MpegTsOutputPolicy,
+    OutputMetadata, PipelineStep, MPEGTS_PCR_PERIOD_MS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,6 +11,8 @@ pub struct FfmpegCommand {
     pub executable: String,
     pub environment: Vec<EnvironmentVariable>,
     pub arguments: Vec<String>,
+    /// Optional generated output hints; use the getter to check mutable argv.
+    pub mpegts_output: Option<MpegTsOutputPolicy>,
 }
 
 impl FfmpegCommand {
@@ -20,6 +22,7 @@ impl FfmpegCommand {
             executable: crate::ffmpeg_path(),
             environment,
             arguments,
+            mpegts_output: None,
         }
     }
 
@@ -36,7 +39,18 @@ impl FfmpegCommand {
             executable: executable.into(),
             environment,
             arguments,
+            mpegts_output: None,
         }
+    }
+
+    /// Borrow generated final-TS hints only while argv still matches its seal.
+    /// Executable/environment identity and actual source PSI/PCR remain the
+    /// caller's responsibility; mutations never re-infer policy from raw argv.
+    #[must_use]
+    pub fn mpegts_output_policy(&self) -> Option<&MpegTsOutputPolicy> {
+        self.mpegts_output
+            .as_ref()
+            .filter(|policy| policy.matches(&self.arguments))
     }
 }
 
@@ -271,10 +285,13 @@ impl CommandGenerator {
         pipeline_steps: &[PipelineStep],
         is_intel_vaapi_or_qsv: bool,
     ) -> FfmpegCommand {
-        FfmpegCommand::new(
+        let mut command = FfmpegCommand::new(
             Self::generate_environment_variables(pipeline_steps),
             Self::generate_arguments(inputs, pipeline_steps, is_intel_vaapi_or_qsv),
-        )
+        );
+        command.mpegts_output =
+            MpegTsOutputPolicy::from_generated(pipeline_steps, &command.arguments);
+        command
     }
 }
 

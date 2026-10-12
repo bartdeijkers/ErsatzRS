@@ -8024,6 +8024,7 @@ mod tests {
         );
         worker.touch();
         let command = FfmpegCommand {
+            mpegts_output: None,
             executable: "/bin/sleep".to_string(),
             arguments: vec!["30".to_string()],
             environment: Vec::new(),
@@ -8065,6 +8066,7 @@ mod tests {
         );
         worker.touch();
         let command = FfmpegCommand {
+            mpegts_output: None,
             executable: "/bin/sleep".to_string(),
             arguments: vec!["30".to_string()],
             environment: Vec::new(),

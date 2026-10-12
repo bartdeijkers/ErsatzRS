@@ -13,6 +13,7 @@ mod retained_stream_buffer;
 pub mod stream;
 pub mod streaming_specs;
 pub mod teletext_binding;
+pub mod teletext_optional_output;
 pub mod teletext_output;
 mod teletext_retained_output;
 pub mod variant;

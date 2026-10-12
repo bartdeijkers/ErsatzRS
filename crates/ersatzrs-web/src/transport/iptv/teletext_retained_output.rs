@@ -263,10 +263,9 @@ impl ForwardState {
     }
 }
 
-pub(super) fn validate_policy(
-    policy: ReservePolicy,
+pub(super) fn allocation_model(
     config: TeletextOutputConfig,
-) -> Result<usize, RetainedTeletextError> {
+) -> Result<(usize, usize), RetainedTeletextError> {
     let base = config
         .max_buffer_packets
         .checked_mul(PACKET_BYTES + size_of::<Duration>())
@@ -278,6 +277,14 @@ pub(super) fn validate_policy(
         .and_then(|bytes| bytes.checked_add(2 * packet_index))
         .and_then(|bytes| bytes.checked_add(packet_index.max(3 * size_of::<usize>())))
         .ok_or(RetainedTeletextError::Configuration)?;
+    Ok((base, per_processing_packet))
+}
+
+pub(super) fn validate_policy(
+    policy: ReservePolicy,
+    config: TeletextOutputConfig,
+) -> Result<usize, RetainedTeletextError> {
+    let (base, per_processing_packet) = allocation_model(config)?;
     let processing_packets = MAX_ENCODED_BUFFER_BYTES
         .checked_sub(base)
         .ok_or(RetainedTeletextError::Configuration)?

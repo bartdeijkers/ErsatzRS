@@ -11,7 +11,7 @@ TSDuck/independent decoding and actual client display/navigation; Kodi optional.
 v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
 metadata/fresh state. Local X26 retains forward references.
 Replay/raster keep fallback; encoding keeps lineage, IDs and call ancestry.
-AP00 retains pointers/C2; native pages retain no-X26/default owners/X27/X28/M29.
+AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
 Corrected X27 decoding passes; client open.
 X26/metadata dual decoding pass.
 C2 uses final words per instance. Charset aliases keep raw pending; differing pairs stay pending.
@@ -31,17 +31,18 @@ foreign X26, row-zero and full A7/A8/C3/client proof stay open.
 X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
 Headers fence physical/logical owners; declarations check roles/defaults/extents,
 empty owners and one MOT/magazine.
-Compiler keeps resources/M29; paced sweeps preserve deadlines/cursors/FF.
+Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/corrected nested pass.
 QTM edit/save/reopen proves renumber/loss; host roundtrip open.
 
 Budgeted v2 stays pinned through invocation; Base refuses v2. Encoding retains
 original defaults, secondary uncertainty and channel/model/deadline fences.
-Cold composition isolates M29, coalesces full resources and rechecks MOT effects.
-Originals/pending/frozen generations persist; v2 retains raw JSON, v1 semantics.
+Cold composition isolates M29/resources and rechecks MOT effects.
+Originals/pending/frozen generations persist; v2 raw JSON, v1 semantics.
 Native recovery checks hash/selection; activation/guide freshness open.
-Cold client passes; ADR0122 controls, legacy acquisition, regions/link CRC/UI/Lua open.
+TS hints/sole PSI/optional startup; route discovery open.
+Cold client passes; ADR0122/legacy/regions/link CRC/UI/Lua open.
 
 SQLite retains tracks/owners/data/leases; missing reports/revisions prove no bytes
 or absence. Pages stay NotAcquired. Explicit-PID parsing keeps flags/subcodes/PTS,
@@ -61,7 +62,7 @@ x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission, tokens, reaping,
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
-P9A-02: decoder Health/six-RID packaging/licensing.
+P9A-02: decoder Health/six-RID licenses.
 P9A-03/04 retain persistence/rescans, page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage and HLS/browser
 gates. Slate handover, activation/publication/refresh/restart,

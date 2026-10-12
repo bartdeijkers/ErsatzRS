@@ -783,6 +783,7 @@ mod tests {
                 environment: BTreeMap::new(),
             },
             FfmpegCommand {
+                mpegts_output: None,
                 executable: "sh".into(),
                 arguments: vec!["-c".into(), "cat".into()],
                 environment: Vec::new(),

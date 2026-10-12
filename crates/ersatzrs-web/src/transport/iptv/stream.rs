@@ -106,7 +106,7 @@ use super::retained_stream_buffer::{
     forward_retained_ts, ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS,
 };
 use super::teletext_binding::{TeletextOutputAdmission, TeletextOutputBinding, TeletextOutputRole};
-use super::teletext_output::{forward_teletext_output_with_control, TeletextPumpError};
+use super::teletext_output::TeletextPumpError;
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::{hls, hls::HlsQuery, LegacyWrapperQuery};
@@ -787,7 +787,7 @@ async fn forward_retained_response(
     let result = match ReservePolicy::new(output.muxrate_bps, output.remaining) {
         Ok(policy) => {
             if let Some(binding) = binding {
-                super::teletext_retained_output::forward_retained_ts_with_teletext(
+                super::teletext_optional_output::forward_bound_retained_teletext_output(
                     &mut source,
                     &mut writer,
                     policy,
@@ -5743,13 +5743,8 @@ async fn supervise_stream_process_with_retry_context(
             Some(stdout) => match output.binding() {
                 Some(binding) => {
                     // Every child gets fresh PSI/PCR/continuity and timing state.
-                    forward_teletext_output_with_control(
-                        stdout,
-                        writer,
-                        binding.config(),
-                        binding.content().clone(),
-                        binding.first_byte_timeout(),
-                        binding.cloned_control(),
+                    super::teletext_optional_output::forward_bound_teletext_output(
+                        stdout, writer, binding,
                     )
                     .await
                 }
@@ -6160,6 +6155,7 @@ mod tests {
         let result = spawn_stream_retry(
             StreamRetryAttempt {
                 command: FfmpegCommand {
+                    mpegts_output: None,
                     executable: "must-not-spawn".into(),
                     arguments: Vec::new(),
                     environment: Vec::new(),
@@ -8114,6 +8110,7 @@ mod tests {
         let registry: Arc<dyn HlsSessionRegistry> =
             Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
         let command = FfmpegCommand {
+            mpegts_output: None,
             executable: "/bin/sh".to_owned(),
             arguments: vec![
                 "-c".to_owned(),
@@ -8402,6 +8399,7 @@ mod tests {
         .unwrap();
         let artifact_path = PathBuf::from(owner.subtitle().path.as_ref().unwrap());
         let command = FfmpegCommand {
+            mpegts_output: None,
             executable: ersatzrs_ffmpeg::ffmpeg_path(),
             arguments: [
                 "-hide_banner",
@@ -8473,12 +8471,14 @@ mod tests {
     fn shell_command(unix_script: &str, windows_script: &str) -> FfmpegCommand {
         if cfg!(windows) {
             FfmpegCommand {
+                mpegts_output: None,
                 executable: "cmd.exe".to_owned(),
                 arguments: vec!["/C".to_owned(), windows_script.to_owned()],
                 environment: Vec::new(),
             }
         } else {
             FfmpegCommand {
+                mpegts_output: None,
                 executable: "/bin/sh".to_owned(),
                 arguments: vec!["-c".to_owned(), unix_script.to_owned()],
                 environment: Vec::new(),

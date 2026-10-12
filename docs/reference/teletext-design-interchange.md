@@ -4185,3 +4185,42 @@ warm publisher/resource retirement and full process/Lua restart remain required.
 The current operation supplies a shared complete candidate for that connection;
 it does not replace forwarding-gate transport admission or receiver acceptance.
 P9A-04 owns verification and the remaining flow gaps.
+
+
+## Optional startup admission and actual output facts
+
+Generated final MPEG-TS commands expose `mpegts_output_policy()` rate/PCR-period
+hints only while the complete argv matches its framed digest. Named final steps
+and a conservative finite generated-option grammar reject extra output sinks,
+ambiguous pipe/progress stdout, duplicate flags and unsupported forms. Opaque
+constructors do not infer hints. The public optional policy is transferable to
+identical argv; it is not an unforgeable origin or executable/runtime receipt.
+No argv/environment changes follow from storing these facts. Unknown generated
+forms return no hints; future route binding must preserve ordinary playback.
+
+`TeletextProgramSelection::SoleProgram` waits for complete current PAT, all
+advertised PMTs and observed CAT, then requires exactly one non-network program.
+It derives actual PMT/PCR ownership, never program1 or fixture constants. Existing
+explicit selection remains available; ambiguity and every collision fail closed.
+This only proves the supplied source window and requires continuing monitoring.
+
+`TeletextOutputBinding::with_optional_startup(maximum_bytes)` opts in explicitly;
+existing bindings remain strict. A bounded journal captures exact consumed raw
+bytes before gate admission, including partial packets and the rejected chunk.
+A pre-write admission/configuration or own journal-cap rejection discards the
+failed gate and replays those bytes plus the same continuing source. Actual
+read/write/empty-output/first-byte-timeout failures stay terminal. The first
+nonempty sink-write attempt, even Pending or partially failed, seals fallback.
+The journal is released before that attempt; a plain fallback epoch cannot later
+upgrade from a watch proposal. Final direct and retained dispatch use the same
+selection; retained fallback preserves the original absolute startup deadline,
+reserve, terminal outcome and cancellation. Its requested-allocation model also
+charges journal/scratch/processing overlap; this is not an RSS bound. Direct
+gate and journal have separate component limits.
+
+This seam does not automatically reconstruct accepted services on normal routes.
+The next integration requires bounded actual-output discovery that retains the
+original arrival ages when transferring consumed startup bytes into a fresh gate;
+naive replay with a renewed epoch is insufficient. Full warm-resource retirement,
+active Health, current generation ownership and all existing engine/client/editor/
+admin/Lua/platform acceptance remain open. P9A-04 owns the canonical proof.

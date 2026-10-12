@@ -2467,6 +2467,7 @@ mod tests {
     fn preview_command_reports_progress_without_changing_hls_output() {
         use super::*;
         let command = FfmpegCommand {
+            mpegts_output: None,
             executable: "ffmpeg".into(),
             environment: Vec::new(),
             arguments: ["-nostats", "-f", "hls", "live.m3u8"]

@@ -73,6 +73,7 @@ pub struct TeletextOutputBinding {
     content: TeletextOutputContent,
     first_byte_timeout: Duration,
     control: Option<TeletextOutputControl>,
+    optional_startup_bytes: Option<usize>,
 }
 
 impl TeletextOutputBinding {
@@ -137,6 +138,7 @@ impl TeletextOutputBinding {
             content,
             first_byte_timeout,
             control: None,
+            optional_startup_bytes: None,
         })
     }
 
@@ -147,6 +149,32 @@ impl TeletextOutputBinding {
     pub fn with_control(mut self, control: TeletextOutputControl) -> Self {
         self.control = Some(control);
         self
+    }
+
+    /// Permit exact raw playback if authored admission fails before any sink write.
+    /// Every later failure remains terminal for this output epoch.
+    /// # Errors
+    /// Rejects a zero journal or one beyond the gate capacity or 32 MiB.
+    pub fn with_optional_startup(
+        mut self,
+        maximum_bytes: usize,
+    ) -> Result<Self, TeletextPumpError> {
+        if maximum_bytes == 0
+            || maximum_bytes > 32 * 1024 * 1024
+            || self
+                .config
+                .max_buffer_packets
+                .checked_mul(188)
+                .is_none_or(|capacity| maximum_bytes > capacity)
+        {
+            return Err(TeletextPumpError::Configuration);
+        }
+        self.optional_startup_bytes = Some(maximum_bytes);
+        Ok(self)
+    }
+
+    pub(super) const fn optional_startup_bytes(&self) -> Option<usize> {
+        self.optional_startup_bytes
     }
 
     pub(crate) fn cloned_control(&self) -> Option<TeletextOutputControl> {

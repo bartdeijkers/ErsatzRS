@@ -13,6 +13,18 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+Generated final-MPEG-TS commands now carry rate/PCR-period hints bound to exact
+argv; opaque commands do not infer them. These are transferable data, not runtime
+or source authority. Complete current PSI can select its sole programme without
+guessing program/PCR IDs; ambiguous services require explicit selection. An
+explicit bounded optional-startup policy preserves every consumed raw byte and
+the continuing source if authored admission rejects before the first sink-write
+attempt. Afterwards the epoch remains strict; no raw fallback can mix with emitted
+authored packets. Direct and retained final-output dispatch share this policy,
+with existing bindings strict by default. Ordinary accepted-generation lookup,
+original-age discovery, active-publication Health and warm ownership remain open.
+P9A-04 owns verification; the reference documents the preparatory interfaces.
+
 Preparatory context fingerprint version2 now includes the exact bounded accepted
 External JSON document SHA256, before parsing/filtering. Version1 retains its exact
 historical semantic framing and remains readable; pending admission replays the

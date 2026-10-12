@@ -18,6 +18,15 @@ use super::{
 const MAX_DISCOVERY_PACKETS: usize = 32_768;
 const MAX_PROGRAMS: usize = 128;
 
+/// Explicit source-program policy; never a guessed program number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeletextProgramSelection {
+    /// Select this exact nonzero program from the complete current PAT.
+    Explicit(u16),
+    /// Select only when the current PAT advertises exactly one non-network program.
+    SoleProgram,
+}
+
 /// Source-PSI admission/monitor failures, without retaining programme content.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextPsiError {
@@ -42,6 +51,9 @@ pub enum TeletextPsiError {
     /// The selected program is zero or absent from a complete current PAT.
     #[error("teletext selected program is absent from the source PAT")]
     Program,
+    /// Sole-program policy cannot choose among multiple advertised programs.
+    #[error("teletext source PAT advertises multiple selectable programs")]
+    AmbiguousProgram,
     /// Admission must wait for a complete current PAT and every advertised PMT.
     #[error("teletext source PSI discovery is incomplete")]
     Incomplete,
@@ -71,7 +83,7 @@ pub enum TeletextPsiError {
 /// rates/buffers and own cancellation/restart. This
 /// reader never consumes media sources or modifies audiovisual packets.
 pub struct TeletextPsiDiscovery {
-    program: u16,
+    selection: TeletextProgramSelection,
     pid: u16,
     packets: usize,
     failure: Option<TeletextPsiError>,
@@ -91,7 +103,7 @@ impl TeletextPsiDiscovery {
     /// # Errors
     /// Rejects program zero and reserved/null/out-of-range elementary PIDs.
     pub fn new(program: u16, pid: u16) -> Result<Self, TeletextPsiError> {
-        Self::new_inner(program, pid, false)
+        Self::new_inner(TeletextProgramSelection::Explicit(program), pid, false)
     }
 
     /// Admit output from an explicitly new producer/muxer source epoch.
@@ -103,16 +115,36 @@ impl TeletextPsiDiscovery {
     /// # Errors
     /// Rejects program zero and reserved/null/out-of-range elementary PIDs.
     pub fn new_source_epoch(program: u16, pid: u16) -> Result<Self, TeletextPsiError> {
-        Self::new_inner(program, pid, true)
+        Self::new_source_epoch_selection(TeletextProgramSelection::Explicit(program), pid)
     }
 
-    fn new_inner(program: u16, pid: u16, source_epoch: bool) -> Result<Self, TeletextPsiError> {
-        if program == 0 {
+    /// Admit a new source epoch using the exact selected program policy.
+    ///
+    /// Sole-program discovery waits for complete current PAT, all advertised
+    /// PMTs and any observed CAT. Network entries do not count as programs;
+    /// multiple programs require an explicit selection. Initial discontinuity
+    /// handling and all ownership/continuity fences match `new_source_epoch`.
+    /// # Errors
+    /// Rejects explicit program zero and invalid elementary PIDs at construction.
+    /// Empty or ambiguous complete source maps cannot later produce a plan.
+    pub fn new_source_epoch_selection(
+        selection: TeletextProgramSelection,
+        pid: u16,
+    ) -> Result<Self, TeletextPsiError> {
+        Self::new_inner(selection, pid, true)
+    }
+
+    fn new_inner(
+        selection: TeletextProgramSelection,
+        pid: u16,
+        source_epoch: bool,
+    ) -> Result<Self, TeletextPsiError> {
+        if selection == TeletextProgramSelection::Explicit(0) {
             return Err(TeletextPsiError::Program);
         }
         validate_pid(pid)?;
         Ok(Self {
-            program,
+            selection,
             pid,
             packets: 0,
             failure: None,
@@ -155,19 +187,21 @@ impl TeletextPsiDiscovery {
         if !self.pat.complete() || self.pat_assembler.is_pending() {
             return Err(TeletextPsiError::Incomplete);
         }
-        let selected = self
-            .pmts
-            .iter()
-            .find(|(_, pmt)| pmt.program == self.program)
-            .ok_or(TeletextPsiError::Program)?;
-        if self
-            .pmts
-            .values()
-            .any(|pmt| pmt.section.is_none() || pmt.assembler.is_pending())
-            || self.cat_seen && (!self.cat.complete() || self.cat_assembler.is_pending())
-        {
-            return Err(TeletextPsiError::Incomplete);
-        }
+        let selected = match self.selection {
+            TeletextProgramSelection::Explicit(program) => self
+                .pmts
+                .iter()
+                .find(|(_, pmt)| pmt.program == program)
+                .ok_or(TeletextPsiError::Program)?,
+            TeletextProgramSelection::SoleProgram => {
+                self.check_ownership_complete()?;
+                if self.pmts.len() > 1 {
+                    return Err(TeletextPsiError::AmbiguousProgram);
+                }
+                self.pmts.iter().next().ok_or(TeletextPsiError::Program)?
+            }
+        };
+        self.check_ownership_complete()?;
         let section = selected
             .1
             .section
@@ -223,6 +257,18 @@ impl TeletextPsiDiscovery {
             );
         }
         Ok(TeletextPsiMonitor::new(plan, tables))
+    }
+
+    fn check_ownership_complete(&self) -> Result<(), TeletextPsiError> {
+        if self
+            .pmts
+            .values()
+            .any(|pmt| pmt.section.is_none() || pmt.assembler.is_pending())
+            || self.cat_seen && (!self.cat.complete() || self.cat_assembler.is_pending())
+        {
+            return Err(TeletextPsiError::Incomplete);
+        }
+        Ok(())
     }
 
     fn observe(&mut self, raw: &[u8; 188]) -> Result<(), TeletextPsiError> {
@@ -410,3 +456,7 @@ pub(super) fn current_section(section: &[u8], table_id: u8) -> Result<bool, Tele
     }
     Ok(section[5] & 1 != 0)
 }
+
+#[cfg(test)]
+#[path = "psi_selection_tests.rs"]
+mod selection_tests;
