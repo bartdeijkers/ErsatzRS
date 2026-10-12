@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-12): `16fd9979bc2f1e22e6f334bb943091be9031f5ba`
-  — chore: update next (#3083).
+- Latest fetched target (`origin/main`, 2026-10-12): `4b6c9dae60184ce8e23d5b476ad55cf3d9f5528d`
+  — feat: warn about legacy engine removal (#3084).
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -634,6 +634,8 @@ remain. See `post-publication-cleanup.json`.
   fix, dynamic callback retry, JSON logs, three workflow commits and Jellyfin
   compatible playback as pending rows 215-225; all 214 existing SHA/subject pairs
   remain an exact prefix.
+  A later 2026-10-12 refresh appends the legacy engine removal warning as pending
+  row 226; all 225 existing SHA/subject pairs remain an exact prefix.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows 209-213 carry the
   `ucu-10` prefix; the matching milestone still has to be added to the tracker.
@@ -5806,3 +5808,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 223 | `cf29faa0` | build: improve workflow performance (#3081) | | | | ucu-10; provisional: N/A (upstream workflow caching and Docker base image tweaks). Claude 2026-10-12 triage. |
 | 224 | `6e40ed98` | fix: jellyfin compatible playback (#3082) | | | | ucu-10; provisional: Port. Upstream now requires a Jellyfin API key for playback parameters and sends it on stream and subtitle requests, because some Jellyfin-compatible servers reject unauthenticated media requests. ErsatzRS builds its Jellyfin media URLs in `crates/ersatzrs-infra/src/jellyfin/` and the audit starts at the playback/subtitle request path there, checking whether the key travels with those requests. Claude 2026-10-12 triage. |
 | 225 | `16fd9979` | chore: update next (#3083) | | | | ucu-10; provisional: Adapt, folded into the row 214 pin decision. Pin moves to `v0.2.1-bff83ef6-develop`; that build stops hevc streams hanging on A53 closed captions with Mesa before 26.2.3 (captions are dropped there) and makes `crop` always scale to cover the output before cropping. The crop behaviour is worth checking against our own scaling rules regardless of the pin. Claude 2026-10-12 triage. |
+| 226 | `4b6c9dae` | feat: warn about legacy engine removal (#3084) | | | | ucu-10; provisional: N/A for the diff, but the most consequential row of this window to read. Upstream announces that its legacy streaming engine is removed in ErsatzTV 26.12: the Channels page lists channels still on it, the channel editor warns, and starting such a stream logs a warning pointing at an issue form. None of that is portable, because ErsatzRS has no legacy ErsatzTV engine to retire — its native FFmpeg pipeline is the primary engine under ADR 0095 and Next is the accepted optional second one. What it does mean for us is that the upstream reference implementation for everything the native pipeline mirrors stops being maintained after 26.12, so future rows will increasingly describe Next-only behaviour. That is a maintainer decision about the parity baseline, not a port. Claude 2026-10-12 triage. |
