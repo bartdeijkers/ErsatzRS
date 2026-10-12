@@ -50,6 +50,8 @@ mod client_capture;
 mod designs;
 #[path = "teletext_profile_preparation/documents.rs"]
 mod documents;
+#[path = "teletext_profile_preparation/generations.rs"]
+mod generations;
 #[path = "teletext_profile_preparation/guide_capture.rs"]
 mod guide_capture;
 #[path = "teletext_profile_preparation/guide_publications.rs"]

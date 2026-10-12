@@ -67,7 +67,7 @@ fn manifest(id: &str) -> AddonManifest {
     }
 }
 
-async fn open(path: &Path) -> DbPool {
+pub(in crate::repositories) async fn open(path: &Path) -> DbPool {
     SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(
@@ -169,16 +169,16 @@ async fn seed_producer(pool: &DbPool, id: &str, enabled: bool) -> TeletextProfil
     profile
 }
 
-struct Fixture {
-    root: tempfile::TempDir,
-    repo: SqliteTeletextPublicationRepository,
-    selection: TeletextChannelSelectionSnapshot,
-    design_id: i64,
-    digest: String,
+pub(in crate::repositories) struct Fixture {
+    pub(in crate::repositories) root: tempfile::TempDir,
+    pub(in crate::repositories) repo: SqliteTeletextPublicationRepository,
+    pub(in crate::repositories) selection: TeletextChannelSelectionSnapshot,
+    pub(in crate::repositories) design_id: i64,
+    pub(in crate::repositories) digest: String,
 }
 
 impl Fixture {
-    async fn new() -> Self {
+    pub(in crate::repositories) async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
         let pool = open(&root.path().join("requests.sqlite")).await;
         sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
@@ -222,7 +222,10 @@ impl Fixture {
         }
     }
 
-    fn save(&self, current: Option<i64>) -> TeletextPublicationRequestSave {
+    pub(in crate::repositories) fn save(
+        &self,
+        current: Option<i64>,
+    ) -> TeletextPublicationRequestSave {
         TeletextPublicationRequestSave {
             design_id: self.design_id,
             revision: 1,
@@ -233,7 +236,10 @@ impl Fixture {
         }
     }
 
-    async fn request(&self, current: Option<i64>) -> TeletextPublicationRequest {
+    pub(in crate::repositories) async fn request(
+        &self,
+        current: Option<i64>,
+    ) -> TeletextPublicationRequest {
         requested(
             self.repo
                 .request(&self.save(current), DOCUMENT.len())

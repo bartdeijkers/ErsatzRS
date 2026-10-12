@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Add durable, independently fenced teletext generation selection and native
+  reconstruction of exact frozen originals. Drafts and pending requests remain
+  separate from accepted output; dynamic guide freshness and ordinary stream
+  activation remain open.
 - Strengthen preparatory teletext guide fingerprints with the exact accepted
   External JSON document bytes, including changes outside the projected window.
   Preserve historical semantic-only fingerprints without relabelling them and

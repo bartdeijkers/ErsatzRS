@@ -155,7 +155,7 @@ impl AppState {
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();
         let next_engine = next_engine_host(pool.clone(), playout_locker.clone());
         let operations = operation_coordinator(playout_locker);
-        let application = Arc::new(ApplicationServices::new(
+        let application = application_with_teletext_storage(
             ApplicationPorts::new(
                 Arc::new(repositories.channel.clone()),
                 Arc::new(NativeChannelRuntime::new(
@@ -217,11 +217,10 @@ impl AppState {
                 }),
                 Arc::new(TokioScanWorkQueue::new(scan_work_tx)),
                 Arc::new(NativeScanRuntime::new(pool.clone())),
-            )
-            .with_teletext_designs(Arc::new(repositories.teletext_designs.clone()))
-            .with_teletext_publications(Arc::new(repositories.teletext_publications.clone())),
+            ),
+            &repositories,
             operations,
-        ));
+        );
         Self {
             api_key: None,
             streaming_http_addr: Arc::new(OnceLock::new()),
@@ -287,6 +286,20 @@ impl AppState {
     pub fn set_tuner_count(&self, tuner_count: i32) {
         self.tuner_count.store(tuner_count, Ordering::Relaxed);
     }
+}
+
+fn application_with_teletext_storage(
+    ports: ApplicationPorts,
+    repositories: &Repositories,
+    operations: OperationCoordinator,
+) -> Arc<ApplicationServices> {
+    Arc::new(ApplicationServices::new(
+        ports
+            .with_teletext_designs(Arc::new(repositories.teletext_designs.clone()))
+            .with_teletext_publications(Arc::new(repositories.teletext_publications.clone()))
+            .with_teletext_generations(Arc::new(repositories.teletext_generations.clone())),
+        operations,
+    ))
 }
 
 fn next_engine_host(

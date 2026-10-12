@@ -39,9 +39,9 @@ QTM edit/save/reopen proves renumber/loss; host roundtrip open.
 Budgeted v2 stays pinned through invocation; Base refuses v2. Encoding retains
 original defaults, secondary uncertainty and channel/model/deadline fences.
 Cold composition isolates M29, coalesces full resources and rechecks MOT effects.
-Originals/pending persist; v2 retains accepted JSON bytes, v1 remains semantic-only.
-Cold client passes; recovery/activation open. ADR0122 controls stay preparatory;
-legacy acquisition, regions/link CRC, UI/Lua and publication remain open.
+Originals/pending/frozen generations persist; v2 retains raw JSON, v1 semantics.
+Native recovery checks hash/selection; activation/guide freshness open.
+Cold client passes; ADR0122 controls, legacy acquisition, regions/link CRC/UI/Lua open.
 
 SQLite retains tracks/owners/data/leases; missing reports/revisions prove no bytes
 or absence. Pages stay NotAcquired. Explicit-PID parsing keeps flags/subcodes/PTS,

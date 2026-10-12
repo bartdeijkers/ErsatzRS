@@ -867,10 +867,23 @@ selection and independent current-request CAS before writing both records.
 The expected live head is separate from the selected target revision: deliberate
 publication of an older revision is allowed when the head is still current.
 Requests remain readable after channel/profile/package removal and application
-reconstruction. They are pending intents only, with no runtime consumer, accepted
-generation or automatic startup activation yet. A later output promotion owner
-must revalidate all fences and reconcile warm receiver state; pending persistence
-never proves published-generation recovery or changes ADR 0122 timing.
+reconstruction. Pending intents never activate output. A separate immutable
+accepted-generation history and per-channel pointer now select exact fully
+recompiled frozen originals, with independent generation CAS and a versioned
+complete wire/service fingerprint. Promotion rechecks the pending request, design
+head/revision, original selection and accepted pointer in one immediate transaction.
+Native recovery recompiles immutable originals and checks their fingerprint and
+current selection without consuming pending intents or invoking packages. Saving
+a newer draft or pending request does not replace accepted output.
+
+Frozen qualification requires canonical captured requests with no guide channels
+and no guide-source receipt; even a programme-empty channel is source-dependent.
+Missing historical inputs do not certify static content. Guide-bearing/unknown
+originals remain previewable and pending, but cannot gain active authority until
+current-role/freshness proof exists. This is an unfinished promotion path, not an
+accepted authoring limitation. Ordinary routes, active-publication Health, warm
+publisher/recovery ownership and complete restart/Lua timing remain open. Durable
+selection alone never proves per-output delivery or receiver cache reconciliation.
 
 ### Evidence and delivery order
 

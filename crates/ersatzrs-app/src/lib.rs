@@ -17,6 +17,7 @@ pub mod teletext_channel_documents;
 pub mod teletext_channels;
 pub mod teletext_design_documents;
 pub mod teletext_designs;
+pub mod teletext_generations;
 pub mod teletext_guide;
 pub mod teletext_pages;
 pub mod teletext_pages_v2;
