@@ -295,6 +295,16 @@ async fn installed_original_save_exact_preview_and_pending_request_keep_one_nati
     assert_eq!(requested.request().design_id, saved.head().id);
     assert_eq!(requested.request().revision, saved.head().revision);
     assert_eq!(requested.design().selection(), selected);
+    let guide_inputs = requested.design().guide_inputs().unwrap();
+    for contract in [
+        ersatzrs_domain::TeletextPageContract::V1,
+        ersatzrs_domain::TeletextPageContract::V2,
+    ] {
+        assert_eq!(
+            guide_inputs.request(contract),
+            saved.candidate().requests().request(contract)
+        );
+    }
     let actual = requested.design().encoded().unwrap();
     let recompiled =
         project_teletext_preview(actual, address(124, 32), options(), budget()).unwrap();

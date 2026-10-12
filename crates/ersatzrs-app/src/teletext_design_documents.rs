@@ -23,6 +23,10 @@ use serde::{
 };
 use std::{collections::BTreeSet, fmt, io, marker::PhantomData, mem::size_of};
 
+#[path = "teletext_design_documents/guide_inputs.rs"]
+mod guide_inputs;
+pub use guide_inputs::TeletextSavedGuideInputs;
+
 const MAX_BINDINGS: usize = 1024;
 const MAX_DEPTH: usize = 32;
 
@@ -32,7 +36,9 @@ pub struct TeletextDesignDocumentBudget {
     pub max_serialized_bytes: usize,
     pub max_documents: usize,
     pub max_response_bytes: usize,
+    /// Aggregate context includes exact requests when guide inputs are present.
     pub max_context_bytes: usize,
+    /// Scalar context fields; request strings use their independent wire cap.
     pub max_context_field_bytes: usize,
     pub max_resource_transmissions: usize,
     pub validation: TeletextProfileDocumentBudget,
@@ -176,8 +182,16 @@ pub struct TeletextRestoredDesignDocumentParts {
     pub v1_region: Option<TeletextSavedV1Region>,
     pub resource_transmissions: Vec<TeletextSavedResourceTransmission>,
     pub edit_policy: TeletextSavedEditPolicy,
+    pub guide_inputs: Option<TeletextSavedGuideInputs>,
 }
 impl RestoredTeletextDesignDocuments {
+    /// Exact historical requests; absence explicitly denotes legacy/static data.
+    /// Presence validates data integrity, not source freshness or invocation.
+    #[must_use]
+    pub fn guide_inputs(&self) -> Option<&TeletextSavedGuideInputs> {
+        self.parts.guide_inputs.as_ref()
+    }
+
     #[must_use]
     pub const fn selection(&self) -> &TeletextChannelSelectionSnapshot {
         &self.parts.selection
@@ -224,6 +238,7 @@ impl fmt::Debug for TeletextRestoredDesignDocumentParts {
         f.debug_struct("TeletextRestoredDesignDocumentParts")
             .field("documents", &self.documents.len())
             .field("resources", &self.resource_transmissions.len())
+            .field("guide_inputs", &self.guide_inputs)
             .finish_non_exhaustive()
     }
 }
@@ -255,6 +270,8 @@ pub enum TeletextDesignDocumentFailure {
     Association,
     #[error("invalid original correlation or response")]
     Source,
+    #[error("invalid historical guide inputs")]
+    GuideInputs,
     #[error("original document failed structural validation")]
     Document,
     #[error("invalid original entry")]
@@ -303,11 +320,11 @@ fn storage<T>(count: usize) -> Result<(), TeletextDesignDocumentError> {
 
 // Local map-only DTOs avoid adding Serde to invocation or checked snapshot types.
 macro_rules! stored_map {
-    ($name:ident { $($field:ident: $ty:ty),* $(,)? }) => {
-        #[derive(Serialize)] struct $name { $($field: $ty),* }
+    ($name:ident { $($(#[$attribute:meta])* $field:ident: $ty:ty),* $(,)? }) => {
+        #[derive(Serialize)] struct $name { $($(#[$attribute])* $field: $ty),* }
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                #[derive(Deserialize)] #[serde(deny_unknown_fields)] struct Fields { $($field: $ty),* }
+                #[derive(Deserialize)] #[serde(deny_unknown_fields)] struct Fields { $($(#[$attribute])* $field: $ty),* }
                 let fields: Fields = map_only(deserializer)?;
                 Ok(Self { $($field: fields.$field),* })
             }
@@ -357,7 +374,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Required<T> {
 }
 stored_map!(Envelope { format_version: u16, selection: Selection, generation: String,
     entry_addon_id: Required<String>, entry: Required<Entry>, v1_region: Required<TeletextSavedV1Region>,
-    edit_policy: EditPolicy, resource_transmissions: Vec<Transmission>, documents: Vec<Document> });
+    edit_policy: EditPolicy, resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
+    #[serde(default)] guide_inputs: guide_inputs::OptionalGuideInputs });
 stored_map!(Selection { channel_id: EntityId, bindings: Vec<Member> });
 stored_map!(Member { contract: u32, channel_id: EntityId, addon_id: String, binding_revision: i64,
     profile_id: EntityId, profile_revision: i64, installation: Installation, effective_settings: Vec<Setting> });
@@ -519,6 +537,8 @@ struct BorrowedEnvelope<'a> {
     edit_policy: EditPolicy,
     resource_transmissions: &'a [TeletextSavedResourceTransmission],
     documents: Vec<BorrowedDocument<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guide_inputs: Option<guide_inputs::BorrowedGuideInputs<'a>>,
 }
 
 /// Encode bounded structurally checked originals, without writes or packages.
@@ -529,10 +549,44 @@ pub fn encode_teletext_design_documents(
     input: TeletextDesignDocumentInput<'_>,
     budget: TeletextDesignDocumentBudget,
 ) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
+    encode_documents(input, None, budget)
+}
+
+/// Encode structurally checked originals with their exact preflight requests.
+/// The independently versioned private subdocument preserves UTF-8 bytes and
+/// selected contracts. Matching requests establish no source or invocation
+/// authority. Complete native host validation before CAS remains mandatory.
+/// # Errors
+/// Rejects request shape, generation, selection/context differences and existing
+/// source/model/storage limits, without producing a partial document.
+pub fn encode_teletext_design_documents_with_requests(
+    input: TeletextDesignDocumentInput<'_>,
+    requests: &crate::teletext_channel_documents::TeletextChannelRequestTemplates,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
+    encode_documents(input, Some(requests), budget)
+}
+
+fn encode_documents(
+    input: TeletextDesignDocumentInput<'_>,
+    requests: Option<&crate::teletext_channel_documents::TeletextChannelRequestTemplates>,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
     validate_context(input.selection, input.generation, budget)?;
     let documents = borrow_sources(&input, budget)?;
     validate_transmissions(input.resource_transmissions, budget)?;
-    validate_capture_context(&input, budget)?;
+    let context_bytes = validate_capture_context(&input, budget)?;
+    let guide_inputs = requests
+        .map(|requests| {
+            guide_inputs::borrow(
+                requests,
+                input.selection,
+                input.generation,
+                context_bytes,
+                budget,
+            )
+        })
+        .transpose()?;
     let parsed = parse_sources(
         input.selection,
         input.generation,
@@ -565,6 +619,7 @@ pub fn encode_teletext_design_documents(
         },
         resource_transmissions: input.resource_transmissions,
         documents,
+        guide_inputs,
     };
     let mut writer = BoundedWriter {
         bytes: Vec::new(),
@@ -655,6 +710,11 @@ pub fn decode_teletext_design_documents(
             .collect::<Result<_, _>>()?,
     };
     validate_context(&selection, &envelope.generation, budget)?;
+    let guide_inputs = envelope
+        .guide_inputs
+        .0
+        .map(|inputs| inputs.restore(&selection, &envelope.generation, budget))
+        .transpose()?;
     let borrowed = envelope
         .documents
         .iter()
@@ -714,6 +774,7 @@ pub fn decode_teletext_design_documents(
             v1_region: envelope.v1_region.0,
             resource_transmissions: transmissions,
             edit_policy: TeletextSavedEditPolicy::OriginalOnly,
+            guide_inputs,
         },
     })
 }
@@ -907,7 +968,7 @@ fn validate_transmissions(
 fn validate_capture_context(
     input: &TeletextDesignDocumentInput<'_>,
     budget: TeletextDesignDocumentBudget,
-) -> Result<(), TeletextDesignDocumentError> {
+) -> Result<usize, TeletextDesignDocumentError> {
     let mut bytes = input.generation.len();
     let mut add = |text: &str| -> Result<(), TeletextDesignDocumentError> {
         limit(text.len(), budget.max_context_field_bytes, "context field")?;
@@ -958,7 +1019,8 @@ fn validate_capture_context(
             ersatzrs_domain::TeletextResourceKind::Mip => "mip",
         })?;
     }
-    limit(bytes, budget.max_context_bytes, "context")
+    limit(bytes, budget.max_context_bytes, "context")?;
+    Ok(bytes)
 }
 
 struct BoundedWriter {
@@ -996,6 +1058,8 @@ enum Path {
     Document,
     Response,
     Transmissions,
+    GuideInputs,
+    GuideRequest,
 }
 struct Scan {
     budget: TeletextDesignDocumentBudget,
@@ -1050,11 +1114,15 @@ impl Scan {
                 "responses",
             ))
         } else {
-            self.check(limit(
-                text.len(),
-                self.budget.max_context_field_bytes,
-                "context field",
-            ))?;
+            let (maximum, dimension) = if matches!(path, Path::GuideRequest) {
+                (
+                    ersatzrs_addon_contract::MAX_TELETEXT_PAGES_INPUT_BYTES,
+                    "guide request",
+                )
+            } else {
+                (self.budget.max_context_field_bytes, "context field")
+            };
+            self.check(limit(text.len(), maximum, dimension))?;
             self.context = self
                 .context
                 .checked_add(text.len())
@@ -1111,6 +1179,8 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Root, "selection") => Path::Selection,
                 (Path::Root, "documents") => Path::Documents,
                 (Path::Root, "resource_transmissions") => Path::Transmissions,
+                (Path::Root, "guide_inputs") => Path::GuideInputs,
+                (Path::GuideInputs, "v1" | "v2") => Path::GuideRequest,
                 (Path::Selection, "bindings") => Path::Bindings,
                 (Path::Binding, "effective_settings") => Path::Settings,
                 (Path::Document, "response") => Path::Response,

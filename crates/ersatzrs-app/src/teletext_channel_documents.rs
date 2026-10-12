@@ -468,7 +468,7 @@ fn select_entry(
     Ok(Some(entry.to_owned()))
 }
 
-fn preflight_requests(
+pub(super) fn preflight_requests(
     selection: &TeletextChannelSelectionSnapshot,
     context: &SuppliedTeletextGuideContext<'_>,
 ) -> Result<TeletextChannelRequestTemplates, ChannelTeletextDocumentError> {

@@ -155,6 +155,18 @@ fn assert_restored_originals(
     let original = saved.candidate();
     assert_eq!(restored.selection(), original.selection());
     assert_eq!(restored.digest(), saved.digest());
+    let guide_inputs = restored
+        .guide_inputs()
+        .expect("new captures retain request inputs");
+    for contract in [
+        ersatzrs_domain::TeletextPageContract::V1,
+        ersatzrs_domain::TeletextPageContract::V2,
+    ] {
+        assert_eq!(
+            guide_inputs.request(contract),
+            original.requests().request(contract)
+        );
+    }
     assert_eq!(
         restored.edit_policy(),
         TeletextSavedEditPolicy::OriginalOnly

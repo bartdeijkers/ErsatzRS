@@ -1170,11 +1170,15 @@ and after installed producer/native preparation under cumulative read limits and
 original deadline; changed raw/effective settings, channel facts, source receipts or
 complete occurrences or exact stored configured/accepted path associations reject.
 The original bounded V1/V2 request buffers now move through validation/native
-preparation without reserialization, separately from response source records. This is
-point-in-time semantic comparison and input retention, not a live-file or atomic
-publication fence. Mutable-file capture/recheck, durable guide-input/context association
-and publication-time source freshness, trusted generation ownership, safe promotion
-and localized preview controls remain next.
+preparation and remain byte-exact in immutable design save/reload through an optional
+versioned private-envelope extension. Legacy absence remains distinct from captured
+Off. A bounded streaming fingerprint covers every compared guide/context/path field,
+options, order and precise times without cloning/JSON buffers. This is point-in-time
+semantic comparison and historical input retention, not live-file or atomic publication
+freshness. Next seal the captured context/fingerprint and host locale/timezone/instant
+to those exact requests and the saved revision, then compare inside the publication
+transaction; configured-to-accepted ownership, mutable-file capture/recheck, trusted
+generation ownership, safe promotion and localized preview controls remain open.
 Original-only capture
 is not an editor-permission or zone/template acceptance.
 Prioritize the existing synthetic profile-selection→validation→preview→explicit

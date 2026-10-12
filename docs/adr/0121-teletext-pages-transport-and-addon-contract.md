@@ -17,11 +17,15 @@ The preparatory guide/native bridge now rejects changed effective guide context
 before and after producer preparation, with cumulative read limits and the original
 deadline, including exact stored configured/accepted source-path associations.
 Original bounded V1/V2 request buffers now move through validation into the native
-candidate separately from response-only source DTOs. These facts do not validate
-configured-to-accepted path ownership, fence live-file/projected-away raw changes
-or an intervening change and restoration. Durable guide-input association and a
-fresh, atomic publication-time source check remain required; the interchange
-reference and P9A-04 own API details, proof and the remaining integration gaps.
+candidate and persist byte-exact in an optional, independently versioned private
+storage subdocument; legacy envelope/version-1 records remain readable. A bounded
+version-1 fingerprint covers the complete compared guide context without cloning or
+JSON buffers. These facts do not validate configured-to-accepted path ownership,
+fence live-file/projected-away raw changes or an intervening change and restoration.
+Sealed request-to-context/source association and a fresh, atomic publication-time
+source check remain required; the interchange reference and P9A-04 own API details,
+proof and remaining integration gaps. The stored subdocument is historical data,
+not an invocation receipt, editor permission or generation-activation authority.
 
 The selected-runtime capability report now runs bounded decoder-option,
 exact-page text and colour bitmap probes against an independent synthetic DVB

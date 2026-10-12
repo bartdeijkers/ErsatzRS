@@ -3905,8 +3905,63 @@ presence-only Debug. Exact association equality joins context comparison.
 
 These are preparatory input facts. They do not read/hash live files, reconstruct
 raw projected-away source data, confer durable guide provenance or authorize a
-publication. Next bind versioned request/context/source data to the exact saved
-revision in the existing private envelope, preserving legacy/manual/static
-records, then recheck its effective context within the publication transaction.
-The storage envelope/version remains unchanged in this checkpoint. P9A-04 owns
+publication. Original requests now persist through the optional private subdocument
+below. Next seal their captured context/source association to the exact saved
+revision, preserving legacy/manual/static records, then recheck effective context
+within the publication transaction. The storage version remains 1. P9A-04 owns
 verification and the remaining engine/vertical-flow gaps.
+
+
+### Stored original guide requests
+
+The private version-1 design envelope optionally contains `guide_inputs`, a closed
+map with `input_version: 1` and required nullable `v1`/`v2` UTF-8 request strings.
+Absence denotes legacy/static historical data; a present Off capture has both
+fields null. A present null map, missing/duplicate/unknown fields, unsupported
+subversion or mismatched selected-contract presence rejects. Generation and the
+complete common typed V1/V2 context must agree; only schema is normalized in the
+temporary comparison values. Original request bytes are never reserialized.
+
+`encode_teletext_design_documents_with_requests` borrows the native candidate's
+opaque templates. The compatibility encoder omits the extension byte-identically.
+Decode moves strings into historical `TeletextSavedGuideInputs` buffers; getters
+and consuming restore parts preserve presence and exact bytes. These carry no
+current invocation/source authority. Request payloads share `max_context_bytes`
+with existing context, obey the independent 4 MiB per-request wire bound and
+`max_serialized_bytes` for the entire envelope. The scalar-only context-field cap
+does not truncate a complete request. Source-byte admission precedes stored DTO
+allocation/request parsing; this is not total parsed-model/allocator/RSS proof.
+
+Native save/reload retains these inputs while rebuilding the same original pages,
+resource lifecycle, pixels and navigation without invoking packages. Pending
+publication confirmation still binds the exact revision/document digest and fresh
+complete channel selection; accepted generation promotion remains unimplemented.
+This private extension is not the external-editor metadata sidecar and grants no
+zone/template editing permission. Older closed parsers reject the newly added
+field; updated parsers continue to read legacy records. No storage migration or
+root version increment is introduced.
+
+### Compared-context fingerprint
+
+`GuideSnapshot::context_digest(GuideSnapshotDigestLimits)` returns a 32-byte
+SHA-256 fingerprint under inclusive field/byte work limits. Algorithm version
+`GUIDE_SNAPSHOT_DIGEST_VERSION = 1` is independent of request/storage versions.
+Each frame is a one-byte type tag, eight-byte big-endian payload length and
+payload. Domain and version frames precede fixed schema traversal. Explicit
+stable enum tags, option discriminators and ordered sequence lengths distinguish
+presence, grouping and order. Integers are fixed-endian; UTC instants and signed
+durations retain seconds and nanoseconds, including negative/large durations.
+
+Exhaustive struct destructuring covers exactly `compare_context`: snapshot
+window/raw/effective policy, ordered channel/source/path facts, every programme,
+content/artwork/credit field and segment. Artwork size hints remain included even
+without artwork. Only admission usage counters are excluded. Host locale,
+timezone and capture instant must be bound separately in the future source
+receipt. Changed field coverage requires an explicit algorithm-version decision.
+
+The walker streams borrowed values without JSON buffers or cloned content. Both
+counters and size arithmetic are checked before a frame reaches the fixed-state
+hasher; rejection returns no partial fingerprint. Equal admitted contexts produce
+equal fingerprints. This is a semantic-context fingerprint, not a hash of live
+files or projected-away raw sources, an authenticated source receipt or a
+publication fence. P9A-04 owns the independent framing oracle and focused proof.

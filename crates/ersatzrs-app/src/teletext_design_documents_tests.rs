@@ -1,4 +1,6 @@
 //! Private original storage tests; no persistence, editing or publication proof.
+#[path = "teletext_design_documents/guide_inputs_tests.rs"]
+mod guide_inputs_tests;
 use super::*;
 use crate::{
     teletext_profile_documents::BoundTeletextDocumentInput,

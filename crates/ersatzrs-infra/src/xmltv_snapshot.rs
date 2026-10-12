@@ -16,6 +16,11 @@ use sqlx::Row;
 
 #[path = "xmltv_snapshot/allocation.rs"]
 mod allocation;
+#[path = "xmltv_snapshot/digest.rs"]
+mod digest;
+pub use digest::{
+    GuideSnapshotDigestError, GuideSnapshotDigestLimits, GUIDE_SNAPSHOT_DIGEST_VERSION,
+};
 #[path = "xmltv_snapshot/sources.rs"]
 mod sources;
 
@@ -154,6 +159,22 @@ pub enum GuideSnapshotComparison {
 }
 
 impl GuideSnapshot {
+    /// Fingerprint exactly the fields compared by `compare_context`.
+    ///
+    /// The versioned streaming encoding preserves optional values, ordered
+    /// collections and full metadata. Admission usage is excluded. This is
+    /// preparatory data, not raw-source freshness or publication authority.
+    ///
+    /// # Errors
+    /// Rejects checked arithmetic or trusted field/encoded-byte limits before
+    /// hashing the next field. No partial digest is returned.
+    pub fn context_digest(
+        &self,
+        limits: GuideSnapshotDigestLimits,
+    ) -> Result<[u8; 32], GuideSnapshotDigestError> {
+        digest::context_digest(self, limits)
+    }
+
     /// Compare the frozen window, raw/effective configuration and ordered channel
     /// context, including exact source receipts and complete occurrences.
     /// Admission usage is excluded; underlying uncaptured sources are not fenced.

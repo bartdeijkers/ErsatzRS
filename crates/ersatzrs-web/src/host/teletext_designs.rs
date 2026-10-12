@@ -5,10 +5,11 @@ use std::{fmt, fmt::Write as _, sync::Arc, time::Instant};
 use async_trait::async_trait;
 use ersatzrs_app::{
     teletext_design_documents::{
-        decode_teletext_design_documents, encode_teletext_design_documents,
+        decode_teletext_design_documents, encode_teletext_design_documents_with_requests,
         EncodedTeletextDesignDocuments, TeletextDesignDocumentBudget, TeletextDesignDocumentError,
         TeletextDesignDocumentInput, TeletextSavedDocumentSource, TeletextSavedEditPolicy,
-        TeletextSavedResourceTransmission, TeletextSavedResourceUpdate, TeletextSavedV1Region,
+        TeletextSavedGuideInputs, TeletextSavedResourceTransmission, TeletextSavedResourceUpdate,
+        TeletextSavedV1Region,
     },
     teletext_designs::{
         TeletextDesignStoreError, TeletextOriginalDesignValidationError,
@@ -85,6 +86,7 @@ pub struct RestoredOriginalTeletextDesign {
     revision: i64,
     selection: TeletextChannelSelectionSnapshot,
     sources: Vec<TeletextSavedDocumentSource>,
+    guide_inputs: Option<TeletextSavedGuideInputs>,
     digest: String,
     originals: EncodedChannelTeletextOriginals,
     edit_policy: TeletextSavedEditPolicy,
@@ -105,6 +107,12 @@ impl RestoredOriginalTeletextDesign {
     #[must_use]
     pub fn sources(&self) -> &[TeletextSavedDocumentSource] {
         &self.sources
+    }
+    /// Historical exact invocation inputs; absence remains legacy/static data.
+    /// These bytes confer no current guide-source or publication authority.
+    #[must_use]
+    pub const fn guide_inputs(&self) -> Option<&TeletextSavedGuideInputs> {
+        self.guide_inputs.as_ref()
     }
     #[must_use]
     pub fn digest(&self) -> &str {
@@ -225,7 +233,7 @@ pub async fn save_original_teletext_design_candidate(
                 },
             })
             .collect();
-        let document = encode_teletext_design_documents(
+        let document = encode_teletext_design_documents_with_requests(
             TeletextDesignDocumentInput {
                 selection: candidate.selection(),
                 generation: candidate.generation(),
@@ -237,6 +245,7 @@ pub async fn save_original_teletext_design_candidate(
                 }),
                 resource_transmissions: &transmissions,
             },
+            candidate.requests(),
             budget,
         )?;
         let digest = sha256_hex(document.bytes());
@@ -328,6 +337,7 @@ pub async fn reload_original_teletext_design_revision(
             revision: stored.revision,
             selection: parts.selection,
             sources: parts.sources,
+            guide_inputs: parts.guide_inputs,
             digest: stored.digest,
             originals,
             edit_policy: parts.edit_policy,
