@@ -13,16 +13,15 @@ use ersatzrs_domain::{
     build_teletext_glyph_layers, resolve_teletext_attribute_execution,
     resolve_teletext_attribute_execution_with_transmission, resolve_teletext_base_footprints,
     resolve_teletext_charset_execution, resolve_teletext_colour_composition,
-    resolve_teletext_display_geometry, resolve_teletext_display_resolution,
-    resolve_teletext_drcs_execution, resolve_teletext_drcs_program, resolve_teletext_glyph_intent,
-    resolve_teletext_spatial_program, resolve_teletext_spatial_trace, TeletextAttributeExecution,
-    TeletextAttributeExecutionError, TeletextAttributeTransmissionError,
-    TeletextAttributeTransmissionEvidence, TeletextBaseDisplay, TeletextBaseFootprintError,
-    TeletextBaseFootprints, TeletextCharsetExecution, TeletextCharsetExecutionError,
-    TeletextCharsetPair, TeletextCharsetValueError, TeletextCollectedEnhancementReferences,
-    TeletextColourComposition, TeletextColumnOperation, TeletextDisplayGeometry,
-    TeletextDisplayGeometryBudget, TeletextDisplayGeometryError, TeletextDisplayResolution,
-    TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
+    resolve_teletext_display_geometry, resolve_teletext_drcs_execution,
+    resolve_teletext_drcs_program, resolve_teletext_glyph_intent, resolve_teletext_spatial_program,
+    resolve_teletext_spatial_trace, TeletextAttributeExecution, TeletextAttributeExecutionError,
+    TeletextAttributeTransmissionError, TeletextAttributeTransmissionEvidence, TeletextBaseDisplay,
+    TeletextBaseFootprintError, TeletextBaseFootprints, TeletextCharsetExecution,
+    TeletextCharsetExecutionError, TeletextCharsetPair, TeletextCharsetValueError,
+    TeletextCollectedEnhancementReferences, TeletextColourComposition, TeletextColumnOperation,
+    TeletextDisplayGeometry, TeletextDisplayGeometryBudget, TeletextDisplayGeometryError,
+    TeletextDisplayResolution, TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
     TeletextDisplayResolutionInputs, TeletextDrcsExecution, TeletextDrcsExecutionBudget,
     TeletextDrcsExecutionError, TeletextDrcsProgramExecutionError, TeletextEffectiveProgramSource,
     TeletextEnhancementCharsetDesignation, TeletextEnhancementCollectionBudget,
@@ -40,6 +39,7 @@ use super::colour_context::{
     resolve_teletext_colour_context, resolve_teletext_program_colour_context,
     TeletextColourContext, TeletextColourContextError,
 };
+use super::compile_context::TeletextCompileContext;
 use super::layout::{self, PositionedBaseGlyph};
 use super::TeletextEncodingError;
 
@@ -285,13 +285,13 @@ impl TeletextMainComposition {
     pub const fn collected(&self) -> &TeletextCollectedEnhancementReferences {
         &self.collected
     }
-    /// Recompute consumed display projections only after final packing has supplied
-    /// exact original-emitter positions. The service is the same immutable input.
-    pub(super) fn with_transmission(
+    /// Settle the same composition under the service's shared update quota.
+    pub(super) fn with_transmission_context(
         mut self,
         service: &TeletextSemanticService,
         transmission: &TeletextAttributeTransmissionEvidence,
         maximum: usize,
+        context: &mut TeletextCompileContext<'_, '_>,
     ) -> Result<Self, TeletextMainCompositionError> {
         let source = &self.original_program_source;
         let (attributes, display) = display_after_transmission(
@@ -307,8 +307,8 @@ impl TeletextMainComposition {
                 geometry: &self.display_geometry,
             },
             source,
-            transmission,
-            maximum,
+            (transmission, maximum),
+            context,
         )?;
         let presentation = service.effective_presentation(self.owner).ok_or_else(|| {
             error(
@@ -372,6 +372,21 @@ pub fn compose_teletext_main_program(
     service: &TeletextSemanticService,
     owner: TeletextPageAddress,
     budget: TeletextMainCompositionBudget,
+) -> Result<TeletextMainComposition, TeletextMainCompositionError> {
+    compose_teletext_main_program_with_context(
+        service,
+        owner,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
+}
+
+/// Compose unchanged authored values while debiting the shared display quota.
+pub(super) fn compose_teletext_main_program_with_context(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    budget: TeletextMainCompositionBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<TeletextMainComposition, TeletextMainCompositionError> {
     let (source, original) = service
         .effective_program(owner)
@@ -444,6 +459,7 @@ pub fn compose_teletext_main_program(
         original_display.borrowed(),
         &source,
         budget.collection.max_commands,
+        context,
     )?;
     let colour_composition = resolve_teletext_colour_composition(
         &display_resolution,
@@ -548,14 +564,33 @@ impl TeletextPhysicalDisplayReplay {
     /// Factory-only settlement using final packing of this exact replay input.
     /// The factory retains the same service/composition/program/catalog pairing;
     /// this method is not detached evidence or public publication authority.
+    #[cfg(test)]
     pub(super) fn with_transmission(
-        mut self,
+        self,
         service: &TeletextSemanticService,
         original: &TeletextMainComposition,
         transmission: &TeletextAttributeTransmissionEvidence,
         maximum: usize,
     ) -> Result<Self, TeletextPhysicalDisplayReplayError> {
-        let update = || -> Result<_, TeletextMainCompositionError> {
+        self.with_transmission_context(
+            service,
+            original,
+            transmission,
+            maximum,
+            &mut TeletextCompileContext::new(None, None, None),
+        )
+    }
+
+    /// Settle physical replay under the same service-owned update quota.
+    pub(super) fn with_transmission_context(
+        mut self,
+        service: &TeletextSemanticService,
+        original: &TeletextMainComposition,
+        transmission: &TeletextAttributeTransmissionEvidence,
+        maximum: usize,
+        context: &mut TeletextCompileContext<'_, '_>,
+    ) -> Result<Self, TeletextPhysicalDisplayReplayError> {
+        let mut update = || -> Result<_, TeletextMainCompositionError> {
             let source = TeletextEffectiveProgramSource::Local;
             let (attributes, display) = display_after_transmission(
                 &original.base_display,
@@ -563,8 +598,8 @@ impl TeletextPhysicalDisplayReplay {
                 &original.colour_context,
                 self.execution.borrowed(),
                 &source,
-                transmission,
-                maximum,
+                (transmission, maximum),
+                context,
             )?;
             let presentation = service.effective_presentation(self.owner).ok_or_else(|| {
                 error(
@@ -627,9 +662,28 @@ pub fn replay_teletext_physical_display(
     catalog: &TeletextEnhancementObjectCatalog,
     budget: TeletextEnhancementCollectionBudget,
 ) -> Result<TeletextPhysicalDisplayReplay, TeletextPhysicalDisplayReplayError> {
+    replay_teletext_physical_display_with_context(
+        service,
+        composition,
+        program,
+        catalog,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
+}
+
+/// Replay the original pairing under the service's shared display quota.
+pub(super) fn replay_teletext_physical_display_with_context(
+    service: &TeletextSemanticService,
+    composition: &TeletextMainComposition,
+    program: &TeletextEnhancementProgram,
+    catalog: &TeletextEnhancementObjectCatalog,
+    budget: TeletextEnhancementCollectionBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<TeletextPhysicalDisplayReplay, TeletextPhysicalDisplayReplayError> {
     let owner = composition.owner;
     let maximum = budget.max_commands;
-    let build = || -> Result<TeletextPhysicalDisplayReplay, TeletextMainCompositionError> {
+    let mut build = || -> Result<TeletextPhysicalDisplayReplay, TeletextMainCompositionError> {
         check_input(owner, program.commands().len(), 0, maximum)?;
         let source = TeletextEffectiveProgramSource::Local;
         check_physical_colour_context(service, composition, program, catalog, maximum)?;
@@ -667,6 +721,7 @@ pub fn replay_teletext_physical_display(
             execution.borrowed(),
             &source,
             maximum,
+            context,
         )?;
         let presentation = service
             .effective_presentation(owner)
@@ -883,9 +938,10 @@ fn display_after_transmission(
     colours: &TeletextColourContext,
     execution: OriginalDisplayBorrowed<'_>,
     source: &TeletextEffectiveProgramSource,
-    transmission: &TeletextAttributeTransmissionEvidence,
-    maximum: usize,
+    transmission: (&TeletextAttributeTransmissionEvidence, usize),
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<(TeletextAttributeExecution, TeletextDisplayResolution), TeletextMainCompositionError> {
+    let (transmission, maximum) = transmission;
     let attributes = resolve_teletext_attribute_execution_with_transmission(
         base,
         execution.spatial,
@@ -910,6 +966,7 @@ fn display_after_transmission(
         },
         source,
         maximum,
+        context,
     )?;
     Ok((attributes, display))
 }
@@ -921,6 +978,7 @@ fn original_display_resolution(
     original: OriginalDisplayBorrowed<'_>,
     source: &TeletextEffectiveProgramSource,
     maximum: usize,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<TeletextDisplayResolution, TeletextMainCompositionError> {
     let owner = base.owner();
     let max_candidates = original_candidate_budget(owner, maximum)?;
@@ -946,32 +1004,33 @@ fn original_display_resolution(
         .and_then(|count| count.checked_add(1))
         .and_then(|count| count.checked_mul(TELETEXT_ROWS * 72 * 16))
         .ok_or_else(exhausted)?;
-    resolve_teletext_display_resolution(
-        TeletextDisplayResolutionInputs {
-            base,
-            base_footprints,
-            original: original.spatial,
-            layers: original.glyphs,
-            attributes: original.attributes,
-            intent: original.intent,
-            drcs: original.drcs,
-            geometry: original.geometry,
-            row_colours: colours.row_colours(),
-        },
-        TeletextDisplayResolutionBudget {
-            max_candidates,
-            max_commands: maximum,
-            max_writers,
-            max_origins,
-            max_updates,
-        },
-    )
-    .map_err(|reason| {
-        let location = reason
-            .location
-            .and_then(|location| original_location(source, location));
-        error(owner, location, reason.into())
-    })
+    context
+        .resolve_display(
+            TeletextDisplayResolutionInputs {
+                base,
+                base_footprints,
+                original: original.spatial,
+                layers: original.glyphs,
+                attributes: original.attributes,
+                intent: original.intent,
+                drcs: original.drcs,
+                geometry: original.geometry,
+                row_colours: colours.row_colours(),
+            },
+            TeletextDisplayResolutionBudget {
+                max_candidates,
+                max_commands: maximum,
+                max_writers,
+                max_origins,
+                max_updates,
+            },
+        )
+        .map_err(|reason| {
+            let location = reason
+                .location
+                .and_then(|location| original_location(source, location));
+            error(owner, location, reason.into())
+        })
 }
 
 fn original_display_execution(

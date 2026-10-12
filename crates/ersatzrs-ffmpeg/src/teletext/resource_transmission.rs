@@ -9,6 +9,7 @@ use ersatzrs_domain::{
     TeletextResourceIdentity, TeletextSemanticService, TeletextSpatialEvent, TeletextSpatialTrace,
 };
 
+use super::compile_context::TeletextCompileContext;
 use super::enhancement_program::{LoweringState, ResourceContext};
 
 use super::{
@@ -369,11 +370,11 @@ fn correspondence(target: Option<TeletextObjectIdentity>, command: Option<usize>
 
 /// Native default roots have no Local packet word. Only their exact resource
 /// bodies gain same-instance timing evidence; sparse default provenance survives.
-pub(super) fn settle_native(
+pub(super) fn settle_native_with_context(
     composition: TeletextMainComposition,
     service: &TeletextSemanticService,
-    resources: &ResourceTransmissionContext<'_>,
     maximum: usize,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<TeletextMainComposition, TeletextMainCompositionError> {
     let trace = composition.spatial_trace();
     let fail = |reason| TeletextMainCompositionError {
@@ -412,7 +413,13 @@ pub(super) fn settle_native(
             .object
             .is_some_and(|target| target.scope() != TeletextObjectScope::Local)
         {
-            if let Some(word) = resources.word(trace, event, event_ordinal).map_err(&fail)? {
+            if let Some(word) = context
+                .resources
+                .map(|resources| resources.word(trace, event, event_ordinal))
+                .transpose()
+                .map_err(&fail)?
+                .flatten()
+            {
                 positions.push(TeletextAttributeTransmissionPosition {
                     event_ordinal,
                     source: event.source(),
@@ -424,7 +431,7 @@ pub(super) fn settle_native(
     }
     let evidence =
         TeletextAttributeTransmissionEvidence::new(trace, &positions, maximum).map_err(fail)?;
-    composition.with_transmission(service, &evidence, maximum)
+    composition.with_transmission_context(service, &evidence, maximum, context)
 }
 
 #[cfg(test)]

@@ -10,7 +10,8 @@ use ersatzrs_domain::{
     TeletextDefaultObjectSelection, TeletextPageAddress, TeletextSemanticService,
 };
 
-use super::normalized_main_program::compile_normalized_with_resources_before;
+use super::compile_context::TeletextCompileContext;
+use super::normalized_main_program::compile_normalized_with_context;
 use super::packets::{self, PageEnhancements, PagePacketMetadata};
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
@@ -94,14 +95,20 @@ pub(super) fn encode_teletext_compiled_display_page(
     budget: &TeletextNormalizedMainProgramBudget,
     resources: Option<&ResourceTransmissionContext<'_>>,
 ) -> Result<EncodedTeletextCompiledDisplayPage, TeletextCompiledDisplayPageEncodingError> {
-    encode_teletext_compiled_display_page_before(
-        service, owner, region, defaults, budget, resources, None,
+    encode_teletext_compiled_display_page_with_context(
+        service,
+        owner,
+        region,
+        defaults,
+        budget,
+        &mut TeletextCompileContext::new(resources, None, None),
     )
 }
 
 /// Keep the service's original deadline through normalization and page assembly.
 /// Checks are cooperative between bounded stages, without preempting a running
 /// stage or returning a partial candidate. `None` preserves standalone encoding.
+#[cfg(test)]
 pub(super) fn encode_teletext_compiled_display_page_before(
     service: &TeletextSemanticService,
     owner: TeletextPageAddress,
@@ -111,8 +118,26 @@ pub(super) fn encode_teletext_compiled_display_page_before(
     resources: Option<&ResourceTransmissionContext<'_>>,
     deadline: Option<Instant>,
 ) -> Result<EncodedTeletextCompiledDisplayPage, TeletextCompiledDisplayPageEncodingError> {
+    encode_teletext_compiled_display_page_with_context(
+        service,
+        owner,
+        region,
+        defaults,
+        budget,
+        &mut TeletextCompileContext::new(resources, deadline, None),
+    )
+}
+
+pub(super) fn encode_teletext_compiled_display_page_with_context(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    region: TeletextEncodingRegion,
+    defaults: &[TeletextDefaultObjectSelection],
+    budget: &TeletextNormalizedMainProgramBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<EncodedTeletextCompiledDisplayPage, TeletextCompiledDisplayPageEncodingError> {
     let error = |reason| TeletextCompiledDisplayPageEncodingError { owner, reason };
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let page = service
         .base()
         .pages
@@ -120,28 +145,26 @@ pub(super) fn encode_teletext_compiled_display_page_before(
         .find(|page| page.address == owner)
         .ok_or_else(|| error(TeletextCompiledDisplayPageEncodingFailure::MissingPage))?;
     let TeletextEncodingRegion::WesternLatin = region;
-    let normalized = compile_normalized_with_resources_before(
-        service, owner, defaults, budget, resources, deadline,
-    )
-    .map_err(|reason| {
-        if matches!(
-            &reason.reason,
-            TeletextNormalizedMainProgramFailure::TimedOut
-        ) {
-            error(TeletextCompiledDisplayPageEncodingFailure::TimedOut)
-        } else {
-            error(TeletextCompiledDisplayPageEncodingFailure::Normalization(
-                Box::new(reason),
-            ))
-        }
-    })?;
-    check_deadline(owner, deadline)?;
+    let normalized = compile_normalized_with_context(service, owner, defaults, budget, context)
+        .map_err(|reason| {
+            if matches!(
+                &reason.reason,
+                TeletextNormalizedMainProgramFailure::TimedOut
+            ) {
+                error(TeletextCompiledDisplayPageEncodingFailure::TimedOut)
+            } else {
+                error(TeletextCompiledDisplayPageEncodingFailure::Normalization(
+                    Box::new(reason),
+                ))
+            }
+        })?;
+    check_deadline(owner, context.deadline)?;
     let compiled = layout::compile_for_composition(page).map_err(|reason| {
         error(TeletextCompiledDisplayPageEncodingFailure::Base(Box::new(
             reason,
         )))
     })?;
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let metadata = service.page_enhancements().get(&owner);
     let page = packets::encode_compiled_page(
         page,
@@ -158,7 +181,7 @@ pub(super) fn encode_teletext_compiled_display_page_before(
             reason,
         )))
     })?;
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let magazine_units = service
         .magazine_presentations()
         .get(&owner.page.magazine())
@@ -172,7 +195,7 @@ pub(super) fn encode_teletext_compiled_display_page_before(
         })
         .into_iter()
         .collect();
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     Ok(EncodedTeletextCompiledDisplayPage {
         normalized,
         page,

@@ -11,14 +11,15 @@ use ersatzrs_domain::{
     TeletextSemanticService,
 };
 
+use super::compile_context::TeletextCompileContext;
 use super::local_object_program::{
     compile_with_context, EncodedTeletextLocalObjectProgram,
     TeletextLocalObjectProgramEncodingError, TeletextLocalObjectProgramEncodingFailure,
 };
 use super::main_composition::{
-    compose_teletext_main_program, replay_teletext_physical_display, TeletextMainComposition,
-    TeletextMainCompositionBudget, TeletextMainCompositionError, TeletextMainCompositionFailure,
-    TeletextMainCompositionSource, TeletextPhysicalDisplayReplay,
+    compose_teletext_main_program_with_context, replay_teletext_physical_display_with_context,
+    TeletextMainComposition, TeletextMainCompositionBudget, TeletextMainCompositionError,
+    TeletextMainCompositionFailure, TeletextMainCompositionSource, TeletextPhysicalDisplayReplay,
     TeletextPhysicalDisplayReplayError,
 };
 use super::resource_transmission::{
@@ -92,28 +93,29 @@ pub fn compile_teletext_composed_main_program(
     composition_budget: TeletextMainCompositionBudget,
     packing_budget: TeletextObjectCatalogBudget,
 ) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
-    compile_composed_with_resources(
+    compile_composed_with_context(
         service,
         owner,
         allocations,
         composition_budget,
         packing_budget,
-        None,
+        &mut TeletextCompileContext::new(None, None, None),
     )
 }
 
-pub(super) fn compile_composed_with_resources(
+pub(super) fn compile_composed_with_context(
     service: &TeletextSemanticService,
     owner: TeletextPageAddress,
     allocations: &TeletextResourceObjectAllocations,
     composition_budget: TeletextMainCompositionBudget,
     packing_budget: TeletextObjectCatalogBudget,
-    resources: Option<&ResourceTransmissionContext<'_>>,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
-    if let Some(resources) = resources {
+    if let Some(resources) = context.resources {
         resources.validate_catalog(service.objects(), allocations)?;
     }
-    let composition = compose_teletext_main_program(service, owner, composition_budget)?;
+    let composition =
+        compose_teletext_main_program_with_context(service, owner, composition_budget, context)?;
     let links = service.page_enhancements().get(&owner).map_or(
         TeletextResolvedObjectPageLinks {
             public: None,
@@ -141,12 +143,13 @@ pub(super) fn compile_composed_with_resources(
         &composition,
         &encoded,
         composition_budget.collection.max_commands,
-        resources,
+        context.resources,
     )?;
-    let composition = composition.with_transmission(
+    let composition = composition.with_transmission_context(
         service,
         &transmission,
         composition_budget.collection.max_commands,
+        context,
     )?;
     Ok(EncodedTeletextComposedMainProgram {
         composition,
@@ -328,18 +331,18 @@ pub fn compile_teletext_physical_display_program(
     replay_budget: TeletextEnhancementCollectionBudget,
     packing_budget: TeletextObjectCatalogBudget,
 ) -> Result<EncodedTeletextPhysicalDisplayProgram, TeletextPhysicalDisplayEncodingError> {
-    compile_physical_with_resources(
+    compile_physical_with_context(
         service,
         composition,
         actual_program,
         catalog,
         allocations,
         (replay_budget, packing_budget),
-        None,
+        &mut TeletextCompileContext::new(None, None, None),
     )
 }
 
-pub(super) fn compile_physical_with_resources(
+pub(super) fn compile_physical_with_context(
     service: &TeletextSemanticService,
     composition: &TeletextMainComposition,
     actual_program: &TeletextEnhancementProgram,
@@ -349,19 +352,20 @@ pub(super) fn compile_physical_with_resources(
         TeletextEnhancementCollectionBudget,
         TeletextObjectCatalogBudget,
     ),
-    resources: Option<&ResourceTransmissionContext<'_>>,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextPhysicalDisplayProgram, TeletextPhysicalDisplayEncodingError> {
     let (replay_budget, packing_budget) = budgets;
-    if let Some(resources) = resources {
+    if let Some(resources) = context.resources {
         resources.validate_catalog(catalog, allocations)?;
     }
     let owner = composition.owner();
-    let replay = replay_teletext_physical_display(
+    let replay = replay_teletext_physical_display_with_context(
         service,
         composition,
         actual_program,
         catalog,
         replay_budget,
+        context,
     )?;
     let links = service.page_enhancements().get(&owner).map_or(
         TeletextResolvedObjectPageLinks {
@@ -379,10 +383,19 @@ pub(super) fn compile_physical_with_resources(
         packing_budget,
         Some(composition.colour_context().row_colours()[0]),
     )?;
-    let evidence =
-        physical_transmission_evidence(&replay, &encoded, replay_budget.max_commands, resources)?;
-    let replay =
-        replay.with_transmission(service, composition, &evidence, replay_budget.max_commands)?;
+    let evidence = physical_transmission_evidence(
+        &replay,
+        &encoded,
+        replay_budget.max_commands,
+        context.resources,
+    )?;
+    let replay = replay.with_transmission_context(
+        service,
+        composition,
+        &evidence,
+        replay_budget.max_commands,
+        context,
+    )?;
     Ok(EncodedTeletextPhysicalDisplayProgram { replay, encoded })
 }
 

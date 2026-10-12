@@ -13,18 +13,19 @@ use ersatzrs_domain::{
     TeletextResourceUpdateCounter,
 };
 
+use super::compile_context::TeletextCompileContext;
 use super::compiled_display_page::{
-    encode_teletext_compiled_display_page_before, TeletextCompiledDisplayPageEncodingFailure,
+    encode_teletext_compiled_display_page_with_context, TeletextCompiledDisplayPageEncodingFailure,
 };
+use super::main_composition::compose_teletext_main_program_with_context;
 use super::resource_transmission::{
-    settle_native, ResourceTransmissionContext, TeletextResourceTransmissionError,
+    settle_native_with_context, ResourceTransmissionContext, TeletextResourceTransmissionError,
 };
 use super::{
-    allocate_teletext_resource_objects, compose_teletext_main_program, encode_teletext_drcs_page,
-    encode_teletext_mot_page, encode_teletext_native_default_page, encode_teletext_object_page,
-    layout, packets, presentation, validate_teletext_physical_page_inventory,
-    EncodedTeletextCompiledDisplayPage, EncodedTeletextNativeDefaultPage,
-    EncodedTeletextObjectPage, EncodedTeletextResourcePage,
+    allocate_teletext_resource_objects, encode_teletext_drcs_page, encode_teletext_mot_page,
+    encode_teletext_native_default_page, encode_teletext_object_page, layout, packets,
+    presentation, validate_teletext_physical_page_inventory, EncodedTeletextCompiledDisplayPage,
+    EncodedTeletextNativeDefaultPage, EncodedTeletextObjectPage, EncodedTeletextResourcePage,
     TeletextCompiledDisplayPageEncodingError, TeletextEncodingError, TeletextEncodingRegion,
     TeletextMainComposition, TeletextMainCompositionError, TeletextMotDefaultAllocations,
     TeletextNativeDefaultPageEncodingError, TeletextNormalizedMainProgramBudget,
@@ -53,6 +54,11 @@ pub struct TeletextAuthoredServiceEncodingBudget {
     pub max_units: usize,
     /// Raw Local main commands and all catalog bodies, counted once each.
     pub max_commands: usize,
+    /// Optional cumulative admitted display-resolution charges across all
+    /// original/physical/settled displays. Zero is an exhausted quota; None
+    /// retains the existing independent stage limits. No production default
+    /// is inferred, and this meter is not total compiler CPU or RSS.
+    pub max_display_updates: Option<usize>,
     /// Independent stage bounds applied to each display candidate.
     pub normalization: TeletextNormalizedMainProgramBudget,
 }
@@ -313,7 +319,51 @@ pub(super) fn encode_teletext_authored_service_with_clock(
     deadline: Option<Instant>,
     now: &mut impl FnMut() -> Instant,
 ) -> Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError> {
+    encode_with_clock_and_usage(declared, transmissions, budget, deadline, now).0
+}
+
+/// Compile with the optional shared update quota and report admitted charges.
+/// Usage is kept outside the model/wire/artifact identity and survives failure.
+/// `None` usage means aggregate metering was disabled, not that work was absent.
+/// # Errors
+/// Returns the same located result as the existing encoder. Quota exhaustion
+/// returns no partial candidate. Other independent stage limits still apply;
+/// conservative reservations are admitted charges, not exact CPU/RSS work.
+pub fn encode_teletext_authored_service_with_usage(
+    declared: TeletextDeclaredService,
+    transmissions: &[TeletextServiceResourceTransmission],
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Option<Instant>,
+) -> (
+    Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError>,
+    Option<usize>,
+) {
+    encode_with_clock_and_usage(declared, transmissions, budget, deadline, &mut Instant::now)
+}
+
+fn encode_with_clock_and_usage(
+    declared: TeletextDeclaredService,
+    transmissions: &[TeletextServiceResourceTransmission],
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Option<Instant>,
+    now: &mut impl FnMut() -> Instant,
+) -> (
+    Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError>,
+    Option<usize>,
+) {
     let mut clock = EncodingClock { deadline, now };
+    let mut usage = budget.max_display_updates.map(|_| 0);
+    let result = encode_owned_service(declared, transmissions, budget, &mut clock, &mut usage);
+    (result, usage)
+}
+
+fn encode_owned_service(
+    declared: TeletextDeclaredService,
+    transmissions: &[TeletextServiceResourceTransmission],
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    clock: &mut EncodingClock<'_, impl FnMut() -> Instant>,
+    usage: &mut Option<usize>,
+) -> Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError> {
     clock.check(None, None)?;
     let count = preflight(&declared, transmissions, budget)?;
     clock.check(None, None)?;
@@ -362,16 +412,23 @@ pub(super) fn encode_teletext_authored_service_with_clock(
     let mut pages = Vec::with_capacity(count);
     let mut inventory = Vec::with_capacity(count);
     let mut units = declared.semantic().magazine_presentations().len();
+    let mut context = TeletextCompileContext::new(
+        Some(&resource_context),
+        clock.deadline,
+        budget.max_display_updates,
+    );
     for page in &declared.semantic().base().pages {
         clock.check(Some(page.address), None)?;
-        let encoded = encode_display(
+        let result = encode_display(
             &declared,
             page.address,
             &defaults,
-            &resource_context,
+            &mut context,
             budget,
-            &mut clock,
-        )?;
+            clock,
+        );
+        *usage = context.used_updates();
+        let encoded = result?;
         clock.check(Some(page.address), None)?;
         append_page(encoded, &mut pages, &mut inventory, &mut units, budget)?;
         clock.check(Some(page.address), None)?;
@@ -541,7 +598,7 @@ fn encode_display(
     declared: &TeletextDeclaredService,
     owner: TeletextPageAddress,
     defaults: &[TeletextDefaultObjectSelection],
-    resources: &ResourceTransmissionContext<'_>,
+    context: &mut TeletextCompileContext<'_, '_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
     clock: &mut EncodingClock<'_, impl FnMut() -> Instant>,
 ) -> Result<EncodedTeletextAuthoredPage, Error> {
@@ -564,15 +621,19 @@ fn encode_display(
         .get(&owner)
         .is_some_and(|page| page.local_program.is_some());
     if !local && layout.base_glyphs().is_empty() {
-        let composition =
-            compose_teletext_main_program(service, owner, budget.normalization.composition)
-                .map_err(|reason| located(Failure::Composition(Box::new(reason))))?;
+        let composition = compose_teletext_main_program_with_context(
+            service,
+            owner,
+            budget.normalization.composition,
+            context,
+        )
+        .map_err(|reason| located(Failure::Composition(Box::new(reason))))?;
         clock.check(Some(owner), None)?;
-        let composition = settle_native(
+        let composition = settle_native_with_context(
             composition,
             service,
-            resources,
             budget.normalization.composition.collection.max_commands,
+            context,
         )
         .map_err(|reason| located(Failure::Composition(Box::new(reason))))?;
         clock.check(Some(owner), None)?;
@@ -590,14 +651,13 @@ fn encode_display(
             },
         )))
     } else {
-        let encoded = encode_teletext_compiled_display_page_before(
+        let encoded = encode_teletext_compiled_display_page_with_context(
             service,
             owner,
             TeletextEncodingRegion::WesternLatin,
             defaults,
             &budget.normalization,
-            Some(resources),
-            clock.deadline,
+            context,
         )
         .map_err(|reason| {
             if matches!(

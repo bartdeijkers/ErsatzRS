@@ -25,8 +25,12 @@ deadline. The same native deadline now reaches service/resource/display,
 normalization and packet-assembly checkpoints. Timeout returns no partial
 candidate and maps to the existing host timeout; untimed standalone callers and
 encoded identities retain their behavior. Checks are cooperative between bounded
-stages, not mid-stage preemption or aggregate CPU/RSS admission. Actual consumed
-stage counters and remaining whole-service credits remain to be connected.
+stages, not mid-stage preemption or aggregate CPU/RSS admission. An explicit
+optional whole-service quota now debits actual admitted display-resolution updates
+across original, physical and transmission-settlement passes, including failures.
+Usage is separate from model/wire identity; disabled metering keeps prior stage
+limits. Conservative reservations are charges, not executed CPU/RSS costs. Other
+stage meters and measured production host policy remain open; P9A-04 owns proof.
 Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact

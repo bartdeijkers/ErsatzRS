@@ -18,6 +18,7 @@ mod carousel;
 mod charset;
 mod clock;
 mod colour_context;
+mod compile_context;
 mod compiled_display_page;
 mod composed_main;
 mod compositional;

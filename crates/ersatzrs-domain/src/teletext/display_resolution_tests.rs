@@ -870,6 +870,166 @@ fn writer_storage_and_update_work_are_bounded_without_mutating_or_returning_part
 }
 
 #[test]
+fn admitted_update_usage_preserves_shared_adaptive_and_passive_results_at_exact_bounds() {
+    for kind in [
+        None,
+        Some(TeletextObjectType::Adaptive),
+        Some(TeletextObjectType::Passive),
+    ] {
+        let object = local(0x0100);
+        let original = match kind {
+            None => service(vec![set(1, 8), foreground(8, 1), glyph(8, b'S')], vec![]),
+            Some(kind) => service(
+                vec![set(1, 8), invoke(object, kind, None)],
+                vec![definition(
+                    object,
+                    kind,
+                    vec![foreground(0, 2), glyph(0, b'O')],
+                )],
+            ),
+        };
+        let fixture = Fixture::new(blank(), &original);
+        let expected = resolve_teletext_display_resolution(fixture.inputs(), budget());
+        let (actual, used) =
+            resolve_teletext_display_resolution_with_usage(fixture.inputs(), budget());
+        assert_eq!(actual, expected);
+        assert!(actual.is_ok());
+        assert!(used > 0 && used < budget().max_updates);
+        if kind.is_some() {
+            // Each object reserves its whole-plane scan before per-cell updates.
+            assert!(used > 80_000);
+        }
+        let mut exact = budget();
+        exact.max_updates = used;
+        assert_eq!(
+            resolve_teletext_display_resolution_with_usage(fixture.inputs(), exact),
+            (expected, used)
+        );
+        exact.max_updates -= 1;
+        let (denied, admitted) =
+            resolve_teletext_display_resolution_with_usage(fixture.inputs(), exact);
+        assert_eq!(
+            denied,
+            resolve_teletext_display_resolution(fixture.inputs(), exact)
+        );
+        assert_eq!(
+            denied.unwrap_err().reason,
+            TeletextDisplayResolutionFailure::UpdateBudget {
+                maximum: exact.max_updates
+            }
+        );
+        assert!(admitted <= exact.max_updates);
+    }
+}
+
+#[test]
+fn admitted_update_usage_retains_exact_work_when_last_candidate_consensus_is_denied() {
+    let fixture = Fixture::new(
+        blank(),
+        &service(
+            vec![
+                set(24, 39),
+                size(39, false, false),
+                size(39, true, true),
+                glyph(39, b'Z'),
+            ],
+            vec![],
+        ),
+    );
+    let (result, used) = resolve_teletext_display_resolution_with_usage(fixture.inputs(), budget());
+    assert!(result.is_ok());
+    let mut limited = budget();
+    limited.max_updates = used - 1;
+    let (result, admitted) =
+        resolve_teletext_display_resolution_with_usage(fixture.inputs(), limited);
+    assert_eq!(
+        result,
+        resolve_teletext_display_resolution(fixture.inputs(), limited)
+    );
+    let error = result.unwrap_err();
+    assert_eq!(admitted, limited.max_updates);
+    assert_eq!(
+        error.reason,
+        TeletextDisplayResolutionFailure::UpdateBudget {
+            maximum: limited.max_updates
+        }
+    );
+    assert_eq!(
+        error.location,
+        Some(TeletextEnhancementSource {
+            object: None,
+            command: 3
+        })
+    );
+    assert_eq!(
+        error.root_source,
+        Some(TeletextSpatialRootSource::Local { command: 3 })
+    );
+    assert_eq!(error.invocation, None);
+}
+
+#[test]
+fn admitted_update_usage_is_zero_on_invalid_preflight() {
+    let fixture = Fixture::new(blank(), &service(vec![set(1, 8), glyph(8, b'A')], vec![]));
+    let foreign = Fixture::new(blank(), &service(vec![set(1, 8), glyph(8, b'B')], vec![]));
+    let mut inputs = fixture.inputs();
+    inputs.attributes = &foreign.attributes;
+    let (result, used) = resolve_teletext_display_resolution_with_usage(inputs, budget());
+    assert!(result.is_err());
+    assert_eq!(
+        result,
+        resolve_teletext_display_resolution(inputs, budget())
+    );
+    assert_eq!(used, 0);
+    for which in 0..3 {
+        let mut limited = budget();
+        match which {
+            0 => limited.max_updates = 0,
+            1 => limited.max_writers = 49,
+            _ => limited.max_commands = 0,
+        }
+        let (result, used) =
+            resolve_teletext_display_resolution_with_usage(fixture.inputs(), limited);
+        assert!(result.is_err());
+        assert_eq!(
+            result,
+            resolve_teletext_display_resolution(fixture.inputs(), limited)
+        );
+        assert_eq!(used, 0);
+    }
+}
+
+#[test]
+fn denied_object_bulk_reservation_keeps_previous_shared_charges_without_adding_denied_work() {
+    let object = local(0x0100);
+    let fixture = Fixture::new(
+        blank(),
+        &service(
+            vec![set(1, 8), invoke(object, TeletextObjectType::Passive, None)],
+            vec![definition(
+                object,
+                TeletextObjectType::Passive,
+                vec![foreground(0, 2), glyph(0, b'O')],
+            )],
+        ),
+    );
+    let mut limited = budget();
+    // Blank Level 1 cells occupy 25 * 40 - 8 = 992 normal-size parts.
+    limited.max_updates = 993;
+    let (result, admitted) =
+        resolve_teletext_display_resolution_with_usage(fixture.inputs(), limited);
+    assert_eq!(
+        result,
+        resolve_teletext_display_resolution(fixture.inputs(), limited)
+    );
+    assert_eq!(
+        result.unwrap_err().reason,
+        TeletextDisplayResolutionFailure::UpdateBudget { maximum: 993 }
+    );
+    assert_eq!(admitted, 992);
+}
+
+#[test]
 fn same_owner_changed_projection_and_changed_footprints_are_rejected_with_source_correspondence() {
     let actual = Fixture::new(blank(), &service(vec![set(1, 8), glyph(8, b'A')], vec![]));
     let foreign = Fixture::new(blank(), &service(vec![set(1, 8), glyph(8, b'B')], vec![]));

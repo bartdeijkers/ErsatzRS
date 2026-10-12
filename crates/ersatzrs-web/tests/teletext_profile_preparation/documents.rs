@@ -130,6 +130,7 @@ pub(super) fn policy() -> TeletextDocumentEncodingPolicy {
             max_pages: 16,
             max_units: 1024,
             max_commands: 8192,
+            max_display_updates: None,
             normalization,
         },
         transmissions: Vec::new(),

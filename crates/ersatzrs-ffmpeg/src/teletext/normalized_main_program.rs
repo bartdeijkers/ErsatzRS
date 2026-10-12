@@ -1,6 +1,8 @@
 //! Owned engine normalization candidate; not whole-service admission or publication.
-use super::augmented_origin_compilation::compile_augmented_with_resources;
-use super::composed_main::compile_composed_with_resources;
+use super::augmented_origin_compilation::compile_augmented_with_context;
+use super::compile_context::TeletextCompileContext;
+use super::composed_main::compile_composed_with_context;
+#[cfg(test)]
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
     allocate_teletext_resource_objects, build_teletext_augmented_origin_program,
@@ -133,22 +135,19 @@ pub(super) fn compile_teletext_normalized_main_program_with_defaults(
     defaults: &[TeletextDefaultObjectSelection],
     budget: &TeletextNormalizedMainProgramBudget,
 ) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
-    compile_normalized_with_resources(service, owner, defaults, budget, None)
-}
-
-pub(super) fn compile_normalized_with_resources(
-    service: &TeletextSemanticService,
-    owner: TeletextPageAddress,
-    defaults: &[TeletextDefaultObjectSelection],
-    budget: &TeletextNormalizedMainProgramBudget,
-    resources: Option<&ResourceTransmissionContext<'_>>,
-) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
-    compile_normalized_with_resources_before(service, owner, defaults, budget, resources, None)
+    compile_normalized_with_context(
+        service,
+        owner,
+        defaults,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
 }
 
 /// Cooperatively check the original deadline between bounded normalization stages.
 /// An executing stage is not preempted; no deadline is renewed and no output is
 /// returned after observed expiry. `None` preserves the standalone encoder path.
+#[cfg(test)]
 pub(super) fn compile_normalized_with_resources_before(
     service: &TeletextSemanticService,
     owner: TeletextPageAddress,
@@ -157,8 +156,24 @@ pub(super) fn compile_normalized_with_resources_before(
     resources: Option<&ResourceTransmissionContext<'_>>,
     deadline: Option<Instant>,
 ) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
+    compile_normalized_with_context(
+        service,
+        owner,
+        defaults,
+        budget,
+        &mut TeletextCompileContext::new(resources, deadline, None),
+    )
+}
+
+pub(super) fn compile_normalized_with_context(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    defaults: &[TeletextDefaultObjectSelection],
+    budget: &TeletextNormalizedMainProgramBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
     let fail = |reason| TeletextNormalizedMainProgramError { owner, reason };
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let original_allocations = allocate_teletext_resource_objects(
         service.objects(),
         defaults,
@@ -169,14 +184,14 @@ pub(super) fn compile_normalized_with_resources_before(
             error,
         )))
     })?;
-    check_deadline(owner, deadline)?;
-    let original = compile_composed_with_resources(
+    check_deadline(owner, context.deadline)?;
+    let original = compile_composed_with_context(
         service,
         owner,
         &original_allocations,
         budget.composition,
         budget.packing,
-        resources,
+        context,
     )
     .map_err(|error| {
         fail(TeletextNormalizedMainProgramFailure::Original(Box::new(
@@ -184,24 +199,22 @@ pub(super) fn compile_normalized_with_resources_before(
         )))
     })?
     .into_composition();
-    check_deadline(owner, deadline)?;
-    let physical =
-        compile_physical_before(service, &original, defaults, budget, resources, deadline)?;
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
+    let physical = compile_physical_with_context(service, &original, defaults, budget, context)?;
+    check_deadline(owner, context.deadline)?;
     Ok(EncodedTeletextNormalizedMainProgram { original, physical })
 }
 
-fn compile_physical_before(
+fn compile_physical_with_context(
     service: &TeletextSemanticService,
     original: &TeletextMainComposition,
     defaults: &[TeletextDefaultObjectSelection],
     budget: &TeletextNormalizedMainProgramBudget,
-    resources: Option<&ResourceTransmissionContext<'_>>,
-    deadline: Option<Instant>,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextPhysicalDisplayProgram, TeletextNormalizedMainProgramError> {
     let owner = original.owner();
     let fail = |reason| TeletextNormalizedMainProgramError { owner, reason };
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let plan = plan_teletext_base_compatibility_realization(original, budget.realization).map_err(
         |error| {
             fail(TeletextNormalizedMainProgramFailure::Realization(Box::new(
@@ -209,7 +222,7 @@ fn compile_physical_before(
             )))
         },
     )?;
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let placement =
         plan_teletext_origin_carrier_placement(&plan, service.objects(), budget.placement)
             .map_err(|error| {
@@ -217,14 +230,14 @@ fn compile_physical_before(
                     error,
                 )))
             })?;
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let augmented =
         build_teletext_augmented_origin_program(&placement, budget.assembly).map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::Assembly(Box::new(
                 error,
             )))
         })?;
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
     let allocations = allocate_teletext_resource_objects(
         augmented.catalog(),
         defaults,
@@ -235,24 +248,24 @@ fn compile_physical_before(
             error,
         )))
     })?;
-    check_deadline(owner, deadline)?;
-    let compiled = compile_augmented_with_resources(
+    check_deadline(owner, context.deadline)?;
+    let compiled = compile_augmented_with_context(
         service,
         &augmented,
         &allocations,
         budget.replay,
         budget.packing,
         budget.ancestry,
-        resources,
+        context,
     )
     .map_err(|error| {
         fail(TeletextNormalizedMainProgramFailure::Compilation(Box::new(
             error,
         )))
     })?;
-    check_deadline(owner, deadline)?;
-    check_candidate(&compiled, budget, deadline)?;
-    check_deadline(owner, deadline)?;
+    check_deadline(owner, context.deadline)?;
+    check_candidate(&compiled, budget, context.deadline)?;
+    check_deadline(owner, context.deadline)?;
     Ok(compiled.into_physical())
 }
 fn check_candidate(

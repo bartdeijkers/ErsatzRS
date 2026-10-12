@@ -1,6 +1,7 @@
 //! Actual supplied-program packing and bounded same-instance C.2 evidence.
 
 use super::*;
+use crate::teletext::compose_teletext_main_program;
 use ersatzrs_domain::*;
 
 fn owner() -> TeletextPageAddress {

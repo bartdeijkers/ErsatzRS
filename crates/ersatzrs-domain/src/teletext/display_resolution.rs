@@ -123,12 +123,39 @@ pub fn resolve_teletext_display_resolution(
     inputs: TeletextDisplayResolutionInputs<'_>,
     budget: TeletextDisplayResolutionBudget,
 ) -> Result<TeletextDisplayResolution, TeletextDisplayResolutionError> {
-    preflight(inputs, budget)?;
-    let mut builder = super::display_resolution_writers::Builder::new(inputs, budget)?;
-    builder.shared()?;
-    builder.objects(TeletextObjectType::Adaptive)?;
-    builder.objects(TeletextObjectType::Passive)?;
-    Ok(builder.finish())
+    resolve_teletext_display_resolution_with_usage(inputs, budget).0
+}
+
+/// Resolve the display and report admitted display-update work, including on error.
+///
+/// The counter includes conservative bulk reservations admitted by the update
+/// budget. It measures neither executed CPU work nor allocated memory. A denied
+/// or overflowing reservation adds nothing. Preflight or builder-construction
+/// failures report zero; later failures retain all previously admitted charges.
+/// The result has the same semantics and diagnostic provenance as
+/// [`resolve_teletext_display_resolution`]; no partial display escapes.
+/// # Errors
+/// Returns the original resolution error together with its admitted work count.
+pub fn resolve_teletext_display_resolution_with_usage(
+    inputs: TeletextDisplayResolutionInputs<'_>,
+    budget: TeletextDisplayResolutionBudget,
+) -> (
+    Result<TeletextDisplayResolution, TeletextDisplayResolutionError>,
+    usize,
+) {
+    if let Err(error) = preflight(inputs, budget) {
+        return (Err(error), 0);
+    }
+    let mut builder = match super::display_resolution_writers::Builder::new(inputs, budget) {
+        Ok(builder) => builder,
+        Err(error) => return (Err(error), 0),
+    };
+    let result = builder
+        .shared()
+        .and_then(|()| builder.objects(TeletextObjectType::Adaptive))
+        .and_then(|()| builder.objects(TeletextObjectType::Passive));
+    let updates = builder.admitted_updates();
+    (result.map(|()| builder.finish()), updates)
 }
 
 fn preflight(

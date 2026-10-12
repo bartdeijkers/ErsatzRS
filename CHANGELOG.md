@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Add an optional whole-service teletext display-update quota shared by all
+  normalization and transmission-settlement passes. Failed work retains its
+  admitted charges; exhaustion preserves the prior accepted generation. Existing
+  model and wire identities remain unchanged. Production policy and complete
+  compiler CPU/memory bounds remain open.
 - Add bounded optional teletext startup admission that preserves exact raw
   playback when authored admission rejects before any sink-write attempt.
   Source discovery derives actual program/PCR identity, retains original arrival

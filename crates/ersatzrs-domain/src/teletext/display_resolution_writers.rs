@@ -161,6 +161,9 @@ impl<'a> Builder<'a> {
     pub(super) fn finish(self) -> TeletextDisplayResolution {
         self.output
     }
+    pub(super) fn admitted_updates(&self) -> usize {
+        self.updates
+    }
     fn store(&mut self, state: State) -> usize {
         let index = self.output.states.len();
         self.output.states.push(state);

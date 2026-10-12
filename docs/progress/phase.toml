@@ -1205,9 +1205,11 @@ A sparse two-theme100-page save/accept/reload measurement records exact model/
 storage/unit costs, not worst-case memory or production defaults. The original
 native deadline now reaches service/resource/native-display/normalization/packet
 checkpoints without changing encoded identities; bounded stages are not preempted.
-Next expose actual admitted display-update usage, including failed-stage usage,
-then propagate separate remaining credits across every original/physical/settled
-pass to bound aggregate normalization work. Choose production compiler/output policy;
+An optional service-owned update quota now debits actual admitted display-resolution
+charges across every original/physical/settled pass and display, including failures;
+model/wire identities and disabled-meter behavior remain unchanged. This is not a
+total CPU/RSS bound. Next connect other existing consumed stage meters to separate
+shared buckets and measure resource-rich costs before production compiler/output policy;
 connect ordinary final-route lookup/Health and retained first-byte command
 provenance. Accepted-specific retry execution and whole-process restart remain
 unproven. Warm publisher ownership and

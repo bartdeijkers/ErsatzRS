@@ -4275,13 +4275,30 @@ semantic models and page units remain unchanged.
 
 An executing bounded stage is not preempted. Document decoding, producer lifting,
 cold composition and other native stages retain their own existing bounds. This
-is not immediate worker cancellation, an aggregate operation quota or peak-RSS
-proof. The next quota seam must expose actual admitted usage from existing meters
-and debit separate whole-service buckets on success and failure. In particular,
-display-resolution `Builder.updates` includes conservative reservations and omits
-some initialization/scans; it is neither exact execution count nor CPU/RSS cost.
-All resource-backed original/physical settlement passes must share its credit;
-the final retained model cannot reveal discarded earlier work. P9A-04 owns proof.
+is not immediate worker cancellation, a total compiler-operation quota or peak-RSS
+proof. `TeletextAuthoredServiceEncodingBudget::max_display_updates` is an optional
+inclusive whole-service quota for admitted display-resolution charges. `Some(0)`
+is exhausted; `None` keeps the existing independent stage caps. No production
+default is supplied. One non-clone context retains the original deadline and
+resource transmission identity, and shares remaining credit across every native,
+original, physical and transmission-settlement pass and the next display.
+
+`resolve_teletext_display_resolution_with_usage` returns the original result plus
+admitted updates, including on failure. Denied/overflowed charges add zero; earlier
+charges and conservative bulk reservations are not refunded. Preflight/builder
+failure reports zero. The service context limits each pass to the lesser of its
+stage cap and remaining service credit, then debits before propagating either
+outcome. No partial candidate escapes.
+
+`encode_teletext_authored_service_with_usage(declared, transmissions, budget,
+deadline)` returns the same located result plus optional admitted usage. `None`
+means aggregate metering was disabled, not zero work. Quota and usage do not change
+model equality, units or artifact fingerprints. The existing encoder and timed
+host calls honor the same optional quota. Display-resolution updates include
+conservative reservations and omit some initialization/scans; they are neither
+exact execution count nor CPU/RSS cost. Other stage meters need separate shared
+buckets and resource-rich measurement before choosing production host policy.
+The final retained model cannot reveal discarded earlier work. P9A-04 owns proof.
 
 `serve_channel_stream_with_accepted_teletext(state, channel_number, format, intent)`
 connects that intent to the real direct final MPEG-TS producer. The route checks

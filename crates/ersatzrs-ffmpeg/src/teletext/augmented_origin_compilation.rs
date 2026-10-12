@@ -1,6 +1,6 @@
 //! Producer-paired invocation correspondence, not display admission or generation.
-use super::composed_main::compile_physical_with_resources;
-use super::resource_transmission::ResourceTransmissionContext;
+use super::compile_context::TeletextCompileContext;
+use super::composed_main::compile_physical_with_context;
 use super::{
     EncodedTeletextPhysicalDisplayProgram, TeletextAugmentedOriginProgram,
     TeletextAugmentedOriginSource, TeletextMainCompositionSource,
@@ -129,25 +129,25 @@ pub fn compile_teletext_augmented_origin_program<'a>(
     packing_budget: TeletextObjectCatalogBudget,
     ancestry_budget: TeletextAugmentedInvocationBudget,
 ) -> Result<EncodedTeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginCompilationError> {
-    compile_augmented_with_resources(
+    compile_augmented_with_context(
         service,
         augmented,
         allocations,
         replay_budget,
         packing_budget,
         ancestry_budget,
-        None,
+        &mut TeletextCompileContext::new(None, None, None),
     )
 }
 
-pub(super) fn compile_augmented_with_resources<'a>(
+pub(super) fn compile_augmented_with_context<'a>(
     service: &TeletextSemanticService,
     augmented: &'a TeletextAugmentedOriginProgram<'a>,
     allocations: &TeletextResourceObjectAllocations,
     replay_budget: TeletextEnhancementCollectionBudget,
     packing_budget: TeletextObjectCatalogBudget,
     ancestry_budget: TeletextAugmentedInvocationBudget,
-    resources: Option<&ResourceTransmissionContext<'_>>,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginCompilationError> {
     let composition = augmented.placement().plan().composition();
     let original = composition.spatial_trace().invocations();
@@ -173,14 +173,14 @@ pub(super) fn compile_augmented_with_resources<'a>(
         augmented.carriers().len(),
         ancestry_budget.max_carriers,
     )?;
-    let physical = compile_physical_with_resources(
+    let physical = compile_physical_with_context(
         service,
         composition,
         augmented.program(),
         augmented.catalog(),
         allocations,
         (replay_budget, packing_budget),
-        resources,
+        context,
     )
     .map_err(|error| {
         state.error(
