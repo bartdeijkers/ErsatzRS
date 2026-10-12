@@ -81,9 +81,17 @@ syntax instead of Scriban. Existing ErsatzTV custom templates need only
 mechanical syntax translation (`{{ if x }}` → `{% if x %}`, `{{ end }}` →
 `{% endif %}`/`{% endfor %}`) since context variable names match. A malformed
 custom template cannot corrupt the whole guide response: each rendered
-fragment is parsed and re-emitted through the same `quick_xml` writer that
-builds the rest of the document, and a parse or template-evaluation failure
-falls back to a minimal `<title>`-only element for that one channel/
+fragment is sanitized for XML 1.0 characters and strictly parsed with
+`roxmltree` in its nested document context before its bytes are appended to the
+`quick_xml` writer. Tokenization alone does not validate XML character ranges,
+entity references, attributes or namespaces. The native web host therefore uses
+`roxmltree` for validation (DTD/entity resolution disabled); `quick_xml` remains
+the serializer. Forbidden literal characters become U+FFFD at output time,
+without changing stored metadata. Fallback text and attributes use the same
+character policy, and the completed document is validated before publication.
+Numeric references are also checked by `quick_xml`, since `roxmltree` tolerates
+surrogate and out-of-range references internally. A parse or template-evaluation
+failure falls back to a minimal `<title>`-only element for that one channel/
 programme rather than failing the request.
 
 Rich content resolution preloads all distinct `MediaItem` ids and hydrates

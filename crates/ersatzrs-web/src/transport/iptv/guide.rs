@@ -1,3 +1,7 @@
+mod xml;
+
+use xml::{append_fragment, sanitize_xml, validate_xml};
+
 use std::collections::HashMap;
 use std::io::Cursor;
 
@@ -13,9 +17,7 @@ use ersatzrs_domain::{Channel, CONFIG_KEY_XMLTV_DAYS_TO_BUILD, CONFIG_KEY_XMLTV_
 use ersatzrs_infra::xmltv_templates::{
     self, ChannelGuideTemplates, RenderChannelInput, RenderProgrammeInput,
 };
-use quick_xml::errors::IllFormedError;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
 
 use crate::api::artwork::{artwork_reference_url, ArtworkUrlKind};
@@ -233,11 +235,11 @@ pub fn build_xmltv(
             Ok(fragment) => match append_fragment(&mut writer, &fragment) {
                 Ok(()) => wrote_programme = true,
                 Err(error) => {
-                    tracing::warn!(%error, channel_id = %channel_id, title = %programme.title, "channel guide template produced invalid XML");
+                    tracing::warn!(%error, channel_id = %channel_id, "channel guide template produced invalid XML");
                 }
             },
             Err(error) => {
-                tracing::warn!(%error, channel_id = %channel_id, title = %programme.title, "channel guide template render failed");
+                tracing::warn!(%error, channel_id = %channel_id, "channel guide template render failed");
             }
         }
         if !wrote_programme {
@@ -257,56 +259,11 @@ pub fn build_xmltv(
 
     writer.write_event(Event::End(BytesEnd::new("tv")))?;
 
-    String::from_utf8(writer.into_inner().into_inner())
-        .map_err(|error| quick_xml::Error::Io(std::sync::Arc::new(std::io::Error::other(error))))
-}
-
-/// Parse a rendered template fragment and re-emit its events through the
-/// document writer. This validates well-formedness before the fragment
-/// reaches the response: a malformed custom template (unescaped `&`, an
-/// unclosed tag) fails here rather than corrupting the whole guide.
-///
-/// Events are collected into an owned buffer first and only written to
-/// `writer` once the *entire* fragment has parsed successfully. Writing as
-/// we go would leave whatever parsed before a mid-fragment failure already
-/// committed to the shared document — an unclosed tag from a malformed
-/// custom template would then have the caller's fallback element appended
-/// after it, producing unbalanced, invalid XML instead of a clean fallback.
-fn append_fragment(
-    writer: &mut Writer<Cursor<Vec<u8>>>,
-    fragment: &str,
-) -> Result<(), quick_xml::Error> {
-    let mut reader = Reader::from_str(fragment);
-    reader.config_mut().trim_text(true);
-    let mut events = Vec::new();
-    let mut open_elements = Vec::new();
-    loop {
-        let event = reader.read_event()?;
-        match &event {
-            Event::Start(start) => open_elements.push(start.name().as_ref().to_owned()),
-            Event::End(end) => {
-                let found = end.name().as_ref().to_owned();
-                let Some(expected) = open_elements.pop() else {
-                    return Err(IllFormedError::UnmatchedEndTag(found).into());
-                };
-                if expected != found {
-                    return Err(IllFormedError::MismatchedEndTag { expected, found }.into());
-                }
-            }
-            Event::Eof => {
-                if let Some(expected) = open_elements.last() {
-                    return Err(IllFormedError::MissingEndTag(expected.clone()).into());
-                }
-                break;
-            }
-            _ => {}
-        }
-        events.push(event.into_owned());
-    }
-    for event in events {
-        writer.write_event(event)?;
-    }
-    Ok(())
+    let output = String::from_utf8(writer.into_inner().into_inner())
+        .map_err(|error| quick_xml::Error::Io(std::sync::Arc::new(std::io::Error::other(error))))?;
+    // Defense in depth: never publish a successful response containing broken XML.
+    validate_xml(&output)?;
+    Ok(output)
 }
 
 fn write_fallback_channel(
@@ -315,10 +272,10 @@ fn write_fallback_channel(
     channel_name: &str,
 ) -> Result<(), quick_xml::Error> {
     let mut channel_start = BytesStart::new("channel");
-    channel_start.push_attribute(("id", channel_id));
+    channel_start.push_attribute(("id", sanitize_xml(channel_id).as_ref()));
     writer.write_event(Event::Start(channel_start))?;
     writer.write_event(Event::Start(BytesStart::new("display-name")))?;
-    writer.write_event(Event::Text(BytesText::new(channel_name)))?;
+    writer.write_event(Event::Text(BytesText::new(&sanitize_xml(channel_name))))?;
     writer.write_event(Event::End(BytesEnd::new("display-name")))?;
     Ok(writer.write_event(Event::End(BytesEnd::new("channel")))?)
 }
@@ -333,12 +290,12 @@ fn write_fallback_programme(
     let mut programme_start = BytesStart::new("programme");
     programme_start.push_attribute(("start", start));
     programme_start.push_attribute(("stop", stop));
-    programme_start.push_attribute(("channel", channel_id));
+    programme_start.push_attribute(("channel", sanitize_xml(channel_id).as_ref()));
     writer.write_event(Event::Start(programme_start))?;
     let mut title_start = BytesStart::new("title");
     title_start.push_attribute(("lang", "en"));
     writer.write_event(Event::Start(title_start))?;
-    writer.write_event(Event::Text(BytesText::new(title)))?;
+    writer.write_event(Event::Text(BytesText::new(&sanitize_xml(title))))?;
     writer.write_event(Event::End(BytesEnd::new("title")))?;
     Ok(writer.write_event(Event::End(BytesEnd::new("programme")))?)
 }
@@ -467,12 +424,7 @@ mod tests {
 
         let result = append_fragment(&mut writer, unclosed);
 
-        assert!(matches!(
-            result,
-            Err(quick_xml::Error::IllFormed(
-                IllFormedError::MissingEndTag(tag)
-            )) if tag == "programme"
-        ));
+        assert!(result.is_err());
         assert!(writer.into_inner().into_inner().is_empty());
     }
 
@@ -512,8 +464,7 @@ mod tests {
         )
         .expect("xmltv render");
 
-        let mut validation_writer = Writer::new(Cursor::new(Vec::<u8>::new()));
-        append_fragment(&mut validation_writer, &output)
+        roxmltree::Document::parse(&output)
             .expect("the complete output must remain well-formed XML");
         assert!(output.contains("<title lang=\"en\">Big Buck Bunny</title>"));
         assert!(!output.contains("<programme><title>Big Buck Bunny</title>"));
@@ -569,6 +520,14 @@ mod tests {
             &AccessToken::default(),
         )
         .expect("xmltv render");
+        // Normalize template-only blank lines for a whitespace-clean snapshot.
+        // Metadata whitespace preservation has separate exact-value assertions.
+        let output = output
+            .lines()
+            .map(str::trim_end)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
         insta::assert_snapshot!(output);
     }
 
@@ -640,6 +599,171 @@ mod tests {
         assert!(output.contains("<sub-title lang=\"en\">Pilot</sub-title>"));
         assert!(output.contains("<episode-num system=\"onscreen\">S01E01</episode-num>"));
         assert!(output.contains("<rating system=\"VCHIP\"><value>TV-14</value></rating>"));
+    }
+
+    #[tokio::test]
+    async fn xmltv_sanitizes_every_bundled_kind_without_losing_rich_metadata() {
+        let templates = fixture_templates().await;
+        let dirty = "café 日本語 😀 & < > \" ' \u{0}\u{b}\u{fffe}\u{ffff}";
+        let clean = sanitize_xml(dirty);
+        let mut channel = fixture_channel("1", dirty);
+        channel.categories = Some(dirty.into());
+        let programmes: Vec<_> = [
+            XmltvItemKind::Movie,
+            XmltvItemKind::Episode,
+            XmltvItemKind::MusicVideo,
+            XmltvItemKind::Song,
+            XmltvItemKind::OtherVideo,
+            XmltvItemKind::RemoteStream,
+        ]
+        .into_iter()
+        .map(|kind| XmltvProgramme {
+            channel_number: "1".into(),
+            start: Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap(),
+            stop: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
+            custom_title: None,
+            title: dirty.into(),
+            content: XmltvProgrammeContent {
+                kind,
+                sub_title: Some(dirty.into()),
+                description: Some(dirty.into()),
+                genres: vec![dirty.into()],
+                artists: vec![dirty.into()],
+                year: Some(2026),
+                ..Default::default()
+            },
+        })
+        .collect();
+        let output = build_xmltv(
+            &[channel],
+            &programmes,
+            XmltvTimeZone::Utc,
+            &templates,
+            &HashMap::new(),
+            "http",
+            "example.test",
+            &AccessToken::default(),
+        )
+        .unwrap();
+        let doc = roxmltree::Document::parse(&output).unwrap();
+        assert_eq!(
+            doc.descendants()
+                .filter(|n| n.has_tag_name("programme"))
+                .count(),
+            6
+        );
+        for programme in doc.descendants().filter(|n| n.has_tag_name("programme")) {
+            assert_eq!(
+                programme
+                    .children()
+                    .find(|n| n.has_tag_name("title"))
+                    .unwrap()
+                    .text(),
+                Some(clean.as_ref())
+            );
+            // A fallback would discard these fields. Dirty input must retain the rich guide.
+            assert!(programme
+                .children()
+                .any(|n| n.has_tag_name("date") || n.has_tag_name("desc")));
+        }
+        assert!(doc
+            .descendants()
+            .any(|n| n.has_tag_name("display-name") && n.text() == Some(clean.as_ref())));
+        assert!(!output.contains(['\u{0}', '\u{b}', '\u{fffe}', '\u{ffff}']));
+        assert!(
+            programmes.iter().all(|p| p.title == dirty),
+            "stored/input metadata is untouched"
+        );
+    }
+
+    #[tokio::test]
+    async fn xmltv_malformed_templates_fall_back_with_sanitized_text_and_attributes() {
+        let root = tempfile::tempdir().unwrap();
+        // Well-tokenized fragments which the old quick-xml-only check accepted.
+        tokio::fs::write(
+            root.path().join("channel.jinja"),
+            "<channel id=\"1\" id=\"2\"/>",
+        )
+        .await
+        .unwrap();
+        tokio::fs::write(
+            root.path().join("movie.jinja"),
+            "<programme><title>&#xFFFE;</title></programme>",
+        )
+        .await
+        .unwrap();
+        let templates = xmltv_templates::load_channel_guide_templates_in(root.path())
+            .await
+            .unwrap();
+        let dirty = "A & < > \" ' 日本語\u{fffe}";
+        let channel = fixture_channel("1\u{0}&\"", dirty);
+        let programme = XmltvProgramme {
+            channel_number: channel.number.clone(),
+            start: Utc.with_ymd_and_hms(2026, 4, 17, 20, 0, 0).unwrap(),
+            stop: Utc.with_ymd_and_hms(2026, 4, 17, 21, 0, 0).unwrap(),
+            custom_title: Some(dirty.into()),
+            title: "Original title".into(),
+            content: XmltvProgrammeContent::default(),
+        };
+        let output = build_xmltv(
+            &[channel],
+            &[programme],
+            XmltvTimeZone::Utc,
+            &templates,
+            &HashMap::new(),
+            "http",
+            "example.test",
+            &AccessToken::default(),
+        )
+        .unwrap();
+        let doc = roxmltree::Document::parse(&output).unwrap();
+        let channel = doc
+            .descendants()
+            .find(|n| n.has_tag_name("channel"))
+            .unwrap();
+        let programme = doc
+            .descendants()
+            .find(|n| n.has_tag_name("programme"))
+            .unwrap();
+        assert_eq!(channel.attribute("id"), programme.attribute("channel"));
+        assert_eq!(
+            channel.first_element_child().unwrap().text(),
+            Some(sanitize_xml(dirty).as_ref())
+        );
+        assert_eq!(
+            programme.first_element_child().unwrap().text(),
+            Some(sanitize_xml(dirty).as_ref())
+        );
+        assert_eq!(
+            doc.root_element()
+                .children()
+                .filter(roxmltree::Node::is_element)
+                .count(),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn xmltv_empty_guide_is_a_complete_xml_document() {
+        let output = build_xmltv(
+            &[],
+            &[],
+            XmltvTimeZone::Utc,
+            &fixture_templates().await,
+            &HashMap::new(),
+            "http",
+            "example.test",
+            &AccessToken::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            roxmltree::Document::parse(&output)
+                .unwrap()
+                .root_element()
+                .tag_name()
+                .name(),
+            "tv"
+        );
     }
 
     #[test]

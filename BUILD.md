@@ -267,6 +267,22 @@ If the browser does not auto-refresh, check that nothing else is bound to port
 `3001` and that the page was loaded via `cargo leptos`'s server (not a stale
 `cargo run --bin ersatzrs-web` from a previous session).
 
+### Rerun only Rust tests after a fixture repair
+
+A GitHub job rerun uses the original revision. To check a new revision while
+reusing unaffected checks, dispatch the existing workflow with `test_only`:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f test_only=true
+```
+
+This runs the complete `Test` job, including progress and architecture validation,
+and skips unrelated jobs. Hosted runners use the equivalent Rust test shards.
+The run is titled `CI (Test only)` and cannot suppress a later full CI run through
+the duplicate-run check. It is scoped test evidence, not full CI acceptance.
+When deliberately preserving earlier checks, `[skip ci]` on the repair commit
+prevents the automatic full PR run; the manual dispatch still checks that commit.
+
 ## Inner-loop strategy (don't recompile the source 5×)
 
 A single task often runs five *different* compilation graphs — and because Cargo
@@ -288,7 +304,12 @@ Keep the edit loop cheap by **not** flipping configurations while iterating:
   -p <crate>` as the required focused/local runner; append a test filter
   when one regression is sufficient. The checked-in `.config/nextest.toml`
   keeps running after failures, retries nothing, and reports tests slower than
-  60 seconds in the final summary.
+  60 seconds in the final summary. Large teletext carousel/output fixture suites
+  share a single nextest test-group slot in local and CI profiles: each complete
+  500-display service retains several GiB of semantic preview state. Other test
+  suites keep their normal concurrency. The self-hosted Test job additionally
+  limits compilation to two jobs and test execution to four slots, leaving
+  headroom for other runners and interactive work on the shared machine.
 - **UI work:** `./run.sh dev` (`cargo leptos watch`) — keeps the SSR binary and
   WASM bundle in lockstep; never pair a standalone `cargo leptos build` with a
   separate `cargo run` while iterating.

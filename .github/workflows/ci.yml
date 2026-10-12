@@ -1,4 +1,5 @@
 name: CI
+run-name: ${{ inputs.test_only && 'CI (Test only)' || 'CI' }}
 
 on:
   pull_request:
@@ -47,6 +48,11 @@ on:
         options:
           - self-hosted
           - github-hosted
+      test_only:
+        description: Run only the Rust Test job (does not establish full CI acceptance)
+        type: boolean
+        required: false
+        default: false
       reset_target_dir:
         description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
         type: boolean
@@ -95,6 +101,7 @@ jobs:
   # queue time to save a duplicate that is comparatively rare.
   preflight:
     name: Preflight
+    if: ${{ !inputs.test_only }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -107,7 +114,7 @@ jobs:
           script: |
             if (context.eventName !== 'push') {
               core.setOutput('skip', 'false');
-              core.info(`${context.eventName} always runs the full gate.`);
+              core.info(`${context.eventName} runs the selected gate.`);
               return;
             }
             const runs = await github.paginate(
@@ -121,7 +128,8 @@ jobs:
               },
             );
             const proven = runs.filter(
-              (run) => run.id !== context.runId && run.conclusion === 'success',
+              (run) => run.id !== context.runId && run.conclusion === 'success'
+                && run.display_title !== 'CI (Test only)',
             );
             core.setOutput('skip', proven.length > 0 ? 'true' : 'false');
             if (proven.length > 0) {
@@ -186,11 +194,15 @@ jobs:
 
   test:
     name: Test
-    if: ${{ inputs.runner != 'github-hosted' }}
+    if: ${{ always() && !cancelled() && inputs.runner != 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # test build on the serial self-hosted runner.
     needs: fmt
+    # Leave headroom for the other runners and the interactive WSL session.
+    env:
+      CARGO_BUILD_JOBS: "2"
+      NEXTEST_TEST_THREADS: "4"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -251,7 +263,7 @@ jobs:
 
   test_hosted:
     name: Test (${{ matrix.shard }})
-    if: ${{ inputs.runner == 'github-hosted' }}
+    if: ${{ always() && !cancelled() && inputs.runner == 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
     runs-on: ubuntu-24.04
     # Keep cold workspace linking within the hosted job lifetime by splitting
     # the large web crate's library and binary test targets. Preserve native

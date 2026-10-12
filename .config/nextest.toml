@@ -8,6 +8,15 @@ retries = 0
 slow-timeout = "60s"
 final-status-level = "slow"
 
+[test-groups]
+# Complete 500-display fixtures retain several GiB of semantic preview state.
+# Serialize these suites across processes in both local and CI profiles.
+teletext-large-services = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'package(ersatzrs-ffmpeg) & (test(authored_service_carousel_tests::) | test(authored_service_interleave_tests::) | test(authored_service_shared_replacement_tests::) | test(output::authored_service_tests::interleave::))'
+test-group = 'teletext-large-services'
+
 # CI reuses the default semantics (no retries, run through failures, slow
 # tests reported after 60s) and adds a JUnit report. The report carries a
 # duration per test, which is what makes CI runtime regressions attributable

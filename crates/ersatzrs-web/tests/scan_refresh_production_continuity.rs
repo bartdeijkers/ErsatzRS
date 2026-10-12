@@ -12,6 +12,7 @@ use ersatzrs_domain::{
     Channel, CollectionType, EntityId, FFmpegProfile, MediaSourceKind, PlaybackOrder, PlayoutMode,
     ProgramSchedule, ProgramScheduleItem, ScanPlayoutRefresh, ScanPlayoutRefreshReason,
 };
+use ersatzrs_infra::ffprobe::LocalProbeCleanupScope;
 use ersatzrs_infra::maintenance::run_requested_playout_build;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use ersatzrs_web::host::scanning::NativeScanRuntime;
@@ -77,15 +78,9 @@ async fn production_local_scan_refresh_survives_restart_and_preserves_unrelated_
 
     let runtime = NativeScanRuntime::new(baseline.clone());
     for library_id in [RELATED_LIBRARY_ID, UNRELATED_LIBRARY_ID] {
-        let report = <NativeScanRuntime as ScanRuntime>::scan_library(
-            &runtime,
-            MediaSourceKind::Local,
-            library_id,
-            true,
-            &(),
-        )
-        .await
-        .expect("materialize the initial staged Remote Streams snapshot");
+        let report = scan_with_cleanup_scope(&runtime, library_id)
+            .await
+            .expect("materialize the initial staged Remote Streams snapshot");
         assert!(
             report.playout_refreshes.is_empty(),
             "initial materialization precedes the Classic playouts"
@@ -252,6 +247,24 @@ async fn production_local_scan_refresh_survives_restart_and_preserves_unrelated_
     );
 
     prove_pure_reorder_is_exactly_playlist_scoped(&reopened, related_playlist_id, refresh_at).await;
+}
+
+// Native scans require the same task-local cleanup owner installed by the
+// production worker. Keep one scope per scan and verify cleanup before return.
+async fn scan_with_cleanup_scope(
+    runtime: &NativeScanRuntime,
+    library_id: EntityId,
+) -> Result<ersatzrs_app::ScanRuntimeReport, ersatzrs_app::ScanRuntimeError> {
+    let scope = LocalProbeCleanupScope::new();
+    let result = scope
+        .scope(runtime.scan_library(MediaSourceKind::Local, library_id, true, &()))
+        .await;
+    scope.close();
+    scope
+        .wait_cleanup()
+        .await
+        .expect("confirm local scan cleanup");
+    result
 }
 
 #[derive(Clone)]
@@ -604,15 +617,9 @@ async fn edit_related_nfo_and_scan_both(
     edit_first_nfo_title(related_root);
 
     let runtime = NativeScanRuntime::new(pool.clone());
-    let unchanged = <NativeScanRuntime as ScanRuntime>::scan_library(
-        &runtime,
-        MediaSourceKind::Local,
-        UNRELATED_LIBRARY_ID,
-        true,
-        &(),
-    )
-    .await
-    .expect("scan unchanged unrelated Remote Streams library");
+    let unchanged = scan_with_cleanup_scope(&runtime, UNRELATED_LIBRARY_ID)
+        .await
+        .expect("scan unchanged unrelated Remote Streams library");
     assert!(
         unchanged.playout_refreshes.is_empty(),
         "the unchanged production scan must queue nothing"
@@ -626,15 +633,9 @@ async fn edit_related_nfo_and_scan_both(
         &persisted_classic_rows(pool, UNRELATED_PLAYOUT_ID).await,
     );
 
-    let changed = <NativeScanRuntime as ScanRuntime>::scan_library(
-        &runtime,
-        MediaSourceKind::Local,
-        RELATED_LIBRARY_ID,
-        true,
-        &(),
-    )
-    .await
-    .expect("scan changed related Remote Streams library");
+    let changed = scan_with_cleanup_scope(&runtime, RELATED_LIBRARY_ID)
+        .await
+        .expect("scan changed related Remote Streams library");
     assert_eq!(
         changed.playout_refreshes,
         [expected_refresh()],
@@ -766,15 +767,9 @@ async fn prove_pure_reorder_is_exactly_playlist_scoped(
         .expect("stage the pure reorder publication");
 
     let runtime = NativeScanRuntime::new(pool.clone());
-    let report = <NativeScanRuntime as ScanRuntime>::scan_library(
-        &runtime,
-        MediaSourceKind::Local,
-        RELATED_LIBRARY_ID,
-        true,
-        &(),
-    )
-    .await
-    .expect("scan a pure managed-playlist reorder");
+    let report = scan_with_cleanup_scope(&runtime, RELATED_LIBRARY_ID)
+        .await
+        .expect("scan a pure managed-playlist reorder");
     assert_eq!(
         report.playout_refreshes,
         [ScanPlayoutRefresh {
