@@ -6,7 +6,7 @@ use ersatzrs_ffmpeg::{
     pipeline::OutputFormat,
     teletext::{
         EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextOutputConfig,
-        TeletextOutputError, TeletextOutputGate,
+        TeletextOutputError, TeletextOutputGate, TeletextServiceDescriptor,
     },
 };
 use tokio::time::Instant;
@@ -74,6 +74,13 @@ pub struct TeletextOutputBinding {
     first_byte_timeout: Duration,
     control: Option<TeletextOutputControl>,
     optional_startup_bytes: Option<usize>,
+    source_discovery: Option<TeletextSourceDiscovery>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct TeletextSourceDiscovery {
+    pub maximum_bytes: usize,
+    pub maximum_time: Duration,
 }
 
 impl TeletextOutputBinding {
@@ -139,6 +146,7 @@ impl TeletextOutputBinding {
             first_byte_timeout,
             control: None,
             optional_startup_bytes: None,
+            source_discovery: None,
         })
     }
 
@@ -166,6 +174,9 @@ impl TeletextOutputBinding {
                 .max_buffer_packets
                 .checked_mul(188)
                 .is_none_or(|capacity| maximum_bytes > capacity)
+            || self
+                .source_discovery
+                .is_some_and(|policy| policy.maximum_bytes > maximum_bytes)
         {
             return Err(TeletextPumpError::Configuration);
         }
@@ -175,6 +186,65 @@ impl TeletextOutputBinding {
 
     pub(super) const fn optional_startup_bytes(&self) -> Option<usize> {
         self.optional_startup_bytes
+    }
+
+    /// Discover the sole actual source program and PCR before optional admission.
+    /// Other clock/rate/retention values remain explicit host policy. Startup
+    /// rejection preserves raw playback before the first sink-write attempt.
+    /// # Errors
+    /// Rejects unbounded discovery time/bytes or incompatible journal capacity.
+    pub fn with_source_discovery(
+        self,
+        maximum_bytes: usize,
+        maximum_time: Duration,
+    ) -> Result<Self, TeletextPumpError> {
+        if maximum_bytes == 0
+            || maximum_bytes > 32_768 * 188
+            || maximum_time.is_zero()
+            || Instant::now().checked_add(maximum_time).is_none()
+        {
+            return Err(TeletextPumpError::Configuration);
+        }
+        let mut binding = if let Some(journal) = self.optional_startup_bytes {
+            if journal < maximum_bytes {
+                return Err(TeletextPumpError::Configuration);
+            }
+            self
+        } else {
+            self.with_optional_startup(maximum_bytes)?
+        };
+        binding.source_discovery = Some(TeletextSourceDiscovery {
+            maximum_bytes,
+            maximum_time,
+        });
+        Ok(binding)
+    }
+
+    pub(super) const fn source_discovery(&self) -> Option<TeletextSourceDiscovery> {
+        self.source_discovery
+    }
+
+    pub(super) fn service_descriptor(&self) -> TeletextServiceDescriptor {
+        match &self.content {
+            TeletextOutputContent::Base(pages) => TeletextServiceDescriptor::from_page_set(pages),
+            TeletextOutputContent::Authored(service) => {
+                TeletextServiceDescriptor::from_authored_service(service)
+            }
+        }
+    }
+
+    pub(super) fn with_discovered_source(
+        &self,
+        program: u16,
+        pcr: u16,
+    ) -> Result<Self, TeletextPumpError> {
+        let mut config = self.config;
+        config.program = program;
+        config.clock.pcr_pid = pcr;
+        let mut binding = Self::new_inner(config, self.content.clone(), self.first_byte_timeout)?;
+        binding.control.clone_from(&self.control);
+        binding.optional_startup_bytes = self.optional_startup_bytes;
+        Ok(binding)
     }
 
     pub(crate) fn cloned_control(&self) -> Option<TeletextOutputControl> {
@@ -304,4 +374,4 @@ mod tests;
 
 #[cfg(test)]
 #[path = "teletext_authored_output_tests.rs"]
-mod authored_tests;
+pub(super) mod authored_tests;

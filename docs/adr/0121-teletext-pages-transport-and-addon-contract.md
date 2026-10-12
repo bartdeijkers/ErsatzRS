@@ -13,6 +13,18 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+Explicit source-discovery bindings now feed the same direct/retained gate from
+bounded actual PSI. A checked owned prefix preserves the original source epoch
+and oldest observed arrival, including partial transport tails. Revalidation uses
+a fresh gate, never replays a sealed monitor, and does not renew first-byte,
+holding, pacing or reserve-startup deadlines. Setup failure also preserves exact
+consumed bytes. Probe and journal limits are independent; a retained journal must
+cover its pre-write reserve. Smaller processing windows charge that journal within
+the existing32MiB requested-allocation ceiling without changing cadence, EOF or
+cycle checks; strict default callers retain their old cap. No transport defaults
+or normal-route accepted-generation activation are supplied by this interface.
+P9A-04 owns the scoped proof and remaining integrated flow gaps.
+
 Generated final-MPEG-TS commands now carry rate/PCR-period hints bound to exact
 argv; opaque commands do not infer them. These are transferable data, not runtime
 or source authority. Complete current PSI can select its sole programme without

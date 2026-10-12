@@ -11,7 +11,12 @@ use tokio::{
     time::{timeout_at, Instant},
 };
 
-use super::teletext_binding::{control::PumpControl, TeletextOutputContent, TeletextOutputControl};
+use super::{
+    teletext_binding::{
+        control::PumpControl, TeletextOutputBinding, TeletextOutputContent, TeletextOutputControl,
+    },
+    teletext_startup::TeletextStartupPrefix,
+};
 
 const READ_BYTES: usize = 256 * 188;
 
@@ -176,20 +181,79 @@ pub async fn forward_teletext_output_with_control<R: AsyncRead + Unpin, W: Async
     first_byte_timeout: Duration,
     control: Option<TeletextOutputControl>,
 ) -> Result<u64, TeletextPumpError> {
+    forward_output(
+        source,
+        sink,
+        ForwardOptions {
+            config,
+            content,
+            first_byte_timeout,
+            control,
+            seed: None,
+        },
+    )
+    .await
+}
+
+/// Continue the same source after bounded discovery without renewing arrival ages.
+/// The retained raw prefix starts at physical packet zero and is counted exactly
+/// once. Its source epoch and oldest arrival remain authoritative for this pump.
+pub(super) async fn forward_teletext_output_seeded<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    binding: &TeletextOutputBinding,
+    seed: TeletextStartupPrefix,
+) -> Result<u64, TeletextPumpError> {
+    forward_output(
+        source,
+        sink,
+        ForwardOptions {
+            config: binding.config(),
+            content: binding.content().clone(),
+            first_byte_timeout: binding.first_byte_timeout(),
+            control: binding.cloned_control(),
+            seed: Some(seed),
+        },
+    )
+    .await
+}
+
+struct ForwardOptions {
+    config: TeletextOutputConfig,
+    content: TeletextOutputContent,
+    first_byte_timeout: Duration,
+    control: Option<TeletextOutputControl>,
+    seed: Option<TeletextStartupPrefix>,
+}
+
+async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    options: ForwardOptions,
+) -> Result<u64, TeletextPumpError> {
+    let ForwardOptions {
+        config,
+        content,
+        first_byte_timeout,
+        control,
+        seed,
+    } = options;
     let mut progress = ForwardProgress {
         emitted: 0,
         intervals: 1,
         control: control.map(PumpControl::new),
     };
-    let epoch = Instant::now();
+    let epoch = seed
+        .as_ref()
+        .map_or_else(Instant::now, TeletextStartupPrefix::epoch);
     if first_byte_timeout.is_zero() {
         return Err(TeletextPumpError::Configuration);
     }
     let first_deadline = absolute(epoch, first_byte_timeout)?;
     absolute(epoch, config.max_hold)?;
     let mut gate = content.new_gate(config, false)?;
+    let mut started = seed_gate(&mut gate, seed, first_byte_timeout, epoch)?;
     let mut prefetch = SourcePrefetch::new(source, config)?;
-    let mut started = false;
     loop {
         gate.check_deadline(epoch.elapsed())?;
         if progress
@@ -254,6 +318,27 @@ pub async fn forward_teletext_output_with_control<R: AsyncRead + Unpin, W: Async
         started = true;
         gate.push(&prefetch.scratch[..read], epoch.elapsed())?;
     }
+}
+
+fn seed_gate(
+    gate: &mut TeletextOutputGate,
+    seed: Option<TeletextStartupPrefix>,
+    first_byte_timeout: Duration,
+    epoch: Instant,
+) -> Result<bool, TeletextPumpError> {
+    let Some(seed) = seed else {
+        return Ok(false);
+    };
+    if seed.bytes().is_empty() {
+        return Err(TeletextPumpError::Configuration);
+    }
+    if seed.first_arrival() >= first_byte_timeout {
+        return Err(TeletextPumpError::FirstByteTimeout);
+    }
+    gate.push(seed.bytes(), seed.first_arrival())?;
+    drop(seed);
+    gate.check_deadline(epoch.elapsed())?;
+    Ok(true)
 }
 
 struct ForwardProgress {
@@ -390,3 +475,7 @@ fn source_deadline_error(started: bool) -> TeletextPumpError {
 #[cfg(test)]
 #[path = "teletext_output_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "teletext_output_startup_tests.rs"]
+mod startup_tests;

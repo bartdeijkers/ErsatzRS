@@ -1195,9 +1195,11 @@ generation selection/native recovery now has an explicit pending/head/selection/
 accepted-pointer fence and complete wire fingerprint. Generated final-TS hints,
 complete sole-program PSI selection and lossless optional startup admission now
 prepare route binding; ordinary routes still do not select accepted generations.
-Next implement bounded actual-output discovery with original arrival ages, then
-normal-route lookup, active publication Health, warm publisher ownership and
-localized preview controls. Dynamic or provenance-unknown originals cannot bypass missing current-role proof.
+Explicit final dispatch now supports bounded actual-output discovery and seeded
+forwarding with original arrival ages, exact raw fallback and separate probe/journal
+bounds. Next connect accepted frozen-generation lookup using source-independent
+runtime policy plus generated command facts, active publication Health, warm
+publisher ownership and localized preview controls. Dynamic or provenance-unknown originals cannot bypass missing current-role proof.
 Multiple-playout guide versus first-playout playback semantics need explicit proof.
 These remain open acceptance work.
 Original-only capture

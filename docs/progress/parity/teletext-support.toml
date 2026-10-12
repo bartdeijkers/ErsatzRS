@@ -41,7 +41,7 @@ original defaults, secondary uncertainty and channel/model/deadline fences.
 Cold composition isolates M29/resources and rechecks MOT effects.
 Originals/pending/frozen generations persist; v2 raw JSON, v1 semantics.
 Native recovery checks hash/selection; activation/guide freshness open.
-TS hints/sole PSI/optional startup; route discovery open.
+TS hints/sole PSI/aged seed/raw fallback; ordinary lookup open.
 Cold client passes; ADR0122/legacy/regions/link CRC/UI/Lua open.
 
 SQLite retains tracks/owners/data/leases; missing reports/revisions prove no bytes

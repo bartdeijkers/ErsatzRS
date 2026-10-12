@@ -351,10 +351,10 @@ fn retained_allocation_model_charges_journal_and_processing_before_admission() {
     let policy = ReservePolicy::new(5_000_000, Some(Duration::from_secs(1))).unwrap();
     let selected = retained_binding(policy, false);
     assert!(retained_startup_budget(policy, &selected, 1024 * 188).is_ok());
-    // An entire eight-second raw reserve plus its simultaneously prepared
-    // packet vectors and journal cannot fit the existing 32 MiB model.
+    // The processing cap now makes room for an entire pre-write reserve journal.
+    assert!(retained_startup_budget(policy, &selected, policy.capacity_bytes()).is_ok());
     assert!(matches!(
-        retained_startup_budget(policy, &selected, policy.capacity_bytes()),
+        retained_startup_budget(policy, &selected, MAX_BYTES),
         Err(RetainedTeletextError::Configuration)
     ));
 }

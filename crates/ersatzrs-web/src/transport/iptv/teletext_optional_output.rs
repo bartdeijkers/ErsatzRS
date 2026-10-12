@@ -15,10 +15,13 @@ use tokio::{
 use super::{
     retained_stream_buffer::{forward_retained_ts, ReservePolicy},
     teletext_binding::TeletextOutputBinding,
+    teletext_output::forward_teletext_output_seeded,
     teletext_output::{forward_teletext_output_with_control, TeletextPumpError},
     teletext_retained_output::{
-        allocation_model, forward_retained_ts_with_teletext, validate_policy, RetainedTeletextError,
+        allocation_model, forward_retained_ts_with_startup, forward_retained_ts_with_teletext,
+        processing_cap, RetainedTeletextError, RetainedTeletextInput,
     },
+    teletext_startup::TeletextStartupPrefix,
 };
 
 const PACKET_BYTES: usize = 188;
@@ -72,6 +75,24 @@ impl Startup {
     }
     fn take(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.bytes)
+    }
+
+    fn seeded(
+        maximum: usize,
+        binding: &TeletextOutputBinding,
+        prefix: &TeletextStartupPrefix,
+    ) -> Result<Arc<Mutex<Self>>, TeletextPumpError> {
+        if prefix.bytes().len() > maximum {
+            return Err(TeletextPumpError::Configuration);
+        }
+        let state = Self::new(maximum, binding)?;
+        {
+            let mut journal = state.lock().unwrap();
+            journal.bytes.extend_from_slice(prefix.bytes());
+            journal.received = u64::try_from(prefix.bytes().len())
+                .map_err(|_| TeletextPumpError::Configuration)?;
+        }
+        Ok(state)
     }
 }
 
@@ -196,6 +217,10 @@ pub(super) async fn forward_bound_teletext_output<R: AsyncRead + Unpin, W: Async
     sink: &mut W,
     binding: &TeletextOutputBinding,
 ) -> Result<u64, TeletextPumpError> {
+    if binding.source_discovery().is_some() {
+        return super::teletext_discovery_output::forward_discovered_direct(source, sink, binding)
+            .await;
+    }
     if let Some(maximum) = binding.optional_startup_bytes() {
         let result = forward_optional_teletext_output(source, sink, binding, maximum).await?;
         if let Some(rejection) = result.rejection {
@@ -224,6 +249,12 @@ pub(super) async fn forward_bound_retained_teletext_output(
     cancel: &Notify,
     binding: &TeletextOutputBinding,
 ) -> Result<(), RetainedTeletextError> {
+    if binding.source_discovery().is_some() {
+        return super::teletext_discovery_output::forward_discovered_retained(
+            source, sink, policy, terminal, startup, cancel, binding,
+        )
+        .await;
+    }
     if let Some(maximum_bytes) = binding.optional_startup_bytes() {
         let result = forward_optional_retained_teletext_output(
             source,
@@ -275,6 +306,15 @@ pub async fn forward_optional_teletext_output<R: AsyncRead + Unpin, W: AsyncWrit
         )
         .await
     };
+    finish_direct(source, sink, &state, result).await
+}
+
+async fn finish_direct<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    state: &Arc<Mutex<Startup>>,
+    result: Result<u64, TeletextPumpError>,
+) -> Result<OptionalTeletextOutput, TeletextPumpError> {
     match result {
         Ok(bytes) => Ok(OptionalTeletextOutput {
             bytes,
@@ -288,27 +328,34 @@ pub async fn forward_optional_teletext_output<R: AsyncRead + Unpin, W: AsyncWrit
                 }
                 state.take()
             };
-            let prefix_bytes =
-                u64::try_from(prefix.len()).map_err(|_| TeletextPumpError::Configuration)?;
-            sink.write_all(&prefix)
-                .await
-                .map_err(|error| TeletextPumpError::Write(error.kind()))?;
-            drop(prefix);
-            let rest = copy_plain(source, sink).await?;
-            sink.flush()
-                .await
-                .map_err(|error| TeletextPumpError::Write(error.kind()))?;
             Ok(OptionalTeletextOutput {
-                bytes: prefix_bytes
-                    .checked_add(rest)
-                    .ok_or(TeletextPumpError::Configuration)?,
+                bytes: replay_direct_prefix(source, sink, prefix).await?,
                 rejection: Some(error),
             })
         }
     }
 }
 
-async fn copy_plain<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+pub(super) async fn replay_direct_prefix(
+    source: &mut (impl AsyncRead + Unpin),
+    sink: &mut (impl AsyncWrite + Unpin),
+    prefix: Vec<u8>,
+) -> Result<u64, TeletextPumpError> {
+    let prefix_bytes = u64::try_from(prefix.len()).map_err(|_| TeletextPumpError::Configuration)?;
+    sink.write_all(&prefix)
+        .await
+        .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+    drop(prefix);
+    let remaining = copy_plain(source, sink).await?;
+    sink.flush()
+        .await
+        .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+    prefix_bytes
+        .checked_add(remaining)
+        .ok_or(TeletextPumpError::Configuration)
+}
+
+pub(super) async fn copy_plain<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     source: &mut R,
     sink: &mut W,
 ) -> Result<u64, TeletextPumpError> {
@@ -334,25 +381,15 @@ async fn copy_plain<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
 // Before commitment the journal bounds all consumed/processable packet slots.
 // Afterwards the journal is released and the reader drops its scratch before
 // more reads; the unchanged strict reserve model supplies its ordinary bound.
-fn retained_startup_budget(
+pub(super) fn retained_startup_budget(
     policy: ReservePolicy,
     binding: &TeletextOutputBinding,
     journal: usize,
 ) -> Result<(), RetainedTeletextError> {
-    let config = binding.config();
-    let processing = validate_policy(policy, config)?;
-    let (base, per_packet) = allocation_model(config)?;
-    let _total = base
-        .checked_add(
-            processing
-                .min(journal / PACKET_BYTES)
-                .checked_mul(per_packet)
-                .ok_or(RetainedTeletextError::Configuration)?,
-        )
-        .and_then(|bytes| bytes.checked_add(journal))
-        .and_then(|bytes| bytes.checked_add(READ_BYTES))
-        .filter(|bytes| *bytes <= MAX_BYTES)
+    let extra = journal
+        .checked_add(READ_BYTES)
         .ok_or(RetainedTeletextError::Configuration)?;
+    processing_cap(policy, binding.config(), extra)?;
     // Fallback releases the gate before creating the ordinary reserve, but keeps
     // the original journal as its exact first input; charge their overlap too.
     if policy
@@ -394,17 +431,43 @@ pub(super) async fn forward_optional_retained_teletext_output(
             sink,
             state: Arc::clone(&state),
         };
-        forward_retained_ts_with_teletext(
+        forward_retained_ts_with_startup(
             &mut reader,
             &mut writer,
             policy,
             terminal,
             startup,
             cancel,
-            binding,
+            RetainedTeletextInput {
+                binding,
+                prefix: None,
+                extra_startup_bytes: startup_bytes + READ_BYTES,
+            },
         )
         .await
     };
+    finish_retained(
+        source,
+        sink,
+        policy,
+        terminal,
+        startup,
+        cancel,
+        (&state, result),
+    )
+    .await
+}
+
+async fn finish_retained(
+    source: &mut (impl AsyncRead + Unpin),
+    sink: &mut (impl AsyncWrite + Unpin),
+    policy: ReservePolicy,
+    terminal: &AtomicU8,
+    startup: Instant,
+    cancel: &Notify,
+    outcome: (&Arc<Mutex<Startup>>, Result<(), RetainedTeletextError>),
+) -> Result<OptionalRetainedTeletextOutput, RetainedTeletextError> {
+    let (state, result) = outcome;
     match result {
         Ok(()) => Ok(OptionalRetainedTeletextOutput {
             bytes: state.lock().unwrap().received,
@@ -423,18 +486,183 @@ pub(super) async fn forward_optional_retained_teletext_output(
                 }
                 state.take()
             };
-            let mut continuation = std::io::Cursor::new(prefix).chain(source);
-            let mut counted = CountingReader {
-                source: &mut continuation,
-                count: 0,
-            };
-            forward_retained_ts(&mut counted, sink, policy, terminal, startup, cancel).await?;
             Ok(OptionalRetainedTeletextOutput {
-                bytes: counted.count,
+                bytes: replay_retained_prefix(
+                    source, sink, policy, terminal, startup, cancel, prefix,
+                )
+                .await?,
                 rejection: Some(error),
             })
         }
     }
+}
+
+pub(super) async fn replay_retained_prefix(
+    source: &mut (impl AsyncRead + Unpin),
+    sink: &mut (impl AsyncWrite + Unpin),
+    policy: ReservePolicy,
+    terminal: &AtomicU8,
+    startup: Instant,
+    cancel: &Notify,
+    prefix: Vec<u8>,
+) -> Result<u64, RetainedTeletextError> {
+    if policy
+        .capacity_bytes()
+        .checked_add(prefix.capacity())
+        .and_then(|bytes| bytes.checked_add(2 * READ_BYTES))
+        .is_none_or(|bytes| bytes > MAX_BYTES)
+    {
+        return Err(RetainedTeletextError::Configuration);
+    }
+    let mut continuation = std::io::Cursor::new(prefix).chain(source);
+    let mut counted = CountingReader {
+        source: &mut continuation,
+        count: 0,
+    };
+    forward_retained_ts(&mut counted, sink, policy, terminal, startup, cancel).await?;
+    Ok(counted.count)
+}
+
+pub(super) async fn forward_optional_seeded_teletext_output<
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+>(
+    source: &mut R,
+    sink: &mut W,
+    binding: &TeletextOutputBinding,
+    prefix: TeletextStartupPrefix,
+    maximum_bytes: usize,
+) -> Result<OptionalTeletextOutput, TeletextPumpError> {
+    let state = match Startup::seeded(maximum_bytes, binding, &prefix) {
+        Ok(state) => state,
+        Err(error) => {
+            return Ok(OptionalTeletextOutput {
+                bytes: replay_direct_prefix(source, sink, prefix.into_bytes()).await?,
+                rejection: Some(error),
+            })
+        }
+    };
+    let mut reader = match TeeReader::new(source, &state) {
+        Ok(reader) => reader,
+        Err(error) => {
+            drop(prefix);
+            return finish_direct(source, sink, &state, Err(error)).await;
+        }
+    };
+    let result = {
+        let mut writer = CommitWriter {
+            sink,
+            state: Arc::clone(&state),
+        };
+        forward_teletext_output_seeded(&mut reader, &mut writer, binding, prefix).await
+    };
+    drop(reader);
+    finish_direct(source, sink, &state, result).await
+}
+
+pub(super) struct SeededOptionalTeletextStartup<'a> {
+    pub binding: &'a TeletextOutputBinding,
+    pub maximum_bytes: usize,
+    pub prefix: TeletextStartupPrefix,
+}
+
+pub(super) async fn forward_optional_seeded_retained_output(
+    source: &mut (impl AsyncRead + Unpin),
+    sink: &mut (impl AsyncWrite + Unpin),
+    policy: ReservePolicy,
+    terminal: &AtomicU8,
+    startup: Instant,
+    cancel: &Notify,
+    options: SeededOptionalTeletextStartup<'_>,
+) -> Result<OptionalRetainedTeletextOutput, RetainedTeletextError> {
+    let SeededOptionalTeletextStartup {
+        binding,
+        maximum_bytes,
+        prefix,
+    } = options;
+    let extra_base = allocation_model(binding.config()).map(|(base, _)| base);
+    let base = extra_base.as_ref().copied().unwrap_or(MAX_BYTES);
+    if retained_startup_budget(policy, binding, maximum_bytes).is_err()
+        || extra_base.is_err()
+        || base
+            .checked_add(maximum_bytes)
+            .and_then(|bytes| bytes.checked_add(prefix.retained_bytes()))
+            .and_then(|bytes| bytes.checked_add(READ_BYTES))
+            .is_none_or(|bytes| bytes > MAX_BYTES)
+    {
+        return Ok(OptionalRetainedTeletextOutput {
+            bytes: replay_retained_prefix(
+                source,
+                sink,
+                policy,
+                terminal,
+                startup,
+                cancel,
+                prefix.into_bytes(),
+            )
+            .await?,
+            rejection: Some(RetainedTeletextError::Configuration),
+        });
+    }
+    let Ok(state) = Startup::seeded(maximum_bytes, binding, &prefix) else {
+        return Ok(OptionalRetainedTeletextOutput {
+            bytes: replay_retained_prefix(
+                source,
+                sink,
+                policy,
+                terminal,
+                startup,
+                cancel,
+                prefix.into_bytes(),
+            )
+            .await?,
+            rejection: Some(RetainedTeletextError::Configuration),
+        });
+    };
+    let Ok(mut reader) = TeeReader::new(source, &state) else {
+        drop(prefix);
+        return finish_retained(
+            source,
+            sink,
+            policy,
+            terminal,
+            startup,
+            cancel,
+            (&state, Err(RetainedTeletextError::Configuration)),
+        )
+        .await;
+    };
+    let result = {
+        let mut writer = CommitWriter {
+            sink,
+            state: Arc::clone(&state),
+        };
+        forward_retained_ts_with_startup(
+            &mut reader,
+            &mut writer,
+            policy,
+            terminal,
+            startup,
+            cancel,
+            RetainedTeletextInput {
+                binding,
+                prefix: Some(prefix),
+                extra_startup_bytes: maximum_bytes + READ_BYTES,
+            },
+        )
+        .await
+    };
+    drop(reader);
+    finish_retained(
+        source,
+        sink,
+        policy,
+        terminal,
+        startup,
+        cancel,
+        (&state, result),
+    )
+    .await
 }
 
 struct CountingReader<'a, R> {

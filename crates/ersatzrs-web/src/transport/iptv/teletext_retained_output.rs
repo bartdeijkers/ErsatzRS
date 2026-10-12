@@ -15,6 +15,7 @@ use tokio::{
 use super::{
     retained_stream_buffer::{ReserveError, ReservePolicy},
     teletext_binding::{control::PumpControl, TeletextOutputBinding},
+    teletext_startup::TeletextStartupPrefix,
 };
 
 const PACKET_BYTES: usize = 188;
@@ -70,10 +71,12 @@ impl ForwardState {
     fn new(
         policy: ReservePolicy,
         binding: &TeletextOutputBinding,
+        epoch: Option<Instant>,
+        extra_startup_bytes: usize,
     ) -> Result<Self, RetainedTeletextError> {
         let config = binding.config();
-        let processing_packets = validate_policy(policy, config)?;
-        let epoch = Instant::now();
+        let processing_packets = processing_cap(policy, config, extra_startup_bytes)?;
+        let epoch = epoch.unwrap_or_else(Instant::now);
         Ok(Self {
             gate: binding.new_gate(true)?,
             config,
@@ -91,6 +94,17 @@ impl ForwardState {
             pending: None,
             control: binding.cloned_control().map(PumpControl::new),
         })
+    }
+
+    fn seed(&mut self, prefix: TeletextStartupPrefix) -> Result<(), RetainedTeletextError> {
+        self.received = u64::try_from(prefix.bytes().len())
+            .map_err(|_| RetainedTeletextError::Configuration)?;
+        self.gate.push(prefix.bytes(), prefix.first_arrival())?;
+        // Release the original allocation before preparing any window or
+        // reading the remainder. Arrival ages already belong to the gate.
+        drop(prefix);
+        self.gate.check_deadline(self.epoch.elapsed())?;
+        Ok(())
     }
 
     fn held_bytes(&self) -> Result<usize, RetainedTeletextError> {
@@ -311,6 +325,33 @@ pub(super) fn validate_policy(
     Ok(processing_packets)
 }
 
+/// Reserve caller-owned startup payload within the same processing ceiling.
+/// Zero preserves the original strict-pump model. Unknown/oversized windows
+/// still fail through the existing processing limit; cadence is unchanged.
+pub(super) fn processing_cap(
+    policy: ReservePolicy,
+    config: TeletextOutputConfig,
+    extra_startup_bytes: usize,
+) -> Result<usize, RetainedTeletextError> {
+    let original = validate_policy(policy, config)?;
+    if extra_startup_bytes == 0 {
+        return Ok(original);
+    }
+    let (base, per_packet) = allocation_model(config)?;
+    let maximum = MAX_ENCODED_BUFFER_BYTES
+        .checked_sub(base)
+        .and_then(|bytes| bytes.checked_sub(extra_startup_bytes))
+        .ok_or(RetainedTeletextError::Configuration)?
+        / per_packet;
+    let processing = original.min(maximum);
+    if processing == 0
+        || processing as u128 <= u128::from(policy.muxrate_bps()) / (50 * PACKET_BYTES as u128 * 8)
+    {
+        return Err(RetainedTeletextError::Configuration);
+    }
+    Ok(processing)
+}
+
 /// Forward one reserve through a single gate without reopening its source.
 ///
 /// The source is read between individual physical packet due times. Both raw
@@ -327,7 +368,74 @@ pub(super) async fn forward_retained_ts_with_teletext(
     cancel: &Notify,
     binding: &TeletextOutputBinding,
 ) -> Result<(), RetainedTeletextError> {
-    let mut state = ForwardState::new(policy, binding)?;
+    forward_retained_ts_with_startup(
+        source,
+        writer,
+        policy,
+        terminal,
+        startup,
+        cancel,
+        RetainedTeletextInput {
+            binding,
+            prefix: None,
+            extra_startup_bytes: 0,
+        },
+    )
+    .await
+}
+
+/// One existing binding plus already-consumed bytes from its original epoch.
+pub(super) struct RetainedTeletextInput<'a> {
+    pub binding: &'a TeletextOutputBinding,
+    pub prefix: Option<TeletextStartupPrefix>,
+    /// Concurrent caller-owned journal/scratch payload after the seed is freed.
+    pub extra_startup_bytes: usize,
+}
+
+fn preflight_prefix(
+    prefix: &TeletextStartupPrefix,
+    policy: ReservePolicy,
+    binding: &TeletextOutputBinding,
+    startup: Instant,
+    cancel: &Notify,
+) -> Result<(), RetainedTeletextError> {
+    if cancel.notified().now_or_never().is_some() {
+        return Err(ReserveError::Cancelled.into());
+    }
+    if Instant::now() >= startup || prefix.first_arrival() >= binding.first_byte_timeout() {
+        return Err(ReserveError::Deadline.into());
+    }
+    let (base, _) = allocation_model(binding.config())?;
+    if prefix.bytes().len() > policy.capacity_bytes()
+        || base
+            .checked_add(prefix.retained_bytes())
+            .and_then(|bytes| bytes.checked_add(READ_BYTES))
+            .is_none_or(|bytes| bytes > MAX_ENCODED_BUFFER_BYTES)
+    {
+        return Err(RetainedTeletextError::Configuration);
+    }
+    Ok(())
+}
+
+/// Continue the same retained source with original prefix arrival ages.
+/// The absolute reserve-startup deadline and cancellation owner are unchanged.
+pub(super) async fn forward_retained_ts_with_startup(
+    source: &mut (impl AsyncRead + Unpin),
+    writer: &mut (impl AsyncWrite + Unpin),
+    policy: ReservePolicy,
+    terminal: &AtomicU8,
+    startup: Instant,
+    cancel: &Notify,
+    input: RetainedTeletextInput<'_>,
+) -> Result<(), RetainedTeletextError> {
+    if let Some(prefix) = &input.prefix {
+        preflight_prefix(prefix, policy, input.binding, startup, cancel)?;
+    }
+    let epoch = input.prefix.as_ref().map(TeletextStartupPrefix::epoch);
+    let mut state = ForwardState::new(policy, input.binding, epoch, input.extra_startup_bytes)?;
+    if let Some(prefix) = input.prefix {
+        state.seed(prefix)?;
+    }
     let mut incoming = vec![0_u8; READ_BYTES].into_boxed_slice();
     loop {
         if cancel.notified().now_or_never().is_some() {
@@ -460,6 +568,10 @@ fn absolute(epoch: Instant, elapsed: Duration) -> Result<Instant, RetainedTelete
 #[cfg(test)]
 #[path = "teletext_retained_output_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "teletext_retained_startup_tests.rs"]
+mod startup_tests;
 
 #[cfg(test)]
 #[path = "teletext_retained_runtime_tests.rs"]

@@ -17,8 +17,10 @@ release section when tagging a release.
 
 - Add bounded optional teletext startup admission that preserves exact raw
   playback when authored admission rejects before any sink-write attempt.
-  Generated MPEG-TS hints and sole-program PSI selection prepare safe runtime
-  binding; automatic generation lookup and full live acceptance remain open.
+  Source discovery derives actual program/PCR identity, retains original arrival
+  ages and shares the retained stream's memory/deadline bounds. Generated MPEG-TS
+  hints prepare safe runtime binding; automatic generation lookup and full live
+  acceptance remain open.
 - Add durable, independently fenced teletext generation selection and native
   reconstruction of exact frozen originals. Drafts and pending requests remain
   separate from accepted output; dynamic guide freshness and ordinary stream

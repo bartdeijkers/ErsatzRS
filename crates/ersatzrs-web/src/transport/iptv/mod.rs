@@ -13,9 +13,12 @@ mod retained_stream_buffer;
 pub mod stream;
 pub mod streaming_specs;
 pub mod teletext_binding;
+mod teletext_discovery_output;
 pub mod teletext_optional_output;
 pub mod teletext_output;
 mod teletext_retained_output;
+mod teletext_source_probe;
+mod teletext_startup;
 pub mod variant;
 
 use axum::{

@@ -4219,8 +4219,34 @@ charges journal/scratch/processing overlap; this is not an RSS bound. Direct
 gate and journal have separate component limits.
 
 This seam does not automatically reconstruct accepted services on normal routes.
-The next integration requires bounded actual-output discovery that retains the
-original arrival ages when transferring consumed startup bytes into a fresh gate;
-naive replay with a renewed epoch is insufficient. Full warm-resource retirement,
+Explicit `with_source_discovery(maximum_bytes, maximum_time)` now adds that
+bounded probe to final dispatch. Every complete packet of each consumed read is
+inspected before planning; the exact prefix includes partial tails and later
+same-chunk collisions. Actual PAT/PMT program/PCR replace the binding's supplied
+IDs before forwarding; other clock/rate/retention values remain explicit host
+policy. No program1 or fixture-PID fact is inferred. Probe bounds remain separate
+from a larger optional journal, and cannot outgrow or shrink it. The retained
+journal must cover pre-write reserve consumption to reach actual admission.
+
+The checked prefix records its original epoch/oldest arrival. Fresh gate ingestion
+revalidates the whole prefix once, then reads only the same continuing source;
+a sealed monitor is never replayed. First-byte, holding, pacing and existing
+absolute reserve-startup/cancellation checks retain their original times. Invalid
+seed timestamps retain owned bytes on constructor rejection. Journal/scratch/
+configuration setup failure preserves the prefix before raw fallback; actual
+source errors and every committed-output failure remain terminal.
+
+Retained processing caps deduct the journal and extra reader from the same32MiB
+requested-allocation model. Prefix capacity is separately charged while seed
+ownership overlaps the gate/journal, then released before preparing output.
+Smaller windows preserve cadence/cycle/EOF rules and remain bounded for the epoch;
+strict default callers have no extra reservation and keep their original cap.
+Fallback charges the ordinary reserve plus actual raw-prefix capacity. These are
+allocation payload bounds, not RSS or authored-service-tree bounds. Timers may
+batch packet writes at one timestamp only within each packet's own original due
+and allowed lateness; no strict microsecond timestamp uniqueness is promised.
+
+Next construct accepted generation bindings from source-independent host policy
+and actual generated-command facts, then connect normal-route lookup and Health. Full warm-resource retirement,
 active Health, current generation ownership and all existing engine/client/editor/
 admin/Lua/platform acceptance remain open. P9A-04 owns the canonical proof.
