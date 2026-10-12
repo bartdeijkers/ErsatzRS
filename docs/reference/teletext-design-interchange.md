@@ -4246,7 +4246,24 @@ allocation payload bounds, not RSS or authored-service-tree bounds. Timers may
 batch packet writes at one timestamp only within each packet's own original due
 and allowed lateness; no strict microsecond timestamp uniqueness is promised.
 
-Next construct accepted generation bindings from source-independent host policy
-and actual generated-command facts, then connect normal-route lookup and Health. Full warm-resource retirement,
+`TeletextSourcePolicy::new` now checks explicit source-independent host limits;
+qualification derives rate/period arithmetic from each actual command. The PCR
+period requires separately chosen time/packet gap slack, not an assumed maximum
+source interval. Actual PSI supplies program/PCR only after bounded discovery.
+
+`load_accepted_teletext_output_intent` restores only selected frozen generations
+with explicit storage/compiler policy and one absolute deadline covering all
+awaits. No package runs and a pending document never supplies output authority.
+`TeletextAcceptedOutputIntent` retains the sealed candidate and its shared native
+service. Injectable direct and retained forwarding recheck current accepted identity
+and effective channel selection before consuming source bytes. Unsupported command
+or pre-write admission preserves exact ordinary playback and returns a rejection.
+Known incompatible commands/policies skip optional storage queries entirely.
+Retained preflight charges gate/journal/probe overlap before late gate allocation,
+including actual retained prefix capacity; original reserve/startup/cancellation
+and commitment rules still apply. These APIs do not supply production compiler
+defaults, an ongoing publication owner or normal-route registration.
+
+Next connect normal-route lookup and Health under explicit production policy. Full warm-resource retirement,
 active Health, current generation ownership and all existing engine/client/editor/
 admin/Lua/platform acceptance remain open. P9A-04 owns the canonical proof.

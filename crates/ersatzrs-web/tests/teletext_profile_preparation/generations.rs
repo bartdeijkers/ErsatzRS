@@ -1,4 +1,5 @@
-//! Explicit frozen-original acceptance/recovery, not stream/client delivery proof.
+//! Frozen-original acceptance/recovery and a synthetic source/output seam.
+//! These tests do not prove real playback, suitable-client rendering or full acceptance.
 //! Installed shell fixtures inherit the parent's intentional Unix-only scope.
 
 use super::{channel_documents, designs, documents::DocumentFixture, *};
@@ -18,6 +19,12 @@ use ersatzrs_web::host::{
     },
     teletext_preview::{project_teletext_preview, TeletextPreviewBudget},
 };
+
+// This module connects the native SQLite fixture to a real command policy and
+// independently constructed/observed TS bytes. It intentionally runs no FFmpeg
+// process and makes no actual-client or complete Level 2.5 acceptance claim.
+#[path = "accepted_transport_flow.rs"]
+mod accepted_transport_flow;
 
 async fn request(
     fixture: &Fixture,

@@ -280,8 +280,14 @@ impl ForwardState {
 pub(super) fn allocation_model(
     config: TeletextOutputConfig,
 ) -> Result<(usize, usize), RetainedTeletextError> {
-    let base = config
-        .max_buffer_packets
+    allocation_model_capacity(config.max_buffer_packets)
+}
+
+/// The same allocation model before a source identity exists. No gate is built.
+pub(super) fn allocation_model_capacity(
+    max_buffer_packets: usize,
+) -> Result<(usize, usize), RetainedTeletextError> {
+    let base = max_buffer_packets
         .checked_mul(PACKET_BYTES + size_of::<Duration>())
         .and_then(|bytes| bytes.checked_add(FIXED_BYTES))
         .ok_or(RetainedTeletextError::Configuration)?;

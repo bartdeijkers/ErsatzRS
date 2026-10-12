@@ -13,6 +13,22 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+Accepted frozen originals now have an explicit source-independent output intent.
+Host limits contain no program/PCR identifiers or compiler defaults. Each final
+command qualifies rate/period bounds before actual-source PSI supplies those IDs;
+the binding retains the same shared native service. Application confirmation
+rechecks accepted identity and effective channel selection before injectable
+source reads. Known unsupported commands/policies preserve ordinary output
+without waiting for optional generation storage.
+Complete recovery is bounded across repository awaits by the original absolute
+deadline. Retained late construction preflights gate/journal/probe overlap and
+charges actual retained-prefix capacity before allocating its validation gate.
+The existing optional pumps retain original ages, reserve ownership and exact
+pre-write fallback. Normal-route lookup, production compiler limits, live Health,
+ongoing publication ownership and client acceptance remain unimplemented here.
+This preparatory explicit API does not waive full authored/editor/Lua/admin or
+platform acceptance. P9A-04 owns the canonical evidence and next integration step.
+
 Explicit source-discovery bindings now feed the same direct/retained gate from
 bounded actual PSI. A checked owned prefix preserves the original source epoch
 and oldest observed arrival, including partial transport tails. Revalidation uses
@@ -34,7 +50,7 @@ the continuing source if authored admission rejects before the first sink-write
 attempt. Afterwards the epoch remains strict; no raw fallback can mix with emitted
 authored packets. Direct and retained final-output dispatch share this policy,
 with existing bindings strict by default. Ordinary accepted-generation lookup,
-original-age discovery, active-publication Health and warm ownership remain open.
+active-publication Health and warm ownership remain open.
 P9A-04 owns verification; the reference documents the preparatory interfaces.
 
 Preparatory context fingerprint version2 now includes the exact bounded accepted
