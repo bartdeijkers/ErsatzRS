@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Add bounded accepted guide-document reads within a caller-owned database
+  snapshot, checking source bytes and programme counts before allocation.
+  Complete guide acquisition remains to be connected.
 - Add an opt-in synthetic teletext capture and bounded client replay workflow,
   verifying unchanged video/audio plus enhanced pages and numeric navigation.
   Live generation promotion and full Level 2.5 acceptance remain open.

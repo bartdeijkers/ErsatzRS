@@ -1,3 +1,5 @@
+#[path = "external_json_snapshot/bounded_reader.rs"]
+mod bounded_reader;
 mod common;
 #[path = "external_json_snapshot/health.rs"]
 mod health;

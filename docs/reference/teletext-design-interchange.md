@@ -3735,3 +3735,30 @@ rendering and numeric navigation for the cold representative pages. It does not
 prove link/subpage navigation, full resources/panels, warm cache replacement,
 localized admin/browser, accepted generation or full Level 2.5 support. P9A-01
 owns the exact successful capture/client receipt and P9A-04 retains the flow gaps.
+
+### Bounded accepted guide-source reads
+
+The additive infra `external_json::snapshot::accepted_on` borrows the caller's
+exact SQLite connection, including a dereferenced read transaction. It returns
+an optional privately constructed `BoundedSnapshot` with the exact accepted
+revision, source path and parsed schedule; it does not consult mutable files.
+The existing pooled and playback readers retain their behavior.
+
+`AcceptedSnapshotBudget` supplies remaining document bytes, source-path bytes,
+combined bytes and raw programme records. SQL checks scalar storage types,
+positive revision, schema version and all byte ceilings before returning either
+payload string. Document bytes also obey the existing 32 MiB ceiling. All counts
+use UTF-8 bytes, not character counts. A serde count-only pass checks the complete
+raw `programs` array before normal schedule parsing; duplicate/missing/wrong-shaped
+arrays and malformed timelines reject. Valid empty arrays permit a zero record
+budget. No short-duration or out-of-window record escapes the source count.
+
+`usage()` reports exact source document/path bytes and raw programme count;
+`snapshot()` borrows the result and `into_snapshot()` transfers it. Debug excludes
+paths/programme content. Usage does not measure retained strings, later metadata
+hydration, mirror/content clones or projection work. A complete guide caller
+still needs one transaction across channels/settings/SQL/metadata/accepted
+sources, checked aggregate and preclone bounds, complete grouping before window
+filtering, and exact source provenance. Missing accepted revisions do not confer
+mutable-file authority; that capture/recheck workflow remains to be integrated.
+P9A-04 owns the focused evidence and current acquisition gaps.
