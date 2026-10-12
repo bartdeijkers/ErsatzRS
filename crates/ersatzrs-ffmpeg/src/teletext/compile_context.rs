@@ -3,19 +3,23 @@
 use std::time::Instant;
 
 use ersatzrs_domain::{
-    resolve_teletext_display_resolution, resolve_teletext_display_resolution_with_usage,
-    resolve_teletext_drcs_program_with_usage, resolve_teletext_spatial_program_with_usage,
-    resolve_teletext_spatial_trace_with_usage, TeletextCharsetPair,
-    TeletextCollectedEnhancementReferences, TeletextDisplayResolution,
+    resolve_teletext_attribute_execution_with_transmission_and_usage,
+    resolve_teletext_attribute_execution_with_usage, resolve_teletext_display_resolution,
+    resolve_teletext_display_resolution_with_usage, resolve_teletext_drcs_program_with_usage,
+    resolve_teletext_spatial_program_with_usage, resolve_teletext_spatial_trace_with_usage,
+    TeletextAttributeExecution, TeletextAttributeExecutionError, TeletextAttributeExecutionFailure,
+    TeletextAttributeTransmissionEvidence, TeletextBaseDisplay, TeletextCharsetPair,
+    TeletextCollectedEnhancementReferences, TeletextColourReference, TeletextDisplayResolution,
     TeletextDisplayResolutionBudget, TeletextDisplayResolutionError,
     TeletextDisplayResolutionFailure, TeletextDisplayResolutionInputs, TeletextDrcsExecution,
     TeletextDrcsExecutionBudget, TeletextDrcsExecutionError, TeletextDrcsExecutionFailure,
     TeletextDrcsProgramExecutionError, TeletextEnhancementCollectionBudget,
     TeletextEnhancementCollectionError, TeletextEnhancementCollectionFailure,
     TeletextEnhancementObjectCatalog, TeletextEnhancementProgram, TeletextEnhancementSource,
-    TeletextGlyphIntent, TeletextObjectCatalogBudget, TeletextPageAddress, TeletextSemanticService,
-    TeletextSpatialTrace, TeletextSpatialTraceBudget, TeletextSpatialTraceError,
-    TeletextSpatialTraceFailure, TeletextSpatialTraceUsage, TeletextSpatialTraceWorkBudget,
+    TeletextGlyphIntent, TeletextGlyphLayers, TeletextObjectCatalogBudget, TeletextPageAddress,
+    TeletextSemanticService, TeletextSpatialTrace, TeletextSpatialTraceBudget,
+    TeletextSpatialTraceError, TeletextSpatialTraceFailure, TeletextSpatialTraceUsage,
+    TeletextSpatialTraceWorkBudget,
 };
 
 use super::augmented_origin_compilation::compile_augmented_with_context_and_usage;
@@ -60,6 +64,7 @@ pub(super) struct TeletextCompileContext<'a, 'service> {
     spatial_event_visits: WorkCredit,
     spatial_invocation_visits: WorkCredit,
     identity_checks: WorkCredit,
+    attribute_cell_updates: WorkCredit,
 }
 
 // One non-clone credit per existing meter; these units are never summed.
@@ -120,6 +125,7 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
             spatial_event_visits: WorkCredit::new(None),
             spatial_invocation_visits: WorkCredit::new(None),
             identity_checks: WorkCredit::new(None),
+            attribute_cell_updates: WorkCredit::new(None),
         }
     }
 
@@ -142,6 +148,7 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         context.spatial_event_visits = WorkCredit::new(budget.max_spatial_event_visits);
         context.spatial_invocation_visits = WorkCredit::new(budget.max_spatial_invocation_visits);
         context.identity_checks = WorkCredit::new(budget.max_identity_checks);
+        context.attribute_cell_updates = WorkCredit::new(budget.max_attribute_cell_updates);
         context
     }
 
@@ -170,7 +177,51 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
             spatial_event_visits: self.spatial_event_visits.used(),
             spatial_invocation_visits: self.spatial_invocation_visits.used(),
             identity_checks: self.identity_checks.used(),
+            attribute_cell_updates: self.attribute_cell_updates.used(),
         }
+    }
+
+    pub(super) fn resolve_attributes(
+        &mut self,
+        base: &TeletextBaseDisplay,
+        original: &TeletextSpatialTrace,
+        layers: &TeletextGlyphLayers,
+        row_colours: &[TeletextColourReference; 25],
+        max_commands: usize,
+        transmission: Option<&TeletextAttributeTransmissionEvidence>,
+    ) -> Result<TeletextAttributeExecution, TeletextAttributeExecutionError> {
+        // The domain retains its derived stage ceiling. Remaining service
+        // credit only shortens that ceiling across original and settled passes.
+        let remaining = self.attribute_cell_updates.remaining;
+        let (result, admitted) = match transmission {
+            Some(transmission) => resolve_teletext_attribute_execution_with_transmission_and_usage(
+                base,
+                original,
+                layers,
+                row_colours,
+                max_commands,
+                transmission,
+                remaining,
+            ),
+            None => resolve_teletext_attribute_execution_with_usage(
+                base,
+                original,
+                layers,
+                row_colours,
+                max_commands,
+                remaining,
+            ),
+        };
+        if !self.attribute_cell_updates.debit(admitted) {
+            return Err(TeletextAttributeExecutionError {
+                owner: base.owner(),
+                location: None,
+                root_source: None,
+                invocation: None,
+                reason: TeletextAttributeExecutionFailure::WorkBudget,
+            });
+        }
+        result
     }
 
     pub(super) fn collect_display_references(

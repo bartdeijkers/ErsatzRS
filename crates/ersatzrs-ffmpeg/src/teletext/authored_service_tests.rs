@@ -653,6 +653,7 @@ pub(super) fn limits() -> TeletextAuthoredServiceEncodingBudget {
         max_spatial_event_visits: None,
         max_spatial_invocation_visits: None,
         max_identity_checks: None,
+        max_attribute_cell_updates: None,
         normalization: normalization_limits(),
     }
 }
@@ -683,3 +684,6 @@ mod planning_quota_tests;
 
 #[path = "authored_service_traversal_quota_tests.rs"]
 mod traversal_quota_tests;
+
+#[path = "authored_service_attribute_quota_tests.rs"]
+mod attribute_quota_tests;

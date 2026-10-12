@@ -10,8 +10,7 @@
 use std::collections::BTreeMap;
 
 use ersatzrs_domain::{
-    build_teletext_glyph_layers, resolve_teletext_attribute_execution,
-    resolve_teletext_attribute_execution_with_transmission, resolve_teletext_base_footprints,
+    build_teletext_glyph_layers, resolve_teletext_base_footprints,
     resolve_teletext_charset_execution, resolve_teletext_colour_composition,
     resolve_teletext_display_geometry, resolve_teletext_drcs_execution,
     resolve_teletext_glyph_intent, TeletextAttributeExecution, TeletextAttributeExecutionError,
@@ -945,20 +944,21 @@ fn display_after_transmission(
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<(TeletextAttributeExecution, TeletextDisplayResolution), TeletextMainCompositionError> {
     let (transmission, maximum) = transmission;
-    let attributes = resolve_teletext_attribute_execution_with_transmission(
-        base,
-        execution.spatial,
-        execution.glyphs,
-        colours.row_colours(),
-        maximum,
-        transmission,
-    )
-    .map_err(|reason| {
-        let location = reason
-            .location
-            .and_then(|value| original_location(source, value));
-        error(base.owner(), location, reason.into())
-    })?;
+    let attributes = context
+        .resolve_attributes(
+            base,
+            execution.spatial,
+            execution.glyphs,
+            colours.row_colours(),
+            maximum,
+            Some(transmission),
+        )
+        .map_err(|reason| {
+            let location = reason
+                .location
+                .and_then(|value| original_location(source, value));
+            error(base.owner(), location, reason.into())
+        })?;
     let display = original_display_resolution(
         base,
         footprints,
@@ -1113,7 +1113,7 @@ fn display_execution_from_spatial(
     let maximum = budget.max_commands;
     let glyphs = original_glyph_layers(base, &spatial, source, maximum)?;
     let attributes =
-        original_attribute_execution(base, &spatial, &glyphs, colours, source, maximum)?;
+        original_attribute_execution(base, &spatial, &glyphs, colours, source, maximum, context)?;
     let charsets =
         resolve_teletext_charset_execution(base, &spatial, &glyphs, maximum).map_err(|reason| {
             let location = reason
@@ -1163,8 +1163,10 @@ fn original_attribute_execution(
     colours: &TeletextColourContext,
     source: &TeletextEffectiveProgramSource,
     maximum: usize,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<TeletextAttributeExecution, TeletextMainCompositionError> {
-    resolve_teletext_attribute_execution(base, spatial, glyphs, colours.row_colours(), maximum)
+    context
+        .resolve_attributes(base, spatial, glyphs, colours.row_colours(), maximum, None)
         .map_err(|reason| {
             let location = reason
                 .location

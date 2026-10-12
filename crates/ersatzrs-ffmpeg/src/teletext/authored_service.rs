@@ -84,6 +84,9 @@ pub struct TeletextAuthoredServiceEncodingBudget {
     pub max_spatial_invocation_visits: Option<usize>,
     /// Optional cumulative admitted catalogue scans and carrier-ID candidate probes.
     pub max_identity_checks: Option<usize>,
+    /// Optional cumulative admitted attribute cell projections/writes; event
+    /// scans, private state, snapshots and observations remain separate work.
+    pub max_attribute_cell_updates: Option<usize>,
     /// Independent stage bounds applied to each display candidate.
     pub normalization: TeletextNormalizedMainProgramBudget,
 }
@@ -105,6 +108,7 @@ pub struct TeletextAuthoredServiceEncodingUsage {
     pub spatial_event_visits: Option<usize>,
     pub spatial_invocation_visits: Option<usize>,
     pub identity_checks: Option<usize>,
+    pub attribute_cell_updates: Option<usize>,
 }
 
 impl TeletextAuthoredServiceEncodingUsage {
@@ -122,6 +126,7 @@ impl TeletextAuthoredServiceEncodingUsage {
             spatial_event_visits: budget.max_spatial_event_visits.map(|_| 0),
             spatial_invocation_visits: budget.max_spatial_invocation_visits.map(|_| 0),
             identity_checks: budget.max_identity_checks.map(|_| 0),
+            attribute_cell_updates: budget.max_attribute_cell_updates.map(|_| 0),
         }
     }
 }

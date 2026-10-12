@@ -123,6 +123,35 @@ pub fn resolve_teletext_attribute_execution(
     row_colours: &[TeletextColourReference; 25],
     max_commands: usize,
 ) -> Result<TeletextAttributeExecution, TeletextAttributeExecutionError> {
+    resolve_teletext_attribute_execution_with_usage(
+        base,
+        original,
+        glyph_layers,
+        row_colours,
+        max_commands,
+        None,
+    )
+    .0
+}
+
+/// Execute unchanged attributes with optional admitted cell-update credit.
+/// The existing event-derived stage ceiling still applies. Only tail, Adaptive
+/// and winning Passive updates are counted; scans, snapshots, private state and
+/// candidate observations are not cell updates or total CPU/memory accounting.
+/// # Errors
+/// Preserves ordinary located failures and reports prior admitted updates on
+/// either outcome. Denied updates and preflight/initialization failures charge zero.
+pub fn resolve_teletext_attribute_execution_with_usage(
+    base: &TeletextBaseDisplay,
+    original: &TeletextSpatialTrace,
+    glyph_layers: &TeletextGlyphLayers,
+    row_colours: &[TeletextColourReference; 25],
+    max_commands: usize,
+    max_updates: Option<usize>,
+) -> (
+    Result<TeletextAttributeExecution, TeletextAttributeExecutionError>,
+    usize,
+) {
     execute_attributes(
         base,
         original,
@@ -130,6 +159,7 @@ pub fn resolve_teletext_attribute_execution(
         row_colours,
         max_commands,
         None,
+        max_updates,
     )
 }
 
@@ -145,6 +175,35 @@ pub fn resolve_teletext_attribute_execution_with_transmission(
     max_commands: usize,
     transmission: &TeletextAttributeTransmissionEvidence,
 ) -> Result<TeletextAttributeExecution, TeletextAttributeExecutionError> {
+    resolve_teletext_attribute_execution_with_transmission_and_usage(
+        base,
+        original,
+        glyph_layers,
+        row_colours,
+        max_commands,
+        transmission,
+        None,
+    )
+    .0
+}
+
+/// Execute exact transmission settlement with optional cell-update credit.
+/// Usage remains outside the immutable model and includes only the existing
+/// admitted update meter, retaining earlier charges after a later failure.
+/// # Errors
+/// Preserves ordinary located errors and exact-trace transmission admission.
+pub fn resolve_teletext_attribute_execution_with_transmission_and_usage(
+    base: &TeletextBaseDisplay,
+    original: &TeletextSpatialTrace,
+    glyph_layers: &TeletextGlyphLayers,
+    row_colours: &[TeletextColourReference; 25],
+    max_commands: usize,
+    transmission: &TeletextAttributeTransmissionEvidence,
+    max_updates: Option<usize>,
+) -> (
+    Result<TeletextAttributeExecution, TeletextAttributeExecutionError>,
+    usize,
+) {
     execute_attributes(
         base,
         original,
@@ -152,6 +211,7 @@ pub fn resolve_teletext_attribute_execution_with_transmission(
         row_colours,
         max_commands,
         Some(transmission),
+        max_updates,
     )
 }
 
@@ -162,7 +222,70 @@ fn execute_attributes(
     row_colours: &[TeletextColourReference; 25],
     max_commands: usize,
     transmission: Option<&TeletextAttributeTransmissionEvidence>,
-) -> Result<TeletextAttributeExecution, TeletextAttributeExecutionError> {
+    max_updates: Option<usize>,
+) -> (
+    Result<TeletextAttributeExecution, TeletextAttributeExecutionError>,
+    usize,
+) {
+    let (mut executor, diagnostic_limit) = match prepare_executor(
+        base,
+        original,
+        glyph_layers,
+        row_colours,
+        max_commands,
+        transmission,
+        max_updates,
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => return (Err(error), 0),
+    };
+    let initial_credit = executor.remaining;
+    let result = (|| {
+        executor.capture_unaddressable();
+        executor.execute_tails()?;
+        let before_adaptive = executor.cells.clone();
+        executor.execute_adaptive()?;
+        let before_passive = executor.cells.clone();
+        let mut private = vec![None; original.events().len()];
+        executor.execute_passive(&mut private)?;
+        let records = observe_candidates(glyph_layers, &before_passive, &private)?;
+        if executor.pending.len() > diagnostic_limit {
+            return Err(TeletextAttributeExecutionError {
+                owner: base.owner(),
+                location: None,
+                root_source: None,
+                invocation: None,
+                reason: TeletextAttributeExecutionFailure::WorkBudget,
+            });
+        }
+        Ok((before_adaptive, before_passive, records))
+    })();
+    let admitted = initial_credit - executor.remaining;
+    (
+        result.map(
+            |(before_adaptive, before_passive, records)| TeletextAttributeExecution {
+                owner: base.owner(),
+                transmission: transmission.cloned(),
+                cells: executor.cells,
+                before_adaptive,
+                before_passive,
+                records,
+                pending: executor.pending,
+            },
+        ),
+        admitted,
+    )
+}
+
+fn prepare_executor<'a>(
+    base: &TeletextBaseDisplay,
+    original: &'a TeletextSpatialTrace,
+    glyph_layers: &'a TeletextGlyphLayers,
+    row_colours: &[TeletextColourReference; 25],
+    max_commands: usize,
+    transmission: Option<&'a TeletextAttributeTransmissionEvidence>,
+    max_updates: Option<usize>,
+) -> Result<(Executor<'a>, usize), TeletextAttributeExecutionError> {
     let owner = base.owner();
     let fail = |reason| TeletextAttributeExecutionError {
         owner,
@@ -207,34 +330,15 @@ fn execute_attributes(
         .ok_or_else(|| fail(TeletextAttributeExecutionFailure::WorkBudget))?;
     preflight_observations(base, original, glyph_layers, max_commands)?;
     let cells = initial_cells(base, row_colours)?;
-    let mut executor = Executor {
+    let executor = Executor {
         transmission,
         original,
         layers: glyph_layers,
         cells,
         pending: Vec::new(),
-        remaining: maximum,
+        remaining: max_updates.map_or(maximum, |limit| maximum.min(limit)),
     };
-    executor.capture_unaddressable();
-    executor.execute_tails()?;
-    let before_adaptive = executor.cells.clone();
-    executor.execute_adaptive()?;
-    let before_passive = executor.cells.clone();
-    let mut private = vec![None; original.events().len()];
-    executor.execute_passive(&mut private)?;
-    let records = observe_candidates(glyph_layers, &before_passive, &private)?;
-    if executor.pending.len() > diagnostic_limit {
-        return Err(fail(TeletextAttributeExecutionFailure::WorkBudget));
-    }
-    Ok(TeletextAttributeExecution {
-        owner,
-        transmission: transmission.cloned(),
-        cells: executor.cells,
-        before_adaptive,
-        before_passive,
-        records,
-        pending: executor.pending,
-    })
+    Ok((executor, diagnostic_limit))
 }
 
 fn stage_cell(

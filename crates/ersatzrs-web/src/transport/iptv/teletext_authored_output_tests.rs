@@ -168,6 +168,7 @@ pub(in crate::transport::iptv) fn authored_service_with_counter(
             max_spatial_event_visits: None,
             max_spatial_invocation_visits: None,
             max_identity_checks: None,
+            max_attribute_cell_updates: None,
             normalization: normalization_budget(),
         },
     )

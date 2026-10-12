@@ -209,6 +209,7 @@ fn legacy_encoder_honors_comparison_quotas_while_disabled_usage_remains_none() {
             spatial_event_visits: None,
             spatial_invocation_visits: None,
             identity_checks: None,
+            attribute_cell_updates: None,
         }
     );
     let mut budget = limits();

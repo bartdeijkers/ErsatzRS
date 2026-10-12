@@ -1142,6 +1142,16 @@ fn exact_owner_mismatch_is_rejected_before_execution_with_no_input_mutation() {
     assert_eq!(error.location, None);
     assert_eq!(error.root_source, None);
     assert_eq!(error.invocation, None);
+    let (result, admitted) = resolve_teletext_attribute_execution_with_usage(
+        &foreign,
+        &original,
+        &glyphs,
+        &[TeletextColourReference::BLACK; 25],
+        16,
+        Some(0),
+    );
+    assert_eq!(result.unwrap_err(), error);
+    assert_eq!(admitted, 0);
     assert_eq!(foreign, before);
     assert_eq!(original, before_original);
     assert_eq!(glyphs, before_glyphs);
@@ -1457,4 +1467,266 @@ fn passive_g1_alpha_glyph_uses_private_colours_without_inheriting_local_attribut
     let gap = execution.cell(1, 7).unwrap();
     assert_eq!(gap.foreground().value().unwrap().get(), 13);
     assert_eq!(gap.background().value().unwrap().get(), 6);
+}
+
+fn update_meter_inputs(
+    service: &TeletextSemanticService,
+) -> (
+    TeletextBaseDisplay,
+    TeletextSpatialTrace,
+    TeletextGlyphLayers,
+) {
+    let base = base();
+    let original = resolve_teletext_spatial_trace(
+        service,
+        owner(),
+        TeletextSpatialTraceBudget {
+            max_events: 4096,
+            max_invocations: 32,
+        },
+    )
+    .unwrap();
+    let glyphs = build_teletext_glyph_layers(&base, &original, 4096).unwrap();
+    (base, original, glyphs)
+}
+
+fn update_meter_execution(
+    base: &TeletextBaseDisplay,
+    original: &TeletextSpatialTrace,
+    glyphs: &TeletextGlyphLayers,
+    transmission: Option<&TeletextAttributeTransmissionEvidence>,
+    maximum: Option<usize>,
+) -> (
+    Result<TeletextAttributeExecution, TeletextAttributeExecutionError>,
+    usize,
+) {
+    let rows = [TeletextColourReference::BLACK; 25];
+    match transmission {
+        None => resolve_teletext_attribute_execution_with_usage(
+            base, original, glyphs, &rows, 4096, maximum,
+        ),
+        Some(evidence) => resolve_teletext_attribute_execution_with_transmission_and_usage(
+            base, original, glyphs, &rows, 4096, evidence, maximum,
+        ),
+    }
+}
+
+fn update_meter_legacy_execution(
+    base: &TeletextBaseDisplay,
+    original: &TeletextSpatialTrace,
+    glyphs: &TeletextGlyphLayers,
+    transmission: Option<&TeletextAttributeTransmissionEvidence>,
+) -> TeletextAttributeExecution {
+    let rows = [TeletextColourReference::BLACK; 25];
+    match transmission {
+        None => resolve_teletext_attribute_execution(base, original, glyphs, &rows, 4096),
+        Some(evidence) => resolve_teletext_attribute_execution_with_transmission(
+            base, original, glyphs, &rows, 4096, evidence,
+        ),
+    }
+    .unwrap()
+}
+
+#[test]
+fn attribute_update_exact_and_one_less_limits_preserve_all_object_models_and_provenance() {
+    let target = local(0xffff);
+    for (object_type, expected_updates, denied_command) in [
+        (TeletextObjectType::Active, 32, 1),
+        (TeletextObjectType::Adaptive, 2, 2),
+        (TeletextObjectType::Passive, 1, 2),
+    ] {
+        let service = service(
+            vec![set(1, 0), invoke(target, object_type, None)],
+            vec![definition(
+                target,
+                object_type,
+                vec![set(0, 8), foreground(8, 13), glyph(8, b'A')],
+            )],
+        );
+        let (base, original, glyphs) = update_meter_inputs(&service);
+        let positions = original
+            .events()
+            .iter()
+            .enumerate()
+            .map(|(ordinal, event)| TeletextAttributeTransmissionPosition {
+                event_ordinal: ordinal,
+                source: event.source(),
+                invocation: event.invocation(),
+                word: ordinal,
+            })
+            .collect::<Vec<_>>();
+        let evidence =
+            TeletextAttributeTransmissionEvidence::new(&original, &positions, 4096).unwrap();
+        let saved = (
+            base.clone(),
+            original.clone(),
+            glyphs.clone(),
+            evidence.clone(),
+        );
+        for transmission in [None, Some(&evidence)] {
+            let expected = update_meter_legacy_execution(&base, &original, &glyphs, transmission);
+            for maximum in [None, Some(expected_updates), Some(usize::MAX)] {
+                let (result, admitted) =
+                    update_meter_execution(&base, &original, &glyphs, transmission, maximum);
+                assert_eq!(result.unwrap(), expected);
+                assert_eq!(admitted, expected_updates);
+            }
+            let (result, admitted) = update_meter_execution(
+                &base,
+                &original,
+                &glyphs,
+                transmission,
+                Some(expected_updates - 1),
+            );
+            let error = result.unwrap_err();
+            assert_eq!(admitted, expected_updates - 1);
+            assert_eq!(error.owner, owner());
+            assert_eq!(error.reason, TeletextAttributeExecutionFailure::WorkBudget);
+            assert_eq!(
+                error.location,
+                Some(TeletextEnhancementSource {
+                    object: Some(target),
+                    command: denied_command
+                })
+            );
+            assert_eq!(
+                error.root_source,
+                Some(TeletextSpatialRootSource::Local { command: 1 })
+            );
+            assert_eq!(
+                error.invocation.map(TeletextSpatialInvocationId::get),
+                Some(0)
+            );
+        }
+        assert_eq!((base, original, glyphs, evidence), saved);
+    }
+}
+
+#[test]
+fn zero_attribute_update_credit_preserves_empty_and_glyph_only_execution() {
+    for main in [vec![], vec![set(1, 8), glyph(8, b'A')]] {
+        let service = service(main, vec![]);
+        let (base, original, glyphs) = update_meter_inputs(&service);
+        let evidence = TeletextAttributeTransmissionEvidence::new(&original, &[], 4096).unwrap();
+        let expected = execute(&service, &base, 4096).unwrap();
+        let (result, admitted) = update_meter_execution(&base, &original, &glyphs, None, Some(0));
+        assert_eq!(admitted, 0);
+        assert_eq!(result.unwrap(), expected);
+        let expected = resolve_teletext_attribute_execution_with_transmission(
+            &base,
+            &original,
+            &glyphs,
+            &[TeletextColourReference::BLACK; 25],
+            4096,
+            &evidence,
+        )
+        .unwrap();
+        let (result, admitted) =
+            update_meter_execution(&base, &original, &glyphs, Some(&evidence), Some(0));
+        assert_eq!(admitted, 0);
+        assert_eq!(result.unwrap(), expected);
+    }
+}
+
+#[test]
+fn attribute_update_usage_is_zero_before_command_or_transmission_admission() {
+    let service = service(vec![set(1, 8), foreground(8, 13)], vec![]);
+    let (base, original, glyphs) = update_meter_inputs(&service);
+    let rows = [TeletextColourReference::BLACK; 25];
+    let saved = (base.clone(), original.clone(), glyphs.clone());
+    let expected =
+        resolve_teletext_attribute_execution(&base, &original, &glyphs, &rows, 1).unwrap_err();
+    let (result, admitted) = resolve_teletext_attribute_execution_with_usage(
+        &base,
+        &original,
+        &glyphs,
+        &rows,
+        1,
+        Some(0),
+    );
+    assert_eq!(result.unwrap_err(), expected);
+    assert_eq!(admitted, 0);
+    assert_eq!(
+        expected.reason,
+        TeletextAttributeExecutionFailure::CommandBudget { maximum: 1 }
+    );
+    let other_service = self::service(vec![], vec![]);
+    let (_, other, _) = update_meter_inputs(&other_service);
+    let foreign = TeletextAttributeTransmissionEvidence::new(&other, &[], 4096).unwrap();
+    let expected = resolve_teletext_attribute_execution_with_transmission(
+        &base, &original, &glyphs, &rows, 4096, &foreign,
+    )
+    .unwrap_err();
+    let (result, admitted) = resolve_teletext_attribute_execution_with_transmission_and_usage(
+        &base,
+        &original,
+        &glyphs,
+        &rows,
+        4096,
+        &foreign,
+        Some(0),
+    );
+    assert_eq!(result.unwrap_err(), expected);
+    assert_eq!(admitted, 0);
+    assert_eq!(
+        expected.reason,
+        TeletextAttributeExecutionFailure::TransmissionMismatch
+    );
+    assert_eq!((base, original, glyphs), saved);
+}
+
+#[test]
+fn attribute_update_usage_preserves_real_transmission_tie_settlement() {
+    let service = service(
+        vec![
+            set(1, 18),
+            foreground(18, 4),
+            foreground(18, 13),
+            glyph(18, b'A'),
+        ],
+        vec![],
+    );
+    let (base, original, glyphs) = update_meter_inputs(&service);
+    let positions = [1, 2].map(|ordinal| {
+        let event = original.events()[ordinal];
+        TeletextAttributeTransmissionPosition {
+            event_ordinal: ordinal,
+            source: event.source(),
+            invocation: event.invocation(),
+            word: ordinal,
+        }
+    });
+    let evidence = TeletextAttributeTransmissionEvidence::new(&original, &positions, 4096).unwrap();
+    let (unsettled, admitted) = update_meter_execution(&base, &original, &glyphs, None, Some(44));
+    let unsettled = unsettled.unwrap();
+    assert_eq!(admitted, 44);
+    assert_eq!(unsettled.cell(1, 18).unwrap().foreground().value(), None);
+    assert!(!unsettled.pending().is_empty());
+    let expected = update_meter_legacy_execution(&base, &original, &glyphs, Some(&evidence));
+    let (settled, admitted) =
+        update_meter_execution(&base, &original, &glyphs, Some(&evidence), Some(44));
+    let settled = settled.unwrap();
+    assert_eq!(admitted, 44);
+    assert_eq!(settled, expected);
+    assert_eq!(foreground_value(&settled, 1, 18), 13);
+    assert!(settled.pending().is_empty());
+    for transmission in [None, Some(&evidence)] {
+        let (result, admitted) =
+            update_meter_execution(&base, &original, &glyphs, transmission, Some(43));
+        let error = result.unwrap_err();
+        assert_eq!(admitted, 43);
+        assert_eq!(error.reason, TeletextAttributeExecutionFailure::WorkBudget);
+        assert_eq!(
+            error.location,
+            Some(TeletextEnhancementSource {
+                object: None,
+                command: 2
+            })
+        );
+        assert_eq!(
+            error.root_source,
+            Some(TeletextSpatialRootSource::Local { command: 2 })
+        );
+        assert_eq!(error.invocation, None);
+    }
 }

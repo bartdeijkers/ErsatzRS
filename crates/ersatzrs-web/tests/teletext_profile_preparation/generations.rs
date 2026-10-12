@@ -331,10 +331,31 @@ async fn saved_profile_change(
     assert!(matches!(result, TeletextProfileMutation::Saved(_)));
 }
 
+fn attribute_updates(
+    service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    maximum: usize,
+) -> usize {
+    let mut policy = channel_documents::policy();
+    policy.encoding.max_attribute_cell_updates = Some(maximum);
+    let (result, usage) =
+        ersatzrs_ffmpeg::teletext::encode_teletext_authored_service_with_work_usage(
+            service.declared().clone(),
+            &policy.transmissions,
+            &policy.encoding,
+            Some(designs::deadline()),
+        );
+    let encoded = result.unwrap();
+    assert_eq!(designs::units(&encoded), designs::units(service));
+    assert_eq!(encoded.magazine_units(), service.magazine_units());
+    assert_eq!(preview(&encoded).raster(), preview(service).raster());
+    usage.attribute_cell_updates.unwrap()
+}
+
 #[tokio::test]
 async fn compiler_and_deadline_failures_preserve_the_exact_accepted_pointer() {
     let (mut fixture, saved, pending) = prepared().await;
     let original = accepted(accept(&fixture, &pending, 1, None).await);
+    assert!(attribute_updates(original.service(), 100_000) > 0);
     let before = designs::config(&fixture).await;
     let invoked = calls(&fixture);
     let target = || TeletextGenerationTarget {
@@ -372,7 +393,7 @@ async fn compiler_and_deadline_failures_preserve_the_exact_accepted_pointer() {
             NativeTeletextDesignError::Encoding(_)
         ))
     ));
-    let exhaust: [fn(&mut ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget); 8] = [
+    let exhaust: [fn(&mut ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget); 9] = [
         |budget| budget.max_display_updates = Some(0),
         |budget| budget.max_glyph_comparison_work = Some(0),
         |budget| budget.max_display_comparison_updates = Some(0),
@@ -381,6 +402,7 @@ async fn compiler_and_deadline_failures_preserve_the_exact_accepted_pointer() {
         |budget| budget.max_assembly_work = Some(0),
         |budget| budget.max_collected_commands = Some(0),
         |budget| budget.max_spatial_event_visits = Some(0),
+        |budget| budget.max_attribute_cell_updates = Some(0),
     ];
     for exhaust in exhaust {
         let mut policy = channel_documents::policy();
@@ -471,6 +493,58 @@ async fn zero_ancestry_quota_with_no_calls_is_valid_compilation_before_replay_re
     let invoked = calls(&fixture);
     let mut policy = channel_documents::policy();
     policy.encoding.max_ancestry_work = Some(0);
+    let result = accept_original_teletext_generation(
+        &fixture.state.application,
+        TeletextGenerationTarget {
+            request: pending,
+            expected_design_head: saved.head().revision,
+            expected_generation_id: Some(original.generation().id),
+        },
+        designs::budget(),
+        policy,
+        designs::deadline(),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        result,
+        Mutation::Rejected(Rejection::AlreadyAccepted)
+    ));
+    assert_eq!(count(&fixture).await, 1);
+    assert_same_output(&recover(&fixture).await.unwrap(), &original);
+    assert_eq!(designs::config(&fixture).await, before);
+    assert_eq!(calls(&fixture), invoked);
+    assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+}
+
+#[tokio::test]
+async fn zero_attribute_quota_with_empty_pages_is_valid_before_replay_rejection() {
+    let (mut fixture, _) = designs::persistent_pair(DocumentFixture::Authored).await;
+    for label in ["first", "second"] {
+        let path = fixture
+            .root
+            .path()
+            .join(format!("channel-response-{label}.json"));
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        document["pages"][0]["rows"] = serde_json::json!([]);
+        if label == "second" {
+            document["page_enhancements"][0]["local_program"]["commands"] = serde_json::json!([]);
+        }
+        channel_documents::write_response(&fixture, label, &document);
+    }
+    let candidate = channel_documents::candidate(&fixture, channel_documents::policy())
+        .await
+        .unwrap();
+    let saved = designs::save(&fixture, candidate, None).await;
+    let pending = request(&fixture, &saved, None).await;
+    let original = accepted(accept(&fixture, &pending, 1, None).await);
+    assert_eq!(attribute_updates(original.service(), 0), 0);
+    let before = designs::config(&fixture).await;
+    let invoked = calls(&fixture);
+    let mut policy = channel_documents::policy();
+    policy.encoding.max_attribute_cell_updates = Some(0);
     let result = accept_original_teletext_generation(
         &fixture.state.application,
         TeletextGenerationTarget {

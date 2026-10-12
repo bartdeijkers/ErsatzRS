@@ -4349,9 +4349,23 @@ candidate probes; assembly's `*_with_work_usage` reports separate work and
 identity checks across both recipe passes. Failed recipes debit before returning
 failure, without inferring their cost from a successful final ID.
 
-These meters cannot be summed into an invented total CPU/RSS cost. Catalogue
-indexing/graph validation, attribute execution and other native work still need
-separate admission analysis; structural reservation is not full validation cost.
+An additional optional `max_attribute_cell_updates` shares admitted attribute
+cell projections and writes across original execution, physical replay and both
+transmission settlements, including native absent-X26 settlement. The
+`attribute_cell_updates` usage bucket counts the existing tail, Adaptive and
+winning Passive update meter. `resolve_teletext_attribute_execution_with_usage`
+and `resolve_teletext_attribute_execution_with_transmission_and_usage` return
+the unchanged result plus admitted updates; their last argument is optional
+update credit. The original derived event-count-times-72 stage ceiling still
+applies. Owner/input/evidence/preflight/initialization errors consume no updates;
+denied updates consume none and later errors retain prior admissions. Truly
+update-free pages are valid with `Some(0)`; disabled service credit reports None.
+
+These meters cannot be summed into an invented total CPU/RSS cost. Attribute
+event scans, private-state changes, snapshots and observations are not counted
+cell updates. Catalogue indexing/graph validation and other native work still
+need separate admission analysis; structural reservation is not full validation
+cost.
 No production limits or full engine acceptance are inferred.
 Resource-rich measurement and the canonical P9A-04 receipt determine the next
 production-policy step; no production defaults are inferred here.

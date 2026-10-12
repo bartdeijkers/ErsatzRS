@@ -303,6 +303,7 @@ fn metered_reencode(
     policy.encoding.max_spatial_event_visits = Some(usize::MAX);
     policy.encoding.max_spatial_invocation_visits = Some(usize::MAX);
     policy.encoding.max_identity_checks = Some(usize::MAX);
+    policy.encoding.max_attribute_cell_updates = Some(usize::MAX);
 
     let started = Instant::now();
     let (metered, usage) = encode_teletext_authored_service_with_work_usage(
@@ -324,6 +325,7 @@ fn metered_reencode(
     assert!(usage.collected_drcs_references.unwrap() > 0);
     assert!(usage.spatial_event_visits.unwrap() > 0);
     assert!(usage.spatial_invocation_visits.unwrap() > 0);
+    assert!(usage.attribute_cell_updates.unwrap() > 0);
 
     (usage, micros)
 }
@@ -496,7 +498,8 @@ async fn sixteen_authored_pages_with_shared_objects_and_drcs_preserve_native_flo
                 "collected_drcs_references":usage.collected_drcs_references.unwrap(),
                 "spatial_event_visits":usage.spatial_event_visits.unwrap(),
                 "spatial_invocation_visits":usage.spatial_invocation_visits.unwrap(),
-                "identity_checks":usage.identity_checks.unwrap()},
+                "identity_checks":usage.identity_checks.unwrap(),
+                "attribute_cell_updates":usage.attribute_cell_updates.unwrap()},
             "timings_micros":{"prepare_and_encode":prepare_micros,"metered_reencode":metered_encode_micros,"save":save_micros,"historical_preview_reload":preview_micros,"request_and_accept":publication_micros,"accepted_reload":reload_micros}
         })
     );

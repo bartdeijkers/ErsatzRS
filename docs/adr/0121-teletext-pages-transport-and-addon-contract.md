@@ -35,8 +35,11 @@ wire or artifact identity. Planning, placement, assembly and ancestry also retai
 separate admitted service credits; truly empty work may fit zero credit. Original
 and supplied-program collection, both spatial count/emit passes and carrier-ID
 scans/probes now share additional independent credits. Failed recipes retain
-actual admitted identity usage. Catalogue indexing/graph validation, attribute
-execution and other native admission accounting remain open. Conservative reservations
+actual admitted identity usage. Attribute cell projections/writes also share
+credit across original/physical execution and all transmission settlements.
+Scans, snapshots, private state and observations remain outside that meter;
+catalogue indexing/graph validation and other native admission accounting
+remain open. Conservative reservations
 are charges, not executed CPU/RSS costs. Measured production host policy remains
 open; P9A-04 owns proof and the resource-rich measurement scope.
 Retained late construction preflights gate/journal/probe overlap and
