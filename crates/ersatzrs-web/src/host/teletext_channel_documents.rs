@@ -206,8 +206,10 @@ pub async fn prepare_channel_teletext_document_candidate(
     context: &SuppliedTeletextGuideContext<'_>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError> {
+    let mut input_budget = policy.input;
+    input_budget.max_producers = maximum_producers(&policy);
     let input = application
-        .invoke_channel_teletext_documents(channel_id, entry_addon_id, context, policy.input)
+        .invoke_channel_teletext_documents(channel_id, entry_addon_id, context, input_budget)
         .await?;
     let candidate = tokio::task::spawn_blocking(move || encode_channel(input, policy))
         .await
@@ -236,6 +238,7 @@ fn encode_channel(
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError> {
     check_deadline(input.deadline())?;
+    check_producer_budget(input.producer_count(), &policy)?;
     let PreparedChannelTeletextDocumentParts {
         selection,
         generation,
@@ -295,6 +298,7 @@ pub(super) fn encode_original_channel_documents(
     if documents.len() != selection.bindings.len() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
+    check_producer_budget(documents.len(), &policy)?;
     if documents.is_empty() {
         return Ok(EncodedChannelTeletextOriginals {
             v1_region: None,
@@ -350,18 +354,31 @@ pub(super) fn encode_original_channel_documents(
     })
 }
 
+pub(super) fn maximum_producers(policy: &TeletextChannelDocumentEncodingPolicy) -> usize {
+    policy
+        .input
+        .max_producers
+        .min(policy.composition.max_producers)
+}
+
+fn check_producer_budget(
+    count: usize,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    let maximum = maximum_producers(policy);
+    if count > maximum {
+        return Err(ChannelTeletextDocumentEncodingError::ProducerBudget { count, maximum });
+    }
+    Ok(())
+}
+
 fn prepare_producers(
     documents: Vec<TeletextProfileDocument>,
     deadline: Instant,
     region: Option<TeletextEncodingRegion>,
     policy: &TeletextChannelDocumentEncodingPolicy,
 ) -> Result<Vec<TeletextProducerPresentation>, ChannelTeletextDocumentEncodingError> {
-    if documents.len() > policy.composition.max_producers {
-        return Err(ChannelTeletextDocumentEncodingError::ProducerBudget {
-            count: documents.len(),
-            maximum: policy.composition.max_producers,
-        });
-    }
+    check_producer_budget(documents.len(), policy)?;
     preflight_producer_storage(documents.len(), policy.composition.max_storage_bytes)?;
     let mut producers = Vec::with_capacity(documents.len());
     for (binding, document) in documents.into_iter().enumerate() {

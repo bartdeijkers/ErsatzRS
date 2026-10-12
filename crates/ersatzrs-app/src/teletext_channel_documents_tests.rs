@@ -188,6 +188,7 @@ fn basic(selection: TeletextSelectionSnapshot) -> TeletextProfileRuntimeReceipt 
 
 fn input_budget() -> TeletextChannelDocumentInputBudget {
     TeletextChannelDocumentInputBudget {
+        max_producers: MAX_BINDINGS,
         max_response_bytes: 1024 * 1024,
     }
 }
@@ -461,6 +462,7 @@ async fn off_is_fenced_empty_and_on_requires_selected_entry_without_writes() {
         Some("obsolete"),
         &context(),
         TeletextChannelDocumentInputBudget {
+            max_producers: 0,
             max_response_bytes: 0,
         },
         |_, _, _| async { panic!("Off invoked producer") },
@@ -468,6 +470,7 @@ async fn off_is_fenced_empty_and_on_requires_selected_entry_without_writes() {
     )
     .await
     .unwrap();
+    assert_eq!(input.producer_count(), 0);
     assert!(input.requests().request(TeletextPageContract::V1).is_none());
     assert!(input.requests().request(TeletextPageContract::V2).is_none());
     let prepared = input.validate(document_budget()).unwrap();
@@ -562,6 +565,7 @@ async fn off_correlation_retention_obeys_generation_byte_bound_without_building_
             None,
             &context,
             TeletextChannelDocumentInputBudget {
+                max_producers: 0,
                 max_response_bytes: 0,
             },
             |_, _, _| async { panic!("Off invoked producer") },
@@ -683,6 +687,7 @@ async fn aggregate_cutoff_is_exact_and_individual_wire_limit_is_independent() {
         Some(A),
         &context(),
         TeletextChannelDocumentInputBudget {
+            max_producers: MAX_BINDINGS,
             max_response_bytes: exact,
         },
         |selected, _, _| async move { Ok(mixed_receipt(selected)) },
@@ -702,6 +707,7 @@ async fn aggregate_cutoff_is_exact_and_individual_wire_limit_is_independent() {
             Some(A),
             &context(),
             TeletextChannelDocumentInputBudget {
+                max_producers: MAX_BINDINGS,
                 max_response_bytes: maximum,
             },
             |selected, _, _| {
@@ -725,6 +731,7 @@ async fn aggregate_cutoff_is_exact_and_individual_wire_limit_is_independent() {
             Some(A),
             &context(),
             TeletextChannelDocumentInputBudget {
+                max_producers: MAX_BINDINGS,
                 max_response_bytes: usize::MAX
             },
             |selected, _, _| async move {
@@ -952,4 +959,165 @@ async fn bounded_selection_shape_and_storage_fail_before_invocation() {
                 | ChannelTeletextDocumentError::BindingCount)
         ));
     }
+}
+
+#[tokio::test]
+async fn trusted_producer_count_admits_exact_membership_and_denies_one_less_or_zero() {
+    let repo = mixed_repository();
+    let before = repo.selection.lock().unwrap().clone();
+    let calls = Cell::new(0);
+    let input = prepare_with_ports(
+        &repo,
+        9,
+        Some(A),
+        &context(),
+        TeletextChannelDocumentInputBudget {
+            max_producers: 2,
+            ..input_budget()
+        },
+        |selected, _, _| {
+            calls.set(calls.get() + 1);
+            async move { Ok(mixed_receipt(selected)) }
+        },
+        Instant::now,
+    )
+    .await
+    .unwrap();
+    assert_eq!(input.producer_count(), 2);
+    assert!(input.requests().request(TeletextPageContract::V1).is_some());
+    assert!(input.requests().request(TeletextPageContract::V2).is_some());
+    let prepared = input.validate(document_budget()).unwrap();
+    assert_eq!(prepared.selection(), &before);
+    assert_eq!(prepared.documents().len(), 2);
+    assert_eq!(prepared.sources().len(), 2);
+    assert_eq!(calls.get(), 2);
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
+    assert_eq!(*repo.selection.lock().unwrap(), before);
+    for maximum in [1, 0] {
+        let repo = mixed_repository();
+        let before = repo.selection.lock().unwrap().clone();
+        let calls = Cell::new(0);
+        let result = prepare_with_ports(
+            &repo,
+            9,
+            Some(A),
+            &context(),
+            TeletextChannelDocumentInputBudget {
+                max_producers: maximum,
+                ..input_budget()
+            },
+            |selected, _, _| {
+                calls.set(calls.get() + 1);
+                async move { Ok(mixed_receipt(selected)) }
+            },
+            Instant::now,
+        )
+        .await;
+        assert!(matches!(result,
+            Err(ChannelTeletextDocumentError::ProducerBudget { count: 2, maximum: limit })
+            if limit == maximum));
+        assert_eq!(calls.get(), 0);
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+        assert_eq!(*repo.selection.lock().unwrap(), before);
+    }
+}
+
+#[tokio::test]
+async fn trusted_producer_count_precedes_membership_entry_and_guide_request_work() {
+    for defect in 0..3 {
+        let repo = Repository::two();
+        match defect {
+            1 => repo.selection.lock().unwrap().bindings[1].addon_id = A.to_owned(),
+            2 => repo.selection.lock().unwrap().channel_id = 10,
+            _ => {}
+        }
+        let before = repo.selection.lock().unwrap().clone();
+        let mut invalid_context = context();
+        invalid_context.generation = "";
+        invalid_context.locale = "";
+        invalid_context.timezone = "invalid";
+        let calls = Cell::new(0);
+        let result = prepare_with_ports(
+            &repo,
+            9,
+            None,
+            &invalid_context,
+            TeletextChannelDocumentInputBudget {
+                max_producers: 1,
+                ..input_budget()
+            },
+            |selected, _, _| {
+                calls.set(calls.get() + 1);
+                async move { Ok(basic(selected)) }
+            },
+            Instant::now,
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(ChannelTeletextDocumentError::ProducerBudget {
+                count: 2,
+                maximum: 1
+            })
+        ));
+        assert_eq!(calls.get(), 0);
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+        assert_eq!(*repo.selection.lock().unwrap(), before);
+    }
+}
+
+#[tokio::test]
+async fn static_binding_ceiling_and_original_deadline_precede_trusted_producer_cap() {
+    let repo = Repository::new(vec![binding(A, 1); MAX_BINDINGS + 1]);
+    let before = repo.selection.lock().unwrap().clone();
+    let result = prepare_with_ports(
+        &repo,
+        9,
+        None,
+        &context(),
+        TeletextChannelDocumentInputBudget {
+            max_producers: 0,
+            ..input_budget()
+        },
+        |_, _, _| async { panic!("over-static-ceiling selection invoked producer") },
+        Instant::now,
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(ChannelTeletextDocumentError::BindingCount)
+    ));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+    assert_eq!(*repo.selection.lock().unwrap(), before);
+    let repo = Repository::two();
+    let before = repo.selection.lock().unwrap().clone();
+    let start = Instant::now();
+    let ticks = Cell::new(0);
+    let result = prepare_with_ports(
+        &repo,
+        9,
+        None,
+        &context(),
+        TeletextChannelDocumentInputBudget {
+            max_producers: 0,
+            ..input_budget()
+        },
+        |_, _, _| async { panic!("expired selection invoked producer") },
+        || {
+            let tick = ticks.get();
+            ticks.set(tick + 1);
+            if tick == 0 {
+                start
+            } else {
+                start + PREPARATION_TIMEOUT
+            }
+        },
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(ChannelTeletextDocumentError::TimedOut)
+    ));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+    assert_eq!(*repo.selection.lock().unwrap(), before);
 }

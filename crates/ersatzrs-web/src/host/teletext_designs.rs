@@ -31,7 +31,7 @@ use ersatzrs_ffmpeg::teletext::{
 use sha2::{Digest, Sha256};
 
 use super::teletext_channel_documents::{
-    encode_original_channel_documents, ChannelTeletextDocumentEncodingError,
+    encode_original_channel_documents, maximum_producers, ChannelTeletextDocumentEncodingError,
     EncodedChannelTeletextDocumentCandidate, EncodedChannelTeletextOriginals,
     TeletextChannelDocumentEncodingPolicy,
 };
@@ -309,11 +309,15 @@ pub async fn reload_original_teletext_design_revision(
     application: &ApplicationServices,
     id: EntityId,
     revision: i64,
-    budget: TeletextDesignDocumentBudget,
+    mut budget: TeletextDesignDocumentBudget,
     mut policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> Result<Option<RestoredOriginalTeletextDesign>, NativeTeletextDesignError> {
     check_deadline(deadline)?;
+    // Restrict the decoder's existing streaming document-count admission before
+    // it converts any original into a semantic service. Stored bytes retain the
+    // independent max_serialized_bytes limit; entry/lifecycle content is unchanged.
+    budget.max_documents = budget.max_documents.min(maximum_producers(&policy));
     let Some(stored) = application
         .teletext_design_revision(id, revision, budget.max_serialized_bytes)
         .await?

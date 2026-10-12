@@ -50,7 +50,7 @@ async fn request(
     }
 }
 
-async fn accept(
+pub(super) async fn accept(
     fixture: &Fixture,
     request: &TeletextPublicationRequest,
     head: i64,
@@ -71,7 +71,9 @@ async fn accept(
     .unwrap()
 }
 
-fn accepted(result: Mutation<AcceptedTeletextOutputCandidate>) -> AcceptedTeletextOutputCandidate {
+pub(super) fn accepted(
+    result: Mutation<AcceptedTeletextOutputCandidate>,
+) -> AcceptedTeletextOutputCandidate {
     match result {
         Mutation::Accepted(value) => value,
         Mutation::Rejected(reason) => panic!("unexpected generation rejection: {reason:?}"),
@@ -123,7 +125,7 @@ fn assert_same_output(
     assert!(first.raster().diagnostics().is_empty());
 }
 
-fn preview(
+pub(super) fn preview(
     service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
 ) -> ersatzrs_web::host::teletext_preview::TeletextNativePreview<'_> {
     project_teletext_preview(
@@ -144,7 +146,7 @@ fn preview(
     .unwrap()
 }
 
-async fn prepared() -> (
+pub(super) async fn prepared() -> (
     Fixture,
     SavedOriginalTeletextDesign,
     TeletextPublicationRequest,

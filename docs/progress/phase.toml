@@ -1212,11 +1212,13 @@ behavior. The sixteen-display populated POP/GPOP/DRCS/GDRCS native
 preview/save/accept/reload fixture measures admitted buckets, not worst-case
 CPU/RSS. Truly empty ancestry/attribute work is valid under zero credit;
 positive-work exhaustion preserves accepted output. Attribute cell updates share
-service credit across original/physical execution and every settlement. Next enforce the composition producer cap before
-profile request preparation/invocation and before saved-original decoding.
+service credit across original/physical execution and every settlement. Producer
+admission now intersects input/composition limits before request preparation and
+invocation, with the same document-count cap before saved-original decoding.
 Catalogue indexing/closure work is already finite under structural caps and
 shared assembly reservations; missing telemetry does not prove unbounded work.
-Prove a production-shaped workload and concurrent admission before host policy;
+Next prove a production-shaped workload and bounded concurrent admission before
+host compiler/output policy;
 connect ordinary final-route lookup/Health and retained first-byte command
 provenance. Accepted-specific retry execution and whole-process restart remain
 unproven. Warm publisher ownership and

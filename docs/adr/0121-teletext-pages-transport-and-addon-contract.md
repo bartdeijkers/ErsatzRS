@@ -41,7 +41,11 @@ Scans, snapshots, private state and observations remain outside that meter;
 catalogue indexing/graph validation and other native admission accounting
 remain open. Conservative reservations
 are charges, not executed CPU/RSS costs. Measured production host policy remains
-open; P9A-04 owns proof and the resource-rich measurement scope.
+open; P9A-04 owns proof and the resource-rich measurement scope. Input/composition
+producer limits now intersect before request preparation/invocation, with defensive
+native checks before validation/lifting. Saved reload restricts the existing
+bounded document-count decoder before native original parsing. Rejection retains
+immutable revisions and accepted output; bounded storage reads/outer scans remain.
 Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact

@@ -60,6 +60,8 @@ mod guide_publications;
 mod output_candidates;
 #[path = "teletext_profile_preparation/preview.rs"]
 mod preview;
+#[path = "teletext_profile_preparation/producer_admission.rs"]
+mod producer_admission;
 #[path = "teletext_profile_preparation/publications.rs"]
 mod publications;
 const SCRIPT: &str = r#"case "$1" in

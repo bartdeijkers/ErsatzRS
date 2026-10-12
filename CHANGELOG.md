@@ -423,6 +423,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Enforce teletext producer limits before addon invocation and original-document
+  validation, including saved-design reconstruction. Over-limit work leaves the
+  stored revision, accepted generation and ordinary playback unchanged.
 - Honor the original teletext compilation deadline between resource writers,
   display-normalization stages and packet assembly. Expiry returns no partial
   candidate and cannot replace an accepted generation. Checkpoints do not

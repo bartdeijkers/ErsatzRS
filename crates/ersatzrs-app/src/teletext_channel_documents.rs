@@ -60,12 +60,15 @@ impl fmt::Debug for TeletextChannelRequestTemplates {
     }
 }
 
-/// Trusted cumulative retained producer-response budget, independent of wire caps.
+/// Trusted selected-producer and retained response budgets, independent of wire caps.
 /// At most two guide templates additionally obey the existing 4 MiB request cap.
 /// This does not bound total process memory or parsed models; validation uses the
 /// caller's separate semantic and declaration budgets.
 #[derive(Debug, Clone, Copy)]
 pub struct TeletextChannelDocumentInputBudget {
+    /// Admit the complete selected channel before requests or producer invocation.
+    /// The independent static binding ceiling still applies; zero accepts Off.
+    pub max_producers: usize,
     pub max_response_bytes: usize,
 }
 
@@ -80,6 +83,12 @@ pub struct BoundChannelTeletextDocumentInput {
 }
 
 impl BoundChannelTeletextDocumentInput {
+    /// Observe selected producer count without interpreting the retained receipts.
+    #[must_use]
+    pub const fn producer_count(&self) -> usize {
+        self.selection.bindings.len()
+    }
+
     /// Borrow retained preflight bytes before synchronous document validation.
     #[must_use]
     pub const fn requests(&self) -> &TeletextChannelRequestTemplates {
@@ -286,6 +295,8 @@ pub enum ChannelTeletextDocumentError {
     SelectionShape,
     #[error("teletext channel selection exceeds its binding limit")]
     BindingCount,
+    #[error("teletext channel producer count {count} exceeds trusted budget {maximum}")]
+    ProducerBudget { count: usize, maximum: usize },
     #[error("teletext channel requires an explicit entry add-on")]
     EntryAddonRequired,
     #[error("teletext channel entry add-on is not selected")]
@@ -376,7 +387,7 @@ where
         .ok_or(ChannelTeletextDocumentError::TimedOut)?;
     let selection = snapshot(repository, channel_id).await?;
     check_deadline(now(), deadline)?;
-    validate_selection(&selection, channel_id)?;
+    validate_selection(&selection, channel_id, budget.max_producers)?;
     let entry = select_entry(&selection, entry_addon_id)?;
     let requests = preflight_requests(&selection, context)?;
     check_deadline(now(), deadline)?;
@@ -434,9 +445,16 @@ async fn snapshot(
 fn validate_selection(
     selection: &TeletextChannelSelectionSnapshot,
     channel_id: EntityId,
+    maximum: usize,
 ) -> Result<(), ChannelTeletextDocumentError> {
     if selection.bindings.len() > MAX_BINDINGS {
         return Err(ChannelTeletextDocumentError::BindingCount);
+    }
+    if selection.bindings.len() > maximum {
+        return Err(ChannelTeletextDocumentError::ProducerBudget {
+            count: selection.bindings.len(),
+            maximum,
+        });
     }
     let mut seen = BTreeSet::new();
     if selection.channel_id != channel_id

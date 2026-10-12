@@ -34,6 +34,7 @@ pub(super) fn policy() -> TeletextChannelDocumentEncodingPolicy {
     let original = documents::policy();
     TeletextChannelDocumentEncodingPolicy {
         input: TeletextChannelDocumentInputBudget {
+            max_producers: 8,
             max_response_bytes: 32_768,
         },
         validation: original.validation,

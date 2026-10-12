@@ -4366,6 +4366,21 @@ event scans, private-state changes, snapshots and observations are not counted
 cell updates. Catalogue indexing/graph validation and other native work still
 need separate admission analysis; structural reservation is not full validation
 cost.
+`TeletextChannelDocumentInputBudget::max_producers` is an inclusive trusted
+channel producer count, checked after the original snapshot/deadline and static
+1,024-binding ceiling, before membership/entry/request construction, receipt
+allocation or addon invocation. The numeric preparation `ProducerBudget` error
+reports count and maximum without producer content. An empty Off selection fits
+zero. The host uses the smaller input/composition producer cap and defensively
+checks it before document validation or native lift/composition.
+
+Historical reload restricts the existing design `max_documents` to that same
+minimum before decoding stored originals. The bounded outer JSON scan enforces
+binding/document counts before embedded document parsing. Stored bytes still use
+the independent serialized-byte bound; scanning and repository reads still occur.
+Rejected work leaves revisions, publication pointers and current output unchanged;
+no addon runs during historical reconstruction.
+
 No production limits or full engine acceptance are inferred.
 Resource-rich measurement and the canonical P9A-04 receipt determine the next
 production-policy step; no production defaults are inferred here.
