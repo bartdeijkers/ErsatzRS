@@ -11,10 +11,14 @@ to Phase 9. This supplements ADRs 0120/0121 without changing their delivery orde
 Partially implemented: neutral profile/binding types and an additive SQLite
 repository provide isolated, revision-fenced configuration. Shared application
 controls prepare profile-scoped and complete channel-wide unpublished candidates.
-The native host encodes their exact retained draft using the existing Western
-Latin encoder. Lua intervals, localized administration, automatic service
-activation, durable generation ownership/publication and full encoding/client
-acceptance remain open. P9A-04 owns
+The native host encodes exact retained authored originals through the shared
+compiler. A dedicated in-order SSR channel route connects named manifest-driven
+profiles and base binding controls to these application functions, independently
+of global addon configuration and generic channel saves. Forms preserve observed
+installation/profile/binding revisions; unavailable bindings retain an Off path.
+This connects configuration only: design preparation/preview/publication in the
+admin, effective Lua/applied state, full warm activation and independent full
+encoding/client acceptance remain open. P9A-04 owns the current verification and
 independent synthetic acceptance; P9B-01/02 own the sole production TV-guide
 add-on and integrated proof.
 ADR 0123 adds Level 2.5 and TTI design interchange: addon-owned themes, zone edit

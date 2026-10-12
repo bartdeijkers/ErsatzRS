@@ -4472,3 +4472,45 @@ the simultaneous red/blue 200->201 capture/image identities and remaining gaps.
 Full warm-resource retirement,
 active Health, current generation ownership and all existing engine/client/editor/
 admin/Lua/platform acceptance remain open. P9A-04 owns the canonical proof.
+
+
+### Channel profile administration
+
+The channel editor links saved channels to `/channels/:id/teletext`. This
+server-rendered, in-order route uses populated native HTML forms; its controls
+remain useful without JavaScript. The shared admin shell owns hydration. No
+teletext island or shared UI primitive is introduced.
+
+The page edits operator **base** configuration through the same application
+profile and binding functions used by other callers. Selecting a profile or
+turning a binding On does not install or enable a package, invoke a producer,
+prepare a design, or publish pages. The selected profile belongs to its addon;
+distinct profiles on two channels retain distinct settings. Editing a shared
+profile invalidates only bindings that depend on it. The page does not claim
+that a base change immediately replaces a running broadcast or a Lua override.
+An unreadable aggregate addon catalog retains existing selections and Off
+controls but disables profile editing/On without manifest metadata. This current
+read-model gap is visible in P9A-04; it is not a promised permanent restriction
+or proof that malformed installations are fully isolated.
+Requested, accepted and applied publication state remains a separate integration
+requirement.
+
+Profile fields come from the installed manifest. An absent override inherits
+installation settings and then manifest defaults; an explicit empty value is a
+literal override. Theme and zone setting names and allowed values remain addon
+owned. Secret fields use unresolved references rather than secret contents.
+Profile edits replace the complete override bag. Submitted installation,
+profile and binding revisions are the rendered observation, not a fresh token
+silently substituted during save. Concurrent changes therefore reject without
+partial writes. An existing binding can be turned Off using only its binding
+revision, including when its selected profile or installation is unavailable.
+
+These forms connect profile selection to the synthetic workflow. They do not
+complete the next design step: fresh preparation needs explicit entry/resource
+lifecycle and host limits; historical preview needs explicit raster/work limits
+and exact stored design ID, revision, page and subcode. The runtime recovery
+policy cannot supply fresh entry/lifecycle or preview limits. The next connection
+must use native preparation, original design save/reload and the same validated
+raster as transmission, without adopting test bounds as production defaults.
+P9A-04 holds current implementation and browser evidence and all remaining
+acceptance criteria.

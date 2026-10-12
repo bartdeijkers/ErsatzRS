@@ -1484,6 +1484,37 @@ pub enum TextKey {
     ScanWorkerUnavailableBrief,
     ScanWorkerUnavailableHelp,
     TeletextDecoderTitle,
+    TeletextChannelTitle,
+    TeletextChannelBaseHelp,
+    TeletextChannelEmpty,
+    TeletextChannelProfiles,
+    TeletextProfileCreate,
+    TeletextProfileSave,
+    TeletextProfileName,
+    TeletextProfileSharedHelp,
+    TeletextBindingProfile,
+    TeletextBindingSave,
+    TeletextBindingOff,
+    TeletextBindingNone,
+    TeletextProfileInheritHelp,
+    TeletextProfileOverride,
+    TeletextProfileValue,
+    TeletextProfileReference,
+    TeletextProfileConfigured,
+    TeletextProfileMissingInstallation,
+    TeletextProfileDisabledInstallation,
+    TeletextProfileIncompatibleInstallation,
+    TeletextProfileInvalidSettings,
+    TeletextProfileDeleted,
+    TeletextProfileStaleInstallation,
+    TeletextAdminConflict,
+    TeletextAdminInvalid,
+    TeletextAdminUnavailable,
+    TeletextAdminSaved,
+    TeletextAdminWrongAddon,
+    TeletextAdminLimit,
+    TeletextProfileRedacted,
+    TeletextProfileRepairHelp,
     TeletextWorkTitle,
     TeletextWorkDefault,
     TeletextWorkConfigured,
@@ -3696,6 +3727,37 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ScanWorkerUnavailableBrief,
     TextKey::ScanWorkerUnavailableHelp,
     TextKey::TeletextDecoderTitle,
+    TextKey::TeletextChannelTitle,
+    TextKey::TeletextChannelBaseHelp,
+    TextKey::TeletextChannelEmpty,
+    TextKey::TeletextChannelProfiles,
+    TextKey::TeletextProfileCreate,
+    TextKey::TeletextProfileSave,
+    TextKey::TeletextProfileName,
+    TextKey::TeletextProfileSharedHelp,
+    TextKey::TeletextBindingProfile,
+    TextKey::TeletextBindingSave,
+    TextKey::TeletextBindingOff,
+    TextKey::TeletextBindingNone,
+    TextKey::TeletextProfileInheritHelp,
+    TextKey::TeletextProfileOverride,
+    TextKey::TeletextProfileValue,
+    TextKey::TeletextProfileReference,
+    TextKey::TeletextProfileConfigured,
+    TextKey::TeletextProfileMissingInstallation,
+    TextKey::TeletextProfileDisabledInstallation,
+    TextKey::TeletextProfileIncompatibleInstallation,
+    TextKey::TeletextProfileInvalidSettings,
+    TextKey::TeletextProfileDeleted,
+    TextKey::TeletextProfileStaleInstallation,
+    TextKey::TeletextAdminConflict,
+    TextKey::TeletextAdminInvalid,
+    TextKey::TeletextAdminUnavailable,
+    TextKey::TeletextAdminSaved,
+    TextKey::TeletextAdminWrongAddon,
+    TextKey::TeletextAdminLimit,
+    TextKey::TeletextProfileRedacted,
+    TextKey::TeletextProfileRepairHelp,
     TextKey::TeletextWorkTitle,
     TextKey::TeletextWorkDefault,
     TextKey::TeletextWorkConfigured,
@@ -4985,6 +5047,38 @@ const HLS_LIVE_DELIVERY_SUFFIX: &str = " hours. Review the streaming logs and ru
 
 pub fn health_check_title(title: &str) -> String {
     health_check_title_text(use_i18n(), title)
+}
+
+/// Localize static teletext configuration outcomes without displaying payloads.
+pub fn teletext_admin_error_text(language: UiLanguage, code: &str) -> &'static str {
+    let key = match unwrap_server_function_error(code).as_str() {
+        "conflict" => TextKey::TeletextAdminConflict,
+        "unavailable" | "storage" => TextKey::TeletextAdminUnavailable,
+        "wrong-addon" => TextKey::TeletextAdminWrongAddon,
+        "missing-profile" => TextKey::ProfileNotFound,
+        "deleted-profile" => TextKey::TeletextProfileDeleted,
+        "limit" => TextKey::TeletextAdminLimit,
+        _ => TextKey::TeletextAdminInvalid,
+    };
+    text(language, key)
+}
+
+/// Configuration eligibility is separate from page validation and live output.
+pub fn teletext_profile_availability_text(
+    language: UiLanguage,
+    availability: &str,
+) -> &'static str {
+    let key = match availability {
+        "configured" => TextKey::TeletextProfileConfigured,
+        "missing-installation" => TextKey::TeletextProfileMissingInstallation,
+        "disabled-installation" => TextKey::TeletextProfileDisabledInstallation,
+        "incompatible-installation" => TextKey::TeletextProfileIncompatibleInstallation,
+        "invalid-settings" => TextKey::TeletextProfileInvalidSettings,
+        "deleted-profile" => TextKey::TeletextProfileDeleted,
+        "stale-installation" => TextKey::TeletextProfileStaleInstallation,
+        _ => TextKey::TeletextAdminUnavailable,
+    };
+    text(language, key)
 }
 
 pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
@@ -6403,6 +6497,75 @@ mod tests {
             health_check_message_text(UiLanguage::Dutch, title, unknown, unknown),
             unknown
         );
+    }
+
+    #[test]
+    fn teletext_profile_controls_localize_static_outcomes_without_payload_echo() {
+        let errors = [
+            ("conflict", TextKey::TeletextAdminConflict),
+            ("invalid", TextKey::TeletextAdminInvalid),
+            ("unavailable", TextKey::TeletextAdminUnavailable),
+            ("wrong-addon", TextKey::TeletextAdminWrongAddon),
+            ("missing-profile", TextKey::ProfileNotFound),
+            ("deleted-profile", TextKey::TeletextProfileDeleted),
+            ("limit", TextKey::TeletextAdminLimit),
+            ("storage", TextKey::TeletextAdminUnavailable),
+        ];
+        let availability = [
+            ("configured", TextKey::TeletextProfileConfigured),
+            (
+                "missing-installation",
+                TextKey::TeletextProfileMissingInstallation,
+            ),
+            (
+                "disabled-installation",
+                TextKey::TeletextProfileDisabledInstallation,
+            ),
+            (
+                "incompatible-installation",
+                TextKey::TeletextProfileIncompatibleInstallation,
+            ),
+            ("invalid-settings", TextKey::TeletextProfileInvalidSettings),
+            ("deleted-profile", TextKey::TeletextProfileDeleted),
+            (
+                "stale-installation",
+                TextKey::TeletextProfileStaleInstallation,
+            ),
+        ];
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for (code, key) in errors {
+                assert_eq!(
+                    teletext_admin_error_text(language, code),
+                    text(language, key)
+                );
+            }
+            for (code, key) in availability {
+                assert_eq!(
+                    teletext_profile_availability_text(language, code),
+                    text(language, key)
+                );
+            }
+            for key in [
+                TextKey::TeletextChannelTitle,
+                TextKey::TeletextChannelBaseHelp,
+                TextKey::TeletextProfileInheritHelp,
+                TextKey::TeletextProfileRepairHelp,
+            ] {
+                assert!(!text(language, key).is_empty());
+                if language != UiLanguage::English {
+                    assert_ne!(text(language, key), text(UiLanguage::English, key));
+                }
+            }
+            assert_eq!(
+                teletext_admin_error_text(language, "synthetic-private-error-payload"),
+                text(language, TextKey::TeletextAdminInvalid),
+            );
+            assert_eq!(
+                teletext_profile_availability_text(language, "synthetic-private-state"),
+                text(language, TextKey::TeletextAdminUnavailable),
+            );
+        }
     }
 
     #[test]

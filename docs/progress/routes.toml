@@ -2,7 +2,7 @@
 
 [[route]]
 nav     = '/channels'
-backing = '`ChannelsListPage` + add/`:id` editor + `:id/watch` browser player'
+backing = '`ChannelsListPage` + add/`:id` editor + `:id/watch` browser player + `:id/teletext` native profile/binding forms'
 routed  = true
 
 [[route]]

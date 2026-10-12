@@ -2724,6 +2724,108 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 channel profile administration checkpoint:
+Requirement mapping: localized per-channel addon/profile controls are the first
+admin step of the synthetic selected-profile -> validation -> preview -> explicit
+publication -> ordinary stream -> suitable-client flow. A separate in-order SSR
+/channels/:id/teletext route and bounded native POST handlers reuse existing
+application profile/binding commands, leaving generic SaveChannel and global
+AddonSetting unchanged. Manifest fields preserve inherit versus empty literal;
+observed installation/profile/binding CAS tokens survive submit unchanged.
+Off works independently of profile/package eligibility. Obsolete, redacted or
+incompatible override bags are refused rather than silently discarded by fields
+from the current manifest; the retained profile and Off path remain visible and
+the operator can explicitly create and select a replacement profile. These
+configuration controls do not invoke a package, create a design or publish.
+The initial cold native check rejects a String-versus-str match and a moved
+profile ID in the new view; both are corrected before final verification.
+Architecture-lint rejects SQL fixture setup under src/api. The same six HTTP
+cases move to the existing integration-test boundary; no baseline/allow is raised.
+The corrected architecture and hydration checks pass (all four debt counters zero;
+31 existing hydration suppressions unchanged). Progress validates without warnings.
+Nextest 4b0e0e4f-9f59-4e9b-8ca6-b9ed22a7d085 runs 11 identities: ten pass,
+including all six real Router POST cases and both localization checks; one SSR
+textarea assertion fails. The locked tachys0.2.19 textarea disables child escaping.
+The new control adopts the existing local-library explicit RCDATA encoding pattern,
+including leading-LF preservation. Corrected run b75d0daf-0614-4fe9-9990-8f520af74a8b
+passes all three affected SSR cases, with exact escaped synthetic breakout HTML.
+The regression covers empty literals, ampersands/entity text, multiline text,
+leading LF and closing-textarea/script input without weakening escaping assertions.
+Together these results prove 11 unique successful Rust identities. The six HTTP
+cases prove complete override persistence/inheritance, two-channel isolation,
+client installation/profile/binding CAS, malformed/foreign/duplicate inputs,
+unavailable Off, no silent old-setting removal and pre-mutation body limits.
+Strict affected-web all-target Clippy passes after replacing redundant owned
+String assignments/borrows without any lint exemption; existing future-incompatibility
+notice remains distinct. The first headed Chromium case fails on its exact reopened
+leading-LF value, with three serial cases skipped. Native form POST preserves CRLF
+in storage; HTML normalizes CR/CRLF before suppressing the first textarea LF. The
+new control now recognizes both leading CR and LF, and adds native CRLF/bare-CR
+oracles without changing the browser expectation. Corrected Nextest
+3fb1f3b9-f2c7-4a9b-b27f-2fee8e126fc6 passes that affected case; strict affected-web
+all-target Clippy passes again after this final correction. A rebuilt matched
+SSR/WASM candidate passes all four headed Chromium functional identities
+(175.219 seconds) and all four Firefox identities (357.930 seconds), each looping
+nine cultures through light/dark and JS/no-JS profile create/edit/select/Off.
+Exact multiline breakout text survives storage and reopened DOM; stale CAS and
+missing/invalid profiles reject, two channels retain distinct profile themes,
+and publication/playout/global settings/package snapshots remain unchanged.
+The functional screenshots initially target an inner-scroller element and are
+clipped; those images do not establish visual acceptance. A separate unchanged-
+candidate viewport supplement checks visible controls, EN/NL theme/selection,
+320-pixel keyboard focus and 200-percent zoom. Terminal supplement receipts
+and actual inspected images are recorded below before checkpoint commit.
+Do not infer draft/publication or full engine acceptance from these admin tests.
+
+Viewport supplement: Chromium151.0.7922.34 passes4/4 in22.177 seconds;
+Firefox153.0 passes4/4 in44.568 seconds; all eight have zero skipped, failed or
+flaky identities. Each covers EN/NL in both themes and JS/no-JS, actual visible
+binding/theme controls on two channels, keyboard focus at320 pixels and200-percent
+zoom. Root inspects actual viewport PNGs: Chromium light selected-day binding and
+320px focused native select, Firefox dark selected-night theme and200-percent
+focused select. Fixed-shell clipping is corrected in capture instrumentation,
+without changing product CSS or relaxing functional assertions. The original
+eight functional identities are reused unchanged, not rerun for image capture.
+Receipts live under tmp/phase9-channel-profile-proof/, outside Playwright's default
+output cleanup: phase9-profile-admin-headed-chromium-corrected.log and
+phase9-profile-admin-headed-firefox.log; firefox-functional/playwright-results.json,
+chromium-visual/playwright-results.json and firefox-visual/playwright-results.json.
+Chromium's earlier functional JSON was removed by the following default-output
+cleanup; its terminal successful log and observed identities remain the evidence.
+receipt-sha256.json records retained receipt and inspected-image hashes.
+Inspected nl-channel-1-binding.png SHA256
+bd964b2e0822cb75e7f17d0044baed8155ac9587eeacccc6bf5e7a073843dec7;
+nl-320-keyboard.png09c58d99f9bd1b24eca3516c8ab54772d3e208f6a5b0219d7c7bd975bb1c8111;
+nl-channel-2-theme.png5d2038c8949674a65dfe2714ab511f63f2767ded7b56184f107fd5470fe12476;
+nl-200-percent.png1822f481ebc6c7ac2cb34ba3d19f49038858f4d52027d6d0112cd21574d48092.
+Matched candidate binary SHA256
+59f9dc977efc56e7243216cdb7cc0f510cb15838c7370bb4d74b467da7082364;
+WASM bfc8097d56e88abdd94911469823e409295025b477b093b53f59150af0775870.
+Final view source93a7b30b42e60679f20dca291358d90539e8bc05418743f95a65e82d9be13fd3;
+final spec5a59b86d174f64a52fd5a1f4df7346d275bc0cd3173cda52194be901dfa30d52.
+Formatting, architecture/hydration ratchets and new-Clippy-allow checks pass;
+no required milestone or cross-platform gate is waived.
+
+Concrete read-model gap: the reused addon_overview aggregate fails on any
+malformed installed manifest. Retained bindings keep independent Off/profile-ID
+visibility, but absent manifest metadata disables Save/On with localized catalog
+failure. This is not complete malformed-addon isolation acceptance. A narrow
+application addon-metadata read is still needed if an unrelated malformed
+installation blocks a configured channel's draft connection; no direct admin SQL
+bypass, implicit package repair or accepted restriction is introduced.
+
+Next criterion: connect Validate and save draft to explicit trusted preparation
+policy, then exact immutable design ID/revision/page/subcode preview through the
+same native compiler/raster. Runtime recovery policy supplies neither fresh
+entry/resource lifecycle nor preview/raster work limits; no fixture preset is
+promoted to production. Explicit publication and served-host ordinary URL/client
+proof follow this draft connection. Reuse b0877edc native/transport/VLC/Health and
+566fc0cb cancellation-ownership evidence where those paths remain unchanged.
+Full authored Level2.5/fallback, QTeletextMaker/sidecar/edit boundaries, zones,
+Lua intervals/error/Continue/Refresh/Reset, whole-process restart, applied/warm
+state, source/Next/retained playback and six-platform proof remain open.
+No milestone status, acceptance, dependency or engine-first sequencing changes.
+
 2026-10-12 ordinary selected-original stream connection checkpoint:
 Requirement mapping: synthetic profile selection -> native validation/preview ->
 immutable original save -> explicit pending request/acceptance -> ordinary Router

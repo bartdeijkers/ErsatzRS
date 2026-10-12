@@ -185,6 +185,11 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                 <a href="/channels" class=style::back_link>{tr(TextKey::Channels)}</a>
                 <h1 class=style::page_title inner_html=page_title></h1>
             </div>
+            {(channel_id > 0).then(|| view! {
+                <a href=format!("/channels/{channel_id}/teletext") data-testid="channel-teletext-link">
+                    {tr(TextKey::TeletextChannelTitle)}
+                </a>
+            })}
 
             <form method="post" action="/admin-api/channels/save-multipart" enctype="multipart/form-data">
                 <input type="hidden" name="id" value=channel_id.to_string()/>

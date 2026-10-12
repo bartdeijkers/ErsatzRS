@@ -22,6 +22,7 @@ pub mod schedules;
 pub mod search;
 pub mod sessions;
 pub mod settings;
+pub mod teletext;
 pub mod templates;
 pub mod troubleshooting;
 pub mod watermarks;

@@ -19,6 +19,7 @@ pub mod remote_stream_playlists;
 pub mod schedules;
 pub mod search;
 pub mod settings;
+pub mod teletext;
 pub mod templates;
 pub mod troubleshooting;
 pub mod watermarks;

@@ -427,3 +427,10 @@ name   = 'MultiCollectionsPages'
 status = '✅'
 routes = ['/media/multi-collections', '/media/multi-collections/add', '/media/multi-collections/:id/edit']
 notes  = '`tests/e2e/media-collection-route-family.spec.ts` covers seeded list and editor workflows, persistence, hydration, and supported HTML fallbacks.'
+
+
+[[page]]
+name   = 'ChannelTeletextPage'
+status = '✅'
+routes = ['/channels/:id/teletext']
+notes  = 'In-order SSR resolves the profile/binding projection into populated native forms; shared shell hydration only, no new island or primitive. Three bounded HTML POST routes reuse application controls with unchanged client CAS. Eleven unique focused Rust cases and eight nine-culture light/dark JS/no-JS headed Chromium/Firefox functional identities pass; eight EN/NL visual identities verify visible controls, 320px keyboard focus and 200% zoom. P9A-04 owns proof and separate draft/preview/publication gaps.'

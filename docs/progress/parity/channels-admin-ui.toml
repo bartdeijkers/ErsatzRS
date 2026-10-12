@@ -2,7 +2,7 @@ feature    = 'Channels admin UI'
 etv_source = '`ErsatzTV/Pages/Channel*.razor`, `ErsatzTV/ViewModels/ChannelEditViewModel.cs`, `ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, `ErsatzTV/Locals/Pages/Channels*.resx`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/channels/`, `crates/ersatzrs-web/src/admin/languages/`, `crates/ersatzrs-core/src/repositories/channel.rs`, `crates/ersatzrs-infra/src/repositories/channel.rs`'
 status     = 'In progress'
-adr        = ['0053', '0054', '0055', '0095']
+adr        = ['0053', '0054', '0055', '0095', '0122']
 
 summary    = '''
 UCU-02 row 11 adds persisted native/Next engine selection, native defaults,

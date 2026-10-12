@@ -4,4 +4,5 @@ pub mod guide;
 pub mod list;
 pub mod numbers;
 pub mod preview;
+pub mod teletext;
 pub mod watch;

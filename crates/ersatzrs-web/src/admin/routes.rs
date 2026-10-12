@@ -13,7 +13,7 @@ use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::addons::{AddonDetailPage, AddonsSettingsPage};
 use crate::admin::pages::channels::{
     editor::ChannelEditorPage, epg::EpgPreviewPage, list::ChannelsListPage,
-    numbers::ChannelNumbersPage, watch::ChannelWatchPage,
+    numbers::ChannelNumbersPage, teletext::ChannelTeletextPage, watch::ChannelWatchPage,
 };
 use crate::admin::pages::dev::ComponentsPage;
 use crate::admin::pages::ffmpeg_profiles::{
@@ -130,6 +130,11 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=ChannelWatchPage
             />
             <Route path=(StaticSegment("channels"), ParamSegment("id")) view=ChannelEditorPage ssr=SsrMode::InOrder/>
+            <Route
+                path=(StaticSegment("channels"), ParamSegment("id"), StaticSegment("teletext"))
+                view=ChannelTeletextPage
+                ssr=SsrMode::InOrder
+            />
 
             <Route path=StaticSegment("ffmpeg") view=FfmpegProfilesListPage/>
             <Route

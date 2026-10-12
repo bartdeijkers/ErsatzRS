@@ -198,6 +198,24 @@ pub fn build_app(app_state: AppState) -> Router {
                 post(api::collections::delete_multi_collection_form),
             )
             .route(
+                "/admin-api/teletext/profile/save",
+                post(api::teletext::save_profile).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
+                "/admin-api/teletext/binding/save",
+                post(api::teletext::save_binding).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
+                "/admin-api/teletext/binding/off",
+                post(api::teletext::off).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
                 "/admin-api/channels/save",
                 post(api::channels::save_channel_form),
             )
