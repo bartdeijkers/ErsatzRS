@@ -121,7 +121,8 @@ pub use object_pages::{
     TeletextObjectPageEncodingFailure, TeletextObjectPageTransmission,
 };
 pub use output::{
-    TeletextOutputConfig, TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule,
+    TeletextOutputAcknowledgement, TeletextOutputConfig, TeletextOutputError, TeletextOutputGate,
+    TeletextOutputSchedule,
 };
 pub use packets::{
     encode_teletext_page, encode_teletext_page_set, EncodedTeletextPage, EncodedTeletextPageSet,

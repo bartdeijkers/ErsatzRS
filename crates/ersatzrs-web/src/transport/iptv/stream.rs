@@ -106,7 +106,7 @@ use super::retained_stream_buffer::{
     forward_retained_ts, ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS,
 };
 use super::teletext_binding::{TeletextOutputAdmission, TeletextOutputBinding, TeletextOutputRole};
-use super::teletext_output::{forward_teletext_output_with_content, TeletextPumpError};
+use super::teletext_output::{forward_teletext_output_with_control, TeletextPumpError};
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::{hls, hls::HlsQuery, LegacyWrapperQuery};
@@ -5743,12 +5743,13 @@ async fn supervise_stream_process_with_retry_context(
             Some(stdout) => match output.binding() {
                 Some(binding) => {
                     // Every child gets fresh PSI/PCR/continuity and timing state.
-                    forward_teletext_output_with_content(
+                    forward_teletext_output_with_control(
                         stdout,
                         writer,
                         binding.config(),
                         binding.content().clone(),
                         binding.first_byte_timeout(),
+                        binding.cloned_control(),
                     )
                     .await
                 }

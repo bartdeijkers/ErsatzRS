@@ -14,7 +14,7 @@ use tokio::{
 
 use super::{
     retained_stream_buffer::{ReserveError, ReservePolicy},
-    teletext_binding::TeletextOutputBinding,
+    teletext_binding::{control::PumpControl, TeletextOutputBinding},
 };
 
 const PACKET_BYTES: usize = 188;
@@ -63,6 +63,7 @@ struct ForwardState {
     intervals: usize,
     processing_packets: usize,
     pending: Option<PendingWindow>,
+    control: Option<PumpControl>,
 }
 
 impl ForwardState {
@@ -88,6 +89,7 @@ impl ForwardState {
             intervals: 1,
             processing_packets,
             pending: None,
+            control: binding.cloned_control().map(PumpControl::new),
         })
     }
 
@@ -128,8 +130,16 @@ impl ForwardState {
         if !self.started || self.pending.is_some() || self.finished {
             return Ok(());
         }
+        self.prepare_ready_window()
+    }
+
+    fn prepare_ready_window(&mut self) -> Result<(), RetainedTeletextError> {
         loop {
-            if let Some(end) = self.gate.window_end(self.intervals)? {
+            let end = match &mut self.control {
+                Some(control) => control.window_end(&self.gate, self.intervals)?,
+                None => self.gate.window_end(self.intervals)?,
+            };
+            if let Some(end) = end {
                 let count = usize::try_from(
                     end.checked_sub(self.emitted)
                         .ok_or(TeletextOutputError::Boundary)?,
@@ -142,6 +152,11 @@ impl ForwardState {
                     if self.gate.prepare_window(count, self.epoch.elapsed())? {
                         self.set_pending(false)?;
                         return Ok(());
+                    }
+                    if let Some(control) = &mut self.control {
+                        if control.preparation_failed(&self.gate, self.intervals, end)? {
+                            continue;
+                        }
                     }
                     self.intervals = self
                         .intervals
@@ -184,8 +199,17 @@ impl ForwardState {
                     .map_err(|_| TeletextOutputError::Arithmetic)?,
             )
             .ok_or(TeletextOutputError::Arithmetic)?;
-        self.gate
-            .acknowledge_window(pending.schedule, self.epoch.elapsed())?;
+        let receipt = self
+            .gate
+            .acknowledge_window_with_receipt(pending.schedule, self.epoch.elapsed())?;
+        if let Some(control) = &mut self.control {
+            control.acknowledge(
+                &mut self.gate,
+                &receipt,
+                self.epoch.elapsed(),
+                !pending.final_window,
+            )?;
+        }
         if pending.final_window {
             self.gate.finish(self.epoch.elapsed())?;
             self.finished = true;

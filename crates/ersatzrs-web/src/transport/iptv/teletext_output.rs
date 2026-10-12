@@ -11,7 +11,7 @@ use tokio::{
     time::{timeout_at, Instant},
 };
 
-use super::teletext_binding::TeletextOutputContent;
+use super::teletext_binding::{control::PumpControl, TeletextOutputContent, TeletextOutputControl};
 
 const READ_BYTES: usize = 256 * 188;
 
@@ -159,6 +159,28 @@ pub async fn forward_teletext_output_with_content<R: AsyncRead + Unpin, W: Async
     content: TeletextOutputContent,
     first_byte_timeout: Duration,
 ) -> Result<u64, TeletextPumpError> {
+    forward_teletext_output_with_control(source, sink, config, content, first_byte_timeout, None)
+        .await
+}
+
+/// Forward with optional latest trusted engine proposals. Normal paths remain
+/// unbound; sink receipts establish only this output epoch's accepted writes.
+/// # Errors
+/// Actual source/sink/transport failures remain terminal. Invalid replacement
+/// proposals report bounded status while the existing output continues.
+pub async fn forward_teletext_output_with_control<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    source: &mut R,
+    sink: &mut W,
+    config: TeletextOutputConfig,
+    content: TeletextOutputContent,
+    first_byte_timeout: Duration,
+    control: Option<TeletextOutputControl>,
+) -> Result<u64, TeletextPumpError> {
+    let mut progress = ForwardProgress {
+        emitted: 0,
+        intervals: 1,
+        control: control.map(PumpControl::new),
+    };
     let epoch = Instant::now();
     if first_byte_timeout.is_zero() {
         return Err(TeletextPumpError::Configuration);
@@ -168,30 +190,13 @@ pub async fn forward_teletext_output_with_content<R: AsyncRead + Unpin, W: Async
     let mut gate = content.new_gate(config, false)?;
     let mut prefetch = SourcePrefetch::new(source, config)?;
     let mut started = false;
-    let mut emitted = 0_u64;
-    let mut intervals = 1;
     loop {
         gate.check_deadline(epoch.elapsed())?;
-        if let Some(end) = gate.window_end(intervals)? {
-            let count = usize::try_from(
-                end.checked_sub(emitted)
-                    .ok_or(TeletextOutputError::Boundary)?,
-            )
-            .map_err(|_| TeletextOutputError::Arithmetic)?;
-            if count <= gate.retained_packets()? {
-                if gate.prepare_window(count, epoch.elapsed())? {
-                    let schedule = gate.pending_schedule()?;
-                    write_window(sink, &mut gate, &schedule, config, epoch, &mut prefetch).await?;
-                    gate.acknowledge_window(schedule, epoch.elapsed())?;
-                    emitted = end;
-                    intervals = 1;
-                    continue;
-                }
-                intervals = intervals
-                    .checked_add(1)
-                    .ok_or(TeletextOutputError::Arithmetic)?;
-                continue;
-            }
+        if progress
+            .forward_ready(sink, &mut gate, config, epoch, &mut prefetch)
+            .await?
+        {
+            continue;
         }
         let available = gate.remaining_capacity()?.min(prefetch.scratch.len());
         if available == 0 {
@@ -231,18 +236,76 @@ pub async fn forward_teletext_output_with_content<R: AsyncRead + Unpin, W: Async
                 let count = u64::try_from(schedule.packet_count())
                     .map_err(|_| TeletextOutputError::Arithmetic)?;
                 write_window(sink, &mut gate, &schedule, config, epoch, &mut prefetch).await?;
-                gate.acknowledge_window(schedule, epoch.elapsed())?;
-                emitted = emitted
+                let receipt = gate.acknowledge_window_with_receipt(schedule, epoch.elapsed())?;
+                if let Some(control) = &mut progress.control {
+                    control.acknowledge(&mut gate, &receipt, epoch.elapsed(), false)?;
+                }
+                progress.emitted = progress
+                    .emitted
                     .checked_add(count)
                     .ok_or(TeletextOutputError::Arithmetic)?;
             }
             gate.finish(epoch.elapsed())?;
-            return emitted
+            return progress
+                .emitted
                 .checked_mul(188)
                 .ok_or_else(|| TeletextOutputError::Arithmetic.into());
         }
         started = true;
         gate.push(&prefetch.scratch[..read], epoch.elapsed())?;
+    }
+}
+
+struct ForwardProgress {
+    emitted: u64,
+    intervals: usize,
+    control: Option<PumpControl>,
+}
+impl ForwardProgress {
+    async fn forward_ready<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+        &mut self,
+        sink: &mut W,
+        gate: &mut TeletextOutputGate,
+        config: TeletextOutputConfig,
+        epoch: Instant,
+        prefetch: &mut SourcePrefetch<'_, R>,
+    ) -> Result<bool, TeletextPumpError> {
+        let end = match &mut self.control {
+            Some(control) => control.window_end(gate, self.intervals)?,
+            None => gate.window_end(self.intervals)?,
+        };
+        if let Some(end) = end {
+            let count = usize::try_from(
+                end.checked_sub(self.emitted)
+                    .ok_or(TeletextOutputError::Boundary)?,
+            )
+            .map_err(|_| TeletextOutputError::Arithmetic)?;
+            if count <= gate.retained_packets()? {
+                if gate.prepare_window(count, epoch.elapsed())? {
+                    let schedule = gate.pending_schedule()?;
+                    write_window(sink, gate, &schedule, config, epoch, prefetch).await?;
+                    let receipt =
+                        gate.acknowledge_window_with_receipt(schedule, epoch.elapsed())?;
+                    if let Some(control) = &mut self.control {
+                        control.acknowledge(gate, &receipt, epoch.elapsed(), true)?;
+                    }
+                    self.emitted = end;
+                    self.intervals = 1;
+                    return Ok(true);
+                }
+                if let Some(control) = &mut self.control {
+                    if control.preparation_failed(gate, self.intervals, end)? {
+                        return Ok(true);
+                    }
+                }
+                self.intervals = self
+                    .intervals
+                    .checked_add(1)
+                    .ok_or(TeletextOutputError::Arithmetic)?;
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 

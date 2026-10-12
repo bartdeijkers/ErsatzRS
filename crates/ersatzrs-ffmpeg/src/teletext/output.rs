@@ -29,6 +29,13 @@ mod retained_tests;
 #[path = "authored_service_output_tests.rs"]
 mod authored_service_tests;
 
+#[path = "output_transitions.rs"]
+mod transitions;
+
+#[cfg(test)]
+#[path = "output_transition_tests.rs"]
+pub(in crate::teletext) mod transition_tests;
+
 /// Immutable admission and delivery policy for one host-owned TS188 epoch.
 ///
 /// The selected program/PCR PID and declared muxrate must describe the encoded
@@ -97,6 +104,9 @@ pub enum TeletextOutputError {
     /// Retained output has not received its one-shot delivery start.
     #[error("teletext output delivery has not started")]
     DeliveryNotStarted,
+    /// Warm magazine state cannot yet be retired without explicit reconciliation.
+    #[error("teletext output requires warm magazine-cache reconciliation")]
+    CacheReconciliationRequired,
     /// This ended source epoch cannot be reopened.
     #[error("teletext output generation has ended")]
     Closed,
@@ -113,6 +123,38 @@ pub struct TeletextOutputSchedule {
     first_due: Duration,
     last_due: Duration,
     muxrate_bps: u64,
+}
+
+/// Exact sink-accepted window, without receiver or durable-publication authority.
+/// The private stamp prevents reuse after a newer acknowledgement or transition.
+/// A contained terminator does not imply the window ends at a cycle boundary.
+pub struct TeletextOutputAcknowledgement {
+    epoch: Arc<()>,
+    stamp: Arc<()>,
+    end_packet: u64,
+    batch_ticks: u64,
+    cycle_boundary: bool,
+    completes_cycle: bool,
+    signalling_announced: bool,
+}
+
+impl TeletextOutputAcknowledgement {
+    #[must_use]
+    pub const fn is_cycle_boundary(&self) -> bool {
+        self.cycle_boundary
+    }
+    #[must_use]
+    pub const fn contains_complete_cycle(&self) -> bool {
+        self.completes_cycle
+    }
+    #[must_use]
+    pub const fn signalling_announced(&self) -> bool {
+        self.signalling_announced
+    }
+    #[must_use]
+    pub const fn end_packet(&self) -> u64 {
+        self.end_packet
+    }
 }
 
 impl TeletextOutputSchedule {
@@ -176,12 +218,26 @@ enum SourceState {
     Closed,
 }
 
+/// Construction metadata; only sink acknowledgement turns it into a receipt.
+struct PendingCycleEvidence {
+    completes_cycle: bool,
+    cycle_boundary: bool,
+    signalling_announced: bool,
+}
+
+/// Payload selection and its independently acknowledged signalling transition.
+struct PayloadSelection {
+    active: bool,
+    signalling_ready: bool,
+}
+
 struct PendingOutput {
     packets: Vec<[u8; 188]>,
     first_packet: u64,
     first_arrival: Duration,
     exposed: bool,
-    completes_cycle: bool,
+    cycle: PendingCycleEvidence,
+    completed_authored: Option<Arc<EncodedTeletextAuthoredService>>,
 }
 
 /// Compose bounded retention, source PSI/PID, PCR/CBR and atomic page insertion.
@@ -224,6 +280,9 @@ pub struct TeletextOutputGate {
     failure: Option<TeletextOutputError>,
     source_state: SourceState,
     completed_cycle: bool,
+    payload: PayloadSelection,
+    last_ack: Option<Arc<()>>,
+    warm_service: Option<Arc<EncodedTeletextAuthoredService>>,
 }
 
 impl TeletextOutputGate {
@@ -380,6 +439,12 @@ impl TeletextOutputGate {
             failure: None,
             source_state: SourceState::Open,
             completed_cycle: false,
+            payload: PayloadSelection {
+                active: true,
+                signalling_ready: true,
+            },
+            last_ack: None,
+            warm_service: None,
         })
     }
 
@@ -575,6 +640,18 @@ impl TeletextOutputGate {
         schedule: TeletextOutputSchedule,
         now: Duration,
     ) -> Result<(), TeletextOutputError> {
+        self.acknowledge_window_with_receipt(schedule, now)
+            .map(|_| ())
+    }
+
+    /// Return end-of-window evidence only after exact exposed, paced sink acceptance.
+    /// # Errors
+    /// Preserves the same terminal acknowledgement/deadline checks as the wrapper.
+    pub fn acknowledge_window_with_receipt(
+        &mut self,
+        schedule: TeletextOutputSchedule,
+        now: Duration,
+    ) -> Result<TeletextOutputAcknowledgement, TeletextOutputError> {
         let result = self.acknowledge_inner(&schedule, now);
         drop(schedule);
         self.fence(result)
@@ -720,7 +797,7 @@ impl TeletextOutputGate {
         }
         self.source_state = SourceState::Ended;
         if count == 0 {
-            if !self.completed_cycle {
+            if !self.payload.signalling_ready || (self.payload.active && !self.completed_cycle) {
                 return Err(TeletextOutputError::Unterminated);
             }
             return Ok(false);
@@ -764,19 +841,19 @@ impl TeletextOutputGate {
             .first_arrival()?
             .ok_or(TeletextOutputError::Boundary)?;
         let mut packets = self.buffer_ref()?.window()?[..count].to_vec();
-        match self
+        let installation = match self
             .installer
             .as_mut()
             .ok_or(TeletextOutputError::Configuration)?
             .install(&mut packets)
         {
-            Ok(_) => (),
+            Ok(report) => report,
             Err(
                 TeletextPmtInstallError::Incomplete
                 | TeletextPmtInstallError::Multiplex(TeletextMultiplexError::Capacity { .. }),
             ) if !final_window => return Ok(false),
             Err(error) => return Err(error.into()),
-        }
+        };
         let mut completes_cycle = false;
         while self.batch_ticks < end_ticks {
             let start = self.frame_position(self.batch_ticks)?;
@@ -796,8 +873,14 @@ impl TeletextOutputGate {
                         .ok_or(TeletextOutputError::Boundary)?,
                 )
                 .map_err(|_| TeletextOutputError::Arithmetic)?;
-            let batch = self.carousel.next_batch()?;
-            completes_cycle |= batch.kind() == super::TeletextCarouselBatchKind::Terminator;
+            let batch = if self.payload.active && self.payload.signalling_ready {
+                let batch = self.carousel.next_batch()?;
+                completes_cycle |= batch.kind() == super::TeletextCarouselBatchKind::Terminator;
+                Some(batch)
+            } else {
+                self.carousel.advance_empty_at_boundary(STEP_TICKS)?;
+                None
+            };
             let next = self
                 .batch_ticks
                 .checked_add(STEP_TICKS)
@@ -807,14 +890,16 @@ impl TeletextOutputGate {
                 .ok_or(TeletextOutputError::Boundary)?
                 .1
                 .wrapping_add(next);
-            self.monitor
-                .as_ref()
-                .ok_or(TeletextOutputError::Configuration)?
-                .plan()
-                .replace_null_packets(&mut packets[range], &batch, pts, &mut self.packetizer)?;
+            if let Some(batch) = batch {
+                self.monitor
+                    .as_ref()
+                    .ok_or(TeletextOutputError::Configuration)?
+                    .plan()
+                    .replace_null_packets(&mut packets[range], &batch, pts, &mut self.packetizer)?;
+            }
             self.batch_ticks = next;
         }
-        if final_window && !self.completed_cycle && !completes_cycle {
+        if final_window && self.payload.active && !self.completed_cycle && !completes_cycle {
             return Err(TeletextOutputError::Unterminated);
         }
         self.buffer_mut()?.release(count, now)?;
@@ -824,7 +909,16 @@ impl TeletextOutputGate {
             first_packet: self.source_start,
             first_arrival: arrival,
             exposed: false,
-            completes_cycle,
+            cycle: PendingCycleEvidence {
+                completes_cycle,
+                cycle_boundary: self.carousel.is_cycle_boundary(),
+                signalling_announced: installation.announced,
+            },
+            completed_authored: if completes_cycle {
+                self.carousel.authored_service_shared().map(Arc::clone)
+            } else {
+                None
+            },
         });
         self.source_start = end;
         Ok(true)
@@ -834,7 +928,7 @@ impl TeletextOutputGate {
         &mut self,
         schedule: &TeletextOutputSchedule,
         now: Duration,
-    ) -> Result<(), TeletextOutputError> {
+    ) -> Result<TeletextOutputAcknowledgement, TeletextOutputError> {
         self.check_inner(now)?;
         let pending = self
             .pending
@@ -858,9 +952,26 @@ impl TeletextOutputGate {
         {
             return Err(TeletextOutputError::Deadline);
         }
-        self.completed_cycle |= pending.completes_cycle;
+        self.completed_cycle |= pending.cycle.completes_cycle;
+        let stamp = Arc::new(());
+        let receipt = TeletextOutputAcknowledgement {
+            epoch: Arc::clone(&self.epoch),
+            stamp: Arc::clone(&stamp),
+            end_packet: self.source_start,
+            batch_ticks: self.batch_ticks,
+            cycle_boundary: pending.cycle.cycle_boundary,
+            completes_cycle: pending.cycle.completes_cycle,
+            signalling_announced: pending.cycle.signalling_announced,
+        };
+        if pending.cycle.signalling_announced {
+            self.payload.signalling_ready = true;
+        }
+        if let Some(service) = &pending.completed_authored {
+            self.warm_service = Some(Arc::clone(service));
+        }
+        self.last_ack = Some(stamp);
         self.pending = None;
-        Ok(())
+        Ok(receipt)
     }
 
     fn check_inner(&mut self, now: Duration) -> Result<(), TeletextOutputError> {
@@ -914,7 +1025,7 @@ impl TeletextOutputGate {
             .as_mut()
             .ok_or(TeletextOutputError::Unterminated)?
             .finish()?;
-        if !self.completed_cycle {
+        if !self.payload.signalling_ready || (self.payload.active && !self.completed_cycle) {
             return Err(TeletextOutputError::Unterminated);
         }
         self.source_state = SourceState::Closed;

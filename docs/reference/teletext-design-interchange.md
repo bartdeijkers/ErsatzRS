@@ -4024,3 +4024,73 @@ not current Now/Next validity, configured-to-accepted path ownership, actual liv
 file contents, projected-away raw sources, intervening changes/restoration or
 accepted-generation recovery. Runtime promotion and normal-route lookup remain
 separate requirements. P9A-04 owns focused proof and the compact flow gap map.
+
+## Sink-confirmed live-output proposals
+
+The preparatory output API accepts trusted engine proposals; it does not activate
+pending publication records. `TeletextOutputGate::acknowledge_window_with_receipt`
+returns a private epoch/stamp/packet-position/tick receipt after the exact exposed,
+paced window is sink-accepted. `contains_complete_cycle` records completion inside
+that window. `is_cycle_boundary` separately requires its **end** to be a boundary:
+a window containing mFF followed by the next header cannot authorize replacement.
+
+`transition_window_end` predicts the first complete-cycle end within an ordinary
+bounded window using the carousel's copied scalar cursor and borrowed shared
+content. It allocates no page model or packet batches. A false preparation caused
+by a source PMT fragment or local capacity must fall back to ordinary growing
+prefixes, retaining source positions and original deadlines; the host never spins
+on the same capped prefix, drops AV or resets time to manufacture a boundary.
+
+`replace_authored_at_acknowledged_boundary` retains the exact complete service Arc,
+checks resource history/acquisition and continuing source readiness, then preflights
+the paired carousel/PMT replacement. A changed descriptor increments emitted PMT
+version modulo32 and is announced, flushed and acknowledged before any new PES.
+`withdraw_at_acknowledged_boundary` stops authored PES and advertises a source-only
+PMT; re-enable keeps the reserved-PID fence, source monitoring, PMT/PES counters and
+absolute PCR/PTS/physical packet schedule. Closure cannot certify unacknowledged
+changed signalling or a new active generation without its own completed cycle.
+This complete-cycle primitive does not settle immediate logical Off timing.
+
+Native `teletext_output_control_channel` supplies one bounded latest-update watch
+slot, an optional binding control and a latest-status observer. Positive monotonic
+sequences distinguish proposals. `Replace` carries the shared full service;
+`Withdraw` carries no package or source authority. Initial unread updates and final
+updates after sender closure are retained. Changes during writes/flush survive
+until a later safe receipt. `Waiting` becomes `Applied` only after the replacement
+cycle or withdrawal PMT is actually acknowledged. Rejected resource/cache proposals
+preserve old output. Cancellation grants no completed-write or applied claim.
+Status identifies one private output epoch; cloning controls does not aggregate
+all live outputs. Debug output retains only numeric sequence and static phase.
+Existing binding constructors and ordinary routes remain unbound by default;
+HLS workers, internal items, other containers and capacity slates remain excluded.
+
+The warm guard retains the last actually completed authored service across Off.
+Omission of its magazine M29 or MOT bank returns `CacheReconciliationRequired`
+without altering the current stream. Pending never-emitted proposals do not create
+warm history. This is a protective refusal while full cache reconciliation is
+implemented, not accepted removal semantics, a permanent Level2.5 restriction or
+a claim that new HTTP epochs clear receiver state. Page-X28 omission/reset and
+whole-page withdrawal require separate independent warm-client proof.
+
+P9A-04 owns the canonical focused/runtime evidence and missing proof. Next connect
+fresh source/selection checks, accepted-generation persistence/artifact ownership,
+restart and invalidation to this seam and ordinary route lookup. A pending ID,
+watch sequence or single output ACK cannot substitute for that durable authority.
+Full Level2.5, editor interchange, suitable-client navigation, themes/zones/Lua,
+localized admin and ordinary playback/platform acceptance stay open.
+
+Replay the independent native transition regression with verified tools:
+
+```bash
+ERSATZRS_TELETEXT_TEST_FFMPEG="$VERIFIED_FFMPEG" \
+ERSATZRS_TELETEXT_TEST_TSANALYZE="$VERIFIED_TSANALYZE" \
+./run.sh test -p ersatzrs-ffmpeg --lib --run-ignored ignored-only \
+  -E 'test(signalling_runtime_tests::output_transitions::real_runtime_gate_replaces_withdraws_and_reenables_without_changing_av)'
+```
+
+The regression uses one six-second real CBR audiovisual source, one gate and three
+independently decoded literal page phases. Its sink times are simulated; actual
+asynchronous flush/cancellation proof belongs to the direct/retained control tests,
+and actual suitable-client warm display/navigation remains a separate gate.
+The optional `ERSATZRS_TELETEXT_TEST_OUTPUT_TRANSITION_TS` exports its bounded
+synthetic capture; it does not publish or change a live channel.

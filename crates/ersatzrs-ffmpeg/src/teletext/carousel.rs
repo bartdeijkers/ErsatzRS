@@ -99,10 +99,23 @@ enum CarouselContent {
     },
 }
 
+/// Fallible work sealed for one synchronous replacement of the same carousel.
+/// Its fields are private; this carries no delivery or generation authority.
+pub(super) struct PreparedCarouselReplacement {
+    content: CarouselContent,
+}
+
 impl CarouselContent {
     fn authored(
         service: Arc<EncodedTeletextAuthoredService>,
     ) -> Result<Self, TeletextTransportError> {
+        Self::validate_authored(&service)?;
+        Ok(Self::authored_prevalidated(service))
+    }
+
+    fn validate_authored(
+        service: &EncodedTeletextAuthoredService,
+    ) -> Result<(), TeletextTransportError> {
         let magazine_batch = usize::from(!service.magazine_units().is_empty());
         let displays = service.declared().semantic().base().pages.len();
         let resources = &service.pages()[displays..];
@@ -125,6 +138,11 @@ impl CarouselContent {
                 maximum: MAX_RESOURCE_CYCLE_BATCHES,
             });
         }
+        Ok(())
+    }
+
+    fn authored_prevalidated(service: Arc<EncodedTeletextAuthoredService>) -> Self {
+        let displays = service.declared().semantic().base().pages.len();
         let mut resource_order: Vec<_> = (displays..service.pages().len()).collect();
         resource_order.sort_unstable_by_key(|&index| {
             // Authenticated owned candidates retain displays first, then resources.
@@ -138,10 +156,10 @@ impl CarouselContent {
             };
             (rank, index)
         });
-        Ok(Self::Authored {
+        Self::Authored {
             service,
             resource_order,
-        })
+        }
     }
 
     fn page_count(&self) -> usize {
@@ -216,6 +234,12 @@ fn page_batches(units: &[[u8; 46]]) -> usize {
 }
 
 impl TeletextCarousel {
+    pub(super) fn authored_service_shared(&self) -> Option<&Arc<EncodedTeletextAuthoredService>> {
+        match &self.content {
+            CarouselContent::Authored { service, .. } => Some(service),
+            CarouselContent::Legacy(_) => None,
+        }
+    }
     /// Start a plan at relative time zero from a validated, fully encoded set.
     #[must_use]
     pub fn new(set: EncodedTeletextPageSet) -> Self {
@@ -301,20 +325,76 @@ impl TeletextCarousel {
         &mut self,
         service: EncodedTeletextAuthoredService,
     ) -> Result<(), TeletextTransportError> {
+        self.replace_authored_shared_at_boundary(Arc::new(service))
+    }
+
+    /// Replace from the exact shared service without cloning its compiled model.
+    /// The owner must acknowledge the old complete cycle and fence its generation.
+    /// # Errors
+    /// Rejects the same boundary, acquisition and resource-history failures as
+    /// the owned replacement. Every failure leaves the carousel unchanged.
+    pub fn replace_authored_shared_at_boundary(
+        &mut self,
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<(), TeletextTransportError> {
+        let prepared = self.prepare_authored_shared_replacement_at_boundary(service)?;
+        self.commit_prepared_replacement(prepared);
+        Ok(())
+    }
+
+    /// Check boundary, acquisition and lifecycle, then build the resource order
+    /// without modifying the current carousel. The returned value must be
+    /// committed only to this carousel without intervening state mutation.
+    pub(super) fn prepare_authored_shared_replacement_at_boundary(
+        &self,
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<PreparedCarouselReplacement, TeletextTransportError> {
+        self.validate_shared_replacement_at_boundary(&service)?;
+        Ok(PreparedCarouselReplacement {
+            content: CarouselContent::authored_prevalidated(service),
+        })
+    }
+
+    /// Commit already checked content after the installer's fallible preflight.
+    /// The synchronous caller must retain the same carousel and must not advance
+    /// or replace its cursor, content or history between preparation and commit.
+    pub(super) fn commit_prepared_replacement(&mut self, prepared: PreparedCarouselReplacement) {
+        self.replace_content(prepared.content);
+    }
+
+    /// Nonmutating preflight for a synchronous installer. This is not delivery
+    /// evidence; state must not advance between this check and replacement.
+    pub(super) fn validate_shared_replacement_at_boundary(
+        &self,
+        service: &Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<(), TeletextTransportError> {
         if !self.boundary {
             return Err(TeletextTransportError::MidCycleReplacement);
         }
-        let content = CarouselContent::authored(Arc::new(service))?;
+        CarouselContent::validate_authored(service)?;
         let completed = match &self.content {
             CarouselContent::Authored { service, .. } if !self.first_cycle => {
                 Some(service.as_ref())
             }
             CarouselContent::Legacy(_) | CarouselContent::Authored { .. } => None,
         };
-        if let CarouselContent::Authored { service, .. } = &content {
-            self.resource_history.validate(service, completed)?;
+        self.resource_history.validate(service, completed)
+    }
+
+    /// Advance withdrawn empty intervals without emitting or resetting content.
+    /// Only the programme-relative clock changes after all checks succeed.
+    pub(super) fn advance_empty_at_boundary(
+        &mut self,
+        delta_ticks: u64,
+    ) -> Result<(), TeletextTransportError> {
+        if !self.boundary {
+            return Err(TeletextTransportError::MidCycleReplacement);
         }
-        self.replace_content(content);
+        let next = self
+            .ticks
+            .checked_add(delta_ticks)
+            .ok_or(TeletextTransportError::ClockOverflow)?;
+        self.ticks = next;
         Ok(())
     }
 
@@ -336,117 +416,205 @@ impl TeletextCarousel {
         self.resource_resume = None;
     }
 
-    fn prepare_acquisition(&mut self) {
-        if !self.content.has_acquisition() {
-            return;
-        }
-        if !self.magazine_pending
-            && self.unit == 0
-            && self.page >= self.content.resource_count()
-            && self.page < self.content.page_count()
-        {
-            let elapsed = (self.ticks - self.resource_start_ticks) / STEP_TICKS;
-            // Reserve the sole closing FF as well as the next whole display.
-            // Preflight guarantees a complete sweep plus any display can fit.
-            let following =
-                page_batches(self.content.page(self.page).0) + 1 + RESOURCE_WINDOW_MARGIN;
-            if elapsed + following as u64 > MAX_RESOURCE_CYCLE_BATCHES as u64 {
-                self.resource_resume = Some(self.page);
-                self.page = 0;
-                self.magazine_pending = !self.content.magazines().is_empty();
-            }
-        }
-        if self.magazine_pending
-            || (self.content.magazines().is_empty() && self.page == 0 && self.unit == 0)
-        {
-            self.resource_start_ticks = self.ticks;
+    fn cursor(&self) -> CarouselCursor {
+        CarouselCursor {
+            page: self.page,
+            unit: self.unit,
+            ticks: self.ticks,
+            boundary: self.boundary,
+            first_cycle: self.first_cycle,
+            magazine_pending: self.magazine_pending,
+            resource_start_ticks: self.resource_start_ticks,
+            resource_resume: self.resource_resume,
         }
     }
 
-    fn resume_display(&mut self) {
-        if self.page == self.content.resource_count() {
-            if let Some(resume) = self.resource_resume.take() {
-                self.page = resume;
+    fn apply_cursor(&mut self, cursor: CarouselCursor) {
+        self.page = cursor.page;
+        self.unit = cursor.unit;
+        self.ticks = cursor.ticks;
+        self.boundary = cursor.boundary;
+        self.first_cycle = cursor.first_cycle;
+        self.magazine_pending = cursor.magazine_pending;
+        self.resource_start_ticks = cursor.resource_start_ticks;
+        self.resource_resume = cursor.resource_resume;
+    }
+
+    /// Predict the first closing FF within a bounded prefix using the same cursor
+    /// rules as actual planning. Even an initial boundary scans to the next FF.
+    pub(super) fn batches_until_boundary(
+        &self,
+        maximum: usize,
+    ) -> Result<Option<usize>, TeletextTransportError> {
+        let mut cursor = self.cursor();
+        for count in 0..maximum {
+            if matches!(cursor.next_plan(&self.content)?, BatchPlan::Terminator) {
+                return Ok(Some(count + 1));
             }
         }
+        Ok(None)
     }
 
     /// Plan the next bounded batch, leaving a 20 ms presentation interval.
     /// # Errors
     /// Clock overflow leaves the cursor and encoded set unchanged.
     pub fn next_batch(&mut self) -> Result<TeletextCarouselBatch, TeletextTransportError> {
-        let next_ticks = self
-            .ticks
-            .checked_add(STEP_TICKS)
-            .ok_or(TeletextTransportError::ClockOverflow)?;
-        self.prepare_acquisition();
-        let (kind, units) = if self.magazine_pending {
-            self.magazine_pending = false;
-            self.boundary = false;
-            let batch = (
+        let mut cursor = self.cursor();
+        let plan = cursor.next_plan(&self.content)?;
+        let (kind, units) = self.units_for_plan(plan);
+        let ticks = self.ticks;
+        self.apply_cursor(cursor);
+        Ok(TeletextCarouselBatch { ticks, kind, units })
+    }
+
+    fn units_for_plan(&mut self, plan: BatchPlan) -> (TeletextCarouselBatchKind, Vec<[u8; 46]>) {
+        match plan {
+            BatchPlan::Magazine => (
                 TeletextCarouselBatchKind::Magazine,
                 self.content.magazines().to_vec(),
-            );
-            self.resume_display();
-            batch
-        } else if self.page == self.content.page_count() {
-            // A serial-mode page can be closed by a header from any magazine.
-            let magazine = self.content.initial_magazine();
-            if let CarouselContent::Legacy(set) = &self.content {
-                // Completed legacy displays may reuse former raw resource pages.
-                // The owner still confirms this closing batch before replacement.
-                self.resource_history.retire_display_owners(set);
+            ),
+            BatchPlan::Terminator => {
+                if let CarouselContent::Legacy(set) = &self.content {
+                    // Only actual planning retires completed legacy display owners;
+                    // prediction does not acknowledge or change receiver history.
+                    self.resource_history.retire_display_owners(set);
+                }
+                (
+                    TeletextCarouselBatchKind::Terminator,
+                    vec![packets::terminator(self.content.initial_magazine())],
+                )
             }
-            self.page = 0;
-            self.unit = 0;
-            self.boundary = true;
-            self.first_cycle = false;
-            self.magazine_pending = !self.content.magazines().is_empty();
-            (
-                TeletextCarouselBatchKind::Terminator,
-                vec![packets::terminator(magazine)],
-            )
-        } else {
-            let (units, subcode, resource_header) = self.content.page(self.page);
-            self.boundary = false;
-            if self.unit == 0 {
-                self.unit = 1;
+            BatchPlan::Header { page, repeat } => {
+                let (units, subcode, resource_header) = self.content.page(page);
                 let mut header = units[0];
-                if !self.first_cycle
-                    || (resource_header.is_some() && self.resource_resume.is_some())
-                {
-                    // Repetition must not erase already acquired page content.
-                    // C4 shares this Hamming nibble with subcode bits 4..6.
-                    let low = subcode.to_le_bytes()[0];
-                    header[9] = packets::hamming_8_4(low >> 4).reverse_bits();
+                if repeat {
+                    // Clear C4 without disturbing subcode, and resource C8 only.
+                    header[9] = packets::hamming_8_4(subcode.to_le_bytes()[0] >> 4).reverse_bits();
                     if resource_header
                         .is_some_and(|metadata| metadata.transmission().update_indicator())
                     {
-                        // Clear resource C8 without disturbing C7/C9/C10.
                         header[12] ^=
                             (packets::hamming_8_4(0) ^ packets::hamming_8_4(2)).reverse_bits();
                     }
                 }
                 (TeletextCarouselBatchKind::Header, vec![header])
+            }
+            BatchPlan::Page { page, start, end } => (
+                TeletextCarouselBatchKind::Page,
+                self.content.page(page).0[start..end].to_vec(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct CarouselCursor {
+    page: usize,
+    unit: usize,
+    ticks: u64,
+    boundary: bool,
+    first_cycle: bool,
+    magazine_pending: bool,
+    resource_start_ticks: u64,
+    resource_resume: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+enum BatchPlan {
+    Magazine,
+    Terminator,
+    Header {
+        page: usize,
+        repeat: bool,
+    },
+    Page {
+        page: usize,
+        start: usize,
+        end: usize,
+    },
+}
+
+impl CarouselCursor {
+    fn prepare_acquisition(&mut self, content: &CarouselContent) {
+        if !content.has_acquisition() {
+            return;
+        }
+        if !self.magazine_pending
+            && self.unit == 0
+            && self.page >= content.resource_count()
+            && self.page < content.page_count()
+        {
+            let elapsed = (self.ticks - self.resource_start_ticks) / STEP_TICKS;
+            // Reserve the sole closing FF as well as the next whole display.
+            // Preflight guarantees a complete sweep plus any display can fit.
+            let following = page_batches(content.page(self.page).0) + 1 + RESOURCE_WINDOW_MARGIN;
+            if elapsed + following as u64 > MAX_RESOURCE_CYCLE_BATCHES as u64 {
+                self.resource_resume = Some(self.page);
+                self.page = 0;
+                self.magazine_pending = !content.magazines().is_empty();
+            }
+        }
+        if self.magazine_pending
+            || (content.magazines().is_empty() && self.page == 0 && self.unit == 0)
+        {
+            self.resource_start_ticks = self.ticks;
+        }
+    }
+
+    fn resume_display(&mut self, content: &CarouselContent) {
+        if self.page == content.resource_count() {
+            if let Some(resume) = self.resource_resume.take() {
+                self.page = resume;
+            }
+        }
+    }
+
+    fn next_plan(
+        &mut self,
+        content: &CarouselContent,
+    ) -> Result<BatchPlan, TeletextTransportError> {
+        let next_ticks = self
+            .ticks
+            .checked_add(STEP_TICKS)
+            .ok_or(TeletextTransportError::ClockOverflow)?;
+        self.prepare_acquisition(content);
+        let plan = if self.magazine_pending {
+            self.magazine_pending = false;
+            self.boundary = false;
+            self.resume_display(content);
+            BatchPlan::Magazine
+        } else if self.page == content.page_count() {
+            self.page = 0;
+            self.unit = 0;
+            self.boundary = true;
+            self.first_cycle = false;
+            self.magazine_pending = !content.magazines().is_empty();
+            BatchPlan::Terminator
+        } else {
+            let (units, _, resource_header) = content.page(self.page);
+            self.boundary = false;
+            if self.unit == 0 {
+                self.unit = 1;
+                BatchPlan::Header {
+                    page: self.page,
+                    repeat: !self.first_cycle
+                        || (resource_header.is_some() && self.resource_resume.is_some()),
+                }
             } else {
+                let page = self.page;
+                let start = self.unit;
                 let end = (self.unit + MAX_BATCH_UNITS).min(units.len());
-                let batch = units[self.unit..end].to_vec();
                 self.unit = end;
                 if end == units.len() {
                     self.page += 1;
                     self.unit = 0;
-                    self.resume_display();
+                    self.resume_display(content);
                 }
-                (TeletextCarouselBatchKind::Page, batch)
+                BatchPlan::Page { page, start, end }
             }
         };
-        let batch = TeletextCarouselBatch {
-            ticks: self.ticks,
-            kind,
-            units,
-        };
         self.ticks = next_ticks;
-        Ok(batch)
+        Ok(plan)
     }
 }
 
@@ -486,3 +654,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "authored_service_shared_replacement_tests.rs"]
+mod authored_service_shared_replacement_tests;

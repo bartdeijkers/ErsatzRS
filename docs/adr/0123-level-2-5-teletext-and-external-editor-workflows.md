@@ -305,6 +305,13 @@ Rejection must preserve the existing plan and history. The owner still confirms
 actual delivery and fences generations before calling replacement. This local
 history grants no durable restart, cold receiver, publication or decoder-cache
 assurance; those remain required host and independent-client acceptance work.
+The optional output bridge now confirms the actual sink-flushed cycle boundary,
+preflights shared replacement, and acknowledges changed PMT signalling before
+new PES. Its last actually completed service survives withdrawal. Missing old
+M29/MOT magazine banks reject without mutating old output; omission is not a
+cache-clear protocol. This protective guard is not full warm reconciliation or
+an accepted authoring restriction. P9A-04 owns the transport/control receipt;
+full bank/page retirement and independent warm-client proof remain required.
 The additive original libzvbi0.2.42 warm-cache diagnostic now checks representative
 normal DRCS replacement through the complete compiler/carousel, with independent
 fixed glyph/font/render oracles. It grants no restart, other-resource or full

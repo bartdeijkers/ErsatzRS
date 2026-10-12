@@ -108,7 +108,7 @@ impl InterleaveOutput {
             }
         }
         self.record_units(frame, &output, &schedule);
-        let completes = self.gate.pending.as_ref().unwrap().completes_cycle;
+        let completes = self.gate.pending.as_ref().unwrap().cycle.completes_cycle;
         assert_eq!(self.terminators, usize::from(completes));
         assert!(!self.gate.completed_cycle);
         self.now = schedule.last_due();
@@ -196,7 +196,7 @@ fn long_cycle_refreshes_resources_at_physical_deadlines_before_acknowledged_comp
     let mut refreshed = false;
     for frame in 0..SOURCE_FRAMES {
         let schedule = proof.prepare(frame);
-        let completes = proof.gate.pending.as_ref().unwrap().completes_cycle;
+        let completes = proof.gate.pending.as_ref().unwrap().cycle.completes_cycle;
         assert!(!proof.gate.completed_cycle);
         if completes {
             assert!(refreshed);
@@ -227,7 +227,7 @@ fn eof_after_acknowledged_internal_refresh_still_rejects_incomplete_display_cycl
     let mut proof = InterleaveOutput::new();
     for frame in 0..SOURCE_FRAMES {
         let schedule = proof.prepare(frame);
-        assert!(!proof.gate.pending.as_ref().unwrap().completes_cycle);
+        assert!(!proof.gate.pending.as_ref().unwrap().cycle.completes_cycle);
         drop(proof.deliver(frame, schedule));
         assert!(!proof.gate.completed_cycle);
         if proof.refreshed() {
@@ -249,7 +249,7 @@ fn complete_stream() -> Vec<u8> {
     let mut stream = Vec::new();
     for frame in 0..SOURCE_FRAMES {
         let schedule = proof.prepare(frame);
-        let completes = proof.gate.pending.as_ref().unwrap().completes_cycle;
+        let completes = proof.gate.pending.as_ref().unwrap().cycle.completes_cycle;
         assert!(!proof.gate.completed_cycle);
         stream.extend(proof.deliver(frame, schedule).into_iter().flatten());
         assert!(stream.len() <= 16 * 1_024 * 1_024);

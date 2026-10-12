@@ -3,7 +3,7 @@ use mpeg2ts_reader::packet::Packet;
 use super::{
     psi_framing::{validate_section_start, SectionAssembler},
     signalling::{valid_packet, MAX_WINDOW_PACKETS},
-    TeletextMultiplexError, TeletextPmtPlan, TeletextPsiError,
+    TeletextMultiplexError, TeletextPmtPlan, TeletextPsiError, TeletextServiceDescriptor,
 };
 
 /// A PMT installation preflight failure never changes output or continuity.
@@ -24,11 +24,17 @@ pub enum TeletextPmtInstallError {
     /// Rewriting would discard adaptation control data rather than stuffing.
     #[error("teletext source PMT carries unsupported adaptation control data")]
     Adaptation,
+    /// A replacement changes raw ownership or does not advance the output version.
+    #[error("teletext PMT reconfiguration differs from its current source ownership")]
+    Reconfiguration,
 }
 
 /// Physical packet accounting for one complete atomic PMT installation window.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextPmtInstallReport {
+    /// A pending reconfiguration's new PMT was included in this output window.
+    /// This reports construction only; the host must still acknowledge delivery.
+    pub announced: bool,
     /// Complete source table repetitions represented by the rewritten output.
     pub repetitions: usize,
     /// Emitted payload PMT packets, including growth into null slots.
@@ -58,6 +64,7 @@ pub struct TeletextPmtInstaller {
     input: SectionAssembler,
     next_output_cc: Option<u8>,
     first_source_epoch_packet: bool,
+    pending_announcement: bool,
 }
 
 impl TeletextPmtInstaller {
@@ -69,6 +76,7 @@ impl TeletextPmtInstaller {
             input: SectionAssembler::default(),
             next_output_cc: None,
             first_source_epoch_packet: false,
+            pending_announcement: false,
         }
     }
 
@@ -94,6 +102,38 @@ impl TeletextPmtInstaller {
         self.next_output_cc
     }
 
+    /// Prepare the next output table without changing any installer state.
+    /// # Errors
+    /// Rejects a pending source fragment or invalid descriptor/section capacity.
+    pub fn prepare_reconfiguration(
+        &self,
+        service: Option<&TeletextServiceDescriptor>,
+    ) -> Result<TeletextPmtPlan, TeletextPmtInstallError> {
+        if self.input.is_pending() {
+            return Err(TeletextPmtInstallError::Incomplete);
+        }
+        Ok(self.plan.reconfigure(service)?)
+    }
+
+    /// Change the output table while preserving source assembly and output CC.
+    ///
+    /// The next successful installation must contain the replacement table,
+    /// using bounded null capacity when the source has not repeated its PMT.
+    /// Host acknowledgement and generation admission remain separate.
+    /// # Errors
+    /// Rejects pending source fragments, foreign ownership or stale versions.
+    pub fn reconfigure(&mut self, plan: TeletextPmtPlan) -> Result<(), TeletextPmtInstallError> {
+        if self.input.is_pending() {
+            return Err(TeletextPmtInstallError::Incomplete);
+        }
+        if !plan.is_reconfiguration_of(&self.plan) {
+            return Err(TeletextPmtInstallError::Reconfiguration);
+        }
+        self.plan = plan;
+        self.pending_announcement = true;
+        Ok(())
+    }
+
     /// Atomically replace owned PMT slots and the required null slots.
     /// # Errors
     /// Rejects incomplete/changed sections, malformed or discontinuous input,
@@ -109,7 +149,20 @@ impl TeletextPmtInstaller {
         }
         let mut input = self.input.clone();
         let mut first_source_epoch_packet = self.first_source_epoch_packet;
-        let preflight = self.preflight(window, &mut input, &mut first_source_epoch_packet)?;
+        let mut preflight = self.preflight(window, &mut input, &mut first_source_epoch_packet)?;
+        let repetitions = preflight.transmissions.iter().map(|t| t.repetitions).sum();
+        if self.pending_announcement && preflight.transmissions.is_empty() {
+            // Synthetic announcements own only null slots. They do not consume
+            // source CC or its first physical packet's startup-reset allowance.
+            preflight
+                .available
+                .retain(|&index| u16::from(Packet::new(&window[index]).pid()) == 0x1fff);
+            preflight.transmissions.push(Transmission {
+                start: 0,
+                source_cc: self.next_output_cc.unwrap_or(0),
+                repetitions: 1,
+            });
+        }
         let packet_count = self.plan.packets(0)?.len();
         let (allocations, consumed_null_packets) = allocate(&preflight, packet_count, window)?;
         let mut cc = self.next_output_cc;
@@ -133,7 +186,8 @@ impl TeletextPmtInstaller {
         }
         let retained_owned = emitted.len() - consumed_null_packets;
         let report = TeletextPmtInstallReport {
-            repetitions: preflight.transmissions.iter().map(|t| t.repetitions).sum(),
+            announced: self.pending_announcement,
+            repetitions,
             pmt_packets: emitted.len(),
             consumed_null_packets,
             retired_pmt_packets: preflight.owned.len() - retained_owned,
@@ -147,6 +201,7 @@ impl TeletextPmtInstaller {
         self.input = input;
         self.next_output_cc = cc;
         self.first_source_epoch_packet = first_source_epoch_packet;
+        self.pending_announcement = false;
         Ok(report)
     }
 
@@ -265,3 +320,7 @@ fn null_packet() -> [u8; 188] {
     raw[..4].copy_from_slice(&[0x47, 0x1f, 0xff, 0x10]);
     raw
 }
+
+#[cfg(test)]
+#[path = "pmt_reconfiguration_tests.rs"]
+mod reconfiguration_tests;

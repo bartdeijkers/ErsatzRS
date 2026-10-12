@@ -443,3 +443,6 @@ fn verify_analysis(report: &serde_json::Value) {
         }
     }
 }
+
+#[path = "output_transition_runtime_tests.rs"]
+mod output_transitions;

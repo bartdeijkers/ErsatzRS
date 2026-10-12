@@ -70,6 +70,7 @@ fn growing_pmt_uses_only_source_and_null_slots_without_moving_av() {
     assert_eq!(
         installer.install(&mut window).unwrap(),
         TeletextPmtInstallReport {
+            announced: false,
             repetitions: 1,
             pmt_packets: 2,
             consumed_null_packets: 1,
@@ -192,6 +193,7 @@ fn source_fragmentation_and_duplicates_retire_only_surplus_owned_packets() {
     assert_eq!(
         installer.install(&mut window).unwrap(),
         TeletextPmtInstallReport {
+            announced: false,
             repetitions: 1,
             pmt_packets: 2,
             consumed_null_packets: 0,

@@ -95,6 +95,12 @@ fn normalization_budget() -> TeletextNormalizedMainProgramBudget {
 }
 
 fn authored_service() -> EncodedTeletextAuthoredService {
+    authored_service_with_counter(3)
+}
+
+pub(in crate::transport::iptv) fn authored_service_with_counter(
+    counter: u8,
+) -> EncodedTeletextAuthoredService {
     let owner = json!({"page":200,"subcode":16});
     let unused = json!({"target":{"kind":"unspecified","magazine":2},"validity":"level25_only","required_subpages":65535});
     let resource =
@@ -138,7 +144,7 @@ fn authored_service() -> EncodedTeletextAuthoredService {
         .iter()
         .map(|&resource| TeletextServiceResourceTransmission {
             resource,
-            counter: TeletextResourceUpdateCounter::new(3).unwrap(),
+            counter: TeletextResourceUpdateCounter::new(counter).unwrap(),
             update: TeletextResourceFullUpdate::Changed,
             last_subpage: true,
         })
@@ -186,7 +192,7 @@ fn expected_units(binding: &TeletextOutputBinding) -> Vec<[u8; 46]> {
         .collect()
 }
 
-fn actual_units(bytes: &[u8]) -> Vec<[u8; 46]> {
+pub(in crate::transport::iptv) fn actual_units(bytes: &[u8]) -> Vec<[u8; 46]> {
     let mut pes = Vec::new();
     let mut units = Vec::new();
     for packet in bytes.chunks_exact(188) {

@@ -18,6 +18,10 @@ use super::{
 const MAX_PMT_BYTES: usize = 1_024;
 pub(super) const MAX_WINDOW_PACKETS: usize = 32_768;
 
+#[cfg(test)]
+#[path = "pmt_plan_reconfiguration_tests.rs"]
+mod reconfiguration_tests;
+
 mpeg2ts_reader::descriptor_enum! {
     RawDescriptors {
         Other 0..=255 => UnknownDescriptor,
@@ -156,6 +160,66 @@ pub struct TeletextPmtPlan {
 }
 
 impl TeletextPmtPlan {
+    /// Retain the exact admitted raw source and reserve while changing signalling.
+    ///
+    /// The version advances from this plan's output, including after withdrawal;
+    /// `None` emits the original source streams without the authored stream.
+    /// This does not acknowledge delivery or establish receiver cache removal.
+    /// # Errors
+    /// Rejects an empty descriptor or a section exceeding the PMT size limit.
+    pub fn reconfigure(
+        &self,
+        service: Option<&TeletextServiceDescriptor>,
+    ) -> Result<Self, TeletextMultiplexError> {
+        let extra = match service {
+            Some(service) if service.bytes.is_empty() => {
+                return Err(TeletextMultiplexError::SectionCapacity);
+            }
+            Some(service) => 5 + service.bytes.len(),
+            None => 0,
+        };
+        let size = self
+            .source
+            .len()
+            .checked_add(extra)
+            .filter(|&size| size <= MAX_PMT_BYTES)
+            .ok_or(TeletextMultiplexError::SectionCapacity)?;
+        let mut section = self.source[..self.source.len() - 4].to_vec();
+        if let Some(service) = service {
+            let [high, low] = self.pid.to_be_bytes();
+            let [length_high, length_low] = u16::try_from(service.bytes.len())
+                .map_err(|_| TeletextMultiplexError::SectionCapacity)?
+                .to_be_bytes();
+            section.extend_from_slice(&[6, 0xe0 | high, low, 0xf0 | length_high, length_low]);
+            section.extend_from_slice(&service.bytes);
+        }
+        let [high, low] = u16::try_from(size - 3)
+            .map_err(|_| TeletextMultiplexError::SectionCapacity)?
+            .to_be_bytes();
+        section[1] = 0xb0 | high;
+        section[2] = low;
+        let version = (self.section[5] >> 1) & 31;
+        section[5] = 0xc1 | (((version + 1) & 31) << 1);
+        section.extend_from_slice(&mpegts_crc::sum32(&section).to_be_bytes());
+        Ok(Self {
+            source: self.source.clone(),
+            section,
+            program: self.program,
+            pmt_pid: self.pmt_pid,
+            pid: self.pid,
+            pcr_pid: self.pcr_pid,
+        })
+    }
+
+    pub(super) fn is_reconfiguration_of(&self, previous: &Self) -> bool {
+        self.source == previous.source
+            && self.program == previous.program
+            && self.pmt_pid == previous.pmt_pid
+            && self.pid == previous.pid
+            && self.pcr_pid == previous.pcr_pid
+            && ((self.section[5] >> 1) & 31) == (((previous.section[5] >> 1) + 1) & 31)
+    }
+
     /// Check the complete source section and append host-owned service signalling.
     /// # Errors
     /// Rejects invalid CRC/framing/records, unusable PCR, PID conflicts and an

@@ -22,7 +22,6 @@ Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
 Intervals reject sixteen simultaneous opens; unknown survive.
 Collector caps each type at 127 per display, including defaults.
-Call/write/size lineage remains.
 MIT masks/C1 rasterize fragments/DRCS; Unicode keeps Base priority.
 Header/flash/bottom origins remain; eight DRCS rectangles match native RGBA.
 Composites/BBS retain masks/writers; D5 cancels spacing with original scope.
@@ -30,17 +29,15 @@ Enhanced G1 uses D5 only; native later-spacing discrepancy stays open.
 Same-service Unicode/Active wire normalization passes;
 foreign X26, row-zero and full A7/A8/C3/client proof stay open.
 X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
-Headers reject physical/logical-owner collisions.
-Declarations check roles/defaults/extents/empty owners, one MOT/magazine.
+Headers fence physical/logical owners; declarations check roles/defaults/extents,
+empty owners and one MOT/magazine.
 Compiler keeps resources/M29; paced sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/corrected nested pass.
 QTM edit/save/reopen proves renumber/loss; host roundtrip open.
 
-Strict v2 authenticates declarations with host budgets;
-Profiles pin v2 before v1 through request/env/receipt/manifest fences.
-Base prep rejects v2; encoding keeps model/deadline/fences.
-Original defaults/unknown secondary/channel fences remain.
+Budgeted v2 stays pinned through invocation; Base refuses v2. Encoding retains
+original defaults, secondary uncertainty and channel/model/deadline fences.
 Cold composition isolates M29, coalesces full resources and rechecks MOT effects.
 Originals/pending persist; cold capture/client pass; recovery open.
 ADR0122 profiles/themes/zones/admin/Lua stay preparatory.
@@ -48,14 +45,17 @@ Draft/source bounds; acquisition,
 activation, regions, link CRC,
 UI/Lua and publication remain open.
 
-SQLite keeps tracks/owners/data/leases; missing reports prove no absence,
-revisions no bytes. Pages stay NotAcquired. Explicit-PID TS/PES/header parsing retains flags/subcodes/
-missing PTS, not source identity, readiness or inventory. Bounds follow JSON decode,
-not input/child RSS. Acquisition/revisions/selection stay open; auxiliary failure
-preserves metadata; uncertain cleanup is fatal. P9A-03 owns proof.
+SQLite retains tracks/owners/data/leases; missing reports/revisions prove no bytes
+or absence. Pages stay NotAcquired. Explicit-PID parsing keeps flags/subcodes/PTS,
+not identity/readiness/inventory. Post-JSON bounds do not cap child RSS. Acquisition/
+selection stay open; auxiliary failure keeps metadata, uncertain cleanup is fatal.
+P9A-03 owns proof.
 
-Carousel/PES/TS, all-program PSI/PMT, PCR/CBR checks and retention preserve AV/timing/epoch acknowledgement. Finite EOF
-drains validated output; changed/malformed input is terminal. P9A-04 owns proof.
+Carousel/PSI/PCR/retention preserve AV and finite EOF. Actual ACK/cycle ends fence
+shared proposals; changed PMT precedes PES. Withdrawal retains clock/counters;
+invalid resources/unreconciled M29/MOT omissions retain old output. One-epoch watch
+status grants no activation. P9A-04 owns proof; durable promotion, immediate Off
+and full warm reconciliation remain open.
 
 Authored bindings apply to final MPEG-TS roles. Legacy wrapper/first encoder
 reserve distinct leases; transfer/lifecycle and Health preserve capacity/cleanup. Linux route proof covers

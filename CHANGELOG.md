@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Add bounded teletext output proposals for shared complete services. Replace only
+  after a confirmed cycle boundary; acknowledge changed PMT signalling before
+  new page packets. Withdrawal and re-enable preserve the continuing AV clock
+  and packet counters. Invalid proposals preserve the existing stream. Durable
+  runtime publication, immediate-disable policy and full warm-client acceptance
+  remain open.
 - Preparatory teletext guide capture retains exact addon requests and a versioned
   source-context association through immutable save/reload. Source-aware pending
   requests atomically reject changed historical guide context; legacy designs stay

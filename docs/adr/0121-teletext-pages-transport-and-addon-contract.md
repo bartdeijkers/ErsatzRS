@@ -13,6 +13,20 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+The optional live-output proposal seam now requires a fresh receipt for the exact
+sink-flushed window and its actual end-of-cycle boundary, not historical cycle
+completion. Shared replacement preflights carousel/resource and PMT ownership
+before an infallible paired commit. Descriptor changes, withdrawal and re-enable
+advance the emitted PMT version without resetting source assembly, output continuity
+or AV/PCR positions; changed signalling is sink-acknowledged before new authored PES.
+One bounded watch slot retains the latest proposal, and reports observation for one
+opaque output epoch only. It does not certify all outputs or durable publication.
+Unreconciled retired M29/MOT banks reject nonterminally while the old stream continues.
+This preserves a known decoder invariant, not an accepted permanent authoring limit.
+Full warm reconciliation, logical immediate-disable timing, freshness and accepted
+generation recovery/ordinary-route ownership remain required. P9A-04 owns evidence;
+the interchange reference documents the preparatory API.
+
 The preparatory guide/native bridge now rejects changed effective guide context
 before and after producer preparation, with cumulative read limits and the original
 deadline, including exact stored configured/accepted source-path associations.

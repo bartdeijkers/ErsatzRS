@@ -13,6 +13,14 @@ use tokio::time::Instant;
 
 use super::teletext_output::TeletextPumpError;
 
+#[path = "teletext_control.rs"]
+pub(super) mod control;
+pub use control::{
+    teletext_output_control_channel, TeletextOutputControl, TeletextOutputTransitionPhase,
+    TeletextOutputTransitionRejection, TeletextOutputTransitionStatus, TeletextOutputUpdate,
+    TeletextOutputUpdateError,
+};
+
 /// The host-owned output boundary to which a process belongs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TeletextOutputRole {
@@ -64,6 +72,7 @@ pub struct TeletextOutputBinding {
     config: TeletextOutputConfig,
     content: TeletextOutputContent,
     first_byte_timeout: Duration,
+    control: Option<TeletextOutputControl>,
 }
 
 impl TeletextOutputBinding {
@@ -127,7 +136,21 @@ impl TeletextOutputBinding {
             config,
             content,
             first_byte_timeout,
+            control: None,
         })
+    }
+
+    /// Attach latest trusted engine proposals, without activating a publisher.
+    /// Each output gate observes updates independently; shared latest statuses
+    /// do not certify that all outputs acknowledged a replacement.
+    #[must_use]
+    pub fn with_control(mut self, control: TeletextOutputControl) -> Self {
+        self.control = Some(control);
+        self
+    }
+
+    pub(crate) fn cloned_control(&self) -> Option<TeletextOutputControl> {
+        self.control.clone()
     }
 
     /// Explicit immutable transport and retention policy.
