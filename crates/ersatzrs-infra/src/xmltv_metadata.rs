@@ -14,6 +14,10 @@ use crate::db::{Db, DbRow};
 use crate::metadata::artwork_kind;
 use crate::xmltv_read::Read;
 
+#[path = "xmltv_metadata/expansion.rs"]
+mod expansion;
+use expansion::{decode_list, reserve_buffer, reserve_join, reserve_slots, reserve_strings};
+
 pub(crate) type ContentCache = HashMap<i64, (Option<String>, XmltvProgrammeContent)>;
 
 const ID_BATCH_SIZE: usize = 400;
@@ -42,6 +46,7 @@ pub(crate) async fn load_content_cache_with_reader(
     media_item_ids: &[i64],
 ) -> Result<ContentCache, sqlx::Error> {
     reader.preflight_identifiers(media_item_ids.len())?;
+    reserve_slots::<(i64, (Option<String>, XmltvProgrammeContent))>(reader, media_item_ids.len())?;
     let mut cache = HashMap::with_capacity(media_item_ids.len());
     load_movies(reader, media_item_ids, &mut cache).await?;
     load_episodes(reader, media_item_ids, &mut cache).await?;
@@ -66,12 +71,18 @@ async fn load_movies(
         &["ItemId", "MetadataId", "Title", "Plot", "Year", "ContentRating"],
     )
     .await?;
-    let refs = insert_base_rows(cache, rows, XmltvItemKind::Movie, |row, content| {
-        content.description = nonempty(row.try_get("Plot")?);
-        content.year = row.try_get("Year")?;
-        content.content_rating = nonempty(row.try_get("ContentRating")?);
-        Ok(nonempty(row.try_get("Title")?))
-    })?;
+    let refs = insert_base_rows(
+        reader,
+        cache,
+        rows,
+        XmltvItemKind::Movie,
+        |_, row, content| {
+            content.description = nonempty(row.try_get("Plot")?);
+            content.year = row.try_get("Year")?;
+            content.content_rating = nonempty(row.try_get("ContentRating")?);
+            Ok(nonempty(row.try_get("Title")?))
+        },
+    )?;
 
     hydrate_common(reader, cache, &refs, "MovieMetadataId", true).await
 }
@@ -135,12 +146,13 @@ async fn load_episodes(
                 },
             ),
         );
+        reserve_slots::<(i64, i64)>(reader, 2)?;
         episode_refs.push((item_id, episode_metadata_id));
         show_refs.push((item_id, show_metadata_id));
     }
 
-    let show_ids = metadata_ids(&show_refs);
-    let episode_ids = metadata_ids(&episode_refs);
+    let show_ids = metadata_ids(reader, &show_refs)?;
+    let episode_ids = metadata_ids(reader, &episode_refs)?;
     let show_genres = load_string_map(reader, "Genre", "ShowMetadataId", "Name", &show_ids).await?;
     let show_guids =
         load_string_map(reader, "MetadataGuid", "ShowMetadataId", "Guid", &show_ids).await?;
@@ -158,9 +170,13 @@ async fn load_episodes(
     for (item_id, metadata_id) in show_refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
             // Several episodes may share this show within one guide batch.
-            content.genres = show_genres.get(&metadata_id).cloned().unwrap_or_default();
-            content.guids = show_guids.get(&metadata_id).cloned().unwrap_or_default();
-            set_icon(content, show_artwork.get(&metadata_id).cloned());
+            clone_show_content(
+                reader,
+                content,
+                show_genres.get(&metadata_id),
+                show_guids.get(&metadata_id),
+                show_artwork.get(&metadata_id),
+            )?;
         }
     }
     for (item_id, metadata_id) in episode_refs {
@@ -205,9 +221,7 @@ async fn load_music_videos(
         }
         let metadata_id: i64 = row.try_get("MetadataId")?;
         let related_id: Option<i64> = row.try_get("RelatedMetadataId")?;
-        let track = row
-            .try_get::<Option<i32>, _>("Track")?
-            .map(|value| value.to_string());
+        let track = expansion::track(reader, row.try_get("Track")?)?;
         cache.insert(
             item_id,
             (
@@ -224,14 +238,16 @@ async fn load_music_videos(
                 },
             ),
         );
+        reserve_slots::<(i64, i64)>(reader, 1)?;
         video_refs.push((item_id, metadata_id));
         if let Some(related_id) = related_id {
+            reserve_slots::<(i64, i64)>(reader, 1)?;
             artist_refs.push((item_id, related_id));
         }
     }
 
-    let video_ids = metadata_ids(&video_refs);
-    let artist_ids = metadata_ids(&artist_refs);
+    let video_ids = metadata_ids(reader, &video_refs)?;
+    let artist_ids = metadata_ids(reader, &artist_refs)?;
     let mut video_genres =
         load_string_map(reader, "Genre", "MusicVideoMetadataId", "Name", &video_ids).await?;
     let mut artists = load_string_map(
@@ -299,21 +315,51 @@ async fn load_songs(
         ],
     )
     .await?;
-    let refs = insert_base_rows(cache, rows, XmltvItemKind::Song, |row, content| {
-        let artists = decode_string_list(row.try_get("Artists")?);
-        content.sub_title = nonempty(row.try_get("Title")?);
-        content.year = row.try_get("Year")?;
-        content.artists.clone_from(&artists);
-        content.album_artists = decode_string_list(row.try_get("AlbumArtists")?);
-        content.track = nonempty(row.try_get("Track")?);
-        content.comment = nonempty(row.try_get("Comment")?);
-        content.album = nonempty(row.try_get("Album")?);
-        content.release_date = nonempty(row.try_get("ReleaseDate")?);
-        Ok((!artists.is_empty()).then(|| artists.join(", ")))
-    })?;
+    let refs = insert_base_rows(reader, cache, rows, XmltvItemKind::Song, populate_song)?;
 
     hydrate_common(reader, cache, &refs, "SongMetadataId", false).await?;
     hydrate_studios(reader, cache, &refs, "SongMetadataId").await
+}
+
+fn populate_song(
+    reader: &mut Read<'_>,
+    row: &DbRow,
+    content: &mut XmltvProgrammeContent,
+) -> Result<Option<String>, sqlx::Error> {
+    let artists = decode_list(reader, row.try_get("Artists")?)?;
+    content.sub_title = nonempty(row.try_get("Title")?);
+    content.year = row.try_get("Year")?;
+    reserve_strings(reader, &artists)?;
+    content.artists.clone_from(&artists);
+    content.album_artists = decode_list(reader, row.try_get("AlbumArtists")?)?;
+    content.track = nonempty(row.try_get("Track")?);
+    content.comment = nonempty(row.try_get("Comment")?);
+    content.album = nonempty(row.try_get("Album")?);
+    content.release_date = nonempty(row.try_get("ReleaseDate")?);
+    reserve_join(reader, &artists)?;
+    Ok((!artists.is_empty()).then(|| artists.join(", ")))
+}
+
+fn clone_show_content(
+    reader: &mut Read<'_>,
+    content: &mut XmltvProgrammeContent,
+    genres: Option<&Vec<String>>,
+    guids: Option<&Vec<String>>,
+    artwork: Option<&(ArtworkReference, IconSizeHint)>,
+) -> Result<(), sqlx::Error> {
+    if let Some(values) = genres {
+        reserve_strings(reader, values)?;
+    }
+    content.genres = genres.cloned().unwrap_or_default();
+    if let Some(values) = guids {
+        reserve_strings(reader, values)?;
+    }
+    content.guids = guids.cloned().unwrap_or_default();
+    if let Some((reference, _)) = artwork {
+        reserve_buffer(reader, reference.path.len())?;
+    }
+    set_icon(content, artwork.cloned());
+    Ok(())
 }
 
 async fn load_other_videos(
@@ -330,12 +376,18 @@ async fn load_other_videos(
         &["ItemId", "MetadataId", "Title", "Plot", "Year", "ContentRating"],
     )
     .await?;
-    let refs = insert_base_rows(cache, rows, XmltvItemKind::OtherVideo, |row, content| {
-        content.description = nonempty(row.try_get("Plot")?);
-        content.year = row.try_get("Year")?;
-        content.content_rating = nonempty(row.try_get("ContentRating")?);
-        Ok(nonempty(row.try_get("Title")?))
-    })?;
+    let refs = insert_base_rows(
+        reader,
+        cache,
+        rows,
+        XmltvItemKind::OtherVideo,
+        |_, row, content| {
+            content.description = nonempty(row.try_get("Plot")?);
+            content.year = row.try_get("Year")?;
+            content.content_rating = nonempty(row.try_get("ContentRating")?);
+            Ok(nonempty(row.try_get("Title")?))
+        },
+    )?;
 
     hydrate_common(reader, cache, &refs, "OtherVideoMetadataId", false).await
 }
@@ -374,46 +426,16 @@ async fn load_remote_streams(
         ],
     )
     .await?;
-    let refs = insert_base_rows(cache, rows, XmltvItemKind::RemoteStream, |row, content| {
-        let title = nonempty(row.try_get("Title")?);
-        let show_title = nonempty(row.try_get("ShowTitle")?);
-        content.description = nonempty(row.try_get("Plot")?);
-        content.year = row.try_get("Year")?;
-        content.release_date = nonempty(row.try_get("ReleaseDate")?);
-        content.content_rating = nonempty(row.try_get("ContentRating")?);
-        content.collection = nonempty(row.try_get("CollectionName")?);
-        content.original_broadcasters = decode_string_list(row.try_get("OriginalBroadcasters")?);
-        content.broadcasters = decode_string_list(row.try_get("Broadcasters")?);
-        match row.try_get::<i32, _>("ContentKind")? {
-            1 => {
-                content.kind = XmltvItemKind::Episode;
-                content.sub_title.clone_from(&title);
-                content.season_number = row.try_get("SeasonNumber")?;
-                content.episode_number = row.try_get("EpisodeNumber")?;
-                Ok(show_title.or(title))
-            }
-            2 => {
-                content.kind = XmltvItemKind::Movie;
-                Ok(title)
-            }
-            3 => {
-                content.kind = XmltvItemKind::MusicVideo;
-                content.sub_title.clone_from(&title);
-                Ok(title)
-            }
-            4 => {
-                content.kind = XmltvItemKind::OtherVideo;
-                Ok(title)
-            }
-            _ => {
-                content.kind = XmltvItemKind::RemoteStream;
-                Ok(title)
-            }
-        }
-    })?;
+    let refs = insert_base_rows(
+        reader,
+        cache,
+        rows,
+        XmltvItemKind::RemoteStream,
+        populate_remote,
+    )?;
     hydrate_common(reader, cache, &refs, "RemoteStreamMetadataId", false).await?;
 
-    let ids = metadata_ids(&refs);
+    let ids = metadata_ids(reader, &refs)?;
     let mut tags = load_string_map(reader, "Tag", "RemoteStreamMetadataId", "Name", &ids).await?;
     let mut people = load_remote_stream_people(reader, &ids).await?;
     for (item_id, metadata_id) in refs {
@@ -423,6 +445,54 @@ async fn load_remote_streams(
         }
     }
     Ok(())
+}
+
+fn populate_remote(
+    reader: &mut Read<'_>,
+    row: &DbRow,
+    content: &mut XmltvProgrammeContent,
+) -> Result<Option<String>, sqlx::Error> {
+    let title = nonempty(row.try_get("Title")?);
+    let show_title = nonempty(row.try_get("ShowTitle")?);
+    content.description = nonempty(row.try_get("Plot")?);
+    content.year = row.try_get("Year")?;
+    content.release_date = nonempty(row.try_get("ReleaseDate")?);
+    content.content_rating = nonempty(row.try_get("ContentRating")?);
+    content.collection = nonempty(row.try_get("CollectionName")?);
+    content.original_broadcasters = decode_list(reader, row.try_get("OriginalBroadcasters")?)?;
+    content.broadcasters = decode_list(reader, row.try_get("Broadcasters")?)?;
+    match row.try_get::<i32, _>("ContentKind")? {
+        1 => {
+            content.kind = XmltvItemKind::Episode;
+            if let Some(value) = &title {
+                reserve_buffer(reader, value.len())?;
+            }
+            content.sub_title.clone_from(&title);
+            content.season_number = row.try_get("SeasonNumber")?;
+            content.episode_number = row.try_get("EpisodeNumber")?;
+            Ok(show_title.or(title))
+        }
+        2 => {
+            content.kind = XmltvItemKind::Movie;
+            Ok(title)
+        }
+        3 => {
+            content.kind = XmltvItemKind::MusicVideo;
+            if let Some(value) = &title {
+                reserve_buffer(reader, value.len())?;
+            }
+            content.sub_title.clone_from(&title);
+            Ok(title)
+        }
+        4 => {
+            content.kind = XmltvItemKind::OtherVideo;
+            Ok(title)
+        }
+        _ => {
+            content.kind = XmltvItemKind::RemoteStream;
+            Ok(title)
+        }
+    }
 }
 
 async fn load_remote_stream_people(
@@ -444,7 +514,16 @@ async fn load_remote_stream_people(
         let Some(name) = nonempty(row.try_get("Name")?) else {
             continue;
         };
-        let role = nonempty(row.try_get("Role")?).unwrap_or_else(|| "person".to_owned());
+        let role = if let Some(role) = nonempty(row.try_get("Role")?) {
+            role
+        } else {
+            reserve_buffer(reader, "person".len())?;
+            "person".to_owned()
+        };
+        if !people.contains_key(&metadata_id) {
+            reserve_slots::<(i64, Vec<XmltvCredit>)>(reader, 1)?;
+        }
+        reserve_slots::<XmltvCredit>(reader, 1)?;
         people
             .entry(metadata_id)
             .or_default()
@@ -454,13 +533,18 @@ async fn load_remote_stream_people(
 }
 
 fn insert_base_rows<F>(
+    reader: &mut Read<'_>,
     cache: &mut ContentCache,
     rows: Vec<DbRow>,
     kind: XmltvItemKind,
     mut populate: F,
 ) -> Result<Vec<(i64, i64)>, sqlx::Error>
 where
-    F: FnMut(&DbRow, &mut XmltvProgrammeContent) -> Result<Option<String>, sqlx::Error>,
+    F: FnMut(
+        &mut Read<'_>,
+        &DbRow,
+        &mut XmltvProgrammeContent,
+    ) -> Result<Option<String>, sqlx::Error>,
 {
     let mut refs = Vec::new();
     for row in rows {
@@ -473,8 +557,9 @@ where
             kind,
             ..XmltvProgrammeContent::default()
         };
-        let title = populate(&row, &mut content)?;
+        let title = populate(reader, &row, &mut content)?;
         cache.insert(item_id, (title, content));
+        reserve_slots::<(i64, i64)>(reader, 1)?;
         refs.push((item_id, metadata_id));
     }
     Ok(refs)
@@ -487,7 +572,7 @@ async fn hydrate_common(
     owner_column: &str,
     include_guids: bool,
 ) -> Result<(), sqlx::Error> {
-    let ids = metadata_ids(refs);
+    let ids = metadata_ids(reader, refs)?;
     let mut genres = load_string_map(reader, "Genre", owner_column, "Name", &ids).await?;
     let mut artwork = load_artwork_map(reader, owner_column, &ids).await?;
     let mut guids = if include_guids {
@@ -512,8 +597,8 @@ async fn hydrate_studios(
     refs: &[(i64, i64)],
     owner_column: &str,
 ) -> Result<(), sqlx::Error> {
-    let mut studios =
-        load_string_map(reader, "Studio", owner_column, "Name", &metadata_ids(refs)).await?;
+    let ids = metadata_ids(reader, refs)?;
+    let mut studios = load_string_map(reader, "Studio", owner_column, "Name", &ids).await?;
     for &(item_id, metadata_id) in refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
             content.studios = studios.remove(&metadata_id).unwrap_or_default();
@@ -555,8 +640,12 @@ async fn load_string_map(
     for row in rows {
         let metadata_id: i64 = row.try_get("MetadataId")?;
         if let Some(value) = nonempty(row.try_get("Value")?) {
+            if !values.contains_key(&metadata_id) {
+                reserve_slots::<(i64, Vec<String>)>(reader, 1)?;
+            }
             let entries = values.entry(metadata_id).or_default();
             if !entries.contains(&value) {
+                reserve_slots::<String>(reader, 1)?;
                 entries.push(value);
             }
         }
@@ -595,25 +684,25 @@ async fn load_artwork_map(
         } else {
             IconSizeHint::Thumbnail
         };
-        match artwork.get(&metadata_id) {
-            Some((_, IconSizeHint::Poster)) => {}
-            _ => {
-                artwork.insert(
-                    metadata_id,
-                    (
-                        ArtworkReference {
-                            id: row.try_get("Id")?,
-                            kind: if kind == artwork_kind::POSTER {
-                                ersatzrs_domain::ArtworkKind::Poster
-                            } else {
-                                ersatzrs_domain::ArtworkKind::Thumbnail
-                            },
-                            path,
-                        },
-                        hint,
-                    ),
-                );
+        if !matches!(artwork.get(&metadata_id), Some((_, IconSizeHint::Poster))) {
+            if !artwork.contains_key(&metadata_id) {
+                reserve_slots::<(i64, (ArtworkReference, IconSizeHint))>(reader, 1)?;
             }
+            artwork.insert(
+                metadata_id,
+                (
+                    ArtworkReference {
+                        id: row.try_get("Id")?,
+                        kind: if kind == artwork_kind::POSTER {
+                            ersatzrs_domain::ArtworkKind::Poster
+                        } else {
+                            ersatzrs_domain::ArtworkKind::Thumbnail
+                        },
+                        path,
+                    },
+                    hint,
+                ),
+            );
         }
     }
     Ok(artwork)
@@ -638,11 +727,12 @@ async fn fetch_rows_for_ids(
     Ok(rows)
 }
 
-fn metadata_ids(refs: &[(i64, i64)]) -> Vec<i64> {
+fn metadata_ids(reader: &mut Read<'_>, refs: &[(i64, i64)]) -> Result<Vec<i64>, sqlx::Error> {
+    reserve_slots::<i64>(reader, refs.len())?;
     let mut ids = refs.iter().map(|(_, id)| *id).collect::<Vec<_>>();
     ids.sort_unstable();
     ids.dedup();
-    ids
+    Ok(ids)
 }
 
 fn decode_string_list(value: Option<String>) -> Vec<String> {
@@ -667,6 +757,10 @@ fn nonempty(value: Option<String>) -> Option<String> {
 #[cfg(test)]
 #[path = "xmltv_metadata/bounded_read_tests.rs"]
 mod bounded_read_tests;
+
+#[cfg(test)]
+#[path = "xmltv_metadata/expansion_tests.rs"]
+mod expansion_tests;
 
 #[cfg(test)]
 mod tests {

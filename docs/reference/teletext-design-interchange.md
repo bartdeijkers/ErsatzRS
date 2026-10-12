@@ -3782,9 +3782,28 @@ connection cannot call this boundary. A rejected admission leaves counters
 unchanged; earlier admitted queries remain charged and no partial cache is
 returned on failure.
 
-`usage()` reports admitted source rows/value bytes. It is not a measure of SQLite
-storage/RSS, decoded string-list nodes, retained/copy fan-out or occurrence
-projection. Those bounds and complete main SQL/accepted-source/channel/setting
-ownership remain required in the full guide caller. No publication or source
-freshness authority follows from this cache. P9A-04 owns the focused evidence
-and remaining host acquisition work.
+`usage()` reports admitted source rows/value bytes. The existing
+`GuideReadBudget::new` policy remains raw-source-only. Full guide acquisition
+must instead select `new_with_expansion` with `GuideExpansionLimits` and inspect
+its separate `expansion_usage()` counters. Limits are inclusive; checked node/byte
+reservations update atomically, remain charged across calls and are never refunded.
+Failure returns no partial cache.
+
+Expansion admission models cache-capacity entries (including missing IDs),
+reference/ID vectors, hydration-map and value/credit slots, decoded string-list
+slots and UTF-8 payloads, show genre/GUID/artwork copies, song artist copies and
+comma-space joins, remote subtitle-title copies/default person roles and numeric
+track buffers. Valid JSON lists receive a complete vector-free shape/count pass
+before allocating their decoded vector; empty or whitespace elements still count
+before filtering. Known malformed/incompatible/trailing lists retain the same
+one-literal fallback directly, without allocating a parsed prefix a second time.
+Moved raw SQL strings remain charged to source admission without duplicating
+payload costs; new copies are charged before allocation.
+
+These are modeled slots and buffers, not allocator overhead, SQLite storage or
+peak RSS. Driver row handles, bounded ID-batch query strings and serde's escaped
+string scratch remain separately linear in admitted source size. Complete main
+SQL/accepted-source/channel/setting ownership and retained projection/occurrence/
+segment costs still require admission by one full guide caller. No publication
+or source freshness authority follows from this cache. P9A-04 owns the focused
+evidence and remaining host acquisition work.

@@ -6,7 +6,7 @@ use crate::{
 };
 use sqlx::Executor;
 
-async fn database() -> (tempfile::TempDir, DbPool) {
+pub(super) async fn database() -> (tempfile::TempDir, DbPool) {
     let root = tempfile::tempdir().unwrap();
     let url = format!("sqlite:{}", root.path().join("metadata.db").display());
     let pool = crate::db::init(&url).await.unwrap();
@@ -42,7 +42,7 @@ fn budget(records: usize, source_bytes: usize) -> GuideReadBudget {
     })
 }
 
-async fn read(
+pub(super) async fn read(
     pool: &DbPool,
     ids: &[i64],
     limits: &mut GuideReadBudget,

@@ -1,5 +1,5 @@
 //! Shared legacy or transaction-borrowed source reads for XMLTV metadata.
-//! These bounds measure source rows/bytes, not later decoded/cloned content.
+//! Source and optional modeled expansion costs remain separate from full guide projection.
 
 use sqlx::Row as _;
 
@@ -23,11 +23,33 @@ pub struct GuideReadUsage {
     pub source_bytes: usize,
 }
 
+/// Additional metadata model/allocation costs beyond admitted source rows.
+/// These are modeled costs, not an exact allocator or `SQLite` RSS measurement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuideExpansionLimits {
+    pub max_nodes: usize,
+    pub max_bytes: usize,
+}
+
+/// Cumulative admitted decoded-list, cache-capacity and copy costs.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct GuideExpansionUsage {
+    pub nodes: usize,
+    pub bytes: usize,
+}
+
+#[derive(Debug)]
+struct Expansion {
+    limits: GuideExpansionLimits,
+    usage: GuideExpansionUsage,
+}
+
 /// One caller-owned source budget; rejection never yields a truncated result.
 #[derive(Debug)]
 pub struct GuideReadBudget {
     limits: GuideReadLimits,
     usage: GuideReadUsage,
+    expansion: Option<Expansion>,
 }
 
 impl GuideReadBudget {
@@ -39,12 +61,55 @@ impl GuideReadBudget {
                 records: 0,
                 source_bytes: 0,
             },
+            expansion: None,
         }
+    }
+
+    /// Add cumulative decoded/copy limits while retaining the source policy.
+    #[must_use]
+    pub const fn new_with_expansion(
+        limits: GuideReadLimits,
+        expansion: GuideExpansionLimits,
+    ) -> Self {
+        let mut budget = Self::new(limits);
+        budget.expansion = Some(Expansion {
+            limits: expansion,
+            usage: GuideExpansionUsage { nodes: 0, bytes: 0 },
+        });
+        budget
     }
 
     #[must_use]
     pub const fn usage(&self) -> GuideReadUsage {
         self.usage
+    }
+
+    /// `None` denotes the original raw-source-only policy.
+    #[must_use]
+    pub fn expansion_usage(&self) -> Option<GuideExpansionUsage> {
+        self.expansion.as_ref().map(|budget| budget.usage)
+    }
+
+    fn reserve_expansion(&mut self, nodes: usize, bytes: usize) -> Result<(), sqlx::Error> {
+        let Some(expansion) = &mut self.expansion else {
+            return Ok(());
+        };
+        let next = GuideExpansionUsage {
+            nodes: expansion
+                .usage
+                .nodes
+                .checked_add(nodes)
+                .ok_or_else(arithmetic)?,
+            bytes: expansion
+                .usage
+                .bytes
+                .checked_add(bytes)
+                .ok_or_else(arithmetic)?,
+        };
+        check("expansion nodes", next.nodes, expansion.limits.max_nodes)?;
+        check("expansion bytes", next.bytes, expansion.limits.max_bytes)?;
+        expansion.usage = next;
+        Ok(())
     }
 
     fn charge(&mut self, records: usize, source_bytes: usize) -> Result<(), sqlx::Error> {
@@ -128,6 +193,24 @@ impl<'a> Read<'a> {
         Ok(())
     }
 
+    pub(crate) fn expansion_enabled(&self) -> bool {
+        match self {
+            Self::Legacy(_) => false,
+            Self::Snapshot { budget, .. } => budget.expansion.is_some(),
+        }
+    }
+
+    pub(crate) fn reserve_expansion(
+        &mut self,
+        nodes: usize,
+        bytes: usize,
+    ) -> Result<(), sqlx::Error> {
+        match self {
+            Self::Legacy(_) => Ok(()),
+            Self::Snapshot { budget, .. } => budget.reserve_expansion(nodes, bytes),
+        }
+    }
+
     /// Only repository-owned SELECTs and explicitly selected payload aliases.
     /// Preflight and retrieval use identical SQL/ID bindings and one connection.
     pub(crate) async fn fetch_rows(
@@ -182,4 +265,67 @@ async fn measure(
         usize::try_from(records).map_err(|_| arithmetic())?,
         usize::try_from(source_bytes).map_err(|_| arithmetic())?,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn source() -> GuideReadLimits {
+        GuideReadLimits {
+            max_records: 8,
+            max_source_bytes: 32,
+        }
+    }
+
+    #[test]
+    fn expansion_limit_rejection_is_atomic_and_separate_from_source_admission() {
+        let mut budget = GuideReadBudget::new_with_expansion(
+            source(),
+            GuideExpansionLimits {
+                max_nodes: 2,
+                max_bytes: 5,
+            },
+        );
+        budget.charge(1, 3).unwrap();
+        budget.reserve_expansion(1, 4).unwrap();
+        let admitted = budget.expansion_usage();
+        assert!(budget.reserve_expansion(1, 2).is_err());
+        assert_eq!(budget.expansion_usage(), admitted);
+        assert!(budget.reserve_expansion(2, 0).is_err());
+        assert_eq!(budget.expansion_usage(), admitted);
+        assert_eq!(
+            budget.usage(),
+            GuideReadUsage {
+                records: 1,
+                source_bytes: 3
+            }
+        );
+        budget.reserve_expansion(1, 1).unwrap();
+        assert_eq!(
+            budget.expansion_usage(),
+            Some(GuideExpansionUsage { nodes: 2, bytes: 5 })
+        );
+    }
+
+    #[test]
+    fn expansion_checked_overflow_does_not_commit_the_other_dimension() {
+        for (nodes, bytes, next_nodes, next_bytes) in [(usize::MAX, 0, 1, 1), (1, usize::MAX, 1, 1)]
+        {
+            let mut budget = GuideReadBudget::new_with_expansion(
+                source(),
+                GuideExpansionLimits {
+                    max_nodes: usize::MAX,
+                    max_bytes: usize::MAX,
+                },
+            );
+            budget.reserve_expansion(nodes, bytes).unwrap();
+            assert!(budget.reserve_expansion(next_nodes, next_bytes).is_err());
+            assert_eq!(
+                budget.expansion_usage(),
+                Some(GuideExpansionUsage { nodes, bytes })
+            );
+            assert_eq!(budget.usage(), GuideReadUsage::default());
+        }
+    }
 }

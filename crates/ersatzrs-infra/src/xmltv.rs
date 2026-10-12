@@ -14,7 +14,9 @@ use crate::repositories::common::{
 };
 use crate::xmltv_metadata::load_content_cache;
 
-pub use crate::xmltv_read::{GuideReadBudget, GuideReadLimits, GuideReadUsage};
+pub use crate::xmltv_read::{
+    GuideExpansionLimits, GuideExpansionUsage, GuideReadBudget, GuideReadLimits, GuideReadUsage,
+};
 
 /// Metadata cache under the existing XMLTV hydration semantics.
 pub type ProgrammeContentCache =
@@ -23,8 +25,9 @@ pub type ProgrammeContentCache =
 /// Read metadata through the caller's exact transaction and aggregate source budget.
 ///
 /// This additive boundary preserves legacy metadata selection and hydration.
-/// Bounds apply before row retrieval and cache allocation; source usage is not
-/// a bound on decoded collections, retained clones or complete guide projection.
+/// Source bounds apply before row retrieval and cache allocation. An expansion
+/// policy additionally checks decoded lists and copies before allocation;
+/// source and expansion usage remain separate from complete guide projection.
 /// The transaction token pins preflight and retrieval to the same database
 /// snapshot; an autocommit connection cannot call this boundary. The caller owns
 /// the encompassing transaction and complete guide context.
