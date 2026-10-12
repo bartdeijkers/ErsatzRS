@@ -6,7 +6,6 @@ use super::composed_main::compile_composed_with_context;
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
     allocate_teletext_resource_objects, build_teletext_augmented_origin_program,
-    compare_teletext_augmented_origin_glyphs, compare_teletext_physical_display,
     plan_teletext_base_compatibility_realization, plan_teletext_origin_carrier_placement,
     EncodedTeletextAugmentedOriginProgram, EncodedTeletextLocalObjectProgram,
     EncodedTeletextPhysicalDisplayProgram, TeletextAugmentedGlyphComparisonBudget,
@@ -264,44 +263,46 @@ fn compile_physical_with_context(
         )))
     })?;
     check_deadline(owner, context.deadline)?;
-    check_candidate(&compiled, budget, context.deadline)?;
+    check_candidate(&compiled, budget, context)?;
     check_deadline(owner, context.deadline)?;
     Ok(compiled.into_physical())
 }
 fn check_candidate(
     compiled: &EncodedTeletextAugmentedOriginProgram<'_>,
     budget: &TeletextNormalizedMainProgramBudget,
-    deadline: Option<Instant>,
+    context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<(), TeletextNormalizedMainProgramError> {
     let original = compiled.augmented().placement().plan().composition();
     let fail = |reason| TeletextNormalizedMainProgramError {
         owner: original.owner(),
         reason,
     };
-    check_deadline(original.owner(), deadline)?;
-    let glyphs = compare_teletext_augmented_origin_glyphs(compiled, budget.glyph_comparison)
+    check_deadline(original.owner(), context.deadline)?;
+    let glyphs = context
+        .compare_glyphs(compiled, budget.glyph_comparison)
         .map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::GlyphComparison(
                 Box::new(error),
             ))
         })?;
-    check_deadline(original.owner(), deadline)?;
+    check_deadline(original.owner(), context.deadline)?;
     if let Some(diagnostic) = glyphs.diagnostics().first() {
         return Err(fail(TeletextNormalizedMainProgramFailure::GlyphMismatch(
             Box::new(*diagnostic),
         )));
     }
-    let display = compare_teletext_physical_display(
-        original,
-        compiled.physical().replay(),
-        budget.display_comparison,
-    )
-    .map_err(|error| {
-        fail(TeletextNormalizedMainProgramFailure::DisplayComparison(
-            Box::new(error),
-        ))
-    })?;
-    check_deadline(original.owner(), deadline)?;
+    let display = context
+        .compare_display(
+            original,
+            compiled.physical().replay(),
+            budget.display_comparison,
+        )
+        .map_err(|error| {
+            fail(TeletextNormalizedMainProgramFailure::DisplayComparison(
+                Box::new(error),
+            ))
+        })?;
+    check_deadline(original.owner(), context.deadline)?;
     if let Some(diagnostic) = display.diagnostics().first() {
         return Err(fail(TeletextNormalizedMainProgramFailure::DisplayMismatch(
             Box::new(diagnostic.clone()),

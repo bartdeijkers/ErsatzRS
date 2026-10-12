@@ -1,10 +1,11 @@
 //! Whole-page diagnostic observations, not source lineage or receiver acceptance.
 
 use crate::teletext::physical_comparison::{
-    compare_teletext_physical_display, TeletextPhysicalComparison,
-    TeletextPhysicalComparisonBudget, TeletextPhysicalComparisonFailure,
-    TeletextPhysicalComparisonField as Field, TeletextPhysicalComparisonFinding as Finding,
-    TeletextPhysicalComparisonPendingKind, TeletextPhysicalComparisonSide as Side,
+    compare_teletext_physical_display, compare_teletext_physical_display_with_usage,
+    TeletextPhysicalComparison, TeletextPhysicalComparisonBudget,
+    TeletextPhysicalComparisonFailure, TeletextPhysicalComparisonField as Field,
+    TeletextPhysicalComparisonFinding as Finding, TeletextPhysicalComparisonPendingKind,
+    TeletextPhysicalComparisonSide as Side,
 };
 use crate::teletext::{
     compose_teletext_main_program, replay_teletext_physical_display, TeletextMainComposition,
@@ -173,6 +174,75 @@ fn budget() -> TeletextPhysicalComparisonBudget {
         max_updates: 1_000_000,
     }
 }
+
+#[test]
+fn physical_usage_exact_boundary_and_failed_reservation_preserve_models_and_errors() {
+    let service = service(text("é"), vec![], None, None);
+    let original = compose(&service);
+    let physical = replay(&service, &original, original.program().commands().to_vec());
+    let retained = (service.clone(), original.clone(), physical.clone());
+    let expected = compare_teletext_physical_display(&original, &physical, budget()).unwrap();
+    let (result, admitted) =
+        compare_teletext_physical_display_with_usage(&original, &physical, budget());
+    let actual = result.unwrap();
+    assert!(admitted > 1000);
+    assert_eq!(actual.compared_cells(), expected.compared_cells());
+    assert_eq!(actual.diagnostics(), expected.diagnostics());
+    assert_eq!(actual.original_pending(), expected.original_pending());
+    assert_eq!(actual.physical_pending(), expected.physical_pending());
+    assert!(std::ptr::eq(actual.original(), expected.original()));
+    assert!(std::ptr::eq(actual.physical(), expected.physical()));
+    let mut exact = budget();
+    exact.max_updates = admitted;
+    let (result, repeated) =
+        compare_teletext_physical_display_with_usage(&original, &physical, exact);
+    let result = result.unwrap();
+    assert_eq!(repeated, admitted);
+    assert_eq!(result.compared_cells(), expected.compared_cells());
+    assert_eq!(result.diagnostics(), expected.diagnostics());
+    exact.max_updates -= 1;
+    let (result, partial) =
+        compare_teletext_physical_display_with_usage(&original, &physical, exact);
+    let failure = result.unwrap_err();
+    assert_eq!(
+        failure,
+        compare_teletext_physical_display(&original, &physical, exact).unwrap_err()
+    );
+    assert!(
+        matches!(failure.reason, TeletextPhysicalComparisonFailure::Budget {
+        kind:"updates", maximum,..} if maximum == exact.max_updates)
+    );
+    assert!(partial > 0 && partial <= exact.max_updates);
+    assert!(failure.position.is_some());
+    assert_eq!((service, original, physical), retained);
+}
+
+#[test]
+fn physical_usage_preflight_rejections_report_zero_and_original_errors() {
+    let service = service(text("é"), vec![], None, None);
+    let original = compose(&service);
+    let physical = replay(&service, &original, vec![]);
+    for field in ["records", "cells", "updates"] {
+        let mut limits = budget();
+        match field {
+            "records" => limits.max_records = 0,
+            "cells" => limits.max_cells = 999,
+            _ => limits.max_updates = 0,
+        }
+        let (result, admitted) =
+            compare_teletext_physical_display_with_usage(&original, &physical, limits);
+        let error = result.unwrap_err();
+        assert_eq!(admitted, 0);
+        assert_eq!(
+            error,
+            compare_teletext_physical_display(&original, &physical, limits).unwrap_err()
+        );
+        assert!(
+            matches!(error.reason, TeletextPhysicalComparisonFailure::Budget {kind,..} if kind == field)
+        );
+        assert_eq!(error.position, None);
+    }
+}
 fn difference(result: &TeletextPhysicalComparison<'_>, position: (u8, u8), field: Field) -> bool {
     result.diagnostics().iter().any(|diagnostic| {
         diagnostic.position == Some(position) && diagnostic.finding == Finding::Difference(field)
@@ -186,6 +256,12 @@ fn dropping_and_restoring_authored_unicode_uses_sided_masks() {
         let original = compose(&service);
         let dropped = replay(&service, &original, vec![]);
         let comparison = compare_teletext_physical_display(&original, &dropped, budget()).unwrap();
+        let (measured, admitted) =
+            compare_teletext_physical_display_with_usage(&original, &dropped, budget());
+        let measured = measured.unwrap();
+        assert!(admitted > 0);
+        assert_eq!(measured.compared_cells(), comparison.compared_cells());
+        assert_eq!(measured.diagnostics(), comparison.diagnostics());
         assert_eq!(comparison.compared_cells(), 1000);
         assert!(difference(&comparison, (1, 8), Field::GlyphMask));
         let restored = replay(&service, &original, original.program().commands().to_vec());
@@ -411,6 +487,14 @@ fn bounded_failures_return_no_partial_comparison_and_preserve_inputs() {
             _ => limits.max_diagnostics = limit,
         }
         let error = compare_teletext_physical_display(&original, &actual, limits).unwrap_err();
+        let (measured, admitted) =
+            compare_teletext_physical_display_with_usage(&original, &actual, limits);
+        assert_eq!(measured.unwrap_err(), error);
+        if kind == "diagnostics" {
+            assert!(admitted > 0 && admitted <= limits.max_updates);
+        } else {
+            assert_eq!(admitted, 0);
+        }
         assert!(
             matches!(error.reason,TeletextPhysicalComparisonFailure::Budget {kind:actual,..} if actual==kind)
         );

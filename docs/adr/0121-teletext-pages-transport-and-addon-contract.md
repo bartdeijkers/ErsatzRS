@@ -29,8 +29,11 @@ stages, not mid-stage preemption or aggregate CPU/RSS admission. An explicit
 optional whole-service quota now debits actual admitted display-resolution updates
 across original, physical and transmission-settlement passes, including failures.
 Usage is separate from model/wire identity; disabled metering keeps prior stage
-limits. Conservative reservations are charges, not executed CPU/RSS costs. Other
-stage meters and measured production host policy remain open; P9A-04 owns proof.
+limits. Separate optional glyph-lookup and selected-display comparison credits
+now share that service context and retain failure usage without changing model,
+wire or artifact identity. Conservative reservations are charges, not executed
+CPU/RSS costs. Other stage meters and measured production host policy remain
+open; P9A-04 owns proof and the resource-rich measurement scope.
 Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact

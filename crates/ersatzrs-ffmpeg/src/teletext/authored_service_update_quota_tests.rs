@@ -2,7 +2,7 @@
 
 use super::*;
 
-fn single(subcode: u16) -> TeletextDeclaredService {
+pub(super) fn single(subcode: u16) -> TeletextDeclaredService {
     let mut draft = input();
     draft
         .base
@@ -43,7 +43,10 @@ fn metered(
     (result, usage.unwrap())
 }
 
-fn assert_same(expected: &EncodedTeletextAuthoredService, actual: &EncodedTeletextAuthoredService) {
+pub(super) fn assert_same(
+    expected: &EncodedTeletextAuthoredService,
+    actual: &EncodedTeletextAuthoredService,
+) {
     assert_eq!(actual.declared(), expected.declared());
     assert_eq!(actual.inventory(), expected.inventory());
     assert_eq!(actual.unit_count(), expected.unit_count());

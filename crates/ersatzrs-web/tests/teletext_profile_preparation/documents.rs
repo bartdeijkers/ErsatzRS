@@ -131,6 +131,8 @@ pub(super) fn policy() -> TeletextDocumentEncodingPolicy {
             max_units: 1024,
             max_commands: 8192,
             max_display_updates: None,
+            max_glyph_comparison_work: None,
+            max_display_comparison_updates: None,
             normalization,
         },
         transmissions: Vec::new(),

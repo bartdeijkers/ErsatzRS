@@ -189,6 +189,23 @@ pub fn compare_teletext_physical_display<'a>(
     physical: &'a TeletextPhysicalDisplayReplay,
     budget: TeletextPhysicalComparisonBudget,
 ) -> Result<TeletextPhysicalComparison<'a>, TeletextPhysicalComparisonError> {
+    compare_teletext_physical_display_with_usage(original, physical, budget).0
+}
+
+/// Compare unchanged display evidence and return admitted updates on either outcome.
+/// Usage includes the existing conservative bulk reservations, not CPU time or
+/// total memory. A denied reservation consumes no credit; earlier admitted work
+/// is retained after later failures. No partial comparison escapes on failure.
+/// # Errors
+/// The embedded result retains all existing owner, located budget and allocation errors.
+pub fn compare_teletext_physical_display_with_usage<'a>(
+    original: &'a TeletextMainComposition,
+    physical: &'a TeletextPhysicalDisplayReplay,
+    budget: TeletextPhysicalComparisonBudget,
+) -> (
+    Result<TeletextPhysicalComparison<'a>, TeletextPhysicalComparisonError>,
+    usize,
+) {
     let mut builder = Builder {
         result: TeletextPhysicalComparison {
             original,
@@ -199,21 +216,25 @@ pub fn compare_teletext_physical_display<'a>(
         budget,
         remaining: budget.max_updates,
     };
-    builder.preflight()?;
-    builder.global_pending(TeletextPhysicalComparisonSide::Original)?;
-    builder.global_pending(TeletextPhysicalComparisonSide::Physical)?;
-    builder.planes()?;
-    let width = original
-        .display_resolution()
-        .width()
-        .max(physical.display_resolution().width());
-    for row in 0..25 {
-        for column in 0..width {
-            builder.cell(row, column)?;
-            builder.result.compared_cells += 1;
+    let outcome = (|| {
+        builder.preflight()?;
+        builder.global_pending(TeletextPhysicalComparisonSide::Original)?;
+        builder.global_pending(TeletextPhysicalComparisonSide::Physical)?;
+        builder.planes()?;
+        let width = original
+            .display_resolution()
+            .width()
+            .max(physical.display_resolution().width());
+        for row in 0..25 {
+            for column in 0..width {
+                builder.cell(row, column)?;
+                builder.result.compared_cells += 1;
+            }
         }
-    }
-    Ok(builder.result)
+        Ok(())
+    })();
+    let admitted = budget.max_updates - builder.remaining;
+    (outcome.map(|()| builder.result), admitted)
 }
 
 type Side = TeletextPhysicalComparisonSide;

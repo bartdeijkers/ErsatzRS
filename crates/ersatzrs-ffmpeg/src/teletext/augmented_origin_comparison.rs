@@ -126,6 +126,22 @@ pub fn compare_teletext_augmented_origin_glyphs<'a>(
     compiled: &'a EncodedTeletextAugmentedOriginProgram<'a>,
     budget: TeletextAugmentedGlyphComparisonBudget,
 ) -> Result<TeletextAugmentedGlyphComparison<'a>, TeletextAugmentedGlyphComparisonError> {
+    compare_teletext_augmented_origin_glyphs_with_usage(compiled, budget).0
+}
+
+/// Compare unchanged typed evidence and return its admitted work on either outcome.
+/// Usage is the existing source-lookup/visit meter, not CPU time or total memory.
+/// A denied or overflowing charge is excluded; earlier admitted work is retained
+/// even when a later check fails. No partial comparison escapes on failure.
+/// # Errors
+/// The embedded result retains the existing located budget/correspondence errors.
+pub fn compare_teletext_augmented_origin_glyphs_with_usage<'a>(
+    compiled: &'a EncodedTeletextAugmentedOriginProgram<'a>,
+    budget: TeletextAugmentedGlyphComparisonBudget,
+) -> (
+    Result<TeletextAugmentedGlyphComparison<'a>, TeletextAugmentedGlyphComparisonError>,
+    usize,
+) {
     let mut builder = Builder {
         result: TeletextAugmentedGlyphComparison {
             compiled,
@@ -135,20 +151,24 @@ pub fn compare_teletext_augmented_origin_glyphs<'a>(
         budget,
         work: 0,
     };
-    builder.preflight()?;
-    let original = compiled.augmented().placement().plan().composition();
-    let actual = compiled.physical().replay();
-    let width = original
-        .display_resolution()
-        .width()
-        .max(actual.display_resolution().width());
-    for row in 0..25 {
-        for column in 0..width {
-            builder.cell((row, column))?;
-            builder.result.cells += 1;
+    let outcome = (|| {
+        builder.preflight()?;
+        let original = compiled.augmented().placement().plan().composition();
+        let actual = compiled.physical().replay();
+        let width = original
+            .display_resolution()
+            .width()
+            .max(actual.display_resolution().width());
+        for row in 0..25 {
+            for column in 0..width {
+                builder.cell((row, column))?;
+                builder.result.cells += 1;
+            }
         }
-    }
-    Ok(builder.result)
+        Ok(())
+    })();
+    let admitted = builder.work;
+    (outcome.map(|()| builder.result), admitted)
 }
 
 type Error = TeletextAugmentedGlyphComparisonError;
@@ -189,20 +209,21 @@ impl Builder<'_> {
         }
     }
     fn charge(&mut self, count: usize, position: (u8, u8)) -> Result<(), Error> {
-        self.work = self
+        let attempted = self
             .work
             .checked_add(count)
             .ok_or_else(|| self.error(Some(position), Failure::AllocationSize))?;
-        if self.work > self.budget.max_work {
+        if attempted > self.budget.max_work {
             return Err(self.error(
                 Some(position),
                 Failure::Budget {
                     kind: "work",
-                    count: self.work,
+                    count: attempted,
                     maximum: self.budget.max_work,
                 },
             ));
         }
+        self.work = attempted;
         Ok(())
     }
     fn preflight(&mut self) -> Result<(), Error> {

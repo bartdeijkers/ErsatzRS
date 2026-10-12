@@ -9,12 +9,26 @@ use ersatzrs_domain::{
 };
 
 use super::resource_transmission::ResourceTransmissionContext;
+use super::{
+    compare_teletext_augmented_origin_glyphs, compare_teletext_augmented_origin_glyphs_with_usage,
+    compare_teletext_physical_display, compare_teletext_physical_display_with_usage,
+    EncodedTeletextAugmentedOriginProgram, TeletextAugmentedGlyphComparison,
+    TeletextAugmentedGlyphComparisonBudget, TeletextAugmentedGlyphComparisonError,
+    TeletextAugmentedGlyphComparisonFailure, TeletextAuthoredServiceEncodingBudget,
+    TeletextAuthoredServiceEncodingUsage, TeletextMainComposition, TeletextPhysicalComparison,
+    TeletextPhysicalComparisonBudget, TeletextPhysicalComparisonError,
+    TeletextPhysicalComparisonFailure, TeletextPhysicalDisplayReplay,
+};
 
 pub(super) struct TeletextCompileContext<'a, 'service> {
     pub resources: Option<&'a ResourceTransmissionContext<'service>>,
     pub deadline: Option<Instant>,
     maximum_display_updates: Option<usize>,
     remaining_display_updates: Option<usize>,
+    maximum_glyph_comparison_work: Option<usize>,
+    remaining_glyph_comparison_work: Option<usize>,
+    maximum_display_comparison_updates: Option<usize>,
+    remaining_display_comparison_updates: Option<usize>,
 }
 
 impl<'a, 'service> TeletextCompileContext<'a, 'service> {
@@ -28,13 +42,93 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
             deadline,
             maximum_display_updates,
             remaining_display_updates: maximum_display_updates,
+            maximum_glyph_comparison_work: None,
+            remaining_glyph_comparison_work: None,
+            maximum_display_comparison_updates: None,
+            remaining_display_comparison_updates: None,
         }
     }
 
-    pub(super) fn used_updates(&self) -> Option<usize> {
-        self.maximum_display_updates
-            .zip(self.remaining_display_updates)
-            .map(|(maximum, remaining)| maximum - remaining)
+    pub(super) fn for_service(
+        resources: Option<&'a ResourceTransmissionContext<'service>>,
+        deadline: Option<Instant>,
+        budget: &TeletextAuthoredServiceEncodingBudget,
+    ) -> Self {
+        let mut context = Self::new(resources, deadline, budget.max_display_updates);
+        context.maximum_glyph_comparison_work = budget.max_glyph_comparison_work;
+        context.remaining_glyph_comparison_work = budget.max_glyph_comparison_work;
+        context.maximum_display_comparison_updates = budget.max_display_comparison_updates;
+        context.remaining_display_comparison_updates = budget.max_display_comparison_updates;
+        context
+    }
+
+    pub(super) fn used_work(&self) -> TeletextAuthoredServiceEncodingUsage {
+        let used = |maximum: Option<usize>, remaining: Option<usize>| {
+            maximum
+                .zip(remaining)
+                .map(|(maximum, remaining)| maximum - remaining)
+        };
+        TeletextAuthoredServiceEncodingUsage {
+            display_updates: used(self.maximum_display_updates, self.remaining_display_updates),
+            glyph_comparison_work: used(
+                self.maximum_glyph_comparison_work,
+                self.remaining_glyph_comparison_work,
+            ),
+            display_comparison_updates: used(
+                self.maximum_display_comparison_updates,
+                self.remaining_display_comparison_updates,
+            ),
+        }
+    }
+
+    pub(super) fn compare_glyphs<'b>(
+        &mut self,
+        compiled: &'b EncodedTeletextAugmentedOriginProgram<'b>,
+        mut budget: TeletextAugmentedGlyphComparisonBudget,
+    ) -> Result<TeletextAugmentedGlyphComparison<'b>, TeletextAugmentedGlyphComparisonError> {
+        let Some(remaining) = self.remaining_glyph_comparison_work else {
+            return compare_teletext_augmented_origin_glyphs(compiled, budget);
+        };
+        budget.max_work = budget.max_work.min(remaining);
+        let (result, admitted) =
+            compare_teletext_augmented_origin_glyphs_with_usage(compiled, budget);
+        let next = remaining.checked_sub(admitted).ok_or_else(|| {
+            TeletextAugmentedGlyphComparisonError {
+                owner: compiled
+                    .augmented()
+                    .placement()
+                    .plan()
+                    .composition()
+                    .owner(),
+                position: None,
+                reason: TeletextAugmentedGlyphComparisonFailure::AllocationSize,
+            }
+        })?;
+        self.remaining_glyph_comparison_work = Some(next);
+        result
+    }
+
+    pub(super) fn compare_display<'b>(
+        &mut self,
+        original: &'b TeletextMainComposition,
+        physical: &'b TeletextPhysicalDisplayReplay,
+        mut budget: TeletextPhysicalComparisonBudget,
+    ) -> Result<TeletextPhysicalComparison<'b>, TeletextPhysicalComparisonError> {
+        let Some(remaining) = self.remaining_display_comparison_updates else {
+            return compare_teletext_physical_display(original, physical, budget);
+        };
+        budget.max_updates = budget.max_updates.min(remaining);
+        let (result, admitted) =
+            compare_teletext_physical_display_with_usage(original, physical, budget);
+        let next = remaining
+            .checked_sub(admitted)
+            .ok_or(TeletextPhysicalComparisonError {
+                owner: original.owner(),
+                position: None,
+                reason: TeletextPhysicalComparisonFailure::AllocationSize,
+            })?;
+        self.remaining_display_comparison_updates = Some(next);
+        result
     }
 
     pub(super) fn resolve_display(

@@ -17,6 +17,9 @@ use serde_json::{json, Value};
 #[path = "channel_measurement.rs"]
 mod measurement;
 
+#[path = "channel_resource_measurement.rs"]
+mod resource_measurement;
+
 const CHANNEL_SCRIPT: &str = r#"case "$1" in
 check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
 pages) ;;

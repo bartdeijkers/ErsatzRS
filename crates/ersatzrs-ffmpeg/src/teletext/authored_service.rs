@@ -59,8 +59,34 @@ pub struct TeletextAuthoredServiceEncodingBudget {
     /// retains the existing independent stage limits. No production default
     /// is inferred, and this meter is not total compiler CPU or RSS.
     pub max_display_updates: Option<usize>,
+    /// Optional cumulative admitted glyph-comparison lookup work. This is a
+    /// separate unit from display updates, not a CPU-time conversion.
+    pub max_glyph_comparison_work: Option<usize>,
+    /// Optional cumulative admitted selected-display comparison updates,
+    /// including its conservative bulk reservations.
+    pub max_display_comparison_updates: Option<usize>,
     /// Independent stage bounds applied to each display candidate.
     pub normalization: TeletextNormalizedMainProgramBudget,
+}
+
+/// Admitted work in separately bounded service-wide buckets. A disabled bucket
+/// reports None, not zero. These counters are neither model/wire identity nor
+/// complete compiler CPU/RSS costs; earlier charges survive later failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextAuthoredServiceEncodingUsage {
+    pub display_updates: Option<usize>,
+    pub glyph_comparison_work: Option<usize>,
+    pub display_comparison_updates: Option<usize>,
+}
+
+impl TeletextAuthoredServiceEncodingUsage {
+    fn empty(budget: &TeletextAuthoredServiceEncodingBudget) -> Self {
+        Self {
+            display_updates: budget.max_display_updates.map(|_| 0),
+            glyph_comparison_work: budget.max_glyph_comparison_work.map(|_| 0),
+            display_comparison_updates: budget.max_display_comparison_updates.map(|_| 0),
+        }
+    }
 }
 
 /// Native absent-X26 display and its original semantic preview composition.
@@ -338,6 +364,27 @@ pub fn encode_teletext_authored_service_with_usage(
     Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError>,
     Option<usize>,
 ) {
+    let (result, usage) =
+        encode_with_clock_and_usage(declared, transmissions, budget, deadline, &mut Instant::now);
+    (result, usage.display_updates)
+}
+
+/// Compile with separate optional service quotas and report their admitted work.
+/// Every enabled bucket is shared across displays. No charge is refunded on
+/// failure, and disabled buckets remain None. The compatibility usage API still
+/// reports only display-resolution updates; all encoders honor every supplied cap.
+/// # Errors
+/// Returns the original located result without a partial candidate. These
+/// buckets preserve independent stage limits and do not certify total CPU/RSS.
+pub fn encode_teletext_authored_service_with_work_usage(
+    declared: TeletextDeclaredService,
+    transmissions: &[TeletextServiceResourceTransmission],
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Option<Instant>,
+) -> (
+    Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError>,
+    TeletextAuthoredServiceEncodingUsage,
+) {
     encode_with_clock_and_usage(declared, transmissions, budget, deadline, &mut Instant::now)
 }
 
@@ -349,10 +396,10 @@ fn encode_with_clock_and_usage(
     now: &mut impl FnMut() -> Instant,
 ) -> (
     Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError>,
-    Option<usize>,
+    TeletextAuthoredServiceEncodingUsage,
 ) {
     let mut clock = EncodingClock { deadline, now };
-    let mut usage = budget.max_display_updates.map(|_| 0);
+    let mut usage = TeletextAuthoredServiceEncodingUsage::empty(budget);
     let result = encode_owned_service(declared, transmissions, budget, &mut clock, &mut usage);
     (result, usage)
 }
@@ -362,7 +409,7 @@ fn encode_owned_service(
     transmissions: &[TeletextServiceResourceTransmission],
     budget: &TeletextAuthoredServiceEncodingBudget,
     clock: &mut EncodingClock<'_, impl FnMut() -> Instant>,
-    usage: &mut Option<usize>,
+    usage: &mut TeletextAuthoredServiceEncodingUsage,
 ) -> Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError> {
     clock.check(None, None)?;
     let count = preflight(&declared, transmissions, budget)?;
@@ -412,11 +459,8 @@ fn encode_owned_service(
     let mut pages = Vec::with_capacity(count);
     let mut inventory = Vec::with_capacity(count);
     let mut units = declared.semantic().magazine_presentations().len();
-    let mut context = TeletextCompileContext::new(
-        Some(&resource_context),
-        clock.deadline,
-        budget.max_display_updates,
-    );
+    let mut context =
+        TeletextCompileContext::for_service(Some(&resource_context), clock.deadline, budget);
     for page in &declared.semantic().base().pages {
         clock.check(Some(page.address), None)?;
         let result = encode_display(
@@ -427,7 +471,7 @@ fn encode_owned_service(
             budget,
             clock,
         );
-        *usage = context.used_updates();
+        *usage = context.used_work();
         let encoded = result?;
         clock.check(Some(page.address), None)?;
         append_page(encoded, &mut pages, &mut inventory, &mut units, budget)?;

@@ -15,8 +15,8 @@ release section when tagging a release.
 
 ### Added
 
-- Add an optional whole-service teletext display-update quota shared by all
-  normalization and transmission-settlement passes. Failed work retains its
+- Add separate optional whole-service teletext quotas for display resolution,
+  typed glyph lookups and selected-display comparison. Failed work retains its
   admitted charges; exhaustion preserves the prior accepted generation. Existing
   model and wire identities remain unchanged. Production policy and complete
   compiler CPU/memory bounds remain open.

@@ -372,22 +372,29 @@ async fn compiler_and_deadline_failures_preserve_the_exact_accepted_pointer() {
             NativeTeletextDesignError::Encoding(_)
         ))
     ));
-    let mut policy = channel_documents::policy();
-    policy.encoding.max_display_updates = Some(0);
-    let exhausted = accept_original_teletext_generation(
-        &fixture.state.application,
-        target(),
-        designs::budget(),
-        policy,
-        designs::deadline(),
-    )
-    .await;
-    assert!(matches!(
-        exhausted,
-        Err(NativeTeletextGenerationError::Design(
-            NativeTeletextDesignError::Encoding(_)
-        ))
-    ));
+    let exhaust: [fn(&mut ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget); 3] = [
+        |budget| budget.max_display_updates = Some(0),
+        |budget| budget.max_glyph_comparison_work = Some(0),
+        |budget| budget.max_display_comparison_updates = Some(0),
+    ];
+    for exhaust in exhaust {
+        let mut policy = channel_documents::policy();
+        exhaust(&mut policy.encoding);
+        let exhausted = accept_original_teletext_generation(
+            &fixture.state.application,
+            target(),
+            designs::budget(),
+            policy,
+            designs::deadline(),
+        )
+        .await;
+        assert!(matches!(
+            exhausted,
+            Err(NativeTeletextGenerationError::Design(
+                NativeTeletextDesignError::Encoding(_)
+            ))
+        ));
+    }
     assert_eq!(count(&fixture).await, 1);
     assert_same_output(&recover(&fixture).await.unwrap(), &original);
     assert_eq!(designs::config(&fixture).await, before);

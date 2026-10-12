@@ -4,8 +4,9 @@ use super::augmented_origin_compilation_tests::{
 };
 use super::*;
 use crate::teletext::augmented_origin_comparison::{
-    compare_teletext_augmented_origin_glyphs, TeletextAugmentedGlyphComparisonBudget,
-    TeletextAugmentedGlyphComparisonFailure as Failure, TeletextAugmentedGlyphFinding as Finding,
+    compare_teletext_augmented_origin_glyphs, compare_teletext_augmented_origin_glyphs_with_usage,
+    TeletextAugmentedGlyphComparisonBudget, TeletextAugmentedGlyphComparisonFailure as Failure,
+    TeletextAugmentedGlyphFinding as Finding,
 };
 use crate::teletext::{
     allocate_teletext_resource_objects, build_teletext_augmented_origin_program,
@@ -21,6 +22,85 @@ fn limits() -> TeletextAugmentedGlyphComparisonBudget {
         max_diagnostics: 4096,
         max_work: 1_000_000,
     }
+}
+
+#[test]
+fn glyph_usage_exact_boundary_and_denied_charge_preserve_models_and_errors() {
+    with_candidate(active(), None, |service, original, augmented| {
+        let compiled = compiled(service, augmented, ancestry()).unwrap();
+        let retained = (
+            service.clone(),
+            original.clone(),
+            compiled.physical().clone(),
+        );
+        let expected = compare_teletext_augmented_origin_glyphs(&compiled, limits()).unwrap();
+        let (result, admitted) =
+            compare_teletext_augmented_origin_glyphs_with_usage(&compiled, limits());
+        let actual = result.unwrap();
+        assert!(admitted > 1000);
+        assert_eq!(actual.compared_cells(), expected.compared_cells());
+        assert_eq!(actual.diagnostics(), expected.diagnostics());
+        assert_eq!(actual.original_pending(), expected.original_pending());
+        assert_eq!(actual.actual_pending(), expected.actual_pending());
+        assert!(std::ptr::eq(actual.compiled(), expected.compiled()));
+        let mut exact = limits();
+        exact.max_work = admitted;
+        let (result, repeated) =
+            compare_teletext_augmented_origin_glyphs_with_usage(&compiled, exact);
+        let result = result.unwrap();
+        assert_eq!(repeated, admitted);
+        assert_eq!(result.compared_cells(), expected.compared_cells());
+        assert_eq!(result.diagnostics(), expected.diagnostics());
+        exact.max_work -= 1;
+        let (result, partial) =
+            compare_teletext_augmented_origin_glyphs_with_usage(&compiled, exact);
+        let failure = result.unwrap_err();
+        assert_eq!(
+            failure,
+            compare_teletext_augmented_origin_glyphs(&compiled, exact).unwrap_err()
+        );
+        let Failure::Budget {
+            kind,
+            count,
+            maximum,
+        } = failure.reason
+        else {
+            panic!("one fewer admitted-work credit must reject comparison");
+        };
+        assert_eq!(kind, "work");
+        assert_eq!(maximum, exact.max_work);
+        assert!(count > maximum);
+        assert!(partial > 0 && partial <= maximum && partial < count);
+        assert!(failure.position.is_some());
+        assert_eq!(service, &retained.0);
+        assert_eq!(original, &retained.1);
+        assert_eq!(compiled.physical(), &retained.2);
+    });
+}
+
+#[test]
+fn glyph_usage_preflight_rejections_report_zero_and_original_errors() {
+    with_candidate(active(), None, |service, _, augmented| {
+        let compiled = compiled(service, augmented, ancestry()).unwrap();
+        for field in ["records", "cells", "work"] {
+            let mut budget = limits();
+            match field {
+                "records" => budget.max_records = 0,
+                "cells" => budget.max_cells = 999,
+                _ => budget.max_work = 0,
+            }
+            let (result, admitted) =
+                compare_teletext_augmented_origin_glyphs_with_usage(&compiled, budget);
+            let error = result.unwrap_err();
+            assert_eq!(admitted, 0);
+            assert_eq!(
+                error,
+                compare_teletext_augmented_origin_glyphs(&compiled, budget).unwrap_err()
+            );
+            assert!(matches!(error.reason, Failure::Budget {kind,..} if kind == field));
+            assert_eq!(error.position, None);
+        }
+    });
 }
 fn designate(value: u8) -> TeletextEnhancementCommand {
     at(
@@ -136,6 +216,12 @@ fn same_mask_latin_and_cyrillic_is_a_typed_identity_failure() {
     with_candidate(fixture, Some(changed), |service, original, augmented| {
         let result = compiled(service, augmented, ancestry()).unwrap();
         let comparison = compare_teletext_augmented_origin_glyphs(&result, limits()).unwrap();
+        let (measured, admitted) =
+            compare_teletext_augmented_origin_glyphs_with_usage(&result, limits());
+        let measured = measured.unwrap();
+        assert!(admitted > 0);
+        assert_eq!(measured.diagnostics(), comparison.diagnostics());
+        assert_eq!(measured.compared_cells(), comparison.compared_cells());
         let finding = comparison
             .diagnostics()
             .iter()
@@ -442,6 +528,10 @@ fn located_diagnostic_budget_and_pending_histories_are_retained() {
         let mut budget = limits();
         budget.max_diagnostics = 0;
         let error = compare_teletext_augmented_origin_glyphs(&result, budget).unwrap_err();
+        let (measured, admitted) =
+            compare_teletext_augmented_origin_glyphs_with_usage(&result, budget);
+        assert_eq!(measured.unwrap_err(), error);
+        assert!(admitted > 0 && admitted <= budget.max_work);
         assert_eq!(error.position, Some((1, 8)));
         assert!(matches!(
             error.reason,

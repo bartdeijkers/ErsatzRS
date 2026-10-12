@@ -642,6 +642,8 @@ pub(super) fn limits() -> TeletextAuthoredServiceEncodingBudget {
         max_units: 1024,
         max_commands: 8192,
         max_display_updates: None,
+        max_glyph_comparison_work: None,
+        max_display_comparison_updates: None,
         normalization: normalization_limits(),
     }
 }
@@ -663,3 +665,6 @@ mod deadline_tests;
 
 #[path = "authored_service_update_quota_tests.rs"]
 mod update_quota_tests;
+
+#[path = "authored_service_comparison_quota_tests.rs"]
+mod comparison_quota_tests;

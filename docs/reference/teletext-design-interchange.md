@@ -4296,9 +4296,34 @@ means aggregate metering was disabled, not zero work. Quota and usage do not cha
 model equality, units or artifact fingerprints. The existing encoder and timed
 host calls honor the same optional quota. Display-resolution updates include
 conservative reservations and omit some initialization/scans; they are neither
-exact execution count nor CPU/RSS cost. Other stage meters need separate shared
-buckets and resource-rich measurement before choosing production host policy.
-The final retained model cannot reveal discarded earlier work. P9A-04 owns proof.
+exact execution count nor CPU/RSS cost. The final retained model cannot reveal
+discarded earlier work.
+
+Two additional optional inclusive service limits retain separate units:
+`max_glyph_comparison_work` bounds admitted typed-glyph comparison/source-lookup
+charges; `max_display_comparison_updates` bounds admitted selected-display
+comparison updates and bulk reservations. The same service context clamps each
+comparison stage to its own limit or remaining service credit, whichever is
+smaller, and debits before returning success or failure. A native absent-X26 path
+does not perform either comparison; enabled unreached buckets report zero.
+
+`compare_teletext_augmented_origin_glyphs_with_usage` and
+`compare_teletext_physical_display_with_usage` return their unchanged borrowed
+result plus admitted usage. Comparison preflight failure reports zero charges in
+that bucket; later failure retains admitted work. Glyph charges commit only after admission while
+errors retain the original attempted count and position. Denied or overflowing
+reservations do not consume credit. Existing public comparisons discard usage.
+
+`encode_teletext_authored_service_with_work_usage` reports the separately optional
+`TeletextAuthoredServiceEncodingUsage` buckets `display_updates`,
+`glyph_comparison_work` and `display_comparison_updates`, including on failure.
+Disabled buckets report `None`; metrics stay outside model/wire/artifact identity.
+The older `with_usage` API still returns only display-resolution usage while
+honoring all supplied caps. Other planning, placement, assembly/identity,
+ancestry, collection/spatial and catalogue costs remain separate unfinished
+admission work. These meters cannot be summed into an invented total CPU/RSS cost.
+Resource-rich measurement and the canonical P9A-04 receipt determine the next
+production-policy step; no production defaults are inferred here.
 
 `serve_channel_stream_with_accepted_teletext(state, channel_number, format, intent)`
 connects that intent to the real direct final MPEG-TS producer. The route checks
