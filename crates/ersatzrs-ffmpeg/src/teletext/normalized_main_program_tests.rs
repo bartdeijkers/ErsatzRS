@@ -9,6 +9,69 @@ use crate::teletext::{
     TeletextOriginCarrierBudget, TeletextOriginCarrierPlacementBudget,
     TeletextPhysicalComparisonBudget, TeletextPhysicalComparisonFinding,
 };
+use std::time::{Duration, Instant};
+
+#[test]
+fn expired_normalization_deadline_rejects_before_allocation_without_mutating_service() {
+    let service = active().build();
+    let before = service.clone();
+    let mut budget = limits();
+    budget.max_resource_objects = 0;
+    let expired = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
+    let error = crate::teletext::normalized_main_program::compile_normalized_with_resources_before(
+        &service,
+        owner(),
+        &[],
+        &budget,
+        None,
+        Some(expired),
+    )
+    .unwrap_err();
+    assert_eq!(error.owner, owner());
+    assert!(matches!(error.reason, Failure::TimedOut));
+    assert_eq!(service, before);
+}
+
+#[test]
+fn future_normalization_deadline_preserves_original_and_physical_candidate() {
+    let service = active().build();
+    let before = service.clone();
+    let expected = compile_teletext_normalized_main_program(&service, owner(), limits()).unwrap();
+    let deadline = Instant::now() + Duration::from_mins(1);
+    let actual =
+        crate::teletext::normalized_main_program::compile_normalized_with_resources_before(
+            &service,
+            owner(),
+            &[],
+            &limits(),
+            None,
+            Some(deadline),
+        )
+        .unwrap();
+    assert_eq!(actual.original(), expected.original());
+    assert_eq!(actual.physical(), expected.physical());
+    assert_eq!(actual.encoded(), expected.encoded());
+    assert_eq!(service, before);
+}
+
+#[test]
+fn future_normalization_deadline_retains_existing_allocation_failure() {
+    let service = active().build();
+    let mut budget = limits();
+    budget.max_resource_objects = 0;
+    let deadline = Instant::now() + Duration::from_mins(1);
+    let error = crate::teletext::normalized_main_program::compile_normalized_with_resources_before(
+        &service,
+        owner(),
+        &[],
+        &budget,
+        None,
+        Some(deadline),
+    )
+    .unwrap_err();
+    assert_eq!(error.owner, owner());
+    assert!(matches!(error.reason, Failure::Allocation(_)));
+}
 
 fn limits() -> TeletextNormalizedMainProgramBudget {
     let packing = TeletextObjectCatalogBudget {

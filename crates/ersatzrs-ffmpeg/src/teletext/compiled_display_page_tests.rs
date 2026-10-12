@@ -3,6 +3,84 @@
 use super::compiled_display_page::*;
 use super::*;
 use ersatzrs_domain::*;
+use std::time::{Duration, Instant};
+
+#[test]
+fn expired_compiled_display_deadline_returns_no_units_before_normalization() {
+    let service = service(draft());
+    let before = service.clone();
+    let mut budget = limits();
+    budget.composition.max_input_commands = 0;
+    let expired = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
+    let error = encode_teletext_compiled_display_page_before(
+        &service,
+        owner(),
+        TeletextEncodingRegion::WesternLatin,
+        &[],
+        &budget,
+        None,
+        Some(expired),
+    )
+    .unwrap_err();
+    assert_eq!(error.owner, owner());
+    assert!(matches!(
+        error.reason,
+        TeletextCompiledDisplayPageEncodingFailure::TimedOut
+    ));
+    assert_eq!(service, before);
+}
+
+#[test]
+fn future_compiled_display_deadline_preserves_packets_magazines_and_models() {
+    let service = service(draft());
+    let before = service.clone();
+    let expected = encode(&service);
+    let deadline = Instant::now() + Duration::from_mins(1);
+    let actual = encode_teletext_compiled_display_page_before(
+        &service,
+        owner(),
+        TeletextEncodingRegion::WesternLatin,
+        &[],
+        &limits(),
+        None,
+        Some(deadline),
+    )
+    .unwrap();
+    assert_eq!(actual.page(), expected.page());
+    assert_eq!(actual.magazine_units(), expected.magazine_units());
+    assert_eq!(
+        actual.normalized().original(),
+        expected.normalized().original()
+    );
+    assert_eq!(
+        actual.normalized().physical(),
+        expected.normalized().physical()
+    );
+    assert_eq!(service, before);
+}
+
+#[test]
+fn future_compiled_display_deadline_retains_existing_normalization_failure() {
+    let service = service(draft());
+    let mut budget = limits();
+    budget.composition.max_input_commands = 0;
+    let deadline = Instant::now() + Duration::from_mins(1);
+    let error = encode_teletext_compiled_display_page_before(
+        &service,
+        owner(),
+        TeletextEncodingRegion::WesternLatin,
+        &[],
+        &budget,
+        None,
+        Some(deadline),
+    )
+    .unwrap_err();
+    assert_eq!(error.owner, owner());
+    assert!(matches!(
+        error.reason,
+        TeletextCompiledDisplayPageEncodingFailure::Normalization(_)
+    ));
+}
 
 fn owner() -> TeletextPageAddress {
     TeletextPageAddress {

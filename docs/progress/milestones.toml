@@ -2724,6 +2724,64 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-12 cooperative native compilation deadline checkpoint:
+Audit found the complete service encoder was bracketed only by host deadline
+checks, allowing successive page/resource normalization to continue after expiry.
+`encode_teletext_authored_service_before` now carries that same absolute deadline
+through shared preflight/lifecycle/allocation, resource writers/context, native
+composition/settlement, compiled normalization, packet assembly, inventory/M29 and
+final completion. Internal normalization checks between original composition,
+realization, placement, assembly, augmented allocation, physical compilation and
+glyph/display comparisons. A located timeout returns no partial service; both
+host calls map only that failure to their existing TimedOut, preserving every
+other located error. Untimed public compatibility paths passNone and perform no
+new clock reads. No schema/settings/defaults/dependencies/FFmpeg argv/admin change.
+
+All57 selected cases pass in Nexteste98bc8aa-e046-49e0-affa-99b22a3aed5a:
+./run.sh test -p ersatzrs-ffmpeg -p ersatzrs-web --lib
+--test teletext_profile_preparation --test-threads2
+-E 'test(authored_service_tests::) | test(normalized_main_program_tests::) |
+test(compiled_display_page_tests::) | test(documents::) | test(channel_documents::) |
+test(generations::compiler_and_deadline_failures)'. Ten new cases prove expired
+entry before allocation/lifecycle, inclusive expiry at every observed outer
+service checkpoint, all resource/display locations, atomic failure and untouched
+input; future deadlines preserve complete native/compiled/resource/M29/inventory
+units and original/physical models; ordinary failures remain unchanged. The
+injected outer clock never sleeps and does not inject inner normalization time.
+Inner tests establish expired-entry/future-model/error correspondence, not
+deterministic inner mid-stage expiry or preemption. Existing resource/C2/charset/
+metadata/normalization-bound/finite-EOF cases pass, as do actual V1/V2 installed
+profiles, composition/themes/freshness,100-page save/accept/reload and exact
+accepted-pointer preservation on compiler/deadline errors.
+
+Strict all-target FFmpeg/web Clippy passes after five equivalent test-duration
+spellings: four from_secs60 become from_mins1 and from_secs3600 becomes from_hours1.
+Independent byte reversal reconstructs each tested file exactly; every value,
+oracle and production source is unchanged. Functional proof is reused. Independent
+source review confirms original deadline propagation, atomic failure, native/
+compiled/resource coverage and unchanged stage order/budgets/destruction scope in
+the extracted physical helper. Formatting, architecture/progress/new-allow and
+explicit-stage preservation checks accompany the authorized local checkpoint.
+Previous real transport/client receipts retain their recorded scopes: model/wire
+equality is newly tested, while transport/client implementations remain unchanged.
+
+This corrects cooperation between bounded stages, not aggregate CPU/RSS safety,
+immediate native-worker cancellation or preemption of a running stage. Decode,
+producer lifting and cold composition remain separate bounded operations. Raw
+commands and original max_collected_commands omit derived commands, repeated
+catalogue/replay/settlement and display updates; summing existing max_work fields
+would not prove total work. Next expose actual admitted Builder.updates separately
+from the unchanged display-resolution model, including failure usage. Debit one
+service-owned remaining update quota across every original/physical/settled pass;
+the final model omits earlier executions. Conservative bulk reservations remain
+explicit charges, denied/overflowed reservations add zero, and initialization/
+scans outside that meter remain separately unproven. Other existing consumed
+stage meters must then feed separate buckets without invented CPU weights.
+Production host policy, automatic lookup/Health, retained attempt provenance,
+accepted retries/process restart and the complete Level2.5/editor/themes/zones/
+Lua/localized-admin/playback/platform criteria stay open. All six milestone
+contracts/statuses/dependencies and engine-first order remain unchanged; no push.
+
 2026-10-12 actual accepted-generation direct-flow checkpoint:
 The explicit `serve_channel_stream_with_accepted_teletext` route now carries the
 sealed accepted intent into the actual final producer. Resolved channel identity,

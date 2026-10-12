@@ -40,8 +40,8 @@ Budgeted v2 stays pinned through invocation; Base refuses v2. Encoding retains
 original defaults, secondary uncertainty and channel/model/deadline fences.
 Cold composition isolates M29/resources and rechecks MOT effects.
 Originals/pending/frozen persist; raw v2/historical v1.
-Native recovery checks hash/selection; guide freshness open.
-Accepted direct/reopen AV, headed200→201 pass;100-page counts measured.
+Native hash/selection and deadline checks; guide freshness open.
+Accepted direct/reopen AV,200→201 pass;100-page counts measured.
 Normal routes/retained/Health/production bounds open; ADR0122/legacy/regions/link CRC/UI/Lua open.
 
 SQLite retains tracks/owners/data/leases; missing reports/revisions prove no bytes

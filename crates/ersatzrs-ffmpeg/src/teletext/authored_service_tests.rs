@@ -656,3 +656,6 @@ mod transmission_tests;
 
 #[path = "authored_service_charset_tests.rs"]
 mod charset_tests;
+
+#[path = "authored_service_deadline_tests.rs"]
+mod deadline_tests;

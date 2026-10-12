@@ -416,6 +416,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Honor the original teletext compilation deadline between resource writers,
+  display-normalization stages and packet assembly. Expiry returns no partial
+  candidate and cannot replace an accepted generation. Checkpoints do not
+  preempt a running bounded stage or establish aggregate CPU/memory limits.
 - Bound concurrent large teletext test fixtures and release complete services
   between lifecycle cases, preventing test runs from exhausting runner memory.
 

@@ -23,9 +23,10 @@ use ersatzrs_domain::{
     TeletextProducerPresentationBudget, TeletextProducerPresentationError,
 };
 use ersatzrs_ffmpeg::teletext::{
-    encode_teletext_authored_service, EncodedTeletextAuthoredService,
+    encode_teletext_authored_service_before, EncodedTeletextAuthoredService,
     TeletextAuthoredServiceEncodingBudget, TeletextAuthoredServiceEncodingError,
-    TeletextEncodingRegion, TeletextServiceDescriptor, TeletextServiceResourceTransmission,
+    TeletextAuthoredServiceEncodingFailure, TeletextEncodingRegion, TeletextServiceDescriptor,
+    TeletextServiceResourceTransmission,
 };
 
 use super::teletext_documents::{lift_base, TeletextDocumentEncodingError};
@@ -319,9 +320,22 @@ pub(super) fn encode_original_channel_documents(
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?
             .into_parts();
     check_deadline(deadline)?;
-    let encoded =
-        encode_teletext_authored_service(declared, &policy.transmissions, &policy.encoding)
-            .map_err(|error| ChannelTeletextDocumentEncodingError::Encoding(Box::new(error)))?;
+    let encoded = encode_teletext_authored_service_before(
+        declared,
+        &policy.transmissions,
+        &policy.encoding,
+        deadline,
+    )
+    .map_err(|error| {
+        if matches!(
+            &error.reason,
+            TeletextAuthoredServiceEncodingFailure::TimedOut
+        ) {
+            ChannelTeletextDocumentEncodingError::TimedOut
+        } else {
+            ChannelTeletextDocumentEncodingError::Encoding(Box::new(error))
+        }
+    })?;
     check_deadline(deadline)?;
     let descriptor = TeletextServiceDescriptor::from_authored_service(&encoded);
     check_deadline(deadline)?;

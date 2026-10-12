@@ -4,6 +4,7 @@
 //! candidate, not lifecycle-history, carousel, publication or client acceptance.
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::time::Instant;
 
 use ersatzrs_domain::{
     TeletextDeclaredService, TeletextDefaultObjectSelection, TeletextMotDefaultObject,
@@ -12,7 +13,9 @@ use ersatzrs_domain::{
     TeletextResourceUpdateCounter,
 };
 
-use super::compiled_display_page::encode_teletext_compiled_display_page;
+use super::compiled_display_page::{
+    encode_teletext_compiled_display_page_before, TeletextCompiledDisplayPageEncodingFailure,
+};
 use super::resource_transmission::{
     settle_native, ResourceTransmissionContext, TeletextResourceTransmissionError,
 };
@@ -165,6 +168,8 @@ pub struct TeletextAuthoredServiceEncodingError {
 }
 #[derive(Debug, thiserror::Error)]
 pub enum TeletextAuthoredServiceEncodingFailure {
+    #[error("authored service compilation exceeded its original deadline")]
+    TimedOut,
     #[error("{category} count {count} exceeds trusted budget {maximum}")]
     Budget {
         category: &'static str,
@@ -227,6 +232,31 @@ fn sized<T>(category: &'static str, count: usize) -> Result<(), Error> {
     Ok(())
 }
 
+struct EncodingClock<'a, C> {
+    deadline: Option<Instant>,
+    now: &'a mut C,
+}
+
+impl<C: FnMut() -> Instant> EncodingClock<'_, C> {
+    fn check(
+        &mut self,
+        display: Option<TeletextPageAddress>,
+        resource: Option<TeletextResourceIdentity>,
+    ) -> Result<(), Error> {
+        if self
+            .deadline
+            .is_some_and(|deadline| (self.now)() >= deadline)
+        {
+            return Err(Error {
+                display,
+                resource,
+                reason: Failure::TimedOut,
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Compile every display and declared resource atomically from one owned input.
 ///
 /// Exact lifecycle correspondence is checked before encoding. Global original
@@ -244,8 +274,51 @@ pub fn encode_teletext_authored_service(
     transmissions: &[TeletextServiceResourceTransmission],
     budget: &TeletextAuthoredServiceEncodingBudget,
 ) -> Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError> {
+    encode_teletext_authored_service_with_clock(
+        declared,
+        transmissions,
+        budget,
+        None,
+        &mut Instant::now,
+    )
+}
+
+/// Encode with cooperative checkpoints against one absolute native deadline.
+/// The existing model, lifecycle, packing and validation rules are unchanged.
+/// # Errors
+/// Returns the existing located errors or a located timeout, never a partial
+/// service. A running bounded stage is not preempted; this is neither an
+/// aggregate operation quota nor an immediate CPU-cancellation guarantee.
+pub fn encode_teletext_authored_service_before(
+    declared: TeletextDeclaredService,
+    transmissions: &[TeletextServiceResourceTransmission],
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+) -> Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError> {
+    encode_teletext_authored_service_with_clock(
+        declared,
+        transmissions,
+        budget,
+        Some(deadline),
+        &mut Instant::now,
+    )
+}
+
+// A local clock seam makes absolute-deadline boundaries deterministic in tests.
+// Production uses Instant::now; the untimed public API performs no clock reads.
+pub(super) fn encode_teletext_authored_service_with_clock(
+    declared: TeletextDeclaredService,
+    transmissions: &[TeletextServiceResourceTransmission],
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Option<Instant>,
+    now: &mut impl FnMut() -> Instant,
+) -> Result<EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingError> {
+    let mut clock = EncodingClock { deadline, now };
+    clock.check(None, None)?;
     let count = preflight(&declared, transmissions, budget)?;
+    clock.check(None, None)?;
     let transmissions = lifecycle_index(&declared, transmissions)?;
+    clock.check(None, None)?;
     let defaults = declared
         .defaults()
         .iter()
@@ -257,10 +330,12 @@ pub fn encode_teletext_authored_service(
         budget.normalization.max_resource_objects,
     )
     .map_err(|reason| error(Failure::Allocation(Box::new(reason))))?;
+    clock.check(None, None)?;
     // The same final resource bodies supply C2 evidence before either display
     // pass. Keep them private until every display and final inventory succeeds.
     let mut resources = Vec::with_capacity(declared.resource_inventory().len());
     for &resource in declared.resource_inventory() {
+        clock.check(None, Some(resource))?;
         let tx = transmissions[&resource].1;
         resources.push(encode_resource(
             &declared,
@@ -269,6 +344,7 @@ pub fn encode_teletext_authored_service(
             tx,
             budget.max_commands,
         )?);
+        clock.check(None, Some(resource))?;
     }
     let resource_context = ResourceTransmissionContext::new(
         declared.semantic().objects(),
@@ -282,24 +358,36 @@ pub fn encode_teletext_authored_service(
         resource: reason.resource,
         ..error(Failure::ResourceTransmission(Box::new(reason)))
     })?;
+    clock.check(None, None)?;
     let mut pages = Vec::with_capacity(count);
     let mut inventory = Vec::with_capacity(count);
     let mut units = declared.semantic().magazine_presentations().len();
     for page in &declared.semantic().base().pages {
+        clock.check(Some(page.address), None)?;
         let encoded = encode_display(
             &declared,
             page.address,
             &defaults,
             &resource_context,
             budget,
+            &mut clock,
         )?;
+        clock.check(Some(page.address), None)?;
         append_page(encoded, &mut pages, &mut inventory, &mut units, budget)?;
+        clock.check(Some(page.address), None)?;
     }
     for encoded in resources {
+        let resource = encoded
+            .resource_header()
+            .map(TeletextResourceHeaderMetadata::identity);
+        clock.check(None, resource)?;
         append_page(encoded, &mut pages, &mut inventory, &mut units, budget)?;
+        clock.check(None, resource)?;
     }
+    clock.check(None, None)?;
     validate_teletext_physical_page_inventory(&inventory, budget.max_pages)
         .map_err(|reason| error(Failure::Inventory(Box::new(reason))))?;
+    clock.check(None, None)?;
     let magazine_units = declared
         .semantic()
         .magazine_presentations()
@@ -313,6 +401,7 @@ pub fn encode_teletext_authored_service(
             )
         })
         .collect();
+    clock.check(None, None)?;
     Ok(EncodedTeletextAuthoredService {
         declared,
         pages,
@@ -454,6 +543,7 @@ fn encode_display(
     defaults: &[TeletextDefaultObjectSelection],
     resources: &ResourceTransmissionContext<'_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
+    clock: &mut EncodingClock<'_, impl FnMut() -> Instant>,
 ) -> Result<EncodedTeletextAuthoredPage, Error> {
     let service = declared.semantic();
     let located = |reason| Error {
@@ -468,6 +558,7 @@ fn encode_display(
         .ok_or_else(|| located(Failure::MissingResourceBody))?;
     let layout = layout::compile_for_composition(page)
         .map_err(|reason| located(Failure::Layout(Box::new(reason))))?;
+    clock.check(Some(owner), None)?;
     let local = service
         .page_enhancements()
         .get(&owner)
@@ -476,6 +567,7 @@ fn encode_display(
         let composition =
             compose_teletext_main_program(service, owner, budget.normalization.composition)
                 .map_err(|reason| located(Failure::Composition(Box::new(reason))))?;
+        clock.check(Some(owner), None)?;
         let composition = settle_native(
             composition,
             service,
@@ -483,12 +575,14 @@ fn encode_display(
             budget.normalization.composition.collection.max_commands,
         )
         .map_err(|reason| located(Failure::Composition(Box::new(reason))))?;
+        clock.check(Some(owner), None)?;
         let encoded = encode_teletext_native_default_page(
             service,
             owner,
             TeletextEncodingRegion::WesternLatin,
         )
         .map_err(|reason| located(Failure::Native(Box::new(reason))))?;
+        clock.check(Some(owner), None)?;
         Ok(EncodedTeletextAuthoredPage::NativeDisplay(Box::new(
             EncodedTeletextAuthoredNativeDisplay {
                 encoded,
@@ -496,15 +590,25 @@ fn encode_display(
             },
         )))
     } else {
-        let encoded = encode_teletext_compiled_display_page(
+        let encoded = encode_teletext_compiled_display_page_before(
             service,
             owner,
             TeletextEncodingRegion::WesternLatin,
             defaults,
             &budget.normalization,
             Some(resources),
+            clock.deadline,
         )
-        .map_err(|reason| located(Failure::Compiled(Box::new(reason))))?;
+        .map_err(|reason| {
+            if matches!(
+                reason.reason,
+                TeletextCompiledDisplayPageEncodingFailure::TimedOut
+            ) {
+                located(Failure::TimedOut)
+            } else {
+                located(Failure::Compiled(Box::new(reason)))
+            }
+        })?;
         Ok(EncodedTeletextAuthoredPage::CompiledDisplay(Box::new(
             encoded,
         )))

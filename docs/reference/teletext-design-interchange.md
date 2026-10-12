@@ -4264,6 +4264,25 @@ including actual retained prefix capacity; original reserve/startup/cancellation
 and commitment rules still apply. These APIs do not supply production compiler
 defaults, an ongoing publication owner or normal-route registration.
 
+Native preparation/recovery now calls `encode_teletext_authored_service_before`
+with the same absolute operation deadline. The existing untimed encoder remains
+available. Checks bracket shared preflight/allocation, resource writers/context,
+every native or compiled display, inventory and M29 completion; normalization
+checks between original composition, realization, placement, assembly, augmented
+allocation, physical compilation and both comparisons. Located timeout returns
+no partial service and maps to existing host timeout errors; other diagnostics,
+semantic models and page units remain unchanged.
+
+An executing bounded stage is not preempted. Document decoding, producer lifting,
+cold composition and other native stages retain their own existing bounds. This
+is not immediate worker cancellation, an aggregate operation quota or peak-RSS
+proof. The next quota seam must expose actual admitted usage from existing meters
+and debit separate whole-service buckets on success and failure. In particular,
+display-resolution `Builder.updates` includes conservative reservations and omits
+some initialization/scans; it is neither exact execution count nor CPU/RSS cost.
+All resource-backed original/physical settlement passes must share its credit;
+the final retained model cannot reveal discarded earlier work. P9A-04 owns proof.
+
 `serve_channel_stream_with_accepted_teletext(state, channel_number, format, intent)`
 connects that intent to the real direct final MPEG-TS producer. The route checks
 the resolved channel before startup; the supervisor uses the command that actually

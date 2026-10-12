@@ -21,7 +21,13 @@ rechecks accepted identity and effective channel selection before injectable
 source reads. Known unsupported commands/policies preserve ordinary output
 without waiting for optional generation storage.
 Complete recovery is bounded across repository awaits by the original absolute
-deadline. Retained late construction preflights gate/journal/probe overlap and
+deadline. The same native deadline now reaches service/resource/display,
+normalization and packet-assembly checkpoints. Timeout returns no partial
+candidate and maps to the existing host timeout; untimed standalone callers and
+encoded identities retain their behavior. Checks are cooperative between bounded
+stages, not mid-stage preemption or aggregate CPU/RSS admission. Actual consumed
+stage counters and remaining whole-service credits remain to be connected.
+Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact
 pre-write fallback. Normal-route lookup, production compiler limits, live Health,
