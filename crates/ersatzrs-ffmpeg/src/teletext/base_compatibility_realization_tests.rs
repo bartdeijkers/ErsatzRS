@@ -172,6 +172,101 @@ fn partial() -> TeletextMainComposition {
     ))
 }
 
+fn assert_same_plan(
+    actual: &TeletextBaseCompatibilityRealizationPlan<'_>,
+    expected: &TeletextBaseCompatibilityRealizationPlan<'_>,
+) {
+    assert!(std::ptr::eq(actual.composition(), expected.composition()));
+    assert_eq!(actual.seeds(), expected.seeds());
+    assert_eq!(actual.origins(), expected.origins());
+    assert_eq!(actual.fragments(), expected.fragments());
+    assert_eq!(actual.precedence(), expected.precedence());
+    assert_eq!(actual.pending(), expected.pending());
+    assert_eq!(actual.original_pending(), expected.original_pending());
+}
+
+fn assert_same_realization_error(
+    actual: &TeletextBaseCompatibilityRealizationError,
+    expected: &TeletextBaseCompatibilityRealizationError,
+) {
+    assert_eq!(actual.owner, expected.owner);
+    assert_eq!(actual.origin, expected.origin);
+    assert_eq!(actual.location, expected.location);
+    assert_eq!(actual.root_source, expected.root_source);
+    assert_eq!(actual.invocation, expected.invocation);
+    assert_eq!(actual.reason, expected.reason);
+}
+
+#[test]
+fn realization_usage_exact_boundary_and_one_less_preserve_plan_and_error() {
+    let composition = partial();
+    let retained = composition.clone();
+    let expected = plan_teletext_base_compatibility_realization(&composition, budget()).unwrap();
+    let (result, admitted) =
+        plan_teletext_base_compatibility_realization_with_usage(&composition, budget());
+    let actual = result.unwrap();
+    assert!(admitted > 0);
+    assert_same_plan(&actual, &expected);
+    let mut exact = budget();
+    exact.max_updates = admitted;
+    let (result, repeated) =
+        plan_teletext_base_compatibility_realization_with_usage(&composition, exact);
+    assert_eq!(repeated, admitted);
+    assert_same_plan(&result.unwrap(), &expected);
+    exact.max_updates -= 1;
+    let (result, partial) =
+        plan_teletext_base_compatibility_realization_with_usage(&composition, exact);
+    let failure = result.unwrap_err();
+    assert_same_realization_error(
+        &failure,
+        &plan_teletext_base_compatibility_realization(&composition, exact).unwrap_err(),
+    );
+    assert_eq!(failure.owner, owner());
+    assert_eq!(
+        failure.reason,
+        TeletextBaseCompatibilityRealizationFailure::WorkBudget {
+            maximum: exact.max_updates
+        }
+    );
+    assert_eq!(partial, exact.max_updates);
+    assert_eq!(composition, retained);
+}
+
+#[test]
+fn realization_usage_preflight_and_zero_work_failures_consume_no_credit() {
+    let composition = partial();
+    for input_cutoff in [true, false] {
+        let mut limits = budget();
+        limits.max_updates = 0;
+        if input_cutoff {
+            limits.max_commands = 0;
+        }
+        let (result, admitted) =
+            plan_teletext_base_compatibility_realization_with_usage(&composition, limits);
+        let failure = result.unwrap_err();
+        assert_eq!(admitted, 0);
+        assert_same_realization_error(
+            &failure,
+            &plan_teletext_base_compatibility_realization(&composition, limits).unwrap_err(),
+        );
+        if input_cutoff {
+            assert!(matches!(
+                failure.reason,
+                TeletextBaseCompatibilityRealizationFailure::InputBudget {
+                    kind: "commands",
+                    maximum: 0,
+                    ..
+                }
+            ));
+        } else {
+            assert_eq!(
+                failure.reason,
+                TeletextBaseCompatibilityRealizationFailure::WorkBudget { maximum: 0 }
+            );
+        }
+    }
+}
+
 #[test]
 fn actual_base_collision_retains_exact_active_source_and_borrowed_context() {
     let service = service(
@@ -414,6 +509,10 @@ fn count_fences_precede_work_and_closure_cutoffs_retain_source() {
             _ => limits.max_origins = count - 1,
         }
         let error = plan_teletext_base_compatibility_realization(&composition, limits).unwrap_err();
+        let (measured, admitted) =
+            plan_teletext_base_compatibility_realization_with_usage(&composition, limits);
+        assert_eq!(admitted, 0);
+        assert_same_realization_error(&measured.unwrap_err(), &error);
         assert_eq!(
             error.reason,
             TeletextBaseCompatibilityRealizationFailure::InputBudget {
@@ -439,6 +538,10 @@ fn count_fences_precede_work_and_closure_cutoffs_retain_source() {
             limits.max_edges = 0;
         }
         let error = plan_teletext_base_compatibility_realization(&composition, limits).unwrap_err();
+        let (measured, admitted) =
+            plan_teletext_base_compatibility_realization_with_usage(&composition, limits);
+        assert!(admitted > 0 && admitted <= limits.max_updates);
+        assert_same_realization_error(&measured.unwrap_err(), &error);
         assert_eq!(
             error.location,
             Some(TeletextEnhancementSource {

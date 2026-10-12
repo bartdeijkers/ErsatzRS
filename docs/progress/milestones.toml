@@ -2724,6 +2724,72 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-12 shared planning/placement/assembly/ancestry credit checkpoint:
+Four additional inclusive optional buckets use the existing admitted meters,
+separately from the three resolution/comparison buckets. One non-clone service
+context clamps each stage to min(stage, remaining) and debits before propagating
+success or failure. Public planning/placement/assembly usage siblings preserve
+borrowed models, stage order and located errors; ancestry's private usage path
+retains the same mutable context through physical replay. Prospective ancestry
+charges now commit only after admission, preserving original errors/provenance.
+No counters enter model/wire/artifact identity. Disabled caps retain old stage
+limits and report None; unreached enabled buckets report zero. No defaults added.
+
+122 unique selected cases have valid passing proof, including18 new cases.
+Nextest594d4435-40b9-4f83-8e68-64002514880c passes95/97 using the existing
+FFmpeg/web --lib --test teletext_profile_preparation graph, two threads and
+-E 'test(base_compatibility_realization_tests::) | test(origin_carrier_placement_tests::) |
+test(augmented_origin_program_tests::) | test(augmented_origin_compilation_tests::) |
+test(authored_service_tests::) | test(normalized_main_program_tests::) |
+test(compiled_display_page_tests::) | test(channel_documents::) | test(documents::) |
+test(generations::compiler_and_deadline_failures)'. Its first two filters omitted
+actual module aliases. Its95 unchanged successes remain valid; all six new service
+quota cases, six assembly/ancestry cases and richer resource measurement pass.
+
+The two failures were incorrect new test expectations. Assembly's pending
+component rejection occurs after its raw component reservation AND a validation
+visit; preserve that existing error and expect components.len()+1 admitted work.
+The simple native generation fixture contains no calls/carriers, so zero ancestry
+credit legitimately reaches AlreadyAccepted instead of a compile error. Keep zero
+work valid. A separate actual Local Active invocation fixture now proves positive
+ancestry exhaustion preserves the exact accepted pointer, units/raster, config,
+producer calls and playout silence; a no-call case proves valid zero compilation.
+
+Nextest7aeb7ea5-1c29-4eed-a1c1-b67b7a37944c passes26/27, same graph with
+-E 'test(base_compatibility_realization::tests::) | test(origin_carrier_placement::tests::) |
+test(pending_placement_and_unknown_recipe_fail_) | test(generations::compiler_and_deadline_failures) |
+test(generations::ancestry_quota_failure_) | test(generations::zero_ancestry_quota_)'.
+The sole remaining new assertion missed placement's pre-spatial origin visit:
+empty catalogue admits1, populated catalogue2 for this one-origin/no-edge fixture.
+Correct only those expected values and retain exact spatial/provenance oracles.
+Nextest8cec5a97-9f0d-401e-82a3-36a676d10374 passes that case alone; unchanged26
+successes are reused. No production behavior, validation, timeout or retry was
+changed to make an invalid fixture pass. Stage and complete-service cases prove
+exact/one-less bounds, debit-on-failure, independent credits, two-page nonreset,
+original/physical/unit equality, empty/unreached semantics and late-error retention.
+
+The unchanged16-display/eight populated-resource/two-theme native durable flow
+now meters all seven buckets with Some(usize::MAX), preserving every prior model,
+source, packet, raster and save/pending/accept/reload oracle. New admitted amounts:
+realization16,208;placement256;assembly528;ancestry288. Prior amounts remain
+resolution15,033,024;glyph comparison23,088;display comparison4,116,960. All prior
+structural/storage counts are identical to the previous receipt. This is measured
+admission, not exact execution/CPU/RSS or finite pressure on the richer fixture.
+Separate simpler resource-backed tests prove inclusive/exhausted quota boundaries.
+No new client/transport/admin or full executable-restart proof is claimed.
+
+Final strict affected FFmpeg/web all-target Clippy passes. Independent review
+confirms one context, failure preservation, original deadline/stage order, disabled
+compatibility and legitimate zero work. Formatting, architecture/progress and
+explicit-staging/new-allow checks accompany the authorized local checkpoint.
+Identity scans still lose failed recipe usage; collection needs the supplied-program
+DRCS path, spatial traversal needs both counting/emitting passes, and catalogue
+reservation is not full validation work. Connect those actual seams before
+production policy/normal lookup/Health. Full Level2.5/editor/themes/zones/Lua/
+localized-admin/client/restart/playback/platform acceptance and all milestone
+contracts/statuses/dependencies remain unchanged. Engine-first order remains;
+no milestone closes, push, tag, release or other publication.
+
 2026-10-12 separate comparison quotas and populated-resource native flow checkpoint:
 Two optional inclusive service buckets now bound admitted typed-glyph comparison
 work and selected-display comparison updates, separately from display resolution.
@@ -3453,7 +3519,7 @@ Next reuse this reader inside one complete grouped XMLTV snapshot, with aggregat
 - Full authored Level2.5: existing model/encoder/raster and representative independent decoding are partial evidence. The source-audited Active panel screen/row-colour admission path is now rejected by the shared geometry gate with located regressions and legal main/panel cases; P9A-01 owns the receipt and the specific parity debt is resolved. Complete encoded panel decoding/client display remains unproven. Complete repertoire/attribute/object/DRCS/panel coverage, known correctness debts, warm M29/MOT/page-X28 transitions and the full transport/client matrix remain required. A successful representative flow does not close engine acceptance.
 - QTeletextMaker: pinned actual editor edit/save/reopen calibration exists; host TTI/sidecar export/import-as-draft/validation/preview/explicit-publication roundtrip and protected template/theme/zone/dynamic-field boundaries remain unproven.
 - Profiles/themes/zones/Lua/restart/admin/safety: profile storage and isolated synthetic themes are component proof. Addon-owned named themes/zones, shared admin/Lua commands and timing/error/expiry, restart/Refresh/Reset, every supported admin culture/headed proof and the complete ordinary playback/alternate-audio/subtitle/six-platform safety gates remain open.
-The original deadline and optional admitted display-resolution/glyph-lookup/display-comparison quotas now reach complete-service passes. The newest receipt measures a sixteen-display populated-resource native preview/save/accept/reload flow beside the hundred sparse pages. Next connect actual planning/placement/assembly/identity/ancestry and collection/spatial/catalogue meters to separate shared buckets before choosing explicit production compiler/output policy through existing settings. Connect ordinary final-route lookup/active Health and retained first-byte attempt provenance; exercise accepted retries and whole-process restart. Extend the receipted cold accepted-generation AV/client trial to remaining link/subpage/resource/panel and warm coverage. Continue live-source ownership/current-freshness and legacy mutable-file capture/recheck, active Health, safe carousel/PMT/lifecycle promotion and localized exact-address preview controls into one synthetic profile→validation→preview→explicit publication→suitable-client display/navigation flow. Record exact candidate/client/decoder versions and coverage; existing pending/cold client receipts remain representative proof. Resolve demonstrated correctness or persistence gaps that block it; explicitly propose necessary limitations instead of accepting them silently. Keep all agreed acceptance criteria and engine-first delivery: independent generic engine acceptance precedes the sole production TV-guide addon inspired only by NOS200–299. The maintainer authorizes a push to remote/main after each fully verified Phase 9 milestone; preparatory checkpoints remain local. Releases and other external publication are not authorized.
+The original deadline and optional admitted display-resolution/glyph-lookup/display-comparison quotas now reach complete-service passes. The newest receipt measures a sixteen-display populated-resource native preview/save/accept/reload flow beside the hundred sparse pages. Seven separately admitted resolution/planning/placement/assembly/ancestry/comparison buckets now have model/wire/failure proof and richer-flow measurements. Next connect failed-recipe identity usage and collection/spatial/catalogue meters before choosing explicit production compiler/output policy through existing settings. Connect ordinary final-route lookup/active Health and retained first-byte attempt provenance; exercise accepted retries and whole-process restart. Extend the receipted cold accepted-generation AV/client trial to remaining link/subpage/resource/panel and warm coverage. Continue live-source ownership/current-freshness and legacy mutable-file capture/recheck, active Health, safe carousel/PMT/lifecycle promotion and localized exact-address preview controls into one synthetic profile→validation→preview→explicit publication→suitable-client display/navigation flow. Record exact candidate/client/decoder versions and coverage; existing pending/cold client receipts remain representative proof. Resolve demonstrated correctness or persistence gaps that block it; explicitly propose necessary limitations instead of accepting them silently. Keep all agreed acceptance criteria and engine-first delivery: independent generic engine acceptance precedes the sole production TV-guide addon inspired only by NOS200–299. The maintainer authorizes a push to remote/main after each fully verified Phase 9 milestone; preparatory checkpoints remain local. Releases and other external publication are not authorized.
 
 2026-10-11 preparatory channel-composition checkpoint: one read transaction
 captures the complete enabled channel binding membership and every effective

@@ -4319,9 +4319,23 @@ reservations do not consume credit. Existing public comparisons discard usage.
 `glyph_comparison_work` and `display_comparison_updates`, including on failure.
 Disabled buckets report `None`; metrics stay outside model/wire/artifact identity.
 The older `with_usage` API still returns only display-resolution usage while
-honoring all supplied caps. Other planning, placement, assembly/identity,
-ancestry, collection/spatial and catalogue costs remain separate unfinished
-admission work. These meters cannot be summed into an invented total CPU/RSS cost.
+honoring all supplied caps.
+
+Four additional optional inclusive fields share that same service context:
+`max_realization_updates`, `max_placement_work`, `max_assembly_work` and
+`max_ancestry_work`. Their usage fields are `realization_updates`, `placement_work`,
+`assembly_work` and `ancestry_work`. Each reports its existing admitted visits or
+conservative reservations, including on failure; stage-specific limits still apply.
+Public realization, placement and assembly `*_with_usage` siblings preserve the
+borrowed result and located errors. The private ancestry usage path retains the
+same context through physical replay, and commits prospective charges only after
+admission. A genuinely empty ancestry pass consumes zero and is valid with zero
+credit; a real invocation must fit its minimum and correspondence visits.
+
+Assembly work does not measure identity searches whose failed recipe cost is
+still unreported. Collection/spatial, identity and catalogue costs remain separate
+unfinished admission work. These meters cannot be summed into an invented total
+CPU/RSS cost.
 Resource-rich measurement and the canonical P9A-04 receipt determine the next
 production-policy step; no production defaults are inferred here.
 

@@ -1,22 +1,20 @@
 //! Owned engine normalization candidate; not whole-service admission or publication.
-use super::augmented_origin_compilation::compile_augmented_with_context;
 use super::compile_context::TeletextCompileContext;
 use super::composed_main::compile_composed_with_context;
 #[cfg(test)]
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
-    allocate_teletext_resource_objects, build_teletext_augmented_origin_program,
-    plan_teletext_base_compatibility_realization, plan_teletext_origin_carrier_placement,
-    EncodedTeletextAugmentedOriginProgram, EncodedTeletextLocalObjectProgram,
-    EncodedTeletextPhysicalDisplayProgram, TeletextAugmentedGlyphComparisonBudget,
-    TeletextAugmentedGlyphComparisonError, TeletextAugmentedGlyphDiagnostic,
-    TeletextAugmentedInvocationBudget, TeletextAugmentedOriginCompilationError,
-    TeletextAugmentedOriginProgramBudget, TeletextAugmentedOriginProgramError,
-    TeletextBaseCompatibilityRealizationBudget, TeletextBaseCompatibilityRealizationError,
-    TeletextComposedMainEncodingError, TeletextMainComposition, TeletextMainCompositionBudget,
-    TeletextObjectAllocationError, TeletextOriginCarrierPlacementBudget,
-    TeletextOriginCarrierPlacementError, TeletextPhysicalComparisonBudget,
-    TeletextPhysicalComparisonDiagnostic, TeletextPhysicalComparisonError,
+    allocate_teletext_resource_objects, EncodedTeletextAugmentedOriginProgram,
+    EncodedTeletextLocalObjectProgram, EncodedTeletextPhysicalDisplayProgram,
+    TeletextAugmentedGlyphComparisonBudget, TeletextAugmentedGlyphComparisonError,
+    TeletextAugmentedGlyphDiagnostic, TeletextAugmentedInvocationBudget,
+    TeletextAugmentedOriginCompilationError, TeletextAugmentedOriginProgramBudget,
+    TeletextAugmentedOriginProgramError, TeletextBaseCompatibilityRealizationBudget,
+    TeletextBaseCompatibilityRealizationError, TeletextComposedMainEncodingError,
+    TeletextMainComposition, TeletextMainCompositionBudget, TeletextObjectAllocationError,
+    TeletextOriginCarrierPlacementBudget, TeletextOriginCarrierPlacementError,
+    TeletextPhysicalComparisonBudget, TeletextPhysicalComparisonDiagnostic,
+    TeletextPhysicalComparisonError,
 };
 use ersatzrs_domain::{
     TeletextDefaultObjectSelection, TeletextEnhancementCollectionBudget,
@@ -214,24 +212,25 @@ fn compile_physical_with_context(
     let owner = original.owner();
     let fail = |reason| TeletextNormalizedMainProgramError { owner, reason };
     check_deadline(owner, context.deadline)?;
-    let plan = plan_teletext_base_compatibility_realization(original, budget.realization).map_err(
-        |error| {
+    let plan = context
+        .realization(original, budget.realization)
+        .map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::Realization(Box::new(
                 error,
             )))
-        },
-    )?;
+        })?;
     check_deadline(owner, context.deadline)?;
-    let placement =
-        plan_teletext_origin_carrier_placement(&plan, service.objects(), budget.placement)
-            .map_err(|error| {
-                fail(TeletextNormalizedMainProgramFailure::Placement(Box::new(
-                    error,
-                )))
-            })?;
+    let placement = context
+        .placement(&plan, service.objects(), budget.placement)
+        .map_err(|error| {
+            fail(TeletextNormalizedMainProgramFailure::Placement(Box::new(
+                error,
+            )))
+        })?;
     check_deadline(owner, context.deadline)?;
-    let augmented =
-        build_teletext_augmented_origin_program(&placement, budget.assembly).map_err(|error| {
+    let augmented = context
+        .assembly(&placement, budget.assembly)
+        .map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::Assembly(Box::new(
                 error,
             )))
@@ -248,20 +247,20 @@ fn compile_physical_with_context(
         )))
     })?;
     check_deadline(owner, context.deadline)?;
-    let compiled = compile_augmented_with_context(
-        service,
-        &augmented,
-        &allocations,
-        budget.replay,
-        budget.packing,
-        budget.ancestry,
-        context,
-    )
-    .map_err(|error| {
-        fail(TeletextNormalizedMainProgramFailure::Compilation(Box::new(
-            error,
-        )))
-    })?;
+    let compiled = context
+        .compile_augmented(
+            service,
+            &augmented,
+            &allocations,
+            budget.replay,
+            budget.packing,
+            budget.ancestry,
+        )
+        .map_err(|error| {
+            fail(TeletextNormalizedMainProgramFailure::Compilation(Box::new(
+                error,
+            )))
+        })?;
     check_deadline(owner, context.deadline)?;
     check_candidate(&compiled, budget, context)?;
     check_deadline(owner, context.deadline)?;

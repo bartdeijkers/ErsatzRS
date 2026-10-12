@@ -159,6 +159,10 @@ pub(in crate::transport::iptv) fn authored_service_with_counter(
             max_display_updates: None,
             max_glyph_comparison_work: None,
             max_display_comparison_updates: None,
+            max_realization_updates: None,
+            max_placement_work: None,
+            max_assembly_work: None,
+            max_ancestry_work: None,
             normalization: normalization_budget(),
         },
     )

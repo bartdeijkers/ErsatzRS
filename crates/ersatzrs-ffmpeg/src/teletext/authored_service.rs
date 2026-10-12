@@ -65,6 +65,15 @@ pub struct TeletextAuthoredServiceEncodingBudget {
     /// Optional cumulative admitted selected-display comparison updates,
     /// including its conservative bulk reservations.
     pub max_display_comparison_updates: Option<usize>,
+    /// Optional cumulative admitted compatibility-planning visits.
+    pub max_realization_updates: Option<usize>,
+    /// Optional cumulative admitted carrier-placement visits.
+    pub max_placement_work: Option<usize>,
+    /// Optional cumulative assembly visits and conservative clone reservations;
+    /// carrier identity search has a separate unfinished accounting boundary.
+    pub max_assembly_work: Option<usize>,
+    /// Optional cumulative admitted invocation-correspondence visits/reservations.
+    pub max_ancestry_work: Option<usize>,
     /// Independent stage bounds applied to each display candidate.
     pub normalization: TeletextNormalizedMainProgramBudget,
 }
@@ -77,6 +86,10 @@ pub struct TeletextAuthoredServiceEncodingUsage {
     pub display_updates: Option<usize>,
     pub glyph_comparison_work: Option<usize>,
     pub display_comparison_updates: Option<usize>,
+    pub realization_updates: Option<usize>,
+    pub placement_work: Option<usize>,
+    pub assembly_work: Option<usize>,
+    pub ancestry_work: Option<usize>,
 }
 
 impl TeletextAuthoredServiceEncodingUsage {
@@ -85,6 +98,10 @@ impl TeletextAuthoredServiceEncodingUsage {
             display_updates: budget.max_display_updates.map(|_| 0),
             glyph_comparison_work: budget.max_glyph_comparison_work.map(|_| 0),
             display_comparison_updates: budget.max_display_comparison_updates.map(|_| 0),
+            realization_updates: budget.max_realization_updates.map(|_| 0),
+            placement_work: budget.max_placement_work.map(|_| 0),
+            assembly_work: budget.max_assembly_work.map(|_| 0),
+            ancestry_work: budget.max_ancestry_work.map(|_| 0),
         }
     }
 }

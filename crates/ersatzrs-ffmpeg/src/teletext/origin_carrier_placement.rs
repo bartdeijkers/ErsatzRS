@@ -146,76 +146,97 @@ pub fn plan_teletext_origin_carrier_placement<'a>(
     catalog: &'a TeletextEnhancementObjectCatalog,
     budget: TeletextOriginCarrierPlacementBudget,
 ) -> Result<TeletextOriginCarrierPlacement<'a>, TeletextOriginCarrierPlacementError> {
+    plan_teletext_origin_carrier_placement_with_usage(plan, catalog, budget).0
+}
+
+/// Place unchanged origins and return admitted placement visits on either outcome.
+/// A denied visit consumes no credit; earlier admitted visits survive later
+/// failures. Spatial expansion retains its separate limits; this usage measures
+/// neither its work nor total compiler CPU time or memory.
+/// # Errors
+/// The embedded result preserves all existing located input/spatial/work errors.
+pub fn plan_teletext_origin_carrier_placement_with_usage<'a>(
+    plan: &'a TeletextBaseCompatibilityRealizationPlan<'a>,
+    catalog: &'a TeletextEnhancementObjectCatalog,
+    budget: TeletextOriginCarrierPlacementBudget,
+) -> (
+    Result<TeletextOriginCarrierPlacement<'a>, TeletextOriginCarrierPlacementError>,
+    usize,
+) {
     let mut planner = PlacementPlanner {
         plan,
         catalog,
         budget,
         remaining: budget.max_work,
     };
-    planner.preflight()?;
-    let composition = plan.composition();
-    let trace = resolve_teletext_spatial_program(
-        composition.owner(),
-        composition.program(),
-        catalog,
-        budget.spatial,
-    )
-    .map_err(|error| TeletextOriginCarrierPlacementError {
-        owner: composition.owner(),
-        origin: None,
-        location: error.location,
-        root_source: error.root_source,
-        invocation: error.invocation,
-        reason: Failure::Spatial(Box::new(error)),
-    })?;
-    let mut gaps = vec![TeletextOriginCarrierGap {
-        after_command: None,
-        caller: (0, 0),
-    }];
-    for event in trace.events() {
-        planner.charge(None)?;
-        if event.invocation().is_none() && event.source().object.is_none() {
-            if event.source().command != gaps.len() - 1 {
-                return Err(planner.error(None, Failure::Correspondence));
+    let outcome = (|| {
+        planner.preflight()?;
+        let composition = plan.composition();
+        let trace = resolve_teletext_spatial_program(
+            composition.owner(),
+            composition.program(),
+            catalog,
+            budget.spatial,
+        )
+        .map_err(|error| TeletextOriginCarrierPlacementError {
+            owner: composition.owner(),
+            origin: None,
+            location: error.location,
+            root_source: error.root_source,
+            invocation: error.invocation,
+            reason: Failure::Spatial(Box::new(error)),
+        })?;
+        let mut gaps = vec![TeletextOriginCarrierGap {
+            after_command: None,
+            caller: (0, 0),
+        }];
+        for event in trace.events() {
+            planner.charge(None)?;
+            if event.invocation().is_none() && event.source().object.is_none() {
+                if event.source().command != gaps.len() - 1 {
+                    return Err(planner.error(None, Failure::Correspondence));
+                }
+                let ap = event.absolute_after();
+                gaps.push(TeletextOriginCarrierGap {
+                    after_command: Some(event.source().command),
+                    caller: (ap.row(), ap.column()),
+                });
             }
-            let ap = event.absolute_after();
-            gaps.push(TeletextOriginCarrierGap {
-                after_command: Some(event.source().command),
-                caller: (ap.row(), ap.column()),
-            });
         }
-    }
-    if gaps.len() - 1 != composition.program().commands().len() {
-        return Err(planner.error(None, Failure::Correspondence));
-    }
-    let mut used = vec![false; plan.origins().len()];
-    let mut components = Vec::new();
-    for first in 0..used.len() {
-        planner.charge(Some(first))?;
-        if used[first] {
-            continue;
+        if gaps.len() - 1 != composition.program().commands().len() {
+            return Err(planner.error(None, Failure::Correspondence));
         }
-        used[first] = true;
-        let mut members = vec![first];
-        let mut cursor = 0;
-        while cursor < members.len() {
-            let current = members[cursor];
-            cursor += 1;
-            for (other, included) in used.iter_mut().enumerate() {
-                planner.charge(Some(current))?;
-                if !*included && planner.connected(current, other)? {
-                    *included = true;
-                    members.push(other);
+        let mut used = vec![false; plan.origins().len()];
+        let mut components = Vec::new();
+        for first in 0..used.len() {
+            planner.charge(Some(first))?;
+            if used[first] {
+                continue;
+            }
+            used[first] = true;
+            let mut members = vec![first];
+            let mut cursor = 0;
+            while cursor < members.len() {
+                let current = members[cursor];
+                cursor += 1;
+                for (other, included) in used.iter_mut().enumerate() {
+                    planner.charge(Some(current))?;
+                    if !*included && planner.connected(current, other)? {
+                        *included = true;
+                        members.push(other);
+                    }
                 }
             }
+            components.push(planner.component(&members, &gaps)?);
         }
-        components.push(planner.component(&members, &gaps)?);
-    }
-    Ok(TeletextOriginCarrierPlacement {
-        plan,
-        catalog,
-        components,
-    })
+        Ok(TeletextOriginCarrierPlacement {
+            plan,
+            catalog,
+            components,
+        })
+    })();
+    let admitted = budget.max_work - planner.remaining;
+    (outcome, admitted)
 }
 type Failure = TeletextOriginCarrierPlacementFailure;
 type Error = TeletextOriginCarrierPlacementError;

@@ -149,6 +149,32 @@ pub(super) fn compile_augmented_with_context<'a>(
     ancestry_budget: TeletextAugmentedInvocationBudget,
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginCompilationError> {
+    compile_augmented_with_context_and_usage(
+        service,
+        augmented,
+        allocations,
+        replay_budget,
+        packing_budget,
+        ancestry_budget,
+        context,
+    )
+    .0
+}
+
+/// Report admitted ancestry scan work even when correspondence fails.
+/// Physical replay and its shared context retain their own independent meters.
+pub(super) fn compile_augmented_with_context_and_usage<'a>(
+    service: &TeletextSemanticService,
+    augmented: &'a TeletextAugmentedOriginProgram<'a>,
+    allocations: &TeletextResourceObjectAllocations,
+    replay_budget: TeletextEnhancementCollectionBudget,
+    packing_budget: TeletextObjectCatalogBudget,
+    ancestry_budget: TeletextAugmentedInvocationBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> (
+    Result<EncodedTeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginCompilationError>,
+    usize,
+) {
     let composition = augmented.placement().plan().composition();
     let original = composition.spatial_trace().invocations();
     let mut state = Ancestry {
@@ -156,85 +182,88 @@ pub(super) fn compile_augmented_with_context<'a>(
         budget: ancestry_budget,
         work: 0,
     };
-    state
-        .limit(
-            "original invocations",
-            original.len(),
-            ancestry_budget.max_original_invocations,
+    let result = (|| {
+        state
+            .limit(
+                "original invocations",
+                original.len(),
+                ancestry_budget.max_original_invocations,
+            )
+            .map_err(|mut error| {
+                error.original = original
+                    .get(ancestry_budget.max_original_invocations)
+                    .map(|call| call.id());
+                error
+            })?;
+        state.limit(
+            "carriers",
+            augmented.carriers().len(),
+            ancestry_budget.max_carriers,
+        )?;
+        let physical = compile_physical_with_context(
+            service,
+            composition,
+            augmented.program(),
+            augmented.catalog(),
+            allocations,
+            (replay_budget, packing_budget),
+            context,
         )
-        .map_err(|mut error| {
-            error.original = original
-                .get(ancestry_budget.max_original_invocations)
-                .map(|call| call.id());
-            error
-        })?;
-    state.limit(
-        "carriers",
-        augmented.carriers().len(),
-        ancestry_budget.max_carriers,
-    )?;
-    let physical = compile_physical_with_context(
-        service,
-        composition,
-        augmented.program(),
-        augmented.catalog(),
-        allocations,
-        (replay_budget, packing_budget),
-        context,
-    )
-    .map_err(|error| {
-        state.error(
-            None,
-            None,
-            TeletextAugmentedOriginCompilationFailure::Physical(Box::new(error)),
-        )
-    })?;
-    let actual = physical.replay().spatial_trace().invocations();
-    state
-        .limit(
-            "actual invocations",
-            actual.len(),
-            ancestry_budget.max_actual_invocations,
-        )
-        .map_err(|mut error| {
-            if let Some(call) = actual.get(ancestry_budget.max_actual_invocations) {
-                error.actual = Some(call.id());
-                error.location = Some(call.source());
-                error.root_source = Some(call.root_source());
-            }
-            error
-        })?;
-    state.storage(original.len(), actual.len())?;
-    // At least one visit per output/correspondence entry is unavoidable. Fence
-    // this allocation-related minimum first; detailed scans are charged below.
-    let minimum = actual
-        .len()
-        .checked_add(original.len())
-        .and_then(|count| count.checked_add(augmented.carriers().len()))
-        .ok_or_else(|| {
+        .map_err(|error| {
             state.error(
                 None,
                 None,
-                TeletextAugmentedOriginCompilationFailure::AllocationSize,
+                TeletextAugmentedOriginCompilationFailure::Physical(Box::new(error)),
             )
         })?;
-    if minimum > ancestry_budget.max_work {
-        return Err(state.error(
-            actual.first().copied(),
-            None,
-            TeletextAugmentedOriginCompilationFailure::WorkBudget {
-                maximum: ancestry_budget.max_work,
-            },
-        ));
-    }
-    let maps = state.map_all(original, actual)?;
-    Ok(EncodedTeletextAugmentedOriginProgram {
-        augmented,
-        physical,
-        invocations: maps.records,
-        originals: maps.originals,
-        carriers: maps.carriers,
-    })
+        let actual = physical.replay().spatial_trace().invocations();
+        state
+            .limit(
+                "actual invocations",
+                actual.len(),
+                ancestry_budget.max_actual_invocations,
+            )
+            .map_err(|mut error| {
+                if let Some(call) = actual.get(ancestry_budget.max_actual_invocations) {
+                    error.actual = Some(call.id());
+                    error.location = Some(call.source());
+                    error.root_source = Some(call.root_source());
+                }
+                error
+            })?;
+        state.storage(original.len(), actual.len())?;
+        // At least one visit per output/correspondence entry is unavoidable. Fence
+        // this allocation-related minimum first; detailed scans are charged below.
+        let minimum = actual
+            .len()
+            .checked_add(original.len())
+            .and_then(|count| count.checked_add(augmented.carriers().len()))
+            .ok_or_else(|| {
+                state.error(
+                    None,
+                    None,
+                    TeletextAugmentedOriginCompilationFailure::AllocationSize,
+                )
+            })?;
+        if minimum > ancestry_budget.max_work {
+            return Err(state.error(
+                actual.first().copied(),
+                None,
+                TeletextAugmentedOriginCompilationFailure::WorkBudget {
+                    maximum: ancestry_budget.max_work,
+                },
+            ));
+        }
+        let maps = state.map_all(original, actual)?;
+        Ok(EncodedTeletextAugmentedOriginProgram {
+            augmented,
+            physical,
+            invocations: maps.records,
+            originals: maps.originals,
+            carriers: maps.carriers,
+        })
+    })();
+    (result, state.work)
 }
 
 fn matches_original(
@@ -548,14 +577,14 @@ impl Ancestry<'_> {
         count: usize,
         call: Option<TeletextSpatialInvocation>,
     ) -> Result<(), TeletextAugmentedOriginCompilationError> {
-        self.work = self.work.checked_add(count).ok_or_else(|| {
+        let next = self.work.checked_add(count).ok_or_else(|| {
             self.error(
                 call,
                 None,
                 TeletextAugmentedOriginCompilationFailure::AllocationSize,
             )
         })?;
-        if self.work > self.budget.max_work {
+        if next > self.budget.max_work {
             return Err(self.error(
                 call,
                 None,
@@ -564,6 +593,7 @@ impl Ancestry<'_> {
                 },
             ));
         }
+        self.work = next;
         Ok(())
     }
     fn carrier(

@@ -31,8 +31,10 @@ across original, physical and transmission-settlement passes, including failures
 Usage is separate from model/wire identity; disabled metering keeps prior stage
 limits. Separate optional glyph-lookup and selected-display comparison credits
 now share that service context and retain failure usage without changing model,
-wire or artifact identity. Conservative reservations are charges, not executed
-CPU/RSS costs. Other stage meters and measured production host policy remain
+wire or artifact identity. Planning, placement, assembly and ancestry also retain
+separate admitted service credits; truly empty work may fit zero credit. Identity,
+collection/spatial and catalogue accounting remain open. Conservative reservations
+are charges, not executed CPU/RSS costs. Measured production host policy remains
 open; P9A-04 owns proof and the resource-rich measurement scope.
 Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.

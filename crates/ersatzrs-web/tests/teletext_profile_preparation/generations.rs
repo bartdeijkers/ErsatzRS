@@ -372,10 +372,13 @@ async fn compiler_and_deadline_failures_preserve_the_exact_accepted_pointer() {
             NativeTeletextDesignError::Encoding(_)
         ))
     ));
-    let exhaust: [fn(&mut ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget); 3] = [
+    let exhaust: [fn(&mut ersatzrs_ffmpeg::teletext::TeletextAuthoredServiceEncodingBudget); 6] = [
         |budget| budget.max_display_updates = Some(0),
         |budget| budget.max_glyph_comparison_work = Some(0),
         |budget| budget.max_display_comparison_updates = Some(0),
+        |budget| budget.max_realization_updates = Some(0),
+        |budget| budget.max_placement_work = Some(0),
+        |budget| budget.max_assembly_work = Some(0),
     ];
     for exhaust in exhaust {
         let mut policy = channel_documents::policy();
@@ -395,6 +398,94 @@ async fn compiler_and_deadline_failures_preserve_the_exact_accepted_pointer() {
             ))
         ));
     }
+    assert_eq!(count(&fixture).await, 1);
+    assert_same_output(&recover(&fixture).await.unwrap(), &original);
+    assert_eq!(designs::config(&fixture).await, before);
+    assert_eq!(calls(&fixture), invoked);
+    assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+}
+
+#[tokio::test]
+async fn ancestry_quota_failure_with_real_local_invocation_keeps_the_accepted_output() {
+    let (mut fixture, _) = designs::persistent_pair(DocumentFixture::Authored).await;
+    let path = fixture.root.path().join("channel-response-second.json");
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let identity = serde_json::json!({"scope":"local",
+        "owner":document["page_enhancements"][0]["address"],"object_id":65535});
+    document["objects"] = serde_json::json!([{"identity":identity,
+    "object_type":"active","program":{"commands":[
+        {"kind":"at_column","column":0,"operation":{"kind":"g0","code":65}}
+    ]}}]);
+    document["page_enhancements"][0]["local_program"]["commands"][2] = serde_json::json!({"kind":"invoke_object","target":identity,
+            "object_type":"active","offset":null});
+    channel_documents::write_response(&fixture, "second", &document);
+    let candidate = channel_documents::candidate(&fixture, channel_documents::policy())
+        .await
+        .unwrap();
+    let saved = designs::save(&fixture, candidate, None).await;
+    let pending = request(&fixture, &saved, None).await;
+    let original = accepted(accept(&fixture, &pending, 1, None).await);
+    assert!(original.service().pages().iter().any(|page| {
+        matches!(page, ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredPage::CompiledDisplay(page)
+            if !page.normalized().original().spatial_trace().invocations().is_empty())
+    }));
+    let before = designs::config(&fixture).await;
+    let invoked = calls(&fixture);
+    let mut policy = channel_documents::policy();
+    policy.encoding.max_ancestry_work = Some(0);
+    let failed = accept_original_teletext_generation(
+        &fixture.state.application,
+        TeletextGenerationTarget {
+            request: pending,
+            expected_design_head: saved.head().revision,
+            expected_generation_id: Some(original.generation().id),
+        },
+        designs::budget(),
+        policy,
+        designs::deadline(),
+    )
+    .await;
+    assert!(matches!(
+        failed,
+        Err(NativeTeletextGenerationError::Design(
+            NativeTeletextDesignError::Encoding(_)
+        ))
+    ));
+    assert_eq!(count(&fixture).await, 1);
+    assert_same_output(&recover(&fixture).await.unwrap(), &original);
+    assert_eq!(designs::config(&fixture).await, before);
+    assert_eq!(calls(&fixture), invoked);
+    assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+}
+
+#[tokio::test]
+async fn zero_ancestry_quota_with_no_calls_is_valid_compilation_before_replay_rejection() {
+    let (mut fixture, saved, pending) = prepared().await;
+    let original = accepted(accept(&fixture, &pending, 1, None).await);
+    let before = designs::config(&fixture).await;
+    let invoked = calls(&fixture);
+    let mut policy = channel_documents::policy();
+    policy.encoding.max_ancestry_work = Some(0);
+    let result = accept_original_teletext_generation(
+        &fixture.state.application,
+        TeletextGenerationTarget {
+            request: pending,
+            expected_design_head: saved.head().revision,
+            expected_generation_id: Some(original.generation().id),
+        },
+        designs::budget(),
+        policy,
+        designs::deadline(),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        result,
+        Mutation::Rejected(Rejection::AlreadyAccepted)
+    ));
     assert_eq!(count(&fixture).await, 1);
     assert_same_output(&recover(&fixture).await.unwrap(), &original);
     assert_eq!(designs::config(&fixture).await, before);

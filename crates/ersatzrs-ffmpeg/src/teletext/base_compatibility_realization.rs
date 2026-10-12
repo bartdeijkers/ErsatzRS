@@ -162,85 +162,104 @@ pub fn plan_teletext_base_compatibility_realization(
     budget: TeletextBaseCompatibilityRealizationBudget,
 ) -> Result<TeletextBaseCompatibilityRealizationPlan<'_>, TeletextBaseCompatibilityRealizationError>
 {
+    plan_teletext_base_compatibility_realization_with_usage(composition, budget).0
+}
+
+/// Plan unchanged ownership and return admitted planning visits on either outcome.
+/// A denied visit consumes no credit; earlier admitted visits survive later
+/// failures. Usage is this existing planner meter, not CPU time or total memory.
+/// # Errors
+/// The embedded result retains all existing located budget/correspondence errors.
+pub fn plan_teletext_base_compatibility_realization_with_usage(
+    composition: &TeletextMainComposition,
+    budget: TeletextBaseCompatibilityRealizationBudget,
+) -> (
+    Result<TeletextBaseCompatibilityRealizationPlan<'_>, TeletextBaseCompatibilityRealizationError>,
+    usize,
+) {
     let mut planner = Planner {
         composition,
         budget,
         remaining: budget.max_updates,
     };
-    planner.preflight()?;
-    let mut count = 0usize;
-    for command in 0..composition.provenance().len() {
-        planner.charge(None)?;
-        if let Some(seed) = planner.seed(command)? {
-            if count == budget.max_seeds {
-                return Err(planner.error(
-                    Some(seed.origin),
-                    Failure::SeedBudget {
-                        maximum: budget.max_seeds,
-                    },
-                ));
+    let outcome = (|| {
+        planner.preflight()?;
+        let mut count = 0usize;
+        for command in 0..composition.provenance().len() {
+            planner.charge(None)?;
+            if let Some(seed) = planner.seed(command)? {
+                if count == budget.max_seeds {
+                    return Err(planner.error(
+                        Some(seed.origin),
+                        Failure::SeedBudget {
+                            maximum: budget.max_seeds,
+                        },
+                    ));
+                }
+                count += 1;
             }
-            count += 1;
         }
-    }
-    let display = composition.display_resolution();
-    let mut result = TeletextBaseCompatibilityRealizationPlan {
-        composition,
-        seeds: Vec::with_capacity(count),
-        origins: Vec::new(),
-        fragments: Vec::new(),
-        precedence: Vec::new(),
-        pending: Vec::new(),
-    };
-    let mut closure = Closure {
-        included: vec![false; display.origins().len()],
-        cells: vec![false; 25 * usize::from(display.width())],
-        queue: Vec::new(),
-        constraints: BTreeMap::new(),
-    };
-    for command in 0..composition.provenance().len() {
-        planner.charge(None)?;
-        if let Some(seed) = planner.seed(command)? {
-            result.seeds.push(seed);
-            enqueue(seed.origin, &mut closure.included, &mut closure.queue);
+        let display = composition.display_resolution();
+        let mut result = TeletextBaseCompatibilityRealizationPlan {
+            composition,
+            seeds: Vec::with_capacity(count),
+            origins: Vec::new(),
+            fragments: Vec::new(),
+            precedence: Vec::new(),
+            pending: Vec::new(),
+        };
+        let mut closure = Closure {
+            included: vec![false; display.origins().len()],
+            cells: vec![false; 25 * usize::from(display.width())],
+            queue: Vec::new(),
+            constraints: BTreeMap::new(),
+        };
+        for command in 0..composition.provenance().len() {
+            planner.charge(None)?;
+            if let Some(seed) = planner.seed(command)? {
+                result.seeds.push(seed);
+                enqueue(seed.origin, &mut closure.included, &mut closure.queue);
+            }
         }
-    }
-    let mut cursor = 0;
-    while let Some(&index) = closure.queue.get(cursor) {
-        cursor += 1;
-        planner.charge(Some(index))?;
-        let original = *display
-            .origins()
-            .get(index)
-            .ok_or_else(|| planner.error(Some(index), Failure::Correspondence))?;
-        let candidate = planner.candidate(index)?;
-        let rectangle = rectangle(original);
-        result.origins.push(TeletextBaseCompatibilityOrigin {
-            origin_index: index,
-            original,
-            candidate,
-            rectangle,
-        });
-        if let Some(pending) = original.pending() {
-            result.pending.push(planner.pending(
-                index,
-                TeletextBaseCompatibilityPendingReason::OriginalOrigin { pending },
-                None,
-            )?);
+        let mut cursor = 0;
+        while let Some(&index) = closure.queue.get(cursor) {
+            cursor += 1;
+            planner.charge(Some(index))?;
+            let original = *display
+                .origins()
+                .get(index)
+                .ok_or_else(|| planner.error(Some(index), Failure::Correspondence))?;
+            let candidate = planner.candidate(index)?;
+            let rectangle = rectangle(original);
+            result.origins.push(TeletextBaseCompatibilityOrigin {
+                origin_index: index,
+                original,
+                candidate,
+                rectangle,
+            });
+            if let Some(pending) = original.pending() {
+                result.pending.push(planner.pending(
+                    index,
+                    TeletextBaseCompatibilityPendingReason::OriginalOrigin { pending },
+                    None,
+                )?);
+            }
+            if let Some(rectangle) = rectangle {
+                planner.expand(index, rectangle, &mut result, &mut closure)?;
+            } else {
+                result.pending.push(planner.pending(
+                    index,
+                    TeletextBaseCompatibilityPendingReason::UnknownRectangle,
+                    None,
+                )?);
+            }
         }
-        if let Some(rectangle) = rectangle {
-            planner.expand(index, rectangle, &mut result, &mut closure)?;
-        } else {
-            result.pending.push(planner.pending(
-                index,
-                TeletextBaseCompatibilityPendingReason::UnknownRectangle,
-                None,
-            )?);
-        }
-    }
-    result.precedence = closure.constraints.into_values().collect();
-    planner.cycles(&mut result, &closure.included)?;
-    Ok(result)
+        result.precedence = closure.constraints.into_values().collect();
+        planner.cycles(&mut result, &closure.included)?;
+        Ok(result)
+    })();
+    let admitted = budget.max_updates - planner.remaining;
+    (outcome, admitted)
 }
 
 type PlanningError = TeletextBaseCompatibilityRealizationError;

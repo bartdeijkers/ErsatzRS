@@ -200,6 +200,10 @@ fn legacy_encoder_honors_comparison_quotas_while_disabled_usage_remains_none() {
             display_updates: None,
             glyph_comparison_work: None,
             display_comparison_updates: None,
+            realization_updates: None,
+            placement_work: None,
+            assembly_work: None,
+            ancestry_work: None,
         }
     );
     let mut budget = limits();

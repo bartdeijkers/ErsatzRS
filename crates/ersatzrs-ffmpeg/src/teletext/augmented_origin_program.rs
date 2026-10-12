@@ -207,40 +207,62 @@ pub fn build_teletext_augmented_origin_program<'a>(
     placement: &'a TeletextOriginCarrierPlacement<'a>,
     budget: TeletextAugmentedOriginProgramBudget,
 ) -> Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError> {
+    build_teletext_augmented_origin_program_with_usage(placement, budget).0
+}
+
+/// Build the same candidate and report admitted assembly work on either outcome.
+///
+/// The meter is the existing `max_work` reservation counter, including both
+/// recipe passes. A rejected reservation consumes no credit; earlier admitted
+/// work is retained after failure. Identity probes have a separate budget and
+/// are not included in this assembly-work count.
+/// # Errors
+/// Returns the ordinary assembly result with unchanged diagnostics and no partial
+/// candidate. The usage count does not establish total CPU or memory consumption.
+pub fn build_teletext_augmented_origin_program_with_usage<'a>(
+    placement: &'a TeletextOriginCarrierPlacement<'a>,
+    budget: TeletextAugmentedOriginProgramBudget,
+) -> (
+    Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
+    usize,
+) {
     let mut builder = Builder {
         placement,
         budget,
         work: budget.max_work,
         ids: budget.max_identity_checks,
     };
-    let (count, original_commands) = builder.preflight()?;
-    let mut commands = original_commands;
-    for component in placement.components() {
-        for call in component.calls() {
-            let recipe = builder.recipe(call.original_origin_index(), placement.catalog())?;
-            commands = commands
-                .checked_add(recipe.definition().program.commands().len())
-                .ok_or_else(|| {
-                    builder.error(Some(call.original_origin_index()), Failure::AllocationSize)
-                })?;
+    let result = (|| {
+        let (count, original_commands) = builder.preflight()?;
+        let mut commands = original_commands;
+        for component in placement.components() {
+            for call in component.calls() {
+                let recipe = builder.recipe(call.original_origin_index(), placement.catalog())?;
+                commands = commands
+                    .checked_add(recipe.definition().program.commands().len())
+                    .ok_or_else(|| {
+                        builder.error(Some(call.original_origin_index()), Failure::AllocationSize)
+                    })?;
+            }
         }
-    }
-    builder.bound(
-        "catalog commands",
-        commands,
-        budget.recipe.catalog.max_commands,
-        None,
-    )?;
-    builder.storage(count, commands)?;
-    let (catalog, carriers) = builder.emit_catalog(count, original_commands)?;
-    let (program, sources) = builder.emit_main(&carriers, count)?;
-    Ok(TeletextAugmentedOriginProgram {
-        placement,
-        program,
-        catalog,
-        main_sources: sources,
-        carriers,
-    })
+        builder.bound(
+            "catalog commands",
+            commands,
+            budget.recipe.catalog.max_commands,
+            None,
+        )?;
+        builder.storage(count, commands)?;
+        let (catalog, carriers) = builder.emit_catalog(count, original_commands)?;
+        let (program, sources) = builder.emit_main(&carriers, count)?;
+        Ok(TeletextAugmentedOriginProgram {
+            placement,
+            program,
+            catalog,
+            main_sources: sources,
+            carriers,
+        })
+    })();
+    (result, budget.max_work - builder.work)
 }
 type Failure = TeletextAugmentedOriginProgramFailure;
 type Error = TeletextAugmentedOriginProgramError;

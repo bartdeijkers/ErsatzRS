@@ -287,6 +287,36 @@ fn assert_same_service(
     assert_eq!(previews(actual), previews(expected));
 }
 
+fn metered_reencode(
+    prepared: &EncodedChannelTeletextDocumentCandidate,
+) -> (TeletextAuthoredServiceEncodingUsage, u128) {
+    let mut policy = resource_policy();
+    policy.encoding.max_display_updates = Some(usize::MAX);
+    policy.encoding.max_glyph_comparison_work = Some(usize::MAX);
+    policy.encoding.max_display_comparison_updates = Some(usize::MAX);
+    policy.encoding.max_realization_updates = Some(usize::MAX);
+    policy.encoding.max_placement_work = Some(usize::MAX);
+    policy.encoding.max_assembly_work = Some(usize::MAX);
+    policy.encoding.max_ancestry_work = Some(usize::MAX);
+    let started = Instant::now();
+    let (metered, usage) = encode_teletext_authored_service_with_work_usage(
+        prepared.encoded().unwrap().declared().clone(),
+        &policy.transmissions,
+        &policy.encoding,
+        Some(deadline()),
+    );
+    let micros = started.elapsed().as_micros();
+    assert_same_service(&metered.unwrap(), prepared.encoded().unwrap());
+    assert!(usage.display_updates.unwrap() > 0);
+    assert!(usage.glyph_comparison_work.unwrap() > 0);
+    assert!(usage.display_comparison_updates.unwrap() > 0);
+    assert!(usage.realization_updates.unwrap() > 0);
+    assert!(usage.placement_work.unwrap() > 0);
+    assert!(usage.assembly_work.unwrap() > 0);
+    assert!(usage.ancestry_work.unwrap() > 0);
+    (usage, micros)
+}
+
 async fn save(
     fixture: &Fixture,
     candidate: EncodedChannelTeletextDocumentCandidate,
@@ -388,22 +418,7 @@ async fn sixteen_authored_pages_with_shared_objects_and_drcs_preserve_native_flo
             .effective_defaults()
             .palette
     );
-    let mut metered_policy = resource_policy();
-    metered_policy.encoding.max_display_updates = Some(usize::MAX);
-    metered_policy.encoding.max_glyph_comparison_work = Some(usize::MAX);
-    metered_policy.encoding.max_display_comparison_updates = Some(usize::MAX);
-    let started = Instant::now();
-    let (metered, usage) = encode_teletext_authored_service_with_work_usage(
-        prepared.encoded().unwrap().declared().clone(),
-        &metered_policy.transmissions,
-        &metered_policy.encoding,
-        Some(deadline()),
-    );
-    let metered_encode_micros = started.elapsed().as_micros();
-    assert_same_service(&metered.unwrap(), prepared.encoded().unwrap());
-    assert!(usage.display_updates.unwrap() > 0);
-    assert!(usage.glyph_comparison_work.unwrap() > 0);
-    assert!(usage.display_comparison_updates.unwrap() > 0);
+    let (usage, metered_encode_micros) = metered_reencode(&prepared);
     let (saved, save_micros) = save(&fixture, prepared).await;
     let started = Instant::now();
     let restored = reload_original_teletext_design_revision(
@@ -461,7 +476,11 @@ async fn sixteen_authored_pages_with_shared_objects_and_drcs_preserve_native_flo
             "counts":observed,"stored_document_bytes":revision.document.len(),
             "admitted_work":{"display_updates":usage.display_updates.unwrap(),
                 "glyph_comparison_work":usage.glyph_comparison_work.unwrap(),
-                "display_comparison_updates":usage.display_comparison_updates.unwrap()},
+                "display_comparison_updates":usage.display_comparison_updates.unwrap(),
+                "realization_updates":usage.realization_updates.unwrap(),
+                "placement_work":usage.placement_work.unwrap(),
+                "assembly_work":usage.assembly_work.unwrap(),
+                "ancestry_work":usage.ancestry_work.unwrap()},
             "timings_micros":{"prepare_and_encode":prepare_micros,"metered_reencode":metered_encode_micros,"save":save_micros,"historical_preview_reload":preview_micros,"request_and_accept":publication_micros,"accepted_reload":reload_micros}
         })
     );

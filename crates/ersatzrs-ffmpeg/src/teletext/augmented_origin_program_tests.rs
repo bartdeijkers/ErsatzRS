@@ -1,12 +1,12 @@
 //! Candidate assembly/lineage oracles, not normalization or receiver acceptance.
 use super::*;
 use crate::teletext::{
-    build_teletext_augmented_origin_program, plan_teletext_base_compatibility_realization,
-    plan_teletext_origin_carrier_placement, TeletextAugmentedOriginProgramBudget,
-    TeletextAugmentedOriginProgramFailure as Failure, TeletextAugmentedOriginSource as Source,
-    TeletextBaseCompatibilityRealizationBudget, TeletextOriginCarrierBudget,
-    TeletextOriginCarrierCommandRole as Role, TeletextOriginCarrierFailure,
-    TeletextOriginCarrierPlacementBudget,
+    build_teletext_augmented_origin_program, build_teletext_augmented_origin_program_with_usage,
+    plan_teletext_base_compatibility_realization, plan_teletext_origin_carrier_placement,
+    TeletextAugmentedOriginProgramBudget, TeletextAugmentedOriginProgramFailure as Failure,
+    TeletextAugmentedOriginSource as Source, TeletextBaseCompatibilityRealizationBudget,
+    TeletextOriginCarrierBudget, TeletextOriginCarrierCommandRole as Role,
+    TeletextOriginCarrierFailure, TeletextOriginCarrierPlacementBudget,
 };
 fn limits() -> TeletextAugmentedOriginProgramBudget {
     TeletextAugmentedOriginProgramBudget {
@@ -516,7 +516,20 @@ fn pending_placement_and_unknown_recipe_fail_with_original_origin_source_and_no_
         let placement =
             plan_teletext_origin_carrier_placement(&closure, service.objects(), placement_limits())
                 .unwrap();
-        let error = build_teletext_augmented_origin_program(&placement, limits()).unwrap_err();
+        let ordinary = build_teletext_augmented_origin_program(&placement, limits()).unwrap_err();
+        let (result, admitted) =
+            build_teletext_augmented_origin_program_with_usage(&placement, limits());
+        let error = result.unwrap_err();
+        assert_eq!(error.to_string(), ordinary.to_string());
+        if uncertain_glyph {
+            assert_eq!(
+                admitted,
+                placement.components().len() + 1,
+                "raw component reservation and first validation visit precede pending rejection"
+            );
+        } else {
+            assert!(admitted > 1, "recipe failure retains earlier assembly work");
+        }
         assert_eq!(
             error.location,
             Some(TeletextEnhancementSource {
@@ -785,4 +798,140 @@ fn later_uncertain_component_member_blames_its_own_source_and_instance() {
         matches!(error.reason, Failure::Placement { component: 0, pending: crate::teletext::TeletextOriginCarrierPlacementPending::OriginalPlan { origin } } if origin == blocked)
     );
     assert_eq!((service, composition), before);
+}
+
+#[test]
+fn assembly_usage_exact_credit_preserves_candidate_and_rejected_reservation() {
+    let service = repeated_fixture().build();
+    let composition = compose(&service);
+    let saved = (service.clone(), composition.clone());
+    let closure =
+        plan_teletext_base_compatibility_realization(&composition, closure_limits()).unwrap();
+    let placement =
+        plan_teletext_origin_carrier_placement(&closure, service.objects(), placement_limits())
+            .unwrap();
+    let ordinary = build_teletext_augmented_origin_program(&placement, limits()).unwrap();
+    let (result, admitted) =
+        build_teletext_augmented_origin_program_with_usage(&placement, limits());
+    let metered = result.unwrap();
+    assert!(admitted > 0);
+    assert_eq!(metered.program(), ordinary.program());
+    assert_eq!(metered.catalog(), ordinary.catalog());
+    assert_eq!(metered.main_sources(), ordinary.main_sources());
+    assert_eq!(metered.carriers().len(), ordinary.carriers().len());
+    for (actual, expected) in metered.carriers().iter().zip(ordinary.carriers()) {
+        assert_eq!(
+            actual.original_origin_index(),
+            expected.original_origin_index()
+        );
+        assert_eq!(
+            actual.original_candidate_index(),
+            expected.original_candidate_index()
+        );
+        assert_eq!(actual.component_index(), expected.component_index());
+        assert_eq!(actual.call_index(), expected.call_index());
+        assert_eq!(actual.identity(), expected.identity());
+        assert_eq!(actual.command_roles(), expected.command_roles());
+        assert_eq!(actual.original_source(), expected.original_source());
+        assert_eq!(
+            actual.original_root_source(),
+            expected.original_root_source()
+        );
+        assert_eq!(actual.original_invocation(), expected.original_invocation());
+    }
+    let exact = TeletextAugmentedOriginProgramBudget {
+        max_work: admitted,
+        ..limits()
+    };
+    let (result, exact_used) =
+        build_teletext_augmented_origin_program_with_usage(&placement, exact);
+    assert_eq!(result.unwrap().program(), ordinary.program());
+    assert_eq!(exact_used, admitted);
+    let short = TeletextAugmentedOriginProgramBudget {
+        max_work: admitted - 1,
+        ..limits()
+    };
+    let (result, failed_used) =
+        build_teletext_augmented_origin_program_with_usage(&placement, short);
+    let error = result.unwrap_err();
+    assert!(matches!(error.reason, Failure::WorkBudget { maximum } if maximum == admitted - 1));
+    assert!(failed_used > 0);
+    assert!(failed_used <= short.max_work);
+    assert_eq!(
+        error.to_string(),
+        build_teletext_augmented_origin_program(&placement, short)
+            .unwrap_err()
+            .to_string()
+    );
+    assert_eq!((service.clone(), composition.clone()), saved);
+}
+
+#[test]
+fn assembly_usage_preflight_and_zero_work_do_not_admit_rejected_work() {
+    let service = active_fixture().build();
+    let composition = compose(&service);
+    let closure =
+        plan_teletext_base_compatibility_realization(&composition, closure_limits()).unwrap();
+    let placement =
+        plan_teletext_origin_carrier_placement(&closure, service.objects(), placement_limits())
+            .unwrap();
+    let (result, admitted) = build_teletext_augmented_origin_program_with_usage(
+        &placement,
+        TeletextAugmentedOriginProgramBudget {
+            max_input_commands: 0,
+            ..limits()
+        },
+    );
+    assert!(matches!(
+        result.unwrap_err().reason,
+        Failure::InputBudget {
+            kind: "input commands",
+            ..
+        }
+    ));
+    assert_eq!(admitted, 0);
+    let (result, admitted) = build_teletext_augmented_origin_program_with_usage(
+        &placement,
+        TeletextAugmentedOriginProgramBudget {
+            max_work: 0,
+            ..limits()
+        },
+    );
+    assert!(matches!(
+        result.unwrap_err().reason,
+        Failure::WorkBudget { maximum: 0 }
+    ));
+    assert_eq!(admitted, 0);
+}
+
+#[test]
+fn empty_assembly_still_admits_its_existing_main_gap_scan() {
+    let service = Fixture::new(vec![], Some(vec![])).build();
+    let composition = compose(&service);
+    let closure =
+        plan_teletext_base_compatibility_realization(&composition, closure_limits()).unwrap();
+    let placement =
+        plan_teletext_origin_carrier_placement(&closure, service.objects(), placement_limits())
+            .unwrap();
+    let (result, admitted) = build_teletext_augmented_origin_program_with_usage(
+        &placement,
+        TeletextAugmentedOriginProgramBudget {
+            max_work: 1,
+            ..limits()
+        },
+    );
+    assert!(result.unwrap().program().commands().is_empty());
+    assert_eq!(admitted, 1);
+    let (result, admitted) = build_teletext_augmented_origin_program_with_usage(
+        &placement,
+        TeletextAugmentedOriginProgramBudget {
+            max_work: 0,
+            ..limits()
+        },
+    );
+    assert!(matches!(
+        result.unwrap_err().reason,
+        Failure::WorkBudget { maximum: 0 }
+    ));
+    assert_eq!(admitted, 0);
 }

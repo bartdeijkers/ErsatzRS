@@ -197,6 +197,105 @@ fn call_positions(
         .collect()
 }
 
+fn assert_same_placement(
+    actual: &TeletextOriginCarrierPlacement<'_>,
+    expected: &TeletextOriginCarrierPlacement<'_>,
+) {
+    assert!(std::ptr::eq(actual.plan(), expected.plan()));
+    assert!(std::ptr::eq(actual.catalog(), expected.catalog()));
+    assert_eq!(actual.components().len(), expected.components().len());
+    for (actual, expected) in actual.components().iter().zip(expected.components()) {
+        assert_eq!(actual.origin_indices(), expected.origin_indices());
+        assert_eq!(actual.gap(), expected.gap());
+        assert_eq!(actual.calls(), expected.calls());
+        assert_eq!(actual.pending(), expected.pending());
+    }
+}
+
+fn assert_same_placement_error(
+    actual: &TeletextOriginCarrierPlacementError,
+    expected: &TeletextOriginCarrierPlacementError,
+) {
+    assert_eq!(actual.owner, expected.owner);
+    assert_eq!(actual.origin, expected.origin);
+    assert_eq!(actual.location, expected.location);
+    assert_eq!(actual.root_source, expected.root_source);
+    assert_eq!(actual.invocation, expected.invocation);
+    assert_eq!(
+        format!("{:?}", actual.reason),
+        format!("{:?}", expected.reason)
+    );
+}
+
+#[test]
+fn placement_usage_exact_boundary_and_one_less_preserve_model_and_error() {
+    let service = basic();
+    let composition = compose(&service);
+    let retained = (service.clone(), composition.clone());
+    let plan =
+        plan_teletext_base_compatibility_realization(&composition, closure_budget()).unwrap();
+    let expected =
+        plan_teletext_origin_carrier_placement(&plan, service.objects(), budget()).unwrap();
+    let (result, admitted) =
+        plan_teletext_origin_carrier_placement_with_usage(&plan, service.objects(), budget());
+    let actual = result.unwrap();
+    assert!(admitted > 0);
+    assert_same_placement(&actual, &expected);
+    let mut exact = budget();
+    exact.max_work = admitted;
+    let (result, repeated) =
+        plan_teletext_origin_carrier_placement_with_usage(&plan, service.objects(), exact);
+    assert_eq!(repeated, admitted);
+    assert_same_placement(&result.unwrap(), &expected);
+    exact.max_work -= 1;
+    let (result, partial) =
+        plan_teletext_origin_carrier_placement_with_usage(&plan, service.objects(), exact);
+    let failure = result.unwrap_err();
+    assert_same_placement_error(
+        &failure,
+        &plan_teletext_origin_carrier_placement(&plan, service.objects(), exact).unwrap_err(),
+    );
+    assert_eq!(failure.owner, owner());
+    assert!(matches!(failure.reason, Failure::WorkBudget {maximum} if maximum == exact.max_work));
+    assert_eq!(partial, exact.max_work);
+    assert_eq!((service, composition), retained);
+}
+
+#[test]
+fn placement_usage_preflight_and_zero_work_failures_consume_no_credit() {
+    let service = basic();
+    let composition = compose(&service);
+    let plan =
+        plan_teletext_base_compatibility_realization(&composition, closure_budget()).unwrap();
+    for input_cutoff in [true, false] {
+        let mut limits = budget();
+        limits.max_work = 0;
+        if input_cutoff {
+            limits.max_commands = 0;
+        }
+        let (result, admitted) =
+            plan_teletext_origin_carrier_placement_with_usage(&plan, service.objects(), limits);
+        let failure = result.unwrap_err();
+        assert_eq!(admitted, 0);
+        assert_same_placement_error(
+            &failure,
+            &plan_teletext_origin_carrier_placement(&plan, service.objects(), limits).unwrap_err(),
+        );
+        if input_cutoff {
+            assert!(matches!(
+                failure.reason,
+                Failure::InputBudget {
+                    kind: "main commands",
+                    maximum: 0,
+                    ..
+                }
+            ));
+        } else {
+            assert!(matches!(failure.reason, Failure::WorkBudget { maximum: 0 }));
+        }
+    }
+}
+
 #[test]
 fn latest_actual_main_gap_retains_exact_borrow_and_origin_lineage() {
     let service = basic();
@@ -498,6 +597,10 @@ fn raw_limits_precede_traversal_and_work_and_storage_are_checked() {
         }
         let error =
             plan_teletext_origin_carrier_placement(&plan, service.objects(), limits).unwrap_err();
+        let (measured, admitted) =
+            plan_teletext_origin_carrier_placement_with_usage(&plan, service.objects(), limits);
+        assert_eq!(admitted, 0);
+        assert_same_placement_error(&measured.unwrap_err(), &error);
         assert!(
             matches!(error.reason,Failure::InputBudget{kind:actual,count:actual_count,maximum}if actual==kind&&actual_count==count&&maximum==count-1)
         );
@@ -553,11 +656,26 @@ fn fresh_actual_trace_rejects_missing_catalogue_and_expanded_event_cutoff() {
     let plan =
         plan_teletext_base_compatibility_realization(&composition, closure_budget()).unwrap();
     let empty = TeletextEnhancementObjectCatalog::new(vec![], budget().catalog).unwrap();
+    assert_eq!(plan.origins().len(), 1);
+    assert!(plan.precedence().is_empty());
     let error = plan_teletext_origin_carrier_placement(&plan, &empty, budget()).unwrap_err();
+    let (measured, admitted) =
+        plan_teletext_origin_carrier_placement_with_usage(&plan, &empty, budget());
+    // The empty catalogue still admits one original-origin preflight visit.
+    assert_eq!(admitted, 1);
+    assert_same_placement_error(&measured.unwrap_err(), &error);
     assert!(matches!(error.reason, Failure::Spatial(_)));
     assert_eq!(error.location.unwrap().object, None);
     let mut limits = budget();
     limits.spatial.max_events = 0;
+    let (measured, admitted) =
+        plan_teletext_origin_carrier_placement_with_usage(&plan, service.objects(), limits);
+    // One catalogue record and one original origin precede the spatial failure.
+    assert_eq!(admitted, 2);
+    assert_same_placement_error(
+        &measured.unwrap_err(),
+        &plan_teletext_origin_carrier_placement(&plan, service.objects(), limits).unwrap_err(),
+    );
     assert!(matches!(
         plan_teletext_origin_carrier_placement(&plan, service.objects(), limits)
             .unwrap_err()
