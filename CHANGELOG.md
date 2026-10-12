@@ -15,7 +15,11 @@ release section when tagging a release.
 
 ### Added
 
-- Preparatory teletext guide capture retains exact addon requests through native preparation and immutable design save/reload, rejects observed guide/path changes, and provides a bounded, versioned fingerprint of the complete compared context. Legacy designs stay readable. Source ownership, atomic freshness at publication, runtime and complete engine acceptance remain open.
+- Preparatory teletext guide capture retains exact addon requests and a versioned
+  source-context association through immutable save/reload. Source-aware pending
+  requests atomically reject changed historical guide context; legacy designs stay
+  readable. Live-source ownership, current Now/Next freshness, runtime promotion
+  and complete engine acceptance remain open.
 - Add transaction-owned XMLTV metadata reads with aggregate row/value limits
   before retrieval, including oversized data in corrupted numeric fields.
   Existing guide hydration is preserved; complete guide admission remains open.

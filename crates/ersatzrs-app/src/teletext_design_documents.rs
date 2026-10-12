@@ -10,6 +10,7 @@ use crate::{
         TeletextProfileDocument, TeletextProfileDocumentBudget, TeletextValidatedDocumentSource,
     },
 };
+use ersatzrs_core::repositories::{TeletextGuideSourceFence, MAX_TELETEXT_GUIDE_SOURCE_CHANNELS};
 use ersatzrs_domain::{
     validate_teletext_profile_values, EntityId, TeletextChannelSelectionSnapshot,
     TeletextInstallationSnapshot, TeletextPageAddress, TeletextPageContract, TeletextPageNumber,
@@ -26,6 +27,8 @@ use std::{collections::BTreeSet, fmt, io, marker::PhantomData, mem::size_of};
 #[path = "teletext_design_documents/guide_inputs.rs"]
 mod guide_inputs;
 pub use guide_inputs::TeletextSavedGuideInputs;
+#[path = "teletext_design_documents/source_fence.rs"]
+mod source_fence;
 
 const MAX_BINDINGS: usize = 1024;
 const MAX_DEPTH: usize = 32;
@@ -183,8 +186,16 @@ pub struct TeletextRestoredDesignDocumentParts {
     pub resource_transmissions: Vec<TeletextSavedResourceTransmission>,
     pub edit_policy: TeletextSavedEditPolicy,
     pub guide_inputs: Option<TeletextSavedGuideInputs>,
+    pub guide_source: Option<TeletextGuideSourceFence>,
 }
 impl RestoredTeletextDesignDocuments {
+    /// Historical source metadata associated with exact stored guide inputs.
+    /// This descriptive data establishes no current source or output authority.
+    #[must_use]
+    pub fn guide_source(&self) -> Option<&TeletextGuideSourceFence> {
+        self.parts.guide_source.as_ref()
+    }
+
     /// Exact historical requests; absence explicitly denotes legacy/static data.
     /// Presence validates data integrity, not source freshness or invocation.
     #[must_use]
@@ -239,6 +250,7 @@ impl fmt::Debug for TeletextRestoredDesignDocumentParts {
             .field("documents", &self.documents.len())
             .field("resources", &self.resource_transmissions.len())
             .field("guide_inputs", &self.guide_inputs)
+            .field("guide_source", &self.guide_source)
             .finish_non_exhaustive()
     }
 }
@@ -272,6 +284,8 @@ pub enum TeletextDesignDocumentFailure {
     Source,
     #[error("invalid historical guide inputs")]
     GuideInputs,
+    #[error("invalid historical guide-source association")]
+    GuideSource,
     #[error("original document failed structural validation")]
     Document,
     #[error("invalid original entry")]
@@ -375,7 +389,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Required<T> {
 stored_map!(Envelope { format_version: u16, selection: Selection, generation: String,
     entry_addon_id: Required<String>, entry: Required<Entry>, v1_region: Required<TeletextSavedV1Region>,
     edit_policy: EditPolicy, resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
-    #[serde(default)] guide_inputs: guide_inputs::OptionalGuideInputs });
+    #[serde(default)] guide_inputs: guide_inputs::OptionalGuideInputs,
+    #[serde(default)] guide_source: source_fence::OptionalGuideSource });
 stored_map!(Selection { channel_id: EntityId, bindings: Vec<Member> });
 stored_map!(Member { contract: u32, channel_id: EntityId, addon_id: String, binding_revision: i64,
     profile_id: EntityId, profile_revision: i64, installation: Installation, effective_settings: Vec<Setting> });
@@ -539,6 +554,8 @@ struct BorrowedEnvelope<'a> {
     documents: Vec<BorrowedDocument<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     guide_inputs: Option<guide_inputs::BorrowedGuideInputs<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guide_source: Option<&'a TeletextGuideSourceFence>,
 }
 
 /// Encode bounded structurally checked originals, without writes or packages.
@@ -549,7 +566,7 @@ pub fn encode_teletext_design_documents(
     input: TeletextDesignDocumentInput<'_>,
     budget: TeletextDesignDocumentBudget,
 ) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
-    encode_documents(input, None, budget)
+    encode_documents(input, None, None, budget)
 }
 
 /// Encode structurally checked originals with their exact preflight requests.
@@ -564,18 +581,36 @@ pub fn encode_teletext_design_documents_with_requests(
     requests: &crate::teletext_channel_documents::TeletextChannelRequestTemplates,
     budget: TeletextDesignDocumentBudget,
 ) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
-    encode_documents(input, Some(requests), budget)
+    encode_documents(input, Some(requests), None, budget)
+}
+
+/// Preserve exact guide inputs with their historical source-context association.
+/// Matching fields/digest shape is data integrity, never current source authority.
+/// Native validation and transactional publication fences remain separate.
+/// # Errors
+/// Rejects invalid fence shape, missing/mismatched requests, and existing bounds.
+pub fn encode_teletext_design_documents_with_source(
+    input: TeletextDesignDocumentInput<'_>,
+    requests: &crate::teletext_channel_documents::TeletextChannelRequestTemplates,
+    source: &TeletextGuideSourceFence,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
+    encode_documents(input, Some(requests), Some(source), budget)
 }
 
 fn encode_documents(
     input: TeletextDesignDocumentInput<'_>,
     requests: Option<&crate::teletext_channel_documents::TeletextChannelRequestTemplates>,
+    source: Option<&TeletextGuideSourceFence>,
     budget: TeletextDesignDocumentBudget,
 ) -> Result<EncodedTeletextDesignDocuments, TeletextDesignDocumentError> {
     validate_context(input.selection, input.generation, budget)?;
     let documents = borrow_sources(&input, budget)?;
     validate_transmissions(input.resource_transmissions, budget)?;
-    let context_bytes = validate_capture_context(&input, budget)?;
+    let mut context_bytes = validate_capture_context(&input, budget)?;
+    if let Some(source) = source {
+        context_bytes = source_fence::admit(source, context_bytes, budget)?;
+    }
     let guide_inputs = requests
         .map(|requests| {
             guide_inputs::borrow(
@@ -584,6 +619,7 @@ fn encode_documents(
                 input.generation,
                 context_bytes,
                 budget,
+                source,
             )
         })
         .transpose()?;
@@ -620,6 +656,7 @@ fn encode_documents(
         resource_transmissions: input.resource_transmissions,
         documents,
         guide_inputs,
+        guide_source: source,
     };
     let mut writer = BoundedWriter {
         bytes: Vec::new(),
@@ -710,10 +747,21 @@ pub fn decode_teletext_design_documents(
             .collect::<Result<_, _>>()?,
     };
     validate_context(&selection, &envelope.generation, budget)?;
+    let guide_source = envelope.guide_source.0;
+    if guide_source.is_some() && envelope.guide_inputs.0.is_none() {
+        return Err(failure(TeletextDesignDocumentFailure::GuideSource));
+    }
     let guide_inputs = envelope
         .guide_inputs
         .0
-        .map(|inputs| inputs.restore(&selection, &envelope.generation, budget))
+        .map(|inputs| {
+            inputs.restore(
+                &selection,
+                &envelope.generation,
+                budget,
+                guide_source.as_ref(),
+            )
+        })
         .transpose()?;
     let borrowed = envelope
         .documents
@@ -775,6 +823,7 @@ pub fn decode_teletext_design_documents(
             resource_transmissions: transmissions,
             edit_policy: TeletextSavedEditPolicy::OriginalOnly,
             guide_inputs,
+            guide_source,
         },
     })
 }
@@ -1060,6 +1109,9 @@ enum Path {
     Transmissions,
     GuideInputs,
     GuideRequest,
+    GuideSource,
+    GuideChannels,
+    GuideDigest,
 }
 struct Scan {
     budget: TeletextDesignDocumentBudget,
@@ -1181,6 +1233,9 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Root, "resource_transmissions") => Path::Transmissions,
                 (Path::Root, "guide_inputs") => Path::GuideInputs,
                 (Path::GuideInputs, "v1" | "v2") => Path::GuideRequest,
+                (Path::Root, "guide_source") => Path::GuideSource,
+                (Path::GuideSource, "channel_ids") => Path::GuideChannels,
+                (Path::GuideSource, "context_digest") => Path::GuideDigest,
                 (Path::Selection, "bindings") => Path::Bindings,
                 (Path::Binding, "effective_settings") => Path::Settings,
                 (Path::Document, "response") => Path::Response,
@@ -1212,6 +1267,12 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 Path::Other,
                 "resource transmissions",
             ),
+            Path::GuideChannels => (
+                MAX_TELETEXT_GUIDE_SOURCE_CHANNELS,
+                Path::Other,
+                "guide channels",
+            ),
+            Path::GuideDigest => (32, Path::Other, "guide digest"),
             _ => (MAX_BINDINGS, Path::Other, "sequence"),
         };
         let mut count = 0_usize;

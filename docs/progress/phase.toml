@@ -1174,11 +1174,14 @@ preparation and remain byte-exact in immutable design save/reload through an opt
 versioned private-envelope extension. Legacy absence remains distinct from captured
 Off. A bounded streaming fingerprint covers every compared guide/context/path field,
 options, order and precise times without cloning/JSON buffers. This is point-in-time
-semantic comparison and historical input retention, not live-file or atomic publication
-freshness. Next seal the captured context/fingerprint and host locale/timezone/instant
-to those exact requests and the saved revision, then compare inside the publication
-transaction; configured-to-accepted ownership, mutable-file capture/recheck, trusted
-generation ownership, safe promotion and localized preview controls remain open.
+semantic comparison and historical input retention. Native source-bound capture now
+associates the complete fingerprint, ordered source IDs/window and host metadata with
+exact stored requests and revision. Source-aware pending admission recaptures that
+historical context inside the same immediate transaction before insertion; static
+admission cannot discard a present source association. P9A-04 owns focused evidence.
+Next establish configured-to-accepted ownership, live-file/projected-away raw source
+and current Now/Next freshness policies, then trusted generation ownership, safe
+promotion and localized preview controls. These remain open acceptance work.
 Original-only capture
 is not an editor-permission or zone/template acceptance.
 Prioritize the existing synthetic profile-selection→validation→preview→explicit

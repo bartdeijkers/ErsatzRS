@@ -52,6 +52,8 @@ mod designs;
 mod documents;
 #[path = "teletext_profile_preparation/guide_capture.rs"]
 mod guide_capture;
+#[path = "teletext_profile_preparation/guide_publications.rs"]
+mod guide_publications;
 #[path = "teletext_profile_preparation/output_candidates.rs"]
 mod output_candidates;
 #[path = "teletext_profile_preparation/preview.rs"]

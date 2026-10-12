@@ -6,6 +6,7 @@ use super::{
 };
 use crate::teletext_channel_documents::TeletextChannelRequestTemplates;
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
+use ersatzrs_core::repositories::TeletextGuideSourceFence;
 use ersatzrs_domain::{TeletextChannelSelectionSnapshot, TeletextPageContract};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -86,13 +87,14 @@ impl StoredGuideInputs {
         selection: &TeletextChannelSelectionSnapshot,
         generation: &str,
         budget: TeletextDesignDocumentBudget,
+        source: Option<&TeletextGuideSourceFence>,
     ) -> Result<TeletextSavedGuideInputs, TeletextDesignDocumentError> {
         if self.input_version != INPUT_VERSION {
             return Err(failure(TeletextDesignDocumentFailure::GuideInputs));
         }
         // The parent preflight already admitted all context, including requests,
         // before allocating these strings; validate their wire integrity here.
-        validate(
+        let request = validate(
             selection,
             generation,
             self.v1.0.as_deref(),
@@ -100,6 +102,9 @@ impl StoredGuideInputs {
             0,
             budget,
         )?;
+        if let Some(source) = source {
+            super::source_fence::associate(source, request.as_ref())?;
+        }
         Ok(TeletextSavedGuideInputs {
             v1: self.v1.0.map(String::into_bytes),
             v2: self.v2.0.map(String::into_bytes),
@@ -120,6 +125,7 @@ pub(super) fn borrow<'a>(
     generation: &str,
     context_bytes: usize,
     budget: TeletextDesignDocumentBudget,
+    source: Option<&TeletextGuideSourceFence>,
 ) -> Result<BorrowedGuideInputs<'a>, TeletextDesignDocumentError> {
     let text = |contract| {
         requests
@@ -130,7 +136,10 @@ pub(super) fn borrow<'a>(
     };
     let v1 = text(TeletextPageContract::V1)?;
     let v2 = text(TeletextPageContract::V2)?;
-    validate(selection, generation, v1, v2, context_bytes, budget)?;
+    let request = validate(selection, generation, v1, v2, context_bytes, budget)?;
+    if let Some(source) = source {
+        super::source_fence::associate(source, request.as_ref())?;
+    }
     Ok(BorrowedGuideInputs {
         input_version: INPUT_VERSION,
         v1,
@@ -145,7 +154,7 @@ fn validate(
     v2: Option<&str>,
     mut context_bytes: usize,
     budget: TeletextDesignDocumentBudget,
-) -> Result<(), TeletextDesignDocumentError> {
+) -> Result<Option<TeletextPagesRequest>, TeletextDesignDocumentError> {
     let inputs = [
         (TeletextPageContract::V1, v1),
         (TeletextPageContract::V2, v2),
@@ -186,5 +195,5 @@ fn validate(
             canonical = Some(parsed);
         }
     }
-    Ok(())
+    Ok(canonical)
 }

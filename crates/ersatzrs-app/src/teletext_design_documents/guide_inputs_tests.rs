@@ -326,7 +326,7 @@ fn requests_must_match_selected_contract_generation_and_every_common_context_fie
     );
 }
 
-fn context_bytes(value: &Value) -> usize {
+pub(super) fn context_bytes(value: &Value) -> usize {
     match value {
         Value::String(text) => text.len(),
         Value::Array(values) => values.iter().map(context_bytes).sum(),

@@ -3906,10 +3906,11 @@ presence-only Debug. Exact association equality joins context comparison.
 These are preparatory input facts. They do not read/hash live files, reconstruct
 raw projected-away source data, confer durable guide provenance or authorize a
 publication. Original requests now persist through the optional private subdocument
-below. Next seal their captured context/source association to the exact saved
-revision, preserving legacy/manual/static records, then recheck effective context
-within the publication transaction. The storage version remains 1. P9A-04 owns
-verification and the remaining engine/vertical-flow gaps.
+below. The source-bound native path now associates captured context with those
+exact requests/revision and checks historical semantic equality inside pending
+publication admission, as described below. Legacy/manual/static absence remains
+explicit. The storage version stays 1; P9A-04 owns focused verification and the
+remaining live-source, current-freshness and engine/vertical-flow gaps.
 
 
 ### Stored original guide requests
@@ -3956,8 +3957,8 @@ Exhaustive struct destructuring covers exactly `compare_context`: snapshot
 window/raw/effective policy, ordered channel/source/path facts, every programme,
 content/artwork/credit field and segment. Artwork size hints remain included even
 without artwork. Only admission usage counters are excluded. Host locale,
-timezone and capture instant must be bound separately in the future source
-receipt. Changed field coverage requires an explicit algorithm-version decision.
+timezone and capture instant are bound separately in the optional stored source
+association. Changed field coverage requires an explicit algorithm-version decision.
 
 The walker streams borrowed values without JSON buffers or cloned content. Both
 counters and size arithmetic are checked before a frame reaches the fixed-state
@@ -3965,3 +3966,61 @@ hasher; rejection returns no partial fingerprint. Equal admitted contexts produc
 equal fingerprints. This is a semantic-context fingerprint, not a hash of live
 files or projected-away raw sources, an authenticated source receipt or a
 publication fence. P9A-04 owns the independent framing oracle and focused proof.
+
+
+### Historical source association and atomic pending admission
+
+The private version-1 design envelope optionally contains `guide_source`, the
+closed map-only core `TeletextGuideSourceFence`. Its independent version and
+context-digest version are both 1. Required fields are `version`,
+`context_digest_version`, `context_digest` (32-byte integer array), `channel_ids`
+(at most 256, positive and unique, original order), `captured_at`, `start`,
+`finish` (UTC instants), `locale` and `timezone` (named IANA clock).
+Core validation checks exact three-civil-date bounds, including DST; native
+confirmation checks the existing nine-culture catalog rather than inventing one.
+
+`encode_teletext_design_documents_with_source` requires stored guide inputs and
+compares their common typed IDs/order, capture instant, locale, timezone and window
+with the association. Original input bytes remain unchanged. Requestless Off cannot
+establish this association and stays supported without it. Absent legacy/manual/
+static metadata remains absent; present null, invalid/unknown/duplicate/missing
+fields or invalid versions reject. Source strings and instants share the existing
+context/scalar bounds before owned stored/request allocation; fixed digest and
+channel count have separate preflight bounds. The extension changes no root
+storage version, schema, editor sidecar or edit permissions.
+
+Native `capture_source_bound_teletext_guide` moves the exact admitted SQL snapshot
+into a bounded fingerprint worker, then attaches its association after both
+existing invocation-boundary recaptures. It retains the original capture deadline;
+Off remains inert. Native save/reload moves this data beside independently
+recompiled originals, exact requests and preview. Historical reads need no package
+or current source. Metadata by itself is not an authenticated source receipt.
+
+Native `request_source_bound_original_teletext_design_publication` recompiles an
+exact saved revision and privately confirms its document/selection/source
+association. Fresh `TeletextGuideSourceCheckLimits` bound SQL records/source bytes,
+expanded model nodes/bytes and fingerprint fields/bytes. The additive application
+method and core repository `request_with_source` fail closed for unsupported
+validators/repositories. Source-bound targets cannot use the static request path;
+source-aware requests cannot infer a missing association.
+
+The SQLite adapter retains its original immediate transaction, live head CAS,
+exact immutable revision/digest, complete current channel selection and previous
+request CAS. Before pending intent insertion it reads the exact stored association,
+checks current named host clock/civil bounds, recaptures the same ordered source
+channels/window and compares the complete semantic fingerprint in that transaction.
+No separate host precheck substitutes for the atomic read. Changed context,
+mismatched/missing association, exhausted limits or admission expiry reject without
+changing the prior pointer. Legacy repository opaque static documents remain
+supported; JSON-looking malformed roots, present-null/duplicate/escaped source
+fields and trailing input never become source absence.
+
+The fresh operation deadline bounds source-aware acquisition and pre-insert
+admission; once admitted, insertion/commit retain normal SQLite completion rules.
+Cancellation before insertion grants no partial fingerprint or intent. Abandoned
+CPU work owns only its already bounded model. No rollback-after-commit guarantee
+is claimed. This proves equality of the captured historical semantic window,
+not current Now/Next validity, configured-to-accepted path ownership, actual live
+file contents, projected-away raw sources, intervening changes/restoration or
+accepted-generation recovery. Runtime promotion and normal-route lookup remain
+separate requirements. P9A-04 owns focused proof and the compact flow gap map.

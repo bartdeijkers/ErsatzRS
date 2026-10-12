@@ -620,3 +620,6 @@ async fn channel_current_pointers_are_independent_and_manifest_bytes_are_fenced(
     assert_eq!(fixture.count().await, 2);
     assert_eq!(fixture.repo.current(1).await.unwrap(), Some(first));
 }
+
+#[path = "teletext_publications_source_tests.rs"]
+mod source_tests;

@@ -1,11 +1,13 @@
 //! Atomic pending publication intents; output acceptance is separate (ADR 0123).
 
-use std::fmt;
+use std::{fmt, time::Instant};
 
 use async_trait::async_trait;
 use ersatzrs_domain::{EntityId, TeletextChannelSelectionSnapshot, TeletextPublicationRequest};
 
-use super::{Result, TeletextProfileRejection};
+use super::{
+    Result, TeletextGuideSourceCheckLimits, TeletextGuideSourceFence, TeletextProfileRejection,
+};
 
 /// Exact target and complete current-selection fence for a pending request.
 /// Names, effective settings and digests are excluded from diagnostic formatting.
@@ -59,6 +61,16 @@ pub enum TeletextPublicationRejection {
     RequestConflict,
     /// Current configuration cannot supply a complete valid selection.
     SelectionUnavailable(TeletextProfileRejection),
+    /// A saved guide-bound target cannot use the legacy static request path.
+    GuideFenceRequired,
+    /// Supplied source data differs from the exact stored target association.
+    GuideFenceMismatch,
+    /// Transactional recapture differs from the saved semantic context.
+    GuideChanged,
+    /// Source-aware admission is unsupported, unavailable or exceeds its bounds.
+    GuideUnavailable,
+    /// The fresh source-aware admission operation exceeded its deadline.
+    GuideTimedOut,
 }
 
 /// A persisted pending request does not represent accepted transmission.
@@ -82,6 +94,27 @@ pub trait TeletextPublicationRepository: Send + Sync {
         save: &TeletextPublicationRequestSave,
         max_document_bytes: usize,
     ) -> Result<TeletextPublicationMutation<TeletextPublicationRequest>>;
+
+    /// Request a guide-bound target after native validation of its association.
+    /// The implementation must compare the exact stored fence and recapture
+    /// matching semantic context inside the same immediate transaction as the
+    /// design, selection and request CAS. This does not establish raw-source or
+    /// current Now/Next freshness. No output is activated.
+    /// The new deadline bounds admission, not a previously saved receipt's age;
+    /// an admitted transaction retains the normal database completion contract.
+    /// Unsupported repositories fail explicitly, without falling back to request.
+    async fn request_with_source(
+        &self,
+        _save: &TeletextPublicationRequestSave,
+        _fence: &TeletextGuideSourceFence,
+        _limits: TeletextGuideSourceCheckLimits,
+        _max_document_bytes: usize,
+        _deadline: Instant,
+    ) -> Result<TeletextPublicationMutation<TeletextPublicationRequest>> {
+        Ok(TeletextPublicationMutation::Rejected(
+            TeletextPublicationRejection::GuideUnavailable,
+        ))
+    }
 
     /// Read a retained current pending request, without activating or invoking it.
     /// Corrupt metadata must report an error, never masquerade as absent state.

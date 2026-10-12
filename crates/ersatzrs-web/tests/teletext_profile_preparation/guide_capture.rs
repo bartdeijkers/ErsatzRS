@@ -8,7 +8,7 @@ use ersatzrs_infra::xmltv::{GuideExpansionLimits, GuideReadBudget, GuideReadLimi
 use ersatzrs_web::host::teletext_guide::{capture_teletext_guide, TeletextGuideCaptureError};
 use serde_json::Value;
 
-async fn seed_guide(fixture: &Fixture) {
+pub(super) async fn seed_guide(fixture: &Fixture) {
     for sql in [
         r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES ('pages.language','NL_NL')"#,
         r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#,
@@ -128,7 +128,7 @@ async fn captured_sql_guide_reaches_installed_mixed_profiles_without_publication
     assert_eq!(publications, 0);
 }
 
-fn read_budget() -> GuideReadBudget {
+pub(super) fn read_budget() -> GuideReadBudget {
     GuideReadBudget::new_with_expansion(
         GuideReadLimits {
             max_records: 1000,

@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use ersatzrs_app::{
     teletext_design_documents::{
         decode_teletext_design_documents, encode_teletext_design_documents_with_requests,
-        EncodedTeletextDesignDocuments, TeletextDesignDocumentBudget, TeletextDesignDocumentError,
-        TeletextDesignDocumentInput, TeletextSavedDocumentSource, TeletextSavedEditPolicy,
-        TeletextSavedGuideInputs, TeletextSavedResourceTransmission, TeletextSavedResourceUpdate,
-        TeletextSavedV1Region,
+        encode_teletext_design_documents_with_source, EncodedTeletextDesignDocuments,
+        TeletextDesignDocumentBudget, TeletextDesignDocumentError, TeletextDesignDocumentInput,
+        TeletextSavedDocumentSource, TeletextSavedEditPolicy, TeletextSavedGuideInputs,
+        TeletextSavedResourceTransmission, TeletextSavedResourceUpdate, TeletextSavedV1Region,
     },
     teletext_designs::{
         TeletextDesignStoreError, TeletextOriginalDesignValidationError,
@@ -17,7 +17,9 @@ use ersatzrs_app::{
     },
     ApplicationServices,
 };
-use ersatzrs_core::repositories::TeletextDesignMutation;
+use ersatzrs_core::repositories::{
+    TeletextDesignMutation, TeletextGuideSourceCheckLimits, TeletextGuideSourceFence,
+};
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextDesignHead,
     TeletextProducerCompositionMetadata, TeletextProducerPresentation,
@@ -87,6 +89,7 @@ pub struct RestoredOriginalTeletextDesign {
     selection: TeletextChannelSelectionSnapshot,
     sources: Vec<TeletextSavedDocumentSource>,
     guide_inputs: Option<TeletextSavedGuideInputs>,
+    guide_source: Option<TeletextGuideSourceFence>,
     digest: String,
     originals: EncodedChannelTeletextOriginals,
     edit_policy: TeletextSavedEditPolicy,
@@ -113,6 +116,11 @@ impl RestoredOriginalTeletextDesign {
     #[must_use]
     pub const fn guide_inputs(&self) -> Option<&TeletextSavedGuideInputs> {
         self.guide_inputs.as_ref()
+    }
+    /// Historical source data; freshness requires a separate transactional check.
+    #[must_use]
+    pub const fn guide_source(&self) -> Option<&TeletextGuideSourceFence> {
+        self.guide_source.as_ref()
     }
     #[must_use]
     pub fn digest(&self) -> &str {
@@ -233,21 +241,28 @@ pub async fn save_original_teletext_design_candidate(
                 },
             })
             .collect();
-        let document = encode_teletext_design_documents_with_requests(
-            TeletextDesignDocumentInput {
-                selection: candidate.selection(),
-                generation: candidate.generation(),
-                sources: candidate.sources(),
-                entry_addon_id: candidate.entry_addon_id(),
-                entry: candidate.metadata().map(|metadata| metadata.entry),
-                v1_region: candidate.v1_region().map(|region| match region {
-                    TeletextEncodingRegion::WesternLatin => TeletextSavedV1Region::WesternLatin,
-                }),
-                resource_transmissions: &transmissions,
-            },
-            candidate.requests(),
-            budget,
-        )?;
+        let input = TeletextDesignDocumentInput {
+            selection: candidate.selection(),
+            generation: candidate.generation(),
+            sources: candidate.sources(),
+            entry_addon_id: candidate.entry_addon_id(),
+            entry: candidate.metadata().map(|metadata| metadata.entry),
+            v1_region: candidate.v1_region().map(|region| match region {
+                TeletextEncodingRegion::WesternLatin => TeletextSavedV1Region::WesternLatin,
+            }),
+            resource_transmissions: &transmissions,
+        };
+        let document = match candidate.guide_source() {
+            Some(source) => encode_teletext_design_documents_with_source(
+                input,
+                candidate.requests(),
+                source,
+                budget,
+            ),
+            None => {
+                encode_teletext_design_documents_with_requests(input, candidate.requests(), budget)
+            }
+        }?;
         let digest = sha256_hex(document.bytes());
         check_deadline(deadline)?;
         Ok::<_, NativeTeletextDesignError>((candidate, document, digest))
@@ -338,6 +353,7 @@ pub async fn reload_original_teletext_design_revision(
             selection: parts.selection,
             sources: parts.sources,
             guide_inputs: parts.guide_inputs,
+            guide_source: parts.guide_source,
             digest: stored.digest,
             originals,
             edit_policy: parts.edit_policy,
@@ -453,6 +469,23 @@ impl ersatzrs_app::teletext_publications::TeletextPublicationValidator
         }
         Ok(())
     }
+
+    async fn confirm_request_with_source(
+        &self,
+        request: &ersatzrs_core::repositories::TeletextPublicationRequestSave,
+        source: &TeletextGuideSourceFence,
+    ) -> Result<(), ersatzrs_app::teletext_publications::TeletextPublicationValidationError> {
+        use ersatzrs_app::teletext_publications::TeletextPublicationValidationError as E;
+        self.confirm_request(request).await?;
+        if self.design.guide_source() != Some(source)
+            || !crate::admin::languages::LANGUAGES
+                .iter()
+                .any(|definition| definition.code == source.locale)
+        {
+            return Err(E::Association);
+        }
+        self.confirm_request(request).await
+    }
 }
 
 /// Recompile an exact saved revision, then persist an explicitly pending intent.
@@ -478,6 +511,80 @@ pub async fn request_original_teletext_design_publication(
     expected_request_id: Option<EntityId>,
     budget: TeletextDesignDocumentBudget,
     policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<
+    ersatzrs_core::repositories::TeletextPublicationMutation<RequestedOriginalTeletextPublication>,
+    NativeTeletextPublicationError,
+> {
+    request_original_publication(
+        application,
+        design_id,
+        revision,
+        expected_digest,
+        expected_design_head,
+        expected_request_id,
+        budget,
+        policy,
+        None,
+        deadline,
+    )
+    .await
+}
+
+/// Recompile a source-bound saved revision and atomically compare its historical
+/// guide context before writing pending intent. Limits are fresh trusted policy;
+/// the source receipt's old deadline is not renewed or reused as admission.
+/// No accepted generation, live Now/Next freshness or output activation is claimed.
+/// # Errors
+/// Reports native/admission/storage failures; source/CAS rejection writes nothing.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "exact revision, independent CAS fences and explicit trusted native/source policies"
+)]
+pub async fn request_source_bound_original_teletext_design_publication(
+    application: &ApplicationServices,
+    design_id: EntityId,
+    revision: i64,
+    expected_digest: String,
+    expected_design_head: i64,
+    expected_request_id: Option<EntityId>,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    limits: TeletextGuideSourceCheckLimits,
+    deadline: Instant,
+) -> Result<
+    ersatzrs_core::repositories::TeletextPublicationMutation<RequestedOriginalTeletextPublication>,
+    NativeTeletextPublicationError,
+> {
+    request_original_publication(
+        application,
+        design_id,
+        revision,
+        expected_digest,
+        expected_design_head,
+        expected_request_id,
+        budget,
+        policy,
+        Some(limits),
+        deadline,
+    )
+    .await
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "shared native admission retains separate exact target and trusted policy fences"
+)]
+async fn request_original_publication(
+    application: &ApplicationServices,
+    design_id: EntityId,
+    revision: i64,
+    expected_digest: String,
+    expected_design_head: i64,
+    expected_request_id: Option<EntityId>,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    source_limits: Option<TeletextGuideSourceCheckLimits>,
     deadline: Instant,
 ) -> Result<
     ersatzrs_core::repositories::TeletextPublicationMutation<RequestedOriginalTeletextPublication>,
@@ -528,15 +635,35 @@ pub async fn request_original_teletext_design_publication(
         design: &design,
         deadline,
     };
-    Ok(
-        match application
-            .request_teletext_design_publication(request, &validator, budget.max_serialized_bytes)
-            .await?
-        {
-            M::Requested(request) => {
-                M::Requested(RequestedOriginalTeletextPublication { request, design })
-            }
-            M::Rejected(reason) => M::Rejected(reason),
-        },
-    )
+    let mutation = match (design.guide_source(), source_limits) {
+        (Some(source), Some(limits)) => {
+            application
+                .request_source_bound_teletext_design_publication(
+                    request,
+                    &validator,
+                    source,
+                    limits,
+                    budget.max_serialized_bytes,
+                    deadline,
+                )
+                .await?
+        }
+        (Some(_), None) => return Ok(M::Rejected(R::GuideFenceRequired)),
+        (None, Some(_)) => return Ok(M::Rejected(R::GuideFenceMismatch)),
+        (None, None) => {
+            application
+                .request_teletext_design_publication(
+                    request,
+                    &validator,
+                    budget.max_serialized_bytes,
+                )
+                .await?
+        }
+    };
+    Ok(match mutation {
+        M::Requested(request) => {
+            M::Requested(RequestedOriginalTeletextPublication { request, design })
+        }
+        M::Rejected(reason) => M::Rejected(reason),
+    })
 }

@@ -13,13 +13,17 @@ use ersatzrs_app::{
     },
     ApplicationServices,
 };
-use ersatzrs_core::programme::ProgrammeClock;
+use ersatzrs_core::{
+    programme::ProgrammeClock,
+    repositories::{TeletextGuideSourceFence, TELETEXT_GUIDE_SOURCE_FENCE_VERSION},
+};
 use ersatzrs_domain::EntityId;
 use ersatzrs_infra::{
     db::DbPool,
     xmltv::{
         capture_guide_snapshot, GuideReadBudget, GuideSnapshot, GuideSnapshotComparison,
-        GuideSnapshotError,
+        GuideSnapshotDigestError, GuideSnapshotDigestLimits, GuideSnapshotError,
+        GUIDE_SNAPSHOT_DIGEST_VERSION,
     },
 };
 
@@ -45,6 +49,12 @@ pub enum TeletextGuideCaptureError {
     SourceChanged { channel_id: Option<i64> },
     #[error("teletext guide read transaction failed")]
     Database,
+    #[error("teletext guide fingerprint worker failed")]
+    Worker,
+    #[error("teletext guide source association is invalid")]
+    Association,
+    #[error(transparent)]
+    Digest(#[from] GuideSnapshotDigestError),
     #[error(transparent)]
     Snapshot(#[from] GuideSnapshotError),
     #[error(transparent)]
@@ -62,6 +72,7 @@ pub struct CapturedTeletextGuide {
     timezone: String,
     captured_at: DateTime<Utc>,
     deadline: Instant,
+    guide_source: Option<TeletextGuideSourceFence>,
 }
 
 impl CapturedTeletextGuide {
@@ -78,6 +89,10 @@ impl CapturedTeletextGuide {
     #[must_use]
     pub fn timezone(&self) -> &str {
         &self.timezone
+    }
+    #[must_use]
+    pub const fn guide_source(&self) -> Option<&TeletextGuideSourceFence> {
+        self.guide_source.as_ref()
     }
 
     /// Serialize the captured guide with the existing complete request validator.
@@ -134,7 +149,16 @@ impl CapturedTeletextGuide {
         .await
         .map_err(|_| TeletextGuideCaptureError::TimedOut)??;
         self.recheck_context(budget).await?;
-        Ok(candidate.restrict_deadline(self.deadline))
+        let candidate = candidate.restrict_deadline(self.deadline);
+        let candidate = match &self.guide_source {
+            Some(source) if candidate.encoded().is_some() => {
+                candidate.with_guide_source(source.clone())
+            }
+            // Requestless Off remains inert and cannot establish a guide-input association.
+            _ => candidate,
+        };
+        check_deadline(self.deadline)?;
+        Ok(candidate)
     }
 
     async fn recheck_context(
@@ -232,6 +256,59 @@ pub async fn capture_teletext_guide(
     capture_with_clock(pool, channel_ids, captured_at, budget, deadline, &clock).await
 }
 
+/// Capture and fingerprint exactly the admitted historical semantic context.
+/// The owned snapshot moves to a bounded CPU worker; no complete model is cloned.
+/// This association permits later atomic context checks, never output promotion.
+/// # Errors
+/// Rejects capture, fingerprint bounds, invalid association or the original
+/// deadline. Abandoned CPU work retains bounded ownership until completion.
+pub async fn capture_source_bound_teletext_guide(
+    pool: &DbPool,
+    channel_ids: &[i64],
+    captured_at: DateTime<Utc>,
+    budget: &mut GuideReadBudget,
+    deadline: Instant,
+    digest_limits: GuideSnapshotDigestLimits,
+) -> Result<CapturedTeletextGuide, TeletextGuideCaptureError> {
+    let captured = capture_teletext_guide(pool, channel_ids, captured_at, budget, deadline).await?;
+    let captured = tokio::time::timeout_at(
+        tokio::time::Instant::from_std(deadline),
+        tokio::task::spawn_blocking(move || {
+            check_deadline(deadline)?;
+            let context_digest = captured.snapshot.context_digest(digest_limits)?;
+            let source = TeletextGuideSourceFence {
+                version: TELETEXT_GUIDE_SOURCE_FENCE_VERSION,
+                context_digest_version: GUIDE_SNAPSHOT_DIGEST_VERSION,
+                context_digest,
+                channel_ids: captured
+                    .snapshot
+                    .channels()
+                    .iter()
+                    .map(ersatzrs_infra::xmltv::CapturedGuideChannel::id)
+                    .collect(),
+                captured_at,
+                start: captured.snapshot.start(),
+                finish: captured.snapshot.finish(),
+                locale: captured.locale.to_owned(),
+                timezone: captured.timezone.clone(),
+            };
+            source
+                .validate()
+                .map_err(|_| TeletextGuideCaptureError::Association)?;
+            check_deadline(deadline)?;
+            Ok::<_, TeletextGuideCaptureError>(CapturedTeletextGuide {
+                guide_source: Some(source),
+                ..captured
+            })
+        }),
+    )
+    .await
+    .map_err(|_| TeletextGuideCaptureError::TimedOut)?
+    .map_err(|_| TeletextGuideCaptureError::Worker)??;
+    check_deadline(deadline)?;
+    Ok(captured)
+}
+
 async fn capture_with_clock(
     pool: &DbPool,
     channel_ids: &[i64],
@@ -271,6 +348,7 @@ async fn capture_with_clock(
             timezone: timezone.to_owned(),
             captured_at,
             deadline,
+            guide_source: None,
         })
     })
     .await

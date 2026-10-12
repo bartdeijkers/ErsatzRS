@@ -14,6 +14,7 @@ use ersatzrs_app::{
     },
     ApplicationServices,
 };
+use ersatzrs_core::repositories::TeletextGuideSourceFence;
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextColdProducerComposition,
     TeletextComposedProducerPage, TeletextPageAddress, TeletextProducerCompositionBudget,
@@ -53,6 +54,7 @@ pub struct EncodedChannelTeletextDocumentCandidate {
     entry_addon_id: Option<String>,
     sources: Vec<TeletextValidatedDocumentSource>,
     requests: TeletextChannelRequestTemplates,
+    guide_source: Option<TeletextGuideSourceFence>,
     v1_region: Option<TeletextEncodingRegion>,
     producers: Vec<TeletextProducerPresentation>,
     provenance: Vec<TeletextComposedProducerPage>,
@@ -99,6 +101,16 @@ impl EncodedChannelTeletextDocumentCandidate {
     #[must_use]
     pub const fn requests(&self) -> &TeletextChannelRequestTemplates {
         &self.requests
+    }
+    /// Historical semantic source association attached only by native SQL capture.
+    /// It does not grant accepted-generation or runtime publication authority.
+    #[must_use]
+    pub const fn guide_source(&self) -> Option<&TeletextGuideSourceFence> {
+        self.guide_source.as_ref()
+    }
+    pub(super) fn with_guide_source(mut self, source: TeletextGuideSourceFence) -> Self {
+        self.guide_source = Some(source);
+        self
     }
     /// Explicit host region actually used for V1 lift; absent for V2-only/Off.
     #[must_use]
@@ -258,6 +270,7 @@ fn encode_channel(
         sources,
         requests,
         v1_region: originals.v1_region,
+        guide_source: None,
         producers: originals.producers,
         provenance: originals.provenance,
         metadata: originals.metadata,

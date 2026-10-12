@@ -22,10 +22,17 @@ storage subdocument; legacy envelope/version-1 records remain readable. A bounde
 version-1 fingerprint covers the complete compared guide context without cloning or
 JSON buffers. These facts do not validate configured-to-accepted path ownership,
 fence live-file/projected-away raw changes or an intervening change and restoration.
-Sealed request-to-context/source association and a fresh, atomic publication-time
-source check remain required; the interchange reference and P9A-04 own API details,
-proof and remaining integration gaps. The stored subdocument is historical data,
-not an invocation receipt, editor permission or generation-activation authority.
+Native source-bound capture now retains an optional versioned context association
+with ordered source IDs, exact three-civil-date bounds and host capture/locale/clock
+metadata. Storage validates its association with the exact original guide requests.
+Source-aware pending admission compares the stored association and recaptures the
+historical semantic context inside the same immediate transaction before intent
+insertion, under fresh trusted limits/deadline. Static admission cannot discard a
+present association. This does not establish configured-to-accepted ownership,
+current Now/Next accuracy, mutable-file/projected-away raw freshness or accepted
+generation authority. The interchange reference and P9A-04 own API details, proof
+and remaining integration gaps. Stored metadata is historical data, not an
+invocation receipt, editor permission or generation-activation authority.
 
 The selected-runtime capability report now runs bounded decoder-option,
 exact-page text and colour bitmap probes against an independent synthetic DVB
