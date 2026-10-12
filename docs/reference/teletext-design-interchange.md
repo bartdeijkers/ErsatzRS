@@ -3936,7 +3936,8 @@ allocation/request parsing; this is not total parsed-model/allocator/RSS proof.
 Native save/reload retains these inputs while rebuilding the same original pages,
 resource lifecycle, pixels and navigation without invoking packages. Pending
 publication confirmation still binds the exact revision/document digest and fresh
-complete channel selection; accepted generation promotion remains unimplemented.
+complete channel selection; frozen-original generation selection is now a separate
+explicit operation, while dynamic guide freshness and normal-route activation remain open.
 This private extension is not the external-editor metadata sidecar and grants no
 zone/template editing permission. Older closed parsers reject the newly added
 field; updated parsers continue to read legacy records. No storage migration or
@@ -4126,3 +4127,61 @@ proof. This addition fences exact accepted JSON bytes, including ignored fields,
 whitespace and out-of-window programmes. It does not prove mutable-file provenance,
 projected-away SQL changes, current guide roles or durable generation activation.
 P9A-04 owns canonical evidence and the next integration action.
+
+## Durable frozen-original generation selection
+
+An explicit pending request and an accepted generation are separate records.
+The additive accepted-generation history stores the exact immutable request,
+native artifact framing version/digest and a monotonic identity. A per-channel
+pointer has an independent CAS. Neither pending creation nor saving another
+design revision changes that pointer. All history is immutable and retained.
+
+The native host operation recompiles the exact saved originals under a fresh
+admission deadline. It confirms the original full channel selection, original
+document digest and complete compiled-service fingerprint before the repository
+rechecks pending/head/revision/selection/accepted CAS in one immediate transaction.
+Failed validation or conflicts preserve the prior generation and ordinary
+configuration. Once admitted, database completion uses the existing SQLite
+transaction contract; a deadline never pretends to undo a committed selection.
+
+Frozen qualification comes from the existing canonical V1/V2 input validation:
+no source receipt and captured requests with zero guide channels. A channel with
+no programmes still carries source-dependent identity and an empty-guide claim.
+Absent legacy inputs do not certify frozen content. Historical timestamps and
+locale are preserved literals, not current clock/guide guarantees. Guide-bound
+and provenance-unknown originals stay previewable/pending; their unfinished
+current-role freshness path rejects promotion explicitly. This does not limit
+the accepted authored-page or guide-addon scope.
+
+Artifact framing version 1 streams SHA-256 without concatenating wire bodies.
+Every field has one tag byte, an eight-byte big-endian payload length and payload:
+
+| Tag | Payload |
+| --- | --- |
+| 0 | UTF-8 ErsatzRS.Teletext.CompiledService domain |
+| 1 | Two-byte big-endian artifact version |
+| 2 | Complete derived initial/subtitle descriptors |
+| 3 | Eight-byte big-endian M29-unit count |
+| 4 | Each ordered 46-byte M29 unit |
+| 5 | Eight-byte big-endian page count |
+| 6 | Each page's eight-byte big-endian unit count |
+| 7 | Each ordered 46-byte page unit |
+
+The original document digest separately retains logical preview, layout,
+navigation and source identity. Gate PID/rate/retention policy is runtime-owned,
+not original content. Unknown artifact versions or mismatched recompilation
+reject recovery rather than silently adopting new compiler output.
+
+Runtime reconstruction reads accepted metadata only, recompiles the exact
+immutable original without executing any package, compares the complete artifact
+and rechecks accepted pointer plus effective channel selection in one read snapshot.
+It does not require the current pending pointer or draft-head revision; those may
+advance independently. Missing, Off or changed selection grants no service.
+Corrupt metadata/native artifacts are errors, not absent generations. These
+snapshots do not establish ongoing ownership for every active output epoch.
+
+Normal stream lookup, live publication Health, physical package availability,
+warm publisher/resource retirement and full process/Lua restart remain required.
+The current operation supplies a shared complete candidate for that connection;
+it does not replace forwarding-gate transport admission or receiver acceptance.
+P9A-04 owns verification and the remaining flow gaps.

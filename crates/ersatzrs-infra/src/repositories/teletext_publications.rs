@@ -324,7 +324,9 @@ impl<'de> Visitor<'de> for FenceRoot {
     }
 }
 
-fn stored_fence(bytes: &[u8]) -> std::result::Result<Option<TeletextGuideSourceFence>, ()> {
+pub(super) fn stored_fence(
+    bytes: &[u8],
+) -> std::result::Result<Option<TeletextGuideSourceFence>, ()> {
     // Old repository-only opaque fixtures remain valid static documents. JSON
     // starters must form a complete root map; malformed JSON is never absence.
     let first = bytes
@@ -363,7 +365,7 @@ fn valid_save(save: &TeletextPublicationRequestSave) -> bool {
         && valid_digest(&save.digest)
 }
 
-async fn current_in_transaction(
+pub(super) async fn current_in_transaction(
     tx: &mut Transaction<'_, Db>,
     channel_id: EntityId,
 ) -> Result<Option<TeletextPublicationRequest>> {
@@ -432,4 +434,4 @@ fn corrupt() -> RepositoryError {
 
 #[cfg(test)]
 #[path = "teletext_publications_tests.rs"]
-mod tests;
+pub(super) mod tests;

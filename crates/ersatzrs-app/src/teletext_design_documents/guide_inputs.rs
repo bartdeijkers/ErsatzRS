@@ -18,6 +18,7 @@ const INPUT_VERSION: u16 = 1;
 pub struct TeletextSavedGuideInputs {
     v1: Option<Vec<u8>>,
     v2: Option<Vec<u8>>,
+    has_guide_channels: bool,
 }
 
 impl TeletextSavedGuideInputs {
@@ -29,6 +30,14 @@ impl TeletextSavedGuideInputs {
             TeletextPageContract::V2 => self.v2.as_deref(),
         }
     }
+
+    /// Whether canonically validated invocation inputs contained guide channels.
+    /// Even an empty programme list carries source-dependent channel identity.
+    /// False identifies frozen inputs, not current clock/guide freshness.
+    #[must_use]
+    pub const fn has_guide_channels(&self) -> bool {
+        self.has_guide_channels
+    }
 }
 
 impl fmt::Debug for TeletextSavedGuideInputs {
@@ -37,6 +46,7 @@ impl fmt::Debug for TeletextSavedGuideInputs {
             .debug_struct("TeletextSavedGuideInputs")
             .field("v1_bytes", &self.v1.as_ref().map(Vec::len))
             .field("v2_bytes", &self.v2.as_ref().map(Vec::len))
+            .field("has_guide_channels", &self.has_guide_channels)
             .finish()
     }
 }
@@ -108,6 +118,7 @@ impl StoredGuideInputs {
         Ok(TeletextSavedGuideInputs {
             v1: self.v1.0.map(String::into_bytes),
             v2: self.v2.0.map(String::into_bytes),
+            has_guide_channels: request.is_some_and(|value| !value.channels.is_empty()),
         })
     }
 }

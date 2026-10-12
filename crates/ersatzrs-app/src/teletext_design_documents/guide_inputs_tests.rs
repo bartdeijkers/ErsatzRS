@@ -45,6 +45,27 @@ fn value_with_requests(fixture: &Fixture) -> Value {
 }
 
 #[test]
+fn guide_dependency_retains_channel_identity_even_without_programmes() {
+    let fixture = Fixture::mixed();
+    let with_channel = encoded_with_requests(&fixture);
+    let restored = decode_teletext_design_documents(with_channel.bytes(), budget()).unwrap();
+    assert!(restored.guide_inputs().unwrap().has_guide_channels());
+
+    let mut context = request_context();
+    context.channels = &[];
+    let templates = preflight_requests(&fixture.selection, &context).unwrap();
+    let frozen =
+        encode_teletext_design_documents_with_requests(fixture.input(), &templates, budget())
+            .unwrap();
+    let restored = decode_teletext_design_documents(frozen.bytes(), budget()).unwrap();
+    assert!(!restored.guide_inputs().unwrap().has_guide_channels());
+
+    let legacy = fixture.encoded();
+    let restored = decode_teletext_design_documents(legacy.bytes(), budget()).unwrap();
+    assert!(restored.guide_inputs().is_none());
+}
+
+#[test]
 fn mixed_requests_preserve_exact_bytes_and_legacy_encoding_omits_the_new_field() {
     let fixture = Fixture::mixed();
     let templates = requests(&fixture.selection);

@@ -95,6 +95,10 @@ pub struct RestoredOriginalTeletextDesign {
     edit_policy: TeletextSavedEditPolicy,
 }
 impl RestoredOriginalTeletextDesign {
+    pub(crate) fn into_encoded_service(self) -> Option<EncodedTeletextAuthoredService> {
+        self.originals.encoded
+    }
+
     #[must_use]
     pub const fn design_id(&self) -> EntityId {
         self.design_id

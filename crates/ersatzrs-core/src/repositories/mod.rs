@@ -26,6 +26,7 @@ mod playout;
 mod program_schedule;
 mod saved_search;
 mod teletext_designs;
+mod teletext_generations;
 mod teletext_guide_source;
 mod teletext_profiles;
 mod teletext_publications;
@@ -183,6 +184,10 @@ pub use troubleshooting::{
 };
 pub use watermark::WatermarkRepository;
 
+pub use teletext_generations::{
+    TeletextGenerationMutation, TeletextGenerationRejection, TeletextGenerationRepository,
+    TeletextGenerationSave, TELETEXT_GENERATION_ARTIFACT_VERSION,
+};
 pub use teletext_guide_source::{
     TeletextGuideSourceCheckLimits, TeletextGuideSourceFence, TeletextGuideSourceFenceError,
     MAX_TELETEXT_GUIDE_SOURCE_CHANNELS, MAX_TELETEXT_GUIDE_SOURCE_TEXT_BYTES,

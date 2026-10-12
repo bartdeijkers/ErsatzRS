@@ -32,3 +32,28 @@ impl fmt::Debug for TeletextPublicationRequest {
             .finish_non_exhaustive()
     }
 }
+
+/// Durable selected output, distinct from pending intent or per-stream delivery.
+/// Recovery must recompile the immutable revision, match the retained artifact,
+/// and check current channel selection before exposing the service to a stream.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextAcceptedGeneration {
+    /// Monotonic durable identity and independent channel-generation CAS token.
+    pub id: EntityId,
+    /// Exact explicitly requested original revision.
+    pub request: TeletextPublicationRequest,
+    /// Native artifact fingerprint framing version; unknown versions reject.
+    pub artifact_version: u16,
+    /// Exact compiled service fingerprint, not an invocation or sink receipt.
+    pub artifact_digest: String,
+}
+
+impl fmt::Debug for TeletextAcceptedGeneration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextAcceptedGeneration")
+            .field("id", &self.id)
+            .field("request", &self.request)
+            .field("artifact_version", &self.artifact_version)
+            .finish_non_exhaustive()
+    }
+}

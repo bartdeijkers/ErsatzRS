@@ -11,9 +11,9 @@ use ersatzrs_core::repositories::{
     DecoRepository, FfmpegProfileRepository, FillerRepository, GraphicsRepository,
     LibraryRepository, ManagedLibraryOperationRepository, MediaItemRepository,
     MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository, SavedSearchRepository,
-    SettingsMutation, TeletextDesignRepository, TeletextProfileRepository,
-    TeletextPublicationRepository, TelevisionRepository, TemplateRepository,
-    TroubleshootingRepository, WatermarkRepository,
+    SettingsMutation, TeletextDesignRepository, TeletextGenerationRepository,
+    TeletextProfileRepository, TeletextPublicationRepository, TelevisionRepository,
+    TemplateRepository, TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -999,6 +999,7 @@ pub struct ApplicationPorts {
     teletext_profiles: Arc<dyn TeletextProfileRepository>,
     teletext_designs: Option<Arc<dyn TeletextDesignRepository>>,
     teletext_publications: Option<Arc<dyn TeletextPublicationRepository>>,
+    teletext_generations: Option<Arc<dyn TeletextGenerationRepository>>,
     media_source_runtime: Arc<dyn MediaSourceRuntime>,
     admin_search: Arc<dyn AdminSearchRepository>,
     block_previews: Arc<dyn BlockPreviewRepository>,
@@ -1084,6 +1085,7 @@ impl ApplicationPorts {
             teletext_profiles,
             teletext_designs: None,
             teletext_publications: None,
+            teletext_generations: None,
             media_source_runtime,
             admin_search,
             block_previews,
@@ -1386,5 +1388,21 @@ impl ApplicationPorts {
     #[must_use]
     pub fn teletext_publications(&self) -> Option<&(dyn TeletextPublicationRepository + 'static)> {
         self.teletext_publications.as_deref()
+    }
+
+    /// Inject durable generation selection separately from pending intent.
+    #[must_use]
+    pub fn with_teletext_generations(
+        mut self,
+        repository: Arc<dyn TeletextGenerationRepository>,
+    ) -> Self {
+        self.teletext_generations = Some(repository);
+        self
+    }
+
+    /// No configuration flag or pending request substitutes for accepted state.
+    #[must_use]
+    pub fn teletext_generations(&self) -> Option<&(dyn TeletextGenerationRepository + 'static)> {
+        self.teletext_generations.as_deref()
     }
 }
