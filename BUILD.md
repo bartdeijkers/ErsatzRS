@@ -304,7 +304,12 @@ Keep the edit loop cheap by **not** flipping configurations while iterating:
   -p <crate>` as the required focused/local runner; append a test filter
   when one regression is sufficient. The checked-in `.config/nextest.toml`
   keeps running after failures, retries nothing, and reports tests slower than
-  60 seconds in the final summary.
+  60 seconds in the final summary. Large teletext carousel/output fixture suites
+  share a single nextest test-group slot in local and CI profiles: each complete
+  500-display service retains several GiB of semantic preview state. Other test
+  suites keep their normal concurrency. The self-hosted Test job additionally
+  limits compilation to two jobs and test execution to four slots, leaving
+  headroom for other runners and interactive work on the shared machine.
 - **UI work:** `./run.sh dev` (`cargo leptos watch`) — keeps the SSR binary and
   WASM bundle in lockstep; never pair a standalone `cargo leptos build` with a
   separate `cargo run` while iterating.

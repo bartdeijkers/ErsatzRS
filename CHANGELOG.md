@@ -406,6 +406,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Bound concurrent large teletext test fixtures and release complete services
+  between lifecycle cases, preventing test runs from exhausting runner memory.
+
 - Align teletext overlap and scan-continuity test fixtures with panel-colour
   validation and managed probe cleanup ownership. Allow explicitly selected
   Rust-only CI runs on repaired revisions without treating them as full CI proof.

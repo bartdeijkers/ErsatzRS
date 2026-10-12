@@ -196,8 +196,9 @@ fn intrinsic_acquisition_capacity_failure_is_atomic_at_replacement() {
         carousel.next_batch().unwrap().kind(),
         TeletextCarouselBatchKind::Magazine
     );
+    // Mid-cycle refusal is independent of the replacement's display count.
     assert_eq!(
-        carousel.replace_authored_at_boundary(many_displays(499, true)),
+        carousel.replace_authored_at_boundary(many_displays(1, true)),
         Err(TeletextTransportError::MidCycleReplacement)
     );
 }

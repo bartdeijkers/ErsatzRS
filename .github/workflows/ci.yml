@@ -199,6 +199,10 @@ jobs:
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # test build on the serial self-hosted runner.
     needs: fmt
+    # Leave headroom for the other runners and the interactive WSL session.
+    env:
+      CARGO_BUILD_JOBS: "2"
+      NEXTEST_TEST_THREADS: "4"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1

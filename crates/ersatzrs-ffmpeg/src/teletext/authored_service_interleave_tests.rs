@@ -67,8 +67,8 @@ fn long_display_cycle_refreshes_without_replacing_or_reordering_displays() {
 
 #[test]
 fn first_long_cycle_resource_repeat_clears_c4_c8_without_erasing_later_displays() {
-    let mut candidates = vec![many_displays(499, true)];
-    let declared = candidates[0].declared().clone();
+    let changed = many_displays(499, true);
+    let declared = changed.declared().clone();
     let mut tx = crate::teletext::authored_service_tests::transmissions(&declared);
     for record in &mut tx {
         record.update = crate::teletext::TeletextResourceFullUpdate::Unchanged;
@@ -76,8 +76,10 @@ fn first_long_cycle_resource_repeat_clears_c4_c8_without_erasing_later_displays(
     let mut limits = crate::teletext::authored_service_tests::limits();
     limits.max_pages = 600;
     limits.max_units = 20_000;
-    candidates
-        .push(crate::teletext::encode_teletext_authored_service(declared, &tx, &limits).unwrap());
+    // Compile the second full service only after the first carousel is dropped.
+    let candidates = std::iter::once(changed).chain(std::iter::once_with(|| {
+        crate::teletext::encode_teletext_authored_service(declared, &tx, &limits).unwrap()
+    }));
     for candidate in candidates {
         let expected_last_display = candidate.pages()[498].data_units()[0];
         let mut carousel = TeletextCarousel::new_authored(candidate).unwrap();
