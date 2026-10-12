@@ -1,6 +1,6 @@
-//! Cold pending-candidate capture for a later headed suitable-client trial.
+//! Cold pending and accepted-generation captures for headed client trials.
 //! Uses the existing final direct MPEG-TS route, not the private concat wrapper.
-//! This is not generation acceptance, automatic publication or client proof.
+//! A capture is not automatic publication or complete engine/client acceptance.
 
 use super::channel_documents::{
     self, address, candidate, install_contract, response, write_response,
@@ -9,7 +9,7 @@ use super::designs::{budget as document_budget, config, deadline, save, units};
 use super::documents::DocumentFixture;
 use super::*;
 use axum::http::StatusCode;
-use ersatzrs_core::repositories::TeletextPublicationMutation;
+use ersatzrs_core::repositories::{TeletextGenerationMutation, TeletextPublicationMutation};
 use ersatzrs_domain::teletext::{TeletextColourPixelOptions, TeletextFlashPhase};
 use ersatzrs_domain::{
     ChannelSubtitleMode, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingMode,
@@ -21,10 +21,16 @@ use ersatzrs_web::host::{
         request_original_teletext_design_publication, RequestedOriginalTeletextPublication,
         SavedOriginalTeletextDesign,
     },
+    teletext_generations::{accept_original_teletext_generation, TeletextGenerationTarget},
     teletext_preview::{project_teletext_preview, TeletextPreviewBudget},
 };
 use ersatzrs_web::transport::iptv::{
-    stream::serve_channel_stream_with_teletext, teletext_binding::TeletextOutputBinding,
+    stream::{serve_channel_stream_with_accepted_teletext, serve_channel_stream_with_teletext},
+    teletext_accepted_output::{
+        load_accepted_teletext_output_intent, TeletextAcceptedOutputIntent,
+    },
+    teletext_binding::TeletextOutputBinding,
+    teletext_source_policy::{TeletextSourcePolicy, TeletextSourcePolicyLimits},
 };
 use futures_util::StreamExt as _;
 use serde_json::{json, Value};
@@ -73,6 +79,29 @@ fn output_policy() -> TeletextOutputConfig {
         playout_delay: Duration::from_millis(100),
         max_lateness: Duration::from_millis(100),
     }
+}
+
+fn source_policy() -> TeletextSourcePolicy {
+    // Explicit bounds for this pinned, synthetic 4.9536-Mbps source only.
+    // Program/PCR identities must come from the actual route's source PSI.
+    TeletextSourcePolicy::new(TeletextSourcePolicyLimits {
+        elementary_pid: 512,
+        rate_tolerance_ppm: 1000,
+        pcr_jitter_ticks: 14,
+        pcr_gap_slack_ticks: 540_000,
+        pcr_gap_slack_packets: 36,
+        min_pcr_intervals: 2,
+        max_window_packets: 1024,
+        max_buffer_packets: 8192,
+        max_hold: Duration::from_secs(2),
+        playout_delay: Duration::from_millis(100),
+        max_lateness: Duration::from_millis(100),
+        first_byte_timeout: Duration::from_secs(5),
+        probe_maximum_bytes: 1024 * 188,
+        probe_maximum_time: Duration::from_secs(5),
+        startup_maximum_bytes: 8192 * 188,
+    })
+    .unwrap()
 }
 
 fn preview_budget() -> TeletextPreviewBudget {
@@ -264,6 +293,10 @@ async fn capture(fixture: &Fixture, binding: Arc<TeletextOutputBinding>) -> Vec<
         binding,
     ))
     .await;
+    capture_response(response).await
+}
+
+async fn capture_response(response: axum::response::Response) -> Vec<u8> {
     assert_eq!(response.status(), StatusCode::OK);
     let mut body = response.into_body().into_data_stream();
     tokio::time::timeout(Duration::from_secs(35), async {
@@ -461,6 +494,88 @@ async fn pending_output(
     );
     assert_eq!(output.selection(), saved.candidate().selection());
     output
+}
+
+async fn accepted_intent(fixture: &Fixture) -> Arc<TeletextAcceptedOutputIntent> {
+    let pending = pending_output(fixture).await;
+    assert!(load_accepted_teletext_output_intent(
+        &fixture.state.application,
+        1,
+        document_budget(),
+        channel_documents::policy(),
+        source_policy(),
+        deadline(),
+    )
+    .await
+    .unwrap()
+    .is_none());
+    let result = accept_original_teletext_generation(
+        &fixture.state.application,
+        TeletextGenerationTarget {
+            request: pending.request().clone(),
+            expected_design_head: pending.request().revision,
+            expected_generation_id: None,
+        },
+        document_budget(),
+        channel_documents::policy(),
+        deadline(),
+    )
+    .await
+    .unwrap();
+    let TeletextGenerationMutation::Accepted(accepted) = result else {
+        panic!("reviewed synthetic originals must accept explicitly");
+    };
+    assert_eq!(units(accepted.service()), units(pending.service()));
+    assert_eq!(accepted.selection(), pending.selection());
+    let loaded = load_accepted_teletext_output_intent(
+        &fixture.state.application,
+        1,
+        document_budget(),
+        channel_documents::policy(),
+        source_policy(),
+        deadline(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(loaded.candidate().generation(), accepted.generation());
+    assert_eq!(
+        units(loaded.candidate().service()),
+        units(accepted.service())
+    );
+    Arc::new(loaded)
+}
+
+#[tokio::test]
+async fn accepted_direct_route_rejects_wrong_channel_and_other_container_before_startup() {
+    let fixture = installed_main_only_pair().await;
+    let intent = accepted_intent(&fixture).await;
+    for (channel, format) in [("2", OutputFormat::MpegTs), ("1", OutputFormat::Nut)] {
+        let response = Box::pin(serve_channel_stream_with_accepted_teletext(
+            &fixture.state,
+            channel,
+            format,
+            Arc::clone(&intent),
+        ))
+        .await;
+        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+    let repositories = make_repositories(fixture.state.pool.clone());
+    let mut channel = repositories.channel.get_with_profile(1).await.unwrap();
+    channel.streaming_mode = StreamingMode::TransportStreamHybrid;
+    repositories.channel.upsert(&channel).await.unwrap();
+    let response = Box::pin(serve_channel_stream_with_accepted_teletext(
+        &fixture.state,
+        "1",
+        OutputFormat::MpegTs,
+        intent,
+    ))
+    .await;
+    assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    // No source or schedule exists: these responses prove rejection before
+    // producer admission, not an accidental unavailable-source error.
+    channel_documents::assert_requests(&fixture, 2, 2);
+    fixture.state.pool.close().await;
 }
 
 async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8]) {
@@ -723,6 +838,83 @@ async fn installed_originals_pending_request_capture_actual_direct_mpegts_for_cl
     assert!(fixture.playout.try_recv().is_err());
     // Opt-in capture is synthetic-only and never overwrites a preexisting file.
     // No stored document, private context or active-publication receipt is exported.
+    let mut file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(artifact)
+        .await
+        .unwrap();
+    file.write_all(&bytes).await.unwrap();
+    file.sync_all().await.unwrap();
+    fixture.state.pool.close().await;
+}
+
+#[tokio::test]
+#[ignore = "requires exact FFmpeg/ffprobe 9, TSDuck and explicit create-new synthetic capture destination; headed client trial is separate"]
+async fn accepted_originals_reopened_capture_actual_direct_mpegts_for_client_trial() {
+    let ffmpeg = selected("ERSATZRS_TELETEXT_TEST_FFMPEG");
+    let ffprobe = selected("FFPROBE_PATH");
+    let tsanalyze = selected("ERSATZRS_TELETEXT_TEST_TSANALYZE");
+    let artifact = PathBuf::from(selected("ERSATZRS_TELETEXT_CLIENT_CAPTURE"));
+    check_tools(&ffmpeg, &ffprobe).await;
+    let mut fixture = installed_main_only_pair().await;
+    let source = generate_source(&ffmpeg, fixture.root.path()).await;
+    configure_source(&fixture, &source).await;
+    let before = config(&fixture).await;
+    let bindings = fixture
+        .state
+        .application
+        .channel_teletext_bindings(1)
+        .await
+        .unwrap();
+    let accepted = accepted_intent(&fixture).await;
+    let generation = accepted.candidate().generation().clone();
+    let compiled_units = units(accepted.candidate().service());
+    drop(accepted);
+    fixture = fixture.reopen().await;
+    let reloaded = Arc::new(
+        load_accepted_teletext_output_intent(
+            &fixture.state.application,
+            1,
+            document_budget(),
+            channel_documents::policy(),
+            source_policy(),
+            deadline(),
+        )
+        .await
+        .unwrap()
+        .unwrap(),
+    );
+    assert_eq!(reloaded.candidate().generation(), &generation);
+    assert_eq!(units(reloaded.candidate().service()), compiled_units);
+    let response = Box::pin(serve_channel_stream_with_accepted_teletext(
+        &fixture.state,
+        "1",
+        OutputFormat::MpegTs,
+        reloaded,
+    ))
+    .await;
+    let bytes = capture_response(response).await;
+    verify_transport(&tsanalyze, &ffprobe, &bytes).await;
+    let source_bytes = tokio::fs::read(&source).await.unwrap();
+    assert!(source_bytes.len() <= MAX_BYTES);
+    verify_av(&ffmpeg, &source_bytes, &bytes).await;
+    decode_page(&ffmpeg, &bytes, "200").await;
+    decode_page(&ffmpeg, &bytes, "201").await;
+    assert_eq!(config(&fixture).await, before);
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .channel_teletext_bindings(1)
+            .await
+            .unwrap(),
+        bindings
+    );
+    channel_documents::assert_requests(&fixture, 2, 2);
+    assert!(fixture.playout.try_recv().is_err());
+    // Keep exactly the successful synthetic stream for a separate headed trial.
+    // Originals, private context and durable publication records remain local.
     let mut file = tokio::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

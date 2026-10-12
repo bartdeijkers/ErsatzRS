@@ -21,7 +21,10 @@ release section when tagging a release.
   ages and shares the retained stream's memory/deadline bounds. Explicit accepted
   generation adapters combine checked host limits with real command hints and
   PSI, recheck current channel selection and retain the exact shared native
-  service. Automatic normal-route lookup and full live acceptance remain open.
+  service. An explicit direct stream route now carries recovered accepted
+  generations through the actual producer, with checked channel identity and
+  command ownership across retries. Automatic normal-route lookup, retained
+  accepted-generation routing and full live acceptance remain open.
 - Add durable, independently fenced teletext generation selection and native
   reconstruction of exact frozen originals. Drafts and pending requests remain
   separate from accepted output; dynamic guide freshness and ordinary stream

@@ -14,6 +14,9 @@ use ersatzrs_web::host::teletext_channel_documents::{
 };
 use serde_json::{json, Value};
 
+#[path = "channel_measurement.rs"]
+mod measurement;
+
 const CHANNEL_SCRIPT: &str = r#"case "$1" in
 check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
 pages) ;;

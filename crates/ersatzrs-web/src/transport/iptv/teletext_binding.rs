@@ -2,16 +2,19 @@
 
 use std::{sync::Arc, time::Duration};
 
-use ersatzrs_ffmpeg::{
-    pipeline::OutputFormat,
-    teletext::{
-        EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextOutputConfig,
-        TeletextOutputError, TeletextOutputGate, TeletextServiceDescriptor,
-    },
+#[cfg(test)]
+use ersatzrs_ffmpeg::pipeline::OutputFormat;
+use ersatzrs_ffmpeg::teletext::{
+    EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextOutputConfig,
+    TeletextOutputError, TeletextOutputGate, TeletextServiceDescriptor,
 };
 use tokio::time::Instant;
 
 use super::teletext_output::TeletextPumpError;
+
+#[path = "teletext_output_admission.rs"]
+mod admission;
+pub use admission::TeletextOutputAdmission;
 
 #[path = "teletext_control.rs"]
 pub(super) mod control;
@@ -292,79 +295,6 @@ impl TeletextOutputBinding {
     #[must_use]
     pub const fn first_byte_timeout(&self) -> Duration {
         self.first_byte_timeout
-    }
-}
-
-/// An explicit process role, optionally carrying an immutable authored service.
-#[derive(Clone)]
-pub struct TeletextOutputAdmission {
-    role: TeletextOutputRole,
-    binding: Option<Arc<TeletextOutputBinding>>,
-}
-
-impl TeletextOutputAdmission {
-    /// Describe an ordinary output without an authored service.
-    #[must_use]
-    pub const fn plain(role: TeletextOutputRole) -> Self {
-        Self {
-            role,
-            binding: None,
-        }
-    }
-
-    /// Admit an immutable authored service on a final MPEG-TS boundary.
-    /// # Errors
-    /// Internal, worker, other-container and slate roles cannot carry bindings.
-    pub fn with_binding(
-        role: TeletextOutputRole,
-        binding: Arc<TeletextOutputBinding>,
-    ) -> Result<Self, TeletextPumpError> {
-        if !matches!(
-            role,
-            TeletextOutputRole::FinalDirectMpegTs | TeletextOutputRole::FinalWrapperMpegTs
-        ) {
-            return Err(TeletextPumpError::Configuration);
-        }
-        Ok(Self {
-            role,
-            binding: Some(binding),
-        })
-    }
-
-    /// Explicit boundary identity supplied by the process owner.
-    #[must_use]
-    pub const fn role(&self) -> TeletextOutputRole {
-        self.role
-    }
-
-    /// Optional immutable service; cloning admission preserves its identity.
-    #[must_use]
-    pub fn binding(&self) -> Option<&TeletextOutputBinding> {
-        self.binding.as_deref()
-    }
-
-    pub(crate) fn cloned_binding(&self) -> Option<Arc<TeletextOutputBinding>> {
-        self.binding.clone()
-    }
-
-    /// Verify the actual generated format before a process is launched.
-    /// # Errors
-    /// A role/format mismatch or a binding outside MPEG-TS fails admission.
-    pub fn validate_format(&self, format: OutputFormat) -> Result<(), TeletextPumpError> {
-        let matches_role = match self.role {
-            TeletextOutputRole::FinalDirectMpegTs
-            | TeletextOutputRole::FinalWrapperMpegTs
-            | TeletextOutputRole::InternalItem
-            | TeletextOutputRole::CapacitySlate => format == OutputFormat::MpegTs,
-            TeletextOutputRole::HlsWorker => {
-                matches!(format, OutputFormat::Hls | OutputFormat::HlsMp4)
-            }
-            TeletextOutputRole::OtherContainer => format != OutputFormat::MpegTs,
-        };
-        if !matches_role || (self.binding.is_some() && format != OutputFormat::MpegTs) {
-            return Err(TeletextPumpError::Configuration);
-        }
-        Ok(())
     }
 }
 

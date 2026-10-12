@@ -105,6 +105,9 @@ use super::legacy_wrapper_admission::{
 use super::retained_stream_buffer::{
     forward_retained_ts, ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS,
 };
+use super::teletext_accepted_output::{
+    forward_accepted_teletext_output, TeletextAcceptedOutputIntent,
+};
 use super::teletext_binding::{TeletextOutputAdmission, TeletextOutputBinding, TeletextOutputRole};
 use super::teletext_output::TeletextPumpError;
 use crate::host::state::AppState;
@@ -247,6 +250,29 @@ pub async fn serve_channel_stream_with_teletext(
     serve_channel_stream_with_binding(state, channel_number, output_format, Some(binding)).await
 }
 
+/// Serve accepted native originals through the actual final direct producer.
+/// No package is invoked and ordinary routes still perform no automatic lookup.
+/// Channel identity is checked before startup; current selection, command policy
+/// and actual PSI are checked again by the final stdout owner. Retained and
+/// hybrid output need a separate command-provenance seam and are rejected here.
+pub async fn serve_channel_stream_with_accepted_teletext(
+    state: &AppState,
+    channel_number: &str,
+    output_format: OutputFormat,
+    intent: Arc<TeletextAcceptedOutputIntent>,
+) -> Response {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    let Ok(output) = TeletextOutputAdmission::with_accepted(
+        TeletextOutputRole::FinalDirectMpegTs,
+        intent,
+        Arc::clone(&state.application),
+        deadline,
+    ) else {
+        return teletext_output_unavailable();
+    };
+    serve_channel_stream_with_output(state, channel_number, output_format, output, deadline).await
+}
+
 async fn serve_channel_stream_with_binding(
     state: &AppState,
     channel_number: &str,
@@ -262,6 +288,19 @@ async fn serve_channel_stream_with_binding(
         return teletext_output_unavailable();
     };
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    serve_channel_stream_with_output(state, channel_number, output_format, output, deadline).await
+}
+
+async fn serve_channel_stream_with_output(
+    state: &AppState,
+    channel_number: &str,
+    output_format: OutputFormat,
+    output: TeletextOutputAdmission,
+    deadline: tokio::time::Instant,
+) -> Response {
+    if output.validate_format(output_format).is_err() {
+        return teletext_output_unavailable();
+    }
     let lookup = tokio::time::timeout_at(
         deadline,
         state.repositories.channel.get_by_number(channel_number),
@@ -279,6 +318,13 @@ async fn serve_channel_stream_with_binding(
             return StatusCode::NOT_FOUND.into_response();
         }
     };
+
+    if !output.matches_channel(channel.id)
+        || (output.accepted().is_some()
+            && channel.streaming_mode == StreamingMode::TransportStreamHybrid)
+    {
+        return teletext_output_unavailable();
+    }
 
     let effective_streaming_mode = channel.streaming_mode;
     serve_channel_stream_with_channel(
@@ -943,7 +989,13 @@ async fn serve_channel_stream_admitted_inner(
         );
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
-    if interval_source.is_some() && interval_admission.is_some() && output.binding().is_some() {
+    // Accepted originals need the actual retained attempt's first-byte command
+    // identity. The current extension certifies only the initial rate, so never
+    // attach an intent to its outer response or start a producer on that claim.
+    if interval_source.is_some() && output.accepted().is_some() {
+        return teletext_output_unavailable();
+    }
+    if interval_source.is_some() && interval_admission.is_some() && output.has_authored_output() {
         return teletext_output_unavailable();
     }
     if interval_source.is_some() && interval_admission.is_none() {
@@ -2138,6 +2190,19 @@ async fn serve_channel_stream_admitted_inner(
         match reserve_mpeg_ts_capacity(state, &channel.number).await {
             Ok(Some(reservation)) => Some(reservation),
             Ok(None) => {
+                if output.accepted().is_some() {
+                    // A slate and the later media command are distinct source
+                    // epochs; this explicit accepted owner cannot join them.
+                    cancel_retained_startup(
+                        retained_playback.take().map(|playback| playback.prepared),
+                        None,
+                        Some(&mut external_subtitle_owner),
+                        &graphics_cleanup_dirs,
+                        Some(&mut dynamic_text_controllers),
+                    )
+                    .await;
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                }
                 if effective_streaming_mode != ersatzrs_domain::StreamingMode::TransportStream {
                     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
                     cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
@@ -2594,7 +2659,7 @@ async fn serve_legacy_concat_stream(
     let Some((wrapper, first_encoder)) =
         try_reserve_mpeg_ts_wrapper_capacity(limit, &channel.number)
     else {
-        if output.binding().is_some() {
+        if output.has_authored_output() {
             // A raw capacity-slate prefix followed by this wrapper would
             // start a new PSI/PCR epoch. Authored output must fail closed.
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
@@ -4915,6 +4980,9 @@ async fn spawn_stream_body_with_lifetime(
             return Err(error);
         }
     };
+    // The immutable snapshot is the command that created this exact child.
+    // Plain/fixed callers retain no new argv copy or application context.
+    let output = output.with_command(command);
     if child.stdout.is_none() {
         return match reap_stream_process(&mut child).await {
             Ok(()) => {
@@ -5267,6 +5335,7 @@ async fn supervise_stream_command_with_retry_cancellable(
     output: &TeletextOutputAdmission,
     item: Option<&LegacyWrapperItemCancellation>,
 ) -> DirectStreamOutcome {
+    let mut output = output.clone();
     let song = retry.as_ref().and_then(|retry| retry.song.clone());
     loop {
         let outcome = supervise_stream_process_with_retry_context(
@@ -5291,14 +5360,14 @@ async fn supervise_stream_command_with_retry_cancellable(
                         source: Some(song.stream.clone()),
                     })
                 }),
-            output,
+            &output,
         )
         .await;
         let DirectStreamOutcome::Failed(mut stderr) = outcome else {
             return outcome;
         };
         if stderr.wrote_media
-            && (output.binding().is_some()
+            && (output.has_authored_output()
                 || remote_stream.is_some_and(|stream| {
                     matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
                 }))
@@ -5384,6 +5453,7 @@ async fn supervise_stream_command_with_retry_cancellable(
             if let Some(song) = &song {
                 song.mark_in_use();
             }
+            let next_output = output.with_command(&retry_command.command);
             match spawn_stream_retry(
                 retry_command,
                 remote_stream.and_then(remote_stream_producer),
@@ -5394,6 +5464,7 @@ async fn supervise_stream_command_with_retry_cancellable(
             {
                 Ok(next) => {
                     child = next;
+                    output = next_output;
                     context.graph_operation = next_graph_operation;
                     context.ffmpeg_path = next_ffmpeg_path;
                     // Keep an observer for the fallback spawn. It may learn a
@@ -5477,6 +5548,7 @@ async fn supervise_stream_command_with_retry_cancellable(
             if let Some(song) = &song {
                 song.mark_in_use();
             }
+            let next_output = output.with_command(&retry_command.command);
             match spawn_stream_retry(
                 retry_command,
                 remote_stream.and_then(remote_stream_producer),
@@ -5487,6 +5559,7 @@ async fn supervise_stream_command_with_retry_cancellable(
             {
                 Ok(next) => {
                     child = next;
+                    output = next_output;
                     context.graph_operation = next_graph_operation;
                     context.ffmpeg_path = next_ffmpeg_path;
                     // The retry is spent, but its hardware graph can still
@@ -5552,6 +5625,7 @@ async fn supervise_stream_command_with_retry_cancellable(
         if let Some(song) = &song {
             song.mark_in_use();
         }
+        let next_output = output.with_command(&retry_command.command);
         match spawn_stream_retry(
             retry_command,
             remote_stream.and_then(remote_stream_producer),
@@ -5560,7 +5634,10 @@ async fn supervise_stream_command_with_retry_cancellable(
         )
         .await
         {
-            Ok(next) => child = next,
+            Ok(next) => {
+                child = next;
+                output = next_output;
+            }
             Err(error) => {
                 if error.cleanup_confirmed() {
                     if let Some(song) = &song {
@@ -5646,7 +5723,7 @@ fn stream_body_for_wrapper_wait(
 ) -> (Body, Option<StreamOutputCompletion>) {
     use futures_util::StreamExt as _;
 
-    if output.binding().is_none() && !force_completion {
+    if !output.has_authored_output() && !force_completion {
         return (guarded_stream_body(reader, cancel), None);
     }
     let (sender, completion) = tokio::sync::oneshot::channel();
@@ -5748,11 +5825,28 @@ async fn supervise_stream_process_with_retry_context(
                     )
                     .await
                 }
+                None if output.accepted().is_some() => {
+                    let accepted = output.accepted().ok_or(TeletextPumpError::Configuration)?;
+                    let command = output.command().ok_or(TeletextPumpError::Configuration)?;
+                    let result = forward_accepted_teletext_output(
+                        stdout,
+                        writer,
+                        command,
+                        &accepted.intent,
+                        &accepted.application,
+                        accepted.deadline,
+                    )
+                    .await?;
+                    if let Some(rejection) = result.rejection {
+                        tracing::debug!(%rejection, "accepted teletext rejected before commitment; preserving raw output");
+                    }
+                    Ok(result.bytes)
+                }
                 None => tokio::io::copy(stdout, writer)
                     .await
                     .map_err(|error| TeletextPumpError::Write(error.kind())),
             },
-            None if output.binding().is_some() => Err(TeletextPumpError::EmptyOutput),
+            None if output.has_authored_output() => Err(TeletextPumpError::EmptyOutput),
             None => Ok(0),
         }
     };
@@ -5779,7 +5873,8 @@ async fn supervise_stream_process_with_retry_context(
                 let _ = child.start_kill();
             }
             let wrote_media = !empty_output && result.as_ref().map_or(true, |bytes| *bytes > 0);
-            (wrote_media, output.binding().and_then(|_| result.err()))
+            let transport_error = if output.has_authored_output() { result.err() } else { None };
+            (wrote_media, transport_error)
         }
     };
 
@@ -5798,7 +5893,7 @@ async fn supervise_stream_process_with_retry_context(
             None
         },
         result = async {
-            if output.binding().is_some() {
+            if output.has_authored_output() {
                 tokio::time::timeout(Duration::from_secs(5), child.wait())
                     .await
                     .unwrap_or_else(|_| Err(std::io::ErrorKind::TimedOut.into()))
@@ -5847,7 +5942,7 @@ async fn supervise_stream_process_with_retry_context(
             }
             if legacy_disconnect_is_success(
                 stderr.client_disconnect,
-                output.binding().is_some()
+                output.has_authored_output()
                     || remote_stream.is_some_and(|stream| {
                         matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
                     }),

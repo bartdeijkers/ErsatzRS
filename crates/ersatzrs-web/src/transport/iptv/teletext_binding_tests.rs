@@ -31,6 +31,8 @@ fn plain_process_roles_require_their_actual_generated_container() {
         let admission = TeletextOutputAdmission::plain(role);
         assert_eq!(admission.role(), role);
         assert!(admission.binding().is_none());
+        assert!(!admission.has_authored_output());
+        assert!(admission.accepted().is_none());
         for format in FORMATS {
             let accepted = match role {
                 TeletextOutputRole::HlsWorker => {
@@ -53,6 +55,8 @@ fn authored_pages_are_admitted_only_on_final_direct_or_wrapper_transport_outputs
             TeletextOutputRole::FinalDirectMpegTs | TeletextOutputRole::FinalWrapperMpegTs
         ) {
             let admission = result.unwrap();
+            assert!(admission.has_authored_output());
+            assert!(admission.accepted().is_none());
             for format in FORMATS {
                 assert_eq!(
                     admission.validate_format(format).is_ok(),
@@ -83,6 +87,36 @@ fn cloning_admission_preserves_the_same_immutable_binding_and_caller_policy() {
     assert_eq!(original.config().elementary_pid, policy().elementary_pid);
     assert_eq!(original.config().max_hold, policy().max_hold);
     assert_eq!(original.first_byte_timeout(), Duration::from_millis(40));
+}
+
+#[test]
+fn actual_command_snapshots_do_not_change_plain_or_fixed_admission() {
+    let command = ersatzrs_ffmpeg::FfmpegCommand::new_with_executable(
+        "synthetic-tool",
+        Vec::new(),
+        vec!["opaque-output".to_owned()],
+    );
+    for role in ROLES {
+        let original = TeletextOutputAdmission::plain(role);
+        let snapshot = original.with_command(&command);
+        assert_eq!(snapshot.role(), role);
+        assert!(!snapshot.has_authored_output());
+        assert!(snapshot.command().is_none());
+        assert!(snapshot.accepted().is_none());
+        assert!(snapshot.matches_channel(37));
+    }
+    let original =
+        TeletextOutputAdmission::with_binding(TeletextOutputRole::FinalDirectMpegTs, binding())
+            .unwrap();
+    let snapshot = original.with_command(&command);
+    assert!(std::ptr::eq(
+        snapshot.binding().unwrap(),
+        original.binding().unwrap()
+    ));
+    assert!(snapshot.has_authored_output());
+    assert!(snapshot.command().is_none());
+    assert!(snapshot.accepted().is_none());
+    assert!(snapshot.matches_channel(37));
 }
 
 #[test]

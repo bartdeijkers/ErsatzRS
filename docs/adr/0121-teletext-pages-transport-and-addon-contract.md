@@ -25,7 +25,16 @@ deadline. Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact
 pre-write fallback. Normal-route lookup, production compiler limits, live Health,
-ongoing publication ownership and client acceptance remain unimplemented here.
+ongoing publication ownership and complete client acceptance remain open.
+The explicit direct route now associates the accepted intent with its resolved
+channel and actual child command, refreshing the snapshot after each successful
+hardware retry. Terminal authored supervision also covers optional raw fallback.
+Accepted routing rejects retained/hybrid sources and capacity-slate joins until
+actual first-byte attempt provenance is implemented; existing fixed/plain routes
+retain their behavior. A real accepted-original/reopen/AV transport capture and
+headed representative palette/glyph/page-navigation trial are recorded in
+P9A-04. They do not certify accepted-specific retries, whole-process restart,
+normal automatic publication or full Level 2.5/client coverage.
 This preparatory explicit API does not waive full authored/editor/Lua/admin or
 platform acceptance. P9A-04 owns the canonical evidence and next integration step.
 

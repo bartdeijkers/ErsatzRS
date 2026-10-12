@@ -4264,6 +4264,28 @@ including actual retained prefix capacity; original reserve/startup/cancellation
 and commitment rules still apply. These APIs do not supply production compiler
 defaults, an ongoing publication owner or normal-route registration.
 
+`serve_channel_stream_with_accepted_teletext(state, channel_number, format, intent)`
+connects that intent to the real direct final MPEG-TS producer. The route checks
+the resolved channel before startup; the supervisor uses the command that actually
+spawned each child, including successful graph/decode/encode retries, with the
+original route deadline. Authored terminal completion also applies to optional
+raw fallback. Retained/hybrid and capacity-slate joins currently reject this
+explicit API: initial retained metadata cannot certify a later retry's command.
+Plain/fixed routes retain their behavior. This is an explicit integration seam,
+not ordinary automatic lookup or ongoing generation ownership.
+
+For the accepted-generation capture, use the existing verified-tool environment
+and create-new destination recipe above, selecting
+`test(client_capture::accepted_originals_reopened_)` instead. It proves explicit
+acceptance, pool/AppState reopen, exact native recovery and actual AV/teletext
+transport. Reopening is not a whole executable restart. In the isolated headed
+VLC trial, use the native **Teletext Activation** button before entering `200`
+then `201` in its page field; the native field is disabled until activation.
+CLI subtitle selection and page hints did not activate it in the receipted trial.
+The [versioned Qt controller](https://github.com/videolan/vlc/blob/3.0.20/modules/gui/qt/components/controller.cpp)
+defines those activation/page controls. P9A-04 owns exact capture/screenshot
+identities, versions, successful rendering and remaining coverage.
+
 Next connect normal-route lookup and Health under explicit production policy. Full warm-resource retirement,
 active Health, current generation ownership and all existing engine/client/editor/
 admin/Lua/platform acceptance remain open. P9A-04 owns the canonical proof.
