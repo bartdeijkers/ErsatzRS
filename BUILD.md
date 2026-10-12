@@ -267,6 +267,22 @@ If the browser does not auto-refresh, check that nothing else is bound to port
 `3001` and that the page was loaded via `cargo leptos`'s server (not a stale
 `cargo run --bin ersatzrs-web` from a previous session).
 
+### Rerun only Rust tests after a fixture repair
+
+A GitHub job rerun uses the original revision. To check a new revision while
+reusing unaffected checks, dispatch the existing workflow with `test_only`:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f test_only=true
+```
+
+This runs the complete `Test` job, including progress and architecture validation,
+and skips unrelated jobs. Hosted runners use the equivalent Rust test shards.
+The run is titled `CI (Test only)` and cannot suppress a later full CI run through
+the duplicate-run check. It is scoped test evidence, not full CI acceptance.
+When deliberately preserving earlier checks, `[skip ci]` on the repair commit
+prevents the automatic full PR run; the manual dispatch still checks that commit.
+
 ## Inner-loop strategy (don't recompile the source 5×)
 
 A single task often runs five *different* compilation graphs — and because Cargo

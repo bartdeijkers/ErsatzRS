@@ -402,6 +402,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Align teletext overlap and scan-continuity test fixtures with panel-colour
+  validation and managed probe cleanup ownership. Allow explicitly selected
+  Rust-only CI runs on repaired revisions without treating them as full CI proof.
 - Reject full-screen and full-row colour selectors in authored teletext objects
   addressing either side panel, with original command and invocation diagnostics.
   Preserve legal main-page colours and independent panel glyph/cell attributes;

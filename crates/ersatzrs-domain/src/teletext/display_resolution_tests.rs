@@ -1250,7 +1250,15 @@ fn charset_and_position_only_overlap_use_addressed_cells_without_glyph_or_panel_
             following_rows: true,
         },
     ] {
-        for offset in [None, Some((0, 40))] {
+        // Whole-row colours are legal only in the main plane. Panel rejection
+        // is covered by the geometry tests; charset/position overlap still
+        // exercises both planes here, including disabled panels.
+        let offsets: &[_] = if matches!(command, TeletextEnhancementCommand::SetRowColour { .. }) {
+            &[None]
+        } else {
+            &[None, Some((0, 40))]
+        };
+        for &offset in offsets {
             let error = addressed_admission(
                 TeletextObjectType::Adaptive,
                 TeletextObjectType::Adaptive,
