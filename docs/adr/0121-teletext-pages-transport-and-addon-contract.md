@@ -11,7 +11,16 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 ## Implementation
 
-Partial. The selected-runtime capability report now runs bounded decoder-option,
+Partial.
+
+The preparatory guide/native bridge now rejects changed effective guide context
+before and after producer preparation, with cumulative read limits and the original
+deadline. These observations do not fence uncaptured raw source/path changes or
+an intervening change and restoration. Durable guide-input association and a
+fresh, atomic publication-time source check remain required; the interchange
+reference and P9A-04 own API details, proof and the remaining integration gaps.
+
+The selected-runtime capability report now runs bounded decoder-option,
 exact-page text and colour bitmap probes against an independent synthetic DVB
 fixture. Decoder outcomes have localized Health guidance and runtime-bound
 troubleshooting export. Domain drafts now retain checked page/subpage identities,

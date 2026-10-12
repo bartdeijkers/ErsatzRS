@@ -136,6 +136,136 @@ async fn capture(
     capture_guide_snapshot(&mut transaction, ids, start, finish, limits).await
 }
 
+async fn context(pool: &DbPool, ids: &[i64], limits: &mut GuideReadBudget) -> GuideSnapshot {
+    capture(pool, ids, now(), now() + Duration::hours(4), limits)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn context_comparison_ignores_usage_and_preserves_order_membership_and_window() {
+    let (_root, pool) = fixture().await;
+    segments(&pool).await;
+    let mut limits = budget();
+    let first = context(&pool, &[1, 2], &mut limits).await;
+    let second = context(&pool, &[1, 2], &mut limits).await;
+    assert_ne!(first.source_usage(), second.source_usage());
+    assert_ne!(first.expansion_usage(), second.expansion_usage());
+    assert_eq!(
+        first.compare_context(&second),
+        GuideSnapshotComparison::Unchanged
+    );
+    let reversed = context(&pool, &[2, 1], &mut budget()).await;
+    assert_eq!(
+        first.compare_context(&reversed),
+        GuideSnapshotComparison::ChannelChanged(1)
+    );
+    let subset = context(&pool, &[1], &mut budget()).await;
+    assert_eq!(
+        first.compare_context(&subset),
+        GuideSnapshotComparison::ChannelChanged(2)
+    );
+    assert_eq!(
+        subset.compare_context(&first),
+        GuideSnapshotComparison::ChannelChanged(2)
+    );
+    let shifted = capture(
+        &pool,
+        &[1, 2],
+        now() + Duration::seconds(1),
+        now() + Duration::hours(4),
+        &mut budget(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        first.compare_context(&shifted),
+        GuideSnapshotComparison::GlobalChanged
+    );
+    assert_eq!(
+        format!("{:?}", first.compare_context(&reversed)),
+        "ChannelChanged(1)"
+    );
+}
+
+#[tokio::test]
+async fn context_comparison_locates_actual_channel_content_segments_and_source_changes() {
+    let (_root, pool) = fixture().await;
+    segments(&pool).await;
+    let mut previous = context(&pool, &[1, 2], &mut budget()).await;
+    for (sql, id) in [
+        (
+            r#"UPDATE "MovieMetadata" SET "Plot"='Changed plot' WHERE "Id"=30"#,
+            1,
+        ),
+        (
+            r#"UPDATE "PlayoutItem" SET "OutPoint"='06:00:00' WHERE "Id"=33"#,
+            1,
+        ),
+        (
+            r#"UPDATE "Channel" SET "Name"='Changed name' WHERE "Id"=1"#,
+            1,
+        ),
+        (r#"UPDATE "Channel" SET "Number"='3' WHERE "Id"=1"#, 1),
+        (
+            r#"UPDATE "Channel" SET "PlayoutOffset"='02:00:00' WHERE "Id"=2"#,
+            2,
+        ),
+        (
+            r#"UPDATE "Channel" SET "MirrorSourceChannelId"=2 WHERE "Id"=2"#,
+            2,
+        ),
+        (r#"UPDATE "Channel" SET "PlayoutSource"=0 WHERE "Id"=2"#, 2),
+    ] {
+        pool.execute(sql).await.unwrap();
+        let next = context(&pool, &[1, 2], &mut budget()).await;
+        assert_eq!(
+            previous.compare_context(&next),
+            GuideSnapshotComparison::ChannelChanged(id)
+        );
+        previous = next;
+    }
+}
+
+#[tokio::test]
+async fn context_comparison_retains_raw_configuration_and_accepted_revision_identity() {
+    let (root, pool) = fixture().await;
+    external_fixture(
+        &pool,
+        &root.path().join("accepted.json"),
+        r#"{"startTime":"2026-04-15T10:00:00Z","programs":[{"title":"First","duration":60000}]}"#,
+    )
+    .await;
+    let original = context(&pool, &[1], &mut budget()).await;
+    pool.execute(r#"UPDATE "PlayoutExternalJsonSnapshot" SET "Revision"=8 WHERE "PlayoutId"=1"#)
+        .await
+        .unwrap();
+    let revised = context(&pool, &[1], &mut budget()).await;
+    assert_eq!(
+        original.channel(1).unwrap().occurrences(),
+        revised.channel(1).unwrap().occurrences()
+    );
+    assert_eq!(
+        original.compare_context(&revised),
+        GuideSnapshotComparison::ChannelChanged(1)
+    );
+    pool.execute(r#"UPDATE "ConfigElement" SET "Value"='splittimeevenly' WHERE "Key"='xmltv.block_behavior'"#).await.unwrap();
+    let raw_changed = context(&pool, &[1], &mut budget()).await;
+    assert_eq!(revised.block_behavior(), raw_changed.block_behavior());
+    assert_eq!(
+        revised.compare_context(&raw_changed),
+        GuideSnapshotComparison::GlobalChanged
+    );
+    pool.execute(r#"UPDATE "ConfigElement" SET "Value"='deu' WHERE "Key"='pages.language'"#)
+        .await
+        .unwrap();
+    let language_changed = context(&pool, &[1], &mut budget()).await;
+    assert_eq!(
+        raw_changed.compare_context(&language_changed),
+        GuideSnapshotComparison::GlobalChanged
+    );
+}
+
 #[tokio::test]
 async fn full_split_sources_mirrors_and_same_media_repeats_survive_before_half_open_window() {
     let (_root, pool) = fixture().await;

@@ -50,6 +50,16 @@ pub struct CapturedGuideChannel {
     sources: Vec<GuideSnapshotSource>,
 }
 impl CapturedGuideChannel {
+    fn same_context(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.number == other.number
+            && self.name == other.name
+            && self.playout_source == other.playout_source
+            && self.source_channel_id == other.source_channel_id
+            && self.playout_offset == other.playout_offset
+            && self.sources == other.sources
+            && self.occurrences == other.occurrences
+    }
     #[must_use]
     pub const fn id(&self) -> i64 {
         self.id
@@ -95,7 +105,47 @@ pub struct GuideSnapshot {
     source_usage: GuideReadUsage,
     expansion_usage: GuideExpansionUsage,
 }
+
+/// First semantic difference between captured contexts; never source freshness.
+/// Channel order is significant. An absent expected channel reports its original
+/// ID; an additional channel reports the additional ID. No content is disclosed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuideSnapshotComparison {
+    Unchanged,
+    GlobalChanged,
+    ChannelChanged(i64),
+}
+
 impl GuideSnapshot {
+    /// Compare the frozen window, raw/effective configuration and ordered channel
+    /// context, including exact source receipts and complete occurrences.
+    /// Admission usage is excluded; underlying uncaptured sources are not fenced.
+    #[must_use]
+    pub fn compare_context(&self, other: &Self) -> GuideSnapshotComparison {
+        if self.start != other.start
+            || self.finish != other.finish
+            || self.page_language != other.page_language
+            || self.raw_block_behavior != other.raw_block_behavior
+            || self.block_behavior != other.block_behavior
+        {
+            return GuideSnapshotComparison::GlobalChanged;
+        }
+        for (index, channel) in self.channels.iter().enumerate() {
+            if !other
+                .channels
+                .get(index)
+                .is_some_and(|other| channel.same_context(other))
+            {
+                return GuideSnapshotComparison::ChannelChanged(channel.id);
+            }
+        }
+        other
+            .channels
+            .get(self.channels.len())
+            .map_or(GuideSnapshotComparison::Unchanged, |channel| {
+                GuideSnapshotComparison::ChannelChanged(channel.id)
+            })
+    }
     #[must_use]
     pub fn channels(&self) -> &[CapturedGuideChannel] {
         &self.channels

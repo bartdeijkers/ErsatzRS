@@ -1,5 +1,6 @@
 //! Transaction-owned host guide context for explicit unpublished preparation.
-//! This does not establish source freshness, trusted generation ownership,
+//! Rechecks compare effective guide context at invocation boundaries, not raw-source
+//! freshness, atomic publication, trusted generation ownership,
 //! mutable-file provenance or automatic service/publication authority.
 
 use std::{fmt, num::NonZeroU8, time::Instant};
@@ -16,7 +17,10 @@ use ersatzrs_core::programme::ProgrammeClock;
 use ersatzrs_domain::EntityId;
 use ersatzrs_infra::{
     db::DbPool,
-    xmltv::{capture_guide_snapshot, GuideReadBudget, GuideSnapshot, GuideSnapshotError},
+    xmltv::{
+        capture_guide_snapshot, GuideReadBudget, GuideSnapshot, GuideSnapshotComparison,
+        GuideSnapshotError,
+    },
 };
 
 use super::teletext_channel_documents::{
@@ -37,6 +41,8 @@ pub enum TeletextGuideCaptureError {
     CalendarWindow,
     #[error("teletext guide host locale is missing or unsupported")]
     Locale,
+    #[error("teletext guide context changed for channel {channel_id:?}")]
+    SourceChanged { channel_id: Option<i64> },
     #[error("teletext guide read transaction failed")]
     Database,
     #[error(transparent)]
@@ -50,6 +56,7 @@ pub enum TeletextGuideCaptureError {
 /// Owned database guide and resolved host context under the caller's deadline.
 /// SQL facts remain at the captured revision; subsequent preparation is inert.
 pub struct CapturedTeletextGuide {
+    pool: DbPool,
     snapshot: GuideSnapshot,
     locale: &'static str,
     timezone: String,
@@ -95,8 +102,12 @@ impl CapturedTeletextGuide {
     /// The outer deadline bounds this await and can only shorten the candidate's
     /// lifetime. Existing producer/CPU jobs retain their own bounded ownership;
     /// abandoning this await does not synchronously stop running CPU work.
+    /// Before and after invocation, recapture the same civil window and compare
+    /// effective guide context using the caller's cumulative source/model budget.
+    /// This does not fence intervening mutations or authorize later publication.
     /// # Errors
-    /// Rejects the original deadline or existing selection/invocation/encoding failures.
+    /// Rejects changed context, exhausted read budgets, the original deadline or
+    /// existing selection/invocation/encoding failures.
     pub async fn prepare_document_candidate(
         &self,
         application: &ApplicationServices,
@@ -104,8 +115,9 @@ impl CapturedTeletextGuide {
         entry_addon_id: Option<&str>,
         generation: &str,
         policy: TeletextChannelDocumentEncodingPolicy,
+        budget: &mut GuideReadBudget,
     ) -> Result<EncodedChannelTeletextDocumentCandidate, TeletextGuideCaptureError> {
-        check_deadline(self.deadline)?;
+        self.recheck_context(budget).await?;
         let channels = self.borrow_channels();
         let locales = supported_locales();
         let context = self.context(generation, &channels, &locales);
@@ -121,8 +133,45 @@ impl CapturedTeletextGuide {
         )
         .await
         .map_err(|_| TeletextGuideCaptureError::TimedOut)??;
-        check_deadline(self.deadline)?;
+        self.recheck_context(budget).await?;
         Ok(candidate.restrict_deadline(self.deadline))
+    }
+
+    async fn recheck_context(
+        &self,
+        budget: &mut GuideReadBudget,
+    ) -> Result<(), TeletextGuideCaptureError> {
+        check_deadline(self.deadline)?;
+        // The originally admitted channel count is bounded by the capture limit.
+        let channel_ids: Vec<_> = self
+            .snapshot
+            .channels()
+            .iter()
+            .map(ersatzrs_infra::xmltv::CapturedGuideChannel::id)
+            .collect();
+        let current = capture_teletext_guide(
+            &self.pool,
+            &channel_ids,
+            self.captured_at,
+            budget,
+            self.deadline,
+        )
+        .await?;
+        let comparison = self.snapshot.compare_context(&current.snapshot);
+        if self.locale != current.locale || self.timezone != current.timezone {
+            return Err(TeletextGuideCaptureError::SourceChanged { channel_id: None });
+        }
+        match comparison {
+            GuideSnapshotComparison::Unchanged => check_deadline(self.deadline),
+            GuideSnapshotComparison::GlobalChanged => {
+                Err(TeletextGuideCaptureError::SourceChanged { channel_id: None })
+            }
+            GuideSnapshotComparison::ChannelChanged(channel_id) => {
+                Err(TeletextGuideCaptureError::SourceChanged {
+                    channel_id: Some(channel_id),
+                })
+            }
+        }
     }
 
     fn borrow_channels(&self) -> Vec<TeletextGuideChannel<'_>> {
@@ -216,6 +265,7 @@ async fn capture_with_clock(
             .await
             .map_err(|_| TeletextGuideCaptureError::Database)?;
         Ok::<_, TeletextGuideCaptureError>(CapturedTeletextGuide {
+            pool: pool.clone(),
             snapshot,
             locale,
             timezone: timezone.to_owned(),

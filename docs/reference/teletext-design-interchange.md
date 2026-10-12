@@ -3854,5 +3854,27 @@ output binding authority. Its returned candidate lifetime is shortened to the
 earlier original capture/inner preparation deadline and never renewed. The outer
 timeout does not synchronously settle existing producer/CPU jobs; they retain
 existing bounded abandonment ownership. Snapshot costs and the separately
-bounded request/encoding stages do not certify total operation RSS, source
+bounded request/encoding stages do not certify total operation RSS, atomic source
 freshness, trusted generation ownership, safe publication or runtime activation.
+
+Preparation now also receives a mutable caller-owned `GuideReadBudget`. The
+captured object retains the exact database pool; it recaptures the same ordered
+source channels at the original capture instant before invocation and after
+complete native preparation. Each read uses one new read-only transaction and
+charges the same cumulative source/model budget under the original deadline.
+`GuideSnapshot::compare_context` compares the exact UTC window, raw/effective
+language/block policy, all ordered channel facts, source receipts (including
+accepted revision) and full occurrences/content/segments. It ignores admission
+usage. Resolved host locale and actual named timezone must also match.
+`SourceChanged` reports only an optional numeric channel ID; rejected preparation
+returns no candidate, writes no publication and cannot alter the owned original.
+
+These checks prove equality at the observed boundaries, not absence of an
+intervening change and restoration. Projected-away raw rows or uncaptured
+configured/accepted source paths are not fenced; source-path association remains
+required. An unchanged historical capture instant does not establish current
+Now/Next accuracy. Human preview/publication must use a fresh operation deadline,
+retain durable input/source-context association and recheck within the existing
+publication write transaction before its insert. A host precheck followed by a
+separate publication CAS leaves a race and cannot satisfy this requirement.
+This is an additional preparatory fence, not a weakened freshness criterion.
