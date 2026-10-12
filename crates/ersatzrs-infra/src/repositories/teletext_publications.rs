@@ -256,6 +256,7 @@ async fn check_source(
         max_bytes: check.limits.max_digest_bytes,
     };
     let deadline = check.deadline;
+    let digest_version = check.fence.context_digest_version;
     // Move the exact transaction-owned capture into a joined bounded CPU worker.
     // Caller cancellation does not turn a partial hash into successful admission.
     let mut task = PendingHash(tokio::task::spawn_blocking(move || {
@@ -263,7 +264,7 @@ async fn check_source(
             return Err(R::GuideTimedOut);
         }
         let digest = snapshot
-            .context_digest(limits)
+            .context_digest_for_version(digest_version, limits)
             .map_err(|_| R::GuideUnavailable)?;
         if Instant::now() >= deadline {
             return Err(R::GuideTimedOut);

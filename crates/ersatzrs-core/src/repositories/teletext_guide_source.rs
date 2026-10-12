@@ -13,8 +13,9 @@ use crate::programme::ProgrammeClock;
 
 /// Private guide-source receipt version, independent of page contracts.
 pub const TELETEXT_GUIDE_SOURCE_FENCE_VERSION: u16 = 1;
-/// Supported exact semantic-context fingerprint encoding version.
-pub const TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION: u16 = 1;
+/// Latest context fingerprint: v2 also retains exact accepted document bytes.
+/// V1 remains readable as historical semantic-only data, without activation authority.
+pub const TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION: u16 = 2;
 /// Same selected-channel bound as the existing teletext request contract.
 pub const MAX_TELETEXT_GUIDE_SOURCE_CHANNELS: usize = 256;
 /// No individual text field can exceed the existing complete request byte cap.
@@ -71,7 +72,10 @@ impl TeletextGuideSourceFence {
     /// an unrepresentable/mismatched calendar window; never normalizes input.
     pub fn validate(&self) -> Result<(), TeletextGuideSourceFenceError> {
         if self.version != TELETEXT_GUIDE_SOURCE_FENCE_VERSION
-            || self.context_digest_version != TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION
+            || !matches!(
+                self.context_digest_version,
+                1 | TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION
+            )
         {
             return Err(TeletextGuideSourceFenceError::Version);
         }

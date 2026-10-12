@@ -205,7 +205,10 @@ fn guide_source_is_closed_nonnullable_and_checked_before_restoration() {
     for (field, replacement) in [
         ("unknown", json!(true)),
         ("version", json!(2)),
-        ("context_digest_version", json!(2)),
+        (
+            "context_digest_version",
+            json!(TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION + 1),
+        ),
         ("context_digest", json!(vec![0; 31])),
         ("context_digest", json!(vec![0; 33])),
         ("context_digest", json!(vec![256; 32])),

@@ -2724,6 +2724,71 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-12 preparatory exact accepted-document source checkpoint: newly captured
+guide fingerprints retain SHA-256 of the exact already-admitted accepted External
+JSON UTF-8 document, before parsing/filtering, without copying the document.
+Same-revision, same-byte-count ignored-field, whitespace and out-of-window changes
+now change version2 context equality. Existing raw source byte/cardinality limits
+remain the admission boundary; hashing work is bounded by those admitted bytes.
+The context digest's additional fixed 32-byte field is not a raw-hash cost or RSS
+claim. Debug output does not expose document contents or the private digest.
+
+Context fingerprint version2 frames the accepted-document hash as tag10 directly
+after the existing accepted-source fields. Explicit version1 retains its original
+domain, prefix and semantic framing exactly and ignores the new field. Source
+fence storage stays version1 and supports context digest versions1/2; new captures
+choose2. Pending-publication admission dispatches the stored digest version within
+the existing immediate transaction. Historical version1 data is neither silently
+upgraded nor granted stronger provenance, and unsupported versions reject. There
+is no accepted-generation activation or current guide-role freshness authority.
+
+All86 selected cases pass on the final frozen source: 79 core/application/infra/
+native-host cases in Nextest52e3a96c-2446-46a6-ae9c-5a55fe6d25f2 via
+./run.sh test -p ersatzrs-core -p ersatzrs-app -p ersatzrs-infra -p ersatzrs-web
+--lib --test teletext_profile_preparation -E
+'test(teletext_guide_source::) | test(teletext_design_documents::) |
+test(teletext_publications::) | test(xmltv_snapshot::) |
+test(external_json::snapshot::) | test(repositories::teletext_publications::) |
+test(guide_publications::) | test(guide_capture::)';
+seven unchanged bounded accepted-reader cases in
+Nextestb9d082e5-45a2-4364-b29b-f5a3bc6e1f4b via the same four-crate selection,
+--lib --test external_json_snapshot -E 'test(bounded_reader::)'.
+Five cases are new. Existing native installed-producer cases retain exact V1/V2
+inputs/source association through immutable save, reopen, preview raster/navigation
+and pending admission; application reconstruction is not a whole-process restart
+or accepted live generation. Reader proof includes aggregate UTF-8/cardinality
+bounds, malformed/schema/type rejection, the 32MiB hard cap, no live-file fallback
+and borrowed-transaction revision pinning. Independent framing verification gives
+the version1 empty-context SHA-256
+16340a45dc132a362b207bde0b235287816c908605f79872cca2071d4335f688 and version2
+291cb323b4ee2811ade8aab11cb52051e89eb95a2b541d590ad000440e3a96a3
+from eight fields/139 bytes. Independent review also checks the actual raw-byte
+hash, admission ordering, redaction, old framing and atomic stored-version dispatch.
+Strict all-target Clippy for core/app/infra/web and workspace formatting pass.
+Only two read-only transaction comments changed after those tests/lint,
+to satisfy the architecture checker; test operations and assertions are unchanged.
+Architecture/progress checks,
+new-Clippy-allow guard and commitlint are required before the checkpoint commit.
+
+The configured-path equality hypothesis was rejected after reviewing playback and
+ADR0110: accepted-by-playout-ID content deliberately remains authoritative until
+guarded publication, even when the configured path changes. Blanket path equality
+would violate that behavior. Separate ordinary playback reads can race, and its
+first-External-JSON-playout selection versus complete guide capture still needs
+representative policy proof. Neither is resolved by this fingerprint.
+
+Next connect exact pending revisions to durable accepted-generation/artifact
+ownership and normal-route lookup, with fresh source and current Now/Next role
+checks. Legacy mutable-file provenance, projected-away SQL facts, intervening
+changes/restoration, warm resource retirement and logical immediate-disable timing
+remain open. All six Phase9 milestone statuses, dependencies and acceptance
+criteria remain unchanged, including full authored Level2.5, QTeletextMaker,
+themes/zones, Lua/restart, localized headed admin and playback/platform safety.
+This checkpoint is preparatory; production guide-addon work still follows
+independent engine acceptance. The maintainer separately authorized pushing this
+completed checkpoint to origin/main; that push does not establish milestone
+acceptance or green CI.
+
 Sink-confirmed output transition checkpoint (preparatory; no durable activation): a gate receipt now retains exact exposed/flushed window epoch, fresh stamp, exclusive source packet position/ticks, contained-completion and separate actual end-of-cycle evidence. Historical FF followed by the next header cannot authorize replacement. The same shared service Arc preflights acquisition/resource history and paired PMT ownership before infallible carousel commit. A copied scalar cursor predicts FF within bounded windows without copying pages or allocating packet batches; split-PMT/capacity false readiness falls back to ordinary growing prefixes until a later real boundary, without dropping AV or rebasing clocks.
 Changed descriptors advance emitted PMT version modulo32, preserve raw source assembly/monitoring and output CC, and must be sink-acknowledged before new PES. Null-only announcements require no source PMT repetition and preserve startup/reset ownership. Withdrawal stops authored PES and advertises source-only PSI; re-enable retains reserved-PID fences, AV/PCR positions, packetizer counters and absolute time. Empty EOF cannot certify unacknowledged withdrawal; active replacement requires its own complete cycle. The last actually completed service survives Off. Unreconciled M29/MOT bank removals, stale resource lifecycle and oversized proposal descriptors reject without changing old output. This protective refusal is not full cache retirement or an accepted authored restriction; current cycle-only withdrawal does not settle immediate logical Off timing.
 Optional direct/retained controls use bounded latest-value watch slots, positive monotonic proposal sequences and one opaque output-epoch observation, without tasks/registry or serialized authority. Initial unread values, final values after sender closure and changes during blocked flush remain observable. Applied requires the new full cycle or changed withdrawal PMT to be actually flushed/ACKed. Dropped/cancelled writes never become applied. Shared status is explicitly not an aggregate ACK across outputs. Normal binding constructors/routes remain unbound and internal/HLS/other-container/slate exclusions remain intact.
@@ -2779,7 +2844,7 @@ Next reuse this reader inside one complete grouped XMLTV snapshot, with aggregat
 
 2026-10-12 synthetic userflow priority and evidence map (preparatory; no acceptance claim):
 - Profile selection and validation: repository/application profile/binding fences, installed V1/V2 invocation, exact validated source retention and complete cold native candidates are implemented. P9A-01 owns domain13/native7/earlier app evidence. Operator selection/validation in a localized headed admin flow remains unproven.
-- Guide acquisition: an additive expansion-required read transaction now captures exact selected channels/raw settings, all-time SQL items, rich metadata and accepted External JSON revisions under aggregate source/model/copy/projection/segment budgets. Channel-local grouping precedes half-open filtering; source identities, mirrors and original segments remain intact. Actual clock/catalog composition now feeds the existing installed-profile/native candidate path with before/after effective-context recapture under the original cumulative read budgets/deadline; the newest receipt above owns infra/core/host proof. This rejects observed guide and stored configured/accepted path-association changes; exact bounded V1/V2 request buffers now persist through immutable save/reload beside native originals. Native source-bound capture now associates the bounded complete fingerprint, ordered source IDs/window and host metadata with exact stored requests/revision. Source-aware pending admission recaptures that historical semantic context in the same immediate transaction before insertion, with fresh six-dimensional limits/deadline; static requests cannot discard present source metadata. The newest P9A-04 receipt owns proof. It does not validate configured-to-accepted ownership, fence live-file/projected-away raw changes, intervening changes/restoration or current Now/Next accuracy. Legacy mutable-file fallback still needs explicit capture/recheck provenance; trusted generation ownership, current freshness policy and safe promotion remain missing. Unknown/unnamed values reject in the preparatory path without ordinary playback changes; this is no accepted engine restriction.
+- Guide acquisition: an additive expansion-required read transaction now captures exact selected channels/raw settings, all-time SQL items, rich metadata and accepted External JSON revisions under aggregate source/model/copy/projection/segment budgets. Channel-local grouping precedes half-open filtering; source identities, mirrors and original segments remain intact. Actual clock/catalog composition now feeds the existing installed-profile/native candidate path with before/after effective-context recapture under the original cumulative read budgets/deadline; the newest receipt above owns infra/core/host proof. This rejects observed guide and stored configured/accepted path-association changes; exact bounded V1/V2 request buffers now persist through immutable save/reload beside native originals. Native source-bound capture now associates the bounded complete fingerprint, ordered source IDs/window and host metadata with exact stored requests/revision. Source-aware pending admission recaptures that historical semantic context in the same immediate transaction before insertion, with fresh six-dimensional limits/deadline; static requests cannot discard present source metadata. The newest P9A-04 receipt owns proof. The new version2 fingerprint also fences exact accepted JSON bytes, including projected-away/ignored/whitespace changes; version1 remains historical semantic-only data. Accepted-by-playout-ID authority deliberately survives configured-path differences until guarded publication, matching ADR0110 playback behavior. Legacy live-file and projected-away SQL changes, intervening changes/restoration and current Now/Next accuracy remain unproven. Legacy mutable-file fallback still needs explicit capture/recheck provenance; trusted generation ownership, current freshness policy and safe promotion remain missing. Unknown/unnamed values reject in the preparatory path without ordinary playback changes; this is no accepted engine restriction.
 - Preview: exact-address native projection now selects original enhanced composition and navigation from the same complete encoded service under page/model/pixel/diagnostic/work bounds. Five focused cases connect actual installed synthetic profile/binding preparation, immutable save, exact preview and explicit pending request to identical recompiled pixels/navigation/packets/original themes; P9A-01 owns proof. Canonical typed video/header/unresolved roles and located diagnostics survive. Actual localized browser presentation/navigation and headed light/dark/no-JS proof remain missing; this is neither Base fallback nor accepted transmission.
 - Durable originals: bounded version-1 private capture, immutable revisions/digest/CAS/tombstones and historical reconstruction through the same complete compiler are implemented. P9A-01 owns focused storage/codec/native evidence. Exact source, model, packet and raster retention are tested with a closed/reopened file database and newly constructed application state; this is not whole server-process restart or published-generation recovery. Initial original_only grants zero edit permissions, not a permanent authoring restriction. Editor export receipts/edit policies and accepted generation state remain missing.
 - Explicit publication and client: bounded carousel/output epochs, lifecycle/replacement checks and prior transport/decoder receipts exist. Durable pending intents now bind an exact recompiled revision to live design-head, complete channel-selection and independent request CAS; P9A-01 owns proof. They remain pending after application reconstruction, with no startup or stream consumer. The profile/draft-to-admitted-generation promotion bridge and accepted generation state remain missing. The new scoped cold requested-service direct-route capture and headed numeric main-page trial are proven in P9A-01; full suitable-client coverage remains open. Complete authored bindings now connect M29/displays/resources to the existing paced/retained engine gate with independent output epochs; the normal stream route still supplies no publication binding. Pending native originals can now move into a sealed request/selection plus shared complete-service candidate; output bindings accept that same Arc under unchanged timing/gate/cycle checks without copying the compiler output. These ownership seams grant no current runtime revalidation or draft promotion authority; the separate cold explicit caller now proves representative actual client reception. Native preparation currently has test callers only and teletext admin exposes decoder Health/troubleshooting, not profile/preview/publication controls. Connect the recompiled, atomically fenced pending revision to safe generation promotion and authored gate lookup; do not carry the original preparation deadline across human preview or substitute a ConfigElement active flag. The new optional control seam now requires no pending window plus a fresh exact sink receipt whose window ends at the actual carousel boundary; a contained FF alone grants no replacement. Shared replacement preflights resource/acquisition and descriptor/PMT changes atomically. Changed signalling is acknowledged before new PES; withdrawal/re-enable preserves source ownership, AV/PCR positions and output counters. A bounded watch slot retains initial/final/flush-time changes and reports only one output epoch. Known M29/MOT bank removals reject without changing old output. P9A-04's newest transport receipt owns proof, not durable authority. Accepted generation persistence, normal-route lookup, full warm cache retirement and logical immediate-disable timing remain missing; a fresh HTTP epoch never proves cold receiver caches. These are concrete vertical-slice blockers, not accepted limitations or reasons for standalone infrastructure.

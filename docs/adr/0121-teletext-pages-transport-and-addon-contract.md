@@ -13,6 +13,17 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+Preparatory context fingerprint version2 now includes the exact bounded accepted
+External JSON document SHA256, before parsing/filtering. Version1 retains its exact
+historical semantic framing and remains readable; pending admission replays the
+stored version without fallback or silent upgrade. Raw hashing work is bounded by
+admitted source bytes; framing limits cover only the retained32-byte hash frame.
+Neither version grants activation authority. Accepted-by-playout-ID selection and
+its retained configured/accepted paths match ADR0110 playback preservation; path
+inequality alone is not a source defect. Legacy live files, projected-away SQL facts,
+current guide roles and durable accepted-generation ownership remain open.
+P9A-04 owns the implementation receipt and remaining integration proof.
+
 The optional live-output proposal seam now requires a fresh receipt for the exact
 sink-flushed window and its actual end-of-cycle boundary, not historical cycle
 completion. Shared replacement preflights carousel/resource and PMT ownership

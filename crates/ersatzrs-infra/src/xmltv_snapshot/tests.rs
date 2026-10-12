@@ -7,6 +7,7 @@ use crate::{
 use chrono::TimeZone;
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository, PlayoutRepository};
 use ersatzrs_domain::{Channel, FFmpegProfile, FillerKind, PlayoutItem};
+use sha2::Digest as _;
 use sqlx::Executor;
 
 fn now() -> DateTime<Utc> {
@@ -509,6 +510,146 @@ async fn external_fixture(pool: &DbPool, path: &std::path::Path, document: &str)
         .bind(path.to_str().unwrap()).bind(document).execute(pool).await.unwrap();
 }
 
+async fn replace_accepted_document(pool: &DbPool, document: &str) {
+    sqlx::query(r#"UPDATE "PlayoutExternalJsonSnapshot" SET "Document"=? WHERE "PlayoutId"=1"#)
+        .bind(document)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn exact_accepted_bytes_fence_unknown_whitespace_and_outside_window_changes() {
+    let (root, pool) = fixture().await;
+    let document = r#"{"startTime":"2026-04-15T10:00:00Z","programs":[{"title":"Visible","duration":3600000},{"title":"LaterAA","duration":3600000}],"ignored": "one"}"#;
+    external_fixture(&pool, &root.path().join("accepted.json"), document).await;
+    let original = capture(
+        &pool,
+        &[1],
+        now(),
+        now() + Duration::hours(1),
+        &mut budget(),
+    )
+    .await
+    .unwrap();
+    let original_channel = original.channel(1).unwrap();
+    assert_eq!(original_channel.occurrences().len(), 1);
+    assert_eq!(original_channel.occurrences()[0].programme.title, "Visible");
+    // Independent hashlib.sha256 over the literal 144-byte stored fixture.
+    let expected_digest = [
+        0xce, 0xf0, 0x68, 0x92, 0xb2, 0x85, 0x9b, 0x0c, 0x11, 0x73, 0xb0, 0x26, 0x89, 0x6d, 0x6f,
+        0xbf, 0x0a, 0xe6, 0x54, 0xbe, 0xff, 0xc1, 0x7c, 0x38, 0x56, 0x64, 0x24, 0xea, 0xca, 0x21,
+        0x71, 0x21,
+    ];
+    assert_eq!(
+        original_channel.sources(),
+        [GuideSnapshotSource::Accepted {
+            playout_id: 1,
+            revision: 7,
+            raw_programs: 2,
+            document_digest: expected_digest
+        }]
+    );
+    let source_limits = crate::external_json::snapshot::AcceptedSnapshotBudget {
+        max_document_bytes: document.len(),
+        max_path_bytes: 1024,
+        max_total_bytes: 2048,
+        max_programs: 2,
+    };
+    // Read-only transaction owns exact bounded bytes and their preparse digest.
+    let mut transaction = pool.begin().await.unwrap();
+    let bounded =
+        crate::external_json::snapshot::accepted_on(transaction.as_mut(), 1, source_limits)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(bounded.document_digest(), expected_digest);
+    assert!(!format!("{bounded:?}").contains("document_digest"));
+    transaction.rollback().await.unwrap();
+    let limits = GuideSnapshotDigestLimits {
+        max_fields: 100_000,
+        max_bytes: 1024 * 1024,
+    };
+    let legacy = original.context_digest_for_version(1, limits).unwrap();
+    let latest = original.context_digest(limits).unwrap();
+    for changed in [
+        document.replace("one", "two"),
+        document.replace(": \"one\"", " :\"one\""),
+        document.replace("LaterAA", "LaterBB"),
+    ] {
+        assert_eq!(changed.len(), document.len());
+        assert_ne!(changed, document);
+        replace_accepted_document(&pool, &changed).await;
+        let captured = capture(
+            &pool,
+            &[1],
+            now(),
+            now() + Duration::hours(1),
+            &mut budget(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            original_channel.occurrences(),
+            captured.channel(1).unwrap().occurrences()
+        );
+        assert_eq!(original.source_usage(), captured.source_usage());
+        assert_eq!(
+            original.compare_context(&captured),
+            GuideSnapshotComparison::ChannelChanged(1)
+        );
+        assert_eq!(
+            captured.context_digest_for_version(1, limits).unwrap(),
+            legacy
+        );
+        assert_ne!(captured.context_digest(limits).unwrap(), latest);
+    }
+}
+
+#[tokio::test]
+async fn accepted_document_byte_budget_precedes_hash_and_semantic_parse() {
+    use crate::external_json::snapshot::{
+        checked_accepted_on, AcceptedSnapshotBudget, AcceptedSnapshotError, SnapshotError,
+    };
+    let (root, pool) = fixture().await;
+    let document = r#"{"startTime":"not-a-time","programs":[]}"#;
+    external_fixture(&pool, &root.path().join("accepted.json"), document).await;
+    let exact = AcceptedSnapshotBudget {
+        max_document_bytes: document.len(),
+        max_path_bytes: 1024,
+        max_total_bytes: 2048,
+        max_programs: 0,
+    };
+    // Read-only transaction cannot expose a digest on budget or parse failure.
+    let mut transaction = pool.begin().await.unwrap();
+    let result = checked_accepted_on(
+        transaction.as_mut(),
+        1,
+        AcceptedSnapshotBudget {
+            max_document_bytes: document.len() - 1,
+            ..exact
+        },
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(AcceptedSnapshotError::Budget {
+            category: "document bytes",
+            ..
+        })
+    ));
+    let checked = checked_accepted_on(transaction.as_mut(), 1, exact)
+        .await
+        .unwrap()
+        .unwrap();
+    let expected: [u8; 32] = sha2::Sha256::digest(document.as_bytes()).into();
+    assert_eq!(checked.document_digest(), expected);
+    assert!(matches!(
+        checked.parse(),
+        Err(AcceptedSnapshotError::Snapshot(SnapshotError::Invalid))
+    ));
+}
+
 #[tokio::test]
 async fn external_capture_uses_exact_revision_counts_all_programs_and_never_reads_live_file() {
     let (root, pool) = fixture().await;
@@ -549,7 +690,8 @@ async fn external_capture_uses_exact_revision_counts_all_programs_and_never_read
             [GuideSnapshotSource::Accepted {
                 playout_id: 1,
                 revision: 7,
-                raw_programs: 3
+                raw_programs: 3,
+                document_digest: sha2::Sha256::digest(document.as_bytes()).into(),
             }]
         );
         assert_eq!(channel.occurrences()[1].first_item_id, 2);

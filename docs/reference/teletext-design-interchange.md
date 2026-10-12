@@ -4094,3 +4094,35 @@ asynchronous flush/cancellation proof belongs to the direct/retained control tes
 and actual suitable-client warm display/navigation remains a separate gate.
 The optional `ERSATZRS_TELETEXT_TEST_OUTPUT_TRANSITION_TS` exports its bounded
 synthetic capture; it does not publish or change a live channel.
+
+## Exact accepted-document guide fingerprints
+
+`GuideSnapshot::context_digest` now selects version2. Each accepted source retains
+SHA256 of the **exact stored UTF8 document**, after existing schema/type/revision,
+byte/program and item-storage admission and before semantic parsing/filtering.
+The context frame adds tag10, length32 and those bytes after the original accepted
+source identity/revision/count fields. No document copy, normalization, filesystem
+read or separate task is introduced. Raw hashing work is bounded by the admitted
+source document bytes; `GuideSnapshotDigestLimits` bounds the context frames only.
+Source receipt Debug output omits the document fingerprint.
+
+`context_digest_for_version(1, limits)` preserves the original domain/version prefix
+and every original semantic field, omitting the added raw frame. Explicit version2
+includes it; unsupported versions fail statically. Source-aware pending admission
+recaptures within its immediate transaction and hashes the stored version, preserving
+old data without interpreting a version1 digest as raw-source proof. New native
+captures use version2. Old original designs remain readable; future activation of
+live guide content must obtain adequate fresh source/role proof rather than relabel
+an old capture. No published generation is created by this version change.
+
+Ordinary playback and accepted-only capture both select accepted content by
+playout ID, resolving mirror ownership. The accepted snapshot deliberately overrides
+later configured-path/file changes until another guarded publication (ADR0110).
+The existing snapshot path-association regression preserves this behavior.
+Blanket equality of configured and accepted paths would change that policy. Capture
+uses one read transaction; ordinary playback's separate reads and its first-playout
+selection versus the guide's complete playout set require their own integration
+proof. This addition fences exact accepted JSON bytes, including ignored fields,
+whitespace and out-of-window programmes. It does not prove mutable-file provenance,
+projected-away SQL changes, current guide roles or durable generation activation.
+P9A-04 owns canonical evidence and the next integration action.

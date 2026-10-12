@@ -51,6 +51,31 @@ fn receipt_roundtrip_preserves_order_digest_and_three_civil_dates_across_dst() {
 }
 
 #[test]
+fn old_semantic_and_current_raw_source_versions_roundtrip_without_relabeling() {
+    for version in [1, 2] {
+        let mut original = fence();
+        original.context_digest_version = version;
+        original.validate().unwrap();
+        let bytes = serde_json::to_vec(&original).unwrap();
+        let restored: TeletextGuideSourceFence = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(restored, original);
+        assert_eq!(restored.context_digest_version, version);
+    }
+    for version in [0, 3, u16::MAX] {
+        let mut invalid = fence();
+        invalid.context_digest_version = version;
+        assert_eq!(
+            invalid.validate(),
+            Err(TeletextGuideSourceFenceError::Version)
+        );
+        assert!(serde_json::from_slice::<TeletextGuideSourceFence>(
+            &serde_json::to_vec(&invalid).unwrap()
+        )
+        .is_err());
+    }
+}
+
+#[test]
 fn serialized_receipt_is_map_only_closed_and_requires_every_field() {
     let original = serde_json::to_value(fence()).unwrap();
     for key in [
@@ -123,7 +148,7 @@ fn selected_channels_are_bounded_positive_unique_and_never_sorted() {
 #[test]
 fn invalid_versions_metadata_and_window_fail_without_normalization() {
     let mut invalid = fence();
-    invalid.context_digest_version = 2;
+    invalid.context_digest_version = TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION + 1;
     assert_eq!(
         invalid.validate(),
         Err(TeletextGuideSourceFenceError::Version)

@@ -18,7 +18,7 @@ use super::{
 };
 
 /// Stable framing algorithm version, independent of request/response schemas.
-pub const GUIDE_SNAPSHOT_DIGEST_VERSION: u16 = 1;
+pub const GUIDE_SNAPSHOT_DIGEST_VERSION: u16 = 2;
 
 /// Trusted cumulative streaming work limits, not source/publication authority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +32,8 @@ pub struct GuideSnapshotDigestLimits {
 /// Numeric/static failures never retain input or a partially computed digest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum GuideSnapshotDigestError {
+    #[error("guide context fingerprint version is unsupported")]
+    UnsupportedVersion,
     #[error("guide context fingerprint size arithmetic failed")]
     Arithmetic,
     #[error("guide context fingerprint {dimension} count {count} exceeds limit {maximum}")]
@@ -48,14 +50,26 @@ pub(super) fn context_digest(
     snapshot: &GuideSnapshot,
     limits: GuideSnapshotDigestLimits,
 ) -> Result<[u8; 32]> {
+    context_digest_for_version(snapshot, GUIDE_SNAPSHOT_DIGEST_VERSION, limits)
+}
+
+pub(super) fn context_digest_for_version(
+    snapshot: &GuideSnapshot,
+    version: u16,
+    limits: GuideSnapshotDigestLimits,
+) -> Result<[u8; 32]> {
+    if !matches!(version, 1 | 2) {
+        return Err(GuideSnapshotDigestError::UnsupportedVersion);
+    }
     let mut writer = Writer {
         hash: Sha256::new(),
         limits,
         fields: 0,
         bytes: 0,
+        version,
     };
     writer.frame(0, b"ErsatzRS.GuideSnapshot.Context")?;
-    writer.frame(9, &GUIDE_SNAPSHOT_DIGEST_VERSION.to_be_bytes())?;
+    writer.frame(9, &version.to_be_bytes())?;
     writer.snapshot(snapshot)?;
     Ok(writer.hash.finalize().into())
 }
@@ -65,6 +79,7 @@ struct Writer {
     limits: GuideSnapshotDigestLimits,
     fields: usize,
     bytes: usize,
+    version: u16,
 }
 
 impl Writer {
@@ -224,11 +239,16 @@ impl Writer {
                 playout_id,
                 revision,
                 raw_programs,
+                document_digest,
             } => {
                 self.enumeration(1)?;
                 self.signed(*playout_id)?;
                 self.signed(*revision)?;
-                self.length(*raw_programs)
+                self.length(*raw_programs)?;
+                if self.version == 2 {
+                    self.frame(10, document_digest)?;
+                }
+                Ok(())
             }
         }
     }

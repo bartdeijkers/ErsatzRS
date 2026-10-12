@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Strengthen preparatory teletext guide fingerprints with the exact accepted
+  External JSON document bytes, including changes outside the projected window.
+  Preserve historical semantic-only fingerprints without relabelling them and
+  keep accepted content authoritative until guarded publication. Runtime
+  activation and current guide-role freshness remain open.
 - Add bounded teletext output proposals for shared complete services. Replace only
   after a confirmed cycle boundary; acknowledge changed PMT signalling before
   new page packets. Withdrawal and re-enable preserve the continuing AV clock

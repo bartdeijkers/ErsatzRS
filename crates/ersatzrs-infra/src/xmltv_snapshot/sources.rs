@@ -259,6 +259,7 @@ async fn external(
         Some(channel.id),
         Some(playout),
     )?;
+    let document_digest = checked.document_digest();
     let snapshot = checked
         .parse()
         .map_err(|error| {
@@ -273,6 +274,7 @@ async fn external(
         playout_id: playout,
         revision: snapshot.revision,
         raw_programs: usage.programs,
+        document_digest,
     };
     admitted(
         allocation::slots::<ProgrammeGuideItem>(budget, snapshot.schedule.items.len()),

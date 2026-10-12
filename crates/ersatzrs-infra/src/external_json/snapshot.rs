@@ -11,6 +11,7 @@ use serde::{
     de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor},
     Deserialize, Serialize, Serializer,
 };
+use sha2::{Digest as _, Sha256};
 use sqlx::Row;
 
 use super::{ExternalJsonError, ExternalJsonItem, ExternalJsonSchedule, MAX_SCHEDULE_BYTES};
@@ -64,6 +65,7 @@ pub struct AcceptedSnapshotUsage {
 pub struct BoundedSnapshot {
     snapshot: Snapshot,
     usage: AcceptedSnapshotUsage,
+    document_digest: [u8; 32],
 }
 
 impl BoundedSnapshot {
@@ -75,6 +77,13 @@ impl BoundedSnapshot {
     #[must_use]
     pub const fn usage(&self) -> AcceptedSnapshotUsage {
         self.usage
+    }
+
+    /// SHA-256 of the exact admitted stored UTF-8 document, before parsing.
+    /// This is data identity, not a current-source or publication certificate.
+    #[must_use]
+    pub const fn document_digest(&self) -> [u8; 32] {
+        self.document_digest
     }
 
     #[must_use]
@@ -135,11 +144,16 @@ pub(crate) struct CheckedAcceptedDocument {
     schedule_file: String,
     document: String,
     usage: AcceptedSnapshotUsage,
+    document_digest: [u8; 32],
 }
 
 impl CheckedAcceptedDocument {
     pub(crate) const fn usage(&self) -> AcceptedSnapshotUsage {
         self.usage
+    }
+
+    pub(crate) const fn document_digest(&self) -> [u8; 32] {
+        self.document_digest
     }
 
     pub(crate) fn parse(self) -> Result<BoundedSnapshot, AcceptedSnapshotError> {
@@ -153,6 +167,7 @@ impl CheckedAcceptedDocument {
                 schedule,
             },
             usage: self.usage,
+            document_digest: self.document_digest,
         })
     }
 }
@@ -210,6 +225,7 @@ pub(crate) async fn checked_accepted_on(
     Ok(Some(CheckedAcceptedDocument {
         revision,
         schedule_file,
+        document_digest: Sha256::digest(document.as_bytes()).into(),
         document,
         usage,
     }))

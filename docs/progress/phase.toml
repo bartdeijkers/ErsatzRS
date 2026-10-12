@@ -1185,10 +1185,15 @@ new authored PES; withdrawal/re-enable preserves source ownership and AV timing.
 The watch bridge reports one output epoch, not durable or aggregate activation.
 Known unreconciled M29/MOT bank removals reject without changing the old stream;
 full warm-client transitions and immediate-disable timing remain required.
-P9A-04 owns the focused transport/control receipt. Next establish configured-to-
-accepted ownership, live-file/projected-away raw source and current Now/Next
-freshness, then durable accepted generation ownership/recovery, normal-route lookup
-and localized preview controls. These remain open acceptance work.
+P9A-04 owns the focused transport/control receipt. New context fingerprints now
+include exact accepted External JSON document bytes; explicit version1 remains
+historical semantic-only data and is never upgraded silently. Accepted-by-playout-ID
+selection matches ordinary playback and deliberately survives configured-path changes
+until guarded publication (ADR0110). Next bound legacy mutable-file provenance,
+SQL projected-away facts and current Now/Next freshness, then durable accepted
+generation ownership/recovery, normal-route lookup and localized preview controls.
+Multiple-playout guide versus first-playout playback semantics need explicit proof.
+These remain open acceptance work.
 Original-only capture
 is not an editor-permission or zone/template acceptance.
 Prioritize the existing synthetic profile-selection→validation→preview→explicit

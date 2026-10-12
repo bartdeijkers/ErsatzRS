@@ -124,7 +124,20 @@ fn empty_context_has_literal_versioned_framing_and_inclusive_limits() {
         max_fields: 8,
         max_bytes: 139,
     };
-    assert_eq!(empty().context_digest(exact).unwrap(), expected);
+    assert_eq!(
+        empty().context_digest_for_version(1, exact).unwrap(),
+        expected
+    );
+    let latest = [
+        0x29, 0x1c, 0xb3, 0x23, 0xb4, 0xee, 0x28, 0x11, 0xad, 0xe8, 0xaa, 0xb1, 0x1c, 0xb5, 0x20,
+        0x51, 0xe8, 0x9e, 0xb9, 0x5a, 0x2b, 0x54, 0x1d, 0x59, 0x0a, 0xd0, 0x00, 0x44, 0x0e, 0x3a,
+        0x96, 0xa3,
+    ];
+    assert_eq!(empty().context_digest(exact).unwrap(), latest);
+    assert_eq!(
+        empty().context_digest_for_version(2, exact).unwrap(),
+        latest
+    );
     assert_eq!(
         empty().context_digest(GuideSnapshotDigestLimits {
             max_fields: 7,
@@ -217,6 +230,7 @@ fn global_and_channel_context_fields_are_distinct() {
                 playout_id: 10,
                 revision: 1,
                 raw_programs: 1,
+                document_digest: [0xa5; 32],
             };
         },
         |s| s.channels[0].path_associations[0].playout_id = 11,
@@ -295,6 +309,7 @@ fn nested_artwork_credit_and_accepted_source_values_are_distinct() {
         playout_id: 10,
         revision: 1,
         raw_programs: 1,
+        document_digest: [0xa5; 32],
     }];
     let mutators: &[Change] = &[
         |s| content(s).icon_artwork.as_mut().unwrap().id = 6,
@@ -307,6 +322,7 @@ fn nested_artwork_credit_and_accepted_source_values_are_distinct() {
                 playout_id: 11,
                 revision: 1,
                 raw_programs: 1,
+                document_digest: [0xa5; 32],
             };
         },
         |s| {
@@ -314,6 +330,7 @@ fn nested_artwork_credit_and_accepted_source_values_are_distinct() {
                 playout_id: 10,
                 revision: 2,
                 raw_programs: 1,
+                document_digest: [0xa5; 32],
             };
         },
         |s| {
@@ -321,6 +338,7 @@ fn nested_artwork_credit_and_accepted_source_values_are_distinct() {
                 playout_id: 10,
                 revision: 1,
                 raw_programs: 2,
+                document_digest: [0xa5; 32],
             };
         },
     ];
@@ -380,6 +398,7 @@ fn ordered_fixture() -> GuideSnapshot {
         playout_id: 11,
         revision: 2,
         raw_programs: 1,
+        document_digest: [0xa5; 32],
     });
     channel
         .path_associations
@@ -467,6 +486,7 @@ fn failed_field_admission_never_updates_hash_or_one_counter() {
         },
         fields: 0,
         bytes: 0,
+        version: 2,
     };
     let before = writer.hash.clone().finalize();
     assert_eq!(
@@ -497,4 +517,69 @@ fn failed_field_admission_never_updates_hash_or_one_counter() {
         context_digest(&fixture(), limits()).unwrap(),
         fixture().context_digest(limits()).unwrap()
     );
+}
+
+#[test]
+fn accepted_fingerprint_changes_only_version_two_and_is_not_debug_content() {
+    let mut original = fixture();
+    original.channels[0].sources = vec![GuideSnapshotSource::Accepted {
+        playout_id: 10,
+        revision: 1,
+        raw_programs: 1,
+        document_digest: [0xa5; 32],
+    }];
+    let mut changed = fixture();
+    changed.channels[0].sources = vec![GuideSnapshotSource::Accepted {
+        playout_id: 10,
+        revision: 1,
+        raw_programs: 1,
+        document_digest: [0x5a; 32],
+    }];
+    assert_eq!(
+        original.compare_context(&changed),
+        GuideSnapshotComparison::ChannelChanged(1)
+    );
+    assert_eq!(
+        original.context_digest_for_version(1, limits()).unwrap(),
+        changed.context_digest_for_version(1, limits()).unwrap()
+    );
+    assert_ne!(
+        original.context_digest(limits()).unwrap(),
+        changed.context_digest(limits()).unwrap()
+    );
+    let debug = format!("{:?}", original.channels[0].sources);
+    assert!(!debug.contains("document_digest"));
+    assert!(!debug.contains("165"));
+    let mut writer = Writer {
+        hash: Sha256::new(),
+        limits: GuideSnapshotDigestLimits {
+            max_fields: 1,
+            max_bytes: 40,
+        },
+        fields: 0,
+        bytes: 0,
+        version: 2,
+    };
+    assert_eq!(
+        writer.frame(10, &[0xa5; 32]),
+        Err(GuideSnapshotDigestError::Limit {
+            dimension: "bytes",
+            count: 41,
+            maximum: 40
+        })
+    );
+    assert_eq!((writer.fields, writer.bytes), (0, 0));
+    assert_eq!(writer.hash.finalize(), Sha256::new().finalize());
+    for version in [0, 3, u16::MAX] {
+        assert_eq!(
+            original.context_digest_for_version(
+                version,
+                GuideSnapshotDigestLimits {
+                    max_fields: 0,
+                    max_bytes: 0
+                }
+            ),
+            Err(GuideSnapshotDigestError::UnsupportedVersion)
+        );
+    }
 }

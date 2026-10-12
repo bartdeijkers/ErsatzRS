@@ -53,6 +53,10 @@ async fn guide(fixture: &Fixture) {
 }
 
 async fn fence(fixture: &Fixture) -> TeletextGuideSourceFence {
+    fence_for_version(fixture, 1).await
+}
+
+async fn fence_for_version(fixture: &Fixture, version: u16) -> TeletextGuideSourceFence {
     let clock = ProgrammeClock::system().unwrap();
     let captured_at = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
     let (start, finish) = clock
@@ -74,15 +78,18 @@ async fn fence(fixture: &Fixture) -> TeletextGuideSourceFence {
         .await
         .unwrap();
     let digest = snapshot
-        .context_digest(GuideSnapshotDigestLimits {
-            max_fields: limits().max_digest_fields,
-            max_bytes: limits().max_digest_bytes,
-        })
+        .context_digest_for_version(
+            version,
+            GuideSnapshotDigestLimits {
+                max_fields: limits().max_digest_fields,
+                max_bytes: limits().max_digest_bytes,
+            },
+        )
         .unwrap();
     assert_eq!(snapshot.channel(1).unwrap().occurrences().len(), 1);
     TeletextGuideSourceFence {
         version: 1,
-        context_digest_version: 1,
+        context_digest_version: version,
         context_digest: digest,
         channel_ids: vec![1],
         captured_at,
@@ -90,6 +97,60 @@ async fn fence(fixture: &Fixture) -> TeletextGuideSourceFence {
         finish,
         locale: "nl".into(),
         timezone: clock.iana_name().unwrap().into(),
+    }
+}
+
+async fn accepted_guide(fixture: &Fixture, document: &str) {
+    guide(fixture).await;
+    fixture
+        .repo
+        .0
+        .execute(
+            r#"UPDATE "Playout" SET "ScheduleKind"=20,"ScheduleFile"='captured.json' WHERE "Id"=1"#,
+        )
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "PlayoutExternalJsonSnapshot" ("PlayoutId","Revision","SchemaVersion","ScheduleFile","Document","PublishedAt") VALUES (1,7,1,'captured.json',?,'2026-04-15T10:00:00Z')"#)
+        .bind(document).execute(&fixture.repo.0).await.unwrap();
+}
+
+#[tokio::test]
+async fn stored_version_two_rejects_raw_change_while_legacy_version_one_is_preserved() {
+    let original = r#"{"startTime":"2026-04-15T10:00:00Z","programs":[{"title":"Synthetic","duration":3600000}],"ignored":"one"}"#;
+    let changed = original.replace("one", "two");
+    assert_eq!(original.len(), changed.len());
+    for version in [1, 2] {
+        let fixture = Fixture::new().await;
+        accepted_guide(&fixture, original).await;
+        let source = fence_for_version(&fixture, version).await;
+        let mut save = source_save(&fixture, &source).await;
+        let first = requested(
+            fixture
+                .repo
+                .request_with_source(&save, &source, limits(), 8192, deadline())
+                .await
+                .unwrap(),
+        );
+        sqlx::query(r#"UPDATE "PlayoutExternalJsonSnapshot" SET "Document"=? WHERE "PlayoutId"=1"#)
+            .bind(&changed)
+            .execute(&fixture.repo.0)
+            .await
+            .unwrap();
+        save.expected_request_id = Some(first.id);
+        let result = fixture
+            .repo
+            .request_with_source(&save, &source, limits(), 8192, deadline())
+            .await
+            .unwrap();
+        if version == 1 {
+            let next = requested(result);
+            assert_ne!(first.id, next.id);
+            assert_eq!(fixture.count().await, 2);
+        } else {
+            assert_eq!(result, M::Rejected(R::GuideChanged));
+            assert_eq!(fixture.count().await, 1);
+            assert_eq!(fixture.repo.current(1).await.unwrap(), Some(first));
+        }
     }
 }
 

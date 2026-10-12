@@ -29,7 +29,7 @@ mod sources;
 mod tests;
 
 /// Source identity captured preparatorily; never publication/freshness authority.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GuideSnapshotSource {
     Sql {
         playout_id: i64,
@@ -40,7 +40,37 @@ pub enum GuideSnapshotSource {
         playout_id: i64,
         revision: i64,
         raw_programs: usize,
+        /// Exact admitted accepted document bytes, including unprojected data.
+        document_digest: [u8; 32],
     },
+}
+
+impl std::fmt::Debug for GuideSnapshotSource {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Sql {
+                playout_id,
+                schedule_kind,
+                raw_rows,
+            } => formatter
+                .debug_struct("Sql")
+                .field("playout_id", playout_id)
+                .field("schedule_kind", schedule_kind)
+                .field("raw_rows", raw_rows)
+                .finish(),
+            Self::Accepted {
+                playout_id,
+                revision,
+                raw_programs,
+                ..
+            } => formatter
+                .debug_struct("Accepted")
+                .field("playout_id", playout_id)
+                .field("revision", revision)
+                .field("raw_programs", raw_programs)
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 /// Exact stored path associations, without live-file or freshness authority.
@@ -173,6 +203,19 @@ impl GuideSnapshot {
         limits: GuideSnapshotDigestLimits,
     ) -> Result<[u8; 32], GuideSnapshotDigestError> {
         digest::context_digest(self, limits)
+    }
+
+    /// Fingerprint with an explicitly selected historical framing version.
+    /// Version 1 retains its exact semantic framing; version 2 additionally
+    /// includes the raw accepted-document fingerprints. Neither is authority.
+    /// # Errors
+    /// Rejects unsupported versions, checked arithmetic or trusted work limits.
+    pub fn context_digest_for_version(
+        &self,
+        version: u16,
+        limits: GuideSnapshotDigestLimits,
+    ) -> Result<[u8; 32], GuideSnapshotDigestError> {
+        digest::context_digest_for_version(self, version, limits)
     }
 
     /// Compare the frozen window, raw/effective configuration and ordered channel
