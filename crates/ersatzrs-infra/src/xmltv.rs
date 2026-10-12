@@ -14,6 +14,33 @@ use crate::repositories::common::{
 };
 use crate::xmltv_metadata::load_content_cache;
 
+pub use crate::xmltv_read::{GuideReadBudget, GuideReadLimits, GuideReadUsage};
+
+/// Metadata cache under the existing XMLTV hydration semantics.
+pub type ProgrammeContentCache =
+    std::collections::HashMap<i64, (Option<String>, XmltvProgrammeContent)>;
+
+/// Read metadata through the caller's exact transaction and aggregate source budget.
+///
+/// This additive boundary preserves legacy metadata selection and hydration.
+/// Bounds apply before row retrieval and cache allocation; source usage is not
+/// a bound on decoded collections, retained clones or complete guide projection.
+/// The transaction token pins preflight and retrieval to the same database
+/// snapshot; an autocommit connection cannot call this boundary. The caller owns
+/// the encompassing transaction and complete guide context.
+///
+/// # Errors
+/// Returns database/decode, checked arithmetic or source-budget failures without
+/// returning a partial cache. Successful earlier reads remain charged to budget.
+pub async fn load_programme_content_in_transaction(
+    transaction: &mut sqlx::Transaction<'_, Db>,
+    media_item_ids: &[i64],
+    budget: &mut GuideReadBudget,
+) -> Result<ProgrammeContentCache, sqlx::Error> {
+    let mut read = crate::xmltv_read::Read::snapshot(transaction, budget);
+    crate::xmltv_metadata::load_content_cache_with_reader(&mut read, media_item_ids).await
+}
+
 const UNKNOWN_TITLE: &str = "Unknown";
 
 /// Load XMLTV programme rows and apply the persisted XMLTV block behavior.

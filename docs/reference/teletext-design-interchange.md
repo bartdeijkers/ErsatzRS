@@ -3762,3 +3762,29 @@ sources, checked aggregate and preclone bounds, complete grouping before window
 filtering, and exact source provenance. Missing accepted revisions do not confer
 mutable-file authority; that capture/recheck workflow remains to be integrated.
 P9A-04 owns the focused evidence and current acquisition gaps.
+
+### Transaction-owned raw metadata reads
+
+`xmltv::load_programme_content_in_transaction` requires an actual caller-owned
+SQLite transaction, an identifier slice and a mutable `GuideReadBudget`. It
+returns the existing XMLTV content cache without changing metadata selection,
+ordering, duplicate handling or hydration. The legacy pooled loader uses the
+same implementation without the new opt-in limits.
+
+`GuideReadLimits.max_records` bounds cumulative selected rows and each input
+identifier list before cache allocation. `max_source_bytes` bounds the sum of
+all selected values cast to BLOB: UTF-8 text, JSON, paths and scalar
+representations. Explicit alias lists include numeric columns so a corrupted
+numeric field cannot transfer a large TEXT/BLOB before decoding fails. Each
+400-ID batch measures its exact SELECT and bindings on the same transaction,
+checks aggregate count/byte arithmetic, then retrieves rows. An autocommit
+connection cannot call this boundary. A rejected admission leaves counters
+unchanged; earlier admitted queries remain charged and no partial cache is
+returned on failure.
+
+`usage()` reports admitted source rows/value bytes. It is not a measure of SQLite
+storage/RSS, decoded string-list nodes, retained/copy fan-out or occurrence
+projection. Those bounds and complete main SQL/accepted-source/channel/setting
+ownership remain required in the full guide caller. No publication or source
+freshness authority follows from this cache. P9A-04 owns the focused evidence
+and remaining host acquisition work.

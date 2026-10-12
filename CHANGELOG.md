@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Add transaction-owned XMLTV metadata reads with aggregate row/value limits
+  before retrieval, including oversized data in corrupted numeric fields.
+  Existing guide hydration is preserved; complete guide admission remains open.
 - Add bounded accepted guide-document reads within a caller-owned database
   snapshot, checking source bytes and programme counts before allocation.
   Complete guide acquisition remains to be connected.

@@ -10,38 +10,60 @@ use ersatzrs_core::repositories::ArtworkReference;
 use ersatzrs_core::xmltv::{IconSizeHint, XmltvCredit, XmltvItemKind, XmltvProgrammeContent};
 use sqlx::{Pool, Row};
 
-use crate::db::{assert_sql_safe, Db, DbRow};
+use crate::db::{Db, DbRow};
 use crate::metadata::artwork_kind;
+use crate::xmltv_read::Read;
 
 pub(crate) type ContentCache = HashMap<i64, (Option<String>, XmltvProgrammeContent)>;
 
 const ID_BATCH_SIZE: usize = 400;
+const MUSIC_VIDEO_SOURCE_COLUMNS: &[&str] = &[
+    "ItemId",
+    "MetadataId",
+    "RelatedMetadataId",
+    "ArtistTitle",
+    "VideoTitle",
+    "Plot",
+    "Year",
+    "Track",
+    "Album",
+    "ReleaseDate",
+];
 
 pub(crate) async fn load_content_cache(
     pool: &Pool<Db>,
     media_item_ids: &[i64],
 ) -> Result<ContentCache, sqlx::Error> {
+    load_content_cache_with_reader(&mut Read::legacy(pool), media_item_ids).await
+}
+
+pub(crate) async fn load_content_cache_with_reader(
+    reader: &mut Read<'_>,
+    media_item_ids: &[i64],
+) -> Result<ContentCache, sqlx::Error> {
+    reader.preflight_identifiers(media_item_ids.len())?;
     let mut cache = HashMap::with_capacity(media_item_ids.len());
-    load_movies(pool, media_item_ids, &mut cache).await?;
-    load_episodes(pool, media_item_ids, &mut cache).await?;
-    load_music_videos(pool, media_item_ids, &mut cache).await?;
-    load_songs(pool, media_item_ids, &mut cache).await?;
-    load_other_videos(pool, media_item_ids, &mut cache).await?;
-    load_remote_streams(pool, media_item_ids, &mut cache).await?;
+    load_movies(reader, media_item_ids, &mut cache).await?;
+    load_episodes(reader, media_item_ids, &mut cache).await?;
+    load_music_videos(reader, media_item_ids, &mut cache).await?;
+    load_songs(reader, media_item_ids, &mut cache).await?;
+    load_other_videos(reader, media_item_ids, &mut cache).await?;
+    load_remote_streams(reader, media_item_ids, &mut cache).await?;
     Ok(cache)
 }
 
 async fn load_movies(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     ids: &[i64],
     cache: &mut ContentCache,
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         r#"SELECT "MovieId" AS "ItemId", "Id" AS "MetadataId", "Title", "Plot", "Year", "ContentRating"
            FROM "MovieMetadata" WHERE "MovieId" IN"#,
         ids,
         r#"ORDER BY "MetadataId""#,
+        &["ItemId", "MetadataId", "Title", "Plot", "Year", "ContentRating"],
     )
     .await?;
     let refs = insert_base_rows(cache, rows, XmltvItemKind::Movie, |row, content| {
@@ -51,16 +73,16 @@ async fn load_movies(
         Ok(nonempty(row.try_get("Title")?))
     })?;
 
-    hydrate_common(pool, cache, &refs, "MovieMetadataId", true).await
+    hydrate_common(reader, cache, &refs, "MovieMetadataId", true).await
 }
 
 async fn load_episodes(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     ids: &[i64],
     cache: &mut ContentCache,
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         r#"SELECT ep."EpisodeId" AS "ItemId", ep."Id" AS "MetadataId",
                   ep."Title" AS "EpisodeTitle", ep."Plot", ep."EpisodeNumber",
                   season."SeasonNumber", show_meta."Id" AS "RelatedMetadataId",
@@ -73,6 +95,18 @@ async fn load_episodes(
            WHERE ep."EpisodeId" IN"#,
         ids,
         r#"ORDER BY "MetadataId", "RelatedMetadataId""#,
+        &[
+            "ItemId",
+            "MetadataId",
+            "EpisodeTitle",
+            "Plot",
+            "EpisodeNumber",
+            "SeasonNumber",
+            "RelatedMetadataId",
+            "ShowTitle",
+            "ShowYear",
+            "ShowContentRating",
+        ],
     )
     .await?;
 
@@ -107,19 +141,19 @@ async fn load_episodes(
 
     let show_ids = metadata_ids(&show_refs);
     let episode_ids = metadata_ids(&episode_refs);
-    let show_genres = load_string_map(pool, "Genre", "ShowMetadataId", "Name", &show_ids).await?;
+    let show_genres = load_string_map(reader, "Genre", "ShowMetadataId", "Name", &show_ids).await?;
     let show_guids =
-        load_string_map(pool, "MetadataGuid", "ShowMetadataId", "Guid", &show_ids).await?;
-    let show_artwork = load_artwork_map(pool, "ShowMetadataId", &show_ids).await?;
+        load_string_map(reader, "MetadataGuid", "ShowMetadataId", "Guid", &show_ids).await?;
+    let show_artwork = load_artwork_map(reader, "ShowMetadataId", &show_ids).await?;
     let mut episode_guids = load_string_map(
-        pool,
+        reader,
         "MetadataGuid",
         "EpisodeMetadataId",
         "Guid",
         &episode_ids,
     )
     .await?;
-    let mut episode_artwork = load_artwork_map(pool, "EpisodeMetadataId", &episode_ids).await?;
+    let mut episode_artwork = load_artwork_map(reader, "EpisodeMetadataId", &episode_ids).await?;
 
     for (item_id, metadata_id) in show_refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
@@ -142,12 +176,12 @@ async fn load_episodes(
 }
 
 async fn load_music_videos(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     ids: &[i64],
     cache: &mut ContentCache,
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         r#"SELECT mv_meta."MusicVideoId" AS "ItemId", mv_meta."Id" AS "MetadataId",
                   artist_meta."Id" AS "RelatedMetadataId", artist_meta."Title" AS "ArtistTitle",
                   mv_meta."Title" AS "VideoTitle", mv_meta."Plot", mv_meta."Year",
@@ -158,6 +192,7 @@ async fn load_music_videos(
            WHERE mv_meta."MusicVideoId" IN"#,
         ids,
         r#"ORDER BY "MetadataId", "RelatedMetadataId""#,
+        MUSIC_VIDEO_SOURCE_COLUMNS,
     )
     .await?;
 
@@ -198,9 +233,9 @@ async fn load_music_videos(
     let video_ids = metadata_ids(&video_refs);
     let artist_ids = metadata_ids(&artist_refs);
     let mut video_genres =
-        load_string_map(pool, "Genre", "MusicVideoMetadataId", "Name", &video_ids).await?;
+        load_string_map(reader, "Genre", "MusicVideoMetadataId", "Name", &video_ids).await?;
     let mut artists = load_string_map(
-        pool,
+        reader,
         "MusicVideoArtist",
         "MusicVideoMetadataId",
         "Name",
@@ -208,12 +243,18 @@ async fn load_music_videos(
     )
     .await?;
     let mut studios =
-        load_string_map(pool, "Studio", "MusicVideoMetadataId", "Name", &video_ids).await?;
-    let mut directors =
-        load_string_map(pool, "Director", "MusicVideoMetadataId", "Name", &video_ids).await?;
-    let mut artwork = load_artwork_map(pool, "MusicVideoMetadataId", &video_ids).await?;
+        load_string_map(reader, "Studio", "MusicVideoMetadataId", "Name", &video_ids).await?;
+    let mut directors = load_string_map(
+        reader,
+        "Director",
+        "MusicVideoMetadataId",
+        "Name",
+        &video_ids,
+    )
+    .await?;
+    let mut artwork = load_artwork_map(reader, "MusicVideoMetadataId", &video_ids).await?;
     let mut artist_genres =
-        load_string_map(pool, "Genre", "ArtistMetadataId", "Name", &artist_ids).await?;
+        load_string_map(reader, "Genre", "ArtistMetadataId", "Name", &artist_ids).await?;
 
     for (item_id, metadata_id) in video_refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
@@ -233,17 +274,29 @@ async fn load_music_videos(
 }
 
 async fn load_songs(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     ids: &[i64],
     cache: &mut ContentCache,
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         r#"SELECT "SongId" AS "ItemId", "Id" AS "MetadataId", "Title", "Year",
                   "Artists", "AlbumArtists", "Track", "Comment", "Album", "ReleaseDate"
            FROM "SongMetadata" WHERE "SongId" IN"#,
         ids,
         r#"ORDER BY "MetadataId""#,
+        &[
+            "ItemId",
+            "MetadataId",
+            "Title",
+            "Year",
+            "Artists",
+            "AlbumArtists",
+            "Track",
+            "Comment",
+            "Album",
+            "ReleaseDate",
+        ],
     )
     .await?;
     let refs = insert_base_rows(cache, rows, XmltvItemKind::Song, |row, content| {
@@ -259,21 +312,22 @@ async fn load_songs(
         Ok((!artists.is_empty()).then(|| artists.join(", ")))
     })?;
 
-    hydrate_common(pool, cache, &refs, "SongMetadataId", false).await?;
-    hydrate_studios(pool, cache, &refs, "SongMetadataId").await
+    hydrate_common(reader, cache, &refs, "SongMetadataId", false).await?;
+    hydrate_studios(reader, cache, &refs, "SongMetadataId").await
 }
 
 async fn load_other_videos(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     ids: &[i64],
     cache: &mut ContentCache,
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         r#"SELECT "OtherVideoId" AS "ItemId", "Id" AS "MetadataId", "Title", "Plot", "Year", "ContentRating"
            FROM "OtherVideoMetadata" WHERE "OtherVideoId" IN"#,
         ids,
         r#"ORDER BY "MetadataId""#,
+        &["ItemId", "MetadataId", "Title", "Plot", "Year", "ContentRating"],
     )
     .await?;
     let refs = insert_base_rows(cache, rows, XmltvItemKind::OtherVideo, |row, content| {
@@ -283,16 +337,16 @@ async fn load_other_videos(
         Ok(nonempty(row.try_get("Title")?))
     })?;
 
-    hydrate_common(pool, cache, &refs, "OtherVideoMetadataId", false).await
+    hydrate_common(reader, cache, &refs, "OtherVideoMetadataId", false).await
 }
 
 async fn load_remote_streams(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     ids: &[i64],
     cache: &mut ContentCache,
 ) -> Result<(), sqlx::Error> {
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         r#"SELECT rsm."RemoteStreamId" AS "ItemId", rsm."Id" AS "MetadataId", rsm."Title",
                   rsm."ShowTitle", rsm."SeasonNumber", rsm."EpisodeNumber", rsm."Plot", rsm."Year",
                   rsm."ReleaseDate", rsm."ContentRating", rsm."CollectionName",
@@ -302,6 +356,22 @@ async fn load_remote_streams(
            WHERE rsm."RemoteStreamId" IN"#,
         ids,
         r#"ORDER BY "MetadataId""#,
+        &[
+            "ItemId",
+            "MetadataId",
+            "Title",
+            "ShowTitle",
+            "SeasonNumber",
+            "EpisodeNumber",
+            "Plot",
+            "Year",
+            "ReleaseDate",
+            "ContentRating",
+            "CollectionName",
+            "OriginalBroadcasters",
+            "Broadcasters",
+            "ContentKind",
+        ],
     )
     .await?;
     let refs = insert_base_rows(cache, rows, XmltvItemKind::RemoteStream, |row, content| {
@@ -341,11 +411,11 @@ async fn load_remote_streams(
             }
         }
     })?;
-    hydrate_common(pool, cache, &refs, "RemoteStreamMetadataId", false).await?;
+    hydrate_common(reader, cache, &refs, "RemoteStreamMetadataId", false).await?;
 
     let ids = metadata_ids(&refs);
-    let mut tags = load_string_map(pool, "Tag", "RemoteStreamMetadataId", "Name", &ids).await?;
-    let mut people = load_remote_stream_people(pool, &ids).await?;
+    let mut tags = load_string_map(reader, "Tag", "RemoteStreamMetadataId", "Name", &ids).await?;
+    let mut people = load_remote_stream_people(reader, &ids).await?;
     for (item_id, metadata_id) in refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
             content.tags = tags.remove(&metadata_id).unwrap_or_default();
@@ -356,15 +426,16 @@ async fn load_remote_streams(
 }
 
 async fn load_remote_stream_people(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     ids: &[i64],
 ) -> Result<HashMap<i64, Vec<XmltvCredit>>, sqlx::Error> {
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         r#"SELECT "RemoteStreamMetadataId" AS "MetadataId", "Name", "Role"
            FROM "Actor" WHERE "RemoteStreamMetadataId" IN"#,
         ids,
         r#"ORDER BY "MetadataId", "Order", "Id""#,
+        &["MetadataId", "Name", "Role"],
     )
     .await?;
     let mut people: HashMap<i64, Vec<XmltvCredit>> = HashMap::new();
@@ -410,17 +481,17 @@ where
 }
 
 async fn hydrate_common(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     cache: &mut ContentCache,
     refs: &[(i64, i64)],
     owner_column: &str,
     include_guids: bool,
 ) -> Result<(), sqlx::Error> {
     let ids = metadata_ids(refs);
-    let mut genres = load_string_map(pool, "Genre", owner_column, "Name", &ids).await?;
-    let mut artwork = load_artwork_map(pool, owner_column, &ids).await?;
+    let mut genres = load_string_map(reader, "Genre", owner_column, "Name", &ids).await?;
+    let mut artwork = load_artwork_map(reader, owner_column, &ids).await?;
     let mut guids = if include_guids {
-        load_string_map(pool, "MetadataGuid", owner_column, "Guid", &ids).await?
+        load_string_map(reader, "MetadataGuid", owner_column, "Guid", &ids).await?
     } else {
         HashMap::new()
     };
@@ -436,13 +507,13 @@ async fn hydrate_common(
 }
 
 async fn hydrate_studios(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     cache: &mut ContentCache,
     refs: &[(i64, i64)],
     owner_column: &str,
 ) -> Result<(), sqlx::Error> {
     let mut studios =
-        load_string_map(pool, "Studio", owner_column, "Name", &metadata_ids(refs)).await?;
+        load_string_map(reader, "Studio", owner_column, "Name", &metadata_ids(refs)).await?;
     for &(item_id, metadata_id) in refs {
         if let Some((_, content)) = cache.get_mut(&item_id) {
             content.studios = studios.remove(&metadata_id).unwrap_or_default();
@@ -462,7 +533,7 @@ fn set_icon(
 }
 
 async fn load_string_map(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     table: &str,
     owner_column: &str,
     value_column: &str,
@@ -472,7 +543,14 @@ async fn load_string_map(
         r#"SELECT "{owner_column}" AS "MetadataId", "{value_column}" AS "Value"
             FROM "{table}" WHERE "{owner_column}" IN"#
     );
-    let rows = fetch_rows_for_ids(pool, &prefix, ids, r#"ORDER BY "MetadataId", "Value""#).await?;
+    let rows = fetch_rows_for_ids(
+        reader,
+        &prefix,
+        ids,
+        r#"ORDER BY "MetadataId", "Value""#,
+        &["MetadataId", "Value"],
+    )
+    .await?;
     let mut values: HashMap<i64, Vec<String>> = HashMap::new();
     for row in rows {
         let metadata_id: i64 = row.try_get("MetadataId")?;
@@ -487,7 +565,7 @@ async fn load_string_map(
 }
 
 async fn load_artwork_map(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     owner_column: &str,
     ids: &[i64],
 ) -> Result<HashMap<i64, (ArtworkReference, IconSizeHint)>, sqlx::Error> {
@@ -498,10 +576,11 @@ async fn load_artwork_map(
         artwork_kind::THUMBNAIL
     );
     let rows = fetch_rows_for_ids(
-        pool,
+        reader,
         &prefix,
         ids,
         r#"ORDER BY "MetadataId", "ArtworkKind""#,
+        &["MetadataId", "Id", "Path", "ArtworkKind"],
     )
     .await?;
     let mut artwork = HashMap::new();
@@ -541,10 +620,11 @@ async fn load_artwork_map(
 }
 
 async fn fetch_rows_for_ids(
-    pool: &Pool<Db>,
+    reader: &mut Read<'_>,
     prefix: &str,
     ids: &[i64],
     suffix: &str,
+    payload_columns: &[&str],
 ) -> Result<Vec<DbRow>, sqlx::Error> {
     let mut rows = Vec::new();
     for chunk in ids.chunks(ID_BATCH_SIZE) {
@@ -553,11 +633,7 @@ async fn fetch_rows_for_ids(
         }
         let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let sql = format!("{prefix} ({placeholders}) {suffix}");
-        let mut query = sqlx::query(assert_sql_safe(sql));
-        for id in chunk {
-            query = query.bind(*id);
-        }
-        rows.extend(query.fetch_all(pool).await?);
+        rows.extend(reader.fetch_rows(&sql, chunk, payload_columns).await?);
     }
     Ok(rows)
 }
@@ -587,6 +663,10 @@ fn decode_string_list(value: Option<String>) -> Vec<String> {
 fn nonempty(value: Option<String>) -> Option<String> {
     value.filter(|value| !value.trim().is_empty())
 }
+
+#[cfg(test)]
+#[path = "xmltv_metadata/bounded_read_tests.rs"]
+mod bounded_read_tests;
 
 #[cfg(test)]
 mod tests {
