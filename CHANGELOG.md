@@ -474,6 +474,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve native fallback header controls while adapting new teletext exports to
+  QTeletextMaker's effective primary charset. Explicitly version the editor
+  carrier and retain legacy receipts and qualified concepts without rewriting
+  their bytes. Reject protected status/enhancement changes as before.
+
 - Keep video-copy streams free of encoder-only profile, preset, tune and hardware
   options left in a saved transcoding profile. A retained H.264 `high` profile
   could otherwise make FFmpeg reject ordinary playback before producing AV.

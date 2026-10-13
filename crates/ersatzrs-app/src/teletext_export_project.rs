@@ -312,7 +312,10 @@ impl TeletextExportProject {
         use TeletextExportProjectFailure as K;
         validate_budget(b)?;
         if self.schema_version != 1
-            || self.editor_profile != "qteletextmaker-1.0"
+            || !matches!(
+                self.editor_profile.as_str(),
+                "qteletextmaker-1.0" | "qteletextmaker-1.0-carrier-v2"
+            )
             || self.original.document_version != 1
         {
             return Err(failure(K::Schema));

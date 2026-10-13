@@ -41,6 +41,8 @@ use ersatzrs_web::host::{
 
 #[path = "editorial_http.rs"]
 mod http_routes;
+#[path = "editorial_imports/qtm_carrier.rs"]
+mod qtm_carrier;
 
 fn policy() -> NativeTeletextExportPolicy {
     NativeTeletextExportPolicy {
@@ -706,9 +708,8 @@ mod external_editor_probe {
     pub(super) fn editor_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
         assert_eq!((page, subcode), (124, 32));
         let mut response = authoring_metadata::response(theme, page, subcode);
-        // Pinned editor load couples its X28 NOS to header controls. The
-        // separate positive fixture uses unambiguous zero on both planes;
-        // actual-1 retains the nonzero loss/rejection as open fidelity evidence.
+        // Retain the original charset-zero positive fixture. Separate pinned
+        // probes cover the corrected nonzero and independent NOS carriers.
         response["service"]["pages"][0]["national_option"] = serde_json::json!(0);
         response["service"]["magazines"][0]["presentation"]["primary"] = serde_json::json!(0);
         let mut second = response.clone();
@@ -730,6 +731,105 @@ mod external_editor_probe {
             .unwrap()
             .push(second["authoring"]["pages"][0].take());
         response
+    }
+
+    fn charset_response(theme: &str, page: u16, subcode: u16, primary: u8) -> serde_json::Value {
+        let mut response = editor_response(theme, page, subcode);
+        for page in response["service"]["pages"].as_array_mut().unwrap() {
+            page["national_option"] = serde_json::json!(1);
+        }
+        response["service"]["magazines"][0]["presentation"]["primary"] = serde_json::json!(primary);
+        response
+    }
+
+    fn equal_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
+        charset_response(theme, page, subcode, 1)
+    }
+
+    fn independent_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
+        charset_response(theme, page, subcode, 0)
+    }
+
+    fn assert_carrier(flow: &Flow, expected_header: u16, expected_status: u16) {
+        for exported in &flow.exported {
+            assert_eq!(
+                exported.sidecar().project.editor_profile,
+                "qteletextmaker-1.0-carrier-v2"
+            );
+            for mapping in &exported.sidecar().project.pages {
+                assert_eq!(mapping.header_controls, expected_header);
+                let file = exported
+                    .files()
+                    .iter()
+                    .find(|file| file.name == mapping.name)
+                    .unwrap();
+                let document = parse_teletext_tti(&file.bytes, policy().tti).unwrap();
+                assert!(document.records().iter().any(|record|
+                    matches!(record, TeletextTtiRecord::PageStatus(status) if *status == expected_status)));
+            }
+        }
+    }
+
+    fn assert_native_protected_records(
+        original: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+        edited: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+        expected_header: u16,
+    ) {
+        assert_eq!(original.magazine_units(), edited.magazine_units());
+        let displays = |service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService| {
+            service
+                .pages()
+                .iter()
+                .filter_map(|page| match page {
+                    EncodedTeletextAuthoredPage::NativeDisplay(page) => Some(page.encoded().page()),
+                    EncodedTeletextAuthoredPage::CompiledDisplay(page) => Some(page.page()),
+                    _ => None,
+                })
+                .map(|page| {
+                    let mut projection = project_encoded_teletext_display(page, 128).unwrap();
+                    assert_eq!(projection.header.controls.raw(), expected_header);
+                    projection.records.retain(|record| {
+                        !matches!(record, TeletextEncodedDisplayRecord::BaseRow { row: 2, .. })
+                    });
+                    projection
+                })
+                .collect::<Vec<_>>()
+        };
+        let originals = displays(original);
+        let edits = displays(edited);
+        assert_eq!(originals.len(), edits.len());
+        for (before, after) in originals.iter().zip(&edits) {
+            assert_eq!(before.address, after.address);
+            assert_eq!(before.kind, after.kind);
+            assert_eq!(before.language, after.language);
+            assert_eq!(before.header, after.header);
+            assert_eq!(before.records.len(), after.records.len());
+            for (old, new) in before.records.iter().zip(&after.records) {
+                match (old, new) {
+                    (
+                        TeletextEncodedDisplayRecord::EditorialLinks {
+                            nibbles: a,
+                            crc: old_crc,
+                        },
+                        TeletextEncodedDisplayRecord::EditorialLinks {
+                            nibbles: b,
+                            crc: new_crc,
+                        },
+                    ) => {
+                        assert_eq!(a, b);
+                        // Native X27 regenerates its content CRC after the allowed
+                        // row edit. Link identities stay exact; no imported packet
+                        // or receipt is masked or repaired by this test oracle.
+                        if before.address.page.get() == 124 {
+                            assert_ne!(old_crc, new_crc);
+                        } else {
+                            assert_eq!(old_crc, new_crc);
+                        }
+                    }
+                    _ => assert_eq!(old, new),
+                }
+            }
+        }
     }
 
     fn editor_geometry(flow: &Flow, index: usize, page: u16, subcode: u16) -> serde_json::Value {
@@ -1136,14 +1236,34 @@ mod external_editor_probe {
     #[tokio::test]
     #[ignore = "requires a create-new disposable directory, separately operated pinned headed QTeletextMaker 1.0, FFmpeg/ffprobe9 and TSDuck"]
     async fn pinned_external_editor_files_import_preview_publication_and_reopen() {
+        Box::pin(run_pinned_probe(editor_response, 0x0081, 0xc040)).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires pinned headed QTeletextMaker, FFmpeg/ffprobe9 and TSDuck"]
+    async fn pinned_external_editor_nonzero_equal_nos_preserves_native_controls() {
+        Box::pin(run_pinned_probe(equal_response, 0x0481, 0xc240)).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires pinned headed QTeletextMaker, FFmpeg/ffprobe9 and TSDuck"]
+    async fn pinned_external_editor_independent_nos_preserves_native_controls() {
+        Box::pin(run_pinned_probe(independent_response, 0x0481, 0xc040)).await;
+    }
+
+    async fn run_pinned_probe(
+        response: fn(&str, u16, u16) -> serde_json::Value,
+        expected_header: u16,
+        expected_status: u16,
+    ) {
         let directory =
             std::path::PathBuf::from(super::super::client_capture::selected(DIRECTORY_ENV));
         std::fs::create_dir(&directory).expect("probe destination must not already exist");
         let tools = StreamTools::load().await;
         let (playback_fixture, source_path) =
             prepare_editor_playback_fixture(&directory, &tools).await;
-        let (mut fixture, flow) =
-            Box::pin(setup_with_fixture(editor_response, playback_fixture)).await;
+        let (mut fixture, flow) = Box::pin(setup_with_fixture(response, playback_fixture)).await;
+        assert_carrier(&flow, expected_header, expected_status);
         write_ready(&directory, &flow).unwrap();
         let (marker, request) = checked_external_request(&directory, &fixture, &flow).await;
         let edited_hash = hash(
@@ -1166,6 +1286,11 @@ mod external_editor_probe {
             preview
         );
         let accepted = publish_and_accept(&fixture, &flow, &edited).await;
+        assert_native_protected_records(
+            flow.saved[0].candidate().encoded().unwrap(),
+            accepted.service(),
+            expected_header,
+        );
         assert_eq!(generations::preview(accepted.service()).raster(), &preview);
         fixture = fixture.reopen().await;
         generations::assert_same_output(&recover(&fixture, 1).await, &accepted);
@@ -1183,6 +1308,10 @@ mod external_editor_probe {
         .await;
         let success = serde_json::json!({"probe_version":1,"scope":"native application interchange and ordinary MPEG-TS flow",
             "editor_completion":marker,"edited_tti_sha256":edited_hash,
+            "editor_profile":"qteletextmaker-1.0-carrier-v2",
+            "native_header_controls":expected_header,"editor_status":expected_status,
+            "native_headers_enhancements_and_link_targets_unchanged":true,
+            "edited_page_content_crc_changed":true,
             "edited_design_id":edited.head().id,"edited_revision":edited.head().revision,"edited_digest":edited.digest(),
             "preview":{"width":preview.width(),"height":preview.height(),"diagnostics":preview.diagnostics().len(),"sha256":raster_hash(&preview)},
             "accepted_generation_id":accepted.generation().id,"accepted_request_id":accepted.generation().request.id,

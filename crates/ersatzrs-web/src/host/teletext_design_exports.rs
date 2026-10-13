@@ -33,7 +33,7 @@ use super::{
     teletext_designs::{
         reload_original_teletext_design_revision_with_hold, NativeTeletextDesignError,
     },
-    teletext_export_project::build_native_teletext_export_project,
+    teletext_export_project::{build_native_teletext_export_project, TeletextEditorCarrier},
 };
 
 /// Explicit historical revision and live-head fence; absence selects all displays.
@@ -274,6 +274,7 @@ pub async fn export_original_teletext_design(
                 project_budget,
                 policy.tti,
                 deadline,
+                TeletextEditorCarrier::V2,
             )
             .map_err(|error| NativeTeletextExportError::Mapping(Box::new(error)))?;
             let receipt = write_teletext_export_receipt_body(&body, project_budget)?;

@@ -218,9 +218,9 @@ fn protected(
             return Err(location.error(failure));
         }
     }
-    // PS stays exact, including NOS bits. The pinned source changes an internal
-    // default NOS on X28 load, but that alone does not prove normalization of its
-    // separately stored C12..C14 control bits. No permissive status mask is used.
+    // PS stays exact against the authenticated carrier baseline, including NOS
+    // bits. Carrier projection is selected from the stored receipt before this
+    // comparison; uploaded packets never determine or repair expected status.
     for row in 26_u8..=29 {
         for designation in 0_u8..16 {
             location.check_deadline(deadline)?;
@@ -259,6 +259,31 @@ pub fn reconcile_teletext_editorial_tti(
     budget: TeletextTtiBudget,
     deadline: Instant,
 ) -> Result<Option<TeletextPhysicalBaseOverlay>> {
+    reconcile_teletext_editorial_tti_with_status(
+        mapping,
+        baseline_bytes,
+        edited_bytes,
+        budget,
+        deadline,
+        status(mapping.header_controls),
+    )
+}
+
+/// Reconcile using the exact status of an authenticated, versioned editor carrier.
+/// The caller must derive this value from the qualified original and stored
+/// receipt profile, never from uploaded TTI. It confers no authentication or edit
+/// authority and leaves the original header controls unchanged.
+/// # Errors
+/// Rejects the same protected changes as legacy reconciliation, including any
+/// baseline status differing from the trusted value or any edited PS change.
+pub(super) fn reconcile_teletext_editorial_tti_with_status(
+    mapping: &TeletextExportPageMapping,
+    baseline_bytes: &[u8],
+    edited_bytes: &[u8],
+    budget: TeletextTtiBudget,
+    deadline: Instant,
+    expected_status: u16,
+) -> Result<Option<TeletextPhysicalBaseOverlay>> {
     let location = Location {
         page: mapping.page.page,
         subcode: mapping.page.subcode,
@@ -269,7 +294,7 @@ pub fn reconcile_teletext_editorial_tti(
     let edited_document = location.parse(edited_bytes, budget, deadline)?;
     let baseline = Page::index(&baseline_document, mapping, location, deadline)?;
     let edited = Page::index(&edited_document, mapping, location, deadline)?;
-    if baseline.status != Some(status(mapping.header_controls)) {
+    if baseline.status != Some(expected_status) {
         return Err(location.error(NativeTeletextEditorialTtiFailure::Mapping));
     }
     baseline.validate_header(location)?;

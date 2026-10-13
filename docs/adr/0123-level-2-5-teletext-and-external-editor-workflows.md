@@ -53,7 +53,13 @@ changes protected X28 and rejects without publication. Bounded native ZIP export
 and receipt-owned multipart import now connect these functions to localized
 channel-admin forms. Import saves an unpublished concept; preview, request and
 publication stay separate. V3-only addon discovery is included. P9A-04 owns the
-headed nine-culture/both-theme/JS/no-JS browser proof and remaining gaps. General
+headed nine-culture/both-theme/JS/no-JS browser proof and remaining gaps. Versioned
+QTM carriers now use the trusted effective primary in editor PS while retaining
+native fallback controls and separate RE regional bits. The stored receipt profile
+selects byte-identical legacy reconstruction. Actual equal/independent NOS trials
+now pass native preview/publication/reopen and ordinary transport; the legacy
+counterexample remains recorded. QTM has one shared NOS, so its own preview cannot
+show both independent values together; the native model retains both. General
 charset/resource fidelity and full client coverage remain open; this base-row
 slice grants no full editor/engine acceptance.
 A bounded ordered TTI

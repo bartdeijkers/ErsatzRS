@@ -2724,6 +2724,58 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 versioned editor carrier checkpoint:
+Criterion: correct the demonstrated pinned-editor nonzero NOS loss while retaining
+independent native fallback/enhanced primary and old receipt/concept recovery.
+New exports use qteletextmaker-1.0-carrier-v2. Trusted effective presentation
+supplies PS low3 and existing RE upper bits; native controls remain original.
+Legacy reconstruction dispatches from the stored receipt profile before exact
+body equality. PS/RE/enhancement comparison stays exact: no packet masks, repair
+or uploaded authority. Schemas1 and stored legacy bytes remain unchanged.
+
+Run602def65-3eea-4f03-9545-bdffa22ef699 passes57/57 affected app/export/TTI,
+HTTP/concept and native export checks. It includes literal NOS0..7 and nonnational
+flag vectors, separate RE regional bits, protected PS/X28/RE refusals, and a
+repository-seeded old qteletextmaker-1.0 receipt with literal PS,C0C0. That old
+concept imports/previews/explicitly publishes/reopens while receipt bytes/digest
+stay exact; fresh exports independently assert literal C240. The first compile's
+wrong test-only source_header import is corrected, not counted as a success.
+
+Actual unchanged QTeletextMaker1.0/cac2167 in the pinned image, Qt6.10.2, passes
+two real widget/Save As -> native import/shared preview/request/Publish/reopen
+flows. Equal header/enhanced NOS1 uses PS,C240; independent header NOS1/enhanced
+NOS0 uses PS,C040. Both retain native raw controls0481. Exact original enhancements,
+magazine bytes and link targets stay unchanged; X27's content CRC regenerates only
+for the edited page. Both ordinary Router captures retain two themes together,
+exact emitted models, source audio/video and TSDuck checks. FFmpeg9/libzvbi
+decodes AZ on all pages, Q only day/page124; night/page125 remain untouched. Actual
+edited/save-dialog images are inspected. Runs66c446e3-2142-4100-8a94-d57a65e0a156
+and d7dfd62d-5fbf-495b-b4ef-4b6e359fcaac pass1/1 each:59 unique successes total.
+
+Negative trials remain: the first equal fixture chooses FFmpeg8.1 and fails before
+editor launch; all fixture/route/decoder paths are corrected to the existing9
+candidate. An independent trial's old driver selects a visible Open dialog during
+Save As; it exits139, and the native waiter is interrupted without a false marker.
+The test-only driver now requires the exact main-window owner, AcceptSave and
+Save As title. It compiles against the existing image's Qt6.10.2 headers/libraries,
+without installing dependencies or changing the editor. The repeated independent
+flow succeeds with driver83d95a7d; the valid equal flow uses unchanged d18d0d9c.
+Initial SDK/pkg-config guesses fail before build; direct existing Qt6 module
+headers/defines produce the retained final tool. Runtime image/editor identities
+remain pinned. No failed/interrupted trial supplies positive evidence.
+
+Strict app-library and web-library/preparation-test Clippy, formatting, architecture
+and new-allowance checks pass. The57 results remain valid after an ignored-probe
+oracle refinement that distinguishes regenerated CRC from immutable link targets;
+the two actual cases execute the final oracle. Receipt: tmp/phase9-qtm-carrier/identity.json,
+SHA256b94175326e23730639a8d6bf7cfb7a6c3931dd70f952c8cae5c91b1f065bdb1f. Prior localized headed/finite-client
+receipts remain valid; no admin UI or runtime dependency changes. QTM's one NOS
+cannot preview separate fallback/enhanced values simultaneously; trusted metadata
+preserves both for native compilation. Full charset/resource/page-set, editable
+enhancements, panel/live-client, Lua/restart/source/Next and six-platform criteria
+remain required. No permanent restriction or full editor/engine/CI acceptance,
+milestone/criteria/dependency change, production guide or push.
+
 2026-10-14 localized editor transfer checkpoint:
 Criterion: connect retained native export/import to channel admin forms without
 implicit publication, and prove shared preview/explicit publication through
@@ -2936,19 +2988,19 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
 | Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
 | Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two-channel exact route/TSDuck/AV/decoding and actual 124->125->124 client proof; localized native forms and 8-case/all-nine-culture headed flow proven | Bound live client/open-generation transitions and full panel/feature coverage |
-| Actual pinned QTM workflow | Actual v1.0 edit/Save As of one page in a retained two-page set, native import/shared preview/publish/reopen and isolated delivery | General charset/PS/X28 fidelity, resource dependency loading and full supported page-set/subpage edits |
+| Actual pinned QTM workflow | Actual v1.0 charset0, nonzero equal and independent NOS edit/Save As/import/preview/publish/reopen/stream flows; legacy concepts recover unchanged | Remaining charset/resource coverage, resource dependency loading and full supported page-set/subpage edits |
 | Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
-Concrete next action: correct the demonstrated pinned QTM PS/NOS carrier mismatch
-through the existing versioned editor_profile, retain legacy receipts unchanged,
-and prove literal controls plus actual equal/independent header/enhanced NOS
-round trips. This adapts editor interchange, not native DVB controls. Localized
-ZIP/import/preview/explicit publication and edited ordinary-route/main-plane
-client evidence now exist; do not repeat general audits or metric expansion.
-General charset/resource/editor/panel, live-bound/open-client and remaining
-admin/Lua flows stay required; retained nonzero loss must not be masked. Base-row-only import, unchanged-file refusal,
-protected enhancement/PS edits and preserved-but-not-editor-loadable DVB assets
-are explicit pending implementation/proof; none is a permanent accepted limitation.
+Concrete next action: connect preserved resource assets to editor-loadable TTI.
+Start with one representative synthetic DRCS dependency using the pinned editor's
+actual loader/writer, exact versioned mappings and native decode/preview/publication.
+Current raw DVB assets preserve bytes but cannot establish editor resource loading.
+Do not introduce another general audit or metric expansion. Literal and actual
+PS/NOS fidelity plus old concept recovery are now proven; no status/packet mask
+is accepted. Full charset/resource/editor/panel, live-bound/open-client and remaining
+admin/Lua flows stay required. Base-row-only import, unchanged-file refusal,
+protected enhancement/PS edits and repeated-overlay refusal remain pending
+implementation/proof; none is a permanent accepted limitation.
 No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing
 remains; production guide waits for independent generic acceptance. No push,
 installation or publication occurs; no full editor/engine/platform/CI claim.

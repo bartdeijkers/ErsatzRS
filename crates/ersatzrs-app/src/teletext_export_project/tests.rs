@@ -117,6 +117,39 @@ fn project_receipt_and_sidecar_round_trip_without_file_authority() {
     assert!(object.get("permissions").is_none());
 }
 #[test]
+fn v2_editor_profile_round_trips_without_changing_receipt_schema_or_raw_controls() {
+    let mut body = receipt();
+    body.project.editor_profile = "qteletextmaker-1.0-carrier-v2".into();
+    body.project.pages[0].header_controls = 0x0481;
+    let encoded = write_teletext_export_receipt_body(&body, budget()).unwrap();
+    assert_eq!(
+        parse_teletext_export_receipt_body(&encoded, budget()).unwrap(),
+        body
+    );
+    let sidecar = TeletextExportSidecar {
+        schema_version: 1,
+        receipt_id: 9,
+        receipt_digest: "b".repeat(64),
+        project: body.project,
+    };
+    let encoded = write_teletext_export_sidecar(&sidecar, budget()).unwrap();
+    assert_eq!(
+        parse_teletext_export_sidecar(&encoded, budget()).unwrap(),
+        sidecar
+    );
+}
+#[test]
+fn unknown_editor_carrier_profiles_are_rejected() {
+    for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v3"] {
+        let mut value = valid_project();
+        value.editor_profile = profile.into();
+        assert_eq!(
+            value.validate(budget()).unwrap_err().kind,
+            TeletextExportProjectFailure::Schema
+        );
+    }
+}
+#[test]
 fn duplicate_keys_at_each_level_are_not_silently_merged() {
     let project =
         String::from_utf8(write_teletext_export_project(&valid_project(), budget()).unwrap())

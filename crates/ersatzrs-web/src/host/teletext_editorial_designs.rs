@@ -34,9 +34,12 @@ use super::{
         RestoredOriginalTeletextDesign,
     },
     teletext_editorial_effects::validate_teletext_editorial_effects,
-    teletext_editorial_tti::reconcile_teletext_editorial_tti,
+    teletext_editorial_tti::{
+        reconcile_teletext_editorial_tti, reconcile_teletext_editorial_tti_with_status,
+    },
     teletext_export_project::{
-        build_native_teletext_export_project, NativeTeletextExportProjectError,
+        build_native_teletext_export_project, editor_primary_for_page,
+        NativeTeletextExportProjectError, TeletextEditorCarrier,
     },
 };
 pub use super::{
@@ -222,6 +225,7 @@ pub(super) async fn read_editorial_baseline(
 
 struct QualifiedBaseline {
     body: TeletextExportReceiptBody,
+    carrier: TeletextEditorCarrier,
     original: RestoredOriginalTeletextDesign,
     original_document: Vec<u8>,
 }
@@ -235,6 +239,8 @@ fn qualify_baseline(
 ) -> Result<QualifiedBaseline> {
     check_deadline(deadline)?;
     let body = parse_teletext_export_receipt_body(&baseline.receipt.receipt, project)?;
+    let carrier = TeletextEditorCarrier::from_profile(&body.project.editor_profile)
+        .ok_or(NativeTeletextEditorialImportError::Association)?;
     let meta = &baseline.receipt.metadata;
     let captured = &body.project.original;
     if captured.design_id != meta.design_id
@@ -274,6 +280,7 @@ fn qualify_baseline(
         project,
         tti,
         deadline,
+        carrier,
     )
     .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
     if body != generated {
@@ -281,6 +288,7 @@ fn qualify_baseline(
     }
     Ok(QualifiedBaseline {
         body,
+        carrier,
         original,
         original_document,
     })
@@ -375,11 +383,12 @@ fn check_request(
     Ok(())
 }
 fn reconcile_files(
-    body: &TeletextExportReceiptBody,
+    baseline: &QualifiedBaseline,
     files: &[TeletextExportFile],
     tti: TeletextTtiBudget,
     deadline: Instant,
 ) -> Result<Vec<TeletextPhysicalBaseOverlay>> {
+    let body = &baseline.body;
     if files.len() != body.files.len() {
         return Err(NativeTeletextEditorialImportError::Association);
     }
@@ -396,13 +405,33 @@ fn reconcile_files(
             .iter()
             .find(|page| page.name == original.name)
         {
-            if let Some(overlay) = reconcile_teletext_editorial_tti(
-                mapping,
-                &original.bytes,
-                &edited.bytes,
-                tti,
-                deadline,
-            )? {
+            let address = TeletextPageAddress {
+                page: TeletextPageNumber::new(mapping.page.page)
+                    .map_err(|_| NativeTeletextEditorialImportError::Association)?,
+                subcode: TeletextSubcode::new(mapping.page.subcode)
+                    .map_err(|_| NativeTeletextEditorialImportError::Association)?,
+            };
+            let primary = editor_primary_for_page(&baseline.original, address)
+                .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
+            let expected_status = baseline.carrier.status(mapping.header_controls, primary);
+            let overlay = match baseline.carrier {
+                TeletextEditorCarrier::Legacy => reconcile_teletext_editorial_tti(
+                    mapping,
+                    &original.bytes,
+                    &edited.bytes,
+                    tti,
+                    deadline,
+                ),
+                TeletextEditorCarrier::V2 => reconcile_teletext_editorial_tti_with_status(
+                    mapping,
+                    &original.bytes,
+                    &edited.bytes,
+                    tti,
+                    deadline,
+                    expected_status,
+                ),
+            }?;
+            if let Some(overlay) = overlay {
                 overlays.push(overlay);
             }
         } else if original.bytes != edited.bytes {
@@ -446,7 +475,7 @@ fn import_document(
     if sidecar.project != baseline.body.project {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let overlays = reconcile_files(&baseline.body, &request.files, tti, deadline)?;
+    let overlays = reconcile_files(&baseline, &request.files, tti, deadline)?;
     let overlay = TeletextSavedEditorialOverlay::new(provenance, overlays)?;
     let document = append_teletext_design_editorial_overlay(
         &baseline.original_document,

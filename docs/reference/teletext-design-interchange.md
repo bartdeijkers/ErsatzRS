@@ -4773,6 +4773,36 @@ reject. Rows are never ignored to recover original output under an edited digest
 No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
 positive/negative codec, native import and durable qualification evidence.
 
+### Versioned QTeletextMaker status carrier
+
+Schema1 `project.editor_profile` distinguishes the retained
+`qteletextmaker-1.0` carrier from new `qteletextmaker-1.0-carrier-v2` exports.
+It versions the adapter for the same pinned QTeletextMaker1.0 editor, not the
+editor itself or the authored document/receipt schemas. Unknown names reject.
+Stored receipts select reconstruction; uploaded metadata cannot select another
+carrier for an existing receipt. Old receipt bytes/digests and qualified concepts
+are retained exactly.
+
+The pinned constructor loads X28, then applies PS control booleans. Its C12 is
+numeric NOS bit0; native compact C12 occupies bit8 and represents NOS bit2.
+The legacy copy therefore sends native controls0481 as PS,C0C0: the editor
+reconstructs primary4 rather than1. V2 sends PS,C240 when the validated effective
+primary is1. Existing exact-owner presentation resolves X28/M29/header provenance;
+no new raw packet parser or source correction is used.
+
+QTeletextMaker has one shared default NOS. V2 therefore carries the effective
+primary low3 in PS and its upper regional bits in RE, while the original native
+fallback header remains in immutable originals and authenticated mappings. For
+native header NOS1/enhanced NOS0, PS is C040 and original raw controls0481 stay
+unchanged. QTM's own fallback preview cannot represent both NOS values at once;
+this explicit adapter preserves them for native compilation. PS, RE, X28/M29,
+identities and navigation stay protected by exact comparison; importing never
+masks or repairs edited records. Changing protected presentation and full editor
+resource/charset coverage remain required future implementation/proof, not
+accepted permanent restrictions. P9A-04 owns literal/native and actual equal/independent NOS editor proof,
+including ordinary transport and unchanged legacy concept recovery. Full charset
+and resource/page-set proof remains open in its complete acceptance map.
+
 ### Receipt-bound native concept import
 
 `host::teletext_editorial_designs::import_teletext_editorial_design` accepts a
@@ -4843,7 +4873,7 @@ are never edited by import; template changes require the addon-version workflow.
 
 Current gaps are explicit: this connection accepts changed base rows, refuses
 unchanged imports, repeated overlays and protected enhancement/header/navigation
-edits, and keeps PS exact pending editor-normalization proof. Preserved DVB resource
+edits, and keeps PS exact against its authenticated versioned carrier. Preserved DVB resource
 assets do not yet prove QTeletextMaker dependency loading. Enhanced resources,
 objects, DRCS, side-panel editing and the complete pinned editor roundtrip remain
 required. These are pending implementation/evidence, not accepted permanent
@@ -4860,8 +4890,10 @@ unchanged, but X28 primary changes1 to4. Pinned `LevelOnePage(PageBase const&)`
 copies X28 before control bits, and `setControlBit` overwrites the shared
 `m_defaultNOS`; saving reconstructs X28 with that changed value. The importer
 rejects at page124/subcode32/row28/designation0 and proves old output remains.
-This is an unresolved editor-fidelity requirement, not permission to mask packets,
-rewrite saved files, change header encoding or limit the authored engine.
+This retained legacy counterexample is never masked or repaired. The v2 carrier
+now passes separate actual equal/independent NOS trials while retaining native
+header controls and old concepts. Other charset/resource/editor-set requirements
+remain open; no header-encoding change or reduced authored target is accepted.
 
 [Replay instructions](../../scripts/e2e/README.md#replay-the-pinned-editor-against-a-native-export)
 provide the structured file/validation/preview workflow for maintainers and agents.

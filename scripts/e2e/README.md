@@ -1168,3 +1168,22 @@ The structured agent-file workflow and protection rules live in
 [the interchange reference](../../docs/reference/teletext-design-interchange.md);
 P9A-04 owns the current proof/gap map. No representative flow closes full authored
 Level 2.5, editor-resource, Lua/restart or platform acceptance.
+
+The versioned carrier probes use the same replay procedure with test filters
+`pinned_external_editor_nonzero_equal_nos` and
+`pinned_external_editor_independent_nos`. Set **all** fixture/route/decoder paths
+(`FFMPEG_PATH`, `FFPROBE_PATH`, `ErsatzRS_FFMPEG__PATH`,
+`ErsatzRS_FFPROBE__PATH`, `ERSATZRS_TELETEXT_TEST_FFMPEG`) to the same verified
+FFmpeg9 candidate; a decoder-only override leaves the fixture on its old runtime.
+Each probe requires a new directory. The driver selects only its exact owned
+`AcceptSave`/`Save As` dialog, never a visible Open dialog.
+
+The pinned tool image contains Qt6.10.2 headers/libraries without pkg-config
+metadata. To rebuild only the test preload, use its existing SDK with
+`g++ -std=c++17 -fPIC -shared`, the Qt Widgets/Test/Gui/Core module defines,
+include paths under `/usr/include/x86_64-linux-gnu/qt6` and those four module
+subdirectories, and `-lQt6Widgets -lQt6Gui -lQt6Core -lQt6Test -ldl`. Bind the
+repository driver read-only and a separate owned output directory writable;
+use the same offline image with bounded CPU/memory. Retain the new driver hash,
+keep the editor binary unchanged, and record actual runtime/editor/native results.
+P9A-04 owns both successful carrier trials and their precise limits.

@@ -491,3 +491,144 @@ fn editorial_tti_byte_record_budgets_and_expired_deadline_reject_without_partial
     assert_eq!(error.failure, NativeTeletextEditorialTtiFailure::TimedOut);
     assert!(error.cause.is_none());
 }
+
+#[test]
+fn editorial_tti_v2_carrier_status_preserves_independent_original_header_nos() {
+    let mut map = mapping();
+    // Original header NOS 5 remains distinct from unchanged X28 primary NOS 1.
+    // The trusted V2 carrier status projects primary 1, not header controls 5.
+    map.header_controls = 0x501;
+    assert_eq!(status(map.header_controls), 0xC280);
+    let baseline = bytes(records());
+    let mut saved = records();
+    saved[6] = row(1, b"EDITED ZONE");
+    let edited = bytes(saved);
+    let overlay = reconcile_teletext_editorial_tti_with_status(
+        &map,
+        &baseline,
+        &edited,
+        budget(),
+        deadline(),
+        0xC200,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(overlay.owner().subcode.get(), 16);
+    assert_eq!(overlay.rows().len(), 1);
+    assert_eq!(&overlay.rows()[0].cells()[..11], b"EDITED ZONE");
+    assert_eq!(map.header_controls, 0x501);
+    // The legacy entry still enforces the original header-derived status.
+    assert_eq!(
+        reconcile_teletext_editorial_tti(&map, &baseline, &edited, budget(), deadline())
+            .unwrap_err()
+            .failure,
+        NativeTeletextEditorialTtiFailure::Mapping
+    );
+}
+
+#[test]
+fn editorial_tti_trusted_status_rejects_baseline_mismatch_and_every_edited_flag_change() {
+    let baseline = bytes(records());
+    assert_eq!(
+        reconcile_teletext_editorial_tti_with_status(
+            &mapping(),
+            &baseline,
+            &baseline,
+            budget(),
+            deadline(),
+            0xC080,
+        )
+        .unwrap_err()
+        .failure,
+        NativeTeletextEditorialTtiFailure::Mapping
+    );
+    for bit in [0x80, 0x100, 0x200, 0x4000, 0x8000] {
+        let mut saved = records();
+        saved[2] = TeletextTtiRecord::PageStatus(0xC200 ^ bit);
+        assert_eq!(
+            reconcile_teletext_editorial_tti_with_status(
+                &mapping(),
+                &baseline,
+                &bytes(saved),
+                budget(),
+                deadline(),
+                0xC200,
+            )
+            .unwrap_err()
+            .failure,
+            NativeTeletextEditorialTtiFailure::Status
+        );
+    }
+}
+
+#[test]
+fn editorial_tti_v2_primary_four_does_not_relax_enhancement_or_region_protection() {
+    let mut original = records();
+    original[2] = TeletextTtiRecord::PageStatus(0xC080);
+    if let TeletextTtiRecord::Packet { words, .. } = &mut original[10] {
+        words[0] = (4 << 7) | (15 << 14);
+    }
+    let baseline = bytes(original.clone());
+    let mut saved = original.clone();
+    saved[6] = row(1, b"ZONE FOUR");
+    assert!(reconcile_teletext_editorial_tti_with_status(
+        &mapping(),
+        &baseline,
+        &bytes(saved),
+        budget(),
+        deadline(),
+        0xC080,
+    )
+    .unwrap()
+    .is_some());
+    for (index, record, failure) in [
+        (
+            10,
+            records()[10].clone(),
+            NativeTeletextEditorialTtiFailure::Packet,
+        ),
+        (
+            3,
+            TeletextTtiRecord::Region(1),
+            NativeTeletextEditorialTtiFailure::Region,
+        ),
+    ] {
+        let mut changed = original.clone();
+        changed[index] = record;
+        let error = reconcile_teletext_editorial_tti_with_status(
+            &mapping(),
+            &baseline,
+            &bytes(changed),
+            budget(),
+            deadline(),
+            0xC080,
+        )
+        .unwrap_err();
+        assert_eq!(error.failure, failure);
+        if failure == NativeTeletextEditorialTtiFailure::Packet {
+            assert_eq!(error.row, Some(28));
+            assert_eq!(error.designation, Some(0));
+        }
+    }
+}
+
+#[test]
+fn editorial_tti_explicit_legacy_status_is_identical_to_public_legacy_reconciliation() {
+    let baseline = bytes(records());
+    let mut saved = records();
+    saved[6] = row(1, b"LEGACY ZONE");
+    let edited = bytes(saved);
+    let legacy =
+        reconcile_teletext_editorial_tti(&mapping(), &baseline, &edited, budget(), deadline())
+            .unwrap();
+    let explicit = reconcile_teletext_editorial_tti_with_status(
+        &mapping(),
+        &baseline,
+        &edited,
+        budget(),
+        deadline(),
+        0xC200,
+    )
+    .unwrap();
+    assert_eq!(legacy, explicit);
+}

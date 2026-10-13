@@ -6,12 +6,12 @@ adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
 P9A-04 precedes NOS200–299 guide addon, P9B-01.
 ADR0123: authored Level2.5/fallback, pinned QTeletextMaker TTI/sidecar,
-TSDuck/independent decoding and actual client display/navigation; Kodi optional.
+TSDuck/independent decoding, actual client display/navigation; Kodi optional.
 
 v1 bytes/resources/pointers/metadata/fresh state and local X26 references survive.
 Replay/raster keep fallback; encoding keeps lineage, IDs and call ancestry.
 AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
-X27 passes; client open.
+X27 pass; client open.
 X26/metadata dual decoding pass.
 C2 uses final words per instance. Charset aliases keep raw pending; differing pairs stay pending.
 G1 mode/fallback and Latin decoder gaps survive.
@@ -32,26 +32,26 @@ Headers fence physical/logical owners; declarations check roles/defaults/extents
 empty owners and one MOT/magazine.
 Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
-TSDuck/shifted slots/EOF/root/corrected nested pass.
+TSDuck/shifted slots/EOF/root/nested pass.
 QTM edit/save/reopen proves renumber/loss; host roundtrip open.
 
 v2 stays pinned; Base refuses v2. Encoding retains
 defaults, secondary uncertainty and channel/model/deadline fences.
 Cold composition isolates M29/resources and rechecks MOT effects.
 Originals/pending persist; raw v2/historical v1.
-Producer caps;13 quotas;100-number rich flow;workers survive cancellation.
+Producer caps;13 quotas;100-number flow;workers survive cancellation.
 Direct/reopen AV,200→201 pass; RSS/bounds open.
-Two-channel ordinary themes/client and nine-culture Health pass.
+Two-channel ordinary themes/client, nine-culture Health pass.
 Profiles/drafts/preview/admin publication connect.
 Served themes/pending/Off, decoding/client and smoke pass; 12 headed cases pass.
 Copy fixed; finite-client restart/AV passes.
 V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
 QTM charset0 set/stream/client; ZIP/concept admin8-case headed pass.
-PS/NOS, enhanced edits and full client remain open.
+PS/NOS and legacy recovery pass; resources/full client remain open.
 
 SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
 pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
-JSON caps do not bound child RSS. Acquisition/selection stay open; auxiliary
+JSON caps do not bound child RSS; acquisition/selection remain open. Auxiliary
 failure preserves metadata, uncertain cleanup is fatal. P9A-03 owns proof.
 
 Carousel/PSI/PCR/retention preserve AV and finite EOF. Actual ACK/cycle ends fence

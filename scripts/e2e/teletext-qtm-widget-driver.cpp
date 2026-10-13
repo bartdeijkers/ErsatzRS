@@ -95,10 +95,12 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (text.startsWith("Save As")) save = action;
     }
     if (!save) qFatal("Save As action absent");
-    QTimer::singleShot(250, qApp, [context] {
+    QTimer::singleShot(250, qApp, [main, context] {
         for (QWidget *widget : QApplication::topLevelWidgets())
             if (auto dialog = qobject_cast<QFileDialog *>(widget)) {
-                if (!dialog->isVisible()) continue;
+                if (!dialog->isVisible() || dialog->parentWidget() != main
+                    || dialog->acceptMode() != QFileDialog::AcceptSave
+                    || dialog->windowTitle() != "Save As") continue;
                 auto name = dialog->findChild<QLineEdit *>("fileNameEdit");
                 if (!name) qFatal("Actual filename input absent");
                 name->selectAll();
