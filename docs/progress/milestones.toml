@@ -2724,6 +2724,54 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 edited ordinary-stream/client checkpoint:
+Criterion: carry the actual pinned-editor concept through explicit publication,
+ordinary MPEG-TS and an independently inspected suitable-client navigation flow,
+with one installed addon on two channels and different profiles/themes together.
+
+The positive fixture now retains pages124/125, raw subcode32 and reciprocal
+navigation. Actual unchanged QTeletextMaker1.0 edits only day/page124 row2/column8
+through exposed widgets and Save As. Native import qualifies the complete retained
+export/sidecar/permissions; two reopens retain the same preview, separate explicit
+request/acceptance, exact untouched page125 and night original. Source and existing
+output policy are prepared before original config/receipt capture; no freshness
+or ownership fence is relaxed and no packages/templates are modified.
+
+Concurrent ordinary Router /iptv/hls-direct/{channel}.ts responses retain exact
+models, all fixture page/M29 units and source audio/video hashes/timestamps.
+TSDuck/FFprobe pass both captures. Independent FFmpeg9/libzvbi decodes all four
+channel/page combinations with AZ and Q only on day/page124. Original exports,
+receipts/configuration and accepted night pointers remain unchanged.
+Native runc05a689e-9de0-4841-a59b-495001377856 passes5/5 affected identities,
+including existing tampering/protected-effect refusals. Earlier component/native
+receipts remain valid; repeated identities are not additional coverage. Strict
+web test-target Clippy, formatting and new-allowance checks pass after boxing the
+two extracted setup futures; no new exemptions, runtime changes or dependencies.
+
+Actual headed VLC3.0.20-3build6/libzvbi0.2.42-2 windows concurrently replay the
+exact ordinary-route bytes. Client8 exits zero after complete finite deliveries;
+six inspected captures show124.20->125.20->124.20 on each channel, red/day and
+blue/night AZ, and white Q only on day/page124. Native Qt teletext activation is
+confirmed by actual zvbi decoder logs before navigation. CLI track preferences
+and a hotkey trial did not activate it; client6/7 text-focus trials left day125
+at124. These negative artifacts remain retained. Native spinbox arrows solve
+that driver input-delivery gap without altering client/codec/capture bytes.
+This is representative main-plane glyph/palette/numeric navigation, not full
+Level2.5 client conformance. The installed formatter's41 columns still do not
+prove the authored56-column side panels. Finite Router-byte replay is not a
+client attached to a bound live server or an open-client generation transition.
+
+Receipt: tmp/phase9-edited-stream/identity.json and receipt-sha256.txt,
+SHA256de0a9ff2fcaa965eb86128f6ae9d33d6ab5cd38bbcd11b8a00b34737060ef1d5.
+It binds frozen test/driver/replay source, tool versions/hashes, exact exports,
+saved TTI, all source/route/SRT/model proof, actual editor/client captures and
+positive/negative logs, excluding mutable progress. Native/prerequisite evidence
+is reused; the reference/README own workflow/replay details. Localized admin
+file delivery/import and its headed evidence are the next concrete connection;
+full charset/resource/editor-set/panel, Lua/warm/restart/source/Next/platform
+requirements remain. No accepted restriction, criterion/status/dependency change,
+full engine/milestone completion, push or production addon publication.
+
 2026-10-13 actual pinned external-editor/native-flow checkpoint:
 Criterion: use a real exported synthetic TTI in an unchanged pinned external
 editor, preserve exact saved bytes through native import/preview/publication and
@@ -2828,15 +2876,16 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | --- | --- | --- |
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
 | Authoritative export baseline | Complete projection, server-retained receipt and exact rebuild | Operational file delivery/import in localized admin/agent flow |
-| Edited concept -> same preview -> explicit Publish | Native row import/CAS, same raster/packets, separate acceptance, reopen and two-channel theme isolation | Ordinary edited stream, independent decoder/TSDuck and suitable-client navigation |
-| Actual pinned QTM workflow | Existing v1.0 calibration and native per-page export | Host export/open/edit/save/import/preview/publish; PS/X28 normalization and resource dependency loading |
+| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two-channel exact route/TSDuck/AV/independent decoding and actual 124->125->124 main-plane client proof | Localized admin attachment, bound live client/open-generation transitions and full panel/feature coverage |
+| Actual pinned QTM workflow | Actual v1.0 edit/Save As of one page in a retained two-page set, native import/shared preview/publish/reopen and isolated delivery | General charset/PS/X28 fidelity, resource dependency loading and full supported page-set/subpage edits |
 | Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and all six platforms |
 
-Concrete next action: add a second reciprocal-navigation display to the synthetic
-editor fixture, retaining the first page's actual file workflow, then reuse the
-ordinary stream route/capture and independent decoder/TSDuck/client probes for
-its edited accepted concept. General charset/resource/editor and localized admin
-gaps remain required; the retained nonzero editor loss must not be masked. Base-row-only import, unchanged-file refusal,
+Concrete next action: connect existing retained native export/import functions to
+localized admin file delivery/import-as-concept, then inspect the same preview and
+separate Publish in the headed flow. Actual edited ordinary-route/main-plane client
+evidence now exists; do not repeat general audits or metric expansion. General
+charset/resource/editor/panel, live-bound/open-client and localized admin gaps
+remain required; retained nonzero editor loss must not be masked. Base-row-only import, unchanged-file refusal,
 protected enhancement/PS edits and preserved-but-not-editor-loadable DVB assets
 are explicit pending implementation/proof; none is a permanent accepted limitation.
 No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing

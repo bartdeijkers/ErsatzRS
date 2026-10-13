@@ -56,7 +56,7 @@ pub(super) fn selected(name: &str) -> String {
         .expect("set the explicit native teletext capture environment")
 }
 
-fn muxrate() -> i64 {
+pub(super) fn muxrate() -> i64 {
     MpegTsMuxingOptions::from_bitrates(Some(VIDEO_KBPS), Some(AUDIO_KBPS)).muxrate_bps
 }
 
@@ -669,7 +669,7 @@ pub(super) async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8
         .any(|stream| stream["codec_name"] == "dvb_teletext" && stream["id"] == "0x200"));
 }
 
-pub(super) async fn decode_page(ffmpeg: &str, bytes: &[u8], page: &str) {
+pub(super) async fn decode_page_text(ffmpeg: &str, bytes: &[u8], page: &str) -> String {
     let output = probe(
         ffmpeg,
         &[
@@ -701,8 +701,13 @@ pub(super) async fn decode_page(ffmpeg: &str, bytes: &[u8], page: &str) {
         262_144,
     )
     .await;
+    String::from_utf8(output).unwrap()
+}
+
+pub(super) async fn decode_page(ffmpeg: &str, bytes: &[u8], page: &str) {
+    let output = decode_page_text(ffmpeg, bytes, page).await;
     assert!(
-        String::from_utf8(output).unwrap().contains("AZ"),
+        output.contains("AZ"),
         "actual page must contain the original enhanced A and unchanged neighbouring Z"
     );
 }

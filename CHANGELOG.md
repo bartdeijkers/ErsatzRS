@@ -21,20 +21,23 @@ release section when tagging a release.
   resources and metadata. A bounded native import now authenticates retained exports,
   protects free/zone/generated effects and saves immutable concepts for the same
   preview and separate explicit publication. An opt-in headed QTeletextMaker 1.0
-  probe connects one synthetic export/edit/save to native import/publication/reopen.
-  Nonzero charset loss is explicitly rejected; broader editor/admin/client proof
-  remains open.
+  probe connects an edit within a synthetic two-page set to native import,
+  preview, explicit publication, reopen and ordinary stream output. Transport,
+  independent decoding and headed client navigation prove two-channel theme
+  isolation. Nonzero charset loss is explicitly rejected; full editor/admin and
+  Level 2.5 client acceptance remain open.
 - Export saved native teletext originals through a bounded host API to exact
   per-page TTI mappings and versioned sidecars, backed by retained server receipts.
   Preserve full resource/magazine packets, original subcodes/navigation and
   addon-owned metadata without changing broadcast state. Editor-only palette
-  context is explicit; edited concepts and complete QTeletextMaker dependency
-  loading/roundtrip remain open.
+  context is explicit; localized editor administration and complete QTeletextMaker
+  dependency loading/roundtrip remain open.
 - Capture addon-owned teletext template revisions, named themes, typed overrides,
   free areas, custom zones and generated-field bindings through negotiated v3.
   Validate exact page coverage and actual side-panel bounds; preserve metadata
   with immutable original designs without granting import or publication authority.
-  Existing v1/v2 contributions remain compatible; editable TTI concepts remain open.
+  Existing v1/v2 contributions remain compatible; full editor/admin acceptance
+  remains open.
 - Add preparatory immutable teletext export-receipt storage with exact revision,
   digest and current-head fences, required application confirmation and retained
   history after deletion or uninstall. Add a bounded TTI record codec that preserves

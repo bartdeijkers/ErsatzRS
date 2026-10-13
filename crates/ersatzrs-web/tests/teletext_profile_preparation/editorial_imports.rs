@@ -1,6 +1,7 @@
 //! Actual installed synthetic V3 originals to editor concepts and native previews.
-//! POSIX fixtures inherit the parent's Unix-only scope. These are application
-//! flow checks, not `QTeletextMaker`, browser, stream/client or full-engine proof.
+//! POSIX fixtures inherit the parent's Unix-only scope. Regular cases check the
+//! application flow; the opt-in external-editor case also captures ordinary TS.
+//! Headed editor/client evidence and complete engine acceptance remain separate.
 
 use super::{authoring_metadata, channel_documents, designs, generations, *};
 use ersatzrs_app::{
@@ -126,7 +127,17 @@ async fn setup() -> (Fixture, Flow) {
 }
 
 async fn setup_with_response(response: fn(&str, u16, u16) -> serde_json::Value) -> (Fixture, Flow) {
-    let fixture = Fixture::new_persistent().await;
+    Box::pin(setup_with_fixture(
+        response,
+        Fixture::new_persistent().await,
+    ))
+    .await
+}
+
+async fn setup_with_fixture(
+    response: fn(&str, u16, u16) -> serde_json::Value,
+    fixture: Fixture,
+) -> (Fixture, Flow) {
     authoring_metadata::install(&fixture).await;
     for (channel, theme) in [(1, "day"), (2, "night")] {
         authoring_metadata::write(&fixture, theme, &response(theme, 124, 32));
@@ -639,6 +650,7 @@ async fn editorial_tampering_and_protected_effects_preserve_original_pointers_an
 /// Opt-in file handshake for the separately operated pinned headed editor.
 /// This probe never launches the editor or manufactures its saved TTI bytes.
 mod external_editor_probe {
+    use super::super::{client_capture, ordinary_stream_flow};
     use super::*;
     use std::{io, path::Path};
 
@@ -689,12 +701,31 @@ mod external_editor_probe {
     }
 
     fn editor_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
+        assert_eq!((page, subcode), (124, 32));
         let mut response = authoring_metadata::response(theme, page, subcode);
         // Pinned editor load couples its X28 NOS to header controls. The
         // separate positive fixture uses unambiguous zero on both planes;
         // actual-1 retains the nonzero loss/rejection as open fidelity evidence.
         response["service"]["pages"][0]["national_option"] = serde_json::json!(0);
         response["service"]["magazines"][0]["presentation"]["primary"] = serde_json::json!(0);
+        let mut second = response.clone();
+        let owner = serde_json::json!({"page":125,"subcode":32});
+        second["service"]["pages"][0]["address"] = owner.clone();
+        second["service"]["page_enhancements"][0]["address"] = owner.clone();
+        second["service"]["mot_selections"][0]["display"] = owner.clone();
+        second["authoring"]["pages"][0]["page"] = owner;
+        response["service"]["pages"][0]["navigation"][0]["target"]["page"] = serde_json::json!(125);
+        second["service"]["pages"][0]["navigation"][0]["target"]["page"] = serde_json::json!(124);
+        for field in ["pages", "page_enhancements", "mot_selections"] {
+            response["service"][field]
+                .as_array_mut()
+                .unwrap()
+                .push(second["service"][field][0].take());
+        }
+        response["authoring"]["pages"]
+            .as_array_mut()
+            .unwrap()
+            .push(second["authoring"]["pages"][0].take());
         response
     }
 
@@ -750,7 +781,8 @@ mod external_editor_probe {
                 "sidecar":format!("{prefix}/project.ersatzrs.json"),"sidecar_sha256":hash(&sidecar),
                 "page":{"page":page.page.page,"subcode":page.page.subcode,"editor_page":page.editor_page,"editor_ordinal":page.editor_ordinal},
                 "editor_input":format!("{prefix}/{}",page.name),
-                "editor_geometry":editor_geometry(flow,index,page.page.page,page.page.subcode),"files":files}));
+                "editor_geometry":editor_geometry(flow,index,page.page.page,page.page.subcode),
+                "pages":exported.sidecar().project.pages,"files":files}));
         }
         let ready = serde_json::json!({"probe_version":1,"channels":channels,
             "edit":{"channel_id":1,"row":2,"column":8,"code":81},
@@ -942,13 +974,173 @@ mod external_editor_probe {
         lower_hex(&digest.finalize())
     }
 
+    struct StreamTools {
+        ffmpeg: String,
+        ffprobe: String,
+        tsanalyze: String,
+    }
+
+    impl StreamTools {
+        async fn load() -> Self {
+            let tools = Self {
+                ffmpeg: client_capture::selected("ERSATZRS_TELETEXT_TEST_FFMPEG"),
+                ffprobe: client_capture::selected("FFPROBE_PATH"),
+                tsanalyze: client_capture::selected("ERSATZRS_TELETEXT_TEST_TSANALYZE"),
+            };
+            client_capture::check_tools(&tools.ffmpeg, &tools.ffprobe).await;
+            tools
+        }
+    }
+
+    async fn prepare_editor_playback_fixture(
+        directory: &Path,
+        tools: &StreamTools,
+    ) -> (Fixture, std::path::PathBuf) {
+        let fixture = Fixture::new_persistent().await;
+        let source_path = client_capture::generate_source(&tools.ffmpeg, fixture.root.path()).await;
+        client_capture::configure_source_for_channels(&fixture, &source_path, &[1, 2]).await;
+        ordinary_stream_flow::enable_output_policy(&fixture).await;
+        let source = read_bounded(&source_path, 8 * 1024 * 1024).unwrap();
+        write_new(&directory.join("source.ts"), &source).unwrap();
+        (fixture, source_path)
+    }
+
+    fn preview_page(
+        service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+        page: u16,
+    ) -> TeletextRaster {
+        let preview = project_teletext_preview(
+            service,
+            channel_documents::address(page, 32),
+            TeletextColourPixelOptions {
+                reveal_concealed: false,
+                flash_phase: TeletextFlashPhase::Original,
+            },
+            preview_budget(),
+        )
+        .unwrap();
+        assert!(preview.raster().diagnostics().is_empty());
+        assert_eq!(
+            preview.navigation()[0].target.page.get(),
+            if page == 124 { 125 } else { 124 }
+        );
+        preview.raster().clone()
+    }
+
+    async fn decoded_delivery_pages(
+        directory: &Path,
+        tools: &StreamTools,
+        bytes: &[u8],
+        channel: i64,
+        service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    ) -> Vec<serde_json::Value> {
+        let mut pages = Vec::new();
+        for page in [124, 125] {
+            let text =
+                client_capture::decode_page_text(&tools.ffmpeg, bytes, &page.to_string()).await;
+            let filename = format!("channel-{channel}-page-{page}.srt");
+            write_new(&directory.join(&filename), text.as_bytes()).unwrap();
+            assert!(
+                text.contains("AZ"),
+                "actual decode must retain the original enhanced row"
+            );
+            let edited = channel == 1 && page == 124;
+            assert_eq!(
+                text.contains('Q'),
+                edited,
+                "actual decoder must observe Q only on the edited page/channel"
+            );
+            let preview = preview_page(service, page);
+            pages.push(serde_json::json!({"page":page,"subcode":32,
+                "decoded_text":filename,"decoded_sha256":hash(text.as_bytes()),
+                "edited_q_present":edited,"preview_sha256":raster_hash(&preview),
+                "navigation_target":if page==124 {125} else {124}}));
+        }
+        pages
+    }
+
+    async fn verify_delivery(
+        directory: &Path,
+        tools: &StreamTools,
+        source: &[u8],
+        bytes: &[u8],
+        channel: i64,
+        accepted: &AcceptedTeletextOutputCandidate,
+    ) -> serde_json::Value {
+        let filename = format!("channel-{channel}.ts");
+        // Retain exact route bytes if an independent check discovers a defect;
+        // the later proof claims success only after every check has passed.
+        write_new(&directory.join(&filename), bytes).unwrap();
+        client_capture::verify_transport(&tools.tsanalyze, &tools.ffprobe, bytes).await;
+        client_capture::verify_av(&tools.ffmpeg, source, bytes).await;
+        ordinary_stream_flow::assert_emitted_model(bytes, accepted.service());
+        let pages =
+            decoded_delivery_pages(directory, tools, bytes, channel, accepted.service()).await;
+        serde_json::json!({"channel_id":channel,"capture":filename,"bytes":bytes.len(),
+            "sha256":hash(bytes),"generation_id":accepted.generation().id,
+            "request_id":accepted.generation().request.id,"revision":accepted.generation().request.revision,
+            "theme_rgb4":if channel==1 {[15,0,0]} else {[0,0,15]},
+            "tsduck_transport_passed":true,"source_av_passed":true,"complete_emitted_model_equal":true,
+            "pages":pages})
+    }
+
+    async fn capture_edited_native_outputs(
+        directory: &Path,
+        fixture: &mut Fixture,
+        flow: &Flow,
+        edited: &AcceptedTeletextOutputCandidate,
+        tools: &StreamTools,
+        source_path: &Path,
+    ) -> serde_json::Value {
+        let source = read_bounded(source_path, 8 * 1024 * 1024).unwrap();
+        assert_eq!(
+            read_bounded(&directory.join("source.ts"), 8 * 1024 * 1024).unwrap(),
+            source
+        );
+        // Source/policy preparation preceded the original captured selections.
+        // Only the existing disposable schedule's start is reset after the
+        // bounded editor wait; no selection/configuration fence is relaxed.
+        ordinary_stream_flow::reset_source_start(fixture).await;
+        let (first, second) = tokio::join!(
+            ordinary_stream_flow::capture(fixture, 1),
+            ordinary_stream_flow::capture(fixture, 2),
+        );
+        let day = verify_delivery(directory, tools, &source, &first, 1, edited).await;
+        let night = verify_delivery(directory, tools, &source, &second, 2, &flow.accepted[1]).await;
+        assert_eq!(
+            preview_page(edited.service(), 125),
+            preview_page(flow.saved[0].candidate().encoded().unwrap(), 125)
+        );
+        assert_rgb(&preview_page(edited.service(), 124), [15, 0, 0]);
+        assert_rgb(&preview_page(flow.accepted[1].service(), 124), [0, 0, 15]);
+        generations::assert_same_output(&recover(fixture, 1).await, edited);
+        generations::assert_same_output(&recover(fixture, 2).await, &flow.accepted[1]);
+        assert_retained_storage(fixture, flow).await;
+        assert!(fixture.playout.try_recv().is_err());
+        let proof = serde_json::json!({"probe_version":1,
+            "route":"/iptv/hls-direct/{channel}.ts","source":"source.ts",
+            "source_sha256":hash(&source),"source_bytes":source.len(),
+            "muxrate_bps":client_capture::muxrate(),"channels":[day,night],
+            "headed_client_navigation":"requires independent actual client proof for 124 to 125 to 124"});
+        write_new(
+            &directory.join("stream-proof.json"),
+            &serde_json::to_vec_pretty(&proof).unwrap(),
+        )
+        .unwrap();
+        proof
+    }
+
     #[tokio::test]
-    #[ignore = "requires an explicit create-new disposable directory and a separately operated pinned headed QTeletextMaker 1.0 editor"]
+    #[ignore = "requires a create-new disposable directory, separately operated pinned headed QTeletextMaker 1.0, FFmpeg/ffprobe9 and TSDuck"]
     async fn pinned_external_editor_files_import_preview_publication_and_reopen() {
         let directory =
             std::path::PathBuf::from(super::super::client_capture::selected(DIRECTORY_ENV));
         std::fs::create_dir(&directory).expect("probe destination must not already exist");
-        let (mut fixture, flow) = setup_with_response(editor_response).await;
+        let tools = StreamTools::load().await;
+        let (playback_fixture, source_path) =
+            prepare_editor_playback_fixture(&directory, &tools).await;
+        let (mut fixture, flow) =
+            Box::pin(setup_with_fixture(editor_response, playback_fixture)).await;
         write_ready(&directory, &flow).unwrap();
         let (marker, request) = checked_external_request(&directory, &fixture, &flow).await;
         let edited_hash = hash(
@@ -977,11 +1169,21 @@ mod external_editor_probe {
         generations::assert_same_output(&recover(&fixture, 2).await, &flow.accepted[1]);
         assert_retained_storage(&fixture, &flow).await;
         assert!(fixture.playout.try_recv().is_err());
-        let success = serde_json::json!({"probe_version":1,"scope":"native application interchange flow",
+        let stream = capture_edited_native_outputs(
+            &directory,
+            &mut fixture,
+            &flow,
+            &accepted,
+            &tools,
+            &source_path,
+        )
+        .await;
+        let success = serde_json::json!({"probe_version":1,"scope":"native application interchange and ordinary MPEG-TS flow",
             "editor_completion":marker,"edited_tti_sha256":edited_hash,
             "edited_design_id":edited.head().id,"edited_revision":edited.head().revision,"edited_digest":edited.digest(),
             "preview":{"width":preview.width(),"height":preview.height(),"diagnostics":preview.diagnostics().len(),"sha256":raster_hash(&preview)},
             "accepted_generation_id":accepted.generation().id,"accepted_request_id":accepted.generation().request.id,
+            "stream":stream,
             "second_channel_unchanged":true,"originals_and_receipts_unchanged":true,
             "headed_editor_and_client_evidence":"must be attached independently"});
         write_new(

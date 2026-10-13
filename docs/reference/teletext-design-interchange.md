@@ -4840,6 +4840,25 @@ rewrite saved files, change header encoding or limit the authored engine.
 provide the structured file/validation/preview workflow for maintainers and agents.
 Its readiness/completion markers alone grant no authority: final native results,
 actual window/dialog captures and source/binary/image identities are required.
-P9A-04 owns successful and negative receipts. Headed localized admin, ordinary
-edited stream, independent decoding and suitable-client navigation, full page-set/
-resource/charset editing and complete engine acceptance remain open.
+P9A-04 owns successful and negative receipts and the criterion/next-step map.
+The positive probe now retains pages 124/125, raw subcode 32 and reciprocal
+navigation on both channels. It edits only the first page; page 125, protected
+assets, sidecars and originals remain exact. Source/policy setup precedes original
+configuration/receipt capture, so ordinary delivery does not relax freshness.
+After explicit publication and reopen, simultaneous ordinary Router captures
+pass complete emitted-model, TSDuck/FFprobe and source audio/video checks.
+Independent FFmpeg9/libzvbi decodes both pages: `Q` occurs only on day/page124.
+Separate headed VLC3.0.20-3build6/libzvbi0.2.42-2 windows replay the exact served
+bytes and display `124.20 -> 125.20 -> 124.20`, red/day versus blue/night `AZ`,
+and the same isolated `Q`. Actual Qt teletext activation starts the decoder;
+native spinbox arrows deliver navigation without the unreliable X11 text-focus
+path. CLI track preferences alone are not activation. Negative activation and
+focus trials remain retained. This is finite byte-identical replay of ordinary
+Router output, not a client attached to a bound running server or open-client
+generation transition. The installed formatter's 41 columns do not prove the
+56-column side-panel presentation. No permanent limitation is accepted.
+
+Retain `stream-proof.json`, exact source/captures and page-specific decoder files
+alongside native results and the independently inspected headed captures. Headed
+localized admin, full page-set/resource/charset editing and all remaining engine,
+Lua, warm/restart and playback/platform acceptance remain required.

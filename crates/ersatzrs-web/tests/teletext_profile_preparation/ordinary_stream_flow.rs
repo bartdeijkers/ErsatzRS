@@ -67,6 +67,13 @@ async fn setting(fixture: &Fixture, key: &'static str, value: &str) {
         .unwrap();
 }
 
+/// Configure the existing ordinary-route policy after sibling fixture source
+/// setup. Capturing two isolated channels uses the same bounded work admission.
+pub(super) async fn enable_output_policy(fixture: &Fixture) {
+    setting(fixture, POLICY_KEY, POLICY).await;
+    setting(fixture, MAX_CONCURRENT_SETTING, "2").await;
+}
+
 fn themed_pages(theme: &str) -> Value {
     let mut document = channel_documents::response(DocumentFixture::Authored, theme, 200, 0, "nld");
     document["magazines"][0]["magazine"] = json!(2);
@@ -239,7 +246,7 @@ fn raster(
     preview.raster().clone()
 }
 
-async fn reset_source_start(fixture: &Fixture) {
+pub(super) async fn reset_source_start(fixture: &Fixture) {
     let path = fixture.root.path().join("synthetic-client-schedule.json");
     let mut body: Value = serde_json::from_slice(&tokio::fs::read(&path).await.unwrap()).unwrap();
     body["startTime"] = json!(Utc::now().to_rfc3339());
@@ -248,7 +255,7 @@ async fn reset_source_start(fixture: &Fixture) {
         .unwrap();
 }
 
-async fn capture(fixture: &Fixture, channel: i64) -> Vec<u8> {
+pub(super) async fn capture(fixture: &Fixture, channel: i64) -> Vec<u8> {
     let response = build_app(fixture.state.clone())
         .oneshot(
             Request::builder()
@@ -275,7 +282,7 @@ fn emitted_units(bytes: &[u8]) -> BTreeSet<[u8; 46]> {
     observed
 }
 
-fn assert_emitted_model(bytes: &[u8], service: &Arc<EncodedTeletextAuthoredService>) {
+pub(super) fn assert_emitted_model(bytes: &[u8], service: &Arc<EncodedTeletextAuthoredService>) {
     let mut expected: BTreeSet<_> = service
         .pages()
         .iter()

@@ -104,13 +104,19 @@ qtm_probe_root="$PWD/tmp/phase9-qtm-native-flow/editor-run-01"
 test ! -e "$qtm_probe_root"
 test ! -L "$qtm_probe_root"
 ERSATZRS_TELETEXT_QTM_INTERCHANGE_DIR="$qtm_probe_root" \
+  ERSATZRS_TELETEXT_TEST_FFMPEG=/path/to/verified-ffmpeg-9/ffmpeg \
+  FFMPEG_PATH=/path/to/verified-ffmpeg-9/ffmpeg \
+  FFPROBE_PATH=/path/to/verified-ffmpeg-9/ffprobe \
+  ERSATZRS_TELETEXT_TEST_TSANALYZE=/path/to/tsanalyze \
   ./run.sh test -p ersatzrs-web --test teletext_profile_preparation \
     --run-ignored ignored-only \
     -E 'test(external_editor_probe::pinned_external_editor_files_import_preview_publication_and_reopen)'
 ```
 
 The test prepares the same installed synthetic addon on two channels, with
-distinct profiles and day/night themes. It creates immutable original designs,
+distinct profiles and day/night themes. Before capturing configuration or original
+receipts, it prepares disposable playback and the existing bounded output policy.
+It creates immutable original designs,
 export receipts and an existing accepted output for each channel. It writes:
 
 | File | Meaning |
@@ -121,10 +127,12 @@ export receipts and an existing accepted output for each channel. It writes:
 | `channel-1/<exported-file>` and `channel-2/<exported-file>` | Exact exported TTI files and protected binary assets, with lengths/hashes listed in readiness |
 
 The requested edit is channel 1, physical row 2, zero-based column 8, code 81
-(`Q`). The one-page export preserves the authored page/subcode through its trusted
-mapping; the editor's PN/SC ordinal is zero. Header and enhanced charset use zero
-in this separate positive fixture; the prior nonzero editor loss remains open. This single-page probe does not prove
-multi-page or subpage navigation. Leave both channel directories and their
+(`Q`). Each channel exports pages 124 and 125 with reciprocal navigation and raw
+subcode 32. Stable per-page mappings preserve these identities while the editor's
+PN/SC ordinal is zero. Only the first mapped TTI is opened/edited/saved; page 125
+and all other assets remain exact. Header and enhanced charset use zero in this
+separate positive fixture; the prior nonzero editor loss remains open. This does
+not prove editing all pages/subpages or editor resource dependency loading. Leave both channel directories and their
 sidecars/assets byte-identical. Preserve their original names when returning the
 edited bytes to the importer.
 
@@ -271,6 +279,14 @@ and native acceptance publish the edited revision. A second reopen compares the
 accepted edited output and the untouched second channel, with originals and
 receipts retained. File/import refusals record `failed.json` and assert the old
 pointers remain intact; saving the editor file does not itself publish anything.
+After the second reopen, the test captures both channels concurrently through the
+ordinary `/iptv/hls-direct/{channel}.ts` Router route. It checks TSDuck/FFprobe,
+source audio/video hashes/timestamps, the complete encoded model and independent
+FFmpeg/libzvbi decoding of both pages. `Q` must occur only on channel 1/page 124.
+It retains `source.ts`, `channel-1.ts`, `channel-2.ts`, four page-specific SRT files
+and `stream-proof.json`. A separate headed client trial must replay these exact
+served bytes and inspect actual headers, glyphs/themes and navigation; native
+Router capture does not establish a client attached to a bound live server.
 
 Retain the nextest run identity and terminal zero result, `success.json`, edited
 TTI hash, unchanged original/sidecar/asset hashes, tool/source/image/driver
@@ -281,9 +297,10 @@ isolation. It deliberately requires headed editor/client evidence independently.
 
 This representative probe covers native application export → actual editor
 open/edit/save → validated concept import → shared preview → explicit acceptance
-→ database reopen. Ordinary stream-route output, independent decoding/TSDuck,
-appropriate-client viewing/navigation, full authored Level 2.5/fallback, complete
-resource loading/editing, supported page-set/subpage workflows, localized headed
+→ database reopen → ordinary stream-route output and independent decoding/TSDuck.
+Appropriate-client viewing/navigation requires separately inspected headed proof.
+Full authored Level 2.5/fallback, complete resource loading/editing, all supported
+page-set/subpage workflows, localized headed
 admin, Lua behavior and six-platform acceptance retain their existing separate
 requirements. The production TV-guide addon still follows independent engine
 acceptance; no milestone completion follows from this probe alone.
