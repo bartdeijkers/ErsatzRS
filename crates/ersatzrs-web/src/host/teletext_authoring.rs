@@ -9,9 +9,15 @@ use std::{
 use chrono::Utc;
 use ersatzrs_app::{
     teletext_channel_documents::ChannelTeletextDocumentError,
-    teletext_guide::SuppliedTeletextGuideContext, ApplicationServices,
+    teletext_generations::TeletextGenerationStoreError,
+    teletext_guide::SuppliedTeletextGuideContext,
+    teletext_publications::{TeletextPublicationStoreError, TeletextPublicationValidationError},
+    ApplicationServices,
 };
-use ersatzrs_core::repositories::TeletextDesignMutation;
+use ersatzrs_core::repositories::{
+    TeletextDesignMutation, TeletextGenerationMutation, TeletextGenerationRejection,
+    TeletextPublicationMutation, TeletextPublicationRejection,
+};
 use ersatzrs_core::{
     locking::{TeletextWorkGuard, TeletextWorkHold},
     programme::ProgrammeClock,
@@ -19,7 +25,8 @@ use ersatzrs_core::{
 use ersatzrs_domain::{
     validate_teletext_profile_values, TeletextChannelSelectionSnapshot, TeletextColourPixelOptions,
     TeletextFlashPhase, TeletextNavigationLink, TeletextPageAddress, TeletextProfileValue,
-    TeletextResourceIdentity, TeletextSecretReferenceKind, MAX_TELETEXT_DESIGN_NAME_BYTES,
+    TeletextPublicationRequest, TeletextResourceIdentity, TeletextSecretReferenceKind,
+    MAX_TELETEXT_DESIGN_NAME_BYTES,
 };
 use ersatzrs_ffmpeg::teletext::{
     TeletextAuthoredServiceEncodingFailure, TeletextCompiledDisplayPageEncodingFailure,
@@ -33,9 +40,14 @@ use super::teletext_channel_documents::{
     TeletextChannelDocumentPreparation,
 };
 use super::teletext_designs::{
-    reload_original_teletext_design_revision_with_hold,
+    reload_original_teletext_design_revision_with_hold, request_original_publication_with_hold,
     save_original_teletext_design_candidate_with_hold, NativeTeletextDesignError,
-    RestoredOriginalTeletextDesign,
+    NativeTeletextPublicationError, RestoredOriginalTeletextDesign,
+    TeletextOriginalPublicationTarget,
+};
+use super::teletext_generations::{
+    accept_original_teletext_generation_with_hold, frozen_original, NativeTeletextGenerationError,
+    TeletextGenerationAcceptanceTarget, TeletextGenerationTarget,
 };
 use super::teletext_preview::{project_teletext_preview, TeletextPreviewFailure};
 use super::teletext_runtime_policy::{
@@ -146,6 +158,10 @@ pub struct TeletextAuthoringPreviewRequest {
 /// native preview admission from the same exact compiled original service.
 pub struct TeletextAuthoringPreview {
     pub identity: TeletextAuthoringIdentity,
+    digest: String,
+    static_original: bool,
+    selection: TeletextChannelSelectionSnapshot,
+    publication: Option<TeletextAuthoringPublicationObservation>,
     raster: TeletextRaster,
     navigation: Vec<TeletextNavigationLink>,
     pages: Vec<TeletextPageAddress>,
@@ -153,6 +169,11 @@ pub struct TeletextAuthoringPreview {
     deadline: Instant,
 }
 impl TeletextAuthoringPreview {
+    /// Missing observation means unavailable metadata, never absent pointers.
+    #[must_use]
+    pub const fn publication(&self) -> Option<&TeletextAuthoringPublicationObservation> {
+        self.publication.as_ref()
+    }
     #[must_use]
     pub const fn raster(&self) -> &TeletextRaster {
         &self.raster
@@ -203,6 +224,309 @@ impl fmt::Debug for TeletextAuthoringPreview {
 pub struct TeletextAuthoringSaved {
     pub identity: TeletextAuthoringIdentity,
     pub preview: Result<TeletextAuthoringPreview, TeletextAuthoringError>,
+}
+
+/// Optimistic publication metadata; no read field grants mutation authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeletextAuthoringPublicationState {
+    Unrequested,
+    Pending,
+    Selected,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeletextAuthoringPublicationObservation {
+    pub digest: String,
+    pub current_design_head: i64,
+    pub current_pending_id: Option<i64>,
+    pub current_accepted_id: Option<i64>,
+    pub state: TeletextAuthoringPublicationState,
+    pub can_request: bool,
+    pub can_publish: bool,
+    pub replaces_pending: bool,
+}
+
+/// Exact immutable target plus the rendered head and pending-pointer fences.
+/// Requesting intent cannot change the independent accepted pointer.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextAuthoringPublicationTarget {
+    pub identity: TeletextAuthoringIdentity,
+    pub digest: String,
+    pub expected_design_head: i64,
+    pub expected_request_id: Option<i64>,
+}
+impl TeletextAuthoringPublicationTarget {
+    fn validate(&self) -> Result<(), TeletextAuthoringError> {
+        if self.identity.channel_id <= 0
+            || self.identity.design_id <= 0
+            || self.identity.revision <= 0
+            || self.expected_design_head <= 0
+            || self.expected_request_id.is_some_and(|id| id <= 0)
+            || self.digest.len() != 64
+            || !self
+                .digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(failure(TeletextAuthoringStatus::InvalidInput));
+        }
+        Ok(())
+    }
+}
+
+/// Publish alone carries the independently observed accepted-pointer fence.
+pub struct TeletextAuthoringPublishTarget {
+    pub publication: TeletextAuthoringPublicationTarget,
+    pub expected_generation_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextAuthoringPending {
+    pub identity: TeletextAuthoringIdentity,
+    pub request_id: i64,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeletextAuthoringSelected {
+    pub identity: TeletextAuthoringIdentity,
+    pub request_id: i64,
+    pub generation_id: i64,
+}
+
+/// Create pending intent for an exact static original; selected output is unchanged.
+/// No package runs, and submitted head/pending fences are never recaptured.
+/// # Errors
+/// Preserves located native failures and rejects stale fences without mutation.
+pub async fn request_static_teletext_publication(
+    application: &ApplicationServices,
+    target: TeletextAuthoringPublicationTarget,
+    deadline: Instant,
+) -> Result<TeletextAuthoringPending, TeletextAuthoringError> {
+    target.validate()?;
+    let operation = Operation::begin(application, deadline).await?;
+    let identity = target.identity;
+    let mutation = request_original_publication_with_hold(
+        application,
+        TeletextOriginalPublicationTarget {
+            design_id: identity.design_id,
+            revision: identity.revision,
+            expected_digest: target.digest,
+            expected_design_head: target.expected_design_head,
+            expected_request_id: target.expected_request_id,
+            expected_channel_id: Some(identity.channel_id),
+            require_static_original: true,
+        },
+        operation.policy.design,
+        operation.policy.reload_encoding_policy(),
+        None,
+        operation.deadline,
+        operation.guard.hold_work(),
+    )
+    .await
+    .map_err(publication_error)?;
+    match mutation {
+        TeletextPublicationMutation::Requested(requested) => Ok(TeletextAuthoringPending {
+            identity,
+            request_id: requested.request().id,
+        }),
+        TeletextPublicationMutation::Rejected(reason) => Err(publication_rejection(reason)),
+    }
+}
+
+/// Explicitly select exact pending output for new compatible streams.
+/// Existing running streams retain their generation; no warm adoption is implied.
+/// # Errors
+/// Rejects pending/accepted/head/selection races using existing atomic acceptance.
+pub async fn publish_static_teletext_generation(
+    application: &ApplicationServices,
+    target: TeletextAuthoringPublishTarget,
+    deadline: Instant,
+) -> Result<TeletextAuthoringSelected, TeletextAuthoringError> {
+    target.publication.validate()?;
+    if target.expected_generation_id.is_some_and(|id| id <= 0)
+        || target.publication.expected_request_id.is_none()
+    {
+        return Err(failure(TeletextAuthoringStatus::InvalidInput));
+    }
+    let operation = Operation::begin(application, deadline).await?;
+    let publication = target.publication;
+    let request = before(
+        operation.deadline,
+        application.teletext_publication_request(publication.identity.channel_id),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?
+    .filter(|request| Some(request.id) == publication.expected_request_id)
+    .ok_or_else(|| failure(TeletextAuthoringStatus::SelectionChanged))?;
+    if !matches_original(&request, publication.identity, &publication.digest) {
+        return Err(failure(TeletextAuthoringStatus::SelectionChanged));
+    }
+    let mutation = accept_original_teletext_generation_with_hold(
+        application,
+        TeletextGenerationAcceptanceTarget {
+            target: TeletextGenerationTarget {
+                request,
+                expected_design_head: publication.expected_design_head,
+                expected_generation_id: target.expected_generation_id,
+            },
+            expected_channel_id: Some(publication.identity.channel_id),
+        },
+        operation.policy.design,
+        operation.policy.reload_encoding_policy(),
+        operation.deadline,
+        operation.guard.hold_work(),
+    )
+    .await
+    .map_err(generation_error)?;
+    match mutation {
+        TeletextGenerationMutation::Accepted(accepted) => Ok(TeletextAuthoringSelected {
+            identity: publication.identity,
+            request_id: accepted.generation().request.id,
+            generation_id: accepted.generation().id,
+        }),
+        TeletextGenerationMutation::Rejected(reason) => Err(match reason {
+            TeletextGenerationRejection::Publication(reason) => publication_rejection(reason),
+            TeletextGenerationRejection::GuideFreshnessRequired => {
+                failure(TeletextAuthoringStatus::SelectionUnavailable)
+            }
+            TeletextGenerationRejection::GenerationConflict
+            | TeletextGenerationRejection::AlreadyAccepted => {
+                failure(TeletextAuthoringStatus::SelectionChanged)
+            }
+        }),
+    }
+}
+
+fn matches_original(
+    request: &TeletextPublicationRequest,
+    identity: TeletextAuthoringIdentity,
+    digest: &str,
+) -> bool {
+    request.channel_id == identity.channel_id
+        && request.design_id == identity.design_id
+        && request.revision == identity.revision
+        && request.digest == digest
+}
+
+async fn publication_observation(
+    application: &ApplicationServices,
+    preview: &TeletextAuthoringPreview,
+    deadline: Instant,
+) -> Result<TeletextAuthoringPublicationObservation, TeletextAuthoringError> {
+    let head = before(
+        deadline,
+        application.teletext_design_head(preview.identity.design_id),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?
+    .ok_or_else(|| failure(TeletextAuthoringStatus::MissingDesign))?;
+    let pending = before(
+        deadline,
+        application.teletext_publication_request(preview.identity.channel_id),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?;
+    let accepted = before(
+        deadline,
+        application.accepted_teletext_generation(preview.identity.channel_id),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?;
+    let selection_current = match before(
+        deadline,
+        application.observe_channel_teletext_document_selection(preview.identity.channel_id),
+    )
+    .await?
+    {
+        Ok(current) => current == preview.selection,
+        Err(ChannelTeletextDocumentError::SelectionRejected(_)) => false,
+        Err(_) => return Err(failure(TeletextAuthoringStatus::StorageFailed)),
+    };
+    let pending_matches = pending
+        .as_ref()
+        .is_some_and(|request| matches_original(request, preview.identity, &preview.digest));
+    let selected = accepted.as_ref().is_some_and(|generation| {
+        matches_original(&generation.request, preview.identity, &preview.digest)
+    });
+    let already_accepted_request = pending.as_ref().is_some_and(|request| {
+        accepted
+            .as_ref()
+            .is_some_and(|generation| &generation.request == request)
+    });
+    let eligible = preview.static_original && !head.deleted && selection_current;
+    let state = if !selection_current {
+        TeletextAuthoringPublicationState::Unavailable
+    } else if selected {
+        TeletextAuthoringPublicationState::Selected
+    } else if pending_matches {
+        TeletextAuthoringPublicationState::Pending
+    } else if eligible {
+        TeletextAuthoringPublicationState::Unrequested
+    } else {
+        TeletextAuthoringPublicationState::Unavailable
+    };
+    Ok(TeletextAuthoringPublicationObservation {
+        digest: preview.digest.clone(),
+        current_design_head: head.revision,
+        current_pending_id: pending.as_ref().map(|request| request.id),
+        current_accepted_id: accepted.as_ref().map(|generation| generation.id),
+        state,
+        can_request: eligible && !pending_matches,
+        can_publish: eligible && pending_matches && !already_accepted_request,
+        replaces_pending: pending.is_some() && !pending_matches,
+    })
+}
+
+fn publication_rejection(reason: TeletextPublicationRejection) -> TeletextAuthoringError {
+    failure(match reason {
+        TeletextPublicationRejection::InvalidValues => TeletextAuthoringStatus::InvalidInput,
+        TeletextPublicationRejection::MissingDesign
+        | TeletextPublicationRejection::MissingRevision => TeletextAuthoringStatus::MissingDesign,
+        TeletextPublicationRejection::DesignConflict
+        | TeletextPublicationRejection::DigestConflict
+        | TeletextPublicationRejection::SelectionChanged
+        | TeletextPublicationRejection::RequestConflict
+        | TeletextPublicationRejection::DeletedDesign => TeletextAuthoringStatus::SelectionChanged,
+        TeletextPublicationRejection::GuideTimedOut => TeletextAuthoringStatus::TimedOut,
+        _ => TeletextAuthoringStatus::SelectionUnavailable,
+    })
+}
+fn publication_error(error: NativeTeletextPublicationError) -> TeletextAuthoringError {
+    match error {
+        NativeTeletextPublicationError::Design(error) => design_error(error),
+        NativeTeletextPublicationError::Request(TeletextPublicationStoreError::Validation(
+            TeletextPublicationValidationError::TimedOut,
+        )) => failure(TeletextAuthoringStatus::TimedOut),
+        NativeTeletextPublicationError::Request(TeletextPublicationStoreError::Validation(
+            TeletextPublicationValidationError::Association,
+        )) => failure(TeletextAuthoringStatus::SelectionChanged),
+        NativeTeletextPublicationError::Request(_) => {
+            failure(TeletextAuthoringStatus::StorageFailed)
+        }
+    }
+}
+fn generation_error(error: NativeTeletextGenerationError) -> TeletextAuthoringError {
+    match error {
+        NativeTeletextGenerationError::Design(error) => design_error(error),
+        NativeTeletextGenerationError::Storage(TeletextGenerationStoreError::Validation(
+            TeletextPublicationValidationError::TimedOut,
+        )) => failure(TeletextAuthoringStatus::TimedOut),
+        NativeTeletextGenerationError::Storage(TeletextGenerationStoreError::Validation(
+            TeletextPublicationValidationError::Association,
+        ))
+        | NativeTeletextGenerationError::ArtifactMismatch => {
+            failure(TeletextAuthoringStatus::SelectionChanged)
+        }
+        NativeTeletextGenerationError::Storage(_) => {
+            failure(TeletextAuthoringStatus::StorageFailed)
+        }
+        NativeTeletextGenerationError::GuideFreshnessRequired => {
+            failure(TeletextAuthoringStatus::SelectionUnavailable)
+        }
+        NativeTeletextGenerationError::WorkerFailed => {
+            failure(TeletextAuthoringStatus::WorkerFailed)
+        }
+    }
 }
 
 struct Operation {
@@ -411,11 +735,24 @@ async fn preview_with_operation(
     let budget = operation.policy.preview;
     let deadline = operation.deadline;
     let hold = operation.guard.hold_work();
-    teletext_work::spawn_blocking(hold.clone(), move || {
+    let mut preview = teletext_work::spawn_blocking(hold.clone(), move || {
         render_original(&restored, request, budget, deadline, hold)
     })
     .await
-    .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))?
+    .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))??;
+    // Optional metadata gets at most half the remaining original operation bound.
+    // A failed read preserves the historical raster and never invents None IDs.
+    let now = Instant::now();
+    let observation_deadline = deadline
+        .checked_duration_since(now)
+        .and_then(|remaining| now.checked_add(remaining / 2));
+    if let Some(observation_deadline) = observation_deadline {
+        preview.publication =
+            publication_observation(application, &preview, observation_deadline.min(deadline))
+                .await
+                .ok();
+    }
+    Ok(preview)
 }
 
 fn render_original(
@@ -472,6 +809,10 @@ fn render_original(
             design_id: request.design_id,
             revision: request.revision,
         },
+        digest: restored.digest().to_owned(),
+        static_original: frozen_original(restored),
+        selection: restored.selection().clone(),
+        publication: None,
         raster,
         navigation,
         pages,

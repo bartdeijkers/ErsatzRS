@@ -114,6 +114,7 @@ fn channel_page(
             | "worker"
             | "preview"
             | "encoding"
+            | "publication-conflict"
     );
     let (code, message, role) = if !error.is_empty() {
         if draft_code {
@@ -130,7 +131,10 @@ fn channel_page(
             };
             (code, teletext_admin_error_text(language, code), "alert")
         }
-    } else if saved == "draft" {
+    } else if matches!(
+        saved,
+        "draft" | "publication-requested" | "publication-selected"
+    ) {
         (
             saved,
             super::teletext_drafts::draft_status_text(saved),

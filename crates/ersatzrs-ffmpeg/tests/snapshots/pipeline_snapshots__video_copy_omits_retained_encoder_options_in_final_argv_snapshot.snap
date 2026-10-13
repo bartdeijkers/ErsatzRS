@@ -1,0 +1,9 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 4493
+expression: "commands.join(\"\\n\")"
+---
+software: -nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -i /media/movie.mkv -map 0:0 -map 0:1 -muxdelay 0 -muxpreload 0 -movflags +faststart -codec:v copy -codec:a copy -muxrate 9830400 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+nvenc: -nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -init_hw_device cuda=nv:0 -hwaccel cuda -hwaccel_output_format cuda -i /media/movie.mkv -map 0:0 -map 0:1 -muxdelay 0 -muxpreload 0 -movflags +faststart -noautoscale -codec:v copy -codec:a copy -muxrate 9830400 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+qsv: -nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -hwaccel qsv -hwaccel_output_format qsv -init_hw_device qsv=hw -filter_hw_device hw -i /media/movie.mkv -i /media/movie.mkv -map 0:0 -map 1:1 -muxdelay 0 -muxpreload 0 -movflags +faststart -codec:v copy -codec:a copy -muxrate 9830400 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+vaapi: -nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -init_hw_device vaapi -hwaccel vaapi -hwaccel_output_format vaapi -i /media/movie.mkv -i /media/movie.mkv -map 0:0 -map 1:1 -muxdelay 0 -muxpreload 0 -movflags +faststart -noautoscale -codec:v copy -codec:a copy -muxrate 9830400 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

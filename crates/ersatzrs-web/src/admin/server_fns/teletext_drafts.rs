@@ -14,6 +14,30 @@ pub struct TeletextDraftPreviewData {
     pub pages: Vec<TeletextPageAddress>,
     pub navigation: Vec<TeletextNavigationLink>,
     pub diagnostics: Vec<TeletextDraftDiagnosticData>,
+    /// Unavailable observation remains distinct from observed absent pointers.
+    pub publication: Option<TeletextDraftPublicationObservation>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TeletextDraftPublicationState {
+    Unrequested,
+    Pending,
+    Selected,
+    Unavailable,
+}
+
+/// Read-only rendered CAS observations; mutation requires fresh native checks.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextDraftPublicationObservation {
+    pub digest: String,
+    pub current_design_head: i64,
+    pub current_pending_id: Option<i64>,
+    pub current_accepted_id: Option<i64>,
+    pub state: TeletextDraftPublicationState,
+    pub can_request: bool,
+    pub can_publish: bool,
+    pub replaces_pending: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,7 +185,31 @@ fn project_preview(
         pages: preview.pages().to_vec(),
         navigation: preview.navigation().to_vec(),
         diagnostics,
+        publication: preview.publication().map(project_publication),
     })
+}
+
+#[cfg(feature = "ssr")]
+fn project_publication(
+    observation: &crate::host::teletext_authoring::TeletextAuthoringPublicationObservation,
+) -> TeletextDraftPublicationObservation {
+    use crate::host::teletext_authoring::TeletextAuthoringPublicationState as State;
+    let state = match observation.state {
+        State::Unrequested => TeletextDraftPublicationState::Unrequested,
+        State::Pending => TeletextDraftPublicationState::Pending,
+        State::Selected => TeletextDraftPublicationState::Selected,
+        State::Unavailable => TeletextDraftPublicationState::Unavailable,
+    };
+    TeletextDraftPublicationObservation {
+        digest: observation.digest.clone(),
+        current_design_head: observation.current_design_head,
+        current_pending_id: observation.current_pending_id,
+        current_accepted_id: observation.current_accepted_id,
+        state,
+        can_request: observation.can_request,
+        can_publish: observation.can_publish,
+        replaces_pending: observation.replaces_pending,
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -250,5 +298,54 @@ fn pixel_fill(pixel: PreviewPixel) -> String {
         PreviewPixel::Video => "url(#video)".to_owned(),
         PreviewPixel::Header => "url(#header)".to_owned(),
         PreviewPixel::Unresolved => "url(#unresolved)".to_owned(),
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use crate::host::teletext_authoring::{
+        TeletextAuthoringPublicationObservation, TeletextAuthoringPublicationState as State,
+    };
+
+    #[test]
+    fn publication_projection_preserves_observed_fences_and_unavailable_observation() {
+        let absent: Option<TeletextAuthoringPublicationObservation> = None;
+        assert_eq!(
+            serde_json::to_value(absent.as_ref().map(project_publication)).unwrap(),
+            serde_json::Value::Null
+        );
+        for (state, serialized_state) in [
+            (State::Unrequested, "unrequested"),
+            (State::Pending, "pending"),
+            (State::Selected, "selected"),
+            (State::Unavailable, "unavailable"),
+        ] {
+            for pointers in [(None, None), (Some(19), Some(23))] {
+                let observation = TeletextAuthoringPublicationObservation {
+                    digest: "a".repeat(64),
+                    current_design_head: 7,
+                    current_pending_id: pointers.0,
+                    current_accepted_id: pointers.1,
+                    state,
+                    can_request: state == State::Unrequested,
+                    can_publish: state == State::Pending,
+                    replaces_pending: state == State::Selected,
+                };
+                let projected = project_publication(&observation);
+                assert_eq!(projected.digest, observation.digest);
+                assert_eq!(projected.current_design_head, 7);
+                assert_eq!(projected.current_pending_id, pointers.0);
+                assert_eq!(projected.current_accepted_id, pointers.1);
+                assert_eq!(projected.can_request, observation.can_request);
+                assert_eq!(projected.can_publish, observation.can_publish);
+                assert_eq!(projected.replaces_pending, observation.replaces_pending);
+                let value = serde_json::to_value(&projected).unwrap();
+                assert_eq!(value["state"], serialized_state);
+                let restored: TeletextDraftPublicationObservation =
+                    serde_json::from_value(value).unwrap();
+                assert!(restored == projected);
+            }
+        }
     }
 }

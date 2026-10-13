@@ -1,7 +1,8 @@
+import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -75,7 +76,7 @@ function contentHash(files: Map<string, Buffer>): string {
 // synthetic engine evidence, never an installed public package or publication.
 export class TeletextChannelFixture {
   readonly database: DatabaseSync;
-  readonly root = mkdtempSync(join(tmpdir(), 'ersatzrs-e2e-teletext-'));
+  readonly root: string;
   readonly addonId = `org.example.teletext.${randomUUID().replace(/-/g, '')}`;
   readonly channels: readonly [number, number];
   readonly originalUi: Map<string, string | undefined>;
@@ -83,9 +84,19 @@ export class TeletextChannelFixture {
   private readonly packagePath: string;
   private readonly packageFiles = new Map<string, Buffer>();
   private readonly authoredPages: boolean;
+  private readonly playback: boolean;
 
-  constructor(databasePath: string, options: { authoredPages?: boolean } = {}) {
+  constructor(databasePath: string, options: { authoredPages?: boolean; playback?: { ffmpeg: string } } = {}) {
     this.authoredPages = options.authoredPages === true;
+    this.playback = options.playback !== undefined;
+    if (this.playback && !this.authoredPages) throw new Error('Synthetic playback requires the authored producer.');
+    // Retained immutable histories/files belong to the wrapper DB's temporary
+    // directory; it is disposed only after the host has stopped.
+    this.root = mkdtempSync(join(this.playback ? dirname(databasePath) : tmpdir(), 'ersatzrs-e2e-teletext-'));
+    if (options.playback) {
+      try { this.generatePlaybackSource(options.playback.ffmpeg); }
+      catch (error) { rmSync(this.root, { recursive: true, force: true }); throw error; }
+    }
     this.packagePath = this.authoredPages ? join(this.root, 'package') : this.root;
     if (this.authoredPages) mkdirSync(this.packagePath);
     this.database = new DatabaseSync(databasePath);
@@ -134,6 +145,92 @@ export class TeletextChannelFixture {
     ) VALUES (?, '1.0.0', 1, ?, ?, ?, ?, '2026-10-12T00:00:00Z',
       '2026-10-12T00:00:00Z', 'synthetic-config-revision', 'local')`)
       .run(this.addonId, 'a'.repeat(64), this.packageHash, JSON.stringify(manifest), this.packagePath);
+    if (options.playback) this.configurePlayback(profile.Id);
+  }
+
+  private generatePlaybackSource(ffmpeg: string): void {
+    const version = execFileSync(ffmpeg, ['-version'], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 });
+    if (!/^ffmpeg version (?:n)?9(?:[.\s-])/.test(version.split('\n')[0])) {
+      throw new Error('Synthetic playback requires the selected FFmpeg 9 executable.');
+    }
+    const source = join(this.root, 'synthetic-client-source.ts');
+    const bytes = execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+      '-f', 'lavfi', '-i', 'color=c=red:size=160x90:rate=25',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '12',
+      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'mpeg2video', '-b:v', '1000k',
+      '-c:a', 'aac', '-b:a', '128k', '-metadata:s:a:0', 'language=eng',
+      '-muxrate', '4953600', '-pcr_period', '20', '-mpegts_start_pid', '256',
+      '-mpegts_pmt_start_pid', '4096', '-f', 'mpegts', 'pipe:1'],
+    { timeout: 30_000, maxBuffer: 8 * 1024 * 1024, killSignal: 'SIGKILL' });
+    if (!bytes.length || bytes.length % 188 !== 0) throw new Error('Synthetic source is not packet-aligned MPEG-TS.');
+    for (let offset = 0; offset < bytes.length; offset += 188) {
+      if (bytes[offset] !== 0x47 || (((bytes[offset + 1] & 0x1f) << 8) | bytes[offset + 2]) === 512) {
+        throw new Error('Synthetic source has invalid transport framing or an authored-PID collision.');
+      }
+    }
+    writeFileSync(source, bytes);
+  }
+
+  private configurePlayback(templateProfile: number): void {
+    const id = this.channels[0];
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      this.database.prepare('INSERT INTO "Resolution" ("Id","Name","Width","Height","IsCustom") VALUES (?,\'Synthetic teletext\',160,90,1)').run(id);
+      // Preserve schema additions without changing the shared template profile.
+      const template = this.database.prepare('SELECT * FROM "FFmpegProfile" WHERE "Id"=?').get(templateProfile);
+      if (!template) throw new Error('Disposable E2E profile is unavailable.');
+      const profile = { ...template, Id: id, Name: `Synthetic teletext ${id}`, ResolutionId: id,
+        TranscodeVideo: 0, TranscodeAudio: 0, VideoFormat: 99, AudioFormat: 99,
+        VideoBitrate: 4000, VideoBufferSize: 2000, AudioBitrate: 128, AudioBufferSize: 256,
+        AudioChannels: 1, AudioSampleRate: 48, HardwareAcceleration: 0, ThreadCount: 1,
+        OutputDynamicRange: 0, HdrMasteringDisplay: null, HdrMaxCll: null, HdrMaxFall: null,
+        NormalizeColors: 0, NormalizeFramerate: 0,
+        DeinterlaceVideo: 0, NormalizeLoudnessMode: 0 };
+      const keys = Object.keys(profile);
+      if (keys.some(key => !/^[A-Za-z][A-Za-z0-9]*$/.test(key))) throw new Error('Unexpected E2E profile schema.');
+      this.database.prepare(`INSERT INTO "FFmpegProfile" (${keys.map(key => `"${key}"`).join(',')}) VALUES (${keys.map(() => '?').join(',')})`)
+        .run(...keys.map(key => profile[key as keyof typeof profile]));
+      this.database.prepare('INSERT INTO "MediaSource" ("Id") VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO "PlexMediaSource" ("Id","ServerName","ClientIdentifier") VALUES (?,?,?)')
+        .run(id, `Synthetic-${id}`, `synthetic-${id}`);
+      this.database.prepare('INSERT INTO "Library" ("Id","MediaSourceId","MediaKind","Name") VALUES (?,?,1,\'Synthetic teletext\')').run(id, id);
+      this.database.prepare('INSERT INTO "PlexLibrary" ("Id","ShouldSyncItems") VALUES (?,1)').run(id);
+      this.database.prepare('INSERT INTO "LibraryPath" ("Id","LibraryId","Path") VALUES (?,?,?)').run(id, id, this.root);
+      for (const channel of this.channels) {
+        this.database.prepare('UPDATE "Channel" SET "FFmpegProfileId"=?,"StreamingMode"=1,"StreamingEngine"=0,"PreferredAudioLanguageCode"=\'eng\',"SubtitleMode"=0 WHERE "Id"=?').run(id, channel);
+        const schedule = join(this.root, `synthetic-client-schedule-${channel}.json`);
+        this.database.prepare('INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","ScheduleFile","Seed") VALUES (?,?,20,?,0)').run(channel, channel, schedule);
+      }
+      this.database.exec('COMMIT;');
+    } catch (error) {
+      this.database.exec('ROLLBACK;');
+      throw error;
+    }
+    this.resetSourceStart();
+  }
+
+  resetSourceStart(): void {
+    if (!this.playback) throw new Error('Source reset requires the explicit playback fixture.');
+    for (const channel of this.channels) {
+      writeFileSync(join(this.root, `synthetic-client-schedule-${channel}.json`), JSON.stringify({
+        startTime: new Date().toISOString(), programs: [{ title: 'Synthetic local clip',
+          serverKey: `Synthetic-${this.channels[0]}`, duration: 60_000,
+          file: join(this.root, 'synthetic-client-source.ts'), ratingKey: '1' }],
+      }));
+    }
+  }
+
+  setOutputPolicy(raw?: string | null): void {
+    if (!this.playback) throw new Error('Output policy requires the explicit playback fixture.');
+    if (raw === null) {
+      this.database.prepare('DELETE FROM "ConfigElement" WHERE "Key"=?').run('teletext.output.policy');
+      return;
+    }
+    const path = fileURLToPath(new URL('../../../crates/ersatzrs-web/tests/fixtures/teletext-output-policy-v1.json', pathToFileURL(__filename)));
+    this.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)')
+      .run('teletext.output.policy', raw ?? readFileSync(path, 'utf8'));
+    this.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)')
+      .run('teletext.work.max_concurrent', '2');
   }
 
   setting(key: string): string | undefined {
@@ -240,15 +337,38 @@ export class TeletextChannelFixture {
     for (const design of this.designs()) {
       this.database.prepare('UPDATE "TeletextDesign" SET "IsDeleted"=1 WHERE "Id"=?').run(design.Id);
     }
+    const retained = this.playback && (this.database.prepare(
+      'SELECT COUNT(*) AS count FROM "TeletextPublicationRequest" WHERE "ChannelId" IN (?,?)')
+      .get(...this.channels) as { count: number }).count > 0;
+    if (retained) {
+      this.database.prepare('UPDATE "Channel" SET "IsEnabled"=0,"ShowInEpg"=0 WHERE "Id" IN (?,?)').run(...this.channels);
+      this.database.prepare('UPDATE "ChannelTeletextBinding" SET "Enabled"=0 WHERE "AddonId"=?').run(this.addonId);
+      this.database.prepare('UPDATE "AddonInstallation" SET "Enabled"=0 WHERE "AddonId"=?').run(this.addonId);
+      this.restoreSettings();
+      this.database.close();
+      // The wrapper owns later removal of this directory after host shutdown.
+      // HTTP body cancellation alone does not certify worker/process cleanup.
+      return;
+    }
     this.database.prepare('DELETE FROM "ChannelTeletextBinding" WHERE "AddonId"=?').run(this.addonId);
     this.database.prepare('DELETE FROM "TeletextProfile" WHERE "AddonId"=?').run(this.addonId);
     this.database.prepare('DELETE FROM "AddonInstallation" WHERE "AddonId"=?').run(this.addonId);
     this.database.prepare('DELETE FROM "Channel" WHERE "Id" IN (?,?)').run(...this.channels);
+    if (this.playback) {
+      const id = this.channels[0];
+      this.database.prepare('DELETE FROM "FFmpegProfile" WHERE "Id"=?').run(id);
+      this.database.prepare('DELETE FROM "Resolution" WHERE "Id"=?').run(id);
+      this.database.prepare('DELETE FROM "MediaSource" WHERE "Id"=?').run(id);
+    }
+    this.restoreSettings();
+    this.database.close();
+    rmSync(this.root, { recursive: true, force: true });
+  }
+
+  private restoreSettings(): void {
     for (const [key, value] of this.originalUi) {
       if (value === undefined) this.database.prepare('DELETE FROM "ConfigElement" WHERE "Key"=?').run(key);
       else this.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)').run(key, value);
     }
-    this.database.close();
-    rmSync(this.root, { recursive: true, force: true });
   }
 }

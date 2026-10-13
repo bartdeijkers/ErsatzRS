@@ -4447,6 +4447,53 @@ fn sdr_profile_still_tonemaps_an_hdr_source_exactly_as_before() {
 }
 
 #[test]
+fn video_copy_omits_retained_encoder_options_in_final_argv_snapshot() {
+    let builders: [(&str, Box<dyn PipelineBuilder>); 4] = [
+        ("software", Box::new(SoftwarePipelineBuilder)),
+        ("nvenc", Box::new(NvencPipelineBuilder)),
+        ("qsv", Box::new(QsvPipelineBuilder)),
+        ("vaapi", Box::new(VaapiPipelineBuilder)),
+    ];
+    let mut commands = Vec::new();
+    for (name, builder) in builders {
+        let desired = DesiredVideoState {
+            video_format: FFmpegProfileVideoFormat::Copy,
+            audio_format: FFmpegProfileAudioFormat::Copy,
+            video_profile: Some("high".to_owned()),
+            video_preset: Some("medium".to_owned()),
+            video_tune: Some("hq".to_owned()),
+            ..DesiredVideoState::h264_1080p()
+        };
+        let request = h264_request(desired);
+        let arguments = builder
+            .build(request.clone())
+            .command(&request.inputs)
+            .arguments;
+        assert!(
+            arguments
+                .windows(2)
+                .any(|pair| pair == ["-codec:v", "copy"]),
+            "{name}: {arguments:?}"
+        );
+        for option in [
+            "-profile:v",
+            "-preset:v",
+            "-tune:v",
+            "-low_power",
+            "-look_ahead",
+            "-rc_mode",
+        ] {
+            assert!(
+                !arguments.iter().any(|argument| argument == option),
+                "{name}: {option}"
+            );
+        }
+        commands.push(format!("{name}: {}", arguments.join(" ")));
+    }
+    insta::assert_snapshot!(commands.join("\n"));
+}
+
+#[test]
 fn video_copy_ignores_the_output_dynamic_range() {
     let desired = DesiredVideoState {
         video_format: FFmpegProfileVideoFormat::Copy,

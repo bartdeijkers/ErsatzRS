@@ -363,6 +363,38 @@ async fn export_capture(channel: i64, bytes: &[u8]) {
     file.sync_all().await.unwrap();
 }
 
+/// Validate captures made through the real served host and native admin flow.
+/// The independent expected fixture supplies the same redistributable model;
+/// this test does not generate or replace the supplied HTTP capture bytes.
+#[tokio::test]
+#[ignore = "requires actual served-host captures plus pinned FFmpeg/ffprobe9 and TSDuck"]
+async fn served_admin_publication_captures_preserve_exact_model_and_source_av() {
+    let tools = Tools::load().await;
+    let prefix = client_capture::selected("ERSATZRS_TELETEXT_SERVED_CAPTURE");
+    let (fixture, _) = installed_profiles(&tools).await;
+    let source = tokio::fs::read(format!("{prefix}.source.ts"))
+        .await
+        .unwrap();
+    let accepted = [accept(&fixture, 1).await, accept(&fixture, 2).await];
+    for (index, suffix) in [
+        (0, "day"),
+        (1, "night"),
+        (0, "recovered"),
+        (1, "other-channel"),
+    ] {
+        let delivered = tokio::fs::read(format!("{prefix}.{suffix}.ts"))
+            .await
+            .unwrap();
+        verify_authored(&tools, &source, &delivered, accepted[index].service()).await;
+    }
+    for suffix in ["pending", "invalid-policy", "unavailable-profile"] {
+        let delivered = tokio::fs::read(format!("{prefix}.{suffix}.ts"))
+            .await
+            .unwrap();
+        verify_plain(&tools, &source, &delivered).await;
+    }
+}
+
 #[tokio::test]
 #[ignore = "requires pinned FFmpeg/ffprobe9,TSDuck and explicit create-new capture prefix; headed client trial remains separate"]
 async fn ordinary_http_two_channels_share_one_addon_with_isolated_accepted_themes() {

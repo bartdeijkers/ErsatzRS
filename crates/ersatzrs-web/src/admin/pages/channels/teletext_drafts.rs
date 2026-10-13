@@ -7,7 +7,7 @@ use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::teletext::ChannelTeletextData;
 use crate::admin::server_fns::teletext_drafts::{
     TeletextDraftDiagnosticData, TeletextDraftErrorLocation, TeletextDraftPreviewData,
-    TeletextDraftPreviewResult,
+    TeletextDraftPreviewResult, TeletextDraftPublicationObservation, TeletextDraftPublicationState,
 };
 use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::admin_result_view;
@@ -16,6 +16,9 @@ stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.m
 
 pub(super) fn draft_status_text(code: &str) -> &'static str {
     tr(match code {
+        "publication-requested" => TextKey::TeletextPublicationRequestSaved,
+        "publication-selected" => TextKey::TeletextPublicationSelectedSaved,
+        "publication-conflict" => TextKey::TeletextPublicationConflict,
         "draft" => TextKey::TeletextDraftSaved,
         "busy" => TextKey::TeletextWorkBusy,
         "expired" => TextKey::TeletextWorkExpired,
@@ -233,7 +236,76 @@ fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
             <nav class=style::inventory aria-label=tr(TextKey::TeletextPreviewPage)>{inventory}</nav>
             <ul class=style::navigation>{navigation}</ul>
             {diagnostics}
+            {publication_controls(data)}
         </div>
+    }.into_any()
+}
+
+fn publication_controls(data: &TeletextDraftPreviewData) -> AnyView {
+    let Some(observation) = data.publication.as_ref() else {
+        return view! {
+            <section data-testid="teletext-publication" data-state="unavailable">
+                <h3>{tr(TextKey::TeletextPublicationTitle)}</h3>
+                <p role="status">{tr(TextKey::TeletextPublicationUnavailable)}</p>
+            </section>
+        }
+        .into_any();
+    };
+    let (state, message) = match observation.state {
+        TeletextDraftPublicationState::Unrequested => {
+            ("unrequested", TextKey::TeletextPublicationUnrequested)
+        }
+        TeletextDraftPublicationState::Pending => ("pending", TextKey::TeletextPublicationPending),
+        TeletextDraftPublicationState::Selected => {
+            ("selected", TextKey::TeletextPublicationSelected)
+        }
+        TeletextDraftPublicationState::Unavailable => {
+            ("unavailable", TextKey::TeletextPublicationUnavailable)
+        }
+    };
+    view! {
+        <section data-testid="teletext-publication" data-state=state aria-labelledby="teletext-publication-title">
+            <h3 id="teletext-publication-title">{tr(TextKey::TeletextPublicationTitle)}</h3>
+            <p>{tr(TextKey::TeletextPublicationHelp)}</p>
+            <p role="status" data-testid="teletext-publication-status">{tr(message)}</p>
+            <p hidden=!observation.replaces_pending data-testid="teletext-publication-replaces-pending">
+                {tr(TextKey::TeletextPublicationReplacePending)}
+            </p>
+            <div class=style::preview_form>
+                <form method="post" action="/admin-api/teletext/design/request-publication"
+                    data-testid="teletext-publication-request-form">
+                    {publication_fields(data, observation)}
+                    <button type="submit" class=btn_class(ButtonVariant::Primary) disabled=!observation.can_request>
+                        {tr(TextKey::TeletextPublicationRequest)}
+                    </button>
+                </form>
+                <form method="post" action="/admin-api/teletext/design/publish"
+                    data-testid="teletext-publication-publish-form">
+                    {publication_fields(data, observation)}
+                    {hidden("expected_generation_id", observation.current_accepted_id.map_or_else(String::new, |id| id.to_string()))}
+                    <button type="submit" class=btn_class(ButtonVariant::Primary) disabled=!observation.can_publish>
+                        {tr(TextKey::TeletextPublicationPublish)}
+                    </button>
+                </form>
+            </div>
+        </section>
+    }.into_any()
+}
+
+fn publication_fields(
+    data: &TeletextDraftPreviewData,
+    observation: &TeletextDraftPublicationObservation,
+) -> AnyView {
+    view! {
+        {hidden("channel_id", data.channel_id.to_string())}
+        {hidden("design_id", data.design_id.to_string())}
+        {hidden("revision", data.revision.to_string())}
+        {hidden("digest", observation.digest.clone())}
+        {hidden("expected_design_head", observation.current_design_head.to_string())}
+        {hidden("expected_request_id", observation.current_pending_id.map_or_else(String::new, |id| id.to_string()))}
+        // Preview navigation is a return destination, never the opening page.
+        {hidden("preview_page", data.owner.page.get().to_string())}
+        {hidden("preview_subcode", format!("{:04X}", data.owner.subcode.get()))}
     }.into_any()
 }
 
@@ -477,6 +549,7 @@ mod tests {
                 },
             }],
             diagnostics: Vec::new(),
+            publication: None,
         }
     }
 
@@ -627,6 +700,94 @@ mod tests {
         assert!(html.contains("200 / 0010"));
         assert!(html.contains("7, 8"));
         assert!(!html.contains("synthetic-private-transport"));
+    }
+
+    #[test]
+    fn publication_controls_preserve_observed_fences_and_do_not_invent_absence() {
+        let owner_context = Owner::new();
+        let mut data = preview();
+        let html = owner_context.with(|| publication_controls(&data).to_html());
+        assert!(html.contains("data-state=\"unavailable\""));
+        assert!(!html.contains("<form"));
+        data.publication = Some(TeletextDraftPublicationObservation {
+            digest: "a".repeat(64),
+            current_design_head: 7,
+            current_pending_id: Some(19),
+            current_accepted_id: Some(23),
+            state: TeletextDraftPublicationState::Pending,
+            can_request: false,
+            can_publish: true,
+            replaces_pending: false,
+        });
+        let html = owner_context.with(|| publication_controls(&data).to_html());
+        for (name, value) in [
+            ("channel_id", "44"),
+            ("design_id", "8"),
+            ("revision", "3"),
+            ("expected_design_head", "7"),
+            ("expected_request_id", "19"),
+            ("preview_page", "200"),
+            ("preview_subcode", "0010"),
+        ] {
+            assert_eq!(
+                html.matches(&format!("name=\"{name}\" value=\"{value}\""))
+                    .count(),
+                2
+            );
+        }
+        assert_eq!(
+            html.matches(&format!("name=\"digest\" value=\"{}\"", "a".repeat(64)))
+                .count(),
+            2
+        );
+        assert!(!html.contains("entry_page"));
+        assert!(!html.contains("entry_subcode"));
+        assert!(html.contains(tr(TextKey::TeletextPublicationPending)));
+        assert_eq!(html.matches("<form").count(), 2);
+        let request = html
+            .split("data-testid=\"teletext-publication-request-form\"")
+            .nth(1)
+            .unwrap()
+            .split("</form>")
+            .next()
+            .unwrap();
+        assert!(!request.contains("expected_generation_id"));
+        assert!(request
+            .split("<button")
+            .nth(1)
+            .unwrap()
+            .split('>')
+            .next()
+            .unwrap()
+            .contains("disabled"));
+        let publish = html
+            .split("data-testid=\"teletext-publication-publish-form\"")
+            .nth(1)
+            .unwrap()
+            .split("</form>")
+            .next()
+            .unwrap();
+        assert!(publish.contains("name=\"expected_generation_id\" value=\"23\""));
+        assert!(!publish
+            .split("<button")
+            .nth(1)
+            .unwrap()
+            .split('>')
+            .next()
+            .unwrap()
+            .contains("disabled"));
+        data.publication.as_mut().unwrap().replaces_pending = true;
+        data.publication.as_mut().unwrap().state = TeletextDraftPublicationState::Selected;
+        data.publication.as_mut().unwrap().can_request = true;
+        data.publication.as_mut().unwrap().can_publish = false;
+        let html = owner_context.with(|| publication_controls(&data).to_html());
+        assert!(html.contains(tr(TextKey::TeletextPublicationSelected)));
+        let notice = html
+            .split("data-testid=\"teletext-publication-replaces-pending\"")
+            .nth(1)
+            .unwrap();
+        assert!(!notice.split('>').next().unwrap().contains("hidden"));
+        assert!(html.contains(tr(TextKey::TeletextPublicationReplacePending)));
     }
 
     #[test]

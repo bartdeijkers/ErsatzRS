@@ -638,6 +638,32 @@ pub async fn request_source_bound_original_teletext_design_publication(
     .await
 }
 
+/// Exact rendered revision/digest and independent head/pending CAS fences.
+/// An optional route owner is mandatory for channel-scoped native admin callers.
+pub(super) struct TeletextOriginalPublicationTarget {
+    pub(super) design_id: EntityId,
+    pub(super) revision: i64,
+    pub(super) expected_digest: String,
+    pub(super) expected_design_head: i64,
+    pub(super) expected_request_id: Option<EntityId>,
+    pub(super) expected_channel_id: Option<EntityId>,
+    pub(super) require_static_original: bool,
+}
+impl TeletextOriginalPublicationTarget {
+    fn is_valid(&self) -> bool {
+        self.design_id > 0
+            && self.revision > 0
+            && self.expected_design_head > 0
+            && self.expected_request_id.is_none_or(|id| id > 0)
+            && self.expected_channel_id.is_none_or(|id| id > 0)
+            && self.expected_digest.len() == 64
+            && self
+                .expected_digest
+                .bytes()
+                .all(|value| value.is_ascii_digit() || (b'a'..=b'f').contains(&value))
+    }
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "shared native admission retains separate exact target and trusted policy fences"
@@ -659,23 +685,68 @@ async fn request_original_publication(
 > {
     use ersatzrs_core::repositories::{
         TeletextPublicationMutation as M, TeletextPublicationRejection as R,
-        TeletextPublicationRequestSave,
     };
-    if design_id <= 0
-        || revision <= 0
-        || expected_design_head <= 0
-        || expected_request_id.is_some_and(|id| id <= 0)
-        || expected_digest.len() != 64
-        || !expected_digest
-            .bytes()
-            .all(|value| value.is_ascii_digit() || (b'a'..=b'f').contains(&value))
-    {
+    let target = TeletextOriginalPublicationTarget {
+        design_id,
+        revision,
+        expected_digest,
+        expected_design_head,
+        expected_request_id,
+        expected_channel_id: None,
+        require_static_original: false,
+    };
+    if !target.is_valid() {
         return Ok(M::Rejected(R::InvalidValues));
     }
     check_deadline(deadline)?;
     let guard = super::teletext_work::begin(application, Some(deadline))
         .await
         .map_err(NativeTeletextDesignError::from)?;
+    request_original_publication_with_hold(
+        application,
+        target,
+        budget,
+        policy,
+        source_limits,
+        deadline,
+        guard.hold_work(),
+    )
+    .await
+}
+
+/// Request pending intent within the controller's existing bounded admission.
+/// Original channel ownership is checked before any repository mutation.
+/// # Errors
+/// Preserves exact native/source/CAS errors without acquiring another work slot.
+pub(super) async fn request_original_publication_with_hold(
+    application: &ApplicationServices,
+    target: TeletextOriginalPublicationTarget,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    source_limits: Option<TeletextGuideSourceCheckLimits>,
+    deadline: Instant,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
+) -> Result<
+    ersatzrs_core::repositories::TeletextPublicationMutation<RequestedOriginalTeletextPublication>,
+    NativeTeletextPublicationError,
+> {
+    use ersatzrs_core::repositories::{
+        TeletextPublicationMutation as M, TeletextPublicationRejection as R,
+        TeletextPublicationRequestSave,
+    };
+    if !target.is_valid() {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
+    check_deadline(deadline)?;
+    let TeletextOriginalPublicationTarget {
+        design_id,
+        revision,
+        expected_digest,
+        expected_design_head,
+        expected_request_id,
+        expected_channel_id,
+        require_static_original,
+    } = target;
     let Some(design) = reload_original_teletext_design_revision_with_hold(
         application,
         design_id,
@@ -683,12 +754,18 @@ async fn request_original_publication(
         budget,
         policy,
         deadline,
-        guard.hold_work(),
+        hold.clone(),
     )
     .await?
     else {
         return Ok(M::Rejected(R::MissingRevision));
     };
+    if expected_channel_id.is_some_and(|channel_id| design.selection.channel_id != channel_id) {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
+    if require_static_original && !super::teletext_generations::frozen_original(&design) {
+        return Ok(M::Rejected(R::GuideFenceRequired));
+    }
     if design.digest != expected_digest {
         return Ok(M::Rejected(R::DigestConflict));
     }
@@ -732,6 +809,7 @@ async fn request_original_publication(
                 .await?
         }
     };
+    drop(hold);
     Ok(match mutation {
         M::Requested(request) => {
             M::Requested(RequestedOriginalTeletextPublication { request, design })

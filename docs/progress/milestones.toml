@@ -2724,6 +2724,126 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 explicit static-publication connection checkpoint (representative flow verified):
+Criterion: selected profiles -> validated immutable originals -> exact native
+preview -> separate pending request and explicit acceptance -> ordinary served
+MPEG-TS -> independent decoding/transport/client navigation. Request changes only
+pending intent; Publish carries its exact immutable target plus independent
+accepted-pointer CAS. Neither action invokes packages or changes configuration.
+Both reuse the original deadline and actual-worker admission. Native static
+qualification and existing guide-freshness fences remain unchanged; preview
+navigation is a return destination, never a replacement opening page.
+Historical pages retain their exact raster when the saved selection changes.
+The publication observation now compares the actual enabled selection, disabling
+stale/unavailable actions while retaining observed pending/accepted IDs. This
+corrects a demonstrated stale-control gap; atomic mutations already rejected it.
+
+Initial selected builds stop before test execution on a missing nested test-module
+path and nonexistent fixture helper, then three fixture read/value field accesses.
+Only those compile errors are corrected. Nextest
+1e300f35-0567-489a-b3b0-353582419724 passes42/42 selected native identities,
+including seven new real publication API cases and existing authoring, static/
+source-bound publication, generation and accepted-transport regressions.
+dd5def67-6158-463e-9c0e-5e04c5e1df95 passes9/9 selected library identities,
+including both new projection/SSR cases and all-key nine-culture coverage.
+The successful union is51, not a sum of failed or repeated runs. Strict web
+all-target Clippy passes after a test-only type alias; no lint exemption is added.
+Formatting, architecture (four counters0), hydration (31 existing suppressions)
+and new-Clippy-allow policy pass. These prove native/API safety, not served-host
+or suitable-client acceptance. Matched headed browser and exact capture proof
+are in progress; no milestone or full engine acceptance is claimed.
+The initial headed Chromium setup rejects legacy NormalizeAudio/NormalizeVideo
+columns after cloning a migrated Copy profile; remove only those redundant
+fixture fields, retaining TranscodeAudio/Video=false. The unchanged-candidate
+rerun reaches native request/preview in all nine cultures, then its first pending
+stream is empty: inherited VideoProfile=high is still passed to codec copy and
+FFmpeg exits234. This is a demonstrated ordinary playback generator defect,
+not a teletext acceptance waiver. Correct the common copy-encoder option guard,
+retain that inherited profile in the regression, and rerun the exact served flow.
+Negative browser receipts are retained; no unsuccessful identity is counted green.
+The common video_encoder now returns codec copy before encoder-only options.
+Its first build needs an explicit empty String vector; correction is type-only.
+The final-argv regression covers software/NVENC/QSV/VAAPI with retained high/
+medium/hq. Existing eleven selected copy/reencode cases pass unchanged; only the
+new missing snapshot fails as expected. cargo-insta is unavailable in this runtime;
+root manually reviews the complete four argv lines and accepts only that new
+snapshot, without changing existing snapshots or assertions. Focused confirmation
+passes in ed38a3bc-a3a1-41f8-bceb-983560071c24; the eleven valid existing passes
+from a75f16e6-63b4-461e-9973-c0d6e87798fa are reused (12 unique identities).
+Strict ffmpeg/web all-target Clippy and formatting pass after the guard.
+
+Headed Chromium151.0.7922.34 passes both native publication/TCP identities in
+175.358 seconds, zero failed/skipped/flaky: hydrated/light and no-JS/dark, nine
+cultures, one package/two profiles/two simultaneous channels. Pending-only remains
+raw AV. Explicit acceptance preserves original entry200 after preview navigation201.
+Concurrent captures retain distinct themes; invalid output policy gives raw AV,
+restored exact policy recovers accepted output, and native Off keeps raw AV on its
+channel while the other channel remains authored. Immutable histories/pointers are changed only by the two explicit actions;
+Channel/Playout/package and producer call count remain unchanged. Config snapshots
+preserve keys/product values outside intentional UI/policy changes and existing
+Health/heartbeat writes, using the exact normalization recorded below.
+Root inspects the actual English light and Dutch dark selected-control PNGs.
+Nextest2873cde0-6f77-41e4-94ff-d0104afb3f68 passes the opt-in independent
+served-capture verifier against these exact retained files, not regenerated output.
+It checks four authored captures (day/night/recovered/unaffected channel) and three
+raw-AV captures (pending/invalid policy/Off): complete exact native unit sets,
+independent FFmpeg/libzvbi200/201 text, source frame hashes and440Hz audio plus
+TSDuck3.44-4676 continuity/PCR/PTS/PSI/PID ownership. The successful Rust union
+is64 unique selected identities. Neither availability nor PID presence alone is
+claimed as authored rendering proof.
+
+Two actual headed WSLg VLC3.0.20-3build6 clients, libzvbi0.2.42-2,
+vbi-level=2/no-vbi-text/opaque RGBA, 100ms cache and matching quarter-rate replay/
+playback show200.00/redAZ and200.00/blueAZ simultaneously. The night client
+navigates numerically to201.00/blueAZ. The initial simultaneous focus script leaves
+the day client at200 despite requesting201: that image is negative navigation
+evidence. Repeat only the missing day navigation with isolated focus; inspected
+corrected image shows201.00/redAZ. Both original replay completions and the day
+repetition deliver all7,437,468 bytes and each client exits0. No remuxing/looping.
+Exact day capture SHA2566542783827a11a4072b6fef5ba375ac4f155eec2d4dcc777a0c7acfaebf2c7ab;
+night89f10e96f9a5b68ab6c0fd2f4891260d10f6884f0dbde2d1271237a4910a8e0c.
+Positive image hashes: original day200 d01fd9cd27088498ae1292e3fc7d3c456e1347a00c7154ac7ffd37e3ac684054;
+night200 a9e7e03892cc2b57960466b2b7a0d4f7240b93b737dda0ee7ae70d15e75edb51;
+night201 755e75ae17c2c8061df30b552d659c2f789b4b0372914fd3468d4c966ec233de;
+corrected day201 807dafc0adc92d51cb9d594f4791e144437ae226755ea5b261f0cfb4b619a636.
+Installed VLC/plugin/libzvbi hashes are revalidated and match the earlier ordinary
+client receipt below. These representative palettes/local enhancements and numeric
+navigation do not prove complete resources/panels/subpage or live warm adoption.
+The required ordinary MPEG-TS/HLS smoke passes on the corrected source:
+legacy/direct transport, segmenter/session HLS and private-callback refusal. Its
+cold default-feature build takes7m22s; runtime success is claimed only after exit0.
+Headed Firefox153.0 passes6/6 in429.130 seconds: all four nine-culture
+static draft/preview variants plus hydrated/light and no-JS/dark publication/TCP
+flows. Chromium's remaining four nine-culture static variants pass4/4; exact time
+is retained in its archived result JSON. Every terminal run has zero failed,
+skipped or flaky identities. The successful browser union is12, comprising
+8 static-control and4 full native publication/TCP identities. Existing dc10ec5f
+profile controls and prior transport/resource/ownership proofs are reused where
+unchanged; no unrelated whole-suite or full-CI success is claimed.
+Root inspects English light Pending and Dutch dark Selected Firefox controls.
+The wrapper rebuilds matched SSR/WASM after Smoke's separate build. Source is
+unchanged, but artifact identity is recorded honestly: Chromium's TCP server
+SHA256302e324f30c9dd605d8013472dd611bd932eef095ba156a4f1da2ef36e068760;
+Firefox and Chromium static server7150c60ede9a8b8793bfac647a015b6e22405292e08f959071becf55b07da135.
+Both matched bundles use WASM174917dad2ec6c7c836bde73938f388b7211acf46acd0879061e30f39ba8e5fe.
+Receipts, source/capture hashes and inspected PNGs are retained under
+ignored tmp/phase9-publication-proof, outside Playwright default cleanup.
+receipt-sha256.txt SHA2565aedcbdd45ca2b89c69949ce885a59cff1d73ee85e478ca70c6e15347fb1ae8d.
+No required acceptance is removed and no milestone is marked complete.
+
+Next acceptance step after this checkpoint: reuse the existing isolated-web-host
+helper for bounded owned child stop/restart, keeping the shared wrapper untouched.
+Retain two accepted themes plus a newer pending-only original in the same owned
+SQLite/package/source/state paths; prove different actual host PID, health, exact
+historical/pending previews, unchanged pointers/calls and ordinary TCP playback.
+Current AppState/pool reopen is insufficient for that whole-process criterion.
+Full authored Level2.5/fallback (including unresolved charset/link/resource/panel
+proof), actual QTeletextMaker roundtrip/edit boundaries/versioned metadata/zones,
+Lua intervals/error/Continue/Refresh/Reset/restart, pending/applied warm changes,
+malformed-addon catalog isolation, retained/native/Next/source/playback and six-
+platform acceptance remain open. No limitation is silently accepted; the sole
+production NOS200-299 TV-guide addon still waits for independent engine acceptance.
+
 2026-10-13 static original-draft connection checkpoint:
 Next criterion: connect the selected-profile step to explicit validation, immutable
 NEW concept storage and exact-address native preview, while preserving existing

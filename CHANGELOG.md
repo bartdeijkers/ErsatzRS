@@ -180,8 +180,12 @@ release section when tagging a release.
   the native compiler, with located failures and preserved publication/playback.
   Fresh authoring policy and input remain separate; absent/invalid limits disable
   only authoring and Health reports configuration without broadcast claims.
-  Guide/editor interchange, explicit admin publication, effective Lua controls
-  and complete live activation remain pending.
+  Separate native actions now request pending publication and explicitly select
+  that exact original for new compatible streams, preserving observed revision
+  and pending/accepted-pointer fences. Historical previews retain their pages
+  when the original profile selection becomes unavailable, with publication
+  controls disabled. Guide/editor interchange, effective Lua controls, warm
+  activation and complete live acceptance remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is
@@ -436,6 +440,10 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Keep video-copy streams free of encoder-only profile, preset, tune and hardware
+  options left in a saved transcoding profile. A retained H.264 `high` profile
+  could otherwise make FFmpeg reject ordinary playback before producing AV.
 
 - Retain teletext work capacity until the actual addon-resolution and native
   workers finish, including after requester cancellation or an early cleanup

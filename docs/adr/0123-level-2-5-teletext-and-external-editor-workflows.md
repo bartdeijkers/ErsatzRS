@@ -16,8 +16,12 @@ trusted authoring bounds are separate from per-channel entry/region/resource
 inputs. Original and preview workers retain one shared admission/deadline;
 opaque complete-selection observations are checked before producer invocation.
 Receiver header, video and unresolved pixels remain distinct, with located
-encoding/raster failures. This original-only connection grants no broadcast
-publication, TTI/editor/zone acceptance or full authored Level 2.5 acceptance.
+encoding/raster failures. Separate bounded native actions now request pending
+intent and explicitly select that exact static original for new compatible
+streams using existing immutable qualification and atomic publication fences.
+Selection changes disable publication controls without erasing historical
+preview or pointer observations. Existing streams retain their captured output.
+This connection grants no TTI/editor/zone or full authored Level 2.5 acceptance.
 P9A-04 owns current independent proof and all remaining obligations.
 
 Checked colour references, four-bit RGB, editable CLUT2/3 declarations

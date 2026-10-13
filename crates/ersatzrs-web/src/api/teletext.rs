@@ -103,6 +103,146 @@ pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pai
     }
 }
 
+/// Requesting intent and selecting output are separate explicit native actions.
+pub async fn request_publication(
+    State(state): State<AppState>,
+    Form(pairs): Form<Pairs>,
+) -> Response {
+    publication_action(&state.application, pairs, PublicationAction::Request).await
+}
+
+pub async fn publish_design(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
+    publication_action(&state.application, pairs, PublicationAction::Publish).await
+}
+
+#[derive(Clone, Copy)]
+enum PublicationAction {
+    Request,
+    Publish,
+}
+
+struct PublicationCommand {
+    target: crate::host::teletext_authoring::TeletextAuthoringPublicationTarget,
+    expected_generation_id: Option<i64>,
+    owner: ersatzrs_domain::TeletextPageAddress,
+}
+
+async fn publication_action(
+    application: &ApplicationServices,
+    pairs: Pairs,
+    action: PublicationAction,
+) -> Response {
+    use crate::host::teletext_authoring::{
+        publish_static_teletext_generation, request_static_teletext_publication,
+        TeletextAuthoringPublishTarget,
+    };
+    let channel = redirect_channel(&pairs);
+    let deadline = std::time::Instant::now()
+        .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT);
+    let command = match publication_command(pairs, action) {
+        Ok(command) => command,
+        Err(code) => return respond(channel, "publication", Err(code)),
+    };
+    let Some(deadline) = deadline else {
+        return respond(channel, "publication", Err("expired"));
+    };
+    let identity = command.target.identity;
+    let result = match action {
+        PublicationAction::Request => {
+            request_static_teletext_publication(application, command.target, deadline)
+                .await
+                .map(|_| "publication-requested")
+        }
+        PublicationAction::Publish => publish_static_teletext_generation(
+            application,
+            TeletextAuthoringPublishTarget {
+                publication: command.target,
+                expected_generation_id: command.expected_generation_id,
+            },
+            deadline,
+        )
+        .await
+        .map(|_| "publication-selected"),
+    };
+    let mut query = format!(
+        "design_id={}&revision={}&page={}&subcode={:04x}",
+        identity.design_id,
+        identity.revision,
+        command.owner.page,
+        command.owner.subcode.get(),
+    );
+    match result {
+        Ok(code) => {
+            query.push_str("&saved=");
+            query.push_str(code);
+        }
+        Err(error) if error.code() == "conflict" => {
+            query.push_str("&error=publication-conflict");
+        }
+        Err(error) => query.push_str(&authoring_error_query(&error)),
+    }
+    Redirect::to(&format!("/channels/{channel}/teletext?{query}")).into_response()
+}
+
+fn publication_command(
+    pairs: Pairs,
+    action: PublicationAction,
+) -> ControlResult<PublicationCommand> {
+    use crate::host::teletext_authoring::{
+        TeletextAuthoringIdentity, TeletextAuthoringPublicationTarget,
+    };
+    use ersatzrs_domain::{TeletextPageAddress, TeletextPageNumber, TeletextSubcode};
+    let mut fields = fields(pairs)?;
+    let identity = TeletextAuthoringIdentity {
+        channel_id: positive(&take(&mut fields, "channel_id")?)?,
+        design_id: positive(&take(&mut fields, "design_id")?)?,
+        revision: positive(&take(&mut fields, "revision")?)?,
+    };
+    let digest = take(&mut fields, "digest")?;
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("invalid-input");
+    }
+    let expected_design_head = positive(&take(&mut fields, "expected_design_head")?)?;
+    let expected_request_id = optional_positive(&take(&mut fields, "expected_request_id")?)?;
+    let expected_generation_id = match action {
+        PublicationAction::Request => None,
+        PublicationAction::Publish => {
+            optional_positive(&take(&mut fields, "expected_generation_id")?)?
+        }
+    };
+    let page = take(&mut fields, "preview_page")?
+        .parse::<u16>()
+        .map_err(|_| "invalid-input")?;
+    let subcode = take(&mut fields, "preview_subcode")?;
+    if subcode.len() != 4 || !subcode.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("invalid-input");
+    }
+    let owner = TeletextPageAddress {
+        page: TeletextPageNumber::new(page).map_err(|_| "invalid-input")?,
+        subcode: TeletextSubcode::new(
+            u16::from_str_radix(&subcode, 16).map_err(|_| "invalid-input")?,
+        )
+        .map_err(|_| "invalid-input")?,
+    };
+    if !fields.is_empty() {
+        return Err("invalid-input");
+    }
+    Ok(PublicationCommand {
+        target: TeletextAuthoringPublicationTarget {
+            identity,
+            digest,
+            expected_design_head,
+            expected_request_id,
+        },
+        expected_generation_id,
+        owner,
+    })
+}
+
 fn prepare_command(
     pairs: Pairs,
 ) -> ControlResult<(

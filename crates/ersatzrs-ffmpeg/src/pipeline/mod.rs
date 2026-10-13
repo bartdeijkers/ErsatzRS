@@ -3563,6 +3563,11 @@ fn video_encoder(
     desired: &DesiredVideoState,
     runtime_capabilities: Option<&FfmpegCapabilityReport>,
 ) -> PipelineStep {
+    // Stream copy has no encoder context; retained transcode settings must not
+    // become codec options (for example, the symbolic H.264 profile "high").
+    if desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return PipelineStep::encoder("copy", StreamKind::Video, Vec::<String>::new());
+    }
     let name = match desired.video_format {
         FFmpegProfileVideoFormat::Copy => "copy",
         _ => crate::hardware_encoder_name(acceleration, desired.video_format)

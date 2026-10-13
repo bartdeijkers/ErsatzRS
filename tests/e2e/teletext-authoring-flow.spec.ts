@@ -1,11 +1,14 @@
 import { expect, Locator, Page, test } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitForHydration } from './hydration';
 import { TeletextChannelFixture } from './helpers/teletext-channel-fixture';
+import { captureTeletextChannelTs } from './helpers/teletext-stream-capture';
 
 // The runner owns this disposable database and the intentional POSIX package.
-// This proves static drafts and native previews, never automatic publication.
+// Draft tests prove non-publication; separate tests perform both explicit actions.
 const databasePath = process.env.E2E_DB_PATH;
 const specUrl = pathToFileURL(__filename);
 const cultures = [
@@ -195,6 +198,7 @@ for (const javaScriptEnabled of [true, false]) {
             await expect(page.getByRole('heading', { name: text('TeletextPreviewTitle'), exact: true })).toBeVisible();
             await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
             await expect(page.getByTestId('teletext-authoring')).toContainText(text('TeletextAuthoringStaticHelp'));
+            await assertPublication(page, text, 'unrequested');
             await assertPreview(page, theme, '200');
             const navigation = page.getByTestId('teletext-preview-model').locator('ul a');
             await expect(navigation).toHaveText('201 / 0000');
@@ -252,4 +256,194 @@ for (const javaScriptEnabled of [true, false]) {
       }
     });
   }
+}
+
+async function assertPublication(page: Page, text: (key: string) => string, state: 'unrequested' | 'pending' | 'selected'): Promise<void> {
+  const publication = page.getByTestId('teletext-publication');
+  await expect(publication).toHaveAttribute('data-state', state);
+  const keys = { unrequested: 'TeletextPublicationUnrequested', pending: 'TeletextPublicationPending', selected: 'TeletextPublicationSelected' };
+  await expect(page.getByTestId('teletext-publication-status')).toHaveText(text(keys[state]));
+  const request = page.getByTestId('teletext-publication-request-form');
+  const publish = page.getByTestId('teletext-publication-publish-form');
+  await expect(request.getByRole('button')).toHaveText(text('TeletextPublicationRequest'));
+  await expect(publish.getByRole('button')).toHaveText(text('TeletextPublicationPublish'));
+  if (state === 'unrequested') {
+    await expect(request.getByRole('button')).toBeEnabled();
+    await expect(publish.getByRole('button')).toBeDisabled();
+  } else {
+    await expect(request.getByRole('button')).toBeDisabled();
+    if (state === 'pending') await expect(publish.getByRole('button')).toBeEnabled();
+    else await expect(publish.getByRole('button')).toBeDisabled();
+  }
+  await expect(request.locator('[name="expected_generation_id"]')).toHaveCount(0);
+  await expect(publish.locator('[name="expected_generation_id"]')).toHaveCount(1);
+  await expect(request.locator('[name="digest"]')).toHaveValue(/^[a-f0-9]{64}$/);
+}
+
+function publicationRows(fixture: TeletextChannelFixture): unknown[][] {
+  return ['TeletextPublicationRequest', 'TeletextPublicationRequestCurrent',
+    'TeletextAcceptedGeneration', 'TeletextAcceptedGenerationCurrent'].map(table =>
+    fixture.database.prepare(`SELECT * FROM "${table}" WHERE "ChannelId" IN (?,?) ORDER BY 1`).all(...fixture.channels));
+}
+
+function playbackSafety(fixture: TeletextChannelFixture): unknown {
+  const snapshot = fixture.safetySnapshot() as { publication: unknown; configuration: unknown; channels: unknown; playouts: unknown; package: unknown };
+  return { configuration: snapshot.configuration, channels: snapshot.channels, playouts: snapshot.playouts, package: snapshot.package };
+}
+
+async function localizedPublication(pages: Page[], urls: string[], state: 'pending' | 'selected', javaScriptEnabled: boolean, dark: boolean, testInfo: { outputPath(name: string): string }): Promise<void> {
+  for (const [language, module] of cultures) {
+    await pages[0].request.post('/admin-api/settings/ui/save', {
+      form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
+    });
+    for (const [index, page] of pages.entries()) {
+      await page.goto(urls[index]);
+      await ready(page, javaScriptEnabled);
+      await assertPublication(page, translations(module), state);
+      await assertPreview(page, index === 0 ? 'day' : 'night', '200');
+      if (language === 'en-us' || language === 'nl') {
+        await page.getByTestId('teletext-publication').scrollIntoViewIfNeeded();
+        await expect(page.getByTestId('teletext-publication-status')).toBeInViewport();
+        await page.screenshot({ path: testInfo.outputPath(`${language}-${state}-${index}.png`), fullPage: false });
+      }
+    }
+  }
+  await pages[0].request.post('/admin-api/settings/ui/save', {
+    form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
+  });
+}
+
+async function captureOrdinary(fixture: TeletextChannelFixture, baseURL: string, channel: number, path: string, authored: boolean): Promise<void> {
+  const capture = await captureTeletextChannelTs(`${baseURL}/iptv/hls-direct/${channel}.ts`, path,
+    { maximumBytes: Math.floor(8 * 1024 * 1024 / 188) * 188, maximumTimeMs: 30_000 });
+  expect(capture.ended).toBe('eof');
+  const pids = new Map<number, number>();
+  let malformed = 0;
+  for (let offset = 0; offset < capture.bytes.length; offset += 188) {
+    if (capture.bytes[offset] !== 0x47 || (capture.bytes[offset + 1] & 0x80) !== 0) malformed++;
+    const pid = ((capture.bytes[offset + 1] & 0x1f) << 8) | capture.bytes[offset + 2];
+    pids.set(pid, (pids.get(pid) ?? 0) + 1);
+  }
+  expect(malformed).toBe(0);
+  expect(pids.get(0) ?? 0).toBeGreaterThan(0);
+  expect(pids.get(256) ?? 0).toBeGreaterThan(0);
+  expect(pids.get(257) ?? 0).toBeGreaterThan(0);
+  if (authored) expect(pids.get(512) ?? 0).toBeGreaterThan(0);
+  else expect(pids.has(512)).toBe(false);
+  // This is decoded A/V evidence; external TSDuck/libzvbi/client checks inspect
+  // the retained exact TCP captures for transport and authored page semantics.
+  execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
+    '-i', path, '-t', '1', '-map', '0:v:0', '-map', '0:a:0', '-f', 'null', '-'],
+  { timeout: 30_000, maxBuffer: 65_536 });
+  expect(fixture.calls()).toEqual(['day', 'night']);
+}
+
+for (const [javaScriptEnabled, dark] of [[true, false], [false, true]] as const) {
+  test(`teletext explicit publication TCP flow (JavaScript ${javaScriptEnabled}, dark ${dark})`, async ({ browser, baseURL }, testInfo) => {
+    test.skip(!databasePath || !process.env.FFMPEG_PATH, 'Requires disposable E2E_DB_PATH and pinned FFmpeg 9.');
+    test.setTimeout(360_000);
+    testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
+    const fixture = new TeletextChannelFixture(databasePath!, { authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+    fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
+    const safe = playbackSafety(fixture);
+    const candidate = testInfo.outputPath('candidate');
+    copyFileSync(join(fixture.root, 'synthetic-client-source.ts'), `${candidate}.source.ts`);
+    const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 1280, height: 900 } });
+    const pages = [await context.newPage(), await context.newPage()];
+    const errors: string[] = [];
+    for (const page of pages) {
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    }
+    const text = translations('en_us');
+    try {
+      await pages[0].request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0 });
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`);
+      await ready(pages[0], javaScriptEnabled);
+      const day = await createProfile(pages[0], fixture, 'day', javaScriptEnabled);
+      const night = await createProfile(pages[0], fixture, 'night', javaScriptEnabled);
+      const urls: string[] = [];
+      for (const [index, theme, profile] of [[0, 'day', day], [1, 'night', night]] as const) {
+        const page = pages[index];
+        await page.goto(`/channels/${fixture.channels[index]}/teletext`);
+        await ready(page, javaScriptEnabled);
+        await selectProfile(page, fixture, profile, javaScriptEnabled);
+        await submit(page, await prepareFields(page, fixture, theme), text('TeletextValidateSaveDraft'), javaScriptEnabled);
+        await assertPreview(page, theme, '200');
+        await assertPublication(page, text, 'unrequested');
+        urls.push(page.url());
+        await submit(page, page.getByTestId('teletext-publication-request-form'), text('TeletextPublicationRequest'), javaScriptEnabled);
+        await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'publication-requested');
+        await assertPublication(page, text, 'pending');
+      }
+      expect(fixture.calls()).toEqual(['day', 'night']);
+      const pending = publicationRows(fixture);
+      expect(pending.map(rows => rows.length)).toEqual([2, 2, 0, 0]);
+      expect(playbackSafety(fixture)).toEqual(safe);
+      await localizedPublication(pages, urls, 'pending', javaScriptEnabled, dark, testInfo);
+      fixture.resetSourceStart();
+      await captureOrdinary(fixture, baseURL!, fixture.channels[0], `${candidate}.pending.ts`, false);
+      expect(publicationRows(fixture)).toEqual(pending);
+      for (const [index, page] of pages.entries()) {
+        await page.goto(urls[index]); await ready(page, javaScriptEnabled);
+        await page.getByTestId('teletext-preview-model').locator('ul a').click();
+        await ready(page, javaScriptEnabled);
+        await assertPreview(page, index === 0 ? 'day' : 'night', '201');
+        await submit(page, page.getByTestId('teletext-publication-publish-form'), text('TeletextPublicationPublish'), javaScriptEnabled);
+        await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'publication-selected');
+        await assertPreview(page, index === 0 ? 'day' : 'night', '201');
+        await assertPublication(page, text, 'selected');
+      }
+      const selected = publicationRows(fixture);
+      expect(selected.map(rows => rows.length)).toEqual([2, 2, 2, 2]);
+      const entries = fixture.database.prepare('SELECT json_extract(CAST("Document" AS TEXT),\'$.entry.page\') AS "Page",json_extract(CAST("Document" AS TEXT),\'$.entry.subcode\') AS "Subcode" FROM "TeletextDesignRevision" WHERE "DesignId" IN (?,?) ORDER BY "DesignId"')
+        .all(...fixture.designs().map(design => design.Id));
+      expect(entries).toEqual([{ Page: 200, Subcode: 0 }, { Page: 200, Subcode: 0 }]);
+      await localizedPublication(pages, urls, 'selected', javaScriptEnabled, dark, testInfo);
+      expect(playbackSafety(fixture)).toEqual(safe);
+      fixture.resetSourceStart();
+      await Promise.all([
+        captureOrdinary(fixture, baseURL!, fixture.channels[0], `${candidate}.day.ts`, true),
+        captureOrdinary(fixture, baseURL!, fixture.channels[1], `${candidate}.night.ts`, true),
+      ]);
+      expect(publicationRows(fixture)).toEqual(selected);
+      fixture.setOutputPolicy('{"version":999}');
+      fixture.resetSourceStart();
+      await captureOrdinary(fixture, baseURL!, fixture.channels[0], `${candidate}.invalid-policy.ts`, false);
+      expect(publicationRows(fixture)).toEqual(selected);
+      fixture.setOutputPolicy();
+      fixture.resetSourceStart();
+      await captureOrdinary(fixture, baseURL!, fixture.channels[0], `${candidate}.recovered.ts`, true);
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`);
+      await ready(pages[0], javaScriptEnabled);
+      await submit(pages[0], pages[0].locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-disable-form"]`), text('TeletextBindingOff'), javaScriptEnabled);
+      expect(fixture.binding(fixture.channels[0])?.Enabled).toBe(0);
+      expect(fixture.binding(fixture.channels[1])?.Enabled).toBe(1);
+      await pages[0].goto(urls[0]);
+      await ready(pages[0], javaScriptEnabled);
+      await assertPreview(pages[0], 'day', '200');
+      await expect(pages[0].getByTestId('teletext-publication')).toHaveAttribute('data-state', 'unavailable');
+      await expect(pages[0].getByTestId('teletext-publication-status')).toHaveText(text('TeletextPublicationUnavailable'));
+      await expect(pages[0].getByTestId('teletext-publication-request-form').getByRole('button')).toBeDisabled();
+      await expect(pages[0].getByTestId('teletext-publication-publish-form').getByRole('button')).toBeDisabled();
+      fixture.resetSourceStart();
+      await Promise.all([
+        captureOrdinary(fixture, baseURL!, fixture.channels[0], `${candidate}.unavailable-profile.ts`, false),
+        captureOrdinary(fixture, baseURL!, fixture.channels[1], `${candidate}.other-channel.ts`, true),
+      ]);
+      expect(publicationRows(fixture)).toEqual(selected);
+      expect(playbackSafety(fixture)).toEqual(safe);
+      expect(fixture.unchangedPackage()).toBe(true);
+      expect(fixture.designs()).toHaveLength(2);
+      expect(fixture.calls()).toEqual(['day', 'night']);
+      expect(errors).toEqual([]);
+    } finally {
+      try {
+        await pages[0].request.post('/admin-api/settings/ui/save', { form: {
+          language: fixture.originalUi.get('pages.language') ?? 'en-us',
+          is_dark_mode: String(/^(1|true)$/i.test(fixture.originalUi.get('pages.is_dark_mode') ?? 'True')),
+        }, maxRedirects: 0 });
+      } finally { await context.close(); fixture.close(); }
+    }
+  });
 }

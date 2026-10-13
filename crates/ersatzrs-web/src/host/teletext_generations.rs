@@ -95,7 +95,7 @@ fn check_deadline(deadline: Instant) -> Result<(), NativeTeletextGenerationError
     }
 }
 
-fn frozen_original(design: &RestoredOriginalTeletextDesign) -> bool {
+pub(super) fn frozen_original(design: &RestoredOriginalTeletextDesign) -> bool {
     design.guide_source().is_none()
         && design
             .guide_inputs()
@@ -222,6 +222,13 @@ async fn fingerprint(
     .map_err(|_| NativeTeletextGenerationError::WorkerFailed)?
 }
 
+/// Existing explicit acceptance target plus a channel-scoped route fence.
+/// Absence is used only by the compatible historical public entrypoint.
+pub(super) struct TeletextGenerationAcceptanceTarget {
+    pub(super) target: TeletextGenerationTarget,
+    pub(super) expected_channel_id: Option<EntityId>,
+}
+
 /// Explicitly accept frozen originals, recompiling under a fresh operation bound.
 /// Packages never run here. Current pending/selection/head/generation CAS is
 /// repeated atomically after native validation. This cannot promote guide content
@@ -239,7 +246,42 @@ pub async fn accept_original_teletext_generation(
     let guard = super::teletext_work::begin(application, Some(deadline))
         .await
         .map_err(NativeTeletextDesignError::from)?;
-    let hold = guard.hold_work();
+    accept_original_teletext_generation_with_hold(
+        application,
+        TeletextGenerationAcceptanceTarget {
+            target,
+            expected_channel_id: None,
+        },
+        budget,
+        policy,
+        deadline,
+        guard.hold_work(),
+    )
+    .await
+}
+
+/// Accept one exact static pending target within the controller's admission.
+/// No guide-freshness or atomic repository fence is bypassed.
+/// # Errors
+/// Preserves existing native/CAS failures; route mismatch cannot mutate output.
+pub(super) async fn accept_original_teletext_generation_with_hold(
+    application: &ApplicationServices,
+    target: TeletextGenerationAcceptanceTarget,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
+) -> Result<M<AcceptedTeletextOutputCandidate>, NativeTeletextGenerationError> {
+    check_deadline(deadline)?;
+    let TeletextGenerationAcceptanceTarget {
+        target,
+        expected_channel_id,
+    } = target;
+    if expected_channel_id
+        .is_some_and(|channel_id| channel_id <= 0 || target.request.channel_id != channel_id)
+    {
+        return Ok(M::Rejected(R::Publication(P::InvalidValues)));
+    }
     let Some(design) = reload_original_teletext_design_revision_with_hold(
         application,
         target.request.design_id,
@@ -253,6 +295,9 @@ pub async fn accept_original_teletext_generation(
     else {
         return Ok(M::Rejected(R::Publication(P::MissingRevision)));
     };
+    if expected_channel_id.is_some_and(|channel_id| design.selection().channel_id != channel_id) {
+        return Ok(M::Rejected(R::Publication(P::InvalidValues)));
+    }
     if design.digest() != target.request.digest {
         return Ok(M::Rejected(R::Publication(P::DigestConflict)));
     }
@@ -262,7 +307,7 @@ pub async fn accept_original_teletext_generation(
     if design.encoded().is_none() {
         return Ok(M::Rejected(R::Publication(P::InvalidValues)));
     }
-    let (design, artifact_digest) = fingerprint(design, deadline, hold).await?;
+    let (design, artifact_digest) = fingerprint(design, deadline, hold.clone()).await?;
     let save = TeletextGenerationSave {
         request: target.request,
         expected_design_head: target.expected_design_head,
@@ -281,6 +326,7 @@ pub async fn accept_original_teletext_generation(
     let mutation = application
         .accept_teletext_generation(save, &validator, budget.max_serialized_bytes)
         .await?;
+    drop(hold);
     Ok(match mutation {
         M::Accepted(generation) => M::Accepted(AcceptedTeletextOutputCandidate {
             generation,

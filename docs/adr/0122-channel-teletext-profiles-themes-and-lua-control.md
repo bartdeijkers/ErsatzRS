@@ -18,8 +18,13 @@ of global addon configuration and generic channel saves. Forms preserve observed
 installation/profile/binding revisions; unavailable bindings retain an Off path.
 A separate static-page action now connects complete selection observation to
 new immutable original save and exact historical native preview, under one
-actual-worker admission and original deadline. This grants no publication or
-package activation. Fresh guide/editor interchange, explicit admin publication,
+actual-worker admission and original deadline. Saving grants no publication or
+package activation. Two separate native actions request pending intent and
+explicitly select its exact immutable original for new compatible streams;
+observed head/pending/accepted fences are checked by the existing transactions.
+Historical pages remain previewable when their saved selection becomes stale,
+with unavailable publication controls and retained pointer observations.
+Running streams retain their captured generation. Fresh guide/editor interchange,
 effective Lua/applied state, full warm activation and independent full
 encoding/client acceptance remain open. P9A-04 owns the current verification and
 independent synthetic acceptance; P9B-01/02 own the sole production TV-guide

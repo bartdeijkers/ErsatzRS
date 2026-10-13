@@ -12,6 +12,9 @@ use ersatzrs_web::host::teletext_work::{begin, MAX_CONCURRENT_SETTING};
 use serde_json::{json, Value};
 use std::time::Instant;
 
+#[path = "authoring/publication.rs"]
+mod publication;
+
 const POLICY_KEY: &str = "teletext.authoring.policy";
 const SCRIPT: &str = r#"test "$1" = pages || exit 9
  test "$ERSATZRS_ADDON_CAPABILITY" = teletext.pages.v2 || exit 10

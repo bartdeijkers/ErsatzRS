@@ -8,8 +8,8 @@ p9a-04 precedes one ErsatzRS-Addons guide (NOS200–299), p9b-01.
 ADR0123: authored Level2.5/fallback, pinned QTeletextMaker TTI/sidecar,
 TSDuck/independent decoding and actual client display/navigation; Kodi optional.
 
-v1 lifting retains bytes; resources retain geometry/lifecycle/pointers/
-metadata/fresh state. Local X26 retains forward references.
+v1 bytes, resource geometry/lifecycle/pointers/metadata/fresh state and
+local X26 forward references survive.
 Replay/raster keep fallback; encoding keeps lineage, IDs and call ancestry.
 AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
 X27 decoding passes; client open.
@@ -43,14 +43,15 @@ Originals/pending persist; raw v2/historical v1.
 Producer caps;13 quotas;100-number rich flow;workers survive cancellation.
 Direct/reopen AV,200→201 pass;RSS/production bounds open.
 Two-channel ordinary themes/client and nine-culture Health pass.
-Profile and static draft/preview native/headed pass.
-Next admin publication/served host; retained/Lua/regions/link CRC open.
+Profiles/drafts/preview/admin publication connect.
+Served themes/pending/Off, decoding/client and smoke pass; 12 headed cases pass.
+Copy encoder options fixed. Next accepted/new-pending host restart;
+retained/Lua/regions/link CRC open.
 
-SQLite retains tracks/owners/data/leases; missing reports prove no bytes/absence.
-Pages stay NotAcquired. PID parsing keeps flags/subcodes/PTS,
-not identity/readiness/inventory. JSON bounds do not cap child RSS. Acquisition/
-selection stay open; auxiliary failure keeps metadata, uncertain cleanup is fatal.
-P9A-03 owns proof.
+SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
+pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
+JSON caps do not bound child RSS. Acquisition/selection stay open; auxiliary
+failure preserves metadata, uncertain cleanup is fatal. P9A-03 owns proof.
 
 Carousel/PSI/PCR/retention preserve AV and finite EOF. Actual ACK/cycle ends fence
 shared proposals; changed PMT precedes PES. Withdrawal retains clock/counters;
@@ -58,9 +59,8 @@ invalid resources/unreconciled M29/MOT omissions retain old output. One-epoch wa
 status grants no activation. P9A-04 owns proof; durable promotion, immediate Off
 and full warm reconciliation remain open.
 
-Authored bindings apply to final MPEG-TS roles. Legacy wrapper/first encoder
-reserve distinct leases; transfer/lifecycle and Health preserve capacity/cleanup. Linux route proof covers
-x64 FFmpeg, Windows interop and QEMU ARM64/ARMv7: admission, tokens, reaping,
+Final MPEG-TS owners retain separate wrapper/encoder leases, lifecycle and
+Health capacity/cleanup. Linux x64/Windows-interop/QEMU ARM64/ARMv7 prove admission, tokens, reaping,
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
@@ -68,8 +68,8 @@ P9A-02: decoder Health/six-RID licenses.
 P9A-03/04 retain persistence/rescans, page/language/forced/default
 selection, native/Next Burn/Convert/copy, carriage and HLS/browser
 gates. Slate handover, activation/publication/refresh/restart, localized management,
-source/client/browser/smoke/TSDuck remain open. UCU waives no gates. Content waits for p9a-04;
-Phase10 waits for p9b-02.
+full source/client/browser/smoke/TSDuck stay open. UCU waives no gates.
+Content waits for p9a-04; Phase10 for p9b-02.
 '''
 
 [[debt]]
