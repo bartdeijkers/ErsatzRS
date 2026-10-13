@@ -159,7 +159,7 @@ pub(super) fn encode_teletext_compiled_display_page_with_context(
             }
         })?;
     check_deadline(owner, context.deadline)?;
-    let compiled = layout::compile_for_composition(page).map_err(|reason| {
+    let compiled = layout::compile_for_service_composition(service, page).map_err(|reason| {
         error(TeletextCompiledDisplayPageEncodingFailure::Base(Box::new(
             reason,
         )))

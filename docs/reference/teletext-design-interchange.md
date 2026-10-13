@@ -4712,3 +4712,36 @@ it. The ordinary route currently resolves accepted state at new-stream startup
 and retains its immutable generation thereafter. Running-stream adoption and
 receiver-cache transitions remain required, separate acceptance work. A selected
 durable pointer alone does not prove that any running client applied it.
+
+
+### Physical base-row concept compilation seam
+
+`TeletextPhysicalBaseRow` retains exactly forty seven-bit cells at row0..24;
+row0 identity columns0..7 remain reserved. `TeletextPhysicalBaseOverlay` binds
+one nonempty, duplicate-free row set to an exact page/subcode. Attachment is a
+consuming replacement of the overlay set, with exact-owner checks and the existing
+semantic and cold-composition content/item/storage/work budgets. Original addon
+responses, page drafts, resource definitions, declarations, producer association
+and captured metadata remain unchanged. No Unicode inverse or inferred national
+glyph is introduced.
+
+Composition, compiled-display and native-default encoding apply the same merged
+layout. Overridden rows resolve coded G0/G1 intent through the existing attribute
+trace, glyph and raster pipeline; unchanged generated X26 glyphs retain their
+original enhancement program. The private host compiler applies overlays before
+complete native qualification, under the existing operation deadline. It creates
+neither a successful addon invocation nor a saved/published concept.
+
+Unsupported C0 semantics and changes to generated X26 fallback positions reject
+with page/subcode/row/column diagnostics. Header/caption and double-height safety
+remain shared across all consumers. These are explicit current correctness gaps
+for later full authored acceptance, not approved permanent limitations. The
+required complete Level2.5 and fallback scope remains unchanged.
+
+The next connection must authenticate a retained export receipt and complete
+free/zone/generated effects before attachment. Byte positions alone do not fence
+spacing changes to protected cells to the right or double-height cells below.
+Persist a separately versioned private overlay alongside exact original bytes;
+reload through this same compiler, retain revision/head CAS and make publication
+an explicit later action. Import must leave current broadcast state untouched.
+P9A-04 owns the verification receipt and the remaining editor/client flow.

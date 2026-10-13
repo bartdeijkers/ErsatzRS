@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 synthetic editor flow: verify native original export, then validated editorial concepts and actual editor/preview/publication; full engine acceptance remains open'
+current_focus = 'P9A-04 synthetic editor flow: authenticate receipt/zone effects and persist private concepts through the verified shared row compiler; full engine/editor acceptance remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1292,9 +1292,11 @@ free/zone/generated rectangles and dynamic-field bindings. Exact display coverag
 receiver-header protection and actual Level2.5 sidepanel bounds are validated;
 metadata survives immutable original reload without producer invocation. V1/V2
 remain closed. P9A-04 owns the exact verification and gap map.
-Next connect this original metadata to server-owned TTI file/resource/edit
-baselines and native export confirmation. Add a private validated concept overlay
-through the existing compiler, immutable revision/head CAS and explicit publisher.
+Native export now retains server-owned TTI file/resource/edit baselines.
+A typed physical-row overlay connects the same semantic/compiler/raster pipeline;
+authenticate complete zone/generated effects against
+retained receipts and save a separately versioned private concept overlay through
+immutable revision/head CAS and explicit publication.
 Current saved original_only policy remains uneditable; uploaded metadata cannot
 broaden permissions or impersonate a successful addon invocation.
 Prove a synthetic editable zone while protecting presentation, navigation and

@@ -817,7 +817,7 @@ fn checked_base_inputs(
         .iter()
         .find(|page| page.address == owner)
         .ok_or_else(|| error(owner, None, TeletextMainCompositionFailure::SelectionState))?;
-    let layout = layout::compile_for_composition(page)
+    let layout = layout::compile_for_service_composition(service, page)
         .map_err(|reason| error(owner, None, reason.into()))?;
     check_input(owner, command_count, layout.base_glyphs().len(), maximum)?;
     let presentation = service

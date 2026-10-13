@@ -93,7 +93,7 @@ pub fn encode_teletext_native_default_page(
         ));
     }
     let TeletextEncodingRegion::WesternLatin = region;
-    let compiled = layout::compile_for_composition(page).map_err(|reason| {
+    let compiled = layout::compile_for_service_composition(service, page).map_err(|reason| {
         error(TeletextNativeDefaultPageEncodingFailure::Base(Box::new(
             reason,
         )))

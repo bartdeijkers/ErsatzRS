@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Preserve exact physical teletext editor rows through the shared native compiler
+  and preview raster, with per-page/subpage isolation and existing bounded work.
+  Original addon sources and resources remain intact; receipt/zone validation,
+  saved edited concepts and operational import/publication remain open.
 - Export saved native teletext originals through a bounded host API to exact
   per-page TTI mappings and versioned sidecars, backed by retained server receipts.
   Preserve full resource/magazine packets, original subcodes/navigation and

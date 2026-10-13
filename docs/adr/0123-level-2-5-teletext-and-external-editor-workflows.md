@@ -30,7 +30,12 @@ Preparatory immutable export receipts now use the existing design repository,
 exact head/original-digest checks and bounded read-only snapshot verification.
 The application requires a trusted native export confirmation port; its production
 file/resource mapping adapter is now implemented for saved native originals.
-Editable concepts and indirect edit-policy enforcement remain unimplemented.
+A typed physical-base-row overlay now preserves exact seven-bit editor cells
+through the existing semantic service, compiled/native encoders and shared raster.
+It is separate from unchanged original addon responses, resources and metadata;
+existing service and full cold-composition limits also charge replacement rows.
+This compiler seam grants no editing rights. Authoritative receipt/zone validation,
+private versioned concept persistence and operational import remain unimplemented.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.

@@ -214,6 +214,20 @@ impl TeletextDeclaredService {
     pub const fn semantic(&self) -> &TeletextSemanticService {
         &self.semantic
     }
+    /// Attach trusted physical rows while preserving the authenticated logical
+    /// declarations, resource inventory, MOT selections and exact resolutions.
+    /// # Errors
+    /// Rejects invalid overlay owners or combined service budget overflow.
+    pub fn with_physical_base_overlays(
+        mut self,
+        overlays: Vec<super::TeletextPhysicalBaseOverlay>,
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self
+            .semantic
+            .with_physical_base_overlays(overlays, budget)?;
+        Ok(self)
+    }
     #[must_use]
     pub fn mots(&self) -> &[TeletextMotLevel25Declaration] {
         &self.mots

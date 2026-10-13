@@ -10,8 +10,8 @@ use ersatzrs_domain::{
     TeletextBaseDisplayAttributes, TeletextBaseDisplayCell, TeletextBaseDisplayCellKind,
     TeletextBaseDisplayValueError, TeletextBaseSpacingControl, TeletextCharsetValueError,
     TeletextColour, TeletextColourReference, TeletextEffectivePresentation,
-    TeletextEnhancementPosition, TeletextPageAddress, TeletextPageDraft, TeletextRunContent,
-    TeletextSpacingTiming, TELETEXT_COLUMNS, TELETEXT_ROWS,
+    TeletextEnhancementPosition, TeletextPageAddress, TeletextPageDraft, TeletextPageKind,
+    TeletextRunContent, TeletextSpacingTiming, TELETEXT_COLUMNS, TELETEXT_ROWS,
 };
 
 use super::{charset, layout::Layout, TeletextColourContext, TeletextEncodingError};
@@ -148,6 +148,9 @@ fn authored_cells(
         .try_into()
         .map_err(|_| error(page.address, None, TeletextBaseDisplayFailure::Shape))?;
     for row in &page.rows {
+        if layout.is_physical_row(row.row) {
+            continue;
+        }
         for run in &row.runs {
             match &run.content {
                 TeletextRunContent::Text { text } => {
@@ -269,11 +272,7 @@ fn trace_cell(
         control,
         timing: control.timing(),
     });
-    if let (Some(control), Some(source)) = (control, source) {
-        if control.timing() == TeletextSpacingTiming::SetAt {
-            state.apply(control, source);
-        }
-    }
+    apply_before(state, control.zip(source));
     let attributes = state
         .attributes()
         .map_err(|reason| error(owner, Some(position), reason.into()))?;
@@ -291,15 +290,93 @@ fn trace_cell(
     };
     let cell = TeletextBaseDisplayCell::new(position, code, kind, authored, attributes)
         .map_err(|reason| error(owner, Some(position), reason.into()))?;
-    if let (Some(control), Some(source)) = (control, source) {
+    apply_after(state, control.zip(source), row, position.column());
+    Ok(cell)
+}
+
+fn apply_before(
+    state: &mut RowState,
+    control: Option<(TeletextBaseSpacingControl, TeletextBaseAttributeSource)>,
+) {
+    if let Some((control, source)) = control {
+        if control.timing() == TeletextSpacingTiming::SetAt {
+            state.apply(control, source);
+        }
+    }
+}
+
+fn apply_after(
+    state: &mut RowState,
+    control: Option<(TeletextBaseSpacingControl, TeletextBaseAttributeSource)>,
+    row: &[u8; TELETEXT_COLUMNS],
+    column: u8,
+) {
+    if let Some((control, source)) = control {
         if control.timing() == TeletextSpacingTiming::SetAfter
             && (control != TeletextBaseSpacingControl::StartBox
-                || row.get(usize::from(position.column()) + 1) == Some(&0x0b))
+                || row.get(usize::from(column) + 1) == Some(&0x0b))
         {
             state.apply(control, source);
         }
     }
-    Ok(cell)
+}
+
+/// Check the same current spacing subset and state timing before either
+/// packet assembly or preview. Physical rows do not bypass header or caption
+/// visibility rules merely because they contain no original Unicode runs.
+pub(super) fn validate_physical_base_row(
+    page: &TeletextPageDraft,
+    row: u8,
+    cells: &[u8; TELETEXT_COLUMNS],
+) -> Result<(), TeletextEncodingError> {
+    let start = if row == 0 { 8_u8 } else { 0 };
+    let mut state = RowState::new(row, (0, 0), false, TeletextColourReference::BLACK);
+    for column in start..40 {
+        let code = cells[usize::from(column)];
+        let spacing = if code < 0x20 {
+            let spacing = control(code).ok_or(TeletextEncodingError::PhysicalBaseControl {
+                address: page.address,
+                row,
+                column,
+                code,
+            })?;
+            let position = TeletextEnhancementPosition::new(row, column).map_err(|_| {
+                TeletextEncodingError::PhysicalBaseControl {
+                    address: page.address,
+                    row,
+                    column,
+                    code,
+                }
+            })?;
+            Some((
+                spacing,
+                TeletextBaseAttributeSource::Spacing {
+                    position,
+                    control: spacing,
+                    timing: spacing.timing(),
+                },
+            ))
+        } else {
+            None
+        };
+        apply_before(&mut state, spacing);
+        if row == 0
+            && spacing.is_some_and(|(value, _)| value == TeletextBaseSpacingControl::DoubleHeight)
+        {
+            return Err(TeletextEncodingError::HeaderHeight {
+                address: page.address,
+            });
+        }
+        if code > b' ' && page.kind != TeletextPageKind::FullPage && (row == 0 || !state.boxed) {
+            return Err(TeletextEncodingError::HiddenContent {
+                address: page.address,
+                row,
+                column,
+            });
+        }
+        apply_after(&mut state, spacing, cells, column);
+    }
+    Ok(())
 }
 
 fn control(code: u8) -> Option<TeletextBaseSpacingControl> {

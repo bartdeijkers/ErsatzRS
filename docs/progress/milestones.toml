@@ -2724,6 +2724,67 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 physical base-row compiler checkpoint:
+Criterion: connect lossless TTI base cells to the same validated semantic service,
+native encoders and preview raster without rewriting original addon responses.
+This resolves the specific missing shared layout seam from18290023; it does not
+save, authenticate, import or publish edited concepts.
+
+Typed immutable rows retain40 seven-bit cells, reserved header fields and exact
+page/subcode ownership. Complete overlay replacement checks absent/duplicate owners
+and original-plus-overlay budgets before allocation. The cold constructor preserves
+producer overlays; later attachment reuses its full input/content/storage/work
+preflight, not merely the semantic-service budget. Original producer documents,
+resource/MOT declarations, metadata, associations and logical ownership stay exact.
+
+All three native paths consume the same merged layout. Overridden rows resolve
+coded G0/G1 intent through existing spacing trace/glyph/raster logic; no guessed
+Unicode inverse is introduced. Original generated X26 remains intact where fallback
+cells match. Unsupported C0 semantics or changed derived-X26 fallback cells reject
+with exact locations, never silently emit divergent preview/transport content.
+These current gaps remain required full-engine work, not permanent accepted limits.
+
+Targeted review found raw overlays could bypass the existing authored double-height
+last-row/lower-row rule in native-default encoding. The shared final merged-matrix
+check now rejects that concrete path before every consumer. Valid blank lower rows
+and explicitly cleared lower rows work independently of supplied overlay order.
+The host seam applies overlays before full native qualification under the existing
+deadline and retains legacy producer overlays when no new set is supplied.
+
+Verification: domain runcbc6a919-898b-40d9-893f-19bd68d0adc7 passes62/62;
+separate existing cold-composition run68e520c3-5b1f-4f2b-888c-c276819a3dbe
+passes11/11. The latter was selected separately because the initial filename filter
+was not the actual cold-test namespace. FFmpeg run
+3d80a512-c9cd-4ebf-9af8-4294f8ccda8c passes57/57, including13 new overlay
+cases and44 existing layout/base/compiled/native/cold regressions. Edited Z raster
+pixels match an ordinary authored Z reference; literal raw national positions and
+spacing mode changes retain coded intent. Header/caption and merged double-height
+failures reject in every consumer, while unchanged generated X26 stays exact.
+
+Final host run0e26fc9d-9938-4d57-b9f5-a0f16c470c20 passes6/6 after the final
+native correction. Synthetic same-addon two-channel selections retain distinct
+profiles and red/blue pixels simultaneously, exact original/provenance/lifecycle,
+unchanged second-page output and navigation, and matching compiled-service preview.
+Unsupported controls, protected fallback edits, full cold byte limits and expired
+deadlines return no candidate. This is compiler evidence, not installation, durable
+configuration, receipt/edit-rights, live playback or suitable-client proof.
+
+A test helper's needless by-value argument caused the initial strict domain lint
+failure; it now borrows the producer. Final affected domain run
+7b38a2a4-b12a-4fc5-99c9-af25db2c2cdb passes9/9; the successful union is136
+unique Rust identities, with repeats counted once. Strict all-target Clippy passes
+domain/ffmpeg/web, workspace formatting and architecture-lint pass (four ratchets
+zero). No new dependencies/migrations, UI, transport or FFmpeg argv are introduced.
+Previous unchanged headed/decoder/TSDuck/client/ordinary-AV receipts are retained;
+no new live import/client, six-platform, full-CI or engine/editor acceptance is
+claimed. Proof: tmp/phase9-editorial-base/identity.json and receipt-sha256.txt,
+SHA256fcb3c6ce0144dd17c51d08ee82c2ed424d9d6b1e8663d50dafd7e57e00bf9a0f.
+The immutable receipt binds final source/logs and excludes mutable progress prose.
+The concrete next step and unchanged acceptance gaps are mapped below. A separately
+versioned private concept codec is being prepared as an unapplied ignored patch;
+its native reload must fail closed until authoritative receipt/edit-effect
+validation applies the overlay. It grants no imported concept acceptance.
+
 2026-10-13 native original export checkpoint:
 Criterion: connect captured addon metadata and complete frozen native originals to
 selected TTI files, external metadata and authoritative retained export baselines.
@@ -2801,23 +2862,21 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | --- | --- | --- |
 | Original addon templates/themes/zones | V3 capture and exact durable reload; sanitized export metadata | Imported free/zone/generated and indirect-effect validation |
 | Authoritative export baseline | Complete native file/resource mapping, private body confirmation and retained receipt CAS | Admin/agent operational file delivery and import actions |
-| Edited concept -> same preview -> explicit Publish | Original-only preview/publication/ordinary stream is already proven | Checked physical-base-row overlay propagated through existing semantic composition and saved concepts; original responses stay exact |
+| Edited concept -> same preview -> explicit Publish | Exact raw-row model connects original-preserving cold composition, native/compiled encoding and raster; original-only live flow already proven | Authoritative receipt/edit-effect validation, separately versioned saved overlay, reload and explicit publication |
 | Actual pinned QTM workflow | Prior calibration reused; native per-page export is present | Real host export/open/edit/save/import/preview/publish; X28 national-option/PS normalization and resource dependency loading |
 | Full engine acceptance | Prior representative independent decoding/TSDuck/client/AV evidence retained | Remaining full Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and six-platform gates |
 
-Concrete next action: implement a separately versioned private concept overlay
-from a trusted receipt, using the existing physical layout/base trace and the same
-semantic service, compiler/raster/preview. There is no lossless Unicode draft
-inverse for arbitrary TTI C0 rows. A checked physical-base-row input avoids guessed
-national glyph restoration; changed raw cells retain coded rather than invented
-Unicode intent. Existing compiled-display/native-default/main-composition layouts
-must consume the same overlay. Keep generated X26/resource definitions protected
-until their editing is independently validated. Trace/geometry comparisons must
-also reject in-zone control changes that affect protected cells to the right or
-through double-height footprints, not merely compare edited byte coordinates.
-Existing incomplete raw-control coverage remains full-engine debt, never silently
-normalized or accepted as a permanent subset. Reuse saved-document head CAS and
-explicit publication fences; original addon bytes/OriginalOnly remain intact.
+Concrete next action: authenticate a retained export receipt and complete imported
+free/zone/generated effects, then save a separately versioned private overlay using
+the existing immutable revision/head CAS. Reload through the same complete native
+compiler before preview or explicit publication. Original addon bytes, guide input
+requests/source fences and OriginalOnly capture remain intact; no forged producer
+invocation receipt or changed package/template is introduced. Byte coordinates do
+not fence changed spacing attributes to the right or double-height footprints
+below. Compare original trace/geometry and protected resource/declaration effects.
+Generated X26 edits and currently unsupported C0 controls remain located rejections
+until their required semantic support and independent verification are complete;
+they are not approved permanent restrictions or waived engine/editor criteria.
 
 Protected .dvb assets prove complete preservation but are not QTeletextMaker-
 loadable POP/MOT/DRCS dependency files. Faithful external dependency loading,
@@ -2893,7 +2952,7 @@ Proof: tmp/phase9-authoring-metadata/identity.json and immutable
 receipt-sha256.txt, SHA256087ef11d6c1a9a0426a8aef2a03b6a8f53854dd2383f7705fdea2351009c68ab.
 The receipt binds source/native logs and excludes mutable progress prose.
 
-The current criterion/next-step map is maintained in the native export checkpoint
+The current criterion/next-step map is maintained in the physical-row checkpoint
 above. This historical capture checkpoint leaves all milestone authority and
 complete engine/editor requirements unchanged.
 

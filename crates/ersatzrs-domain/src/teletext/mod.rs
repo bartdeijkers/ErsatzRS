@@ -182,6 +182,8 @@ mod glyph_intent_tests;
 mod base_footprints_tests;
 
 mod display_resolution;
+mod physical_base_overlay;
+pub use physical_base_overlay::*;
 mod display_resolution_values;
 mod display_resolution_writers;
 pub use display_resolution::*;
