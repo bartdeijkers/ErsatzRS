@@ -30,8 +30,11 @@ release section when tagging a release.
   per-page TTI mappings and versioned sidecars, backed by retained server receipts.
   Preserve full resource/magazine packets, original subcodes/navigation and
   addon-owned metadata without changing broadcast state. Editor-only palette
-  context is explicit; localized editor administration and complete QTeletextMaker
-  dependency loading/roundtrip remain open.
+  context is explicit; full charset/resource interchange remains open.
+  Channel previews now offer localized
+  ZIP export and bounded complete-set import as an unpublished draft, with stored
+  channel ownership and protected-edit validation before save. Preview and
+  publication retain their separate native actions.
 - Capture addon-owned teletext template revisions, named themes, typed overrides,
   free areas, custom zones and generated-field bindings through negotiated v3.
   Validate exact page coverage and actual side-panel bounds; preserve metadata

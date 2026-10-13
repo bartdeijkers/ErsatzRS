@@ -4808,6 +4808,33 @@ nor pending/accepted broadcast pointers. Separate request and explicit acceptanc
 use the same qualified model; prior accepted output remains until that action.
 The immutable original receipt can be reused with a newly observed current head.
 
+The channel preview now exposes native editor transfer adapters. Export posts the
+exact channel/design/revision/digest and observed current head to
+`/admin-api/teletext/design/export`. Without page fields it downloads the supported
+set; `export_page` plus four-digit hexadecimal `export_subcode` selects a display.
+The standard ZIP contains exact TTI/DVB files and `project.ersatzrs.json`; no
+package runs and accepted output is unchanged. ZIP uses the workspace's existing
+zip8 dependency with stored entries, without a new archive implementation.
+
+Import posts multipart to `/admin-api/teletext/design/import?channel_id=<id>`:
+text `channel_id`, `name`, `expected_design_head`, one `sidecar` file and repeated
+`files` parts with their original flat names. Include every file from the same
+export. The optional query context preserves channel-local error feedback when
+the body limit rejects before parsing a field; it must agree with the body.
+Stored receipt/original ownership is authoritative before export or save. Closed
+fields, duplicate names, malformed sets and oversized uploads reject. The total
+HTTP upload cap is 8 MiB; configured existing design/encoding/TTI bounds can be
+smaller. Every worker retains actual admission after requester cancellation,
+and all phases share the original bounded operation deadline.
+
+Successful import redirects to the exact saved revision/page for the same native
+preview. It neither requests nor selects output. Protected/syntax/association/
+missing-receipt/no-change/limit errors have localized labels; native numeric page,
+subcode and position remain in the redirect. Resource locations reuse the existing
+authoring formatter. The no-JS forms reuse existing publication controls and all
+nine culture modules. Generic-engine acceptance and full editor/feature coverage
+remain separate; P9A-04 owns the current test/browser proof and remaining gaps.
+
 For agent file workflows: obtain a retained native export, keep its sidecar and
 protected assets, edit permitted TTI rows, submit the complete set with the current
 head, inspect located validation errors, reload the saved immutable revision for

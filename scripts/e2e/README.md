@@ -1150,3 +1150,21 @@ client display/navigation. Import, preview and publication remain separate gates
 The four-case fixture SHA256 is
 `2100d9bd163221cfa57617a5936ae780d6b174a895b48508c70bf536666e5d30`;
 the helper and earlier four/two-case composition fixtures remain unchanged.
+
+### Localized teletext editor transfer flow
+
+`tests/e2e/teletext-editor-flow.spec.ts` uses the runner-owned disposable database
+and one v3-only synthetic addon on two channels with day/night profiles. Run it
+through `scripts/e2e/playwright-e2e.sh` with `--headed --workers 1`, in Chromium
+and Firefox. Four JavaScript/theme combinations each exercise all nine cultures:
+profile selection, original validation, complete/selected ZIP download, protected
+edit rejection, multipart concept import, shared preview and separate publication.
+Its bounded TTI cell edit tests the HTTP/admin connection; the actual pinned
+QTeletextMaker and ordinary-stream/client receipts remain separate evidence.
+
+The native forms require the exact unchanged `.ersatzrs.json` sidecar and every
+TTI/DVB file from the same export. Imports preserve filenames and cannot publish.
+The structured agent-file workflow and protection rules live in
+[the interchange reference](../../docs/reference/teletext-design-interchange.md);
+P9A-04 owns the current proof/gap map. No representative flow closes full authored
+Level 2.5, editor-resource, Lua/restart or platform acceptance.

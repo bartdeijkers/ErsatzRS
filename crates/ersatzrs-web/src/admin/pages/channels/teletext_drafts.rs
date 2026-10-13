@@ -20,6 +20,12 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "publication-selected" => TextKey::TeletextPublicationSelectedSaved,
         "publication-conflict" => TextKey::TeletextPublicationConflict,
         "draft" => TextKey::TeletextDraftSaved,
+        "editorial-limit" => TextKey::TeletextEditorLimit,
+        "editorial-mismatch" => TextKey::TeletextEditorMismatch,
+        "editorial-protected" => TextKey::TeletextEditorProtected,
+        "editorial-no-changes" => TextKey::TeletextEditorNoChanges,
+        "editorial-syntax" => TextKey::TeletextEditorSyntax,
+        "editorial-missing-receipt" => TextKey::TeletextEditorMissingReceipt,
         "busy" => TextKey::TeletextWorkBusy,
         "expired" => TextKey::TeletextWorkExpired,
         "missing-design" | "foreign-channel" => TextKey::TeletextDraftMissing,
@@ -236,9 +242,98 @@ fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
             <nav class=style::inventory aria-label=tr(TextKey::TeletextPreviewPage)>{inventory}</nav>
             <ul class=style::navigation>{navigation}</ul>
             {diagnostics}
+            {editorial_controls(data)}
             {publication_controls(data)}
         </div>
     }.into_any()
+}
+
+fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
+    let Some(observation) = data.publication.as_ref() else {
+        return view! {
+            <section data-testid="teletext-editor-controls" data-state="unavailable">
+                <h3>{tr(TextKey::TeletextEditorTitle)}</h3>
+                <p role="status">{tr(TextKey::TeletextEditorUnavailable)}</p>
+            </section>
+        }
+        .into_any();
+    };
+    view! {
+        <section data-testid="teletext-editor-controls" data-state="available"
+            aria-labelledby="teletext-editor-title">
+            <h3 id="teletext-editor-title">{tr(TextKey::TeletextEditorTitle)}</h3>
+            <p>{tr(TextKey::TeletextEditorHelp)}</p>
+            <p>{tr(TextKey::TeletextEditorOwnershipHelp)}</p>
+            <p>{tr(TextKey::TeletextEditorTemplateHelp)}</p>
+            <div class=style::preview_form>
+                <form method="post" action="/admin-api/teletext/design/export"
+                    data-testid="teletext-editor-export-all-form">
+                    {editorial_export_fields(data, observation)}
+                    <button type="submit" class=btn_class(ButtonVariant::Primary)>
+                        {tr(TextKey::TeletextEditorExportSet)}
+                    </button>
+                </form>
+                <form method="post" action="/admin-api/teletext/design/export"
+                    data-testid="teletext-editor-export-page-form">
+                    {editorial_export_fields(data, observation)}
+                    {hidden("export_page", data.owner.page.get().to_string())}
+                    {hidden("export_subcode", format!("{:04X}", data.owner.subcode.get()))}
+                    <button type="submit" class=btn_class(ButtonVariant::Primary)>
+                        {tr(TextKey::TeletextEditorExportPage)}
+                    </button>
+                </form>
+            </div>
+            {editorial_import_form(data.channel_id, observation.current_design_head)}
+            <p>{tr(TextKey::TeletextEditorNoPublicationHelp)}</p>
+        </section>
+    }
+    .into_any()
+}
+
+fn editorial_export_fields(
+    data: &TeletextDraftPreviewData,
+    observation: &TeletextDraftPublicationObservation,
+) -> AnyView {
+    view! {
+        {hidden("channel_id", data.channel_id.to_string())}
+        {hidden("design_id", data.design_id.to_string())}
+        {hidden("revision", data.revision.to_string())}
+        {hidden("digest", observation.digest.clone())}
+        {hidden("expected_design_head", observation.current_design_head.to_string())}
+    }
+    .into_any()
+}
+
+fn editorial_import_form(channel_id: i64, current_design_head: i64) -> AnyView {
+    view! {
+        <p id="teletext-editor-import-help">{tr(TextKey::TeletextEditorImportHelp)}</p>
+        <form method="post" action=format!("/admin-api/teletext/design/import?channel_id={channel_id}")
+            enctype="multipart/form-data" class=style::preview_form
+            aria-describedby="teletext-editor-import-help"
+            data-testid="teletext-editor-import-form">
+            {hidden("channel_id", channel_id.to_string())}
+            {hidden("expected_design_head", current_design_head.to_string())}
+            <div>
+                <label for="teletext-editor-name">{tr(TextKey::TeletextDesignName)}</label>
+                <input id="teletext-editor-name" name="name" required
+                    maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
+            </div>
+            <div>
+                <label for="teletext-editor-sidecar">{tr(TextKey::TeletextEditorSidecar)}</label>
+                <input id="teletext-editor-sidecar" name="sidecar" type="file"
+                    accept=".json" required/>
+            </div>
+            <div>
+                <label for="teletext-editor-files">{tr(TextKey::TeletextEditorFiles)}</label>
+                <input id="teletext-editor-files" name="files" type="file"
+                    accept=".tti,.dvb" multiple required/>
+            </div>
+            <button type="submit" class=btn_class(ButtonVariant::Primary)>
+                {tr(TextKey::TeletextEditorImport)}
+            </button>
+        </form>
+    }
+    .into_any()
 }
 
 fn publication_controls(data: &TeletextDraftPreviewData) -> AnyView {

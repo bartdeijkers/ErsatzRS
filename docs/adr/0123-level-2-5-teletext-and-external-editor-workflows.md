@@ -49,9 +49,13 @@ pinned QTeletextMaker1.0. Concurrent ordinary-route captures preserve both theme
 exact encoded models and source audio/video; independent decoding and headed
 VLC main-page navigation observe the edit only on its channel/page. The editor
 couples X28 NOS to header controls on load; a separately retained nonzero trial
-changes protected X28 and rejects without publication. Operational localized
-admin, general charset/resource fidelity and full client coverage remain open;
-this base-row slice grants no full editor/engine acceptance.
+changes protected X28 and rejects without publication. Bounded native ZIP export
+and receipt-owned multipart import now connect these functions to localized
+channel-admin forms. Import saves an unpublished concept; preview, request and
+publication stay separate. V3-only addon discovery is included. P9A-04 owns the
+headed nine-culture/both-theme/JS/no-JS browser proof and remaining gaps. General
+charset/resource fidelity and full client coverage remain open; this base-row
+slice grants no full editor/engine acceptance.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: edited two-page QTM flow reaches ordinary streams and headed client navigation; next connect localized admin file delivery/import to the existing native functions; full engine acceptance remains open'
+current_focus = 'P9A-04: localized editor flow proven; next correct the demonstrated versioned QTeletextMaker PS/NOS carrier mismatch and prove pinned-editor round trips while preserving legacy concepts; full engine acceptance remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1305,8 +1305,13 @@ Exact model/TSDuck/source-AV checks, independent decoding and headed client
 The client replays exact finite Router captures; live attachment/open transitions
 and 56-column panel display remain unproven. A nonzero editor trial changes
 protected X28 and correctly rejects; full charset/resource fidelity is required.
-Next connect localized admin file delivery/import to the existing native functions,
-then prove the full headed flow. P9A-04 owns the canonical criterion/gap map.
+Localized native ZIP delivery and bounded receipt-owned multipart concept import
+now connect the same functions to channel admin, including v3-only discovery.
+P9A-04 owns the headed matrix and canonical criterion/gap map. Next correct the
+demonstrated QTeletextMaker PS/NOS carrier mismatch through a versioned export
+profile, retain old receipts unchanged and prove equal/independent header and
+enhanced charset round trips in the pinned editor. This is editor adaptation;
+native DVB controls must remain unchanged.
 This representative success does not establish full engine acceptance.
 The shared geometry gate now rejects
 illegal panel screen/row-colour selectors; complete panel decoding/client proof

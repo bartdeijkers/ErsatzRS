@@ -39,6 +39,9 @@ use ersatzrs_web::host::{
     teletext_preview::project_teletext_preview,
 };
 
+#[path = "editorial_http.rs"]
+mod http_routes;
+
 fn policy() -> NativeTeletextExportPolicy {
     NativeTeletextExportPolicy {
         document: designs::budget(),
@@ -700,7 +703,7 @@ mod external_editor_probe {
         Ok(bytes)
     }
 
-    fn editor_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
+    pub(super) fn editor_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
         assert_eq!((page, subcode), (124, 32));
         let mut response = authoring_metadata::response(theme, page, subcode);
         // Pinned editor load couples its X28 NOS to header controls. The

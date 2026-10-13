@@ -4,7 +4,7 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
-p9a-04 precedes one ErsatzRS-Addons guide (NOS200–299), p9b-01.
+P9A-04 precedes NOS200–299 guide addon, P9B-01.
 ADR0123: authored Level2.5/fallback, pinned QTeletextMaker TTI/sidecar,
 TSDuck/independent decoding and actual client display/navigation; Kodi optional.
 
@@ -46,7 +46,8 @@ Profiles/drafts/preview/admin publication connect.
 Served themes/pending/Off, decoding/client and smoke pass; 12 headed cases pass.
 Copy fixed; finite-client restart/AV passes.
 V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
-QTM charset0 set/stream/client pass; charset/admin/enhanced open.
+QTM charset0 set/stream/client; ZIP/concept admin8-case headed pass.
+PS/NOS, enhanced edits and full client remain open.
 
 SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
 pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
@@ -59,8 +60,9 @@ invalid resources/unreconciled M29/MOT omissions retain old output. One-epoch wa
 status grants no activation. P9A-04 owns proof; durable promotion, immediate Off
 and full warm reconciliation remain open.
 
-MPEG-TS owners retain wrapper/encoder leases, lifecycle and Health cleanup. Linux x64/Windows-interop/QEMU ARM64/ARMv7 prove admission, tokens, reaping,
-video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
+MPEG-TS wrapper/encoder leases, lifecycle/Health remain.
+Linux x64/Windows-interop/QEMU ARM64/ARMv7 prove admission/tokens/reaping,
+video/selected audio/Dutch200/TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
 P9A-02: decoder Health/six-RID licenses.

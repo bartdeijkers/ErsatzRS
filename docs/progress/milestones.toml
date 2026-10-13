@@ -2724,6 +2724,65 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 localized editor transfer checkpoint:
+Criterion: connect retained native export/import to channel admin forms without
+implicit publication, and prove shared preview/explicit publication through
+localized headed light/dark and hydrated/no-JS Chromium/Firefox.
+
+Native adapters download a standard ZIP of exact TTI/assets/sidecar and accept a
+bounded complete multipart set as a concept. Stored receipt/original ownership
+precedes writes; uploaded claims cannot change it. Closed fields, duplicate,
+traversal, incomplete files and protected edits reject. Deadlines and actual-worker
+admission survive cancellation; packaging/preflight do not nest native admission.
+The existing zip8 Stored writer is reused without new package versions. The first
+native oversized trial rejects safely but loses the channel redirect before field
+parsing; the correction adds closed query context checked against body ownership.
+
+Run9d556ecb-2a89-4cf5-b98e-3c14522be69d passes41/41 HTTP/native-concept/i18n/API
+checks. New v3-only discovery run6ceaf343-b1b8-4c89-bb18-5a91ddffb969 passes1/1,
+for42 unique successes. Its first compile lacks fixture mutability; its first SSR
+run uses a single-thread runtime and fails an existing blocking-helper requirement.
+Only the test runtime/binding changes; final real SSR retains the v3-only form.
+The first headed probe exposes the production discovery defect: the v1/v2 filter
+omits v3-only producers. The one-condition correction includes v3. These retained
+negative trials are not successful evidence.
+
+Hydration source map: /channels/{id}/teletext uses ChannelTeletextPage blocking SSR
+and plain TeletextDraftPreview, no route islands. Exact preview/publication
+observations feed native export/import forms, shared raster and separate actions.
+Existing hidden fields, preview_form/fields CSS and Primary buttons provide no-JS
+behavior. Eighteen new labels/errors are present in all nine culture modules.
+Headed tests/e2e/teletext-editor-flow.spec.ts passes8/8, with no skip/retry/flaky:
+Chromium151.0.7922.34 and Firefox153.0, each light/dark and JS/no-JS, all nine
+cultures in each case (72 culture flows). Each proves profile selection/validation,
+complete/selected ZIP download, protected generated-row rejection, exact file
+upload, free-row concept save, same preview and separate request/Publish. Same
+addon/two channels retain red day/blue night together; Q appears only day/page200,
+page201/night stay unchanged. Oversized/rejected imports preserve heads/pointers;
+installed package and captured channel/profile configuration stay unchanged;
+producers are not
+reinvoked for preview/publication. Actual native file controls work at320 pixels,
+keyboard focus and200% zoom. Targeted inspected screenshots show new localized
+controls and red AZ/white Q. Initial harness failures (collapsed details, ambiguous
+file-input button role, intrinsic SVG size) are corrected separately. A first
+semantic pass has clipped full-page screenshots; final viewport captures replace
+that visual claim, while its semantic result remains valid.
+
+Final strict focused Clippy/progress, formatting, architecture, hydration and
+new-allowance checks pass. Narrow ownership/bounds/cancellation/
+publication review finds no concrete defect. Dependency bans/licenses/sources
+pass; the whole advisory gate fails on unchanged ammonia RUSTSEC-2021-0157/0158
+and unsafe-libyaml RUSTSEC-2024-0449. No dependency version changes or suppression.
+Receipt: tmp/phase9-editorial-http/identity.json,
+SHA256d41867425eb0ab00d5f745b09347f23c8892fa503412abffa1f3374bad9d6173. It binds
+source, matched SSR/WASM/site, native/browser logs, versions and artifacts; mutable
+progress prose is excluded. The prior actual QTM/ordinary-route/TSDuck/independent
+decoding/finite-client receipt remains valid; this browser suite edits one TTI
+cell directly and does not repeat the external-editor/client trial. Full Level2.5,
+charset/resources/page-set, sidepanel/live-client, Lua/restart/source/Next and six
+platform requirements remain open. No milestone/criteria/dependency change,
+production addon, push or full CI claim.
+
 2026-10-13 edited ordinary-stream/client checkpoint:
 Criterion: carry the actual pinned-editor concept through explicit publication,
 ordinary MPEG-TS and an independently inspected suitable-client navigation flow,
@@ -2875,17 +2934,19 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | Criterion | Implemented/proven | Missing evidence or concrete next blocker |
 | --- | --- | --- |
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
-| Authoritative export baseline | Complete projection, server-retained receipt and exact rebuild | Operational file delivery/import in localized admin/agent flow |
-| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two-channel exact route/TSDuck/AV/independent decoding and actual 124->125->124 main-plane client proof | Localized admin attachment, bound live client/open-generation transitions and full panel/feature coverage |
+| Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
+| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two-channel exact route/TSDuck/AV/decoding and actual 124->125->124 client proof; localized native forms and 8-case/all-nine-culture headed flow proven | Bound live client/open-generation transitions and full panel/feature coverage |
 | Actual pinned QTM workflow | Actual v1.0 edit/Save As of one page in a retained two-page set, native import/shared preview/publish/reopen and isolated delivery | General charset/PS/X28 fidelity, resource dependency loading and full supported page-set/subpage edits |
-| Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and all six platforms |
+| Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
-Concrete next action: connect existing retained native export/import functions to
-localized admin file delivery/import-as-concept, then inspect the same preview and
-separate Publish in the headed flow. Actual edited ordinary-route/main-plane client
-evidence now exists; do not repeat general audits or metric expansion. General
-charset/resource/editor/panel, live-bound/open-client and localized admin gaps
-remain required; retained nonzero editor loss must not be masked. Base-row-only import, unchanged-file refusal,
+Concrete next action: correct the demonstrated pinned QTM PS/NOS carrier mismatch
+through the existing versioned editor_profile, retain legacy receipts unchanged,
+and prove literal controls plus actual equal/independent header/enhanced NOS
+round trips. This adapts editor interchange, not native DVB controls. Localized
+ZIP/import/preview/explicit publication and edited ordinary-route/main-plane
+client evidence now exist; do not repeat general audits or metric expansion.
+General charset/resource/editor/panel, live-bound/open-client and remaining
+admin/Lua flows stay required; retained nonzero loss must not be masked. Base-row-only import, unchanged-file refusal,
 protected enhancement/PS edits and preserved-but-not-editor-loadable DVB assets
 are explicit pending implementation/proof; none is a permanent accepted limitation.
 No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing

@@ -144,6 +144,7 @@ pub async fn load_channel_teletext_for_application(
         .filter(|addon| {
             addon.manifest.has_capability("teletext.pages.v1")
                 || addon.manifest.has_capability("teletext.pages.v2")
+                || addon.manifest.has_capability("teletext.pages.v3")
         })
         .map(|addon| (addon.addon_id.clone(), addon))
         .collect();
