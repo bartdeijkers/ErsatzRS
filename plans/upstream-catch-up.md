@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-13): `388ab6a0f289f95f1bdceaa76d64858cfcc674da`
-  — chore: update next (#3091).
+- Latest fetched target (`origin/main`, 2026-10-13): `8c3636c11dfc9e7522984b451f8f380767a06b25`
+  — fix: mpegts initial burst (#3092).
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -648,6 +648,8 @@ remain. See `post-publication-cleanup.json`.
   A later 2026-10-13 refresh appends the Next HLS subtitle rendition fix and the
   v0.2.2 develop pin as pending rows 233-234; all 232 existing SHA/subject pairs
   remain an exact prefix. Those rows sit after the v26.11.2 boundary.
+  A later 2026-10-13 refresh appends the MPEG-TS initial burst as pending row
+  235; all 234 existing SHA/subject pairs remain an exact prefix.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows 209-213 carry the
   `ucu-10` prefix; the matching milestone still has to be added to the tracker.
@@ -5829,3 +5831,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 232 | `e6bb6c67` | prep for release v26.11.2 | | | | ucu-10; provisional: N/A (upstream CHANGELOG heading, date and compare links for v26.11.2; no source change), like rows 168, 203 and 208. This row is the release boundary that closes UCU-10. Claude 2026-10-13 triage. |
 | 233 | `7b623769` | fix: next hls subtitle rendition (#3090) | | | | ucu-10; provisional: Covered for the first half, Port for the second. Upstream stops advertising the HLS subtitle rendition unless the channel's text subtitle mode is Convert, because a Burn channel offered an empty track that froze VLC 3; ErsatzRS already gates that rendition on Convert (`crates/ersatzrs-web/src/transport/iptv/variant.rs:90`). The second half is the one to audit: upstream's MPEG-TS streams were requesting the HLS subtitle track they cannot use and started about ten seconds slower, so the audit has to confirm our MPEG-TS path never asks the Next session for that rendition and measure the start delay. Claude 2026-10-13 triage. |
 | 234 | `388ab6a0` | chore: update next (#3091) | | | | ucu-10; provisional: Adapt, folded into the row 214/231 pin decision. Upstream leaves the released v0.2.1 again for `v0.2.2-3b93b660-develop` one day later, which is worth noting for the rebase choice: their pin follows develop between releases, so ours should track a release tag rather than chase each snapshot. Claude 2026-10-13 triage. |
+| 235 | `8c3636c1` | fix: mpegts initial burst (#3092) | | | | ucu-10; provisional: Covered in the pipeline, Port in the shipped scripts. Upstream adds `-readrate_initial_burst 6` after `-readrate 1.0` so clients like Plex fill their buffer and start sooner, in both the generated command and its embedded MPEG-TS script. ErsatzRS already emits the flag from the pipeline with a burst of 8 (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:3427`), but neither shipped script carries it (`assets/Scripts/MpegTs/run.sh:3`, `assets/Scripts/MpegTs/run.bat:3`), so a channel using the script path starts without the burst. The audit should align the scripts and decide whether 8 or upstream's 6 is the value we keep. Claude 2026-10-13 triage. |
