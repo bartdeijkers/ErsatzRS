@@ -487,6 +487,305 @@ async fn reload_rejects_corrupt_or_bounded_storage_and_native_recompilation_fail
     fixture.state.pool.close().await;
 }
 
+// This fixture-only application witness deliberately admits structural concept
+// bytes to storage. It proves neither authenticated editor receipt provenance
+// nor import permission nor complete native concept validation. Production
+// reload must reject this document rather than drop its overlay under its digest.
+struct StructuralEditorialFixtureConfirmation;
+
+#[async_trait::async_trait]
+impl ersatzrs_app::teletext_designs::TeletextOriginalDesignValidator
+    for StructuralEditorialFixtureConfirmation
+{
+    async fn confirm_original(
+        &self,
+        document: ersatzrs_app::teletext_design_documents::EncodedTeletextDesignDocuments,
+    ) -> Result<
+        ersatzrs_app::teletext_design_documents::EncodedTeletextDesignDocuments,
+        ersatzrs_app::teletext_designs::TeletextOriginalDesignValidationError,
+    > {
+        assert!(
+            ersatzrs_app::teletext_design_documents::decode_teletext_design_documents(
+                document.bytes(),
+                budget()
+            )
+            .unwrap()
+            .editorial_overlay()
+            .is_some()
+        );
+        Ok(document)
+    }
+}
+
+struct EditorialRejectionState {
+    original: SavedOriginalTeletextDesign,
+    sources: [Vec<u8>; 2],
+    pending: ersatzrs_domain::TeletextPublicationRequest,
+    accepted: ersatzrs_web::host::teletext_generations::AcceptedTeletextOutputCandidate,
+    config: Vec<(Option<String>, Option<String>)>,
+    bindings: Vec<ersatzrs_domain::ChannelTeletextBindingRead>,
+    edited: ersatzrs_domain::TeletextDesignRevision,
+}
+
+fn structural_editorial_fixture_document(
+    saved: &SavedOriginalTeletextDesign,
+    original_bytes: &[u8],
+) -> ersatzrs_app::teletext_design_documents::EncodedTeletextDesignDocuments {
+    use ersatzrs_app::teletext_design_documents::{
+        append_teletext_design_editorial_overlay, TeletextSavedEditorialOverlay,
+        TeletextSavedEditorialProvenance,
+    };
+    use ersatzrs_domain::{TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow};
+    use ersatzrs_ffmpeg::teletext::{
+        project_encoded_teletext_display, TeletextEncodedDisplayRecord,
+    };
+    let encoded_page = saved
+        .candidate()
+        .encoded()
+        .unwrap()
+        .pages()
+        .iter()
+        .find_map(|page| match page {
+            EncodedTeletextAuthoredPage::NativeDisplay(page)
+                if page.encoded().page().address() == address(123, 16) =>
+            {
+                Some(page.encoded().page())
+            }
+            EncodedTeletextAuthoredPage::CompiledDisplay(page)
+                if page.page().address() == address(123, 16) =>
+            {
+                Some(page.page())
+            }
+            _ => None,
+        })
+        .unwrap();
+    let mut cells = project_encoded_teletext_display(encoded_page, 128)
+        .unwrap()
+        .records
+        .into_iter()
+        .find_map(|record| match record {
+            TeletextEncodedDisplayRecord::BaseRow { row: 1, cells } => Some(cells),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(cells[8], b'Z');
+    cells[8] = b'Q';
+    let overlay = TeletextSavedEditorialOverlay::new(
+        TeletextSavedEditorialProvenance {
+            // Valid-shaped synthetic receipt claims are intentionally not a
+            // native export/import authority in this negative-control fixture.
+            export_receipt_id: 1,
+            export_receipt_digest: "d".repeat(64),
+            original_design_id: saved.head().id,
+            original_revision: 1,
+            original_digest: saved.digest().to_owned(),
+        },
+        vec![TeletextPhysicalBaseOverlay::new(
+            address(123, 16),
+            vec![TeletextPhysicalBaseRow::new(1, cells).unwrap()],
+        )
+        .unwrap()],
+    )
+    .unwrap();
+    append_teletext_design_editorial_overlay(original_bytes, &overlay, budget()).unwrap()
+}
+
+async fn save_structural_editorial_fixture(
+    fixture: &Fixture,
+    saved: &SavedOriginalTeletextDesign,
+) -> ersatzrs_domain::TeletextDesignRevision {
+    let original = fixture
+        .state
+        .application
+        .teletext_design_revision(saved.head().id, 1, budget().max_serialized_bytes)
+        .await
+        .unwrap()
+        .unwrap();
+    let document = structural_editorial_fixture_document(saved, &original.document);
+    let edited_head = fixture
+        .state
+        .application
+        .save_original_teletext_design(
+            "Synthetic unvalidated editor concept".to_owned(),
+            Some((saved.head().id, 1)),
+            document,
+            &StructuralEditorialFixtureConfirmation,
+            budget().max_serialized_bytes,
+        )
+        .await
+        .unwrap();
+    let TeletextDesignMutation::Saved(edited_head) = edited_head else {
+        panic!("fixture-only structural save must append an immutable revision");
+    };
+    assert_eq!(edited_head.revision, 2);
+    let edited = fixture
+        .state
+        .application
+        .teletext_design_revision(saved.head().id, 2, budget().max_serialized_bytes)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(edited.digest, saved.digest());
+    assert!(
+        ersatzrs_app::teletext_design_documents::decode_teletext_design_documents(
+            &edited.document,
+            budget()
+        )
+        .unwrap()
+        .editorial_overlay()
+        .is_some()
+    );
+    edited
+}
+
+async fn editorial_rejection_fixture() -> (Fixture, EditorialRejectionState) {
+    let (fixture, sources) = persistent_pair(DocumentFixture::Authored).await;
+    let prepared = candidate(&fixture, channel_documents::policy())
+        .await
+        .unwrap();
+    let original = save(&fixture, prepared, None).await;
+    let pending = super::generations::request(&fixture, &original, None).await;
+    let accepted =
+        super::generations::accepted(super::generations::accept(&fixture, &pending, 1, None).await);
+    assert!(fixture
+        .state
+        .application
+        .accepted_teletext_generation(1)
+        .await
+        .unwrap()
+        .is_some());
+    let config = config(&fixture).await;
+    let bindings = fixture
+        .state
+        .application
+        .channel_teletext_bindings(1)
+        .await
+        .unwrap();
+    let edited = save_structural_editorial_fixture(&fixture, &original).await;
+    (
+        fixture,
+        EditorialRejectionState {
+            original,
+            sources,
+            pending,
+            accepted,
+            config,
+            bindings,
+            edited,
+        },
+    )
+}
+
+async fn assert_editorial_native_rejection(fixture: &Fixture, state: &EditorialRejectionState) {
+    use ersatzrs_web::host::teletext_designs::{
+        request_original_teletext_design_publication, NativeTeletextPublicationError,
+    };
+    assert!(matches!(
+        reload_original_teletext_design_revision(
+            &fixture.state.application,
+            state.original.head().id,
+            2,
+            budget(),
+            channel_documents::policy(),
+            deadline(),
+        )
+        .await,
+        Err(NativeTeletextDesignError::EditorialValidationUnavailable)
+    ));
+    assert!(matches!(
+        request_original_teletext_design_publication(
+            &fixture.state.application,
+            state.original.head().id,
+            2,
+            state.edited.digest.clone(),
+            2,
+            Some(state.pending.id),
+            budget(),
+            channel_documents::policy(),
+            deadline(),
+        )
+        .await,
+        Err(NativeTeletextPublicationError::Design(
+            NativeTeletextDesignError::EditorialValidationUnavailable
+        ))
+    ));
+}
+
+async fn assert_editorial_originals_and_pointers_preserved(
+    fixture: &mut Fixture,
+    state: &EditorialRejectionState,
+) {
+    let old = reload_original_teletext_design_revision(
+        &fixture.state.application,
+        state.original.head().id,
+        1,
+        budget(),
+        channel_documents::policy(),
+        deadline(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(old.digest(), state.original.digest());
+    let original_encoded = state.original.candidate().encoded().unwrap();
+    assert_eq!(units(old.encoded().unwrap()), units(original_encoded));
+    assert_eq!(
+        old.encoded().unwrap().magazine_units(),
+        original_encoded.magazine_units()
+    );
+    for (source, expected) in old.sources().iter().zip(&state.sources) {
+        assert_eq!(source.bytes(), expected);
+    }
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .teletext_publication_request(1)
+            .await
+            .unwrap(),
+        Some(state.pending.clone())
+    );
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .accepted_teletext_generation(1)
+            .await
+            .unwrap(),
+        Some(state.accepted.generation().clone())
+    );
+    super::generations::assert_same_output(
+        &super::generations::recover(fixture).await.unwrap(),
+        &state.accepted,
+    );
+    assert_eq!(config(fixture).await, state.config);
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .channel_teletext_bindings(1)
+            .await
+            .unwrap(),
+        state.bindings
+    );
+    assert_eq!(revision_count(fixture).await, 2);
+    channel_documents::assert_requests(fixture, 1, 2);
+    assert!(fixture.playout.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn saved_editorial_overlay_cannot_reload_or_publish_as_unchanged_original() {
+    let (mut fixture, state) = editorial_rejection_fixture().await;
+    for reopen in [false, true] {
+        if reopen {
+            fixture = fixture.reopen().await;
+        }
+        assert_editorial_native_rejection(&fixture, &state).await;
+        assert_editorial_originals_and_pointers_preserved(&mut fixture, &state).await;
+    }
+    fixture.state.pool.close().await;
+}
+
 #[tokio::test]
 async fn saved_explicit_resource_lifecycle_survives_restart_without_policy_inference() {
     let (fixture, _) = persistent_pair(DocumentFixture::Companion).await;

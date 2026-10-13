@@ -52,6 +52,8 @@ pub enum NativeTeletextDesignError {
     WorkerFailed,
     #[error("teletext resource lifecycle count exceeds storage policy")]
     LifecycleBudget,
+    #[error("saved teletext editorial receipt and edit-effect validation is unavailable")]
+    EditorialValidationUnavailable,
 }
 
 /// Saved immutable original and its associated complete preview candidate.
@@ -386,6 +388,12 @@ pub(super) async fn reload_original_teletext_design_revision_with_hold(
     let restored = super::teletext_work::spawn_blocking(hold, move || {
         check_deadline(deadline)?;
         let parts = decode_teletext_design_documents(&stored.document, budget)?.into_parts();
+        // Structural storage references grant no editor permissions. Until the
+        // retained receipt and complete protected effects are authenticated,
+        // never recover original output under an edited document's digest.
+        if parts.editorial_overlay.is_some() {
+            return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
+        }
         drop(stored.document);
         policy.entry = parts.entry;
         policy.transmissions = parts

@@ -1295,8 +1295,10 @@ remain closed. P9A-04 owns the exact verification and gap map.
 Native export now retains server-owned TTI file/resource/edit baselines.
 A typed physical-row overlay connects the same semantic/compiler/raster pipeline;
 authenticate complete zone/generated effects against
-retained receipts and save a separately versioned private concept overlay through
-immutable revision/head CAS and explicit publication.
+retained receipts. A separately versioned private concept codec now preserves
+original bytes; native reload/publication refuses it until authentication. Connect
+complete edit effects and qualified immutable revision/head CAS before preview
+and explicit publication.
 Current saved original_only policy remains uneditable; uploaded metadata cannot
 broaden permissions or impersonate a successful addon invocation.
 Prove a synthetic editable zone while protecting presentation, navigation and

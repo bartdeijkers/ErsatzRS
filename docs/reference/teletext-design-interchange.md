@@ -4745,3 +4745,31 @@ Persist a separately versioned private overlay alongside exact original bytes;
 reload through this same compiler, retain revision/head CAS and make publication
 an explicit later action. Import must leave current broadcast state untouched.
 P9A-04 owns the verification receipt and the remaining editor/client flow.
+
+
+### Private concept-row subdocument
+
+The optional `editorial_overlay` has its own `schema_version:1` and remains absent
+from all original capture encodings. Present null, unknown fields/versions and
+invalid shape reject. Structural provenance stores positive export-receipt and
+original-design/revision IDs and lowercase SHA256 references, not trusted grants.
+Exact replacement page/subcodes carry nonempty distinct rows with40 seven-bit
+cells; receiver header positions remain reserved. Streaming preflight charges
+owner/row counts and fixed row content before allocating owned arrays/vectors,
+using existing document/service limits. Native composition still owns full
+original-plus-overlay cold limits.
+
+`append_teletext_design_editorial_overlay` validates the existing stored original
+and exact unambiguous owner membership, then preserves its JSON prefix and tail
+byte-for-byte while inserting this closed subdocument. Original producer strings,
+guide requests/source fences, installation/settings context, resource lifecycle,
+entry/region, metadata and `original_only` capture policy remain exact. Appending
+is read-only syntax work: no package invocation, revision save or publication.
+
+Until authoritative immutable receipt/original association and complete edit-region
+effects are connected, native reload and publication refuse a present subdocument
+with `EditorialValidationUnavailable`. They never discard its rows and recover old
+output under an edited digest. The next implementation must replace that explicit
+rejection with full native authentication and qualification before preview/save.
+No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
+positive/negative codec and durable rejection proof, including limitations.

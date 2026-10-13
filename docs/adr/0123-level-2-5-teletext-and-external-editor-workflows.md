@@ -34,8 +34,13 @@ A typed physical-base-row overlay now preserves exact seven-bit editor cells
 through the existing semantic service, compiled/native encoders and shared raster.
 It is separate from unchanged original addon responses, resources and metadata;
 existing service and full cold-composition limits also charge replacement rows.
-This compiler seam grants no editing rights. Authoritative receipt/zone validation,
-private versioned concept persistence and operational import remain unimplemented.
+This compiler seam grants no editing rights. A separately versioned private
+concept subdocument now retains original/export references and exact replacement
+rows without changing original capture serialization. Structural restoration
+confers no import permission; native reload/publication explicitly rejects its
+presence until authoritative receipt and complete edit effects are authenticated.
+Operational import, qualified concept persistence and edit-policy enforcement
+remain unimplemented.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.

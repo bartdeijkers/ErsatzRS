@@ -2724,6 +2724,63 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 private concept codec and durable rejection checkpoint:
+Criterion: preserve editable row data alongside exact captured originals through
+restart-safe storage, without allowing unqualified concepts into preview/output.
+This connects thef58e2556 typed row seam to an independently versioned private
+subdocument. Actual authenticated import and complete engine acceptance stay open.
+
+Original capture serialization remains byte-identical and omits editorial_overlay.
+A present subdocument is closed/map-only/non-null with schema_version1. Positive
+original/export IDs, exact revision and lowercase digest references remain untrusted
+structural claims. Fixed40-cell rows retain seven-bit/header and exact-owner rules.
+Streaming preflight charges owner/row counts and content before owned allocation;
+append preserves original JSON prefix/tail and exact producer/guide/context strings,
+resource lifecycle and addon metadata. Existing OriginalOnly capture grants no new
+permissions. Repeated overlays, ambiguous producers and malformed bounds reject.
+
+Native reload now refuses any present overlay until the authoritative immutable
+receipt/original pair and complete edit effects are authenticated. Publication
+request uses that same reload. It never ignores rows and recovers original output
+under an edited digest. A fixture-only trusted application witness intentionally
+saves structurally valid concept bytes to prove this guard; it is not native save
+eligibility or editor permission. Before and after reopen, edited revision2 rejects
+reload/publication while old revision1 packets/M29/source bytes remain exact.
+Existing nonempty pending/accepted pointers, recovered raster/navigation,
+configuration/bindings and producer/playout counts stay unchanged.
+
+Verification: initial module lookup was corrected with an explicit test path.
+Application run3c75be86-631a-4cc8-89ec-2cfa286631a5 passes24 existing identities
+and fails8 new fixtures. The common fixture incorrectly put domain logical_subpage
+into closed producer-wire resource data; it now uses the actual wire DTO/subpage.
+Affected run10c708bd-f328-4d53-a76e-1f51c62cbf36 passes7/8; its remaining guide fixture incorrectly
+used the legacy request parser on V3 input. The final explicit schema3 parser keeps
+complete requests/source-fence tests and run
+c662c17a-6eff-4208-9b16-bac6150c4700 passes1/1. Both negative receipts remain;
+no wholly green32-test application run is claimed. Valid baseline and unchanged
+seven-test successes are reused, with unique identities counted once.
+
+The first native build exposed a test state field using the binding entity instead
+of the actual binding read model; after correction native run
+84131470-3139-44b1-93b9-868f2d543126 passes6/6: one new durable guard and five
+existing immutable-original/lifecycle/bounds/uninstall/reopen regressions. The
+successful union is38 unique Rust identities. Strict app/web all-target Clippy,
+formatting and architecture-lint pass; growing restore code was split without new
+lint exemptions. No dependencies/migrations/transport/argv/admin are added.
+Unchanged prior headed/decoder/TSDuck/client/AV proof is retained; no new live
+editor/client, six-platform, full-CI, authenticated import or engine acceptance is
+claimed. Receipt: tmp/phase9-saved-editorial/identity.json and receipt-sha256.txt,
+SHA2562e91e26b6a2956aa28e6302090a042ac0257f62c7577e3c4eacdaca699f522b8.
+The receipt binds final source/logs and excludes mutable progress prose.
+
+Concrete next action: parse actual edited TTI against the authoritative retained
+baseline, derive raw rows and authenticate free/zone/generated plus indirect
+attribute/footprint effects. Only then replace native rejection with qualified
+same-design revision/head CAS, reload/preview and explicit publication. Uploaded
+sidecars never broaden addon permissions. The existing shared compiler, work lease,
+original guide/source fences, pending/accepted CAS and ordinary route remain the
+connection points; no general audit or measurement expansion follows.
+
 2026-10-13 physical base-row compiler checkpoint:
 Criterion: connect lossless TTI base cells to the same validated semantic service,
 native encoders and preview raster without rewriting original addon responses.
@@ -2862,12 +2919,12 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | --- | --- | --- |
 | Original addon templates/themes/zones | V3 capture and exact durable reload; sanitized export metadata | Imported free/zone/generated and indirect-effect validation |
 | Authoritative export baseline | Complete native file/resource mapping, private body confirmation and retained receipt CAS | Admin/agent operational file delivery and import actions |
-| Edited concept -> same preview -> explicit Publish | Exact raw-row model connects original-preserving cold composition, native/compiled encoding and raster; original-only live flow already proven | Authoritative receipt/edit-effect validation, separately versioned saved overlay, reload and explicit publication |
+| Edited concept -> same preview -> explicit Publish | Shared raw-row compiler/raster and separate private codec; durable unqualified concepts refuse reload/publication; original-only live flow proven | Authoritative receipt/edit-effect validation, qualified same-design save/reload/preview and explicit publication |
 | Actual pinned QTM workflow | Prior calibration reused; native per-page export is present | Real host export/open/edit/save/import/preview/publish; X28 national-option/PS normalization and resource dependency loading |
 | Full engine acceptance | Prior representative independent decoding/TSDuck/client/AV evidence retained | Remaining full Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and six-platform gates |
 
 Concrete next action: authenticate a retained export receipt and complete imported
-free/zone/generated effects, then save a separately versioned private overlay using
+free/zone/generated effects, then qualify the private overlay and save it using
 the existing immutable revision/head CAS. Reload through the same complete native
 compiler before preview or explicit publication. Original addon bytes, guide input
 requests/source fences and OriginalOnly capture remain intact; no forged producer
@@ -2952,7 +3009,7 @@ Proof: tmp/phase9-authoring-metadata/identity.json and immutable
 receipt-sha256.txt, SHA256087ef11d6c1a9a0426a8aef2a03b6a8f53854dd2383f7705fdea2351009c68ab.
 The receipt binds source/native logs and excludes mutable progress prose.
 
-The current criterion/next-step map is maintained in the physical-row checkpoint
+The current criterion/next-step map is maintained in the private concept checkpoint
 above. This historical capture checkpoint leaves all milestone authority and
 complete engine/editor requirements unchanged.
 
