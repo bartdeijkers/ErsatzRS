@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-13): `aa88df20af4de4122335f0a2ec2cd3dcacdb323c`
-  — fix: local episode nfo tags and genres (#3085).
+- Latest fetched target (`origin/main`, 2026-10-13): `f5b5e9aa0aad4336b2fabe5530d99d2f07aa4e99`
+  — fix: nested filler sequences (#3088).
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -638,6 +638,9 @@ remain. See `post-publication-cleanup.json`.
   row 226; all 225 existing SHA/subject pairs remain an exact prefix.
   The 2026-10-13 refresh appends the local episode NFO genre and tag fix as
   pending row 227; all 226 existing SHA/subject pairs remain an exact prefix.
+  A later 2026-10-13 refresh appends the search page fix, a Next pin bump and
+  nested filler sequences as pending rows 228-230; all 227 existing SHA/subject
+  pairs remain an exact prefix.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows 209-213 carry the
   `ucu-10` prefix; the matching milestone still has to be added to the tracker.
@@ -5812,3 +5815,6 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 225 | `16fd9979` | chore: update next (#3083) | | | | ucu-10; provisional: Adapt, folded into the row 214 pin decision. Pin moves to `v0.2.1-bff83ef6-develop`; that build stops hevc streams hanging on A53 closed captions with Mesa before 26.2.3 (captions are dropped there) and makes `crop` always scale to cover the output before cropping. The crop behaviour is worth checking against our own scaling rules regardless of the pin. Claude 2026-10-12 triage. |
 | 226 | `4b6c9dae` | feat: warn about legacy engine removal (#3084) | | | | ucu-10; provisional: N/A for the diff, but the most consequential row of this window to read. Upstream announces that its legacy streaming engine is removed in ErsatzTV 26.12: the Channels page lists channels still on it, the channel editor warns, and starting such a stream logs a warning pointing at an issue form. None of that is portable, because ErsatzRS has no legacy ErsatzTV engine to retire — its native FFmpeg pipeline is the primary engine under ADR 0095 and Next is the accepted optional second one. What it does mean for us is that the upstream reference implementation for everything the native pipeline mirrors stops being maintained after 26.12, so future rows will increasingly describe Next-only behaviour. That is a maintainer decision about the parity baseline, not a port. Claude 2026-10-12 triage. |
 | 227 | `aa88df20` | fix: local episode nfo tags and genres (#3085) | | | | ucu-10; provisional: Port, pending the audit. Upstream had excluded episode metadata from its genre and tag reconciliation, so genres and tags read from an episode NFO were never added or removed on rescan; the guard is dropped and episodes now follow the same add/remove path as every other kind. ErsatzRS parses episode genres and tags from NFO (`crates/ersatzrs-scanner/src/nfo.rs:197`) and carries them through the local television scanner (`crates/ersatzrs-scanner/src/local_television.rs:141`), so the audit has to show that a changed NFO actually adds and removes episode genres and tags on a rescan rather than only on first import. Claude 2026-10-13 triage. |
+| 228 | `abdae14e` | fix: don't force load search page (#3086) | | | | ucu-10; provisional: N/A, Blazor-specific. Searching from the search bar forced a full page navigation that their framework then logged as a failed location change; upstream reworks the Razor page to query reactively with a cancellation token instead. ErsatzRS serves search as an ordinary server-rendered route with its own query parsing (`crates/ersatzrs-web/src/admin/search_query.rs`), so there is no forced reload to remove; the audit only has to confirm a search from the bar and from a smart collection target keeps working without a full reload. Claude 2026-10-13 triage. |
+| 229 | `c1b6f0e8` | chore: update next (#3087) | | | | ucu-10; provisional: Adapt, folded into the row 214 pin decision. Pin moves to `v0.2.1-73a72616-develop`, which fixes completely green QSV output on legacy Intel encoders. That failure mode is worth remembering when the approved QSV hardware debt is finally verified. Claude 2026-10-13 triage. |
+| 230 | `f5b5e9aa` | fix: nested filler sequences (#3088) | | | | ucu-10; provisional: Port, pending the audit. A filler sequence that calls another sequence was re-read per call, so nested sequences lost their handler state; upstream expands each sequence once per build, caches the cloned instructions and rejects cycles before any filler runs. ErsatzRS flattens sequences and already rejects cycles up front (`crates/ersatzrs-core/src/scheduling/yaml/sequences.rs:6`, `:47`), so the audit has to show that a nested filler sequence keeps its state across calls in one build rather than restarting. Claude 2026-10-13 triage. |
