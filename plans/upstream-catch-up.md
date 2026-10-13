@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-13): `f5b5e9aa0aad4336b2fabe5530d99d2f07aa4e99`
-  — fix: nested filler sequences (#3088).
+- Latest fetched target (`origin/main`, 2026-10-13): `e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0`
+  — prep for release v26.11.2.
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -641,6 +641,10 @@ remain. See `post-publication-cleanup.json`.
   A later 2026-10-13 refresh appends the search page fix, a Next pin bump and
   nested filler sequences as pending rows 228-230; all 227 existing SHA/subject
   pairs remain an exact prefix.
+  A later 2026-10-13 refresh appends the released Next v0.2.1 pin and upstream
+  release v26.11.2 as pending rows 231-232; all 230 existing SHA/subject pairs
+  remain an exact prefix. Row 232 is the finish line the dashboard now shows for
+  UCU-10.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows 209-213 carry the
   `ucu-10` prefix; the matching milestone still has to be added to the tracker.
@@ -5818,3 +5822,5 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 228 | `abdae14e` | fix: don't force load search page (#3086) | | | | ucu-10; provisional: N/A, Blazor-specific. Searching from the search bar forced a full page navigation that their framework then logged as a failed location change; upstream reworks the Razor page to query reactively with a cancellation token instead. ErsatzRS serves search as an ordinary server-rendered route with its own query parsing (`crates/ersatzrs-web/src/admin/search_query.rs`), so there is no forced reload to remove; the audit only has to confirm a search from the bar and from a smart collection target keeps working without a full reload. Claude 2026-10-13 triage. |
 | 229 | `c1b6f0e8` | chore: update next (#3087) | | | | ucu-10; provisional: Adapt, folded into the row 214 pin decision. Pin moves to `v0.2.1-73a72616-develop`, which fixes completely green QSV output on legacy Intel encoders. That failure mode is worth remembering when the approved QSV hardware debt is finally verified. Claude 2026-10-13 triage. |
 | 230 | `f5b5e9aa` | fix: nested filler sequences (#3088) | | | | ucu-10; provisional: Port, pending the audit. A filler sequence that calls another sequence was re-read per call, so nested sequences lost their handler state; upstream expands each sequence once per build, caches the cloned instructions and rejects cycles before any filler runs. ErsatzRS flattens sequences and already rejects cycles up front (`crates/ersatzrs-core/src/scheduling/yaml/sequences.rs:6`, `:47`), so the audit has to show that a nested filler sequence keeps its state across calls in one build rather than restarting. Claude 2026-10-13 triage. |
+| 231 | `3b7d5f29` | chore: update to next v0.2.1 (#3089) | | | | ucu-10; provisional: Adapt, and the moment the row 214 pin decision becomes concrete. Upstream leaves the develop builds behind and pins the released `v0.2.1` tag. ErsatzRS pins its own reviewed distribution under ADR 0117 (`scripts/release/next-patches/manifest.json:6`, `0.1.0-0362692-ersatzrs.1`); a released upstream tag is a cleaner base to rebase onto than the develop snapshots this window has been tracking, so the audit should weigh rebasing now rather than after the next bump. Claude 2026-10-13 triage. |
+| 232 | `e6bb6c67` | prep for release v26.11.2 | | | | ucu-10; provisional: N/A (upstream CHANGELOG heading, date and compare links for v26.11.2; no source change), like rows 168, 203 and 208. This row is the release boundary that closes UCU-10. Claude 2026-10-13 triage. |
