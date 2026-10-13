@@ -4738,12 +4738,12 @@ remain shared across all consumers. These are explicit current correctness gaps
 for later full authored acceptance, not approved permanent limitations. The
 required complete Level2.5 and fallback scope remains unchanged.
 
-The next connection must authenticate a retained export receipt and complete
+The native connection now authenticates a retained export receipt and complete
 free/zone/generated effects before attachment. Byte positions alone do not fence
 spacing changes to protected cells to the right or double-height cells below.
-Persist a separately versioned private overlay alongside exact original bytes;
-reload through this same compiler, retain revision/head CAS and make publication
-an explicit later action. Import must leave current broadcast state untouched.
+A separately versioned private overlay now retains exact original bytes; reload
+uses this same compiler and existing revision/head CAS. Publication stays a later
+explicit action. Native import leaves current broadcast state untouched.
 P9A-04 owns the verification receipt and the remaining editor/client flow.
 
 
@@ -4766,10 +4766,60 @@ guide requests/source fences, installation/settings context, resource lifecycle,
 entry/region, metadata and `original_only` capture policy remain exact. Appending
 is read-only syntax work: no package invocation, revision save or publication.
 
-Until authoritative immutable receipt/original association and complete edit-region
-effects are connected, native reload and publication refuse a present subdocument
-with `EditorialValidationUnavailable`. They never discard its rows and recover old
-output under an edited digest. The next implementation must replace that explicit
-rejection with full native authentication and qualification before preview/save.
+Native reload and publication now authenticate a present subdocument using the
+retained server receipt and exact immutable original. A missing receipt still
+returns `EditorialValidationUnavailable`; forged associations and unsafe effects
+reject. Rows are never ignored to recover original output under an edited digest.
 No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
-positive/negative codec and durable rejection proof, including limitations.
+positive/negative codec, native import and durable qualification evidence.
+
+### Receipt-bound native concept import
+
+`host::teletext_editorial_designs::import_teletext_editorial_design` accepts a
+`NativeTeletextEditorialImportRequest`: concept name, receipt ID/digest, current
+observed design head, exact versioned sidecar and the complete named file set.
+Use the existing `NativeTeletextExportPolicy` with explicit trusted document,
+project, TTI, service and encoding bounds. Import/reload share the existing work
+admission; blocking workers retain ownership through completion after caller
+cancellation. No new defaults, schema, dependency or background queue is added.
+
+The host reads the authoritative retained receipt and original, rebuilds their
+complete native export and checks every retained byte/mapping. Uploaded metadata
+must equal the captured project; it cannot broaden addon-owned permissions.
+Missing, duplicated or renamed files, modified resources/M29 assets and changed
+page/subpage/navigation/presentation/enhancement records reject. Actual TTI parser
+records supply seven-bit physical rows without Unicode inversion. Omitted empty
+rows follow the audited editor's clear-packet behavior. Identity and protected
+record failures retain page/subpage/row/column/designation diagnostics.
+
+Captured main-area Free/Zone rectangles authorize cell edits; Generated and
+omitted regions stay protected. Complete native compilation then compares byte
+roles, spacing attributes, suppression/size footprints, enhanced geometry,
+selected glyph masks and latent effects in protected cells. Identical screen
+colour alone cannot authorize a spacing-code escape. Protected resource and
+magazine output remain exact. X27/0's38 control/link nibbles stay exact; its two
+page-data CRC bytes may change only through the trusted encoder's recalculation.
+
+The qualified private overlay is appended alongside byte-exact original producer,
+request/source/settings and template/theme/zone metadata. Existing same-design
+revision/head CAS persists it; stale/deleted/missing heads reject. Reload rebuilds
+and qualifies it again without invoking packages. Import changes neither bindings
+nor pending/accepted broadcast pointers. Separate request and explicit acceptance
+use the same qualified model; prior accepted output remains until that action.
+The immutable original receipt can be reused with a newly observed current head.
+
+For agent file workflows: obtain a retained native export, keep its sidecar and
+protected assets, edit permitted TTI rows, submit the complete set with the current
+head, inspect located validation errors, reload the saved immutable revision for
+preview, and request publication explicitly only after review. Installed packages
+are never edited by import; template changes require the addon-version workflow.
+
+Current gaps are explicit: this connection accepts changed base rows, refuses
+unchanged imports, repeated overlays and protected enhancement/header/navigation
+edits, and keeps PS exact pending editor-normalization proof. Preserved DVB resource
+assets do not yet prove QTeletextMaker dependency loading. Enhanced resources,
+objects, DRCS, side-panel editing and the complete pinned editor roundtrip remain
+required. These are pending implementation/evidence, not accepted permanent
+restrictions. Native fixture preview/reopen/publication proves no actual editor,
+headed admin, ordinary edited stream, independent decoding or suitable-client
+navigation; those next flow steps and full engine acceptance remain open.

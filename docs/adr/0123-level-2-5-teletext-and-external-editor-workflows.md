@@ -37,10 +37,14 @@ existing service and full cold-composition limits also charge replacement rows.
 This compiler seam grants no editing rights. A separately versioned private
 concept subdocument now retains original/export references and exact replacement
 rows without changing original capture serialization. Structural restoration
-confers no import permission; native reload/publication explicitly rejects its
-presence until authoritative receipt and complete edit effects are authenticated.
-Operational import, qualified concept persistence and edit-policy enforcement
-remain unimplemented.
+confers no import permission. Native import and reload now authenticate the retained
+server receipt against its exact immutable original and rebuilt complete export.
+They qualify physical row edits against captured free/zone/generated boundaries,
+including spacing attributes, glyph semantics and double-height footprints. The
+existing head CAS saves a private immutable concept; the same native model serves
+preview and separate explicit publication, including restart recovery. Unqualified
+concepts still reject. Actual pinned-editor and operational admin/stream/client
+connection remain open; this base-row slice grants no full editor/engine acceptance.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.
@@ -49,7 +53,7 @@ with exact producer bytes. It shares the complete v2 service validation and chec
 actual effective Level 2.5 panel widths. Durable reload reconstructs the same
 metadata without package invocation; unchanged `original_only` policy grants no
 editing. Native file mapping/export confirmation now retains exact per-page TTI and
-protected resource/M29 assets in server-owned receipts. Edited concepts remain open;
+protected resource/M29 assets in server-owned receipts. Enhanced editor concepts remain open;
 protected assets do not yet establish editor dependency loading or resource editing.
 
 

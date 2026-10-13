@@ -8,8 +8,9 @@ use ersatzrs_app::{
         decode_teletext_design_documents, encode_teletext_design_documents_with_requests,
         encode_teletext_design_documents_with_source, EncodedTeletextDesignDocuments,
         TeletextDesignDocumentBudget, TeletextDesignDocumentError, TeletextDesignDocumentInput,
-        TeletextSavedDocumentSource, TeletextSavedEditPolicy, TeletextSavedGuideInputs,
-        TeletextSavedResourceTransmission, TeletextSavedResourceUpdate, TeletextSavedV1Region,
+        TeletextRestoredDesignDocumentParts, TeletextSavedDocumentSource, TeletextSavedEditPolicy,
+        TeletextSavedGuideInputs, TeletextSavedResourceTransmission, TeletextSavedResourceUpdate,
+        TeletextSavedV1Region,
     },
     teletext_designs::{
         TeletextDesignStoreError, TeletextOriginalDesignValidationError,
@@ -21,8 +22,8 @@ use ersatzrs_core::repositories::{
     TeletextDesignMutation, TeletextGuideSourceCheckLimits, TeletextGuideSourceFence,
 };
 use ersatzrs_domain::{
-    EntityId, TeletextChannelSelectionSnapshot, TeletextDesignHead,
-    TeletextProducerCompositionMetadata, TeletextProducerPresentation,
+    EntityId, TeletextChannelSelectionSnapshot, TeletextDesignHead, TeletextDesignRevision,
+    TeletextPhysicalBaseOverlay, TeletextProducerCompositionMetadata, TeletextProducerPresentation,
 };
 use ersatzrs_ffmpeg::teletext::{
     EncodedTeletextAuthoredService, TeletextEncodingRegion, TeletextResourceFullUpdate,
@@ -31,9 +32,9 @@ use ersatzrs_ffmpeg::teletext::{
 use sha2::{Digest, Sha256};
 
 use super::teletext_channel_documents::{
-    encode_original_channel_documents, maximum_producers, ChannelTeletextDocumentEncodingError,
-    EncodedChannelTeletextDocumentCandidate, EncodedChannelTeletextOriginals,
-    TeletextChannelDocumentEncodingPolicy,
+    encode_original_channel_documents_with_physical_overlays, maximum_producers,
+    ChannelTeletextDocumentEncodingError, EncodedChannelTeletextDocumentCandidate,
+    EncodedChannelTeletextOriginals, TeletextChannelDocumentEncodingPolicy,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -54,6 +55,8 @@ pub enum NativeTeletextDesignError {
     LifecycleBudget,
     #[error("saved teletext editorial receipt and edit-effect validation is unavailable")]
     EditorialValidationUnavailable,
+    #[error("saved teletext editorial validation: {0}")]
+    Editorial(Box<super::teletext_editorial_designs::NativeTeletextEditorialImportError>),
 }
 
 /// Saved immutable original and its associated complete preview candidate.
@@ -370,7 +373,7 @@ pub(super) async fn reload_original_teletext_design_revision_with_hold(
     id: EntityId,
     revision: i64,
     mut budget: TeletextDesignDocumentBudget,
-    mut policy: TeletextChannelDocumentEncodingPolicy,
+    policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
     hold: ersatzrs_core::locking::TeletextWorkHold,
 ) -> Result<Option<RestoredOriginalTeletextDesign>, NativeTeletextDesignError> {
@@ -385,58 +388,99 @@ pub(super) async fn reload_original_teletext_design_revision_with_hold(
     else {
         return Ok(None);
     };
-    let restored = super::teletext_work::spawn_blocking(hold, move || {
+    let (stored, parts) = super::teletext_work::spawn_blocking(hold.clone(), move || {
         check_deadline(deadline)?;
         let parts = decode_teletext_design_documents(&stored.document, budget)?.into_parts();
-        // Structural storage references grant no editor permissions. Until the
-        // retained receipt and complete protected effects are authenticated,
-        // never recover original output under an edited document's digest.
-        if parts.editorial_overlay.is_some() {
-            return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
-        }
-        drop(stored.document);
-        policy.entry = parts.entry;
-        policy.transmissions = parts
-            .resource_transmissions
-            .iter()
-            .map(|record| TeletextServiceResourceTransmission {
-                resource: record.resource,
-                counter: record.counter,
-                last_subpage: record.last_subpage,
-                update: match record.update {
-                    TeletextSavedResourceUpdate::Changed => TeletextResourceFullUpdate::Changed,
-                    TeletextSavedResourceUpdate::Unchanged => TeletextResourceFullUpdate::Unchanged,
-                },
-            })
-            .collect();
-        let region = parts.v1_region.map(|region| match region {
-            TeletextSavedV1Region::WesternLatin => TeletextEncodingRegion::WesternLatin,
-        });
-        let originals = encode_original_channel_documents(
-            &parts.selection,
-            parts.entry_addon_id.as_deref(),
-            parts.documents,
-            deadline,
-            region,
-            policy,
+        Ok::<_, NativeTeletextDesignError>((stored, parts))
+    })
+    .await
+    .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
+    let baseline = if let Some(overlay) = parts.editorial_overlay.as_ref() {
+        Some(super::teletext_editorial_designs::read_editorial_baseline(
+            application, overlay.provenance(), stored.design_id, Some(stored.revision),
+            budget, &policy, deadline,
+        ).await.map_err(|error| {
+            if matches!(error, super::teletext_editorial_designs::NativeTeletextEditorialImportError::MissingReceipt) {
+                NativeTeletextDesignError::EditorialValidationUnavailable
+            } else { NativeTeletextDesignError::Editorial(Box::new(error)) }
+        })?)
+    } else {
+        None
+    };
+    let restored = super::teletext_work::spawn_blocking(hold, move || match baseline {
+        Some(baseline) => super::teletext_editorial_designs::restore_editorial_design(
+            stored, parts, baseline, budget, policy, deadline,
         )
-        .map_err(|error| NativeTeletextDesignError::Encoding(Box::new(error)))?;
-        check_deadline(deadline)?;
-        Ok::<_, NativeTeletextDesignError>(RestoredOriginalTeletextDesign {
-            design_id: stored.design_id,
-            revision: stored.revision,
-            selection: parts.selection,
-            sources: parts.sources,
-            guide_inputs: parts.guide_inputs,
-            guide_source: parts.guide_source,
-            digest: stored.digest,
-            originals,
-            edit_policy: parts.edit_policy,
-        })
+        .map_err(|error| NativeTeletextDesignError::Editorial(Box::new(error))),
+        None => compile_restored_parts(stored, parts, policy, deadline, Vec::new()),
     })
     .await
     .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
     Ok(Some(restored))
+}
+
+/// The caller has authenticated any physical overlay before this final shared
+/// compilation. Historical entry, region, sources and lifecycle remain exact.
+pub(super) fn compile_restored_parts(
+    stored: TeletextDesignRevision,
+    parts: TeletextRestoredDesignDocumentParts,
+    mut policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    overlays: Vec<TeletextPhysicalBaseOverlay>,
+) -> Result<RestoredOriginalTeletextDesign, NativeTeletextDesignError> {
+    check_deadline(deadline)?;
+    policy.entry = parts.entry;
+    policy.transmissions = parts
+        .resource_transmissions
+        .iter()
+        .map(|record| TeletextServiceResourceTransmission {
+            resource: record.resource,
+            counter: record.counter,
+            last_subpage: record.last_subpage,
+            update: match record.update {
+                TeletextSavedResourceUpdate::Changed => TeletextResourceFullUpdate::Changed,
+                TeletextSavedResourceUpdate::Unchanged => TeletextResourceFullUpdate::Unchanged,
+            },
+        })
+        .collect();
+    let region = parts.v1_region.map(|region| match region {
+        TeletextSavedV1Region::WesternLatin => TeletextEncodingRegion::WesternLatin,
+    });
+    let originals = encode_original_channel_documents_with_physical_overlays(
+        &parts.selection,
+        parts.entry_addon_id.as_deref(),
+        parts.documents,
+        overlays,
+        deadline,
+        region,
+        policy,
+    )
+    .map_err(|error| NativeTeletextDesignError::Encoding(Box::new(error)))?;
+    check_deadline(deadline)?;
+    Ok(RestoredOriginalTeletextDesign {
+        design_id: stored.design_id,
+        revision: stored.revision,
+        selection: parts.selection,
+        sources: parts.sources,
+        guide_inputs: parts.guide_inputs,
+        guide_source: parts.guide_source,
+        digest: stored.digest,
+        originals,
+        edit_policy: parts.edit_policy,
+    })
+}
+
+/// Private witness constructed only alongside complete native qualification.
+pub(super) fn native_design_confirmation(
+    digest: String,
+    deadline: Instant,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
+) -> impl TeletextOriginalDesignValidator {
+    NativeOriginalDesignConfirmation {
+        digest,
+        deadline,
+        hold,
+    }
 }
 
 /// Redacted errors before a durable pending request is admitted.

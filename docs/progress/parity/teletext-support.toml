@@ -8,11 +8,10 @@ p9a-04 precedes one ErsatzRS-Addons guide (NOS200–299), p9b-01.
 ADR0123: authored Level2.5/fallback, pinned QTeletextMaker TTI/sidecar,
 TSDuck/independent decoding and actual client display/navigation; Kodi optional.
 
-v1 bytes, resource geometry/lifecycle/pointers/metadata/fresh state and
-local X26 forward references survive.
+v1 bytes/resources/pointers/metadata/fresh state and local X26 references survive.
 Replay/raster keep fallback; encoding keeps lineage, IDs and call ancestry.
 AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
-X27 decoding passes; client open.
+X27 passes; client open.
 X26/metadata dual decoding pass.
 C2 uses final words per instance. Charset aliases keep raw pending; differing pairs stay pending.
 G1 mode/fallback and Latin decoder gaps survive.
@@ -46,7 +45,8 @@ Two-channel ordinary themes/client and nine-culture Health pass.
 Profiles/drafts/preview/admin publication connect.
 Served themes/pending/Off, decoding/client and smoke pass; 12 headed cases pass.
 Copy fixed; finite-client restart/AV passes.
-Exports keep v3/M29; shared row/private concept codecs; edits/QTM open.
+V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
+QTM/admin/edited stream/client and enhancement editing open.
 
 SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
 pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
@@ -54,13 +54,12 @@ JSON caps do not bound child RSS. Acquisition/selection stay open; auxiliary
 failure preserves metadata, uncertain cleanup is fatal. P9A-03 owns proof.
 
 Carousel/PSI/PCR/retention preserve AV and finite EOF. Actual ACK/cycle ends fence
-shared proposals; changed PMT precedes PES. Withdrawal retains clock/counters;
+proposals; changed PMT precedes PES. Withdrawal retains clock/counters;
 invalid resources/unreconciled M29/MOT omissions retain old output. One-epoch watch
 status grants no activation. P9A-04 owns proof; durable promotion, immediate Off
 and full warm reconciliation remain open.
 
-Final MPEG-TS owners retain separate wrapper/encoder leases, lifecycle and
-Health capacity/cleanup. Linux x64/Windows-interop/QEMU ARM64/ARMv7 prove admission, tokens, reaping,
+MPEG-TS owners retain wrapper/encoder leases, lifecycle and Health cleanup. Linux x64/Windows-interop/QEMU ARM64/ARMv7 prove admission, tokens, reaping,
 video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
@@ -92,7 +91,7 @@ resolved    = false
 [[debt]]
 id          = 'teletext-generated-unicode-base-priority-is-not-preserved-on-wire'
 adr         = '0123'
-description = 'The ordinary composed compiler generates Local X26 fallback that outranks an original Active glyph. The explicit normalized engine candidate now passes the unchanged representative dual-level oracle, but broad integration and remaining standards coverage are unproven. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
+description = 'The ordinary composed compiler generates Local X26 fallback that outranks an original Active glyph. The normalized engine candidate now passes the unchanged representative dual-level oracle, but broad integration and remaining standards coverage are unproven. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
 discovered  = '2026-10-11'
 evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The new explicit same-service normalization entry passes the unchanged positive oracle with pinned teletextimager (af44fcf5-1934-4899-8d06-59172060d9f1), after both bounded comparisons and original C2 settlement. P9A-01 and the interchange reference retain the original failure and new request hash. Complete normalized display packets also pass the pinned dual-level Active override case (08c43d55-d7ac-4e43-8f5b-ef5def5aa3ce), preserving actual metadata and fallback. This does not change ordinary compiler paths or grant publication readiness. Foreign default ownership, row-zero/national conversion, broad integration and full dual-receiver/service/client proof remain open.'
 resolved    = false

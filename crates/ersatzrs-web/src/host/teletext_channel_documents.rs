@@ -37,6 +37,7 @@ mod physical_overlay_tests;
 
 /// Trusted input/model/encoding limits and explicit resource lifecycle records.
 /// Entry language always comes from the selected original producer, never policy.
+#[derive(Clone)]
 pub struct TeletextChannelDocumentEncodingPolicy {
     pub input: TeletextChannelDocumentInputBudget,
     pub validation: TeletextProfileDocumentBudget,

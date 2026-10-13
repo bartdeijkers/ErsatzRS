@@ -2724,6 +2724,66 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 receipt-bound native concept checkpoint:
+Criterion: connect actual exported TTI files to authenticated immutable concepts,
+the same qualified preview and separate explicit publication/restart, while
+preserving channel isolation and existing accepted output after import rejection.
+This replaces the preparatory f2e918e7 unconditional-overlay guard only for fully
+authenticated concepts; absent/forged receipt associations still fail closed.
+
+The host reads the retained server receipt and exact original, rebuilds the complete
+native file/resource projection and compares every retained body/mapping. Uploaded
+sidecars cannot broaden captured V3 permissions. Complete bounded file sets retain
+resource/M29 assets and exact identities/presentation/navigation/enhancements. The
+actual TTI parser derives physical rows; full native qualification checks captured
+free/zone/generated boundaries plus indirect spacing, size, footprint, enhanced
+geometry and glyph/latent effects. Existing worker ownership, original deadline,
+source/guide/settings metadata and revision/head CAS remain. No package execution,
+package/template mutation or broadcast pointer change follows from import.
+
+Native integration proves a same-addon two-channel day/night setup: actual export
+and receipt, changed Free/Zone row import, immutable same-design revision, same
+raster/packet/navigation preview, unchanged original bytes, no reinvocation,
+separate pending request and explicit acceptance, reopen and accepted recovery.
+An immutable original receipt also supports a new edit with a fresh current head.
+Twelve tampering/protected-effect cases preserve existing nonempty pending/accepted
+pointers, configuration and original storage. The missing-receipt guard remains.
+This is native fixture evidence, not actual QTM/admin/ordinary-stream/client proof.
+
+Initial component run passes all12 TTI identities but nine effects checks fail;
+first integration run passes2/4, with valid positive edits rejected as changed
+ProtectedStructure. Actual X27/0 navigation CRC is derived from page rows. The
+small correction protects all38 control/link nibbles and permits only the two CRC
+bytes recalculated by the trusted encoder; no uploaded packet authority is added.
+Final effects run b6e1bbab-5bc5-41b3-8eb4-50e9747660e1 passes11/11; native run
+722ccffe-82a0-47de-b8a5-f793ca4a9278 passes4/4 including the full negative matrix.
+Unique successful identities total27; unchanged12 TTI successes are reused, and
+initial failures remain recorded. Lint-only borrow/semicolon/checked-time changes
+preserve these test results. Strict FFmpeg/web all-target Clippy, workspace formatting, architecture-lint,
+new-allowance check and progress validation pass. No dependencies, migration,
+argv, transport or admin changes. Receipt: tmp/phase9-editorial-import/identity.json
+and receipt-sha256.txt, SHA256b2e3ec1e5a5691a09eab216b3376a42090fa2014ea004c6ed0c878ae5b8cb73d. It binds final source/logs and
+excludes mutable progress prose; unchanged prerequisite receipts remain valid.
+
+Current criterion-to-next-step map (reuse detailed earlier receipts below):
+| Criterion | Implemented/proven | Missing evidence or concrete next blocker |
+| --- | --- | --- |
+| Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
+| Authoritative export baseline | Complete projection, server-retained receipt and exact rebuild | Operational file delivery/import in localized admin/agent flow |
+| Edited concept -> same preview -> explicit Publish | Native row import/CAS, same raster/packets, separate acceptance, reopen and two-channel theme isolation | Ordinary edited stream, independent decoder/TSDuck and suitable-client navigation |
+| Actual pinned QTM workflow | Existing v1.0 calibration and native per-page export | Host export/open/edit/save/import/preview/publish; PS/X28 normalization and resource dependency loading |
+| Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and all six platforms |
+
+Concrete next action: drive the actual pinned QTeletextMaker editor with a native
+synthetic export and validate its saved file through this importer. Resolve actual
+normalization/dependency gaps from that flow before connecting ordinary edited
+streams and headed localized admin. Base-row-only import, unchanged-file refusal,
+protected enhancement/PS edits and preserved-but-not-editor-loadable DVB assets
+are explicit pending implementation/proof; none is a permanent accepted limitation.
+No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing
+remains; production guide waits for independent generic acceptance. No push,
+installation or publication occurs; no full editor/engine/platform/CI claim.
+
 2026-10-13 private concept codec and durable rejection checkpoint:
 Criterion: preserve editable row data alongside exact captured originals through
 restart-safe storage, without allowing unqualified concepts into preview/output.
@@ -2914,35 +2974,8 @@ receipt-sha256.txt, SHA256cb19a17b7b1d2336e93a09a4dbd6a664621935e267dd0e0ad88662
 logs and excludes mutable progress prose.
 
 
-Current criterion-to-next-step map (reuse detailed earlier receipts below):
-| Criterion | Implemented/proven | Missing evidence or concrete next blocker |
-| --- | --- | --- |
-| Original addon templates/themes/zones | V3 capture and exact durable reload; sanitized export metadata | Imported free/zone/generated and indirect-effect validation |
-| Authoritative export baseline | Complete native file/resource mapping, private body confirmation and retained receipt CAS | Admin/agent operational file delivery and import actions |
-| Edited concept -> same preview -> explicit Publish | Shared raw-row compiler/raster and separate private codec; durable unqualified concepts refuse reload/publication; original-only live flow proven | Authoritative receipt/edit-effect validation, qualified same-design save/reload/preview and explicit publication |
-| Actual pinned QTM workflow | Prior calibration reused; native per-page export is present | Real host export/open/edit/save/import/preview/publish; X28 national-option/PS normalization and resource dependency loading |
-| Full engine acceptance | Prior representative independent decoding/TSDuck/client/AV evidence retained | Remaining full Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and six-platform gates |
-
-Concrete next action: authenticate a retained export receipt and complete imported
-free/zone/generated effects, then qualify the private overlay and save it using
-the existing immutable revision/head CAS. Reload through the same complete native
-compiler before preview or explicit publication. Original addon bytes, guide input
-requests/source fences and OriginalOnly capture remain intact; no forged producer
-invocation receipt or changed package/template is introduced. Byte coordinates do
-not fence changed spacing attributes to the right or double-height footprints
-below. Compare original trace/geometry and protected resource/declaration effects.
-Generated X26 edits and currently unsupported C0 controls remain located rejections
-until their required semantic support and independent verification are complete;
-they are not approved permanent restrictions or waived engine/editor criteria.
-
-Protected .dvb assets prove complete preservation but are not QTeletextMaker-
-loadable POP/MOT/DRCS dependency files. Faithful external dependency loading,
-resource-dependent editor preview and validated resource editing remain required.
-Pinned editor source also shows X28 loading can normalize national-option status
-bits; actual baseline reconciliation remains open. These are explicit current
-integration gaps, not accepted engine/editor limitations or waived criteria.
-No milestone status, dependency or acceptance text changes. Engine-first and
-NOS200–299-only production guide sequencing remain; no push or publication.
+The current criterion-to-next-step map is maintained in the receipt-bound native
+concept checkpoint above; earlier export gaps and receipts remain historical evidence.
 
 2026-10-13 negotiated authoring-metadata checkpoint:
 Criterion: preserve addon-owned templates/themes/zones/dynamic-field declarations
@@ -3009,7 +3042,7 @@ Proof: tmp/phase9-authoring-metadata/identity.json and immutable
 receipt-sha256.txt, SHA256087ef11d6c1a9a0426a8aef2a03b6a8f53854dd2383f7705fdea2351009c68ab.
 The receipt binds source/native logs and excludes mutable progress prose.
 
-The current criterion/next-step map is maintained in the private concept checkpoint
+The current criterion/next-step map is maintained in the native concept checkpoint
 above. This historical capture checkpoint leaves all milestone authority and
 complete engine/editor requirements unchanged.
 
