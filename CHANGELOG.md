@@ -175,8 +175,13 @@ release section when tagging a release.
   pages, with no partial result after a later encoding failure. Saved channels now
   expose localized native profile forms: manifest-defined overrides, separate
   inherited and empty values, revision-fenced selection and unavailable-profile
-  Off. Admin design preview/publication, effective Lua controls and complete live
-  activation remain pending.
+  Off. An explicit static-page action now validates selected profiles, saves new
+  immutable originals and previews exact saved page/subpage identities through
+  the native compiler, with located failures and preserved publication/playback.
+  Fresh authoring policy and input remain separate; absent/invalid limits disable
+  only authoring and Health reports configuration without broadcast claims.
+  Guide/editor interchange, explicit admin publication, effective Lua controls
+  and complete live activation remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

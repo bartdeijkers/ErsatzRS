@@ -19,7 +19,7 @@ function translations(module: string): (key: string) => string {
     `../../crates/ersatzrs-web/src/admin/languages/${module}.rs`, specUrl,
   )), 'utf8');
   return key => {
-    const found = source.match(new RegExp(String.raw`TextKey::${key}\s*=>\s*("(?:[^"\\]|\\.)*")`));
+    const found = source.match(new RegExp(String.raw`TextKey::${key}\s*=>\s*(?:\{\s*)?("(?:[^"\\]|\\.)*")`));
     if (!found) throw new Error(`Missing ${module}/${key} translation.`);
     return JSON.parse(found[1]) as string;
   };

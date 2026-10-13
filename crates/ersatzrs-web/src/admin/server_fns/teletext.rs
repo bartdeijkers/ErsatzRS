@@ -10,6 +10,9 @@ pub struct ChannelTeletextData {
     pub channel_number: String,
     pub channel_name: String,
     pub catalog_available: bool,
+    /// Opaque full-membership observation; never unresolved settings or secrets.
+    pub authoring_selection: Option<String>,
+    pub authoring_error: Option<String>,
     pub addons: Vec<TeletextAddonData>,
 }
 
@@ -157,13 +160,37 @@ pub async fn load_channel_teletext_for_application(
         addons
             .push(load_addon(application, &addon_id, installed.remove(&addon_id), binding).await?);
     }
+    let (authoring_selection, authoring_error) =
+        match authoring_selection(application, channel_id).await {
+            Ok(selection) => (Some(selection), None),
+            Err(code) => (None, Some(code.to_owned())),
+        };
     Ok(Some(ChannelTeletextData {
         channel_id,
         channel_number: channel.form.number,
         channel_name: channel.form.name,
         catalog_available,
+        authoring_selection,
+        authoring_error,
         addons,
     }))
+}
+
+#[cfg(feature = "ssr")]
+async fn authoring_selection(
+    application: &ersatzrs_app::ApplicationServices,
+    channel_id: i64,
+) -> Result<String, &'static str> {
+    let deadline = std::time::Instant::now()
+        .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT)
+        .ok_or("expired")?;
+    crate::host::teletext_authoring::observe_teletext_authoring_selection(
+        application,
+        channel_id,
+        deadline,
+    )
+    .await
+    .map_err(|error| error.code())
 }
 
 #[cfg(feature = "ssr")]

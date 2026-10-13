@@ -5,4 +5,5 @@ pub mod list;
 pub mod numbers;
 pub mod preview;
 pub mod teletext;
+pub mod teletext_drafts;
 pub mod watch;

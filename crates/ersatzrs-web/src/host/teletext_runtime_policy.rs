@@ -98,6 +98,264 @@ pub(crate) fn parse_native_teletext_runtime_policy(
     })
 }
 
+/// Explicit compilation/rendering bounds; authoring content is submitted separately.
+pub(crate) const NATIVE_TELETEXT_AUTHORING_POLICY_SETTING: &str = "teletext.authoring.policy";
+
+pub(crate) struct NativeTeletextAuthoringPolicy {
+    pub(crate) design: TeletextDesignDocumentBudget,
+    pub(crate) preview: super::teletext_preview::TeletextPreviewBudget,
+    pub(crate) operation_timeout: Duration,
+    input: TeletextChannelDocumentInputBudget,
+    validation: TeletextProfileDocumentBudget,
+    composition: TeletextProducerCompositionBudget,
+    encoding: TeletextAuthoredServiceEncodingBudget,
+}
+
+/// Checked per-channel inputs, not an invocation receipt or publication token.
+pub(crate) struct NativeTeletextAuthoringInput {
+    channel_id: i64,
+    entry_addon_id: String,
+    entry: ersatzrs_domain::TeletextPageAddress,
+    v1_region: ersatzrs_app::teletext_design_documents::TeletextSavedV1Region,
+    transmissions: Vec<LifecycleInput>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum TeletextAuthoringPolicyError {
+    #[error("teletext authoring input exceeds its byte limit")]
+    TooLarge,
+    #[error("teletext authoring input does not match its required schema")]
+    InvalidJson,
+    #[error("teletext authoring format version is unsupported")]
+    UnsupportedVersion,
+    #[error("teletext authoring timeout must be positive and representable")]
+    InvalidTimeout,
+    #[error("teletext authoring channel or entry addon is invalid")]
+    InvalidOwner,
+    #[error("teletext authoring resource lifecycle exceeds its configured count limit")]
+    LifecycleBudget,
+    #[error("teletext authoring resource lifecycle identities are duplicated")]
+    DuplicateLifecycle,
+}
+
+/// Parse trusted bounds independently of source transport and per-channel content.
+pub(crate) fn parse_native_teletext_authoring_policy(
+    raw: &str,
+) -> Result<NativeTeletextAuthoringPolicy, TeletextAuthoringPolicyError> {
+    check_authoring_bytes(raw)?;
+    let dto: AuthoringPolicy =
+        serde_json::from_str(raw).map_err(|_| TeletextAuthoringPolicyError::InvalidJson)?;
+    if dto.version != 1 {
+        return Err(TeletextAuthoringPolicyError::UnsupportedVersion);
+    }
+    let operation_timeout = Duration::from_millis(dto.operation_timeout_ms);
+    if operation_timeout.is_zero() || Instant::now().checked_add(operation_timeout).is_none() {
+        return Err(TeletextAuthoringPolicyError::InvalidTimeout);
+    }
+    let validation = dto.validation.into();
+    Ok(NativeTeletextAuthoringPolicy {
+        design: dto.design.with_validation(validation),
+        preview: dto.preview.into(),
+        operation_timeout,
+        input: dto.input.into(),
+        validation,
+        composition: dto.composition.into(),
+        encoding: dto.encoding.into(),
+    })
+}
+
+/// Parse an explicit On authoring request under current trusted lifecycle bounds.
+/// Off is a separate operation and cannot fabricate otherwise-unused content.
+/// This validates identity representation, not selected membership or resources.
+pub(crate) fn parse_native_teletext_authoring_input(
+    raw: &str,
+    policy: &NativeTeletextAuthoringPolicy,
+) -> Result<NativeTeletextAuthoringInput, TeletextAuthoringPolicyError> {
+    check_authoring_bytes(raw)?;
+    let dto: AuthoringInput =
+        serde_json::from_str(raw).map_err(|_| TeletextAuthoringPolicyError::InvalidJson)?;
+    if dto.input_version != 1 {
+        return Err(TeletextAuthoringPolicyError::UnsupportedVersion);
+    }
+    if dto.channel_id <= 0
+        || ersatzrs_addon_contract::validate_addon_id(&dto.entry_addon_id).is_err()
+    {
+        return Err(TeletextAuthoringPolicyError::InvalidOwner);
+    }
+    check_lifecycle(
+        &dto.resource_transmissions,
+        policy.design.max_resource_transmissions,
+    )?;
+    Ok(NativeTeletextAuthoringInput {
+        channel_id: dto.channel_id,
+        entry_addon_id: dto.entry_addon_id,
+        entry: dto.entry,
+        v1_region: dto.v1_region,
+        transmissions: dto.resource_transmissions,
+    })
+}
+
+impl NativeTeletextAuthoringInput {
+    pub(crate) const fn channel_id(&self) -> i64 {
+        self.channel_id
+    }
+    pub(crate) fn entry_addon_id(&self) -> &str {
+        &self.entry_addon_id
+    }
+    pub(crate) const fn entry(&self) -> ersatzrs_domain::TeletextPageAddress {
+        self.entry
+    }
+}
+
+impl NativeTeletextAuthoringPolicy {
+    pub(crate) fn maximum_producers(&self) -> usize {
+        self.input.max_producers.min(self.composition.max_producers)
+    }
+
+    /// Historical reload replaces entry, region and lifecycle with the exact
+    /// stored originals before encoding. This factory is never fresh authoring
+    /// input; it supplies only the current explicit host compilation bounds.
+    pub(crate) fn reload_encoding_policy(&self) -> TeletextChannelDocumentEncodingPolicy {
+        TeletextChannelDocumentEncodingPolicy {
+            input: self.input,
+            validation: self.validation,
+            v1_region: TeletextEncodingRegion::WesternLatin,
+            composition: self.composition,
+            encoding: self.encoding,
+            entry: None,
+            transmissions: Vec::new(),
+        }
+    }
+
+    /// Pair explicit checked content with this operation's configured budgets.
+    /// Revalidate lifecycle count when an input was parsed under another policy.
+    /// No first entry/addon, region or resource update is chosen here; the native
+    /// preparation caller must check current selection and requested channel.
+    pub(crate) fn encoding_policy(
+        &self,
+        input: &NativeTeletextAuthoringInput,
+    ) -> Result<TeletextChannelDocumentEncodingPolicy, TeletextAuthoringPolicyError> {
+        use ersatzrs_app::teletext_design_documents::{
+            TeletextSavedResourceUpdate, TeletextSavedV1Region,
+        };
+        use ersatzrs_ffmpeg::teletext::{
+            TeletextResourceFullUpdate, TeletextServiceResourceTransmission,
+        };
+        check_lifecycle(&input.transmissions, self.design.max_resource_transmissions)?;
+        Ok(TeletextChannelDocumentEncodingPolicy {
+            input: self.input,
+            validation: self.validation,
+            v1_region: match input.v1_region {
+                TeletextSavedV1Region::WesternLatin => TeletextEncodingRegion::WesternLatin,
+            },
+            composition: self.composition,
+            encoding: self.encoding,
+            entry: Some(input.entry),
+            transmissions: input
+                .transmissions
+                .iter()
+                .map(|record| TeletextServiceResourceTransmission {
+                    resource: record.resource,
+                    counter: record.counter,
+                    update: match record.update {
+                        TeletextSavedResourceUpdate::Changed => TeletextResourceFullUpdate::Changed,
+                        TeletextSavedResourceUpdate::Unchanged => {
+                            TeletextResourceFullUpdate::Unchanged
+                        }
+                    },
+                    last_subpage: record.last_subpage,
+                })
+                .collect(),
+        })
+    }
+}
+
+fn check_authoring_bytes(raw: &str) -> Result<(), TeletextAuthoringPolicyError> {
+    if raw.len() > MAX_POLICY_BYTES {
+        Err(TeletextAuthoringPolicyError::TooLarge)
+    } else {
+        Ok(())
+    }
+}
+
+fn check_lifecycle(
+    records: &[LifecycleInput],
+    maximum: usize,
+) -> Result<(), TeletextAuthoringPolicyError> {
+    if records.len() > maximum {
+        return Err(TeletextAuthoringPolicyError::LifecycleBudget);
+    }
+    let mut identities = std::collections::BTreeSet::new();
+    for record in records {
+        if !identities.insert(record.resource) {
+            return Err(TeletextAuthoringPolicyError::DuplicateLifecycle);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoringPolicy {
+    version: u32,
+    operation_timeout_ms: u64,
+    design: DesignLimits,
+    input: InputLimits,
+    validation: ValidationLimits,
+    composition: ProducerCompositionLimits,
+    encoding: EncodingLimits,
+    preview: PreviewLimits,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreviewLimits {
+    #[serde(rename = "max_pages")]
+    pages: usize,
+    #[serde(rename = "max_model_records")]
+    model_records: usize,
+    #[serde(rename = "max_pixels")]
+    pixels: usize,
+    #[serde(rename = "max_diagnostics")]
+    diagnostics: usize,
+    #[serde(rename = "max_work")]
+    work: usize,
+}
+
+impl From<PreviewLimits> for super::teletext_preview::TeletextPreviewBudget {
+    fn from(value: PreviewLimits) -> Self {
+        Self {
+            max_pages: value.pages,
+            max_model_records: value.model_records,
+            max_pixels: value.pixels,
+            max_diagnostics: value.diagnostics,
+            max_work: value.work,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoringInput {
+    input_version: u32,
+    channel_id: i64,
+    entry_addon_id: String,
+    entry: ersatzrs_domain::TeletextPageAddress,
+    v1_region: ersatzrs_app::teletext_design_documents::TeletextSavedV1Region,
+    resource_transmissions: Vec<LifecycleInput>,
+}
+
+// Mirror the existing saved lifecycle field types and spelling. Saved resource
+// identity is logical_subpage; the addon V2 wire's subpage is a separate format.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LifecycleInput {
+    resource: ersatzrs_domain::TeletextResourceIdentity,
+    counter: ersatzrs_domain::TeletextResourceUpdateCounter,
+    update: ersatzrs_app::teletext_design_documents::TeletextSavedResourceUpdate,
+    last_subpage: bool,
+}
+
 // usize deserialization rejects values not representable on the current target,
 // including supported 32-bit native targets. No casts or architecture guesses.
 // All DTO fields are mandatory; null, missing, duplicate and unknown fields fail.
@@ -1114,6 +1372,458 @@ mod tests {
             assert!(!rendered.contains("synthetic-private"));
             assert!(!rendered.contains("synthetic-private-key"));
             assert!(!rendered.contains("synthetic-private-value"));
+        }
+    }
+    // These are explicit test inputs; no production policy or content is inferred.
+    fn authoring_fixture() -> Value {
+        let mut value = fixture();
+        let root = value.as_object_mut().unwrap();
+        root.remove("source");
+        root.remove("recovery_timeout_ms");
+        root.insert("operation_timeout_ms".to_owned(), json!(1000));
+        root.insert(
+            "preview".to_owned(),
+            json!({
+                "max_pages":16,"max_model_records":32_768,"max_pixels":168_000,
+                "max_diagnostics":1400,"max_work":50_000_000
+            }),
+        );
+        value
+    }
+
+    fn authoring_input(channel: i64, addon: &str, page: u16) -> Value {
+        json!({"input_version":1,"channel_id":channel,"entry_addon_id":addon,
+            "entry":{"page":page,"subcode":16},"v1_region":"western_latin",
+            "resource_transmissions":[]})
+    }
+
+    fn authoring_policy(value: &Value) -> NativeTeletextAuthoringPolicy {
+        parse_native_teletext_authoring_policy(&value.to_string()).unwrap()
+    }
+
+    fn lifecycle() -> Value {
+        json!({"resource":{"kind":"pop","page":{"magazine":2,"page":160},
+            "logical_subpage":0},"counter":3,"update":"changed","last_subpage":true})
+    }
+
+    fn assert_authoring_error(value: &Value, expected: TeletextAuthoringPolicyError) {
+        match parse_native_teletext_authoring_policy(&value.to_string()) {
+            Err(actual) => assert_eq!(actual, expected),
+            Ok(_) => panic!("invalid authoring policy was accepted"),
+        }
+    }
+
+    fn assert_authoring_input_error(
+        value: &Value,
+        policy: &NativeTeletextAuthoringPolicy,
+        expected: TeletextAuthoringPolicyError,
+    ) {
+        match parse_native_teletext_authoring_input(&value.to_string(), policy) {
+            Err(actual) => assert_eq!(actual, expected),
+            Ok(_) => panic!("invalid authoring input was accepted"),
+        }
+    }
+
+    #[test]
+    fn authoring_bounds_and_per_channel_content_stay_separate_from_recovery() {
+        let policy = authoring_policy(&authoring_fixture());
+        assert_eq!(policy.operation_timeout, Duration::from_secs(1));
+        assert_eq!(policy.design.max_serialized_bytes, 262_144);
+        assert_eq!(policy.preview.max_pages, 16);
+        assert_eq!(policy.preview.max_model_records, 32_768);
+        assert_eq!(policy.preview.max_pixels, 168_000);
+        assert_eq!(policy.preview.max_diagnostics, 1400);
+        assert_eq!(policy.preview.max_work, 50_000_000);
+        let mut first = authoring_input(1, "org.example.synthetic", 200);
+        first["resource_transmissions"] = json!([lifecycle()]);
+        let mut second = authoring_input(2, "org.example.second", 300);
+        let mut other = lifecycle();
+        other["resource"]["page"]["magazine"] = json!(3);
+        other["resource"]["logical_subpage"] = json!(1);
+        other["counter"] = json!(7);
+        other["update"] = json!("unchanged");
+        other["last_subpage"] = json!(false);
+        second["resource_transmissions"] = json!([other]);
+        for (value, channel, addon, page, magazine, subpage, counter, last) in [
+            (first, 1, "org.example.synthetic", 200, 2, 0, 3, true),
+            (second, 2, "org.example.second", 300, 3, 1, 7, false),
+        ] {
+            let input = parse_native_teletext_authoring_input(&value.to_string(), &policy).unwrap();
+            assert_eq!(input.channel_id(), channel);
+            assert_eq!(input.entry_addon_id(), addon);
+            let encoded = policy.encoding_policy(&input).unwrap();
+            let entry = encoded.entry.unwrap();
+            assert_eq!((entry.page.get(), entry.subcode.get()), (page, 16));
+            assert_eq!(encoded.v1_region, TeletextEncodingRegion::WesternLatin);
+            assert_eq!(encoded.transmissions.len(), 1);
+            let resource = encoded.transmissions[0];
+            assert_eq!(resource.resource.page().magazine(), magazine);
+            assert_eq!(resource.resource.logical_subpage().get(), subpage);
+            assert_eq!(resource.counter.get(), counter);
+            assert_eq!(resource.last_subpage, last);
+            assert_eq!(
+                resource.update,
+                if last {
+                    ersatzrs_ffmpeg::teletext::TeletextResourceFullUpdate::Changed
+                } else {
+                    ersatzrs_ffmpeg::teletext::TeletextResourceFullUpdate::Unchanged
+                }
+            );
+            assert_eq!(encoded.validation.service, policy.design.validation.service);
+            assert_eq!(
+                encoded.encoding.normalization,
+                parse(&fixture()).encoding.encoding.normalization
+            );
+        }
+        let recovery = parse(&fixture());
+        assert!(recovery.encoding.entry.is_none());
+        assert!(recovery.encoding.transmissions.is_empty());
+    }
+
+    #[test]
+    fn authoring_policy_requires_bounds_and_rejects_content_or_transport_fields() {
+        let value = authoring_fixture();
+        for field in [
+            "version",
+            "operation_timeout_ms",
+            "design",
+            "input",
+            "validation",
+            "composition",
+            "encoding",
+            "preview",
+        ] {
+            let mut absent = value.clone();
+            absent.as_object_mut().unwrap().remove(field);
+            assert_authoring_error(&absent, TeletextAuthoringPolicyError::InvalidJson);
+            let mut null = value.clone();
+            null[field] = Value::Null;
+            assert_authoring_error(&null, TeletextAuthoringPolicyError::InvalidJson);
+        }
+        for field in [
+            "source",
+            "recovery_timeout_ms",
+            "entry",
+            "v1_region",
+            "resource_transmissions",
+            "entry_addon_id",
+            "channel_id",
+        ] {
+            let mut extra = value.clone();
+            extra[field] = json!("private-marker");
+            assert_authoring_error(&extra, TeletextAuthoringPolicyError::InvalidJson);
+        }
+        for section in [
+            "/preview",
+            "/encoding/normalization/assembly/recipe/catalog",
+        ] {
+            let mut extra = value.clone();
+            extra
+                .pointer_mut(section)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert("private-marker".to_owned(), json!(0));
+            assert_authoring_error(&extra, TeletextAuthoringPolicyError::InvalidJson);
+        }
+        let duplicate = value.to_string().replacen(
+            "\"max_pixels\":168000",
+            "\"max_pixels\":168000,\"max_pixels\":1",
+            1,
+        );
+        assert_ne!(duplicate, value.to_string());
+        assert!(matches!(
+            parse_native_teletext_authoring_policy(&duplicate),
+            Err(TeletextAuthoringPolicyError::InvalidJson)
+        ));
+        assert!(matches!(
+            parse_native_teletext_authoring_policy(FIXTURE),
+            Err(TeletextAuthoringPolicyError::InvalidJson)
+        ));
+        assert!(matches!(
+            parse_native_teletext_runtime_policy(&value.to_string()),
+            Err(TeletextRuntimePolicyError::InvalidJson)
+        ));
+    }
+
+    #[test]
+    fn authoring_credits_and_preview_zeros_are_explicit_exhausted_bounds() {
+        let mut value = authoring_fixture();
+        for key in CREDIT_KEYS {
+            let mut missing = value.clone();
+            missing["encoding"].as_object_mut().unwrap().remove(key);
+            assert_authoring_error(&missing, TeletextAuthoringPolicyError::InvalidJson);
+            let mut null = value.clone();
+            null["encoding"][key] = Value::Null;
+            assert_authoring_error(&null, TeletextAuthoringPolicyError::InvalidJson);
+            value["encoding"][key] = json!(0);
+        }
+        for key in [
+            "max_pages",
+            "max_model_records",
+            "max_pixels",
+            "max_diagnostics",
+            "max_work",
+        ] {
+            value["preview"][key] = json!(0);
+        }
+        let policy = authoring_policy(&value);
+        let input = parse_native_teletext_authoring_input(
+            &authoring_input(1, "org.example.synthetic", 200).to_string(),
+            &policy,
+        )
+        .unwrap();
+        let encoding = policy.encoding_policy(&input).unwrap().encoding;
+        assert_eq!(
+            [
+                encoding.max_display_updates,
+                encoding.max_glyph_comparison_work,
+                encoding.max_display_comparison_updates,
+                encoding.max_realization_updates,
+                encoding.max_placement_work,
+                encoding.max_assembly_work,
+                encoding.max_ancestry_work,
+                encoding.max_collected_commands,
+                encoding.max_collected_drcs_references,
+                encoding.max_spatial_event_visits,
+                encoding.max_spatial_invocation_visits,
+                encoding.max_identity_checks,
+                encoding.max_attribute_cell_updates,
+            ],
+            [Some(0); 13]
+        );
+        assert_eq!(
+            [
+                policy.preview.max_pages,
+                policy.preview.max_model_records,
+                policy.preview.max_pixels,
+                policy.preview.max_diagnostics,
+                policy.preview.max_work
+            ],
+            [0; 5]
+        );
+    }
+
+    #[test]
+    fn authoring_on_input_requires_exact_owner_entry_region_and_lifecycle() {
+        let policy = authoring_policy(&authoring_fixture());
+        let value = authoring_input(1, "org.example.synthetic", 200);
+        for field in [
+            "input_version",
+            "channel_id",
+            "entry_addon_id",
+            "entry",
+            "v1_region",
+            "resource_transmissions",
+        ] {
+            let mut absent = value.clone();
+            absent.as_object_mut().unwrap().remove(field);
+            assert_authoring_input_error(
+                &absent,
+                &policy,
+                TeletextAuthoringPolicyError::InvalidJson,
+            );
+            let mut null = value.clone();
+            null[field] = Value::Null;
+            assert_authoring_input_error(&null, &policy, TeletextAuthoringPolicyError::InvalidJson);
+        }
+        for (field, invalid) in [
+            ("channel_id", json!(0)),
+            ("entry_addon_id", json!("")),
+            ("entry_addon_id", json!("not an addon")),
+        ] {
+            let mut malformed = value.clone();
+            malformed[field] = invalid;
+            assert_authoring_input_error(
+                &malformed,
+                &policy,
+                TeletextAuthoringPolicyError::InvalidOwner,
+            );
+        }
+        for (pointer, invalid) in [
+            ("/entry/page", json!(900)),
+            ("/entry/subcode", json!(128)),
+            ("/v1_region", json!("unsupported-v1-region")),
+        ] {
+            let mut malformed = value.clone();
+            *malformed.pointer_mut(pointer).unwrap() = invalid;
+            assert_authoring_input_error(
+                &malformed,
+                &policy,
+                TeletextAuthoringPolicyError::InvalidJson,
+            );
+        }
+        let mut extra = value.clone();
+        extra["entry"]["first_page"] = json!(200);
+        assert_authoring_input_error(&extra, &policy, TeletextAuthoringPolicyError::InvalidJson);
+        let duplicate = value
+            .to_string()
+            .replacen("\"page\":200", "\"page\":200,\"page\":201", 1);
+        assert_ne!(duplicate, value.to_string());
+        assert!(matches!(
+            parse_native_teletext_authoring_input(&duplicate, &policy),
+            Err(TeletextAuthoringPolicyError::InvalidJson)
+        ));
+    }
+
+    #[test]
+    fn authoring_lifecycle_uses_saved_checked_identity_and_preserves_explicit_flags() {
+        let policy = authoring_policy(&authoring_fixture());
+        let mut value = authoring_input(1, "org.example.synthetic", 200);
+        value["resource_transmissions"] = json!([lifecycle()]);
+        for update in ["changed", "unchanged"] {
+            for last_subpage in [false, true] {
+                let mut explicit = value.clone();
+                explicit["resource_transmissions"][0]["update"] = json!(update);
+                explicit["resource_transmissions"][0]["last_subpage"] = json!(last_subpage);
+                explicit["resource_transmissions"][0]["counter"] = json!(0);
+                let input =
+                    parse_native_teletext_authoring_input(&explicit.to_string(), &policy).unwrap();
+                let encoded = policy.encoding_policy(&input).unwrap();
+                let actual = encoded.transmissions[0];
+                assert_eq!(actual.last_subpage, last_subpage);
+                assert_eq!(actual.counter.get(), 0);
+                assert_eq!(
+                    actual.update,
+                    match update {
+                        "changed" => ersatzrs_ffmpeg::teletext::TeletextResourceFullUpdate::Changed,
+                        _ => ersatzrs_ffmpeg::teletext::TeletextResourceFullUpdate::Unchanged,
+                    }
+                );
+            }
+        }
+        for (pointer, invalid) in [
+            ("/resource_transmissions/0/counter", json!(8)),
+            (
+                "/resource_transmissions/0/resource/logical_subpage",
+                json!(16),
+            ),
+            ("/resource_transmissions/0/resource/page/page", json!(255)),
+            ("/resource_transmissions/0/resource/page/magazine", json!(0)),
+            ("/resource_transmissions/0/update", json!("automatic")),
+            ("/resource_transmissions/0/last_subpage", json!(0)),
+        ] {
+            let mut malformed = value.clone();
+            *malformed.pointer_mut(pointer).unwrap() = invalid;
+            assert_authoring_input_error(
+                &malformed,
+                &policy,
+                TeletextAuthoringPolicyError::InvalidJson,
+            );
+        }
+        for field in ["resource", "counter", "update", "last_subpage"] {
+            let mut missing = value.clone();
+            missing["resource_transmissions"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+            assert_authoring_input_error(
+                &missing,
+                &policy,
+                TeletextAuthoringPolicyError::InvalidJson,
+            );
+        }
+        let mut wire = value.clone();
+        let identity = wire["resource_transmissions"][0]["resource"]
+            .as_object_mut()
+            .unwrap();
+        identity.remove("logical_subpage");
+        identity.insert("subpage".to_owned(), json!(0));
+        assert_authoring_input_error(&wire, &policy, TeletextAuthoringPolicyError::InvalidJson);
+        let mut duplicated = value.clone();
+        duplicated["resource_transmissions"] = json!([lifecycle(), lifecycle()]);
+        assert_authoring_input_error(
+            &duplicated,
+            &policy,
+            TeletextAuthoringPolicyError::DuplicateLifecycle,
+        );
+        let mut exceeded = value.clone();
+        exceeded["resource_transmissions"] = json!(vec![lifecycle(); 17]);
+        assert_authoring_input_error(
+            &exceeded,
+            &policy,
+            TeletextAuthoringPolicyError::LifecycleBudget,
+        );
+        let input = parse_native_teletext_authoring_input(&value.to_string(), &policy).unwrap();
+        let mut lowered = authoring_fixture();
+        lowered["design"]["max_resource_transmissions"] = json!(0);
+        assert!(matches!(
+            authoring_policy(&lowered).encoding_policy(&input),
+            Err(TeletextAuthoringPolicyError::LifecycleBudget)
+        ));
+        let empty = parse_native_teletext_authoring_input(
+            &authoring_input(2, "org.example.second", 300).to_string(),
+            &authoring_policy(&lowered),
+        )
+        .unwrap();
+        assert!(authoring_policy(&lowered)
+            .encoding_policy(&empty)
+            .unwrap()
+            .transmissions
+            .is_empty());
+    }
+
+    #[test]
+    fn authoring_byte_version_timeout_overflow_and_redaction_limits_are_checked() {
+        let value = authoring_fixture();
+        let mut boundary = value.to_string();
+        boundary.extend(std::iter::repeat_n(' ', MAX_POLICY_BYTES - boundary.len()));
+        assert!(parse_native_teletext_authoring_policy(&boundary).is_ok());
+        boundary.push(' ');
+        assert!(matches!(
+            parse_native_teletext_authoring_policy(&boundary),
+            Err(TeletextAuthoringPolicyError::TooLarge)
+        ));
+        let policy = authoring_policy(&value);
+        let input = authoring_input(1, "org.example.synthetic", 200);
+        let mut input_boundary = input.to_string();
+        input_boundary.extend(std::iter::repeat_n(
+            ' ',
+            MAX_POLICY_BYTES - input_boundary.len(),
+        ));
+        assert!(parse_native_teletext_authoring_input(&input_boundary, &policy).is_ok());
+        input_boundary.push(' ');
+        assert!(matches!(
+            parse_native_teletext_authoring_input(&input_boundary, &policy),
+            Err(TeletextAuthoringPolicyError::TooLarge)
+        ));
+        let mut version = value.clone();
+        version["version"] = json!(2);
+        assert_authoring_error(&version, TeletextAuthoringPolicyError::UnsupportedVersion);
+        let mut input_version = input.clone();
+        input_version["input_version"] = json!(2);
+        assert_authoring_input_error(
+            &input_version,
+            &policy,
+            TeletextAuthoringPolicyError::UnsupportedVersion,
+        );
+        let mut zero = value.clone();
+        zero["operation_timeout_ms"] = json!(0);
+        assert_authoring_error(&zero, TeletextAuthoringPolicyError::InvalidTimeout);
+        for (field, original, overflow) in [
+            ("operation_timeout_ms", 1000, u128::from(u64::MAX) + 1),
+            ("max_serialized_bytes", 262_144, usize::MAX as u128 + 1),
+        ] {
+            let invalid = value.to_string().replacen(
+                &format!("\"{field}\":{original}"),
+                &format!("\"{field}\":{overflow}"),
+                1,
+            );
+            assert_ne!(invalid, value.to_string());
+            assert!(matches!(
+                parse_native_teletext_authoring_policy(&invalid),
+                Err(TeletextAuthoringPolicyError::InvalidJson)
+            ));
+        }
+        let mut unknown = input.clone();
+        unknown["private-key"] = json!("private-value");
+        let Err(error) = parse_native_teletext_authoring_input(&unknown.to_string(), &policy)
+        else {
+            panic!("unknown input accepted");
+        };
+        for rendered in [format!("{error:?}"), error.to_string()] {
+            assert!(!rendered.contains("private-key"));
+            assert!(!rendered.contains("private-value"));
         }
     }
 }

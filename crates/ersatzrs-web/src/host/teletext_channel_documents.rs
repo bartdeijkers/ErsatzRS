@@ -212,23 +212,77 @@ pub async fn prepare_channel_teletext_document_candidate(
         .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT)
         .ok_or(ChannelTeletextDocumentEncodingError::TimedOut)?;
     let guard = super::teletext_work::begin(application, Some(deadline)).await?;
-    let hold = guard.hold_work();
+    prepare_channel_teletext_document_candidate_with_hold(
+        application,
+        channel_id,
+        entry_addon_id,
+        TeletextChannelDocumentPreparation {
+            context,
+            expected_selection: None,
+            deadline,
+        },
+        policy,
+        guard.hold_work(),
+    )
+    .await
+}
+
+/// Borrowed original operation state; raw settings never enter an admin receipt.
+pub(super) struct TeletextChannelDocumentPreparation<'context, 'guide> {
+    pub(super) context: &'context SuppliedTeletextGuideContext<'guide>,
+    pub(super) expected_selection: Option<&'context TeletextChannelSelectionSnapshot>,
+    pub(super) deadline: Instant,
+}
+
+/// Share one already admitted operation across preparation and later draft work.
+/// The supplied deadline can only shorten the existing preparation allowance.
+/// Actual producer/native workers retain their own clone if the caller drops.
+pub(super) async fn prepare_channel_teletext_document_candidate_with_hold(
+    application: &ApplicationServices,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    preparation: TeletextChannelDocumentPreparation<'_, '_>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
+) -> Result<EncodedChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError> {
+    let deadline = Instant::now()
+        .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT)
+        .ok_or(ChannelTeletextDocumentEncodingError::TimedOut)?
+        .min(preparation.deadline);
+    check_deadline(deadline)?;
     let mut input_budget = policy.input;
     input_budget.max_producers = maximum_producers(&policy);
-    let input = application
-        .invoke_channel_teletext_documents_with_hold(
-            channel_id,
-            entry_addon_id,
-            context,
-            input_budget,
-            deadline,
-            hold.clone(),
-        )
-        .await?;
+    let input = match preparation.expected_selection {
+        Some(expected_selection) => {
+            application
+                .invoke_channel_teletext_documents_with_selection_and_hold(
+                    channel_id,
+                    entry_addon_id,
+                    preparation.context,
+                    input_budget,
+                    expected_selection,
+                    (deadline, hold.clone()),
+                )
+                .await?
+        }
+        None => {
+            application
+                .invoke_channel_teletext_documents_with_hold(
+                    channel_id,
+                    entry_addon_id,
+                    preparation.context,
+                    input_budget,
+                    deadline,
+                    hold.clone(),
+                )
+                .await?
+        }
+    };
     let candidate =
-        super::teletext_work::spawn_blocking(hold, move || encode_channel(input, policy))
+        super::teletext_work::spawn_blocking(hold.clone(), move || encode_channel(input, policy))
             .await
             .map_err(|_| ChannelTeletextDocumentEncodingError::WorkerFailed)??;
+    let candidate = candidate.restrict_deadline(deadline);
     application
         .recheck_channel_teletext_document_selection(candidate.selection(), candidate.deadline())
         .await?;

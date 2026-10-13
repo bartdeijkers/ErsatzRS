@@ -10,7 +10,17 @@ playback, output, profile/Lua and engine-first obligations remain in force.
 
 ## Implementation
 
-Partial — checked colour references, four-bit RGB, editable CLUT2/3 declarations
+Partial — the localized channel admin now connects static selected profiles to validation,
+new immutable original drafts and exact historical native previews. Explicit
+trusted authoring bounds are separate from per-channel entry/region/resource
+inputs. Original and preview workers retain one shared admission/deadline;
+opaque complete-selection observations are checked before producer invocation.
+Receiver header, video and unresolved pixels remain distinct, with located
+encoding/raster failures. This original-only connection grants no broadcast
+publication, TTI/editor/zone acceptance or full authored Level 2.5 acceptance.
+P9A-04 owns current independent proof and all remaining obligations.
+
+Checked colour references, four-bit RGB, editable CLUT2/3 declarations
 and monochrome DRCS bitmap/slot/subtable values exist. Checked raw resource
 identities and a DRCS catalog resolve supplied display references with normative
 subtable/glyph limits. Ordered enhancement programs, checked charset designations

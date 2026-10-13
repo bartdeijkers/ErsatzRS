@@ -1172,3 +1172,135 @@ async fn supplied_admission_deadline_shortens_channel_work_without_renewal() {
     ));
     assert_eq!(repo.reads.load(Ordering::SeqCst), 0);
 }
+
+#[tokio::test]
+async fn observed_selection_changes_reject_before_entry_requests_or_first_producer() {
+    let start = Instant::now();
+    for changed in 0..8 {
+        let repo = mixed_repository();
+        let observed = repo.selection.lock().unwrap().clone();
+        {
+            let mut selection = repo.selection.lock().unwrap();
+            match changed {
+                0 => selection.bindings[0].binding_revision += 1,
+                1 => selection.bindings[0].profile_revision += 1,
+                2 => selection.bindings[0].profile_id += 100,
+                3 => selection.bindings[0].installation.content_sha256.push('x'),
+                4 => {
+                    selection.bindings[0].effective_settings[0].value =
+                        TeletextProfileValue::Literal("changed synthetic theme".to_owned());
+                }
+                5 => {
+                    selection.bindings.pop();
+                }
+                6 => selection.bindings[0].contract = TeletextPageContract::V2,
+                _ => selection.bindings.clear(),
+            }
+        }
+        let captured = repo.selection.lock().unwrap().clone();
+        let mut invalid = context();
+        invalid.generation = "";
+        let result = prepare_with_ports_before_selection(
+            &repo,
+            9,
+            None,
+            &invalid,
+            input_budget(),
+            |_, _, _| async { panic!("changed observation invoked a producer") },
+            (|| start, Some(start + PREPARATION_TIMEOUT), Some(&observed)),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(ChannelTeletextDocumentError::SelectionChanged)),
+            "case {changed}"
+        );
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 1);
+        assert_eq!(*repo.selection.lock().unwrap(), captured);
+    }
+}
+
+#[tokio::test]
+async fn exact_observed_selection_keeps_one_deadline_and_final_membership_recheck() {
+    let start = Instant::now();
+    let deadline = start + Duration::from_secs(15);
+    for changed_after_invocation in [false, true] {
+        let repo = mixed_repository();
+        let observed = repo.selection.lock().unwrap().clone();
+        if changed_after_invocation {
+            let mut changed = observed.clone();
+            changed.bindings[0].binding_revision += 1;
+            *repo.final_selection.lock().unwrap() = Some(Mutation::Saved(changed));
+        }
+        let calls = Cell::new(0);
+        let result = prepare_with_ports_before_selection(
+            &repo,
+            9,
+            Some(A),
+            &context(),
+            input_budget(),
+            |selected, _, actual_deadline| {
+                assert_eq!(actual_deadline, deadline);
+                assert_eq!(selected, observed.bindings[calls.get()]);
+                calls.set(calls.get() + 1);
+                async move { Ok(mixed_receipt(selected)) }
+            },
+            (|| start, Some(deadline), Some(&observed)),
+        )
+        .await;
+        if changed_after_invocation {
+            assert!(matches!(
+                result,
+                Err(ChannelTeletextDocumentError::SelectionChanged)
+            ));
+        } else {
+            let input = result.unwrap();
+            assert_eq!(&input.selection, &observed);
+            assert_eq!(input.deadline(), deadline);
+        }
+        assert_eq!(calls.get(), 2);
+        assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(*repo.selection.lock().unwrap(), observed);
+    }
+}
+
+#[tokio::test]
+async fn observed_off_and_expired_admission_do_not_invoke_or_renew() {
+    let start = Instant::now();
+    let repo = Repository::new(Vec::new());
+    let observed = repo.selection.lock().unwrap().clone();
+    let input = prepare_with_ports_before_selection(
+        &repo,
+        9,
+        Some(A),
+        &context(),
+        input_budget(),
+        |_, _, _| async { panic!("Off observation invoked a producer") },
+        (
+            || start,
+            Some(start + Duration::from_secs(15)),
+            Some(&observed),
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(&input.selection, &observed);
+    assert_eq!(input.deadline(), start + Duration::from_secs(15));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
+    let repo = mixed_repository();
+    let observed = repo.selection.lock().unwrap().clone();
+    let result = prepare_with_ports_before_selection(
+        &repo,
+        9,
+        None,
+        &context(),
+        input_budget(),
+        |_, _, _| async { panic!("expired observation invoked a producer") },
+        (|| start, Some(start), Some(&observed)),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(ChannelTeletextDocumentError::TimedOut)
+    ));
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 0);
+}

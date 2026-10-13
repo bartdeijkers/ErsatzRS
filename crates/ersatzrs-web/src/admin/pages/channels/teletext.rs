@@ -10,6 +10,9 @@ use crate::admin::server_fns::teletext::{
     load_channel_teletext, ChannelTeletextData, TeletextAddonData, TeletextProfileData,
     TeletextSettingData, TeletextSettingValueData,
 };
+use crate::admin::server_fns::teletext_drafts::{
+    load_teletext_draft_preview, TeletextDraftErrorLocation, TeletextDraftPreviewResult,
+};
 use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
@@ -31,7 +34,15 @@ pub fn ChannelTeletextPage() -> impl IntoView {
     };
     let error = query.with_untracked(|values| values.get("error").unwrap_or_default());
     let saved = query.with_untracked(|values| values.get("saved").unwrap_or_default());
-    let data = Resource::new_blocking(channel_id, load_channel_teletext);
+    let data = Resource::new_blocking(
+        move || {
+            (
+                channel_id(),
+                query.with(super::teletext_drafts::preview_query),
+            )
+        },
+        load_channel_page,
+    );
     view! {
         <Suspense fallback=admin_loading_resource_view>
             {move || {
@@ -40,7 +51,11 @@ pub fn ChannelTeletextPage() -> impl IntoView {
                 data.get().map(|result| admin_result_view(
                     result.map_err(|_| tr(TextKey::TeletextAdminUnavailable).to_owned()),
                     |data| match data {
-                        Some(data) => channel_page(data, &error, &saved),
+                        Some((data, preview)) => channel_page(
+                            data, &error, &saved, preview,
+                            query.with(|values| values.get("design_id").is_some()),
+                            query.with(super::teletext_drafts::redirected_error_location),
+                        ),
                         None => view! { <p role="alert">{tr(TextKey::NotFound)}</p> }.into_any(),
                     },
                 ))
@@ -49,15 +64,78 @@ pub fn ChannelTeletextPage() -> impl IntoView {
     }
 }
 
-fn channel_page(data: ChannelTeletextData, error: &str, saved: &str) -> AnyView {
+type ChannelPageData = (
+    ChannelTeletextData,
+    Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
+);
+
+async fn load_channel_page(
+    (channel_id, preview): (i64, Option<super::teletext_drafts::PreviewQuery>),
+) -> Result<Option<ChannelPageData>, ServerFnError> {
+    let Some(channel) = load_channel_teletext(channel_id).await? else {
+        return Ok(None);
+    };
+    // Finish channel observation (and release its admission) before preview.
+    // Resolve every blocking load before the in-order SSR boundary is rendered.
+    let preview = match preview {
+        Some(query) => Some(
+            load_teletext_draft_preview(
+                channel_id,
+                query.design_id,
+                query.revision,
+                query.page,
+                query.subcode,
+            )
+            .await,
+        ),
+        None => None,
+    };
+    Ok(Some((channel, preview)))
+}
+
+fn channel_page(
+    data: ChannelTeletextData,
+    error: &str,
+    saved: &str,
+    preview: Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
+    requested: bool,
+    redirected: Option<TeletextDraftErrorLocation>,
+) -> AnyView {
     let language = use_i18n();
+    let draft_code = matches!(
+        error,
+        "busy"
+            | "expired"
+            | "missing-policy"
+            | "invalid-policy"
+            | "invalid-input"
+            | "missing-design"
+            | "foreign-channel"
+            | "worker"
+            | "preview"
+            | "encoding"
+    );
     let (code, message, role) = if !error.is_empty() {
-        let code = match error {
-            "conflict" | "invalid" | "unavailable" | "wrong-addon" | "missing-profile"
-            | "deleted-profile" | "limit" | "storage" => error,
-            _ => "invalid",
-        };
-        (code, teletext_admin_error_text(language, code), "alert")
+        if draft_code {
+            (
+                error,
+                super::teletext_drafts::draft_status_text(error),
+                "alert",
+            )
+        } else {
+            let code = match error {
+                "conflict" | "invalid" | "unavailable" | "wrong-addon" | "missing-profile"
+                | "deleted-profile" | "limit" | "storage" => error,
+                _ => "invalid",
+            };
+            (code, teletext_admin_error_text(language, code), "alert")
+        }
+    } else if saved == "draft" {
+        (
+            saved,
+            super::teletext_drafts::draft_status_text(saved),
+            "status",
+        )
     } else if matches!(saved, "profile" | "binding" | "off") {
         (saved, tr(TextKey::TeletextAdminSaved), "status")
     } else {
@@ -65,6 +143,7 @@ fn channel_page(data: ChannelTeletextData, error: &str, saved: &str) -> AnyView 
     };
     let channel_id = data.channel_id;
     let empty = data.addons.is_empty();
+    let authoring = super::teletext_drafts::authoring_controls(&data);
     view! {
         <div class=style::page data-testid="channel-teletext-page" data-channel-id=channel_id>
             <header class=style::header>
@@ -79,6 +158,8 @@ fn channel_page(data: ChannelTeletextData, error: &str, saved: &str) -> AnyView 
             <p class=style::help hidden=!empty>{tr(TextKey::TeletextChannelEmpty)}</p>
             <a class=style::manage href="/settings/addons">{tr(TextKey::Addons)}</a>
             {data.addons.into_iter().map(|addon| addon_section(channel_id, &addon)).collect_view()}
+            {authoring}
+            <super::teletext_drafts::TeletextDraftPreview preview=preview requested=requested redirected=redirected/>
         </div>
     }
     .into_any()
@@ -426,7 +507,7 @@ fn unsupported_profile_settings(addon: &TeletextAddonData, profile: &TeletextPro
     })
 }
 
-fn manifest_label(labels: &std::collections::BTreeMap<String, String>) -> String {
+pub(super) fn manifest_label(labels: &std::collections::BTreeMap<String, String>) -> String {
     labels
         .iter()
         .find(|(code, _)| code.eq_ignore_ascii_case(use_i18n().code()))

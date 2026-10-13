@@ -16,8 +16,11 @@ compiler. A dedicated in-order SSR channel route connects named manifest-driven
 profiles and base binding controls to these application functions, independently
 of global addon configuration and generic channel saves. Forms preserve observed
 installation/profile/binding revisions; unavailable bindings retain an Off path.
-This connects configuration only: design preparation/preview/publication in the
-admin, effective Lua/applied state, full warm activation and independent full
+A separate static-page action now connects complete selection observation to
+new immutable original save and exact historical native preview, under one
+actual-worker admission and original deadline. This grants no publication or
+package activation. Fresh guide/editor interchange, explicit admin publication,
+effective Lua/applied state, full warm activation and independent full
 encoding/client acceptance remain open. P9A-04 owns the current verification and
 independent synthetic acceptance; P9B-01/02 own the sole production TV-guide
 add-on and integrated proof.

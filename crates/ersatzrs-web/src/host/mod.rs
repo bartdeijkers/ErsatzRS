@@ -16,6 +16,7 @@ pub mod settings;
 pub mod state;
 pub mod tasks;
 pub mod teletext;
+pub mod teletext_authoring;
 pub mod teletext_channel_documents;
 pub mod teletext_designs;
 pub mod teletext_documents;

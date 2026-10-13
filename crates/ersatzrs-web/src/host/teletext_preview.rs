@@ -27,7 +27,7 @@ pub struct TeletextNativePreview<'a> {
     raster: TeletextRaster,
     navigation: &'a [TeletextNavigationLink],
 }
-impl TeletextNativePreview<'_> {
+impl<'a> TeletextNativePreview<'a> {
     #[must_use]
     pub const fn raster(&self) -> &TeletextRaster {
         &self.raster
@@ -35,6 +35,13 @@ impl TeletextNativePreview<'_> {
     #[must_use]
     pub const fn navigation(&self) -> &[TeletextNavigationLink] {
         self.navigation
+    }
+
+    /// Move the bounded raster without copying its pixels; navigation remains
+    /// borrowed from the exact validated service that produced this preview.
+    #[must_use]
+    pub fn into_parts(self) -> (TeletextRaster, &'a [TeletextNavigationLink]) {
+        (self.raster, self.navigation)
     }
 }
 impl fmt::Debug for TeletextNativePreview<'_> {

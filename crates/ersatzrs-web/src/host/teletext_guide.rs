@@ -362,7 +362,7 @@ async fn capture_with_clock(
     Ok(captured)
 }
 
-fn resolve_locale(raw: Option<&str>) -> Result<&'static str, TeletextGuideCaptureError> {
+pub(super) fn resolve_locale(raw: Option<&str>) -> Result<&'static str, TeletextGuideCaptureError> {
     // Catalog tokens are tiny; reject corrupt storage before allocating normalization.
     let raw = raw
         .filter(|value| value.len() <= 64)
@@ -377,7 +377,7 @@ fn resolve_locale(raw: Option<&str>) -> Result<&'static str, TeletextGuideCaptur
         .ok_or(TeletextGuideCaptureError::Locale)
 }
 
-fn supported_locales() -> Vec<&'static str> {
+pub(super) fn supported_locales() -> Vec<&'static str> {
     crate::admin::languages::LANGUAGES
         .iter()
         .map(|definition| definition.code)

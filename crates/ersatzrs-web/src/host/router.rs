@@ -216,6 +216,12 @@ pub fn build_app(app_state: AppState) -> Router {
                 )),
             )
             .route(
+                "/admin-api/teletext/design/prepare",
+                post(api::teletext::prepare_design).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
                 "/admin-api/channels/save",
                 post(api::channels::save_channel_form),
             )

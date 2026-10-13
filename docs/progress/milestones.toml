@@ -2724,6 +2724,120 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 static original-draft connection checkpoint:
+Next criterion: connect the selected-profile step to explicit validation, immutable
+NEW concept storage and exact-address native preview, while preserving existing
+publication/playback. The optional closed version1 teletext.authoring.policy reuses
+compiler/design bound DTOs and requires positive operation timeout and five
+preview bounds. Content is separate closed per-channel input: explicit entry
+addon/address, V1 region and lifecycle records, including [] for resource-free
+pages. Runtime recovery placeholders are never fresh input or production defaults.
+An opaque length-framed SHA256 observes complete enabled selection and unresolved
+effective settings. The host compares that exact submitted observation, and the
+shared application boundary compares its full snapshot again before the first
+producer. Legacy preparation callers retain their established behavior.
+One original deadline and actual-worker admission cover policy I/O, static
+channels:[] invocation, validation/encoding, original save, historical reload,
+raster and derived SVG projection. Saving grants no publication or package
+activation. Post-save preview failures retain the immutable design identity for
+exact retry. Historical preview checks channel/id/revision/page/subcode without
+reinvoking the package. Receiver header, video and unresolved raster areas remain
+separate; original and visual diagnostic positions and numeric provenance survive.
+Localized populated native forms and a fresh optional authoring-configuration
+Health overlay are connected; no new island, dependency, transport shortcut or
+persisted Health baseline changes. The existing installed synthetic fixture is
+extended for fresh request echo, two profiles/themes and200/201 navigation, with
+mutable test receipts outside its checked package and explicit test-only bounds.
+The initial selected native build fails before test execution: two new app tests
+call a private field as an absent accessor; the new UI lacks its error-location
+import and moves a String before its hidden attribute reads it. All are corrected.
+Nextest ac05342b-e030-47f1-a93a-7e920fdfc87b passes58/59; the one failed
+SSR assertion incorrectly splits textarea markup. Correcting that oracle retains
+the empty-field assertion. fa22952a-fdd9-44b3-bbd7-9d753c6dde42 passes11/11.
+15aab25a-7116-4219-ae53-3f5cc1a2ae29 passes11/11, including a real native POST
+whose unencodable synthetic base glyph returns exact page123/subcode0010/row1/
+column8 without saving, publishing or exposing producer text. Together these
+runs establish60 unique passing selected Rust identities (57 Phase9 and three
+unchanged graphics-authoring cases), rather than summing repeated executions.
+The final15-case run7c322db3-94cc-4e15-8f07-ac9b1d56dd5c passes after
+Clippy-only corrections: seven native controller cases, four SSR cases and four
+localization checks, bringing the union to62 unique successful identities
+(59 Phase9 and three unchanged graphics cases). It proves capacity-one preparation/save/reload/projection,
+two-theme isolation, stale/missing/foreign/expired input rejection before work,
+exact historical navigation, retained committed originals after preview failure,
+nonempty pending/accepted pointers and ordinary playback configuration unchanged,
+and requester cancellation retaining the actual projection worker's lease.
+Strict affected app/web all-target Clippy passes with no lint exemptions.
+Initial matched headed Chromium fails after the successful native draft POST:
+the document remains loading, hydration never starts and the15-second assertion
+fails; three serial identities do not run. The preview creates a late blocking
+resource inside the resolved channel Suspense. Move the complete channel/preview
+read into one top-level sequential resource, preserving original timeouts,
+capacity-one ownership and exact-address assertions. The failed trace is retained
+under tmp/phase9-authoring-proof/chromium-output-initial. The five affected SSR
+cases pass in273141cc-8a46-4dad-a71b-e0cd56295e55, including pure preloaded
+preview, retained malformed-query and redacted-error behavior. The successful
+Rust identity union is now63 (60 Phase9 plus three unchanged graphics cases).
+The rebuilt headed case now completes hydration and both exact red/blue previews.
+It fails on an incorrectly scoped has: navigation locator despite the exact
+Index201 label in the captured DOM. Only that locator changes to the link's actual
+parent; label/address/click/raster assertions stay intact. Its negative trace is
+retained under tmp/phase9-authoring-proof/chromium-output-locator.
+The next case reaches all nine cultures, both previews and actual navigation,
+then fails because Playwright's disabled matcher does not treat fieldset as a
+disableable control despite its disabled attribute and all disabled descendants.
+The oracle now checks that attribute and all seven actual controls; the positive
+path checks the fieldset property and actual enabled submit button. No production
+code, timeout or expected behavior changes. That trace remains under
+tmp/phase9-authoring-proof/chromium-output-fieldset.
+The final unchanged-candidate headed Chromium151.0.7922.34 run passes4/4 in
+104.899 seconds, zero failed/skipped/flaky. Each identity covers nine cultures,
+both channels with the same package and distinct day/night profiles, explicit
+native prepare/save, exact historical previews and Index200->201 navigation,
+localized Health, stale/malformed/wrong-channel/missing-policy rejection, exact
+retry without reinvocation, and unchanged publication/playout/config/package.
+EN/NL viewport,320px keyboard and200-percent captures are retained. Root inspects
+the actual English red201 raster/navigation and Dutch320px focused subpage form.
+The initial combined Firefox run passes both JS draft identities, then no-JS
+times out on the fieldset JavaScript-property matcher; its trace reports undefined
+instead of false. The positive check now uses the native disabled attribute plus
+actual enabled button. Independently, the longer run changes the provider-poll
+heartbeat and fails the profile fixture's configuration snapshot. The snapshot
+now normalizes only values of the seven exact maintenance.loop.*.last_run keys
+written by the existing scheduler, retaining their keys/counts and every actual
+configuration value; no product setting, package, publication or playout assertion
+is removed. Initial negative receipts stay in the firefox-initial archives.
+Reuse the two valid JS identities and run only the two missing no-JS identities
+plus four profile regressions. The corrected Firefox153.0 run passes6/6 in
+421.829 seconds, zero failed/skipped/flaky. Together with the two valid initial
+JS identities it proves all four draft-flow variants and all four profile
+regressions; no failed identity is counted as successful. Root also inspects the
+actual Dutch dark blue201 raster and English200-percent focused subpage form.
+The final Chromium profile regression passes4/4 in173.978 seconds, with zero
+failed/skipped/flaky. The successful union comprises16 unique headed identities:
+eight new static-draft flows and eight existing profile controls, all nine cultures,
+both themes and JS/no-JS across Chromium/Firefox. Earlier profile visual receipts
+remain valid; the new exact-preview screenshots cover the changed draft section.
+Matched server SHA2565b64e2e5a49c2e7b996dfc7cbd893442143a032f7d9f3f6535290e9d8de470ec;
+WASM02fe15a17624c1607e57b907dcd3307801d85e774312722aa74a144ffdb2d158.
+Native logs, browser JSONs, inspected viewport PNGs and source/artifact hashes are
+retained under tmp/phase9-authoring-proof, outside default Playwright cleanup.
+receipt-sha256.txt SHA256eeaf968a734e2afde9aef605dc2c227e961948ae09639f31071a2cca08966300.
+Final strict app/web lint evidence, formatting, architecture (four counters0),
+hydration (31 existing suppressions), new-Clippy-allow and progress checks pass.
+The transport/model/compiler path is unchanged; valid prior TSDuck/independent
+decoding/VLC evidence is reused rather than claimed as a new browser broadcast.
+These results do not establish publication or complete engine acceptance.
+Next criterion: two explicit admin actions preserve exact rendered digest/head/
+pending/accepted CAS, then prove pending-only raw AV and explicit acceptance through
+an actual served-host ordinary MPEG-TS route with independent decoding/TSDuck and
+client navigation. Static originals already qualify for the existing publisher;
+the current gap is admin wiring and served-host proof, not a fake guide fence.
+Existing ordinary streams retain immutable selected output; warm adoption remains
+open. All authored-Level2.5/fallback, TTI/editor/metadata/zone ownership, Lua/restart,
+source/native/Next/platform/playback and independent-engine gates remain intact.
+No milestone status/dependency advances and no remote publication is authorized.
+
 2026-10-13 channel profile administration checkpoint:
 Requirement mapping: localized per-channel addon/profile controls are the first
 admin step of the synthetic selected-profile -> validation -> preview -> explicit

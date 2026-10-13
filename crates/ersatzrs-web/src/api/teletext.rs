@@ -61,6 +61,137 @@ pub async fn off(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Res
     respond(channel, "off", result)
 }
 
+/// Validate selected static producers and save a new original draft. Publication
+/// is never part of this action, including when a subsequent preview fails.
+pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
+    use crate::host::teletext_authoring::prepare_static_teletext_design;
+    let channel = redirect_channel(&pairs);
+    // Establish the original budget before parsing or reading host policy.
+    let deadline = std::time::Instant::now()
+        .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT);
+    let parsed = prepare_command(pairs);
+    let (request, owner) = match parsed {
+        Ok(value) => value,
+        Err(code) => return respond(channel, "draft", Err(code)),
+    };
+    let Some(deadline) = deadline else {
+        return respond(channel, "draft", Err("expired"));
+    };
+    match prepare_static_teletext_design(&state.application, request, deadline).await {
+        Ok(saved) => {
+            let identity = saved.identity;
+            let mut query = format!(
+                "saved=draft&design_id={}&revision={}&page={}&subcode={:04x}",
+                identity.design_id,
+                identity.revision,
+                owner.page,
+                owner.subcode.get(),
+            );
+            if let Err(error) = &saved.preview {
+                query.push_str(&authoring_error_query(error));
+            }
+            Redirect::to(&format!("/channels/{channel}/teletext?{query}")).into_response()
+        }
+        Err(error) => {
+            let query = authoring_error_query(&error);
+            Redirect::to(&format!(
+                "/channels/{channel}/teletext?{}",
+                query.trim_start_matches('&')
+            ))
+            .into_response()
+        }
+    }
+}
+
+fn prepare_command(
+    pairs: Pairs,
+) -> ControlResult<(
+    crate::host::teletext_authoring::TeletextAuthoringPrepare,
+    ersatzrs_domain::TeletextPageAddress,
+)> {
+    use ersatzrs_domain::{TeletextPageAddress, TeletextPageNumber, TeletextSubcode};
+    let mut fields = fields(pairs)?;
+    let channel_id = positive(&take(&mut fields, "channel_id")?)?;
+    let selection_digest = take(&mut fields, "selection_digest")?;
+    if selection_digest.len() != 64
+        || !selection_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("invalid-input");
+    }
+    let name = take(&mut fields, "name")?;
+    let addon = take(&mut fields, "entry_addon_id")?;
+    ersatzrs_addon_contract::validate_addon_id(&addon).map_err(|_| "invalid-input")?;
+    let page = take(&mut fields, "entry_page")?
+        .parse::<u16>()
+        .map_err(|_| "invalid-input")?;
+    let subcode = take(&mut fields, "entry_subcode")?;
+    if subcode.is_empty() || subcode.len() > 4 {
+        return Err("invalid-input");
+    }
+    let subcode = u16::from_str_radix(&subcode, 16).map_err(|_| "invalid-input")?;
+    let owner = TeletextPageAddress {
+        page: TeletextPageNumber::new(page).map_err(|_| "invalid-input")?,
+        subcode: TeletextSubcode::new(subcode).map_err(|_| "invalid-input")?,
+    };
+    let region = take(&mut fields, "v1_region")?;
+    let lifecycle = take(&mut fields, "resource_transmissions")?;
+    if lifecycle.len() > 65_536 {
+        return Err("limit");
+    }
+    if !fields.is_empty() {
+        return Err("invalid-input");
+    }
+    let mut input_json = serde_json::to_string(&serde_json::json!({
+        "input_version": 1, "channel_id": channel_id, "entry_addon_id": addon,
+        "entry": owner, "v1_region": region,
+    }))
+    .map_err(|_| "invalid-input")?;
+    // Keep the submitted JSON untouched until the closed typed parser checks it;
+    // a Value round-trip would silently discard duplicate lifecycle fields.
+    input_json.pop();
+    input_json.push_str(",\"resource_transmissions\":");
+    input_json.push_str(&lifecycle);
+    input_json.push('}');
+    Ok((
+        crate::host::teletext_authoring::TeletextAuthoringPrepare {
+            channel_id,
+            selection_digest,
+            input_json,
+            name,
+        },
+        owner,
+    ))
+}
+
+fn authoring_error_query(
+    error: &crate::host::teletext_authoring::TeletextAuthoringError,
+) -> String {
+    use std::fmt::Write as _;
+    let mut query = format!("&error={}", error.code());
+    if let Some(location) = &error.location {
+        if let Some(resource) = location.resource {
+            if let Ok(raw) = serde_json::to_string(&resource) {
+                query.push_str("&error_resource=");
+                query.push_str(&urlencoding::encode(&raw));
+            }
+        }
+        if let Some(owner) = location.owner {
+            let _ = write!(
+                query,
+                "&error_page={}&error_subcode={:04x}",
+                owner.page,
+                owner.subcode.get()
+            );
+        }
+        if let Some((row, column)) = location.position {
+            let _ = write!(query, "&error_row={row}&error_column={column}");
+        }
+    }
+    query
+}
+
 fn respond(channel: i64, action: &str, result: ControlResult<()>) -> Response {
     let target = if channel > 0 {
         format!("/channels/{channel}/teletext")

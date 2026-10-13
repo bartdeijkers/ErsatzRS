@@ -231,7 +231,32 @@ pub async fn save_original_teletext_design_candidate(
 ) -> Result<TeletextDesignMutation<SavedOriginalTeletextDesign>, NativeTeletextDesignError> {
     check_deadline(deadline)?;
     let guard = super::teletext_work::begin(application, Some(deadline)).await?;
-    let hold = guard.hold_work();
+    save_original_teletext_design_candidate_with_hold(
+        application,
+        name,
+        existing,
+        candidate,
+        budget,
+        deadline,
+        guard.hold_work(),
+    )
+    .await
+}
+
+/// Save under an existing operation's admission and exact supplied deadline.
+/// No preparation allowance is renewed here. Standalone compatibility callers
+/// retain their fresh save deadline; a chained owner passes its original one.
+/// Repository settlement retains its existing atomic `SQLite` transaction contract.
+pub(super) async fn save_original_teletext_design_candidate_with_hold(
+    application: &ApplicationServices,
+    name: String,
+    existing: Option<(EntityId, i64)>,
+    candidate: EncodedChannelTeletextDocumentCandidate,
+    budget: TeletextDesignDocumentBudget,
+    deadline: Instant,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
+) -> Result<TeletextDesignMutation<SavedOriginalTeletextDesign>, NativeTeletextDesignError> {
+    check_deadline(deadline)?;
     let (candidate, document, digest) =
         super::teletext_work::spawn_blocking(hold.clone(), move || {
             check_deadline(deadline)?;

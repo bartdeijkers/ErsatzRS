@@ -25,6 +25,15 @@ const TELETEXT_OUTPUT_INVALID_BRIEF: &str = "Teletext output settings are invali
 const TELETEXT_OUTPUT_INVALID_MESSAGE: &str = "The teletext output settings are invalid. Ordinary playback continues without adding teletext. Correct the settings to enable teletext output.";
 const TELETEXT_OUTPUT_UNREADABLE_BRIEF: &str = "Teletext output settings could not be read";
 const TELETEXT_OUTPUT_UNREADABLE_MESSAGE: &str = "The teletext output settings could not be read. Ordinary playback continues without adding teletext. Check database availability and access.";
+const TELETEXT_AUTHORING_TITLE: &str = "Teletext authoring configuration";
+const TELETEXT_AUTHORING_ABSENT_BRIEF: &str = "Teletext authoring is not configured";
+const TELETEXT_AUTHORING_ABSENT_MESSAGE: &str = "No authoring policy is configured. Draft preparation and preview are unavailable; ordinary playback is unaffected.";
+const TELETEXT_AUTHORING_VALID_BRIEF: &str = "Teletext authoring settings are valid";
+const TELETEXT_AUTHORING_VALID_MESSAGE: &str = "The authoring settings are valid. Each draft and preview still requires bounded validation. This check does not verify authored pages, publication, full Level 2.5 support or memory limits.";
+const TELETEXT_AUTHORING_INVALID_BRIEF: &str = "Teletext authoring settings are invalid";
+const TELETEXT_AUTHORING_INVALID_MESSAGE: &str = "The authoring settings are invalid. Draft preparation and preview are unavailable; ordinary playback is unaffected. Correct the authoring settings.";
+const TELETEXT_AUTHORING_UNREADABLE_BRIEF: &str = "Teletext authoring settings could not be read";
+const TELETEXT_AUTHORING_UNREADABLE_MESSAGE: &str = "The authoring settings could not be read. Draft preparation and preview are unavailable; ordinary playback is unaffected. Check database availability and access.";
 
 #[derive(Clone)]
 pub struct NativeAdminHealthRuntime {
@@ -60,7 +69,10 @@ impl NativeAdminHealthRuntime {
         // This host-local state is read after the cached/persisted baseline.
         // Never persist it across host restarts or count an old copy twice.
         results.retain(|result| {
-            result.title != SCAN_WORKER_TITLE && result.title != TELETEXT_OUTPUT_TITLE
+            !matches!(
+                result.title.as_str(),
+                SCAN_WORKER_TITLE | TELETEXT_OUTPUT_TITLE | TELETEXT_AUTHORING_TITLE
+            )
         });
         if !self.scan_activity.is_worker_available() {
             results.push(
@@ -74,6 +86,7 @@ impl NativeAdminHealthRuntime {
             );
         }
         results.push(teletext_output_configuration(&self.pool).await);
+        results.push(teletext_authoring_configuration(&self.pool).await);
         results
     }
 
@@ -125,6 +138,39 @@ async fn teletext_output_configuration(pool: &DbPool) -> HealthCheckResult {
         ),
     };
     HealthCheckResult::new(TELETEXT_OUTPUT_TITLE, status, message, brief)
+}
+
+async fn teletext_authoring_configuration(pool: &DbPool) -> HealthCheckResult {
+    use super::teletext_runtime_policy::{
+        parse_native_teletext_authoring_policy, NATIVE_TELETEXT_AUTHORING_POLICY_SETTING,
+    };
+
+    let configured = SqliteConfigRepository(pool.clone())
+        .get(NATIVE_TELETEXT_AUTHORING_POLICY_SETTING)
+        .await;
+    let (status, message, brief) = match configured {
+        Ok(None) => (
+            HealthCheckStatus::Info,
+            TELETEXT_AUTHORING_ABSENT_MESSAGE,
+            TELETEXT_AUTHORING_ABSENT_BRIEF,
+        ),
+        Ok(Some(raw)) if parse_native_teletext_authoring_policy(&raw).is_ok() => (
+            HealthCheckStatus::Pass,
+            TELETEXT_AUTHORING_VALID_MESSAGE,
+            TELETEXT_AUTHORING_VALID_BRIEF,
+        ),
+        Ok(Some(_)) => (
+            HealthCheckStatus::Warning,
+            TELETEXT_AUTHORING_INVALID_MESSAGE,
+            TELETEXT_AUTHORING_INVALID_BRIEF,
+        ),
+        Err(_) => (
+            HealthCheckStatus::Warning,
+            TELETEXT_AUTHORING_UNREADABLE_MESSAGE,
+            TELETEXT_AUTHORING_UNREADABLE_BRIEF,
+        ),
+    };
+    HealthCheckResult::new(TELETEXT_AUTHORING_TITLE, status, message, brief)
 }
 
 #[async_trait]
@@ -196,9 +242,16 @@ mod tests {
     }
 
     fn output_row(results: &[HealthCheckResult]) -> &HealthCheckResult {
+        configuration_row(results, TELETEXT_OUTPUT_TITLE)
+    }
+
+    fn configuration_row<'a>(
+        results: &'a [HealthCheckResult],
+        title: &str,
+    ) -> &'a HealthCheckResult {
         let rows = results
             .iter()
-            .filter(|result| result.title == TELETEXT_OUTPUT_TITLE)
+            .filter(|result| result.title == title)
             .collect::<Vec<_>>();
         assert_eq!(
             rows.len(),
@@ -381,5 +434,100 @@ mod tests {
             output_row(&results).message,
             TELETEXT_OUTPUT_UNREADABLE_MESSAGE
         );
+    }
+
+    fn authoring_configuration_fixture() -> serde_json::Value {
+        let mut value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/teletext-output-policy-v1.json"
+        ))
+        .unwrap();
+        let root = value.as_object_mut().unwrap();
+        root.remove("source");
+        root.remove("recovery_timeout_ms");
+        root.insert("operation_timeout_ms".to_owned(), serde_json::json!(1000));
+        root.insert(
+            "preview".to_owned(),
+            serde_json::json!({
+                "max_pages":0,"max_model_records":0,"max_pixels":0,"max_diagnostics":0,"max_work":0
+            }),
+        );
+        value["input"]["max_producers"] = serde_json::json!(0);
+        value["encoding"]["max_attribute_cell_updates"] = serde_json::json!(0);
+        value
+    }
+
+    #[tokio::test]
+    async fn authoring_configuration_is_fresh_redacted_and_independent_of_output_and_baseline() {
+        use super::super::teletext_runtime_policy::{
+            NATIVE_TELETEXT_AUTHORING_POLICY_SETTING as KEY,
+            NATIVE_TELETEXT_RUNTIME_POLICY_SETTING as OUTPUT_KEY,
+        };
+        let runtime = health_fixture().await;
+        let config = SqliteConfigRepository(runtime.pool.clone());
+        let output = include_str!("../../tests/fixtures/teletext-output-policy-v1.json");
+        config.set(OUTPUT_KEY, output).await.unwrap();
+        let baseline = runtime.run_health_checks(false).await.unwrap();
+        let baseline_counts = runtime.issue_counts().await.unwrap();
+        let store = SqlHealthCheckStore::new(runtime.pool.clone());
+        let persisted = store.load_results().await.unwrap();
+        let row = configuration_row(&baseline.results, TELETEXT_AUTHORING_TITLE);
+        assert_eq!(row.status, HealthCheckStatus::Info);
+        assert_eq!(row.message, TELETEXT_AUTHORING_ABSENT_MESSAGE);
+        assert_eq!(
+            output_row(&baseline.results).status,
+            HealthCheckStatus::Pass
+        );
+        assert!(!persisted
+            .iter()
+            .any(|row| row.title == TELETEXT_AUTHORING_TITLE));
+        for invalid in ["synthetic-private-authoring-policy", output] {
+            config.set(KEY, invalid).await.unwrap();
+            let read = runtime.run_health_checks(false).await.unwrap();
+            let row = configuration_row(&read.results, TELETEXT_AUTHORING_TITLE);
+            assert_eq!(row.status, HealthCheckStatus::Warning);
+            assert_eq!(row.message, TELETEXT_AUTHORING_INVALID_MESSAGE);
+            assert!(!format!("{row:?}").contains("synthetic-private"));
+            assert_eq!(output_row(&read.results), output_row(&baseline.results));
+            assert_eq!(
+                runtime.issue_counts().await.unwrap(),
+                (baseline_counts.0, baseline_counts.1 + 1)
+            );
+        }
+        let valid = authoring_configuration_fixture();
+        config.set(KEY, &valid.to_string()).await.unwrap();
+        let configured = runtime.run_health_checks(false).await.unwrap();
+        let row = configuration_row(&configured.results, TELETEXT_AUTHORING_TITLE);
+        assert_eq!(
+            row.status,
+            HealthCheckStatus::Pass,
+            "zero credits are valid explicit limits, not page readiness"
+        );
+        assert_eq!(row.message, TELETEXT_AUTHORING_VALID_MESSAGE);
+        assert_eq!(runtime.issue_counts().await.unwrap(), baseline_counts);
+        assert_eq!(
+            output_row(&configured.results),
+            output_row(&baseline.results)
+        );
+        let mut expired_policy = valid;
+        expired_policy["operation_timeout_ms"] = serde_json::json!(0);
+        config.set(KEY, &expired_policy.to_string()).await.unwrap();
+        let invalid = runtime.current_results(configured.results.clone()).await;
+        assert_eq!(
+            configuration_row(&invalid, TELETEXT_AUTHORING_TITLE).status,
+            HealthCheckStatus::Warning
+        );
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(KEY)
+            .execute(&runtime.pool)
+            .await
+            .unwrap();
+        let absent = runtime.current_results(invalid).await;
+        assert_eq!(absent, baseline.results);
+        assert_eq!(store.load_results().await.unwrap(), persisted);
+        runtime.pool.close().await;
+        let unreadable = runtime.current_results(absent).await;
+        let row = configuration_row(&unreadable, TELETEXT_AUTHORING_TITLE);
+        assert_eq!(row.status, HealthCheckStatus::Warning);
+        assert_eq!(row.message, TELETEXT_AUTHORING_UNREADABLE_MESSAGE);
     }
 }

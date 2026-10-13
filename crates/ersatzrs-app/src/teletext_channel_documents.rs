@@ -340,8 +340,7 @@ impl ApplicationServices {
             entry_addon_id,
             context,
             budget,
-            None,
-            None,
+            (None, None, None),
         )
         .await
     }
@@ -364,8 +363,45 @@ impl ApplicationServices {
             entry_addon_id,
             context,
             budget,
-            Some(deadline),
-            Some(hold),
+            (Some(deadline), Some(hold), None),
+        )
+        .await
+    }
+
+    /// Observe the complete enabled configuration without invoking a producer.
+    /// The snapshot contains unresolved settings and is not a browser receipt.
+    /// # Errors
+    /// Preserves storage and configuration-selection failures.
+    pub async fn observe_channel_teletext_document_selection(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<TeletextChannelSelectionSnapshot, ChannelTeletextDocumentError> {
+        snapshot(self.ports().teletext_profiles(), channel_id).await
+    }
+
+    /// Prepare exactly a previously checked host-side selection under one hold.
+    /// A changed snapshot fails before entry/request preparation or invocation.
+    /// # Errors
+    /// Preserves preparation errors and rejects any changed complete selection.
+    pub async fn invoke_channel_teletext_documents_with_selection_and_hold(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+        expected_selection: &TeletextChannelSelectionSnapshot,
+        admission: (Instant, TeletextWorkHold),
+    ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
+        self.invoke_channel_teletext_documents_with_optional_hold(
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            (
+                Some(admission.0),
+                Some(admission.1),
+                Some(expected_selection),
+            ),
         )
         .await
     }
@@ -376,9 +412,13 @@ impl ApplicationServices {
         entry_addon_id: Option<&str>,
         context: &SuppliedTeletextGuideContext<'_>,
         budget: TeletextChannelDocumentInputBudget,
-        deadline: Option<Instant>,
-        hold: Option<TeletextWorkHold>,
+        admission: (
+            Option<Instant>,
+            Option<TeletextWorkHold>,
+            Option<&TeletextChannelSelectionSnapshot>,
+        ),
     ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError> {
+        let (deadline, hold, expected_selection) = admission;
         let invoke = |selected, input, deadline| {
             let hold = hold.clone();
             async move {
@@ -400,32 +440,16 @@ impl ApplicationServices {
                 }
             }
         };
-        match deadline {
-            None => {
-                prepare_with_ports(
-                    self.ports().teletext_profiles(),
-                    channel_id,
-                    entry_addon_id,
-                    context,
-                    budget,
-                    invoke,
-                    Instant::now,
-                )
-                .await
-            }
-            Some(deadline) => {
-                prepare_with_ports_before(
-                    self.ports().teletext_profiles(),
-                    channel_id,
-                    entry_addon_id,
-                    context,
-                    budget,
-                    invoke,
-                    (Instant::now, Some(deadline)),
-                )
-                .await
-            }
-        }
+        prepare_with_ports_before_selection(
+            self.ports().teletext_profiles(),
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            invoke,
+            (Instant::now, deadline, expected_selection),
+        )
+        .await
     }
 
     /// Observe the complete channel again after validation/native work, without
@@ -447,6 +471,7 @@ impl ApplicationServices {
     }
 }
 
+#[cfg(test)]
 async fn prepare_with_ports<F, Fut, Clock>(
     repository: &dyn TeletextProfileRepository,
     channel_id: EntityId,
@@ -473,13 +498,14 @@ where
     .await
 }
 
+#[cfg(test)]
 async fn prepare_with_ports_before<F, Fut, Clock>(
     repository: &dyn TeletextProfileRepository,
     channel_id: EntityId,
     entry_addon_id: Option<&str>,
     context: &SuppliedTeletextGuideContext<'_>,
     budget: TeletextChannelDocumentInputBudget,
-    mut invoke: F,
+    invoke: F,
     timing: (Clock, Option<Instant>),
 ) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError>
 where
@@ -487,7 +513,37 @@ where
     Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
     Clock: FnMut() -> Instant,
 {
-    let (mut now, supplied_deadline) = timing;
+    prepare_with_ports_before_selection(
+        repository,
+        channel_id,
+        entry_addon_id,
+        context,
+        budget,
+        invoke,
+        (timing.0, timing.1, None),
+    )
+    .await
+}
+
+async fn prepare_with_ports_before_selection<F, Fut, Clock>(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    budget: TeletextChannelDocumentInputBudget,
+    mut invoke: F,
+    timing: (
+        Clock,
+        Option<Instant>,
+        Option<&TeletextChannelSelectionSnapshot>,
+    ),
+) -> Result<BoundChannelTeletextDocumentInput, ChannelTeletextDocumentError>
+where
+    F: FnMut(TeletextSelectionSnapshot, Vec<u8>, Instant) -> Fut,
+    Fut: Future<Output = Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError>>,
+    Clock: FnMut() -> Instant,
+{
+    let (mut now, supplied_deadline, expected_selection) = timing;
     let started = now();
     let maximum = started
         .checked_add(PREPARATION_TIMEOUT)
@@ -499,6 +555,9 @@ where
     let selection = snapshot(repository, channel_id).await?;
     check_deadline(now(), deadline)?;
     validate_selection(&selection, channel_id, budget.max_producers)?;
+    if expected_selection.is_some_and(|expected| *expected != selection) {
+        return Err(ChannelTeletextDocumentError::SelectionChanged);
+    }
     let entry = select_entry(&selection, entry_addon_id)?;
     let requests = preflight_requests(&selection, context)?;
     check_deadline(now(), deadline)?;

@@ -4505,12 +4505,84 @@ silently substituted during save. Concurrent changes therefore reject without
 partial writes. An existing binding can be turned Off using only its binding
 revision, including when its selected profile or installation is unavailable.
 
-These forms connect profile selection to the synthetic workflow. They do not
-complete the next design step: fresh preparation needs explicit entry/resource
-lifecycle and host limits; historical preview needs explicit raster/work limits
-and exact stored design ID, revision, page and subcode. The runtime recovery
-policy cannot supply fresh entry/lifecycle or preview limits. The next connection
-must use native preparation, original design save/reload and the same validated
-raster as transmission, without adopting test bounds as production defaults.
+These forms connect base profile configuration to the synthetic workflow. The
+separate static original-draft action below now supplies explicit authoring limits
+and per-channel entry/resource lifecycle, then previews exact immutable saved
+identities through the shared native compiler/raster. Runtime recovery policy
+still cannot supply fresh content or preview bounds. Explicit admin publication,
+fresh guide/editor/zone flows and full independent acceptance remain separate,
+without adopting test bounds as production defaults.
 P9A-04 holds current implementation and browser evidence and all remaining
 acceptance criteria.
+
+### Static original drafts and exact browser previews
+
+Channel profile administration now has a separate **Validate and save draft**
+action. This first connection supplies `channels: []` explicitly: it is a static
+synthetic/page-design workflow, without a TV-guide source fence. It does not
+establish fresh guide publication or remove the remaining guide acceptance.
+
+Configure explicit version-1 `teletext.authoring.policy` limits through the existing
+application configuration mechanism. Its required `design`, `input`, `validation`,
+`composition` and `encoding` sections reuse the output policy's numeric schema,
+including all thirteen enabled work credits. It additionally requires a positive,
+representable `operation_timeout_ms` and `preview` limits for `max_pages`,
+`max_model_records`, `max_pixels`, `max_diagnostics` and `max_work`. Source transport
+and recovery fields are rejected. Missing or invalid policy disables the optional
+authoring action; ordinary playback continues. The Health overlay reports this
+configuration independently of output policy or actual broadcast readiness.
+Test fixtures are explicit verification inputs, not production defaults or a
+worst-case compiler/RSS acceptance.
+
+Trusted limits and per-channel content are separate. Native form submission carries
+a draft name, the exact opaque selection observation, an explicit opening-page
+addon, decimal page, hexadecimal subcode, V1 character region and unchanged resource
+lifecycle JSON. No opening addon/page/subcode, resource update counter or last-subpage
+flag is inferred. The current checked V1 lift supports `western_latin`; all existing
+full standards/region/fallback criteria remain open. Required lifecycle arrays use
+the saved identity's `logical_subpage` spelling, independent of addon V2 wire
+`subpage`. An explicit `[]` is valid for resource-free pages. Duplicate, unknown,
+invalid or excessive fields reject without publishing. The UI retains safe profile
+configuration and Off independently of this authoring eligibility.
+
+One original operation deadline and one actual-worker admission cover the native
+static producer invocation, complete validation/encoding, new original save,
+historical reload and preview/projection. The opaque SHA256 observation frames
+complete enabled membership, installation/profile/binding identities and unresolved
+effective settings; raw settings never become a hidden form receipt. A submitted
+observation is compared before preparation, and the shared application checks the
+same full snapshot again before the first producer. This receipt grants no
+publication or executable authority. Legacy application callers keep their existing
+behavior.
+
+A successful save creates a new immutable original draft. If its subsequent preview
+fails, the returned design ID/revision survives for exact retry. The deadline does
+not undo a committed SQLite save. Preview resolves the exact channel, design ID,
+revision, page and actual subcode, without invoking the addon or selecting a current
+profile instead of the saved source. Browser inventory and typed navigation retain
+actual addresses; a page-only link exposes its actual available subpages rather
+than manufacturing subcode zero. SVG pixels come from the same checked native
+raster and use checked derived output-storage bounds. Receiver header, video and
+unresolved cells have distinct patterns; visual and original diagnostic positions
+and numeric engine provenance remain separate. They are not silently replaced with
+apparently valid glyphs.
+
+For an agent-driven file workflow, keep the authored addon response and the closed
+versioned per-channel input as separate files, use the same existing policy parser
+and native controller, retain the immutable saved identity, then validate/preview
+that exact page/subcode before a separate explicit publication request. Raw inputs
+are never a validated generation. The QTeletextMaker TTI/metadata/edit-ownership
+round trip remains its own required workflow; this original-only connection does
+not claim it. P9A-04 owns current native/headed evidence, missing served-host
+publication/client proof and all remaining engine/editor/Lua/platform gates.
+
+The next admin connection must expose separate pending-request and acceptance
+actions with the exact rendered design digest/revision, live head revision,
+pending request and accepted generation CAS tokens. Properly saved static
+`channels: []` originals already qualify for the existing frozen-original
+publisher. Legacy absent guide inputs, guide-bearing inputs and source-associated
+designs still require current-role freshness; no synthetic fence substitutes for
+it. The ordinary route currently resolves accepted state at new-stream startup
+and retains its immutable generation thereafter. Running-stream adoption and
+receiver-cache transitions remain required, separate acceptance work. A selected
+durable pointer alone does not prove that any running client applied it.

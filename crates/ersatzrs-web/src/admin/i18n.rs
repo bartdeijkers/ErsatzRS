@@ -1515,6 +1515,51 @@ pub enum TextKey {
     TeletextAdminLimit,
     TeletextProfileRedacted,
     TeletextProfileRepairHelp,
+    TeletextAuthoringTitle,
+    TeletextAuthoringHelp,
+    TeletextAuthoringStaticHelp,
+    TeletextAuthoringUnavailable,
+    TeletextDesignName,
+    TeletextEntryProducer,
+    TeletextEntryPage,
+    TeletextEntrySubpage,
+    TeletextV1Region,
+    TeletextV1WesternLatin,
+    TeletextResourceLifecycle,
+    TeletextResourceLifecycleHelp,
+    TeletextValidateSaveDraft,
+    TeletextDraftSaved,
+    TeletextPreviewTitle,
+    TeletextPreviewHelp,
+    TeletextPreviewPage,
+    TeletextPreviewSubpage,
+    TeletextPreviewLoad,
+    TeletextPreviewDiagnostics,
+    TeletextPreviewNoDiagnostics,
+    TeletextPreviewReceiverHeader,
+    TeletextPreviewVideo,
+    TeletextPreviewUnresolved,
+    TeletextDraftMissing,
+    TeletextWorkBusy,
+    TeletextWorkExpired,
+    TeletextAuthoringRejected,
+    TeletextPreviewPosition,
+    TeletextPreviewSource,
+    TeletextPreviewReload,
+    TeletextNavIndex,
+    TeletextNavRed,
+    TeletextNavGreen,
+    TeletextNavYellow,
+    TeletextNavCyan,
+    TeletextAuthoringHealthTitle,
+    TeletextAuthoringHealthAbsentBrief,
+    TeletextAuthoringHealthAbsentDetail,
+    TeletextAuthoringHealthValidBrief,
+    TeletextAuthoringHealthValidDetail,
+    TeletextAuthoringHealthInvalidBrief,
+    TeletextAuthoringHealthInvalidDetail,
+    TeletextAuthoringHealthUnreadableBrief,
+    TeletextAuthoringHealthUnreadableDetail,
     TeletextWorkTitle,
     TeletextWorkDefault,
     TeletextWorkConfigured,
@@ -3758,6 +3803,51 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TeletextAdminLimit,
     TextKey::TeletextProfileRedacted,
     TextKey::TeletextProfileRepairHelp,
+    TextKey::TeletextAuthoringTitle,
+    TextKey::TeletextAuthoringHelp,
+    TextKey::TeletextAuthoringStaticHelp,
+    TextKey::TeletextAuthoringUnavailable,
+    TextKey::TeletextDesignName,
+    TextKey::TeletextEntryProducer,
+    TextKey::TeletextEntryPage,
+    TextKey::TeletextEntrySubpage,
+    TextKey::TeletextV1Region,
+    TextKey::TeletextV1WesternLatin,
+    TextKey::TeletextResourceLifecycle,
+    TextKey::TeletextResourceLifecycleHelp,
+    TextKey::TeletextValidateSaveDraft,
+    TextKey::TeletextDraftSaved,
+    TextKey::TeletextPreviewTitle,
+    TextKey::TeletextPreviewHelp,
+    TextKey::TeletextPreviewPage,
+    TextKey::TeletextPreviewSubpage,
+    TextKey::TeletextPreviewLoad,
+    TextKey::TeletextPreviewDiagnostics,
+    TextKey::TeletextPreviewNoDiagnostics,
+    TextKey::TeletextPreviewReceiverHeader,
+    TextKey::TeletextPreviewVideo,
+    TextKey::TeletextPreviewUnresolved,
+    TextKey::TeletextDraftMissing,
+    TextKey::TeletextWorkBusy,
+    TextKey::TeletextWorkExpired,
+    TextKey::TeletextAuthoringRejected,
+    TextKey::TeletextPreviewPosition,
+    TextKey::TeletextPreviewSource,
+    TextKey::TeletextPreviewReload,
+    TextKey::TeletextNavIndex,
+    TextKey::TeletextNavRed,
+    TextKey::TeletextNavGreen,
+    TextKey::TeletextNavYellow,
+    TextKey::TeletextNavCyan,
+    TextKey::TeletextAuthoringHealthTitle,
+    TextKey::TeletextAuthoringHealthAbsentBrief,
+    TextKey::TeletextAuthoringHealthAbsentDetail,
+    TextKey::TeletextAuthoringHealthValidBrief,
+    TextKey::TeletextAuthoringHealthValidDetail,
+    TextKey::TeletextAuthoringHealthInvalidBrief,
+    TextKey::TeletextAuthoringHealthInvalidDetail,
+    TextKey::TeletextAuthoringHealthUnreadableBrief,
+    TextKey::TeletextAuthoringHealthUnreadableDetail,
     TextKey::TeletextWorkTitle,
     TextKey::TeletextWorkDefault,
     TextKey::TeletextWorkConfigured,
@@ -5101,6 +5191,9 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         "Teletext decoding" => text(language, TextKey::TeletextDecoderTitle).to_owned(),
         "Teletext work configuration" => text(language, TextKey::TeletextWorkTitle).to_owned(),
         "Teletext output configuration" => text(language, TextKey::TeletextOutputTitle).to_owned(),
+        "Teletext authoring configuration" => {
+            text(language, TextKey::TeletextAuthoringHealthTitle).to_owned()
+        }
         "Next Runtime Availability" => text(language, TextKey::NextRuntimeAvailability).to_owned(),
         "JavaScript Audio Selection" => {
             text(language, TextKey::JavascriptAudioSelectionTitle).to_owned()
@@ -5414,13 +5507,23 @@ fn addon_list_health_message(
         return None;
     }
     let key = match message {
-        "Initial add-on selection is awaiting review" |
-        "Preview and save the list selection before its first publication or media acquisition." => TextKey::AddonSelectionReviewRequired,
-        "Automatic publication needs review" | "Automatic processing needs attention" => TextKey::AutoPublicationHeld,
-        "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation." => TextKey::PreparationProcessRecoveryRequired,
-        "Media preparation worker is unavailable. Restart the server before retrying preparation." => TextKey::PreparationWorkerUnavailable,
-        "Derived show metadata reached its size limit" |
-        "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete." => TextKey::AddonDerivedMetadataLimited,
+        "Initial add-on selection is awaiting review"
+        | "Preview and save the list selection before its first publication or media acquisition." => {
+            TextKey::AddonSelectionReviewRequired
+        }
+        "Automatic publication needs review" | "Automatic processing needs attention" => {
+            TextKey::AutoPublicationHeld
+        }
+        "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation." => {
+            TextKey::PreparationProcessRecoveryRequired
+        }
+        "Media preparation worker is unavailable. Restart the server before retrying preparation." => {
+            TextKey::PreparationWorkerUnavailable
+        }
+        "Derived show metadata reached its size limit"
+        | "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete." => {
+            TextKey::AddonDerivedMetadataLimited
+        }
         _ => return None,
     };
     Some(text(language, key))
@@ -5433,9 +5536,17 @@ fn scan_and_playback_health_message(
 ) -> Option<&'static str> {
     let key = match (title, message) {
         ("Scanner worker", "Scanner worker is unavailable") => TextKey::ScanWorkerUnavailableBrief,
-        ("Scanner worker", "The scan worker is unavailable. New scans cannot run. Check the logs and confirm that any remaining local probe processes have stopped before restarting ErsatzRS.") => TextKey::ScanWorkerUnavailableHelp,
-        ("Playback Data Access", "Legacy MPEG-TS requires at least two active transcode slots") => TextKey::LegacyMpegTsCapacityBrief,
-        ("Playback Data Access", "An enabled channel uses the native legacy MPEG-TS mode. Its wrapper and programme encoder require two distinct active transcode slots. Increase the active transcode limit to at least 2, or select another streaming mode.") => TextKey::LegacyMpegTsCapacityHelp,
+        (
+            "Scanner worker",
+            "The scan worker is unavailable. New scans cannot run. Check the logs and confirm that any remaining local probe processes have stopped before restarting ErsatzRS.",
+        ) => TextKey::ScanWorkerUnavailableHelp,
+        ("Playback Data Access", "Legacy MPEG-TS requires at least two active transcode slots") => {
+            TextKey::LegacyMpegTsCapacityBrief
+        }
+        (
+            "Playback Data Access",
+            "An enabled channel uses the native legacy MPEG-TS mode. Its wrapper and programme encoder require two distinct active transcode slots. Increase the active transcode limit to at least 2, or select another streaming mode.",
+        ) => TextKey::LegacyMpegTsCapacityHelp,
         _ => return None,
     };
     Some(text(language, key))
@@ -5443,15 +5554,20 @@ fn scan_and_playback_health_message(
 
 fn teletext_work_health_message(language: UiLanguage, message: &str) -> Option<String> {
     match message {
-        "Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready." =>
-            Some(text(language, TextKey::TeletextWorkDefault).to_owned()),
-        "Teletext work concurrency must be a positive integer. Native teletext operations are unavailable until this setting is corrected." =>
-            Some(text(language, TextKey::TeletextWorkInvalid).to_owned()),
+        "Native teletext work is serialized by default. This is not a memory limit or proof that authored pages are ready." => {
+            Some(text(language, TextKey::TeletextWorkDefault).to_owned())
+        }
+        "Teletext work concurrency must be a positive integer. Native teletext operations are unavailable until this setting is corrected." => {
+            Some(text(language, TextKey::TeletextWorkInvalid).to_owned())
+        }
         _ => {
             let count = message.strip_prefix("The configured limit is ")?
                 .strip_suffix(" concurrent native teletext operations. This is not a memory limit or proof that authored pages are ready.")?
                 .parse::<u64>().ok().filter(|count|*count>0)?;
-            Some(text(language, TextKey::TeletextWorkConfigured).replace("{count}", &count.to_string()))
+            Some(
+                text(language, TextKey::TeletextWorkConfigured)
+                    .replace("{count}", &count.to_string()),
+            )
         }
     }
 }
@@ -5472,17 +5588,68 @@ fn teletext_output_health_message(language: UiLanguage, message: &str) -> Option
     .map(|key| text(language, key))
 }
 
+fn teletext_authoring_health_message(language: UiLanguage, message: &str) -> Option<&'static str> {
+    [
+        TextKey::TeletextAuthoringHealthAbsentBrief,
+        TextKey::TeletextAuthoringHealthAbsentDetail,
+        TextKey::TeletextAuthoringHealthValidBrief,
+        TextKey::TeletextAuthoringHealthValidDetail,
+        TextKey::TeletextAuthoringHealthInvalidBrief,
+        TextKey::TeletextAuthoringHealthInvalidDetail,
+        TextKey::TeletextAuthoringHealthUnreadableBrief,
+        TextKey::TeletextAuthoringHealthUnreadableDetail,
+    ]
+    .into_iter()
+    .find(|&key| message == text(UiLanguage::English, key))
+    .map(|key| text(language, key))
+}
+
+fn teletext_decoder_health_message(language: UiLanguage, message: &str) -> Option<&'static str> {
+    let key = match message {
+        "The selected FFmpeg runtime passed teletext page selection, subtitle text and colour bitmap decoding." => {
+            TextKey::TeletextDecoderReady
+        }
+        "Teletext decoding is unavailable. Select an FFmpeg 9 runtime with libzvbi teletext support." => {
+            TextKey::TeletextDecoderMissing
+        }
+        "The teletext decoder lacks required page-selection or rendering options. Select a compatible FFmpeg 9 runtime." => {
+            TextKey::TeletextDecoderOptions
+        }
+        "The teletext decoder check could not finish. Review FFmpeg runtime availability and permissions." => {
+            TextKey::TeletextDecoderHelpFailed
+        }
+        "Teletext page and subtitle text decoding failed. Select a compatible FFmpeg 9 runtime." => {
+            TextKey::TeletextDecoderTextFailed
+        }
+        "Teletext colour bitmap decoding failed. Select a compatible FFmpeg 9 runtime." => {
+            TextKey::TeletextDecoderBitmapFailed
+        }
+        _ => return None,
+    };
+    Some(text(language, key))
+}
+
 fn teletext_configuration_health_message(
     language: UiLanguage,
     title: &str,
     message: &str,
 ) -> Option<String> {
     match title {
+        "Teletext decoding" => Some(
+            teletext_decoder_health_message(language, message)
+                .unwrap_or(message)
+                .to_owned(),
+        ),
         "Teletext work configuration" => Some(
             teletext_work_health_message(language, message).unwrap_or_else(|| message.to_owned()),
         ),
         "Teletext output configuration" => Some(
             teletext_output_health_message(language, message)
+                .unwrap_or(message)
+                .to_owned(),
+        ),
+        "Teletext authoring configuration" => Some(
+            teletext_authoring_health_message(language, message)
                 .unwrap_or(message)
                 .to_owned(),
         ),
@@ -5519,18 +5686,7 @@ pub fn health_check_message_text(
     {
         return localized;
     }
-    if title == "Teletext decoding" {
-        let key = match displayed_message {
-            "The selected FFmpeg runtime passed teletext page selection, subtitle text and colour bitmap decoding." => TextKey::TeletextDecoderReady,
-            "Teletext decoding is unavailable. Select an FFmpeg 9 runtime with libzvbi teletext support." => TextKey::TeletextDecoderMissing,
-            "The teletext decoder lacks required page-selection or rendering options. Select a compatible FFmpeg 9 runtime." => TextKey::TeletextDecoderOptions,
-            "The teletext decoder check could not finish. Review FFmpeg runtime availability and permissions." => TextKey::TeletextDecoderHelpFailed,
-            "Teletext page and subtitle text decoding failed. Select a compatible FFmpeg 9 runtime." => TextKey::TeletextDecoderTextFailed,
-            "Teletext colour bitmap decoding failed. Select a compatible FFmpeg 9 runtime." => TextKey::TeletextDecoderBitmapFailed,
-            _ => return displayed_message.to_owned(),
-        };
-        return text(language, key).to_owned();
-    }
+
     if title == "Unavailable" {
         if let Some(localized) = unavailable_health_message(language, displayed_message) {
             return localized;
@@ -6166,7 +6322,9 @@ mod tests {
     fn programme_checkpoint_health_text_is_localized_for_every_language() {
         for engine in ["YAML", "Block"] {
             let title = format!("{engine} Playout State");
-            let message = format!("50 - Health (playout 88): missing or incompatible {engine} boundary checkpoint; Refresh is unsafe. Use an explicit Reset to create compatible state.");
+            let message = format!(
+                "50 - Health (playout 88): missing or incompatible {engine} boundary checkpoint; Refresh is unsafe. Use an explicit Reset to create compatible state."
+            );
             for definition in crate::admin::languages::LANGUAGES {
                 let language = UiLanguage::from_config(definition.code);
                 let localized_title = health_check_title_text(language, &title);
@@ -6217,9 +6375,15 @@ mod tests {
     #[test]
     fn classic_playout_health_text_is_localized_for_every_language() {
         for message in [
-            format!("{CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX}50 - Health{CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX}"),
-            format!("Classic playout state is not safe to Refresh for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"),
-            format!("Classic playout state is not safe to Refresh or preserve the current programme for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"),
+            format!(
+                "{CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX}50 - Health{CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX}"
+            ),
+            format!(
+                "Classic playout state is not safe to Refresh for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"
+            ),
+            format!(
+                "Classic playout state is not safe to Refresh or preserve the current programme for: 50 - Health{CLASSIC_PLAYOUT_STATE_LEGACY_SUFFIX}"
+            ),
         ] {
             for definition in crate::admin::languages::LANGUAGES {
                 let language = UiLanguage::from_config(definition.code);
@@ -6705,7 +6869,12 @@ mod tests {
                 healthy,
                 text(language, TextKey::JavascriptAudioSelectionHealthy)
             );
-            let warning = health_check_message_text(language, "JavaScript Audio Selection", "12 JavaScript audio-selector loading or execution failures recorded since startup.", "JavaScript audio selection fell back");
+            let warning = health_check_message_text(
+                language,
+                "JavaScript Audio Selection",
+                "12 JavaScript audio-selector loading or execution failures recorded since startup.",
+                "JavaScript audio selection fell back",
+            );
             assert!(warning.contains("12"));
             assert!(!warning.contains("{count}"));
             if language != UiLanguage::English {
@@ -6776,11 +6945,15 @@ mod tests {
     fn selection_review_health_is_localized_for_every_language() {
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
-            for message in ["Initial add-on selection is awaiting review",
-                "Preview and save the list selection before its first publication or media acquisition."] {
+            for message in [
+                "Initial add-on selection is awaiting review",
+                "Preview and save the list selection before its first publication or media acquisition.",
+            ] {
                 for (full, brief) in [(message, ""), ("", message)] {
-                    assert_eq!(health_check_message_text(language, "Add-on media lists", full, brief),
-                        text(language, TextKey::AddonSelectionReviewRequired));
+                    assert_eq!(
+                        health_check_message_text(language, "Add-on media lists", full, brief),
+                        text(language, TextKey::AddonSelectionReviewRequired)
+                    );
                 }
             }
         }
@@ -6950,6 +7123,42 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, HLS_LIVE_DELIVERY_TITLE);
                 assert!(!localized.contains(HLS_LIVE_DELIVERY_SUFFIX));
+            }
+        }
+    }
+    #[test]
+    fn teletext_authoring_health_configuration_is_localized_without_acceptance_claims() {
+        let title = "Teletext authoring configuration";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            assert_eq!(
+                health_check_title_text(language, title),
+                text(language, TextKey::TeletextAuthoringHealthTitle)
+            );
+            for key in [
+                TextKey::TeletextAuthoringHealthAbsentBrief,
+                TextKey::TeletextAuthoringHealthAbsentDetail,
+                TextKey::TeletextAuthoringHealthValidBrief,
+                TextKey::TeletextAuthoringHealthValidDetail,
+                TextKey::TeletextAuthoringHealthInvalidBrief,
+                TextKey::TeletextAuthoringHealthInvalidDetail,
+                TextKey::TeletextAuthoringHealthUnreadableBrief,
+                TextKey::TeletextAuthoringHealthUnreadableDetail,
+            ] {
+                let canonical = text(UiLanguage::English, key);
+                let localized = text(language, key);
+                assert!(!localized.is_empty());
+                assert_eq!(
+                    health_check_message_text(language, title, canonical, canonical),
+                    localized
+                );
+                assert_eq!(
+                    health_check_message_text(language, title, "", canonical),
+                    localized
+                );
+                if language != UiLanguage::English {
+                    assert_ne!(canonical, localized);
+                }
             }
         }
     }
