@@ -74,10 +74,10 @@ pub fn build_request(
     build_request_for_schema(context, wire::TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION)
 }
 
-/// Build the unchanged guide request under a trusted explicit schema 1 or 2.
+/// Build the unchanged guide request under a trusted explicit schema 1, 2 or 3.
 ///
 /// Host selection precedes conversion. Civil dates, exact source offsets,
-/// programme roles/content and all input limits are identical for both versions.
+/// programme roles/content and all input limits are identical for all versions.
 /// This does not negotiate an add-on capability or grant invocation authority.
 /// # Errors
 /// Returns `UnsupportedSchema` for any other version and the same context,
@@ -90,6 +90,7 @@ pub fn build_request_for_schema(
         expected_schema,
         wire::TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION
             | wire::TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION
+            | wire::TELETEXT_PAGES_V3_REQUEST_SCHEMA_VERSION
     ) {
         return Err(wire::TeletextPagesRequestError::UnsupportedSchema.into());
     }

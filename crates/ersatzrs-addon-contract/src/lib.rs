@@ -20,6 +20,8 @@ mod teletext_pages;
 pub use teletext_pages::*;
 mod teletext_pages_v2;
 pub use teletext_pages_v2::*;
+mod teletext_pages_v3;
+pub use teletext_pages_v3::*;
 mod tool_update;
 pub use tool_update::*;
 

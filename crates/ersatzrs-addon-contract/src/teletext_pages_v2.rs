@@ -141,37 +141,46 @@ impl TeletextPagesV2Response {
         crate::teletext_pages::reject_duplicate_keys(bytes)?;
         let response: Self =
             serde_json::from_slice(bytes).map_err(|_| TeletextPagesError::InvalidJson)?;
-        if response.schema_version != TELETEXT_PAGES_V2_RESPONSE_SCHEMA_VERSION {
+        response.validate_wire_bounds(expected_generation)?;
+        Ok(response)
+    }
+
+    /// Apply the unchanged v2 bounds inside a separately negotiated envelope.
+    pub(crate) fn validate_wire_bounds(
+        &self,
+        expected_generation: &str,
+    ) -> Result<(), TeletextPagesV2Error> {
+        if self.schema_version != TELETEXT_PAGES_V2_RESPONSE_SCHEMA_VERSION {
             return Err(TeletextPagesError::UnsupportedSchema.into());
         }
-        for generation in [expected_generation, response.generation.as_str()] {
+        for generation in [expected_generation, self.generation.as_str()] {
             if generation.is_empty() || generation.len() > MAX_TELETEXT_PAGES_GENERATION_BYTES {
                 return Err(TeletextPagesError::InvalidGeneration.into());
             }
         }
-        if response.generation != expected_generation {
+        if self.generation != expected_generation {
             return Err(TeletextPagesError::GenerationMismatch.into());
         }
-        if !(1..=MAX_TELETEXT_PAGES_RECORDS).contains(&response.pages.len()) {
+        if !(1..=MAX_TELETEXT_PAGES_RECORDS).contains(&self.pages.len()) {
             return Err(TeletextPagesError::PageCount.into());
         }
         // Bound raw collections without charging page metadata as additional
         // pages. Repeated identities still count; host semantic/declaration
         // budgets independently bound aggregate work after wire parsing.
         for count in [
-            response.page_enhancements.len(),
-            response.magazines.len(),
-            response.objects.len(),
-            response.drcs.len(),
-            response.mots.len(),
-            response.mot_selections.len(),
-            response.empty_object_pages.len(),
+            self.page_enhancements.len(),
+            self.magazines.len(),
+            self.objects.len(),
+            self.drcs.len(),
+            self.mots.len(),
+            self.mot_selections.len(),
+            self.empty_object_pages.len(),
         ] {
             if count > MAX_TELETEXT_PAGES_RECORDS {
                 return Err(TeletextPagesV2Error::RecordCount);
             }
         }
-        Ok(response)
+        Ok(())
     }
 }
 
@@ -207,7 +216,7 @@ where
     Option::deserialize(deserializer)
 }
 
-fn deserialize_object<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub(crate) fn deserialize_object<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,

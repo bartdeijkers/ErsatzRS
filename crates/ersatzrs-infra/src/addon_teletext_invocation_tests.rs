@@ -470,9 +470,13 @@ mod unix {
 
     #[tokio::test]
     async fn generic_dispatch_remains_rejected_even_for_enabled_declared_package() {
-        let fixture =
-            Fixture::with_contracts("exec cat", &["teletext.pages.v1", "teletext.pages.v2"]).await;
-        for capability in ["teletext.pages.v1", "teletext.pages.v2"] {
+        let capabilities = [
+            "teletext.pages.v1",
+            "teletext.pages.v2",
+            "teletext.pages.v3",
+        ];
+        let fixture = Fixture::with_contracts("exec cat", &capabilities).await;
+        for capability in capabilities {
             let result = super::super::super::resolve_enabled_addon_command(
                 &fixture.pool,
                 &fixture.manifest.id,

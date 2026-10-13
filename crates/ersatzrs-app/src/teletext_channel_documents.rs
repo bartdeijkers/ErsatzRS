@@ -35,11 +35,12 @@ pub const PREPARATION_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BINDINGS: usize = 1024;
 
 /// Exact preflight request bytes for the contracts selected by one channel.
-/// At most two independently capped 4 MiB templates are retained, separately
+/// At most three independently capped 4 MiB templates are retained, separately
 /// from the response budget. These bytes convey no durable guide authority.
 pub struct TeletextChannelRequestTemplates {
     v1: Option<Vec<u8>>,
     v2: Option<Vec<u8>>,
+    v3: Option<Vec<u8>>,
 }
 
 impl TeletextChannelRequestTemplates {
@@ -49,6 +50,7 @@ impl TeletextChannelRequestTemplates {
         match contract {
             TeletextPageContract::V1 => self.v1.as_deref(),
             TeletextPageContract::V2 => self.v2.as_deref(),
+            TeletextPageContract::V3 => self.v3.as_deref(),
         }
     }
 }
@@ -58,6 +60,7 @@ impl fmt::Debug for TeletextChannelRequestTemplates {
         f.debug_struct("TeletextChannelRequestTemplates")
             .field("v1_bytes", &self.v1.as_ref().map(Vec::len))
             .field("v2_bytes", &self.v2.as_ref().map(Vec::len))
+            .field("v3_bytes", &self.v3.as_ref().map(Vec::len))
             .finish()
     }
 }
@@ -669,8 +672,16 @@ pub(super) fn preflight_requests(
         )
         .into());
     }
-    let mut requests = TeletextChannelRequestTemplates { v1: None, v2: None };
-    for contract in [TeletextPageContract::V1, TeletextPageContract::V2] {
+    let mut requests = TeletextChannelRequestTemplates {
+        v1: None,
+        v2: None,
+        v3: None,
+    };
+    for contract in [
+        TeletextPageContract::V1,
+        TeletextPageContract::V2,
+        TeletextPageContract::V3,
+    ] {
         if selection
             .bindings
             .iter()
@@ -680,6 +691,7 @@ pub(super) fn preflight_requests(
             match contract {
                 TeletextPageContract::V1 => requests.v1 = Some(input),
                 TeletextPageContract::V2 => requests.v2 = Some(input),
+                TeletextPageContract::V3 => requests.v3 = Some(input),
             }
         }
     }

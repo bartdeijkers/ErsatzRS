@@ -22,6 +22,7 @@ pub mod teletext_generations;
 pub mod teletext_guide;
 pub mod teletext_pages;
 pub mod teletext_pages_v2;
+pub mod teletext_pages_v3;
 pub mod teletext_profile_documents;
 pub mod teletext_profiles;
 pub mod teletext_publications;

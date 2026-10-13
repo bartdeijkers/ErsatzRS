@@ -119,6 +119,16 @@ pub fn parse_declared_service(
     declared_budget: d::TeletextDeclaredServiceBudget,
 ) -> Result<d::TeletextDeclaredService, TeletextAuthoredPagesError> {
     let input = wire::TeletextPagesV2Response::from_json(bytes, expected_generation)?;
+    checked_declared_service(input, service_budget, declared_budget)
+}
+
+/// Convert a response whose closed wire format and correlation were validated
+/// by its selected contract parser. V3 shares every V2 semantic/budget check.
+pub(super) fn checked_declared_service(
+    input: wire::TeletextPagesV2Response,
+    service_budget: d::TeletextServiceBudget,
+    declared_budget: d::TeletextDeclaredServiceBudget,
+) -> Result<d::TeletextDeclaredService, TeletextAuthoredPagesError> {
     budget::preflight(&input, service_budget, declared_budget)?;
     let base = convert_base(input.language, input.initial_page, input.pages)?;
     let pages = input

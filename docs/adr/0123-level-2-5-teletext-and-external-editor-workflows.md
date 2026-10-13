@@ -32,6 +32,11 @@ The application requires a trusted native export confirmation port; its producti
 file/resource/edit-policy adapter remains unimplemented. A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.
+Negotiated v3 now captures original template/theme/zone/dynamic-field declarations
+with exact producer bytes. It shares the complete v2 service validation and checks
+actual effective Level 2.5 panel widths. Durable reload reconstructs the same
+metadata without package invocation; unchanged `original_only` policy grants no
+editing. Native file mapping/export confirmation and edited concepts remain open.
 
 
 Checked colour references, four-bit RGB, editable CLUT2/3 declarations
@@ -823,6 +828,25 @@ records. It records identity mapping, exact navigation, source/template/package
 and profile revisions, themes/overrides, zones, dynamic fields and dependencies.
 Compare it with authoritative host export/configuration state; supplied metadata
 does not grant package, profile or publication authority.
+
+Capture producer-owned authoring declarations through negotiated
+`teletext.pages.v3`, with a schema-3 envelope containing the unchanged schema-2
+service and schema-1 authoring metadata. Preserve closed v1/v2 behavior; select
+the highest version supported by the host and the exact installed manifest, with
+no downgrade after a selected producer fails. The original response retains
+these declarations alongside the exact installed package/profile selection.
+
+Use symbolic template revision and theme identifiers, typed colour/layout/number/
+boolean overrides, and exact display-page/subcode declarations. Named rectangles
+classify free content, fillable zones and generated content; undeclared cells stay
+protected. Rectangles use main/left-panel/right-panel local coordinates and fit
+both standard bounds and actual selected presentation. Dynamic-field identifiers
+refer to generated regions through symbolic bindings. Identifiers convey no path,
+command, general settings bag or package activation. This capture describes the
+original; native export confirmation and complete imported-model comparison must
+still establish the actual permitted edit scope, including indirect resource
+changes. Existing `original_only` revisions remain uneditable until an explicit
+validated concept mechanism is implemented.
 
 For pinned QTeletextMaker 1.0, one editable TTI document per stable page/subpage
 avoids ordinal renumbering. Restore identities through explicit mapping, not

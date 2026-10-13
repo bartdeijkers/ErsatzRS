@@ -2724,6 +2724,91 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 negotiated authoring-metadata checkpoint:
+Criterion: preserve addon-owned templates/themes/zones/dynamic-field declarations
+with the authoritative original before connecting the agreed editor/sidecar flow.
+This closes the missing producer-metadata seam recorded by checkpoint41d0125a;
+it does not accept editing, TTI interchange or the generic engine.
+
+The exact installed manifest now selects V3 before V2/V1. Negotiated
+teletext.pages.v3 wraps the complete unchanged schema2 service with closed
+schema1 authoring declarations. Requests retain existing guide fields at schema3;
+fixed installed pages invocation and generation/selection/deadline fences remain.
+Generic dispatch still rejects all three capabilities. Selected V3 failure never
+retries V2/V1. The existing V2 conversion retains all service/declaration/resource
+budgets and constructors without JSON reserialization or semantic downgrade.
+
+Metadata captures template revision, named theme/typed overrides, exact original
+display identities, free/zone/generated rectangles and generated-field bindings.
+The strict wire parser checks closed maps/duplicate keys, symbolic identifiers,
+raw/collection bounds, unique complete page coverage, disjoint rectangles and
+receiver-header protection. Application validation also checks actual effective
+Level2.5 sidepanel widths, including page-over-magazine precedence and suppression
+of Level3.5-only panels. Debug/error values exclude authored content and settings.
+The reference owns exact schema fields and limits; these are descriptive original
+boundaries, not imported edit or publication authority.
+
+Private prepared/restored source records retain exact original response bytes
+and expose readonly validated metadata. Existing format1 originals reparse the
+same source on reload without producer invocation. Optional saved V3 guide input
+is omitted when absent, retaining legacy V1/V2 bytes; explicit null or mismatched
+selected requests reject. Existing policy_version1/original_only remains
+unchanged and grants no editing. No installation/config/publication write follows
+from metadata parsing, and imported metadata cannot impersonate an invocation.
+
+Three real installed-fixture tests prove highest-version negotiation, concurrent
+same-addon channel1/day and channel2/night isolation under the explicit existing
+two-worker setting, and actual red/blue native preview pixels from their CLUT2.
+The complete display plus M29 packet tuples and exact response/guide/metadata
+survive file-backed reopen without reinvocation or automatic publication.
+Mixed V1/V3 composition keeps metadata attached only to its original producer.
+Four malformed V3 cases (overlap, foreign page, actual-panel overflow, extra
+publish authority) preserve nonempty pending/accepted pointers, original revision,
+configuration/bindings and the recovered exact accepted native service.
+
+Initial native run9c644fda-c74a-4048-a56d-bd67cefd6907 passed nine unchanged design/
+export-receipt cases and exposed a missed V3 request-builder guard plus fixture
+capacity/installation-pin errors. Those concrete causes are corrected. A later
+run exposed a fixture comparison that omitted separate M29 palette packets;
+whole-service tuple comparison now retains them alongside the pixel assertions.
+Final native run25d21cf3-8157-4936-b569-d4ab99952974 passes3/3 new identities.
+Lib run10bcf470-2a87-4079-9e9c-82627d0f7d4f passes67/67; missing request/profile
+module filters are explicitly covered by438788e9-fbf3-4f78-a714-c68d37cedf16,
+35/35. After validator helper extraction, a783cbe2-0bfc-4734-9c5f-c30b606209e2
+passes9/9 V3 identities again. The successful union is114 unique identities;
+repeats count once, and the initial native suite is not reported as wholly green.
+The nine unchanged native cases remain valid across the V3-only guard/helper fixes.
+No admin/transport implementation changes occur in this checkpoint. Reuse the
+unchanged representative headed/decoding/TSDuck/client/smoke receipts below;
+there is no new V3 HTTP/client, editor, platform or full-CI acceptance claim.
+
+Strict Clippy passes all targets of addon-contract/domain/app/infra/web; final
+formatting, architecture-lint (all four ratchets zero) and progress validation
+pass. No new lint exemptions, dependencies, migration, admin or transport changes.
+Proof: tmp/phase9-authoring-metadata/identity.json and immutable
+receipt-sha256.txt, SHA256087ef11d6c1a9a0426a8aef2a03b6a8f53854dd2383f7705fdea2351009c68ab.
+The receipt binds source/native logs and excludes mutable progress prose.
+
+Current criterion-to-next-step map (remaining detailed evidence stays below):
+| Criterion | Implemented/proven | Missing evidence or concrete next blocker |
+| --- | --- | --- |
+| Preserve original addon authoring declarations | V3 capture, strict bounds, two themes, exact durable reload | No operational TTI/sidecar export yet |
+| Server-owned export/edit baseline | Immutable export receipt/CAS and syntax codec from41d0125a | Native file/resource mapping and required export-confirmation adapter |
+| Edited concept -> preview -> explicit publication | Original-only flow is proven; metadata grants no edit permission | Private validated overlay, indirect protected-resource comparison and exact-head save |
+| Actual QTM roundtrip | Pinned editor calibration is reused | Host export -> edit/save -> import/preview/publish still unproven |
+| Full engine acceptance | Prior representative stream/client and standards receipts retained | All open Level2.5/fallback, source/Next, Lua/timing, warm-transition/restart/drain, localized admin and six-platform gates remain |
+
+Next implement a server-owned file/resource/edit baseline from the frozen original
+and captured declarations, then connect native TTI/sidecar export confirmation.
+Use a synthetic editable zone to prove exact protected content/resources and
+navigation, stale-export rejection, unpublished concept preview and unchanged
+broadcast until explicit publication. Continue through the actual pinned editor
+and ordinary stream/client flow. Do not convert OriginalOnly descriptions into
+permission flags or edit installed package files. Resource/geometry/editor gaps
+remain accepted requirements, not silent restrictions. Production TV-guide work
+still waits for independent complete engine acceptance; milestone statuses,
+dependencies and acceptance text are unchanged. No push or publication.
+
 2026-10-13 trusted interchange prerequisite checkpoint:
 Criterion: retain the authoritative export revision/edit baseline independently
 of uploaded TTI/sidecar bytes, reject stale or corrupted receipts without changing

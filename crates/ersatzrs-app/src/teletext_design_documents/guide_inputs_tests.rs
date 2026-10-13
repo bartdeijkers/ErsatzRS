@@ -73,6 +73,11 @@ fn mixed_requests_preserve_exact_bytes_and_legacy_encoding_omits_the_new_field()
     let encoded =
         encode_teletext_design_documents_with_requests(fixture.input(), &templates, budget())
             .unwrap();
+    let value: Value = serde_json::from_slice(encoded.bytes()).unwrap();
+    assert!(!value["guide_inputs"]
+        .as_object()
+        .unwrap()
+        .contains_key("v3"));
     let marker = b",\"guide_inputs\":";
     let index = encoded
         .bytes()
@@ -119,6 +124,68 @@ fn mixed_requests_preserve_exact_bytes_and_legacy_encoding_omits_the_new_field()
         }
         assert!(debug.contains("v1_bytes"));
     }
+}
+
+#[test]
+fn v3_guide_input_is_selected_exact_optional_and_closed() {
+    let fixture = Fixture::with_authoring();
+    let templates = requests(&fixture.selection);
+    let encoded = encoded_with_requests(&fixture);
+    let restored = decode_teletext_design_documents(encoded.bytes(), budget()).unwrap();
+    let inputs = restored.guide_inputs().unwrap();
+    assert_eq!(
+        inputs.request(TeletextPageContract::V1),
+        templates.request(TeletextPageContract::V1)
+    );
+    assert!(inputs.request(TeletextPageContract::V2).is_none());
+    assert_eq!(
+        inputs.request(TeletextPageContract::V3),
+        templates.request(TeletextPageContract::V3)
+    );
+    let baseline: Value = serde_json::from_slice(encoded.bytes()).unwrap();
+    for replacement in [Value::Null, json!(42), json!([])] {
+        let mut invalid = baseline.clone();
+        invalid["guide_inputs"]["v3"] = replacement;
+        assert_eq!(
+            decode(&invalid).unwrap_err().reason,
+            TeletextDesignDocumentFailure::Json
+        );
+    }
+    let mut missing = baseline.clone();
+    missing["guide_inputs"]
+        .as_object_mut()
+        .unwrap()
+        .remove("v3");
+    assert_eq!(
+        decode(&missing).unwrap_err().reason,
+        TeletextDesignDocumentFailure::GuideInputs
+    );
+    let mut wrong_schema = baseline.clone();
+    let mut request: Value =
+        serde_json::from_str(wrong_schema["guide_inputs"]["v3"].as_str().unwrap()).unwrap();
+    request["schema_version"] = json!(2);
+    wrong_schema["guide_inputs"]["v3"] = json!(serde_json::to_string(&request).unwrap());
+    assert_eq!(
+        decode(&wrong_schema).unwrap_err().reason,
+        TeletextDesignDocumentFailure::GuideInputs
+    );
+    let mut foreign = value_with_requests(&Fixture::mixed());
+    foreign["guide_inputs"]["v3"] = baseline["guide_inputs"]["v3"].clone();
+    assert_eq!(
+        decode(&foreign).unwrap_err().reason,
+        TeletextDesignDocumentFailure::GuideInputs
+    );
+    let bytes = serde_json::to_string(&baseline).unwrap();
+    let duplicate = bytes.replace(
+        "\"v3\":",
+        &format!("\"v3\":{},\"v3\":", baseline["guide_inputs"]["v3"]),
+    );
+    assert_eq!(
+        decode_teletext_design_documents(duplicate.as_bytes(), budget())
+            .unwrap_err()
+            .reason,
+        TeletextDesignDocumentFailure::Json
+    );
 }
 
 #[test]

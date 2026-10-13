@@ -18,6 +18,43 @@ values and stored originals are not readiness, edit-permission or publication
 tokens. Complete resource/region/client and editor acceptance still requires its
 independent evidence; stored export bytes receive separate native confirmation.
 
+## Captured addon authoring metadata
+
+Negotiated `teletext.pages.v3` contains `schema_version: 3`, `service` (the
+complete unchanged schema-2 authored service) and `authoring` (schema-1 producer
+metadata). The host selects the highest supported installed capability and uses
+the same fixed `pages` command and guide fields at request schema 3. Failure never
+retries v2/v1. Existing v1/v2 contracts remain closed and unchanged.
+
+Authoring metadata contains `template: {id, revision}`, `theme: {id, overrides}`
+and one `pages` entry per exact original display address. Each entry has `page`,
+`regions` and `dynamic_fields`. Region fields are `id`, `kind` (`free`, `zone`,
+`generated`), `area` (`main`, `left_panel`, `right_panel`), `row`, `column`, `width`
+and `height`. Coordinates are local to each area; main columns have width 40,
+panels at most 16 and display height 25. Actual panel availability/width also
+bounds a declaration. Regions in the same area do not overlap. Editable main
+regions cannot include receiver-owned header cells 0–7. Undeclared cells are
+protected. Dynamic fields use `{id, region, binding}` and refer to a declared
+`generated` region. These declarations describe content ownership; they do not
+prove that an imported change has respected it.
+
+Identifiers are symbolic ASCII tokens of 1–128 bytes, using letters, digits,
+`_`, `-` and `.`; they are not localized display names or filesystem paths.
+Overrides use unique symbolic keys with tagged `colour` (four-bit RGB), `layout`
+(symbolic `id`), `number` (signed integer) or `boolean` values. Schema caps are
+256 overrides, 256 regions/fields per page and 4,096 aggregate regions/fields,
+within the existing whole-response byte/page bounds. Invalid input rejects the
+complete contribution; no collection or rectangle is truncated.
+
+The validated producer source exposes these immutable declarations beside exact
+original response bytes. Original revisions revalidate them on reload without
+invoking packages. The host's existing complete selection supplies installation,
+package and profile identity; producer or uploaded metadata cannot replace it.
+Captured metadata does not change `policy_version: 1, kind: original_only` or
+make an original editable. Operational sidecar/file mapping, native export
+confirmation, edited-concept validation and the full editor roundtrip remain
+open. P9A-04 owns verification and the next concrete integration step.
+
 ## Resource identity and DRCS lookup
 
 The implemented authored resource identity uses a raw magazine/page byte and

@@ -63,6 +63,123 @@ fn authored_repository() -> Repository {
     repo
 }
 
+fn authored_metadata_value() -> serde_json::Value {
+    let service: serde_json::Value = serde_json::from_slice(&authored_output()).unwrap();
+    json!({"schema_version":3,"service":service,"authoring":{
+        "schema_version":1,"template":{"id":"synthetic-template","revision":"1"},
+        "theme":{"id":"private-night-theme","overrides":[]},
+        "pages":[{"page":{"page":200,"subcode":0},
+            "regions":[{"id":"custom-zone","kind":"zone","area":"main",
+                "row":1,"column":8,"width":16,"height":2}],"dynamic_fields":[]}]}})
+}
+
+#[test]
+fn selected_v3_preserves_original_allocation_metadata_and_existing_authored_service() {
+    use crate::teletext_profile_documents::BoundTeletextDocumentInput;
+    let mut selected = selection(1);
+    selected.contract = ersatzrs_domain::TeletextPageContract::V3;
+    let value = authored_metadata_value();
+    let mut bytes = serde_json::to_vec_pretty(&value).unwrap();
+    bytes.extend_from_slice(b"\n \t");
+    let original = bytes.clone();
+    let allocation = bytes.as_ptr();
+    let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
+    let prepared = BoundTeletextDocumentInput::from_channel_receipt(
+        document_receipt(selected.clone(), bytes),
+        deadline,
+    )
+    .validate(budgets())
+    .unwrap();
+    assert_eq!(prepared.source().bytes(), original);
+    assert_eq!(prepared.source().bytes().as_ptr(), allocation);
+    assert_eq!(prepared.source().contract(), selected.contract);
+    assert_eq!(prepared.source().generation(), GENERATION);
+    assert_eq!(
+        prepared.source().authoring().unwrap().theme.id,
+        "private-night-theme"
+    );
+    let TeletextProfileDocument::Authored(declared) = prepared.document() else {
+        panic!("V3 service was downgraded")
+    };
+    let owner = declared.semantic().base().pages[0].address;
+    assert_eq!(
+        declared
+            .semantic()
+            .effective_program(owner)
+            .unwrap()
+            .1
+            .commands()
+            .len(),
+        3
+    );
+    for debug in [
+        format!("{prepared:?}"),
+        format!("{:?}", prepared.source()),
+        format!("{:?}", prepared.source().authoring()),
+    ] {
+        for sentinel in [GENERATION, "private-night-theme", "Café", "custom-zone"] {
+            assert!(!debug.contains(sentinel));
+        }
+    }
+    let (_, _, _, source, end) = prepared.into_parts_with_source();
+    assert_eq!(source.bytes().as_ptr(), allocation);
+    assert_eq!(source.authoring().unwrap().theme.id, "private-night-theme");
+    assert_eq!(end, deadline);
+}
+
+#[test]
+fn v3_regions_use_actual_page_precedence_and_level25_sidepanel_widths() {
+    use crate::teletext_pages_v3::{
+        parse_authored_service_with_metadata, TeletextAuthoredPagesV3Error,
+    };
+    let parse = |value: &serde_json::Value| {
+        parse_authored_service_with_metadata(
+            &serde_json::to_vec(value).unwrap(),
+            GENERATION,
+            budgets().service,
+            budgets().declarations,
+        )
+    };
+    for (area, last_column) in [("left_panel", 3), ("right_panel", 11)] {
+        let mut value = authored_metadata_value();
+        let region = &mut value["authoring"]["pages"][0]["regions"][0];
+        region["area"] = json!(area);
+        region["column"] = json!(last_column);
+        region["width"] = json!(1);
+        assert!(parse(&value).is_ok());
+        let mut over = value.clone();
+        over["authoring"]["pages"][0]["regions"][0]["column"] = json!(last_column + 1);
+        assert!(matches!(
+            parse(&over),
+            Err(TeletextAuthoredPagesV3Error::PanelGeometry { page: 0, region: 0 })
+        ));
+        let mut level35 = value.clone();
+        level35["service"]["magazines"][0]["presentation"]["panels"]["status"] =
+            json!("level35_only");
+        assert!(matches!(
+            parse(&level35),
+            Err(TeletextAuthoredPagesV3Error::PanelGeometry { .. })
+        ));
+        let mut absent = value;
+        absent["service"]["magazines"] = json!([]);
+        assert!(matches!(
+            parse(&absent),
+            Err(TeletextAuthoredPagesV3Error::PanelGeometry { .. })
+        ));
+    }
+    let mut page_precedence = authored_metadata_value();
+    page_precedence["authoring"]["pages"][0]["regions"][0] = json!({
+        "id":"custom-zone","kind":"zone","area":"left_panel",
+        "row":1,"column":3,"width":1,"height":1});
+    let mut page_defaults = page_precedence["service"]["magazines"][0]["presentation"].clone();
+    page_defaults["panels"]["width"] = json!(2);
+    page_precedence["service"]["page_enhancements"][0]["presentation"] = page_defaults;
+    assert!(matches!(
+        parse(&page_precedence),
+        Err(TeletextAuthoredPagesV3Error::PanelGeometry { .. })
+    ));
+}
+
 fn document_receipt(
     selected: TeletextSelectionSnapshot,
     stdout: Vec<u8>,
@@ -133,6 +250,7 @@ fn raw_source_failures_never_create_validated_retained_records() {
     for contract in [
         ersatzrs_domain::TeletextPageContract::V1,
         ersatzrs_domain::TeletextPageContract::V2,
+        ersatzrs_domain::TeletextPageContract::V3,
     ] {
         for bytes in [
             vec![b' '; wire::MAX_TELETEXT_PAGES_OUTPUT_BYTES + 1],
@@ -152,6 +270,7 @@ fn raw_source_failures_never_create_validated_retained_records() {
                 error,
                 BoundTeletextDocumentError::BaseResponse(_)
                     | BoundTeletextDocumentError::AuthoredResponse(_)
+                    | BoundTeletextDocumentError::AuthoredMetadataResponse(_)
             ));
             assert!(!format!("{error:?}").contains("private malformed source"));
         }

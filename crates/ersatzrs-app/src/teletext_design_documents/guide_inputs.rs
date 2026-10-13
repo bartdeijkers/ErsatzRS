@@ -18,6 +18,7 @@ const INPUT_VERSION: u16 = 1;
 pub struct TeletextSavedGuideInputs {
     v1: Option<Vec<u8>>,
     v2: Option<Vec<u8>>,
+    v3: Option<Vec<u8>>,
     has_guide_channels: bool,
 }
 
@@ -28,6 +29,7 @@ impl TeletextSavedGuideInputs {
         match contract {
             TeletextPageContract::V1 => self.v1.as_deref(),
             TeletextPageContract::V2 => self.v2.as_deref(),
+            TeletextPageContract::V3 => self.v3.as_deref(),
         }
     }
 
@@ -46,6 +48,7 @@ impl fmt::Debug for TeletextSavedGuideInputs {
             .debug_struct("TeletextSavedGuideInputs")
             .field("v1_bytes", &self.v1.as_ref().map(Vec::len))
             .field("v2_bytes", &self.v2.as_ref().map(Vec::len))
+            .field("v3_bytes", &self.v3.as_ref().map(Vec::len))
             .field("has_guide_channels", &self.has_guide_channels)
             .finish()
     }
@@ -71,6 +74,23 @@ pub(super) struct StoredGuideInputs {
     input_version: u16,
     v1: Required<String>,
     v2: Required<String>,
+    #[serde(skip_serializing_if = "optional_v3_absent")]
+    v3: OptionalV3Request,
+}
+
+// Missing denotes a legacy/unselected V3 request. Explicit null is rejected;
+// a captured V3 request is always an actual string under its separate wire cap.
+#[derive(Default, Serialize)]
+struct OptionalV3Request(Option<String>);
+
+impl<'de> Deserialize<'de> for OptionalV3Request {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer).map(|value| Self(Some(value)))
+    }
+}
+
+fn optional_v3_absent(value: &OptionalV3Request) -> bool {
+    value.0.is_none()
 }
 
 impl<'de> Deserialize<'de> for StoredGuideInputs {
@@ -81,12 +101,15 @@ impl<'de> Deserialize<'de> for StoredGuideInputs {
             input_version: u16,
             v1: Required<String>,
             v2: Required<String>,
+            #[serde(default)]
+            v3: OptionalV3Request,
         }
         let fields: Fields = map_only(deserializer)?;
         Ok(Self {
             input_version: fields.input_version,
             v1: fields.v1,
             v2: fields.v2,
+            v3: fields.v3,
         })
     }
 }
@@ -107,8 +130,11 @@ impl StoredGuideInputs {
         let request = validate(
             selection,
             generation,
-            self.v1.0.as_deref(),
-            self.v2.0.as_deref(),
+            [
+                self.v1.0.as_deref(),
+                self.v2.0.as_deref(),
+                self.v3.0.as_deref(),
+            ],
             0,
             budget,
         )?;
@@ -118,6 +144,7 @@ impl StoredGuideInputs {
         Ok(TeletextSavedGuideInputs {
             v1: self.v1.0.map(String::into_bytes),
             v2: self.v2.0.map(String::into_bytes),
+            v3: self.v3.0.map(String::into_bytes),
             has_guide_channels: request.is_some_and(|value| !value.channels.is_empty()),
         })
     }
@@ -128,6 +155,8 @@ pub(super) struct BorrowedGuideInputs<'a> {
     input_version: u16,
     v1: Option<&'a str>,
     v2: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    v3: Option<&'a str>,
 }
 
 pub(super) fn borrow<'a>(
@@ -147,7 +176,8 @@ pub(super) fn borrow<'a>(
     };
     let v1 = text(TeletextPageContract::V1)?;
     let v2 = text(TeletextPageContract::V2)?;
-    let request = validate(selection, generation, v1, v2, context_bytes, budget)?;
+    let v3 = text(TeletextPageContract::V3)?;
+    let request = validate(selection, generation, [v1, v2, v3], context_bytes, budget)?;
     if let Some(source) = source {
         super::source_fence::associate(source, request.as_ref())?;
     }
@@ -155,20 +185,21 @@ pub(super) fn borrow<'a>(
         input_version: INPUT_VERSION,
         v1,
         v2,
+        v3,
     })
 }
 
 fn validate(
     selection: &TeletextChannelSelectionSnapshot,
     generation: &str,
-    v1: Option<&str>,
-    v2: Option<&str>,
+    requests: [Option<&str>; 3],
     mut context_bytes: usize,
     budget: TeletextDesignDocumentBudget,
 ) -> Result<Option<TeletextPagesRequest>, TeletextDesignDocumentError> {
     let inputs = [
-        (TeletextPageContract::V1, v1),
-        (TeletextPageContract::V2, v2),
+        (TeletextPageContract::V1, requests[0]),
+        (TeletextPageContract::V2, requests[1]),
+        (TeletextPageContract::V3, requests[2]),
     ];
     for (contract, input) in inputs {
         let selected = selection

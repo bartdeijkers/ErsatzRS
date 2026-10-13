@@ -6,6 +6,7 @@
 use crate::{
     teletext_pages::parse_page_set,
     teletext_pages_v2::parse_declared_service,
+    teletext_pages_v3::parse_authored_service_with_metadata,
     teletext_profile_documents::{
         TeletextProfileDocument, TeletextProfileDocumentBudget, TeletextValidatedDocumentSource,
     },
@@ -146,6 +147,7 @@ pub struct TeletextSavedDocumentSource {
     contract: TeletextPageContract,
     generation: String,
     bytes: Vec<u8>,
+    authoring: Option<ersatzrs_addon_contract::TeletextAuthoringMetadataWire>,
 }
 impl TeletextSavedDocumentSource {
     #[must_use]
@@ -160,12 +162,21 @@ impl TeletextSavedDocumentSource {
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
+    /// Original producer metadata restored under its selected contract. The
+    /// saved `OriginalOnly` policy still grants no editor/import permissions.
+    #[must_use]
+    pub const fn authoring(
+        &self,
+    ) -> Option<&ersatzrs_addon_contract::TeletextAuthoringMetadataWire> {
+        self.authoring.as_ref()
+    }
 }
 impl fmt::Debug for TeletextSavedDocumentSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TeletextSavedDocumentSource")
             .field("contract", &self.contract)
             .field("bytes", &self.bytes.len())
+            .field("has_authoring", &self.authoring.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -500,6 +511,7 @@ fn contract(value: u32) -> Result<TeletextPageContract, TeletextDesignDocumentEr
     match value {
         1 => Ok(TeletextPageContract::V1),
         2 => Ok(TeletextPageContract::V2),
+        3 => Ok(TeletextPageContract::V3),
         _ => Err(failure(TeletextDesignDocumentFailure::Context)),
     }
 }
@@ -634,7 +646,7 @@ fn encode_documents(
         input.entry_addon_id,
         input.entry,
         input.v1_region,
-        &parsed,
+        &parsed.documents,
     )?;
     let envelope = BorrowedEnvelope {
         format_version: TELETEXT_DESIGN_DOCUMENT_VERSION,
@@ -772,7 +784,7 @@ pub fn decode_teletext_design_documents(
             response: &v.response,
         })
         .collect::<Vec<_>>();
-    let documents = parse_sources(
+    let parsed = parse_sources(
         &selection,
         &envelope.generation,
         &borrowed,
@@ -787,7 +799,7 @@ pub fn decode_teletext_design_documents(
         envelope.entry_addon_id.0.as_deref(),
         entry,
         envelope.v1_region.0,
-        &documents,
+        &parsed.documents,
     )?;
     let transmissions = envelope
         .resource_transmissions
@@ -803,11 +815,13 @@ pub fn decode_teletext_design_documents(
     let sources = envelope
         .documents
         .into_iter()
-        .map(|v| {
+        .zip(parsed.authoring)
+        .map(|(v, authoring)| {
             Ok(TeletextSavedDocumentSource {
                 contract: contract(v.contract)?,
                 generation: v.generation,
                 bytes: v.response.into_bytes(),
+                authoring,
             })
         })
         .collect::<Result<_, TeletextDesignDocumentError>>()?;
@@ -816,7 +830,7 @@ pub fn decode_teletext_design_documents(
             selection,
             generation: envelope.generation,
             sources,
-            documents,
+            documents: parsed.documents,
             entry_addon_id: envelope.entry_addon_id.0,
             entry,
             v1_region: envelope.v1_region.0,
@@ -827,49 +841,72 @@ pub fn decode_teletext_design_documents(
         },
     })
 }
+struct ParsedSources {
+    documents: Vec<TeletextProfileDocument>,
+    authoring: Vec<Option<ersatzrs_addon_contract::TeletextAuthoringMetadataWire>>,
+}
+
 fn parse_sources(
     selection: &TeletextChannelSelectionSnapshot,
     generation: &str,
     sources: &[BorrowedDocument<'_>],
     budget: TeletextProfileDocumentBudget,
-) -> Result<Vec<TeletextProfileDocument>, TeletextDesignDocumentError> {
+) -> Result<ParsedSources, TeletextDesignDocumentError> {
     if selection.bindings.len() != sources.len() {
         return Err(failure(TeletextDesignDocumentFailure::Association));
     }
     storage::<TeletextProfileDocument>(sources.len())?;
-    sources
-        .iter()
-        .enumerate()
-        .map(|(index, source)| {
-            let error = |reason| TeletextDesignDocumentError {
-                binding: Some(index),
-                reason,
-            };
-            let selected = selection.bindings[index].contract;
-            if source.contract != selected.schema_version() || source.generation != generation {
-                return Err(error(TeletextDesignDocumentFailure::Association));
+    storage::<Option<ersatzrs_addon_contract::TeletextAuthoringMetadataWire>>(sources.len())?;
+    let mut documents = Vec::with_capacity(sources.len());
+    let mut authoring = Vec::with_capacity(sources.len());
+    for (index, source) in sources.iter().enumerate() {
+        let error = |reason| TeletextDesignDocumentError {
+            binding: Some(index),
+            reason,
+        };
+        let selected = selection.bindings[index].contract;
+        if source.contract != selected.schema_version() || source.generation != generation {
+            return Err(error(TeletextDesignDocumentFailure::Association));
+        }
+        let (document, metadata) = match selected {
+            TeletextPageContract::V1 => {
+                let base = parse_page_set(source.response.as_bytes(), generation)
+                    .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
+                budget
+                    .service
+                    .validate_base_with_page_metadata(&base)
+                    .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
+                (TeletextProfileDocument::Base(base), None)
             }
-            match selected {
-                TeletextPageContract::V1 => {
-                    let base = parse_page_set(source.response.as_bytes(), generation)
-                        .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
-                    budget
-                        .service
-                        .validate_base_with_page_metadata(&base)
-                        .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
-                    Ok(TeletextProfileDocument::Base(base))
-                }
-                TeletextPageContract::V2 => parse_declared_service(
+            TeletextPageContract::V2 => parse_declared_service(
+                source.response.as_bytes(),
+                generation,
+                budget.service,
+                budget.declarations,
+            )
+            .map(|v| (TeletextProfileDocument::Authored(Box::new(v)), None))
+            .map_err(|_| error(TeletextDesignDocumentFailure::Document))?,
+            TeletextPageContract::V3 => {
+                let (service, metadata) = parse_authored_service_with_metadata(
                     source.response.as_bytes(),
                     generation,
                     budget.service,
                     budget.declarations,
                 )
-                .map(|v| TeletextProfileDocument::Authored(Box::new(v)))
-                .map_err(|_| error(TeletextDesignDocumentFailure::Document)),
+                .map_err(|_| error(TeletextDesignDocumentFailure::Document))?;
+                (
+                    TeletextProfileDocument::Authored(Box::new(service)),
+                    Some(metadata),
+                )
             }
-        })
-        .collect()
+        };
+        documents.push(document);
+        authoring.push(metadata);
+    }
+    Ok(ParsedSources {
+        documents,
+        authoring,
+    })
 }
 fn validate_entry(
     selection: &TeletextChannelSelectionSnapshot,
@@ -1232,7 +1269,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Root, "documents") => Path::Documents,
                 (Path::Root, "resource_transmissions") => Path::Transmissions,
                 (Path::Root, "guide_inputs") => Path::GuideInputs,
-                (Path::GuideInputs, "v1" | "v2") => Path::GuideRequest,
+                (Path::GuideInputs, "v1" | "v2" | "v3") => Path::GuideRequest,
                 (Path::Root, "guide_source") => Path::GuideSource,
                 (Path::GuideSource, "channel_ids") => Path::GuideChannels,
                 (Path::GuideSource, "context_digest") => Path::GuideDigest,

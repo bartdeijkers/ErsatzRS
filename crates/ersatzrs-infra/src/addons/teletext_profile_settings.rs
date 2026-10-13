@@ -39,9 +39,13 @@ pub(crate) struct ScopedConfiguration {
 
 /// Prefer the highest host-supported contract declared by this exact manifest.
 pub(crate) fn preferred_contract(manifest: &AddonManifest) -> Option<TeletextPageContract> {
-    [TeletextPageContract::V2, TeletextPageContract::V1]
-        .into_iter()
-        .find(|contract| manifest.has_capability(contract.capability()))
+    [
+        TeletextPageContract::V3,
+        TeletextPageContract::V2,
+        TeletextPageContract::V1,
+    ]
+    .into_iter()
+    .find(|contract| manifest.has_capability(contract.capability()))
 }
 
 /// Resolve the same bounded values used by writes and invocation admission.

@@ -20,6 +20,7 @@ use crate::{
     teletext_guide::{build_request_for_schema, SuppliedTeletextGuideContext},
     teletext_pages::{parse_page_set, TeletextPagesError},
     teletext_pages_v2::{parse_declared_service, TeletextAuthoredPagesError},
+    teletext_pages_v3::{parse_authored_service_with_metadata, TeletextAuthoredPagesV3Error},
     teletext_profiles::{
         BoundTeletextPagesError, TeletextProfileRuntimeError, TeletextProfileRuntimeReceipt,
     },
@@ -50,6 +51,7 @@ pub struct TeletextValidatedDocumentSource {
     contract: TeletextPageContract,
     generation: String,
     bytes: Vec<u8>,
+    authoring: Option<ersatzrs_addon_contract::TeletextAuthoringMetadataWire>,
 }
 
 impl TeletextValidatedDocumentSource {
@@ -67,6 +69,13 @@ impl TeletextValidatedDocumentSource {
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
+    /// Validated original add-on description, not an import edit permission.
+    #[must_use]
+    pub const fn authoring(
+        &self,
+    ) -> Option<&ersatzrs_addon_contract::TeletextAuthoringMetadataWire> {
+        self.authoring.as_ref()
+    }
 }
 
 impl fmt::Debug for TeletextValidatedDocumentSource {
@@ -74,6 +83,7 @@ impl fmt::Debug for TeletextValidatedDocumentSource {
         f.debug_struct("TeletextValidatedDocumentSource")
             .field("contract", &self.contract)
             .field("response_bytes", &self.bytes.len())
+            .field("has_authoring", &self.authoring.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -113,6 +123,7 @@ impl BoundTeletextDocumentInput {
         budget: TeletextProfileDocumentBudget,
     ) -> Result<PreparedBoundTeletextDocument, BoundTeletextDocumentError> {
         check_deadline(Instant::now(), self.deadline)?;
+        let mut authoring = None;
         let document = match self.receipt.selection.contract {
             TeletextPageContract::V1 => {
                 let base = parse_page_set(&self.receipt.stdout, &self.receipt.generation)?;
@@ -131,12 +142,26 @@ impl BoundTeletextDocumentInput {
                 )
                 .map_err(|error| BoundTeletextDocumentError::AuthoredResponse(Box::new(error)))?,
             )),
+            TeletextPageContract::V3 => {
+                let (service, metadata) = parse_authored_service_with_metadata(
+                    &self.receipt.stdout,
+                    &self.receipt.generation,
+                    budget.service,
+                    budget.declarations,
+                )
+                .map_err(|error| {
+                    BoundTeletextDocumentError::AuthoredMetadataResponse(Box::new(error))
+                })?;
+                authoring = Some(metadata);
+                TeletextProfileDocument::Authored(Box::new(service))
+            }
         };
         check_deadline(Instant::now(), self.deadline)?;
         let source = TeletextValidatedDocumentSource {
             contract: self.receipt.selection.contract,
             generation: self.receipt.generation.clone(),
             bytes: self.receipt.stdout,
+            authoring,
         };
         Ok(PreparedBoundTeletextDocument {
             selection: self.receipt.selection,
@@ -252,6 +277,8 @@ pub enum BoundTeletextDocumentError {
     BaseResponse(#[from] TeletextPagesError),
     #[error(transparent)]
     AuthoredResponse(Box<TeletextAuthoredPagesError>),
+    #[error(transparent)]
+    AuthoredMetadataResponse(Box<TeletextAuthoredPagesV3Error>),
     #[error(transparent)]
     ServiceBudget(Box<TeletextServiceError>),
     #[error("teletext document preparation exceeded its shared deadline")]

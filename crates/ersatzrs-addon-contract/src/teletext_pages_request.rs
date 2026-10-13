@@ -17,6 +17,8 @@ use super::MAX_TELETEXT_PAGES_GENERATION_BYTES;
 pub const TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION: u32 = 1;
 /// Explicit v2 request version; the unchanged guide fields are selected by the host.
 pub const TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION: u32 = 2;
+/// Explicit v3 request version; authoring metadata accompanies the same guide shape.
+pub const TELETEXT_PAGES_V3_REQUEST_SCHEMA_VERSION: u32 = 3;
 
 /// Maximum complete request bytes, including JSON syntax and whitespace.
 pub const MAX_TELETEXT_PAGES_INPUT_BYTES: usize = 4 * 1024 * 1024;
@@ -79,7 +81,7 @@ impl TeletextPagesRequest {
 
     /// Parse only the schema explicitly selected by the trusted host.
     ///
-    /// Schema 1 and 2 share the same guide shape and bounds. The payload cannot
+    /// Schemas 1 through 3 share the same guide shape and bounds. The payload cannot
     /// negotiate a version or trigger a retry under another schema.
     /// # Errors
     /// Returns the same strict wire errors as `from_json`, including an unsupported
@@ -167,7 +169,9 @@ impl TeletextPagesRequest {
 fn validate_expected_schema(expected_schema: u32) -> Result<(), TeletextPagesRequestError> {
     if matches!(
         expected_schema,
-        TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION | TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION
+        TELETEXT_PAGES_V1_REQUEST_SCHEMA_VERSION
+            | TELETEXT_PAGES_V2_REQUEST_SCHEMA_VERSION
+            | TELETEXT_PAGES_V3_REQUEST_SCHEMA_VERSION
     ) {
         Ok(())
     } else {

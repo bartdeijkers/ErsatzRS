@@ -368,6 +368,13 @@ fn teletext_guide_v2_preserves_complete_content_roles_and_exact_v1_output() {
     assert_eq!(v2, expected.to_json_for_schema(2).unwrap());
     let actual = wire::TeletextPagesRequest::from_json_for_schema(&v2, 2).unwrap();
     assert_eq!(actual, expected);
+    let v3 = build_request_for_schema(&input, 3).unwrap();
+    expected.schema_version = 3;
+    assert_eq!(v3, expected.to_json_for_schema(3).unwrap());
+    assert_eq!(
+        wire::TeletextPagesRequest::from_json_for_schema(&v3, 3).unwrap(),
+        expected
+    );
     assert_eq!(
         actual.channels[0].programmes[0].title,
         "Café <b>programme</b>"
@@ -388,7 +395,7 @@ fn teletext_guide_v2_preserves_complete_content_roles_and_exact_v1_output() {
 fn teletext_guide_schema_selection_is_trusted_and_not_payload_negotiation() {
     let channels = [];
     let input = context(&channels);
-    for schema in [0, 3, u32::MAX] {
+    for schema in [0, 4, u32::MAX] {
         assert!(matches!(
             build_request_for_schema(&input, schema),
             Err(TeletextGuideRequestError::Contract(

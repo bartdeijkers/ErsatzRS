@@ -508,11 +508,11 @@ fn trusted_request_v2_roundtrip_changes_only_version_and_preserves_default_v1_by
 
 #[test]
 fn trusted_request_selection_never_negotiates_payload_schema() {
-    for actual in [1, 2] {
+    for actual in [1, 2, 3] {
         let mut supplied = request();
         supplied.schema_version = actual;
         let bytes = supplied.to_json_for_schema(actual).unwrap();
-        for expected in [0, 1, 2, 3, u32::MAX] {
+        for expected in [0, 1, 2, 3, 4, u32::MAX] {
             if expected == actual {
                 continue;
             }

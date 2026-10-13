@@ -113,6 +113,30 @@ fn authored() -> Value {
         "mot_selections":[{"display":{"page":200,"subcode":16},"mot":null},{"display":{"page":200,"subcode":17},"mot":null}],
         "empty_object_pages":[]})
 }
+fn authored_metadata() -> Value {
+    let service = authored();
+    let pages = service["pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|page| {
+            json!({
+                "page":page["address"],
+                "regions":[{"id":"guide-output","kind":"generated","area":"main",
+                    "row":1,"column":0,"width":40,"height":1},
+                    {"id":"private-custom-zone","kind":"zone","area":"left_panel",
+                    "row":3,"column":0,"width":4,"height":2}],
+                "dynamic_fields":[{"id":"programme-title","region":"guide-output",
+                    "binding":"guide.programme.title"}]
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({"schema_version":3,"service":service,"authoring":{
+        "schema_version":1,"template":{"id":"private-guide-template","revision":"1"},
+        "theme":{"id":"private-night-theme","overrides":[{"key":"accent",
+            "value":{"kind":"colour","red":1,"green":2,"blue":3}}]},
+        "pages":pages}})
+}
 fn exact_bytes(value: &Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec_pretty(value).unwrap();
     bytes.extend_from_slice(b"\n \t");
@@ -170,11 +194,94 @@ impl Fixture {
             resource_transmissions: &self.lifecycle,
         }
     }
+    fn with_authoring() -> Self {
+        let mut fixture = Self::mixed();
+        fixture.selection.bindings[1].contract = TeletextPageContract::V3;
+        fixture.sources[1] = source(
+            &fixture.selection.bindings[1],
+            exact_bytes(&authored_metadata()),
+        );
+        fixture
+    }
     fn encoded(&self) -> EncodedTeletextDesignDocuments {
         encode_teletext_design_documents(self.input(), budget()).unwrap()
     }
     fn value(&self) -> Value {
         serde_json::from_slice(self.encoded().bytes()).unwrap()
+    }
+}
+
+#[test]
+fn original_v3_storage_preserves_exact_sources_metadata_and_no_edit_authority() {
+    let fixture = Fixture::with_authoring();
+    let encoded = fixture.encoded();
+    let restored = decode_teletext_design_documents(encoded.bytes(), budget()).unwrap();
+    assert_eq!(
+        restored.edit_policy(),
+        TeletextSavedEditPolicy::OriginalOnly
+    );
+    assert_eq!(restored.selection(), &fixture.selection);
+    for (actual, original) in restored.sources().iter().zip(&fixture.sources) {
+        assert_eq!(actual.bytes(), original.bytes());
+        assert_eq!(actual.authoring(), original.authoring());
+        assert_eq!(actual.contract(), original.contract());
+    }
+    assert!(restored.sources()[0].authoring().is_none());
+    let metadata = restored.sources()[1].authoring().unwrap();
+    assert_eq!(metadata.pages.len(), 2);
+    assert_eq!(metadata.theme.id, "private-night-theme");
+    assert_eq!(
+        metadata.pages[0].dynamic_fields[0].binding,
+        "guide.programme.title"
+    );
+    let TeletextProfileDocument::Authored(service) = &restored.documents()[1] else {
+        panic!("saved V3 service downgraded")
+    };
+    assert_eq!(service.semantic().base().pages.len(), 2);
+    for debug in [
+        format!("{restored:?}"),
+        format!("{:?}", restored.sources()[1]),
+        format!("{metadata:?}"),
+    ] {
+        for sentinel in [
+            "private-night-theme",
+            "private-custom-zone",
+            "private-guide-template",
+            "original-response-sentinel",
+            GENERATION,
+        ] {
+            assert!(!debug.contains(sentinel));
+        }
+    }
+    let mut attempted_permission = fixture.value();
+    attempted_permission["edit_policy"]["kind"] = json!("authoring_regions");
+    assert_eq!(
+        decode(&attempted_permission).unwrap_err().reason,
+        TeletextDesignDocumentFailure::EditPolicy
+    );
+}
+
+#[test]
+fn saved_v3_metadata_is_revalidated_against_its_original_service() {
+    let fixture = Fixture::with_authoring();
+    let baseline = fixture.value();
+    for invalid in 0..5 {
+        let mut changed = baseline.clone();
+        let mut response: Value =
+            serde_json::from_str(changed["documents"][1]["response"].as_str().unwrap()).unwrap();
+        match invalid {
+            0 => response["schema_version"] = json!(2),
+            1 => response["service"]["generation"] = json!("foreign-correlation"),
+            2 => response["authoring"]["pages"][0]["page"]["subcode"] = json!(18),
+            3 => response["authoring"]["pages"][0]["regions"][1]["width"] = json!(5),
+            _ => {
+                response.as_object_mut().unwrap().remove("authoring");
+            }
+        }
+        changed["documents"][1]["response"] = json!(serde_json::to_string(&response).unwrap());
+        let error = decode(&changed).unwrap_err();
+        assert_eq!(error.binding, Some(1));
+        assert_eq!(error.reason, TeletextDesignDocumentFailure::Document);
     }
 }
 fn decode(value: &Value) -> Result<RestoredTeletextDesignDocuments, TeletextDesignDocumentError> {

@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Capture addon-owned teletext template revisions, named themes, typed overrides,
+  free areas, custom zones and generated-field bindings through negotiated v3.
+  Validate exact page coverage and actual side-panel bounds; preserve metadata
+  with immutable original designs without granting import or publication authority.
+  Existing v1/v2 contributions remain compatible; editable TTI concepts remain open.
 - Add preparatory immutable teletext export-receipt storage with exact revision,
   digest and current-head fences, required application confirmation and retained
   history after deletion or uninstall. Add a bounded TTI record codec that preserves

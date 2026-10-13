@@ -20,6 +20,7 @@ pub const MAX_TELETEXT_PROFILE_NAME_BYTES: usize = 256;
 pub enum TeletextPageContract {
     V1,
     V2,
+    V3,
 }
 
 impl TeletextPageContract {
@@ -29,6 +30,7 @@ impl TeletextPageContract {
         match self {
             Self::V1 => 1,
             Self::V2 => 2,
+            Self::V3 => 3,
         }
     }
 
@@ -38,6 +40,7 @@ impl TeletextPageContract {
         match self {
             Self::V1 => "teletext.pages.v1",
             Self::V2 => "teletext.pages.v2",
+            Self::V3 => "teletext.pages.v3",
         }
     }
 }
