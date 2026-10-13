@@ -177,6 +177,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Allow the existing macOS Next source-candidate workflow to build the reviewed
+  v0.2.1 source and retained compatibility patches with exact source, compiler
+  and package validation. Production download pins remain unchanged; candidate
+  artifacts do not publish a dependency release.
+
 - Expand Phase 9 to authored EN 300 706 Level 2.5 with correct base fallback and
   QTeletextMaker TTI import/export, versioned template/theme/zone metadata and
   separate drafts and explicit publication. Require independent decoding,
