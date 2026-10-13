@@ -7,9 +7,9 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use super::*;
 
 // Synthetic opaque envelope: mixed original v1/v2 documents, not active pages.
-const DOCUMENT: &[u8] = b"{\"version\":1,\"sources\":[{\"schema\":1,\"bytes\":\"base\"},{\"schema\":2,\"bytes\":\"authored\"}]}\r\n";
+pub(super) const DOCUMENT: &[u8] = b"{\"version\":1,\"sources\":[{\"schema\":1,\"bytes\":\"base\"},{\"schema\":2,\"bytes\":\"authored\"}]}\r\n";
 
-async fn open(path: &std::path::Path) -> DbPool {
+pub(super) async fn open(path: &std::path::Path) -> DbPool {
     let options = SqliteConnectOptions::new()
         .filename(path)
         .create_if_missing(true)
@@ -23,14 +23,14 @@ async fn open(path: &std::path::Path) -> DbPool {
         .unwrap()
 }
 
-async fn fixture() -> (tempfile::TempDir, SqliteTeletextDesignRepository) {
+pub(super) async fn fixture() -> (tempfile::TempDir, SqliteTeletextDesignRepository) {
     let directory = tempfile::tempdir().unwrap();
     let pool = open(&directory.path().join("designs.sqlite")).await;
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
     (directory, SqliteTeletextDesignRepository(pool))
 }
 
-fn request(existing: Option<(i64, i64)>) -> TeletextDesignSave {
+pub(super) fn request(existing: Option<(i64, i64)>) -> TeletextDesignSave {
     TeletextDesignSave {
         name: "Synthetic mixed design".to_owned(),
         document_version: 1,
@@ -39,7 +39,7 @@ fn request(existing: Option<(i64, i64)>) -> TeletextDesignSave {
     }
 }
 
-fn saved(result: M<TeletextDesignHead>) -> TeletextDesignHead {
+pub(super) fn saved(result: M<TeletextDesignHead>) -> TeletextDesignHead {
     match result {
         M::Saved(head) => head,
         M::Rejected(reason) => panic!("unexpected {reason:?}"),
@@ -315,6 +315,24 @@ async fn listing_is_keyset_bounded_and_corrupt_head_does_not_disappear() {
 async fn producer_model_removal_does_not_delete_design_or_document() {
     let (_directory, repo) = fixture().await;
     let first = saved(repo.save(&request(None), DOCUMENT.len()).await.unwrap());
+    let export = repo
+        .create_export(
+            &TeletextDesignExportSave {
+                design_id: first.id,
+                revision: first.revision,
+                design_digest: sha256_hex(DOCUMENT),
+                expected_design_head: first.revision,
+                receipt_version: 1,
+                receipt: b"synthetic retained export".to_vec(),
+            },
+            1024,
+            DOCUMENT.len(),
+        )
+        .await
+        .unwrap();
+    let M::Saved(export) = export else {
+        panic!("expected saved export")
+    };
     sqlx::query(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, 'synthetic', 1920, 1080)"#)
         .execute(&repo.0).await.unwrap();
     let repositories = super::super::make_repositories(repo.0.clone());
@@ -361,6 +379,14 @@ async fn producer_model_removal_does_not_delete_design_or_document() {
             .unwrap()
             .document,
         DOCUMENT
+    );
+    assert_eq!(
+        repo.export(export.id, 1024, DOCUMENT.len())
+            .await
+            .unwrap()
+            .unwrap()
+            .receipt,
+        b"synthetic retained export"
     );
 }
 

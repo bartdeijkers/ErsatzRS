@@ -16,6 +16,7 @@ pub mod queries;
 pub mod teletext_channel_documents;
 pub mod teletext_channels;
 pub mod teletext_design_documents;
+pub mod teletext_design_exports;
 pub mod teletext_designs;
 pub mod teletext_generations;
 pub mod teletext_guide;
@@ -24,6 +25,7 @@ pub mod teletext_pages_v2;
 pub mod teletext_profile_documents;
 pub mod teletext_profiles;
 pub mod teletext_publications;
+pub mod teletext_tti;
 
 pub use error::{ApplicationError, Result};
 pub use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};

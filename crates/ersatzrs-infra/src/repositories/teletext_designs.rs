@@ -4,12 +4,12 @@ use std::{fmt::Write as _, mem::size_of};
 
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
-    RepositoryError, Result, TeletextDesignMutation as M, TeletextDesignRejection as R,
-    TeletextDesignRepository, TeletextDesignSave,
+    RepositoryError, Result, TeletextDesignExportSave, TeletextDesignMutation as M,
+    TeletextDesignRejection as R, TeletextDesignRepository, TeletextDesignSave,
 };
 use ersatzrs_domain::{
-    EntityId, TeletextDesignHead, TeletextDesignRevision, MAX_TELETEXT_DESIGN_NAME_BYTES,
-    TELETEXT_DESIGN_DOCUMENT_VERSION,
+    EntityId, TeletextDesignExportMetadata, TeletextDesignExportReceipt, TeletextDesignHead,
+    TeletextDesignRevision, MAX_TELETEXT_DESIGN_NAME_BYTES, TELETEXT_DESIGN_DOCUMENT_VERSION,
 };
 use sha2::{Digest as _, Sha256};
 use sqlx::{Executor, Row as _, Transaction};
@@ -160,6 +160,24 @@ impl TeletextDesignRepository for SqliteTeletextDesignRepository {
         tx.commit().await.repository()?;
         head.deleted = true;
         Ok(M::Saved(head))
+    }
+
+    async fn create_export(
+        &self,
+        save: &TeletextDesignExportSave,
+        max_receipt_bytes: usize,
+        max_document_bytes: usize,
+    ) -> Result<M<TeletextDesignExportMetadata>> {
+        exports::create(&self.0, save, max_receipt_bytes, max_document_bytes).await
+    }
+
+    async fn export(
+        &self,
+        id: EntityId,
+        max_receipt_bytes: usize,
+        max_document_bytes: usize,
+    ) -> Result<Option<TeletextDesignExportReceipt>> {
+        exports::read(&self.0, id, max_receipt_bytes, max_document_bytes).await
     }
 }
 
@@ -340,3 +358,6 @@ fn corrupt(value: &'static str) -> RepositoryError {
 #[cfg(test)]
 #[path = "teletext_designs_tests.rs"]
 mod tests;
+
+#[path = "teletext_design_exports.rs"]
+mod exports;

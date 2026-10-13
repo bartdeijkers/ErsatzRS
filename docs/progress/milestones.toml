@@ -2724,6 +2724,95 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 trusted interchange prerequisite checkpoint:
+Criterion: retain the authoritative export revision/edit baseline independently
+of uploaded TTI/sidecar bytes, reject stale or corrupted receipts without changing
+broadcast, and parse the pinned editor's actual record syntax without silent loss.
+This addresses the concrete missing receipt/file boundaries identified after
+6b2f9855; it is not an edited export/import or full engine acceptance claim.
+
+Migration202610130224 adds only immutable TeletextDesignExportReceipt records,
+owned by an existing design revision with a RESTRICT FK. The existing repository
+port now creates receipts under one immediate transaction: live exact current
+head, selected historical revision, bounded original bytes/version/digest and
+computed receipt SHA256. It does not advance the head. Identity exhaustion and
+invalid/stale/missing/deleted targets reject atomically; source corruption errors
+remain distinct from absence. Bounded snapshot reads null-project corrupt types
+and oversized bytes before decoding, check both digests and remain available
+after tombstone or channel/profile/package removal. Receipt values are opaque
+historical storage, not edit or publication authority. Existing schema readiness
+and Health use the compiled migration list; migration/bootstrap regressions cover
+fresh, pending/mismatched/dirty/unknown schema outcomes without a new runtime tool.
+
+Application creation requires a trusted export-confirmation port against the
+repository-read original. Borrowed inputs cannot be replaced by confirmation.
+Shared structural preflight and wrong-digest checks reject before native work;
+final storage CAS still rejects an actual concurrent head change during that
+confirmation. Four installed-fixture application regressions use a synthetic
+witness/negative validator, not a production TTI exporter. They preserve nonempty
+accepted/pending state, original native service, exact configuration and producer
+calls, and retain receipt bytes across file-backed reopen without automatic output.
+The production file/resource/edit-policy confirmation adapter remains unimplemented.
+
+The application TTI syntax API has explicit byte/record bounds and closed ordered
+DE/PN/SC/PS/RE/CT/FL/OL records. Base40-cell C0/ESC and enhanced13-word payloads
+retain original data; all six FL values, PS bits and M29 packet scope survive.
+There is no silent trimming/parity masking/short-row padding/duplicate overwrite
+or unknown-record loss. Static errors carry line/row/column without authored data.
+Numeric metadata and line endings receive documented canonical spelling. Editor
+ordinals remain distinct from authored hex subcodes: PN uses low8bits while SC
+can retain256/257. The codec preserves independent values and does not invent
+receipt mappings. Raw syntax can represent Level3.5 fields; semantic import must
+reject unsupported effects, including fixed-palette/font/multicolour changes,
+without rejecting valid Level2.5 M29 or the first four X27/4 links wholesale.
+One editable file per stable page/subpage remains the accepted editor strategy.
+
+A literal563-byte synthetic saved fixture matches the recorded QTM1.0/cac2167
+Save As hash1cfa16ca74a88898fef95593858d3acedcc6c118db752414b2e33da7b35209db.
+The new parser/writer preserves it and independently checks the X26 triplets.
+A byte-fixture gitattributes rule prevents CRLF/spacing/control conversion even
+with core.autocrlf=true; filtered/unfiltered Git object hashes match. This reuses
+actual editor calibration evidence; no new editor open/edit/save run or ErsatzRS
+export is claimed. The reference's stale no-V2-interface wording is corrected
+against the existing strict V2 conversion and installed original-page flow.
+
+Nextestc0630e17-99e2-48c8-8d43-c55d00354f10 passes5/5 application/publication
+identities. efed9b13-9e67-402a-83e2-d28e26fec09e passes30/30 storage/codec
+identities. After substituting the literal native fixture,
+8c69239c-6441-4637-be09-12ada92294a0 passes all9 codec identities.
+f1d71708-3e5e-4152-833e-f7fbd9595d76 passes13/13 migration identities.
+The successful union is47 unique Rust identities; repeated codec and migration/
+receipt identities are counted once. Earlier21 storage passes are reused as
+history, not added to this union. Two unused imports are removed after that first
+run. Initial architecture lint requires a genuinely read-only transaction comment;
+the correction documents the existing snapshot without changing lock behavior.
+Initial strict lint rejects two doc-markup and three missing-semicolon cases;
+corrections add no exemption and leave runtime behavior unchanged. Final strict
+all-target Clippy passes across domain/core/infra/app and the web consumer.
+Architecture counters remain0; formatting, allow policy and progress validation
+pass. No changed admin surface or streaming implementation requires another
+headed/smoke run here; applicable prior flow evidence is reused, not called full CI.
+
+Native logs, literal calibration hash and source hashes are retained in ignored
+tmp/phase9-export-proof. Its32-entry receipt-sha256.txt has SHA256
+222ef588d21e3678f9a40b4e26296f4e04d4e492b5fedd4bf9fc521d93412d3f;
+mutable documentation is excluded from the hash to avoid self-reference.
+
+Next concrete integration: capture addon-owned template/theme/zone/dynamic-field
+metadata through an explicitly negotiated authoring-aware contract, keeping
+closed V1/V2 behavior. Build the exact server-owned file/resource/edit baseline
+and a private validated concept overlay retaining original invocation history.
+Use existing revision/head CAS for separate unpublished concept revisions, then
+historical preview and explicit publication. A newly independent design would
+need an additional atomic source-head fence; existing create(None) is insufficient.
+Do not substitute OriginalOnly bytes or sidecar flags for editing permission.
+Actual full pinned editor export/edit/import/preview/publication, indirect resource
+edit checks, full Level2.5/fallback/regions/resources/client proof, Lua timing/error/
+Continue/Refresh/Reset/restart, warm application, open-client shutdown and native/
+Next/source/six-platform acceptance remain open. No acceptance/status/dependency
+changes, no permanent one-zone/format restriction, no production guide content
+and no push/publication. The sole NOS200-299 guide still waits for engine acceptance.
+
 2026-10-13 real synthetic host-restart checkpoint (representative flow verified):
 Criterion: two channels sharing one installed addon retain distinct accepted
 profiles/themes, plus a newer pending-only design, across actual process

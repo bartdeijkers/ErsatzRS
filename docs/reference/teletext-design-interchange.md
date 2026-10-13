@@ -2,22 +2,21 @@
 
 ## Delivery state
 
-Planned contract; not an operational import/export interface. Level 2.5 authored
-support, durable designs/drafts, editor roundtrips and real-client acceptance are
-open. Existing Western Latin Level 1/1.5 candidates are preparatory. No new CLI,
-admin route, metadata schema implementation or editor binary is claimed here.
+The external TTI/sidecar workflow is not an operational import/export interface.
+Static profiles, immutable original designs, native previews and separate explicit
+publication are connected; full authored Level 2.5/fallback, editable concepts,
+editor roundtrips and complete client acceptance remain open. P9A-04 owns current
+implementation evidence and remaining acceptance. This reference describes file
+contracts and implemented typed primitives, not a new editor or CLI release.
 
-The domain now provides checked colour references/RGB, editable CLUT2/3 and
-monochrome DRCS bitmap/slot/subtable values. They reject malformed construction
-and JSON; they do not validate resource graphs, per-display usage or native
-encoding. No current addon interface accepts these new values yet.
-Checked raw resource identities and a DRCS catalog now validate definitions and
-supplied display references. Ordered enhancement programs and checked object
-closure now collect transitive DRCS and charset references from the supplied
-effective page program. Resolved display semantics, complete service allocation
-and enhanced carriage remain open. Presentation declarations and an explicitly
-resolved semantic service now compose those values with the unchanged base set;
-they are not operational v2 payloads or readiness/publication tokens.
+The domain provides checked colour references/RGB, editable CLUT2/3 and monochrome
+DRCS bitmap/slot/subtable values. Strict V2 wire conversion feeds supplied service
+and resource declarations into the existing validation/compiler boundary. Checked
+resource identities, DRCS catalogs, enhancement programs and object closure retain
+references and presentation beside mandatory ordinary-client fallback. These typed
+values and stored originals are not readiness, edit-permission or publication
+tokens. Complete resource/region/client and editor acceptance still requires its
+independent evidence; stored export bytes receive separate native confirmation.
 
 ## Resource identity and DRCS lookup
 
@@ -3081,6 +3080,35 @@ proof here (`engine_roundtrip_proven: false`). Identity normalization and unknow
 record loss strengthen the existing external-sidecar and strict import contract;
 they do not waive supported content/navigation preservation. Engine-first order,
 full editor roundtrip and suitable-client acceptance remain required.
+
+
+### Rust TTI syntax boundary
+
+The application crate's `teletext_tti` module provides an ordered, byte-oriented
+record parser and canonical CRLF writer with explicit host byte/record bounds.
+It is an internal syntax API, not a concept-import or compatibility approval.
+Closed DE/PN/SC/PS/RE/CT/FL/OL records retain all six raw FL targets. Base rows
+contain exactly forty checked seven-bit cells, with C0 encoded as ESC plus
+`code | 0x40`. Enhancement rows carry a designation and thirteen eighteen-bit
+words; their original packet number remains distinct. M29 requires an explicit
+magazine `<m>FF` document and never silently becomes X28.
+
+Blank or unknown records, duplicate packet/metadata entries, mixed page numbers,
+parity/high-bit input, invalid ESC and short/long rows are located errors. There
+is no loader-style trimming, masking, padding or overwriting. Metadata numbers
+retain their values but receive canonical spelling and widths on write; payloads
+and record order remain exact. Raw packet words can represent unsupported
+functions, so semantic conversion must independently diagnose Level 3.5-only
+changes before accepting a concept.
+
+PN's suffix and SC are decimal editor ordinals, not authored hexadecimal subcodes.
+The pinned writer uses the low eight bits of its ordinal in PN and the complete
+ordinal in SC: ordinal256 can therefore produce `PN,20000` with `SC,0256`.
+Keep those fields independent and recover stable authored identities from the
+server-owned export receipt. Syntax parsing cannot authorize identity, navigation,
+shared-resource or edit-policy reconciliation. The literal synthetic native Save
+As fixture is stored without checkout line-ending conversion; its existing audit
+hash and behavior do not establish an ErsatzRS editor roundtrip.
 
 ## Planned project bundle
 

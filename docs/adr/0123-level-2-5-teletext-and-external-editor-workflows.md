@@ -26,6 +26,13 @@ A finite-client whole-host restart trial retains two selected themes and a newer
 pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
 the exact proof and negative shutdown receipt.
 P9A-04 owns current independent proof and all remaining obligations.
+Preparatory immutable export receipts now use the existing design repository,
+exact head/original-digest checks and bounded read-only snapshot verification.
+The application requires a trusted native export confirmation port; its production
+file/resource/edit-policy adapter remains unimplemented. A bounded ordered TTI
+syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
+It does not confer semantic Level 2.5/3.5, editing or publication authority.
+
 
 Checked colour references, four-bit RGB, editable CLUT2/3 declarations
 and monochrome DRCS bitmap/slot/subtable values exist. Checked raw resource
@@ -868,8 +875,10 @@ The first implementation slice captures complete native originals into version-1
 private design documents and restores historical previews through the same cold
 compiler, without invoking installed packages. The initial explicit `original_only`
 policy grants zero editing permissions; it is not a permanent authoring limitation
-or external-editor acceptance. Export receipts, editable zone/template policies and
-durable explicit publication remain required next slices. Native confirmation
+or external-editor acceptance. Opaque immutable export-receipt storage and
+separate static publication are now implemented; the authoritative file/resource/
+edit-policy receipt contents, editable concepts and full editor integration remain
+required. Existing OriginalOnly documents and their bytes remain unchanged. Native confirmation
 precedes CAS. Its deadline is a CPU/admission cutoff; admitted SQLite transactions
 use the existing database timeout contract and do not pretend to undo committed
 saves. See the interchange reference for the implementation boundary and P9A-01

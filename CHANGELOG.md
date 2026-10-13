@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Add preparatory immutable teletext export-receipt storage with exact revision,
+  digest and current-head fences, required application confirmation and retained
+  history after deletion or uninstall. Add a bounded TTI record codec that preserves
+  payloads, editor ordinals and magazine scope without silent repair. Native
+  export/import, addon-owned edit policies and the full editor workflow remain open.
 - Add separate optional whole-service teletext quotas for resolution, planning,
   placement, assembly, ancestry, comparison, collection, spatial traversal,
   attribute cell updates and carrier-ID search work. Both spatial passes share credit; failed recipes retain

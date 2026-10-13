@@ -2,6 +2,8 @@
 *.bat text eol=crlf
 *.rs diff=rust
 *.snap text eol=lf
+# Native editor byte fixtures retain CRLF, spacing and teletext control bytes.
+crates/ersatzrs-app/src/teletext_tti/fixtures/*.tti -text -diff
 Cargo.lock text eol=lf linguist-generated=false
 crates/ersatzrs-web/public/vendor/** -whitespace linguist-vendored
 # Unified diffs use a single space for unchanged blank context lines.

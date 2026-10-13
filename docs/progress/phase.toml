@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-01 contract remains open; prioritize the P9A-04 preparatory synthetic ordinary-stream user flow'
+current_focus = 'P9A-04 preparatory synthetic interchange: capture addon-owned edit scopes and connect native export/import; full engine acceptance remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1280,9 +1280,17 @@ Original-only capture
 is not an editor-permission or zone/template acceptance.
 The synthetic profile-selection→validation→preview→explicit publication→ordinary
 stream→client navigation flow is now verified in its representative static scope.
-P9A-04 owns the implementation/proof/gap map. Next connect edited interchange:
-add a versioned server-owned export baseline and addon-declared edit scope, then
-bounded TTI/sidecar export and concept import through the existing compiler.
+P9A-04 owns the implementation/proof/gap map. Preparatory immutable export
+receipt storage now verifies exact original/head/digests and survives reopen,
+tombstone and uninstall. Required application confirmation cannot replace its
+borrowed inputs; final transactional checks reject a concurrent head change.
+A bounded TTI syntax codec retains exact cells/triplets/order, decimal editor
+ordinals and M29 scope; the literal pinned editor calibration is preserved.
+These primitives do not create a public export/import route or edited concept.
+Next capture addon-owned authoring metadata through an explicitly negotiated
+contract, preserving closed V1/V2 behavior; then build the server-owned file/
+resource/edit baseline and a private validated concept overlay through the
+existing compiler, immutable revision/head CAS and explicit publisher.
 Current saved original_only policy and closed addon response carry no edit
 permissions; imported bytes cannot impersonate a successful addon invocation.
 Prove a synthetic editable zone while protecting presentation, navigation and

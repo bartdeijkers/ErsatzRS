@@ -3,7 +3,10 @@
 use std::fmt;
 
 use async_trait::async_trait;
-use ersatzrs_domain::{EntityId, TeletextDesignHead, TeletextDesignRevision};
+use ersatzrs_domain::{
+    EntityId, TeletextDesignExportMetadata, TeletextDesignExportReceipt, TeletextDesignHead,
+    TeletextDesignRevision, TELETEXT_DESIGN_EXPORT_RECEIPT_VERSION,
+};
 
 use super::Result;
 
@@ -37,6 +40,67 @@ impl fmt::Debug for TeletextDesignSave {
     }
 }
 
+/// Exact opaque export envelope bound to an immutable revision and live head.
+///
+/// Storage checks provenance and computes the receipt digest. The application
+/// must separately validate semantic mappings, edit policy and native output;
+/// bytes supplied here never grant editing, package or publication authority.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextDesignExportSave {
+    /// Existing durable design identity.
+    pub design_id: EntityId,
+    /// Deliberately selected immutable revision, not necessarily the current head.
+    pub revision: i64,
+    /// Exact original document digest expected by the caller.
+    pub design_digest: String,
+    /// Independently observed current live head for compare-and-swap.
+    pub expected_design_head: i64,
+    /// Opaque export-receipt envelope version.
+    pub receipt_version: u16,
+    /// Exact bounded receipt bytes, excluded from diagnostics.
+    pub receipt: Vec<u8>,
+}
+
+impl TeletextDesignExportSave {
+    /// Check storage shape and trusted byte bounds without reads or native work.
+    ///
+    /// This preflight grants no semantic, editing or publication authority. Both
+    /// limits must be positive and representable by `SQLite` and Rust allocation
+    /// lengths, including on supported 32-bit targets.
+    #[must_use]
+    pub fn is_valid(&self, max_receipt_bytes: usize, max_document_bytes: usize) -> bool {
+        self.design_id > 0
+            && self.revision > 0
+            && self.expected_design_head >= self.revision
+            && self.design_digest.len() == 64
+            && self
+                .design_digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+            && self.receipt_version == TELETEXT_DESIGN_EXPORT_RECEIPT_VERSION
+            && !self.receipt.is_empty()
+            && self.receipt.len() <= max_receipt_bytes
+            && [max_receipt_bytes, max_document_bytes]
+                .into_iter()
+                .all(|limit| {
+                    limit > 0 && isize::try_from(limit).is_ok() && i64::try_from(limit).is_ok()
+                })
+    }
+}
+
+impl fmt::Debug for TeletextDesignExportSave {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TeletextDesignExportSave")
+            .field("design_id", &self.design_id)
+            .field("revision", &self.revision)
+            .field("expected_design_head", &self.expected_design_head)
+            .field("receipt_version", &self.receipt_version)
+            .field("receipt_bytes", &self.receipt.len())
+            .finish_non_exhaustive()
+    }
+}
+
 /// Static mutation rejection without authored or configuration content.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TeletextDesignRejection {
@@ -48,7 +112,7 @@ pub enum TeletextDesignRejection {
     DeletedDesign,
     /// The current head does not match the expected revision.
     Conflict,
-    /// The monotonic signed revision counter cannot advance.
+    /// A monotonic signed storage counter cannot advance.
     RevisionLimit,
 }
 
@@ -64,7 +128,7 @@ pub enum TeletextDesignMutation<T> {
 /// Atomic design head/CAS and immutable revision persistence.
 ///
 /// Designs remain independently readable after package/profile/channel deletion;
-/// this port has no cascading ownership, export receipts or active flag. Byte
+/// this port has no cascading ownership or active flag. Byte
 /// and listing bounds are trusted caller policy, never document-controlled.
 /// Repository failures must be redacted, and invalid/corrupt stored data must
 /// return an error rather than masquerade as an absent record.
@@ -112,11 +176,71 @@ pub trait TeletextDesignRepository: Send + Sync {
         id: EntityId,
         expected_revision: i64,
     ) -> Result<TeletextDesignMutation<TeletextDesignHead>>;
+
+    /// Persist an immutable opaque receipt without changing the design head.
+    /// One immediate transaction checks a live exact head, the selected original
+    /// revision's bounded bytes/integrity and its exact digest. Historical
+    /// revision selection is allowed; missing targets reject with `MissingDesign`,
+    /// stale head or digest with `Conflict`. Returns metadata, never receipt bytes.
+    async fn create_export(
+        &self,
+        save: &TeletextDesignExportSave,
+        max_receipt_bytes: usize,
+        max_document_bytes: usize,
+    ) -> Result<TeletextDesignMutation<TeletextDesignExportMetadata>>;
+
+    /// Read retained exact receipt bytes, including after a design tombstone.
+    /// Bound stored types/lengths before allocating, then verify receipt version
+    /// and digest plus the owning original revision's version, bytes and digest.
+    /// Only an absent receipt identity returns None; corruption is an error.
+    async fn export(
+        &self,
+        id: EntityId,
+        max_receipt_bytes: usize,
+        max_document_bytes: usize,
+    ) -> Result<Option<TeletextDesignExportReceipt>>;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{TeletextDesignMutation, TeletextDesignSave};
+    use super::{TeletextDesignExportSave, TeletextDesignMutation, TeletextDesignSave};
+
+    #[test]
+    fn export_preflight_checks_exact_storage_shape_without_exposing_bytes() {
+        let valid = TeletextDesignExportSave {
+            design_id: 7,
+            revision: 2,
+            design_digest: "a".repeat(64),
+            expected_design_head: 4,
+            receipt_version: 1,
+            receipt: b"private export payload".to_vec(),
+        };
+        assert!(valid.is_valid(valid.receipt.len(), 1));
+        for (receipt, document) in [
+            (0, 1),
+            (valid.receipt.len() - 1, 1),
+            (1024, 0),
+            (usize::MAX, 1),
+            (1024, usize::MAX),
+        ] {
+            assert!(!valid.is_valid(receipt, document));
+        }
+        let mut invalid = vec![valid.clone(); 7];
+        invalid[0].design_id = 0;
+        invalid[1].revision = 0;
+        invalid[2].expected_design_head = 1;
+        invalid[3].design_digest = "A".repeat(64);
+        invalid[4].design_digest = "a".repeat(63);
+        invalid[5].receipt_version = 2;
+        invalid[6].receipt.clear();
+        for input in invalid {
+            assert!(!input.is_valid(1024, 1024));
+        }
+        let diagnostic = format!("{valid:?}");
+        assert!(!diagnostic.contains("private"));
+        assert!(!diagnostic.contains(&valid.design_digest));
+        assert!(diagnostic.contains("expected_design_head: 4"));
+    }
 
     #[test]
     fn save_request_and_saved_head_diagnostics_redact_authored_values() {
