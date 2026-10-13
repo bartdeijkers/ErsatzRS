@@ -2724,6 +2724,64 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 actual pinned external-editor/native-flow checkpoint:
+Criterion: use a real exported synthetic TTI in an unchanged pinned external
+editor, preserve exact saved bytes through native import/preview/publication and
+reopen, and expose concrete integration failures without broadening acceptance.
+
+QTeletextMaker1.0/cac2167bac933a6160cca45a45d5d4ee95355898 was rebuilt offline
+in local Qt image6064a1cfba3673ce1530dd5ea4c98249a5540666e3feea3160f43c122fd81c01.
+All124 archived source Git blobs match the retained pinned tree; all nine audited
+excerpts match. Actual editor binary SHA256af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a.
+Test-only Qt input drives exposed xcb widgets and actual Save As; it does not edit
+external source or fabricate saved TTI. Input alias bytes equal the native export.
+
+The first geometry guard incorrectly assumed480x250; it fails before editing.
+The original actually has effective left4/right12 panels and width672. A subsequent
+Save As writes Q four columns left and changes protected X28. The final driver
+uses the original compiler-owned geometry and targets main row2/column8 exactly;
+parsed saved bytes independently prove that position before publication.
+
+Native run7f3b61db-af8f-455c-9f99-e7ecbe9c1bda fails the first actual editor trial.
+Its1357-byte saved file keeps numeric PS C0C0, but X28/0 primary changes1 to4;
+import rejects page124/subcode32/row28/designation0 and proves both old outputs,
+originals, receipts and configuration intact. Pinned document/LevelOnePage loading
+copies X28 first, then control bits overwrite shared m_defaultNOS. No packet mask,
+file repair, native-header change or permanent acceptance limitation is adopted.
+The original failure, hashes, actual files/screens and located diagnostic remain.
+
+A DISTINCT synthetic original uses unambiguous header/enhanced charset0. It keeps
+same-addon profiles/day/night themes, panels, template/zones/generated metadata
+and explicit native export/receipt. The actual saved1357-byte TTI SHA256 is
+8ab99707315d05536059aa55e980e1c37b58d7a9d3e1a78a258c0f01c2c3c302. Changes
+are the intended row2/column8 Q plus numeric-case/record-order normalization;
+all protected packet words, sidecars and resource assets remain exact.
+Import saves revision2/digest1a28002ab970e811d0903f76bc9e3c2ca0c897e5670f026ad1e3dd05c920d8ce
+without changing accepted pointers. Same672x250 raster has zero diagnostics and
+hash592d1c135fbf842507156cc4609517ea27d8dee8b4535a553196c2942a912a42;
+preview survives reopen. Separate request/acceptance selects generation3, whose
+recovered output matches after another reopen; the other channel stays unchanged.
+
+Final native run766d597a-b7ee-4d60-9aac-bf09264da871 passes5/5: the new actual
+editor flow plus four affected native guards/zone/tampering/isolation regressions.
+The prior27-identity component receipt remains valid; successful union is28 unique
+Rust identities, counting repeats once. Initial type/lint failures are retained
+and corrected without new exemptions/dependencies. Focused strict web test-target
+Clippy, formatting, progress and new-allowance checks pass. CPP compiles and the
+current driver performs the actual editor interaction. Four positive window/dialog
+captures were visually inspected. Receipt: tmp/phase9-qtm-native-flow/identity.json and receipt-sha256.txt,
+SHA256f64a9e51f228c918757b2cbbc9709da10c4a9c9016cc327a90c75477c21bcb29; binds final sources/logs, tool identities, actual exported/edited files,
+positive/negative artifacts and all inspected captures, excluding mutable progress.
+
+This representative SINGLE-PAGE charset-zero native flow is not full editor or
+engine acceptance. Protected nonzero charset loss stays visible in parity debt.
+Page-set/subpage/resource editing/loading, ordinary edited streams, independent
+decoding/TSDuck/suitable-client navigation, localized headed admin, all Lua/source/
+warm/restart/platform gates remain. No production TV-guide addon starts. The
+criterion/next-step map below is canonical; accepted clauses/status/dependencies
+are unchanged. Next connect reciprocal synthetic page navigation through the
+existing ordinary route and decoder/client probes. No push or publication.
+
 2026-10-13 receipt-bound native concept checkpoint:
 Criterion: connect actual exported TTI files to authenticated immutable concepts,
 the same qualified preview and separate explicit publication/restart, while
@@ -2774,10 +2832,11 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | Actual pinned QTM workflow | Existing v1.0 calibration and native per-page export | Host export/open/edit/save/import/preview/publish; PS/X28 normalization and resource dependency loading |
 | Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and all six platforms |
 
-Concrete next action: drive the actual pinned QTeletextMaker editor with a native
-synthetic export and validate its saved file through this importer. Resolve actual
-normalization/dependency gaps from that flow before connecting ordinary edited
-streams and headed localized admin. Base-row-only import, unchanged-file refusal,
+Concrete next action: add a second reciprocal-navigation display to the synthetic
+editor fixture, retaining the first page's actual file workflow, then reuse the
+ordinary stream route/capture and independent decoder/TSDuck/client probes for
+its edited accepted concept. General charset/resource/editor and localized admin
+gaps remain required; the retained nonzero editor loss must not be masked. Base-row-only import, unchanged-file refusal,
 protected enhancement/PS edits and preserved-but-not-editor-loadable DVB assets
 are explicit pending implementation/proof; none is a permanent accepted limitation.
 No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing

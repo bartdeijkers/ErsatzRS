@@ -43,8 +43,11 @@ They qualify physical row edits against captured free/zone/generated boundaries,
 including spacing attributes, glyph semantics and double-height footprints. The
 existing head CAS saves a private immutable concept; the same native model serves
 preview and separate explicit publication, including restart recovery. Unqualified
-concepts still reject. Actual pinned-editor and operational admin/stream/client
-connection remain open; this base-row slice grants no full editor/engine acceptance.
+concepts still reject. A representative single-page charset-zero export/open/edit/Save As/import/preview/
+explicit publication/reopen trial now passes with pinned QTeletextMaker1.0. The
+editor couples X28 NOS to header controls on load; a separately retained nonzero
+trial changes protected X28 and rejects without publication. Operational admin/
+ordinary edited stream/client and general charset fidelity remain open; this base-row slice grants no full editor/engine acceptance.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.

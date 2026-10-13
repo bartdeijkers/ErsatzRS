@@ -20,7 +20,10 @@ release section when tagging a release.
   A separate versioned private concept codec retains original addon/request bytes,
   resources and metadata. A bounded native import now authenticates retained exports,
   protects free/zone/generated effects and saves immutable concepts for the same
-  preview and separate explicit publication. Full editor/admin roundtrip remains open.
+  preview and separate explicit publication. An opt-in headed QTeletextMaker 1.0
+  probe connects one synthetic export/edit/save to native import/publication/reopen.
+  Nonzero charset loss is explicitly rejected; broader editor/admin/client proof
+  remains open.
 - Export saved native teletext originals through a bounded host API to exact
   per-page TTI mappings and versioned sidecars, backed by retained server receipts.
   Preserve full resource/magazine packets, original subcodes/navigation and

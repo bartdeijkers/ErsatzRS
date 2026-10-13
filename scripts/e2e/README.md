@@ -72,6 +72,223 @@ Level 2.5 enhancement. This does not prove every subpage enhancement or resource
 function. Stop only the owned test containers after retaining evidence. Shared
 X11 access is a local manual-test exception and is never a server dependency.
 
+### Replay the pinned editor against a native export
+
+This opt-in Linux/X11 probe connects the existing native synthetic fixture to an
+unchanged external editor through a bounded file handshake. Run the test and
+editor in separate terminals. `ready.json` means the original exports exist;
+`editor-saved.json` records the separately observed editor completion. A successful
+native flow requires the selected nextest process to exit zero and produce
+`success.json`. Neither readiness nor a completion marker alone proves acceptance.
+P9A-04 records the representative successful charset-zero trial and a separate
+nonzero charset failure. Replays require their own final receipt.
+
+The prepared source is QTeletextMaker 1.0 at
+`cac2167bac933a6160cca45a45d5d4ee95355898`, with all 124 source blobs checked.
+The current prepared executable SHA256 is
+`af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a`.
+The local Qt tool image remains
+`sha256:6064a1cfba3673ce1530dd5ea4c98249a5540666e3feea3160f43c122fd81c01`.
+Keep the source, executable, driver, build logs and their hashes in the evidence
+receipt; a version check is identity evidence, while the exposed `xcb` window and
+captures establish the editor interaction. The editor executable remains
+unchanged. The test-only driver sends QtTest input through actual widgets and
+Save As; it does not generate the saved TTI bytes.
+
+Choose a new proof directory under the ignored workspace. The test itself creates
+the directory with `create_dir` and refuses an existing destination, including
+previous attempts. Keep the selected Cargo target directory unchanged.
+
+```bash
+qtm_probe_root="$PWD/tmp/phase9-qtm-native-flow/editor-run-01"
+test ! -e "$qtm_probe_root"
+test ! -L "$qtm_probe_root"
+ERSATZRS_TELETEXT_QTM_INTERCHANGE_DIR="$qtm_probe_root" \
+  ./run.sh test -p ersatzrs-web --test teletext_profile_preparation \
+    --run-ignored ignored-only \
+    -E 'test(external_editor_probe::pinned_external_editor_files_import_preview_publication_and_reopen)'
+```
+
+The test prepares the same installed synthetic addon on two channels, with
+distinct profiles and day/night themes. It creates immutable original designs,
+export receipts and an existing accepted output for each channel. It writes:
+
+| File | Meaning |
+| --- | --- |
+| `ready.json` | Schema-1 handshake with both channel/profile/theme identities, immutable original/receipt references, exact input filenames and hashes, and the requested edit |
+| `channel-1/project.ersatzrs.json` | Protected sidecar for the first original export |
+| `channel-2/project.ersatzrs.json` | Protected sidecar for the second original export |
+| `channel-1/<exported-file>` and `channel-2/<exported-file>` | Exact exported TTI files and protected binary assets, with lengths/hashes listed in readiness |
+
+The requested edit is channel 1, physical row 2, zero-based column 8, code 81
+(`Q`). The one-page export preserves the authored page/subcode through its trusted
+mapping; the editor's PN/SC ordinal is zero. Header and enhanced charset use zero
+in this separate positive fixture; the prior nonzero editor loss remains open. This single-page probe does not prove
+multi-page or subpage navigation. Leave both channel directories and their
+sidecars/assets byte-identical. Preserve their original names when returning the
+edited bytes to the importer.
+
+Once readiness exists, copy its first channel's exact `editor_input` to
+`native-input.tti` in the proof root. Do not generate, pad, trim or rewrite the
+copy. This script verifies the length/hash before copying, uses create-new output
+and verifies the copied hash. In the second terminal, set `qtm_probe_root` to the
+same new directory selected for the running test:
+
+```bash
+qtm_probe_root="$PWD/tmp/phase9-qtm-native-flow/editor-run-01"
+python3 - "$qtm_probe_root" <<'PY'
+import hashlib
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+ready = json.loads((root / "ready.json").read_bytes())
+assert ready["probe_version"] == 1
+assert [channel["channel_id"] for channel in ready["channels"]] == [1, 2]
+assert ready["edit"] == {"channel_id": 1, "row": 2, "column": 8, "code": 81}
+channel = ready["channels"][0]
+source = root / channel["editor_input"]
+assert source.is_file() and not source.is_symlink()
+entry = next(item for item in channel["files"] if item["name"] == source.name)
+data = source.read_bytes()
+assert len(data) == entry["bytes"]
+assert hashlib.sha256(data).hexdigest() == entry["sha256"]
+destination = root / "native-input.tti"
+with destination.open("xb") as output:
+    output.write(data)
+assert hashlib.sha256(destination.read_bytes()).hexdigest() == entry["sha256"]
+print(json.dumps({"native_input_sha256": entry["sha256"], "bytes": len(data)}))
+PY
+```
+
+Select the staged tool directory containing `qteletextmaker` and the current
+`native-gui-driver.so`, and the visible X11 socket directory. These are explicit
+local tool paths; they are not server runtime dependencies. Verify the executable
+hash against the prepared identity before launching it. Set the tool directory
+to an absolute path accepted by Docker's bind mount syntax.
+
+```bash
+qtm_tools=/path/to/staged-native-editor-tools
+qtm_xsocket=/path/to/visible-x11-socket-directory
+qtm_image=sha256:6064a1cfba3673ce1530dd5ea4c98249a5540666e3feea3160f43c122fd81c01
+sha256sum "$qtm_tools/qteletextmaker" "$qtm_tools/native-gui-driver.so"
+read -r qtm_left qtm_right < <(python3 - "$qtm_probe_root" <<'PYGEOMETRY'
+import json
+from pathlib import Path
+import sys
+geometry = json.loads((Path(sys.argv[1]) / "ready.json").read_bytes())["channels"][0]["editor_geometry"]
+print(geometry["left_columns"], geometry["right_columns"])
+PYGEOMETRY
+)
+test ! -e "$qtm_probe_root/edited.tti"
+test ! -L "$qtm_probe_root/edited.tti"
+docker run --rm --pull=never --network none --read-only \
+  --cpus 1 --memory 768m --tmpfs /tmp:rw,size=128m \
+  --mount "type=bind,src=$qtm_tools,dst=/tool,readonly" \
+  --mount "type=bind,src=$qtm_probe_root,dst=/work" \
+  --mount "type=bind,src=$qtm_xsocket,dst=/tmp/.X11-unix,readonly" \
+  -e DISPLAY -e QT_QPA_PLATFORM=xcb -e QT_X11_NO_MITSHM=1 \
+  -e LANG=C.UTF-8 -e XDG_CONFIG_HOME=/tmp/qtm-config \
+  -e ERSATZRS_QTM_DRIVER_MODE=single-page-zone-q \
+  -e ERSATZRS_QTM_INPUT_BASENAME=native-input.tti \
+  -e ERSATZRS_QTM_OUTPUT_BASENAME=edited.tti \
+  -e "ERSATZRS_QTM_LEFT_PANEL_COLUMNS=$qtm_left" \
+  -e "ERSATZRS_QTM_RIGHT_PANEL_COLUMNS=$qtm_right" \
+  "$qtm_image" sh -eu -c '
+    install -d -m 700 /tmp/qtm-runtime
+    export XDG_RUNTIME_DIR=/tmp/qtm-runtime LD_PRELOAD=/tool/native-gui-driver.so
+    exec /tool/qteletextmaker /work/native-input.tti'
+```
+
+The driver requires an exposed X11 window, selects the Level 2.5 radio button and
+uses the original compiler-owned left/right panel widths when targeting main row
+2/column 8. The recorded geometry has four left and twelve right columns. It
+enters `Q`, invokes the actual Save As dialog and saves `edited.tti`. It refuses an
+existing/symlink output, verifies the saved document path and cleared modified
+state, captures the actual window/dialog and exits. Retain its terminal result,
+completion line and these four captures, then inspect the captures:
+
+- `edited-qtm-level25.png`
+- `edited-qtm-edited.png`
+- `edited-qtm-save-dialog.png`
+- `edited-qtm-saved.png`
+
+After the editor process exits zero, its actual save completes and the independent
+identity/window evidence is retained, write the bounded schema-1 completion
+marker. Use the actual verified executable digest, not a remembered digest or a
+different staged file. The marker has exactly these fields; the probe rejects
+unknown fields, wrong version/identity, unsupported source pins and saved names:
+
+```json
+{
+  "probe_version": 1,
+  "editor_name": "QTeletextMaker",
+  "editor_version": "1.0",
+  "editor_source_commit": "cac2167bac933a6160cca45a45d5d4ee95355898",
+  "editor_binary_sha256": "af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a",
+  "saved_file": "edited.tti"
+}
+```
+
+Create the marker only after those observed steps. It does not authenticate the
+edited contents or the executable by itself:
+
+```bash
+python3 - "$qtm_probe_root" "$qtm_tools/qteletextmaker" <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+executable = Path(sys.argv[2])
+saved = root / "edited.tti"
+assert saved.is_file() and not saved.is_symlink() and 0 < saved.stat().st_size <= 65536
+binary_hash = hashlib.sha256(executable.read_bytes()).hexdigest()
+assert binary_hash == "af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a"
+marker = {"probe_version": 1, "editor_name": "QTeletextMaker", "editor_version": "1.0",
+          "editor_source_commit": "cac2167bac933a6160cca45a45d5d4ee95355898",
+          "editor_binary_sha256": binary_hash, "saved_file": "edited.tti"}
+temporary = root / "editor-saved.ready"
+with temporary.open("x", encoding="utf-8") as output:
+    json.dump(marker, output, indent=2)
+    output.write("\n")
+os.link(temporary, root / "editor-saved.json")
+temporary.unlink()
+PY
+```
+
+The native test waits at most 600 seconds for the completion marker. It then
+checks the exact protected sidecar and every original file on both channels,
+replaces only the first mapped TTI file with the editor's bytes and calls the
+production native importer. Receipt/original/head validation and edit boundaries
+must succeed before the concept is saved. The test checks the unchanged original
+pending/accepted pointers, compiles the shared preview, reopens the file-backed
+database and compares the recovered preview. Only its separate explicit request
+and native acceptance publish the edited revision. A second reopen compares the
+accepted edited output and the untouched second channel, with originals and
+receipts retained. File/import refusals record `failed.json` and assert the old
+pointers remain intact; saving the editor file does not itself publish anything.
+
+Retain the nextest run identity and terminal zero result, `success.json`, edited
+TTI hash, unchanged original/sidecar/asset hashes, tool/source/image/driver
+identities, actual headed editor log and inspected captures in the final receipt.
+`success.json` records the native scope, edited revision/digest, preview dimensions,
+diagnostics/raster hash, accepted generation/request and second-channel
+isolation. It deliberately requires headed editor/client evidence independently.
+
+This representative probe covers native application export → actual editor
+open/edit/save → validated concept import → shared preview → explicit acceptance
+→ database reopen. Ordinary stream-route output, independent decoding/TSDuck,
+appropriate-client viewing/navigation, full authored Level 2.5/fallback, complete
+resource loading/editing, supported page-set/subpage workflows, localized headed
+admin, Lua behavior and six-platform acceptance retain their existing separate
+requirements. The production TV-guide addon still follows independent engine
+acceptance; no milestone completion follows from this probe alone.
+
+
 ## Next copy-mode transport acceptance
 
 Use the existing calibration playout with the accepted Next executable and

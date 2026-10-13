@@ -46,7 +46,7 @@ Profiles/drafts/preview/admin publication connect.
 Served themes/pending/Off, decoding/client and smoke pass; 12 headed cases pass.
 Copy fixed; finite-client restart/AV passes.
 V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
-QTM/admin/edited stream/client and enhancement editing open.
+QTM charset0 passes; charset loss/admin/stream/client/enhanced open.
 
 SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
 pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
@@ -172,4 +172,12 @@ adr         = '0123'
 description = 'Retain real host restart and playback safety acceptance. A finite-client restart trial cannot establish graceful shutdown while admin clients remain open; diagnose the observed listener drain stall without accepting forced termination as clean shutdown.'
 discovered  = '2026-10-13'
 evidence    = 'P9A-04 owns the actual headed restart receipts. Initial NL/no-JS shutdown receives SIGTERM and stops scanner/scheduler, but lacks shutdown-complete within30s and needs SIGKILL. Available Playwright network trace identifies no unanswered admin request at the signal; Node stream captures are outside that trace. Closing the owned UI context before stop and reopening persisted views is a distinct finite-client trial, not a correction or waiver of open-client shutdown behavior.'
+resolved    = false
+
+[[debt]]
+id          = 'teletext-qtm-national-option-fidelity-is-unproven'
+adr         = '0123'
+description = 'Preserve supported header and enhanced charset semantics through actual pinned QTeletextMaker interchange. Its shared NOS state can alter protected X28 during load/save. Do not silently mask or restore edited packets, change the native header encoder, or accept a permanent authored/editor restriction. General lossless charset interchange remains required.'
+discovered  = '2026-10-13'
+evidence    = 'P9A-04 owns the actual exposed QTeletextMaker1.0/cac2167 export/edit/Save As trial. Native file1357 bytes retains numeric PS C0C0 while X28 primary changes1 to4; the constructor copies X28 before header controls, whose setters overwrite m_defaultNOS. Import rejects at page124/subcode32/row28/designation0 and preserves both accepted/pending outputs. A distinct charset-zero original passes the representative native flow; this does not establish general fidelity or full engine/editor acceptance.'
 resolved    = false

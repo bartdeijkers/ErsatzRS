@@ -122,14 +122,14 @@ async fn receipt(
 }
 
 async fn setup() -> (Fixture, Flow) {
+    setup_with_response(authoring_metadata::response).await
+}
+
+async fn setup_with_response(response: fn(&str, u16, u16) -> serde_json::Value) -> (Fixture, Flow) {
     let fixture = Fixture::new_persistent().await;
     authoring_metadata::install(&fixture).await;
     for (channel, theme) in [(1, "day"), (2, "night")] {
-        authoring_metadata::write(
-            &fixture,
-            theme,
-            &authoring_metadata::response(theme, 124, 32),
-        );
+        authoring_metadata::write(&fixture, theme, &response(theme, 124, 32));
         let profile = fixture.profile(theme, theme, "good").await;
         fixture.bind(channel, &profile, None).await;
     }
@@ -634,4 +634,361 @@ async fn editorial_tampering_and_protected_effects_preserve_original_pointers_an
     assert_original_pointers(&fixture, &flow).await;
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
+}
+
+/// Opt-in file handshake for the separately operated pinned headed editor.
+/// This probe never launches the editor or manufactures its saved TTI bytes.
+mod external_editor_probe {
+    use super::*;
+    use std::{io, path::Path};
+
+    const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_QTM_INTERCHANGE_DIR";
+    const EDITOR_COMMIT: &str = "cac2167bac933a6160cca45a45d5d4ee95355898";
+
+    fn hash(bytes: &[u8]) -> String {
+        use sha2::Digest as _;
+        lower_hex(&sha2::Sha256::digest(bytes))
+    }
+
+    fn lower_hex(bytes: &[u8]) -> String {
+        use std::fmt::Write as _;
+        let mut text = String::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+            write!(text, "{byte:02x}").unwrap();
+        }
+        text
+    }
+
+    fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        file.write_all(bytes)
+    }
+
+    fn read_bounded(path: &Path, maximum: usize) -> io::Result<Vec<u8>> {
+        use std::io::Read as _;
+        let metadata = std::fs::symlink_metadata(path)?;
+        if !metadata.file_type().is_file() || metadata.len() > u64::try_from(maximum).unwrap() {
+            return Err(io::Error::other(
+                "editor probe input is not a bounded regular file",
+            ));
+        }
+        let mut bytes = Vec::new();
+        std::fs::File::open(path)?
+            .take(u64::try_from(maximum).unwrap() + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() > maximum {
+            return Err(io::Error::other(
+                "editor probe input exceeded its read limit",
+            ));
+        }
+        Ok(bytes)
+    }
+
+    fn editor_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
+        let mut response = authoring_metadata::response(theme, page, subcode);
+        // Pinned editor load couples its X28 NOS to header controls. The
+        // separate positive fixture uses unambiguous zero on both planes;
+        // actual-1 retains the nonzero loss/rejection as open fidelity evidence.
+        response["service"]["pages"][0]["national_option"] = serde_json::json!(0);
+        response["service"]["magazines"][0]["presentation"]["primary"] = serde_json::json!(0);
+        response
+    }
+
+    fn editor_geometry(flow: &Flow, index: usize, page: u16, subcode: u16) -> serde_json::Value {
+        let owner = channel_documents::address(page, subcode);
+        let composition = flow.saved[index]
+            .candidate()
+            .encoded()
+            .unwrap()
+            .pages()
+            .iter()
+            .find_map(|page| match page {
+                EncodedTeletextAuthoredPage::NativeDisplay(page)
+                    if page.composition().owner() == owner =>
+                {
+                    Some(page.composition())
+                }
+                EncodedTeletextAuthoredPage::CompiledDisplay(page)
+                    if page.page().address() == owner =>
+                {
+                    Some(page.normalized().original())
+                }
+                _ => None,
+            })
+            .unwrap();
+        let geometry = composition.display_geometry();
+        serde_json::json!({"left_columns":geometry.left_width(),
+            "right_columns":geometry.right_width(),"total_columns":geometry.total_width(),
+            "main_origin_column":geometry.left_width(),"target_visual_column":geometry.left_width()+8})
+    }
+
+    fn write_ready(directory: &Path, flow: &Flow) -> io::Result<()> {
+        let mut channels = Vec::new();
+        for (index, exported) in flow.exported.iter().enumerate() {
+            let prefix = format!("channel-{}", index + 1);
+            let channel = directory.join(&prefix);
+            std::fs::create_dir(&channel)?;
+            let sidecar =
+                write_teletext_export_sidecar(exported.sidecar(), policy().project).unwrap();
+            write_new(&channel.join("project.ersatzrs.json"), &sidecar)?;
+            let mut files = Vec::new();
+            for file in exported.files() {
+                write_new(&channel.join(&file.name), &file.bytes)?;
+                files.push(serde_json::json!({"name":file.name,"bytes":file.bytes.len(),"sha256":hash(&file.bytes)}));
+            }
+            let page = &exported.sidecar().project.pages[0];
+            channels.push(serde_json::json!({"channel_id":index+1,
+                "profile_id":exported.sidecar().project.producers[0].profile_id,
+                "theme":exported.sidecar().project.producers[0].authoring.as_ref().unwrap().theme.id,
+                "design_id":flow.saved[index].head().id,"original_revision":1,
+                "original_digest":flow.saved[index].digest(),
+                "receipt_id":exported.metadata().id,"receipt_digest":exported.metadata().digest,
+                "sidecar":format!("{prefix}/project.ersatzrs.json"),"sidecar_sha256":hash(&sidecar),
+                "page":{"page":page.page.page,"subcode":page.page.subcode,"editor_page":page.editor_page,"editor_ordinal":page.editor_ordinal},
+                "editor_input":format!("{prefix}/{}",page.name),
+                "editor_geometry":editor_geometry(flow,index,page.page.page,page.page.subcode),"files":files}));
+        }
+        let ready = serde_json::json!({"probe_version":1,"channels":channels,
+            "edit":{"channel_id":1,"row":2,"column":8,"code":81},
+            "save_as":"edited.tti","completion":"editor-saved.json",
+            "editor":{"name":"QTeletextMaker","version":"1.0","source_commit":EDITOR_COMMIT},
+            "publication":"only after explicit native test request and acceptance"});
+        write_new(
+            &directory.join("ready.json"),
+            &serde_json::to_vec_pretty(&ready).unwrap(),
+        )
+    }
+
+    #[derive(serde::Deserialize, serde::Serialize)]
+    #[serde(deny_unknown_fields)]
+    struct EditorSaved {
+        probe_version: u16,
+        editor_name: String,
+        editor_version: String,
+        editor_source_commit: String,
+        editor_binary_sha256: String,
+        saved_file: String,
+    }
+
+    fn read_completion(directory: &Path) -> io::Result<EditorSaved> {
+        let bytes = read_bounded(&directory.join("editor-saved.json"), 4096)?;
+        let marker: EditorSaved = serde_json::from_slice(&bytes)
+            .map_err(|_| io::Error::other("editor completion does not match its schema"))?;
+        if marker.probe_version != 1
+            || marker.editor_name != "QTeletextMaker"
+            || marker.editor_version != "1.0"
+            || marker.editor_source_commit != EDITOR_COMMIT
+            || marker.saved_file != "edited.tti"
+            || marker.editor_binary_sha256.len() != 64
+            || !marker
+                .editor_binary_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+        {
+            return Err(io::Error::other(
+                "editor completion does not match the pinned probe",
+            ));
+        }
+        Ok(marker)
+    }
+
+    async fn wait_for_editor(directory: &Path) -> io::Result<EditorSaved> {
+        let end = tokio::time::Instant::now() + Duration::from_mins(10);
+        tokio::time::timeout_at(end, async {
+            loop {
+                if tokio::fs::try_exists(directory.join("editor-saved.json")).await? {
+                    return read_completion(directory);
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .map_err(|_| io::Error::other("external editor did not complete within 600 seconds"))?
+    }
+
+    fn read_editor_request(
+        directory: &Path,
+        flow: &Flow,
+    ) -> io::Result<NativeTeletextEditorialImportRequest> {
+        for (index, exported) in flow.exported.iter().enumerate() {
+            let channel = directory.join(format!("channel-{}", index + 1));
+            let sidecar = read_bounded(
+                &channel.join("project.ersatzrs.json"),
+                policy().project.max_bytes,
+            )?;
+            if sidecar
+                != write_teletext_export_sidecar(exported.sidecar(), policy().project).unwrap()
+            {
+                return Err(io::Error::other("editor changed protected sidecar bytes"));
+            }
+            for file in exported.files() {
+                if read_bounded(&channel.join(&file.name), policy().project.max_file_bytes)?
+                    != file.bytes
+                {
+                    return Err(io::Error::other(
+                        "editor changed protected original project files",
+                    ));
+                }
+            }
+        }
+        let exported = &flow.exported[0];
+        let page_name = &exported.sidecar().project.pages[0].name;
+        let mut files = Vec::new();
+        for file in exported.files() {
+            let bytes = if &file.name == page_name {
+                read_bounded(&directory.join("edited.tti"), policy().tti.max_bytes)?
+            } else {
+                read_bounded(
+                    &directory.join("channel-1").join(&file.name),
+                    policy().project.max_file_bytes,
+                )?
+            };
+            files.push(TeletextExportFile {
+                name: file.name.clone(),
+                bytes,
+            });
+        }
+        Ok(NativeTeletextEditorialImportRequest {
+            name: "Synthetic actual QTeletextMaker edit".to_owned(),
+            receipt_id: exported.metadata().id,
+            receipt_digest: exported.metadata().digest.clone(),
+            expected_design_head: 1,
+            sidecar: read_bounded(
+                &directory.join("channel-1/project.ersatzrs.json"),
+                policy().project.max_bytes,
+            )?,
+            files,
+        })
+    }
+
+    async fn checked_external_request(
+        directory: &Path,
+        fixture: &Fixture,
+        flow: &Flow,
+    ) -> (EditorSaved, NativeTeletextEditorialImportRequest) {
+        let result = async {
+            let marker = wait_for_editor(directory).await?;
+            let request = read_editor_request(directory, flow)?;
+            Ok::<_, io::Error>((marker, request))
+        }
+        .await;
+        match result {
+            Ok(value) => value,
+            Err(error) => {
+                assert_original_pointers(fixture, flow).await;
+                write_new(
+                    &directory.join("failed.json"),
+                    &serde_json::to_vec_pretty(&serde_json::json!({
+                    "probe_version":1,"stage":"external_editor_files","old_pointers_preserved":true,
+                    "failure":error.to_string()}))
+                    .unwrap(),
+                )
+                .unwrap();
+                panic!("external editor probe failed before import: {error}");
+            }
+        }
+    }
+
+    async fn checked_external_import(
+        directory: &Path,
+        fixture: &Fixture,
+        flow: &Flow,
+        request: NativeTeletextEditorialImportRequest,
+    ) -> SavedEditorialTeletextDesign {
+        match import_teletext_editorial_design(
+            &fixture.state.application,
+            request,
+            policy(),
+            designs::deadline(),
+        )
+        .await
+        {
+            Ok(TeletextDesignMutation::Saved(saved)) => saved,
+            other => {
+                assert_original_pointers(fixture, flow).await;
+                let failure = match other {
+                    Err(error) => error.to_string(),
+                    Ok(TeletextDesignMutation::Rejected(reason)) => format!("{reason:?}"),
+                    Ok(TeletextDesignMutation::Saved(_)) => unreachable!(),
+                };
+                write_new(&directory.join("failed.json"), &serde_json::to_vec_pretty(&serde_json::json!({
+                    "probe_version":1,"stage":"native_import","old_pointers_preserved":true,"failure":failure})).unwrap()).unwrap();
+                panic!("actual editor result failed native import");
+            }
+        }
+    }
+
+    fn raster_hash(raster: &TeletextRaster) -> String {
+        use sha2::Digest as _;
+        let mut digest = sha2::Sha256::new();
+        for pixel in raster.pixels() {
+            match pixel {
+                TeletextRasterPixel::ReceiverHeader => digest.update([0]),
+                TeletextRasterPixel::Unresolved(index) => {
+                    digest.update([1]);
+                    digest.update(u64::try_from(*index).unwrap().to_le_bytes());
+                }
+                TeletextRasterPixel::Colour(TeletextColourPixel::Video) => digest.update([2]),
+                TeletextRasterPixel::Colour(TeletextColourPixel::Rgb(rgb)) => {
+                    digest.update([3]);
+                    digest.update(rgb.get());
+                }
+            }
+        }
+        lower_hex(&digest.finalize())
+    }
+
+    #[tokio::test]
+    #[ignore = "requires an explicit create-new disposable directory and a separately operated pinned headed QTeletextMaker 1.0 editor"]
+    async fn pinned_external_editor_files_import_preview_publication_and_reopen() {
+        let directory =
+            std::path::PathBuf::from(super::super::client_capture::selected(DIRECTORY_ENV));
+        std::fs::create_dir(&directory).expect("probe destination must not already exist");
+        let (mut fixture, flow) = setup_with_response(editor_response).await;
+        write_ready(&directory, &flow).unwrap();
+        let (marker, request) = checked_external_request(&directory, &fixture, &flow).await;
+        let edited_hash = hash(
+            &request
+                .files
+                .iter()
+                .find(|file| file.name == flow.exported[0].sidecar().project.pages[0].name)
+                .unwrap()
+                .bytes,
+        );
+        let edited = checked_external_import(&directory, &fixture, &flow, request).await;
+        assert_eq!(edited.head().id, flow.saved[0].head().id);
+        assert_eq!(edited.head().revision, 2);
+        assert_original_pointers(&fixture, &flow).await;
+        let preview = assert_concept_preview(&fixture, &flow, &edited, 2).await;
+        fixture = fixture.reopen().await;
+        assert_original_pointers(&fixture, &flow).await;
+        assert_eq!(
+            assert_concept_preview(&fixture, &flow, &edited, 2).await,
+            preview
+        );
+        let accepted = publish_and_accept(&fixture, &flow, &edited).await;
+        assert_eq!(generations::preview(accepted.service()).raster(), &preview);
+        fixture = fixture.reopen().await;
+        generations::assert_same_output(&recover(&fixture, 1).await, &accepted);
+        generations::assert_same_output(&recover(&fixture, 2).await, &flow.accepted[1]);
+        assert_retained_storage(&fixture, &flow).await;
+        assert!(fixture.playout.try_recv().is_err());
+        let success = serde_json::json!({"probe_version":1,"scope":"native application interchange flow",
+            "editor_completion":marker,"edited_tti_sha256":edited_hash,
+            "edited_design_id":edited.head().id,"edited_revision":edited.head().revision,"edited_digest":edited.digest(),
+            "preview":{"width":preview.width(),"height":preview.height(),"diagnostics":preview.diagnostics().len(),"sha256":raster_hash(&preview)},
+            "accepted_generation_id":accepted.generation().id,"accepted_request_id":accepted.generation().request.id,
+            "second_channel_unchanged":true,"originals_and_receipts_unchanged":true,
+            "headed_editor_and_client_evidence":"must be attached independently"});
+        write_new(
+            &directory.join("success.json"),
+            &serde_json::to_vec_pretty(&success).unwrap(),
+        )
+        .unwrap();
+        fixture.state.pool.close().await;
+    }
 }

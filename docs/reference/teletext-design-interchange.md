@@ -4820,6 +4820,26 @@ edits, and keeps PS exact pending editor-normalization proof. Preserved DVB reso
 assets do not yet prove QTeletextMaker dependency loading. Enhanced resources,
 objects, DRCS, side-panel editing and the complete pinned editor roundtrip remain
 required. These are pending implementation/evidence, not accepted permanent
-restrictions. Native fixture preview/reopen/publication proves no actual editor,
-headed admin, ordinary edited stream, independent decoding or suitable-client
-navigation; those next flow steps and full engine acceptance remain open.
+restrictions. A separate pinned QTeletextMaker1.0 trial now opens a real native export with an
+exposed X11 window, edits main row2/column8 through actual widgets and saves through
+Save As. Compiler-owned four-left/twelve-right geometry supplies the editor input
+offset; independently parsed saved cells verify the target before publication.
+The exact saved bytes enter the production native importer; same preview, explicit
+request/acceptance, two reopens and untouched second-channel theme pass. The
+positive fixture explicitly uses zero for original header and enhanced charset.
+
+The retained nonzero trial is a counterexample: header/PS remains numerically
+unchanged, but X28 primary changes1 to4. Pinned `LevelOnePage(PageBase const&)`
+copies X28 before control bits, and `setControlBit` overwrites the shared
+`m_defaultNOS`; saving reconstructs X28 with that changed value. The importer
+rejects at page124/subcode32/row28/designation0 and proves old output remains.
+This is an unresolved editor-fidelity requirement, not permission to mask packets,
+rewrite saved files, change header encoding or limit the authored engine.
+
+[Replay instructions](../../scripts/e2e/README.md#replay-the-pinned-editor-against-a-native-export)
+provide the structured file/validation/preview workflow for maintainers and agents.
+Its readiness/completion markers alone grant no authority: final native results,
+actual window/dialog captures and source/binary/image identities are required.
+P9A-04 owns successful and negative receipts. Headed localized admin, ordinary
+edited stream, independent decoding and suitable-client navigation, full page-set/
+resource/charset editing and complete engine acceptance remain open.
