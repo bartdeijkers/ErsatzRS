@@ -184,8 +184,10 @@ release section when tagging a release.
   that exact original for new compatible streams, preserving observed revision
   and pending/accepted-pointer fences. Historical previews retain their pages
   when the original profile selection becomes unavailable, with publication
-  controls disabled. Guide/editor interchange, effective Lua controls, warm
-  activation and complete live acceptance remain pending.
+  controls disabled. Synthetic restart checks retain both accepted themes and a
+  newer pending-only design across real process replacement and reloaded admin
+  views. Open-client graceful shutdown remains unproven. Guide/editor interchange,
+  effective Lua controls, warm activation and complete live acceptance remain pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is

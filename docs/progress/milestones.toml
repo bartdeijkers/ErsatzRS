@@ -2724,6 +2724,109 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 real synthetic host-restart checkpoint (representative flow verified):
+Criterion: two channels sharing one installed addon retain distinct accepted
+profiles/themes, plus a newer pending-only design, across actual process
+replacement. This extends the b09307c3 ordinary-stream flow; it does not close
+full engine acceptance, Lua intervals or live warm adoption.
+The existing isolated host now exposes owned process identity and restart,
+preserving exact executable/site/database/state/package/source paths and port.
+SIGTERM waits30s, then a recorded SIGKILL fallback waits10s; replacement requires
+confirmed parent closure. A60s fixture cleanup bound accommodates an already
+started15s health wait plus40s stop. Concurrent restart and teardown respawn are
+rejected. Parent close does not prove every runtime child was reaped, and Unix
+signal evidence does not establish graceful Windows shutdown.
+
+The first EN trial rejects a changed addon.preparation.worker lifetime UUID.
+Existing run_preparation_worker intentionally generates a fresh UUID at startup.
+The test now verifies the full version1/Idle/null-attempt checkpoint and UUIDv4
+before normalizing only that identity, requires it to change at restart, and
+requires it to remain stable during subsequent preview/playback. Every remaining
+configuration key/value is compared under the existing exact seven-heartbeat
+normalization and intentional UI/Health exclusions. Product state is not dropped.
+The following EN trial passes, but NL/no-JS receives SIGTERM without confirmed
+clean closure within30s and is forced. These initial runs remain negative evidence.
+The trace contains no unanswered admin request at the signal; Node fetch captures
+are absent from that trace. Do not infer a hanging route or claim a no-JS defect.
+A distinct finite-client trial closes only the owned browser context before stop
+and reopens it with the same options after health. This proves persisted views,
+not open-client graceful drain; the latter is explicit unresolved parity debt.
+
+Chromium151.0.7922.34 finite-client trial passes2/2 in97.218 seconds:
+EN/hydrated/light and NL/no-JS/dark. Both require confirmed unforced exit0,
+different positive host PID, increasing process generation and fresh worker epoch.
+All original/pending/accepted rows and pointers, channel/playout/package values
+and producer calls remain exact. Two accepted themes and a third pending-only
+original retain Selected/Selected/Pending; the third is not promoted. Actual
+native previews navigate200->201, while concurrent ordinary TCP captures before
+and after restart retain both themes, authored PID and decoded AV. Package bytes
+remain unchanged and no producer is reinvoked. Root inspects EN/light Selected
+and NL/dark Pending viewport receipts. The existing isolated settings fault case
+also passes on the initial unchanged-helper trial; unrelated failed teletext cases
+in that run are not counted as successful restart evidence.
+
+The initial capture-verifier invocation fails before decoding because FFMPEG_PATH
+still selects8.1 while the explicit test selector requests the pinned9 artifact.
+After matching both selectors, Nextest506c3fe5-804e-493c-a35b-597dca0db05f passes
+1/1 against the retained successful open-client EN captures. It independently
+checks source frame hashes/440Hz audio, complete native unit sets, page200/201
+libzvbi decoding and TSDuck transport before/after actual restart on both channels.
+The final finite-client verifier passes against all four headed inputs:
+cb61ba66-f71c-4f14-bde6-07d2e883dbc3 (Chromium EN),
+e9bfbeb2-c108-429e-9a54-38638f48006e (Chromium NL),
+c34d083c-19f7-428e-98b1-30f64596e91d (Firefox EN),
+c98e91f4-e4ed-408d-b79a-be9182316912 (Firefox NL).
+These are four successful invocations of one unique Rust identity, covering all
+sixteen actual before/after channel captures, not four distinct tests.
+Headed Firefox153.0 passes3/3 in124.279 seconds: both restart variants and the
+existing isolated settings fault regression. Root inspects EN/light Pending and
+NL/dark Selected viewport receipts. Final Chromium/Firefox terminal suites have
+zero failed/skipped/flaky identities. The successful browser union is four new
+restart identities plus two existing helper-regression identities; the Chromium
+helper pass comes from the initial mixed run and does not make its failed suite
+green. All eight current restart/teardown stops confirm unforced exit0; no
+independent descendant-reaping or full platform acceptance is inferred.
+The wrapper's existing default local FFmpeg override is detected in the initial
+trial. Final runs use its existing ERSATZRS_FFMPEG_DIR option to preserve explicit
+pinned host overrides; neither the shared wrapper nor production startup changes.
+Each restart reuses the wrapper's copied executable/site without a new build.
+WASM174917dad2ec6c7c836bde73938f388b7211acf46acd0879061e30f39ba8e5fe
+is unchanged. The initially observed target executable has SHA256
+7150c60ede9a8b8793bfac647a015b6e22405292e08f959071becf55b07da135;
+later native verification rebuilds the target, including embedded changelog
+changes. The discarded browser-runtime copies were not separately hashed at
+launch, so the post-verifier executable hash is not claimed as their identity.
+Browser process identity, identical restart launch contract and actual output are
+proven; full exact-artifact/platform acceptance remains open. Earlier complete
+static flow/native/client proof is reused where model assumptions are unchanged.
+
+Strict web all-target Clippy and workspace formatting pass; progress validation
+passes within the summary budget and the new-Clippy-allow policy passes. No
+full closeout/CI/milestone success is claimed for this test-and-evidence slice.
+Archived source/capture/browser/native receipts live in ignored
+tmp/phase9-restart-proof. receipt-sha256.txt contains97 entries and has SHA256
+652f4743f50893939c182df40900e2f39a25d425e81571faecd0a248dc766cbe.
+It excludes mutable documentation to avoid a self-referential evidence hash.
+All accepted criteria/status/dependencies remain unchanged; checkpoints stay local.
+
+Next concrete interchange criterion: bind one synthetic addon-declared editable
+zone and protected surrounding content to a server-owned versioned export receipt
+for an exact design/revision/digest. Add bounded TTI/sidecar export and a separate
+concept-import candidate through the existing validator/compiler, then prove
+actual pinned QTeletextMaker edit/save, stale-export rejection, exact identity/
+navigation and preview, and unchanged accepted output until explicit publication.
+Current TeletextSavedEditPolicy supports only OriginalOnly; the closed V2 response
+has no template/zone/dynamic edit ownership metadata. Imported bytes cannot
+impersonate the private invocation-owned original candidate. Reuse immutable
+storage/head CAS, historical preview and explicit publication instead of adding
+another storage framework. The earlier QTM1.0/cac2167 calibration proves editor
+behavior only; its engine_roundtrip_proven:false boundary is unchanged. This is incremental
+scope, never a permanent one-zone or format restriction. Full Level2.5/fallback,
+resource/region/link proof, Lua timing/errors/Continue/Refresh/Reset/restart, warm
+applied state, retained/native/Next/source playback and all six platforms remain
+open. No milestone/dependency/acceptance changes; production NOS200-299 content
+still waits for independent generic engine acceptance.
+
 2026-10-13 explicit static-publication connection checkpoint (representative flow verified):
 Criterion: selected profiles -> validated immutable originals -> exact native
 preview -> separate pending request and explicit acceptance -> ordinary served

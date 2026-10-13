@@ -24,7 +24,10 @@ explicitly select its exact immutable original for new compatible streams;
 observed head/pending/accepted fences are checked by the existing transactions.
 Historical pages remain previewable when their saved selection becomes stale,
 with unavailable publication controls and retained pointer observations.
-Running streams retain their captured generation. Fresh guide/editor interchange,
+Running streams retain their captured generation.
+A finite-client whole-host restart trial retains two selected themes and a newer
+pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
+the exact proof and negative shutdown receipt. Fresh guide/editor interchange,
 effective Lua/applied state, full warm activation and independent full
 encoding/client acceptance remain open. P9A-04 owns the current verification and
 independent synthetic acceptance; P9B-01/02 own the sole production TV-guide

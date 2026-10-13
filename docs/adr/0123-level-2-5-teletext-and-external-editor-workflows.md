@@ -22,6 +22,9 @@ streams using existing immutable qualification and atomic publication fences.
 Selection changes disable publication controls without erasing historical
 preview or pointer observations. Existing streams retain their captured output.
 This connection grants no TTI/editor/zone or full authored Level 2.5 acceptance.
+A finite-client whole-host restart trial retains two selected themes and a newer
+pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
+the exact proof and negative shutdown receipt.
 P9A-04 owns current independent proof and all remaining obligations.
 
 Checked colour references, four-bit RGB, editable CLUT2/3 declarations

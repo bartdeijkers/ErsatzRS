@@ -395,6 +395,32 @@ async fn served_admin_publication_captures_preserve_exact_model_and_source_av() 
     }
 }
 
+/// Validate independently captured streams on both sides of a real host restart.
+/// Reuse the same expected authored models without generating capture bytes or
+/// treating transport and decoder checks as full client or engine acceptance.
+#[tokio::test]
+#[ignore = "requires actual served-host restart captures plus pinned FFmpeg/ffprobe9 and TSDuck"]
+async fn served_admin_restart_captures_preserve_exact_model_and_source_av() {
+    let tools = Tools::load().await;
+    let prefix = client_capture::selected("ERSATZRS_TELETEXT_RESTART_CAPTURE");
+    let (fixture, _) = installed_profiles(&tools).await;
+    let source = tokio::fs::read(format!("{prefix}.source.ts"))
+        .await
+        .unwrap();
+    let accepted = [accept(&fixture, 1).await, accept(&fixture, 2).await];
+    for (index, suffix) in [
+        (0, "before.day"),
+        (1, "before.night"),
+        (0, "after.day"),
+        (1, "after.night"),
+    ] {
+        let delivered = tokio::fs::read(format!("{prefix}.{suffix}.ts"))
+            .await
+            .unwrap();
+        verify_authored(&tools, &source, &delivered, accepted[index].service()).await;
+    }
+}
+
 #[tokio::test]
 #[ignore = "requires pinned FFmpeg/ffprobe9,TSDuck and explicit create-new capture prefix; headed client trial remains separate"]
 async fn ordinary_http_two_channels_share_one_addon_with_isolated_accepted_themes() {
