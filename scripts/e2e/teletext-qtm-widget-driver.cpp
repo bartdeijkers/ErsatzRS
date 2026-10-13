@@ -42,6 +42,7 @@ struct DriverContext {
     QByteArray outputName;
     QString inputPath;
     QString outputPath;
+    QByteArray drcsName;
     int leftPanelColumns;
     int rightPanelColumns;
     QString captureName(const char *stage) const {
@@ -75,18 +76,80 @@ static DriverContext driverContext() {
     if (mode.isEmpty()) {
         if (!input.isEmpty() || !output.isEmpty()
             || !qgetenv("ERSATZRS_QTM_LEFT_PANEL_COLUMNS").isEmpty()
-            || !qgetenv("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS").isEmpty())
+            || !qgetenv("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS").isEmpty()
+            || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME").isEmpty())
             qFatal("Native basenames/panels require explicit single-page driver mode");
         return {false, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
-            "/work/synthetic-editor-audit.tti", "/work/edited-editor-audit.tti", 0, 0};
+            "/work/synthetic-editor-audit.tti", "/work/edited-editor-audit.tti", {}, 0, 0};
     }
     if (mode != "single-page-zone-q" || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
+    const QByteArray drcs = qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME");
+    if (!drcs.isEmpty() && (!safeTtiBasename(drcs) || drcs == input || drcs == output))
+        qFatal("Invalid explicit protected Normal DRCS companion name");
     if (left + right > 16) qFatal("Native Level 2.5 panel counts exceed sixteen columns");
     return {true, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), left, right};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right};
+}
+static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
+    if (context.drcsName.isEmpty()) return;
+    const QString path = QString("/work/") + QString::fromLatin1(context.drcsName);
+    const QFileInfo file(path);
+    if (!file.isFile() || file.isSymLink() || file.size() <= 0)
+        qFatal("Protected Normal DRCS companion absent");
+    QAction *load = nullptr;
+    for (QAction *action : main->findChildren<QAction *>())
+        if (action->statusTip() == "Load a file to use for Normal DRCS definitions") load = action;
+    if (!load) qFatal("Actual Normal DRCS Load file action absent");
+    QTimer::singleShot(250, qApp, [main, context, path] {
+        for (QWidget *widget : QApplication::topLevelWidgets())
+            if (auto dialog = qobject_cast<QFileDialog *>(widget)) {
+                if (!dialog->isVisible() || dialog->parentWidget() != main
+                    || dialog->acceptMode() != QFileDialog::AcceptOpen
+                    || dialog->windowTitle() != "Select Normal DRCS file") continue;
+                auto name = dialog->findChild<QLineEdit *>("fileNameEdit");
+                if (!name) qFatal("Actual DRCS filename input absent");
+                name->selectAll();
+                QTest::keyClicks(name, path, Qt::NoModifier, 5);
+                QTimer::singleShot(200, qApp, [dialog, context, path] {
+                    if (!dialog->grab().save(QString("/work/") + context.captureName("drcs-open-dialog"))
+                        || dialog->selectedFiles() != QStringList{path})
+                        qFatal("Actual DRCS dialog selection/capture failed");
+                    for (QPushButton *button : dialog->findChildren<QPushButton *>()) {
+                        QString text = button->text(); text.remove('&');
+                        if (text == "Open" && button->isEnabled()) { button->click(); return; }
+                    }
+                    qFatal("Actual enabled DRCS Open button absent");
+                });
+                return;
+            }
+        qFatal("Actual Normal DRCS open dialog absent");
+    });
+    load->trigger();
+    bool attached = false;
+    for (QAction *action : main->findChildren<QAction *>())
+        if (action->text() == QString("Normal DRCS: ") + QString::fromLatin1(context.drcsName)) attached = true;
+    if (!attached) qFatal("Actual Normal DRCS attachment did not complete");
+    capture(context.captureName("drcs-loaded").toUtf8().constData());
+    // Fixed opt-in synthetic fixture: Normal S1=0/slot0 at Main(1,8),
+    // asymmetric literal bitmap, day CLUT2 foreground red/background black.
+    // An attachment label alone would also succeed for an empty/wrong file.
+    auto view = editor();
+    if (!view) qFatal("Actual DRCS editor view absent");
+    const QImage bitmap = view->grab().toImage();
+    if (bitmap.size() != view->size()) qFatal("Expected one-to-one DRCS pixel capture");
+    const unsigned short rows[10] = {0x801, 0x800, 0x400, 0x200, 0x100,
+        0x080, 0x040, 0x020, 0x010, 0x009};
+    for (int y = 0; y < 10; ++y)
+        for (int x = 0; x < 12; ++x) {
+            const QColor expected = ((rows[y] >> (11 - x)) & 1) ? QColor(255, 0, 0) : QColor(0, 0, 0);
+            if (bitmap.pixelColor((context.leftPanelColumns + 8) * 12 + x, 10 + y) != expected)
+                qFatal("Actual attached DRCS pixels/palette differ from synthetic literal");
+        }
+    std::puts("QTM actual Normal DRCS glyph: all 120 literal bitmap/day palette pixels match");
+    std::printf("QTM actual Normal DRCS Load file complete: %s\n", context.drcsName.constData());
 }
 static void saveAs(QMainWindow *main, const DriverContext &context) {
     QAction *save = nullptr;
@@ -156,6 +219,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (radio->text() == "2.5") { radio->click(); selected = radio->isChecked(); }
         if (!selected) qFatal("Level 2.5 radio absent");
         capture(context.captureName("level25").toUtf8().constData());
+        loadNormalDrcs(main, context);
         if (context.singlePage) {
             // cac2167 mainwidget.cpp:240,567-581: x/12 minus the
             // decoder's left count addresses Main; y/10 addresses the row.

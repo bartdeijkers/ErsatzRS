@@ -274,7 +274,7 @@ pub async fn export_original_teletext_design(
                 project_budget,
                 policy.tti,
                 deadline,
-                TeletextEditorCarrier::V2,
+                TeletextEditorCarrier::V3,
             )
             .map_err(|error| NativeTeletextExportError::Mapping(Box::new(error)))?;
             let receipt = write_teletext_export_receipt_body(&body, project_budget)?;

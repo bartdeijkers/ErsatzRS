@@ -2724,6 +2724,57 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 protected DRCS editor dependency checkpoint:
+Criterion: connect an existing authored resource to the actual pinned editor,
+then the same native concept/preview/publication and ordinary two-channel flow.
+Fresh carrierV3 adds a linked, protected resource TTI; unchanged DVB identity,
+physical header/lifecycle, PTU/SPACE rows and all X28/3 words remain exact.
+Strict inverse validation rejects correctable damage instead of repairing it.
+Companions are counted before file allocation and charged to existing byte/record
+bounds, without double-charging transmitted units. Legacy/V2 factories and DVB
+filenames stay unchanged; stored receipt profile alone chooses reconstruction.
+
+Run6817d4ad-ed5a-44b4-a062-a961ff36e6e1 passes67/67 affected project/projection,
+HTTP/export/concept cases, including15 new regressions. Literal asymmetric DRCS,
+high-slot/sparse modes, header/parity/protection/order/identity and closed metadata
+are checked. Changed/missing companions retain old accepted output; a retained V2
+resource receipt without a companion still imports/previews/publishes/reopens.
+The first compile's two missing fixture imports are corrected before this run.
+
+Actual unchanged QTM1.0/cac2167, Qt6.10.2 in the pinned6064a1cf image, loads normal
+1C0/S1=0/slot0 through its actual owned Open dialog. All120 actual widget pixels
+match the fixed bitmap/red palette, so an attachment label alone cannot pass.
+Six inspected editor captures retain before/load/edit/Save As. Exact saved display
+TTI imports as Free-row2 Q, shares native preview, explicitly publishes and reopens
+twice; protected glyph/resource bytes, page125, second channel and package stay
+unchanged. Rund100e627-6001-4065-a4bb-7ee846cc5e52 passes1/1, for68 unique Rust
+successes. Concurrent ordinary Router captures preserve exact emitted models,
+TSDuck3.44-4676 transport and FFmpeg9n9.0-20261006 source audio/video. SRT decodes
+F400/Z on all four pages, Q only day124. The reused hash-pinned libzvbi0.2.42 ABI
+independently decodes all120 bitmap and PAL8 pixels on each page124/125:0020 and
+both red/blue palettes from ordered actual captured units.
+
+Actual headed VLC3.0.20/libzvbi0.2.42 shows the DRCS/Z with simultaneous themes,
+Q only day124, and124.20->125.20->124.20 on both channels. Six client-3 images are
+inspected; complete finite replay and owned client exits pass. The first trial
+mistakenly uses an older nonactivating driver and shows video/EOF; it is negative
+only. The authenticated prior successful driver activates zvbi, but client-2's
+day Next screenshot remains124. Direct native Qt spin arrows replace global
+keyboard entry; client-3 then proves both rendered sequences. All trials remain.
+This is byte-identical finite served-capture replay, not live bound-server attachment,
+open-generation changes or full56-column client display.
+
+Strict app/FFmpeg all-target and web-library/preparation-test Clippy pass. The
+successful runtime results remain valid after only a terminating semicolon and
+import relocation for lint; behavior/inputs are unchanged. Formatting, architecture,
+new-allowance and progress checks pass. No UI/WASM/dependency change; prior72
+localized headed file flows and unchanged prerequisite receipts are reused.
+Receipt: tmp/phase9-drcs-companion/identity.json, SHA2565d29c936478f5d200f980c99e6cf798c2e6c747b93e1ed60c444957309574fba.
+Full higher-S1/set mapping, attached-resource/enhancement editing, charsets/panels,
+Lua/timing/restart, remaining localized management, source/Next and six-platform
+acceptance remain required. No permanent restriction, milestone completion,
+acceptance/dependency change, production guide, push or full CI claim.
+
 2026-10-14 versioned editor carrier checkpoint:
 Criterion: correct the demonstrated pinned-editor nonzero NOS loss while retaining
 independent native fallback/enhanced primary and old receipt/concept recovery.
@@ -2988,13 +3039,16 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
 | Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
 | Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two-channel exact route/TSDuck/AV/decoding and actual 124->125->124 client proof; localized native forms and 8-case/all-nine-culture headed flow proven | Bound live client/open-generation transitions and full panel/feature coverage |
-| Actual pinned QTM workflow | Actual v1.0 charset0, nonzero equal and independent NOS edit/Save As/import/preview/publish/reopen/stream flows; legacy concepts recover unchanged | Remaining charset/resource coverage, resource dependency loading and full supported page-set/subpage edits |
+| Actual pinned QTM workflow | Actual v1.0 NOS and DRCS0 dependency load/pixels/edit/Save As/import/preview/publish/reopen/stream/client flows; Legacy/V2 concepts recover unchanged | Remaining charset/resource editing, higher-S1 dependency-set mapping and full supported page-set/subpage edits |
 | Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
-Concrete next action: connect preserved resource assets to editor-loadable TTI.
-Start with one representative synthetic DRCS dependency using the pinned editor's
-actual loader/writer, exact versioned mappings and native decode/preview/publication.
-Current raw DVB assets preserve bytes but cannot establish editor resource loading.
+Concrete next action: extend the proven DRCS0 dependency flow to a representative
+higher-S1 supported set. Pinned QTM ignores SC and indexes PN groups by list order;
+exact resource-to-editor indexing must be explicit, with no guessed/filler banks.
+The single-companion mapping currently proves S1=0 only. Preserve raw assets and
+old receipts, then prove actual loading, the same native preview/publication and
+independent decoding. Attached-resource editing has no QTM save action and remains
+an explicit required integration gap; it is not silently accepted as a restriction.
 Do not introduce another general audit or metric expansion. Literal and actual
 PS/NOS fidelity plus old concept recovery are now proven; no status/packet mask
 is accepted. Full charset/resource/editor/panel, live-bound/open-client and remaining

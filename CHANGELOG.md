@@ -30,7 +30,11 @@ release section when tagging a release.
   per-page TTI mappings and versioned sidecars, backed by retained server receipts.
   Preserve full resource/magazine packets, original subcodes/navigation and
   addon-owned metadata without changing broadcast state. Editor-only palette
-  context is explicit; full charset/resource interchange remains open.
+  context is explicit. A versioned protected DRCS TTI companion now lets the
+  external editor load a monochrome S1=0 resource while retaining its exact DVB
+  identity and bytes. Modified/missing dependencies reject without publication;
+  Legacy/V2 receipts remain recoverable. Full resource editing/set interchange
+  remains open.
   Channel previews now offer localized
   ZIP export and bounded complete-set import as an unpublished draft, with stored
   channel ownership and protected-edit validation before save. Preview and

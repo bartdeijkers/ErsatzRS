@@ -1017,3 +1017,12 @@ support label or accepted by substituting decoder availability.
 - [Interchange and audit reference](../reference/teletext-design-interchange.md)
 - [Phase 9 plan](../../plans/teletext-support.md)
 - [Authoritative milestone acceptance](../progress/milestones.toml)
+
+The V3 external-editor carrier adds a protected DRCS TTI companion referencing
+the original DVB asset. It preserves Legacy/V2 reconstruction and existing
+receipt/document schemas, native lifecycle identity and addon edit ownership.
+Pinned QTM indexes attached PN groups by list position, ignores SC, and offers no
+attached-resource editing/saving. The initial logical-S1=0 monochrome companion
+is a partial integration step; other subtable sets and authored resource editing
+remain required work under unchanged P9A-04 acceptance. The interchange reference
+owns the file contract; P9A-04 owns actual editor and stream evidence.

@@ -30,10 +30,11 @@ use ersatzrs_domain::{
     TeletextProducerPagePresentation, TeletextResourceIdentity, TeletextResourceKind,
 };
 use ersatzrs_ffmpeg::teletext::{
-    project_encoded_teletext_display, project_encoded_teletext_magazines,
-    EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService, EncodedTeletextPage,
-    TeletextEncodedDisplayProjection, TeletextEncodedDisplayProjectionError,
-    TeletextEncodedDisplayRecord, TeletextEncodedMagazineRecord, TeletextEncodingRegion,
+    project_encoded_teletext_display, project_encoded_teletext_drcs,
+    project_encoded_teletext_magazines, EncodedTeletextAuthoredPage,
+    EncodedTeletextAuthoredService, EncodedTeletextPage, TeletextEncodedDisplayProjection,
+    TeletextEncodedDisplayProjectionError, TeletextEncodedDisplayRecord,
+    TeletextEncodedMagazineRecord, TeletextEncodingRegion,
 };
 use sha2::{Digest, Sha256};
 
@@ -84,12 +85,14 @@ fn editor_page(page: u16) -> u16 {
 pub(super) enum TeletextEditorCarrier {
     Legacy,
     V2,
+    V3,
 }
 impl TeletextEditorCarrier {
     pub(super) fn from_profile(profile: &str) -> Option<Self> {
         match profile {
             "qteletextmaker-1.0" => Some(Self::Legacy),
             "qteletextmaker-1.0-carrier-v2" => Some(Self::V2),
+            "qteletextmaker-1.0-carrier-v3" => Some(Self::V3),
             _ => None,
         }
     }
@@ -97,6 +100,7 @@ impl TeletextEditorCarrier {
         match self {
             Self::Legacy => "qteletextmaker-1.0",
             Self::V2 => "qteletextmaker-1.0-carrier-v2",
+            Self::V3 => "qteletextmaker-1.0-carrier-v3",
         }
     }
     /// Keep native flags separate from QTM's single effective primary NOS.
@@ -111,7 +115,7 @@ impl TeletextEditorCarrier {
             // Its C12 means numeric NOS bit 0, unlike compact native bit 8.
             // Use the resolved X28/M29/header primary; retain native flags in
             // the mapping, including an independently authored fallback NOS.
-            Self::V2 => {
+            Self::V2 | Self::V3 => {
                 let primary = u16::from(effective_primary);
                 ((primary & 1) << 9) | ((primary & 2) << 7) | ((primary & 4) << 5)
             }
@@ -269,6 +273,7 @@ fn selected_inventory<'a>(
     project_budget: TeletextExportProjectBudget,
     tti_budget: TeletextTtiBudget,
     deadline: Instant,
+    carrier: TeletextEditorCarrier,
 ) -> Result<ExportInventory<'a>> {
     check_deadline(deadline)?;
     for limit in [
@@ -319,6 +324,15 @@ fn selected_inventory<'a>(
         .filter(|page| page.resource_header().is_some())
         .count()
         .checked_add(encoded.magazine_units().len())
+        .and_then(|count| {
+            count.checked_add(
+                encoded
+                    .pages()
+                    .iter()
+                    .filter(|page| drcs_companion_eligible(page, carrier))
+                    .count(),
+            )
+        })
         .ok_or(NativeTeletextExportProjectError::Budget)?;
     if selected_count == 0
         || selected.is_some_and(|pages| selected_count != pages.len())
@@ -335,6 +349,88 @@ fn selected_inventory<'a>(
         selected_count,
         asset_count,
     })
+}
+
+// The current native DRCS model authors monochrome mode 0, with F for sparse
+// undefined slots. Pinned QTM addresses attached tables by list order, ignoring
+// SC and PN suffixes. A one-page companion can faithfully address logical S1=0;
+// other subtables retain their protected DVB assets until set mapping is proven.
+fn drcs_companion_eligible(
+    page: &EncodedTeletextAuthoredPage,
+    carrier: TeletextEditorCarrier,
+) -> bool {
+    carrier == TeletextEditorCarrier::V3
+        && page.resource_header().is_some_and(|header| {
+            matches!(
+                header.identity().kind(),
+                TeletextResourceKind::Drcs | TeletextResourceKind::Gdrcs
+            ) && header.identity().logical_subpage().get() == 0
+        })
+}
+
+fn append_drcs_companion(
+    page: &EncodedTeletextAuthoredPage,
+    resource_name: &str,
+    files: &mut Files,
+    tti_budget: TeletextTtiBudget,
+) -> Result<TeletextExportAssetMapping> {
+    let projection = project_encoded_teletext_drcs(page, files.budget.max_units)?;
+    let identity = projection.resource_header.identity();
+    let raw_page = (u16::from(identity.page().magazine()) << 8) | u16::from(identity.page().page());
+    let mut records = vec![
+        TeletextTtiRecord::PageNumber {
+            page: raw_page,
+            editor_ordinal: 0,
+        },
+        TeletextTtiRecord::SubpageOrdinal(0),
+        // Resource C12/C13 are lifecycle flags, not a display NOS. Keep the raw
+        // legacy bit permutation; the attached QTM DRCS loader ignores PS.
+        TeletextTtiRecord::PageStatus(
+            TeletextEditorCarrier::Legacy.status(projection.header.controls.raw(), 0),
+        ),
+    ];
+    for record in projection.records {
+        match record {
+            TeletextEncodedDisplayRecord::HeaderText(_) => {}
+            TeletextEncodedDisplayRecord::BaseRow { row, cells } => {
+                records.push(TeletextTtiRecord::BaseRow { row, cells });
+            }
+            TeletextEncodedDisplayRecord::Triplets {
+                row,
+                designation,
+                words,
+            } => records.push(TeletextTtiRecord::Packet {
+                row,
+                designation,
+                words,
+            }),
+            TeletextEncodedDisplayRecord::EditorialLinks { .. } => {
+                return Err(NativeTeletextExportProjectError::Association)
+            }
+        }
+    }
+    let budget = TeletextTtiBudget {
+        max_bytes: tti_budget
+            .max_bytes
+            .min(files.budget.max_file_bytes)
+            .min(files.remaining),
+        max_records: tti_budget.max_records.min(files.budget.max_units),
+    };
+    let document = TeletextTtiDocument::checked_from_records(records, budget)?;
+    let bytes = write_teletext_tti(&document, budget)?;
+    let name = format!("{}.tti", resource_name.trim_end_matches(".dvb"));
+    let mapping = TeletextExportAssetMapping {
+        name: name.clone(),
+        scope: TeletextExportAssetScope::DrcsTti {
+            resource_name: resource_name.to_owned(),
+            editor_ordinal: 0,
+        },
+        unit_count: 0,
+        bytes: bytes.len(),
+        sha256: sha256(&bytes),
+    };
+    files.append(name, bytes)?;
+    Ok(mapping)
 }
 
 fn capture_producers(
@@ -601,6 +697,7 @@ fn assemble_files(
     let mut mappings = Vec::with_capacity(selected_count);
     let mut assets = Vec::with_capacity(asset_count);
     let mut units = 0usize;
+    let mut resource_ordinal = 0usize;
     for page in encoded.pages() {
         check_deadline(deadline)?;
         if let Some(display) = display_page(page) {
@@ -621,14 +718,26 @@ fn assemble_files(
                 page.data_units().len(),
                 project_budget.max_units,
             )?;
+            // Companion files must not renumber the unchanged original DVB
+            // assets; retained V2 receipts rebuild their original names exactly.
+            let resource_name = format!("resource-{resource_ordinal:04}.dvb");
+            resource_ordinal += 1;
             assets.push(files.asset(
-                format!("resource-{:04}.dvb", assets.len()),
+                resource_name.clone(),
                 TeletextExportAssetScope::Resource {
                     identity: resource_identity(header.identity()),
                     physical_subcode: header.physical_subcode(),
                 },
                 page.data_units(),
             )?);
+            if drcs_companion_eligible(page, carrier) {
+                assets.push(append_drcs_companion(
+                    page,
+                    &resource_name,
+                    &mut files,
+                    tti_budget,
+                )?);
+            }
         }
     }
     for (magazine, unit) in magazines.iter().zip(encoded.magazine_units()) {
@@ -668,6 +777,7 @@ pub(super) fn build_native_teletext_export_project(
         project_budget,
         tti_budget,
         deadline,
+        carrier,
     )?;
     let (producers, remaining) = capture_producers(original, project_budget, deadline)?;
     let exported = assemble_files(
@@ -742,13 +852,17 @@ mod tests {
     }
     #[test]
     fn carrier_profiles_are_explicit_and_closed() {
-        for carrier in [TeletextEditorCarrier::Legacy, TeletextEditorCarrier::V2] {
+        for carrier in [
+            TeletextEditorCarrier::Legacy,
+            TeletextEditorCarrier::V2,
+            TeletextEditorCarrier::V3,
+        ] {
             assert_eq!(
                 TeletextEditorCarrier::from_profile(carrier.profile()),
                 Some(carrier)
             );
         }
-        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v3"] {
+        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v4"] {
             assert_eq!(TeletextEditorCarrier::from_profile(profile), None);
         }
     }

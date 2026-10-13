@@ -1,5 +1,35 @@
 # TSDuck playback gate (E2E)
 
+## Protected DRCS editor dependency trial
+
+Use the same pinned QTM1.0/cac2167 binary, image, Qt6.10.2 SDK and visible X11
+setup below. Compile the maintained widget driver after source changes. Its
+optional `ERSATZRS_QTM_NORMAL_DRCS_BASENAME` is a flat TTI filename in `/work`,
+valid only with `single-page-zone-q`. Select the V3 `drcs_tti` companion from the
+authenticated sidecar, verify its hash and linked original DVB asset, and pass
+that unchanged file. The actual View/Normal DRCS/Load file action uses its owned
+Open dialog; six captures retain before/after load, edit and Save As. The fixed
+synthetic trial also checks all120 actual Qt glyph/day-palette pixels.
+
+The ignored native selector is `test(pinned_external_editor_drcs_companion)` in
+`ersatzrs-web`; use the same FFmpeg9/ffprobe/TSDuck environment and create-new
+interchange directory as the existing probe below. Do not issue a completion
+marker until the actual editor exits0 and its saved file/captures are checked.
+It imports only a Free-row2 Q edit, previews, explicitly publishes, reopens twice
+and captures both ordinary channel routes. Missing/modified companions reject in
+the regular `test(drcs_companion)` cases; retained V2 receipts remain recoverable.
+
+Ordered captured units are `channel-1-drcs-units.json` and
+`channel-2-drcs-units.json`. Run `teletext-editor-drcs-decoder.py <units> day|night`
+with the installed pinned libzvbi0.2.42. It reuses the frozen ABI helper and checks
+literal normal S1=0/slot0 bitmap, palette and all120 rendered MAIN pixels on both
+pages124/125:0020. Record actual library/helper/script/input hashes alongside
+TSDuck, exact-model and source-AV proof. Actual client navigation is a separate
+headed trial of the exact served captures. MAIN41-column proof does not establish
+56-column panels; attached-resource editing, higher-S1 set mapping and complete
+Level2.5/editor acceptance remain open in P9A-04. No fixture grants package edits
+or automatic publication.
+
 ## QTeletextMaker headed synthetic calibration
 
 This opt-in Linux/X11 probe uses an unchanged external editor and disposable

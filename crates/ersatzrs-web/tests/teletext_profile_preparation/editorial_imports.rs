@@ -39,6 +39,8 @@ use ersatzrs_web::host::{
     teletext_preview::project_teletext_preview,
 };
 
+#[path = "editorial_imports/drcs_companion.rs"]
+mod drcs_companion;
 #[path = "editorial_http.rs"]
 mod http_routes;
 #[path = "editorial_imports/qtm_carrier.rs"]
@@ -143,14 +145,27 @@ async fn setup_with_fixture(
     response: fn(&str, u16, u16) -> serde_json::Value,
     fixture: Fixture,
 ) -> (Fixture, Flow) {
+    Box::pin(setup_with_fixture_policy(
+        response,
+        fixture,
+        channel_documents::policy,
+    ))
+    .await
+}
+
+async fn setup_with_fixture_policy(
+    response: fn(&str, u16, u16) -> serde_json::Value,
+    fixture: Fixture,
+    encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+) -> (Fixture, Flow) {
     authoring_metadata::install(&fixture).await;
     for (channel, theme) in [(1, "day"), (2, "night")] {
         authoring_metadata::write(&fixture, theme, &response(theme, 124, 32));
         let profile = fixture.profile(theme, theme, "good").await;
         fixture.bind(channel, &profile, None).await;
     }
-    let first = authoring_metadata::candidate(&fixture, 1).await;
-    let second = authoring_metadata::candidate(&fixture, 2).await;
+    let first = prepare_with_policy(&fixture, 1, encoding()).await;
+    let second = prepare_with_policy(&fixture, 2, encoding()).await;
     assert_eq!(
         first.selection().bindings[0].addon_id,
         second.selection().bindings[0].addon_id
@@ -198,6 +213,22 @@ async fn setup_with_fixture(
             calls,
         },
     )
+}
+
+async fn prepare_with_policy(
+    fixture: &Fixture,
+    channel: i64,
+    encoding: ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+) -> ersatzrs_web::host::teletext_channel_documents::EncodedChannelTeletextDocumentCandidate {
+    ersatzrs_web::host::teletext_channel_documents::prepare_channel_teletext_document_candidate(
+        &fixture.state.application,
+        channel,
+        Some(ADDON),
+        &guide(&[]),
+        encoding,
+    )
+    .await
+    .unwrap()
 }
 
 fn edit_cell(files: &mut [TeletextExportFile], name: &str, row: u8, column: usize, code: u8) {
@@ -657,6 +688,9 @@ async fn editorial_tampering_and_protected_effects_preserve_original_pointers_an
 mod external_editor_probe {
     use super::super::{client_capture, ordinary_stream_flow};
     use super::*;
+    use ersatzrs_ffmpeg::teletext::source_assembly::{
+        SuppliedTeletextAssembler, TeletextAssemblyEvent,
+    };
     use std::{io, path::Path};
 
     const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_QTM_INTERCHANGE_DIR";
@@ -754,7 +788,7 @@ mod external_editor_probe {
         for exported in &flow.exported {
             assert_eq!(
                 exported.sidecar().project.editor_profile,
-                "qteletextmaker-1.0-carrier-v2"
+                "qteletextmaker-1.0-carrier-v3"
             );
             for mapping in &exported.sidecar().project.pages {
                 assert_eq!(mapping.header_controls, expected_header);
@@ -885,7 +919,7 @@ mod external_editor_probe {
                 "page":{"page":page.page.page,"subcode":page.page.subcode,"editor_page":page.editor_page,"editor_ordinal":page.editor_ordinal},
                 "editor_input":format!("{prefix}/{}",page.name),
                 "editor_geometry":editor_geometry(flow,index,page.page.page,page.page.subcode),
-                "pages":exported.sidecar().project.pages,"files":files}));
+                "pages":exported.sidecar().project.pages,"assets":exported.sidecar().project.assets,"files":files}));
         }
         let ready = serde_json::json!({"probe_version":1,"channels":channels,
             "edit":{"channel_id":1,"row":2,"column":8,"code":81},
@@ -1143,9 +1177,14 @@ mod external_editor_probe {
                 client_capture::decode_page_text(&tools.ffmpeg, bytes, &page.to_string()).await;
             let filename = format!("channel-{channel}-page-{page}.srt");
             write_new(&directory.join(&filename), text.as_bytes()).unwrap();
+            let original_glyph = if drcs_companion::has_drcs(service) {
+                "\u{f400}Z"
+            } else {
+                "AZ"
+            };
             assert!(
-                text.contains("AZ"),
-                "actual decode must retain the original enhanced row"
+                text.contains(original_glyph),
+                "actual decode must retain the original enhanced glyph and Z"
             );
             let edited = channel == 1 && page == 124;
             assert_eq!(
@@ -1177,6 +1216,7 @@ mod external_editor_probe {
         client_capture::verify_transport(&tools.tsanalyze, &tools.ffprobe, bytes).await;
         client_capture::verify_av(&tools.ffmpeg, source, bytes).await;
         ordinary_stream_flow::assert_emitted_model(bytes, accepted.service());
+        let drcs_units = write_captured_drcs_units(directory, bytes, channel, accepted.service());
         let pages =
             decoded_delivery_pages(directory, tools, bytes, channel, accepted.service()).await;
         serde_json::json!({"channel_id":channel,"capture":filename,"bytes":bytes.len(),
@@ -1184,7 +1224,40 @@ mod external_editor_probe {
             "request_id":accepted.generation().request.id,"revision":accepted.generation().request.revision,
             "theme_rgb4":if channel==1 {[15,0,0]} else {[0,0,15]},
             "tsduck_transport_passed":true,"source_av_passed":true,"complete_emitted_model_equal":true,
-            "pages":pages})
+            "pages":pages,"drcs_units":drcs_units})
+    }
+
+    fn write_captured_drcs_units(
+        directory: &Path,
+        bytes: &[u8],
+        channel: i64,
+        service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    ) -> Option<serde_json::Value> {
+        if !drcs_companion::has_drcs(service) {
+            return None;
+        }
+        let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
+        let mut units = Vec::new();
+        for packet in bytes.chunks_exact(188) {
+            if let TeletextAssemblyEvent::Complete(pes) =
+                assembler.push(packet.try_into().unwrap()).unwrap()
+            {
+                for unit in pes.units().filter_map(|unit| unit.teletext_unit()) {
+                    if units.len() < 512 {
+                        units.push(unit.to_vec());
+                    }
+                }
+            }
+        }
+        assembler.finish().unwrap();
+        assert!(!units.is_empty());
+        let filename = format!("channel-{channel}-drcs-units.json");
+        let json = serde_json::to_vec(&units).unwrap();
+        write_new(&directory.join(&filename), &json).unwrap();
+        Some(
+            serde_json::json!({"file":filename,"units":units.len(),"sha256":hash(&json),
+            "ordering":"actual emitted order, bounded first512 units with repeated headers retained"}),
+        )
     }
 
     async fn capture_edited_native_outputs(
@@ -1251,8 +1324,35 @@ mod external_editor_probe {
         Box::pin(run_pinned_probe(independent_response, 0x0481, 0xc040)).await;
     }
 
+    #[tokio::test]
+    #[ignore = "requires pinned headed QTeletextMaker DRCS loading, FFmpeg/ffprobe9 and TSDuck"]
+    async fn pinned_external_editor_drcs_companion_preserves_native_resources() {
+        Box::pin(run_pinned_probe_policy(
+            drcs_companion::response,
+            drcs_companion::encoding_policy,
+            0x0081,
+            0xc040,
+        ))
+        .await;
+    }
+
     async fn run_pinned_probe(
         response: fn(&str, u16, u16) -> serde_json::Value,
+        expected_header: u16,
+        expected_status: u16,
+    ) {
+        Box::pin(run_pinned_probe_policy(
+            response,
+            channel_documents::policy,
+            expected_header,
+            expected_status,
+        ))
+        .await;
+    }
+
+    async fn run_pinned_probe_policy(
+        response: fn(&str, u16, u16) -> serde_json::Value,
+        encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
         expected_header: u16,
         expected_status: u16,
     ) {
@@ -1262,7 +1362,12 @@ mod external_editor_probe {
         let tools = StreamTools::load().await;
         let (playback_fixture, source_path) =
             prepare_editor_playback_fixture(&directory, &tools).await;
-        let (mut fixture, flow) = Box::pin(setup_with_fixture(response, playback_fixture)).await;
+        let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
+            response,
+            playback_fixture,
+            encoding,
+        ))
+        .await;
         assert_carrier(&flow, expected_header, expected_status);
         write_ready(&directory, &flow).unwrap();
         let (marker, request) = checked_external_request(&directory, &fixture, &flow).await;
@@ -1308,7 +1413,7 @@ mod external_editor_probe {
         .await;
         let success = serde_json::json!({"probe_version":1,"scope":"native application interchange and ordinary MPEG-TS flow",
             "editor_completion":marker,"edited_tti_sha256":edited_hash,
-            "editor_profile":"qteletextmaker-1.0-carrier-v2",
+            "editor_profile":"qteletextmaker-1.0-carrier-v3",
             "native_header_controls":expected_header,"editor_status":expected_status,
             "native_headers_enhancements_and_link_targets_unchanged":true,
             "edited_page_content_crc_changed":true,
