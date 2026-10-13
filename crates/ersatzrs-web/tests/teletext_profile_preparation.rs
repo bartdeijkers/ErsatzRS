@@ -62,6 +62,8 @@ mod generations;
 mod guide_capture;
 #[path = "teletext_profile_preparation/guide_publications.rs"]
 mod guide_publications;
+#[path = "teletext_profile_preparation/native_exports.rs"]
+mod native_exports;
 #[path = "teletext_profile_preparation/ordinary_stream_flow.rs"]
 mod ordinary_stream_flow;
 #[path = "teletext_profile_preparation/output_candidates.rs"]

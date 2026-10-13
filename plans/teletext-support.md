@@ -445,7 +445,12 @@ original/corrected distinction. Synthetic TSDuck transport is not served-playbac
 or suitable-client acceptance.
 These preparatory checks cannot close P9A-01 or the engine acceptance gate.
 Durable designs use immutable revisions, head compare-and-swap and host export
-receipts; pending/publication state belongs to the eventual promotion owner.
+receipts. Native original export now maps selected TTI files to exact display
+identities and retains complete protected resource/M29 dependencies, with private
+confirmation before receipt CAS. The next integration step is a validated editorial
+overlay and concept preview/publication; actual editor normalization and faithful
+resource dependency loading remain unproven. OriginalOnly still grants no edit
+permission. Pending/publication state uses the existing explicit promotion owner.
 
 An unchanged pinned QTeletextMaker 1.0 binary now passes a bounded actual headed
 synthetic edit/subpage navigation/Save As trial. Separate reopening retains the

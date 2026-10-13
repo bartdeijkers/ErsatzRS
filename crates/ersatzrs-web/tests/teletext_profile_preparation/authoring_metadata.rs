@@ -32,7 +32,7 @@ cat > "../authoring-input-$theme.json"
 cat "../authoring-response-$theme.json"
 "#;
 
-fn response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     json!({
         "schema_version":3,
         "service":channel_documents::response(DocumentFixture::Authored,theme,page,subcode,"nld"),
@@ -56,7 +56,7 @@ fn response(theme: &str, page: u16, subcode: u16) -> Value {
     })
 }
 
-fn write(fixture: &Fixture, theme: &str, value: &Value) -> Vec<u8> {
+pub(super) fn write(fixture: &Fixture, theme: &str, value: &Value) -> Vec<u8> {
     // Deliberately retain exact noncanonical whitespace in the saved original.
     let bytes = serde_json::to_vec_pretty(value).unwrap();
     std::fs::write(
@@ -70,7 +70,7 @@ fn write(fixture: &Fixture, theme: &str, value: &Value) -> Vec<u8> {
     bytes
 }
 
-async fn install(fixture: &Fixture) {
+pub(super) async fn install(fixture: &Fixture) {
     std::fs::write(
         fixture.root.path().join("package/fixture.sh"),
         AUTHORING_SCRIPT,
@@ -97,7 +97,10 @@ async fn install(fixture: &Fixture) {
         .execute(&fixture.state.pool).await.unwrap();
 }
 
-async fn candidate(fixture: &Fixture, channel: i64) -> EncodedChannelTeletextDocumentCandidate {
+pub(super) async fn candidate(
+    fixture: &Fixture,
+    channel: i64,
+) -> EncodedChannelTeletextDocumentCandidate {
     prepare_channel_teletext_document_candidate(
         &fixture.state.application,
         channel,

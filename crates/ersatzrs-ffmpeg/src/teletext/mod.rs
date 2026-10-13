@@ -10,6 +10,7 @@
 mod augmented_origin_comparison;
 mod augmented_origin_compilation;
 mod augmented_origin_program;
+mod authored_packet_projection;
 mod authored_service;
 mod base_compatibility_realization;
 mod base_display;
@@ -63,6 +64,7 @@ pub use resource_transmission::{
 pub use augmented_origin_comparison::*;
 pub use augmented_origin_compilation::*;
 pub use augmented_origin_program::*;
+pub use authored_packet_projection::*;
 pub use authored_service::*;
 pub use compiled_display_page::*;
 pub use native_default_page::*;

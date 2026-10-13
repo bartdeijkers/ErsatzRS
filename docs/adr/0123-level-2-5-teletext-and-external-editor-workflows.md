@@ -29,14 +29,18 @@ P9A-04 owns current independent proof and all remaining obligations.
 Preparatory immutable export receipts now use the existing design repository,
 exact head/original-digest checks and bounded read-only snapshot verification.
 The application requires a trusted native export confirmation port; its production
-file/resource/edit-policy adapter remains unimplemented. A bounded ordered TTI
+file/resource mapping adapter is now implemented for saved native originals.
+Editable concepts and indirect edit-policy enforcement remain unimplemented.
+A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.
 Negotiated v3 now captures original template/theme/zone/dynamic-field declarations
 with exact producer bytes. It shares the complete v2 service validation and checks
 actual effective Level 2.5 panel widths. Durable reload reconstructs the same
 metadata without package invocation; unchanged `original_only` policy grants no
-editing. Native file mapping/export confirmation and edited concepts remain open.
+editing. Native file mapping/export confirmation now retains exact per-page TTI and
+protected resource/M29 assets in server-owned receipts. Edited concepts remain open;
+protected assets do not yet establish editor dependency loading or resource editing.
 
 
 Checked colour references, four-bit RGB, editable CLUT2/3 declarations
@@ -900,9 +904,13 @@ private design documents and restores historical previews through the same cold
 compiler, without invoking installed packages. The initial explicit `original_only`
 policy grants zero editing permissions; it is not a permanent authoring limitation
 or external-editor acceptance. Opaque immutable export-receipt storage and
-separate static publication are now implemented; the authoritative file/resource/
-edit-policy receipt contents, editable concepts and full editor integration remain
-required. Existing OriginalOnly documents and their bytes remain unchanged. Native confirmation
+separate static publication are now implemented; native authoritative file/resource
+receipt contents are implemented as an
+internal export seam. Exact original ownership, sanitized producer metadata and
+M29-derived editor context are retained. Editable concepts, indirect protected-cell
+comparison and full editor integration remain required. Protected binary resources
+are not claimed as QTeletextMaker-loadable dependency files. Existing OriginalOnly
+documents and their bytes remain unchanged. Native confirmation
 precedes CAS. Its deadline is a CPU/admission cutoff; admitted SQLite transactions
 use the existing database timeout contract and do not pretend to undo committed
 saves. See the interchange reference for the implementation boundary and P9A-01

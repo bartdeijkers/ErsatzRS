@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 synthetic editor flow: connect captured addon metadata to native TTI/sidecar export and validated concepts; full engine acceptance remains open'
+current_focus = 'P9A-04 synthetic editor flow: verify native original export, then validated editorial concepts and actual editor/preview/publication; full engine acceptance remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1760,6 +1760,18 @@ output under one deadline, with early pipe overflow and caller-drop cleanup.
 A dedicated installed-package adapter now fences resolution and execution with
 one deadline and retains native jobs through cancellation; generic dispatch stays
 blocked. Profile-specific service activation and publication remain open.
+Native original export now maps selected decimal display identities to per-page
+TTI/editor ordinals, retaining per-page language/kind, header controls, exact
+navigation and sanitized captured authoring/profile/package provenance. Complete
+resource/M29 units remain protected dependencies and editor-only M29-derived X28
+is explicitly marked. Private actual-body confirmation precedes export-receipt
+CAS; export neither advances a design head nor changes publication. P9A-04 owns
+verification and the current criterion/gap map. Next connect a private validated
+editorial overlay to concept save, the same preview/compiler and explicit
+publication. Actual pinned editor PS/national-option normalization, faithful
+resource dependency loading and indirect protected-cell enforcement are concrete
+remaining integration gaps. They do not narrow authored Level2.5 or editor
+acceptance; OriginalOnly grants no editing and production guide work still waits.
 The maintainer accepted ADR 0122's channel/add-on profiles, add-on-owned themes
 and custom zones, and shared admin/Lua controls. P9A-04/9B-01/9B-02 now include
 synthetic then integrated isolation, interval/rollback/restart and invalid-profile

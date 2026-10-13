@@ -51,8 +51,8 @@ original response bytes. Original revisions revalidate them on reload without
 invoking packages. The host's existing complete selection supplies installation,
 package and profile identity; producer or uploaded metadata cannot replace it.
 Captured metadata does not change `policy_version: 1, kind: original_only` or
-make an original editable. Operational sidecar/file mapping, native export
-confirmation, edited-concept validation and the full editor roundtrip remain
+make an original editable. Native sidecar/file mapping and export confirmation are implemented as an
+internal host seam. Edited-concept validation and the full editor roundtrip remain
 open. P9A-04 owns verification and the next concrete integration step.
 
 ## Resource identity and DRCS lookup
@@ -3147,7 +3147,68 @@ shared-resource or edit-policy reconciliation. The literal synthetic native Save
 As fixture is stored without checkout line-ending conversion; its existing audit
 hash and behavior do not establish an ErsatzRS editor roundtrip.
 
-## Planned project bundle
+## Native original export boundary
+
+`host::teletext_design_exports::export_original_teletext_design` restores an exact
+stored original through the same native compiler without invoking packages. An
+explicit `(design_id, revision, digest, expected_design_head)` selects that source;
+optional exact decimal page/subcode addresses select display files. A subset can
+omit the original entry without replacing it. All original resource and magazine
+units remain dependencies even when their display page is outside the selection.
+This is an internal native API; admin download/import and edited concepts remain
+unimplemented. It creates an immutable export receipt, never a new design revision,
+publication request or accepted output.
+
+The bounded application project/receipt/sidecar codecs use schema 1 and editor
+profile `qteletextmaker-1.0`. Each flat ASCII TTI filename maps editor ordinal zero
+to an exact original decimal page and hexadecimal subcode. TTI PN uses the page's
+raw BCD spelling; SC is an editor ordinal, not that authored subcode. Per-page
+language/kind, raw C4–C14 controls and exact navigation are retained separately
+from service entry/language/region. Producer records retain original addon,
+installation/package hashes, profile/binding revisions and captured authoring
+metadata; effective settings, secret references and permission flags are excluded.
+A public sidecar carries a repository-assigned receipt ID/digest and descriptive
+project. The private host receipt additionally retains every exact file body.
+Uploaded descriptions and structurally valid digests remain untrusted claims.
+
+A strict inverse of actual native display packets checks clean protected headers,
+odd-parity base/header cells and exact Hamming 8/4 and 24/18 codewords. It rejects
+correctable damage instead of exporting repaired content. Header text occupies
+OL row 0 columns 8–39; the first eight editor cells are spaces. Base rows and
+triplets retain complete ordered payloads. X27/0's 38 protected nibbles and two CRC
+bytes are distinct from X27/4 triplets. TTI FL uses page-only navigation; exact
+subcodes remain in the authoritative original/sidecar. An editor-only CT of 20
+seconds is descriptive and never changes the native carousel.
+
+Where a native page has no X28/0, an actual same-magazine M29/0 supplies a derived
+editor X28/0 to supply its original palette/presentation context in a single-page file.
+`materialized_magazine` explicitly records this conversion. Original absence of
+page X28 and complete actual M29 units are preserved; the export cannot change
+broadcast presentation ownership. The pinned editor may normalize C12–C14 on X28
+load/save; actual roundtrip reconciliation against this baseline remains required.
+
+Protected `.dvb` assets retain every 46-byte native POP/GPOP/MOT/DRCS resource
+unit and magazine unit, with exact logical ownership, physical resource subcode,
+counts and SHA-256. These assets are not directly loadable QTeletextMaker resource
+files. Its resource writer uses different/insufficient packet coding, and uniform
+triplet or seven-bit-row export would silently corrupt resources. Faithful editor
+dependency loading, resource-dependent preview and independently validated resource
+editing remain open requirements. Binary preservation does not establish their
+compatibility or narrow full authored Level 2.5 acceptance.
+
+Caller policy separately bounds project serialized bytes, files, producers, file
+bytes, native units and TTI records/bytes. JSON preflight rejects duplicate keys,
+excess depth, paths and oversized page/file collections before typed allocation;
+full original metadata can survive a selected-file subset. Native work retains one
+existing admission and original deadline through reload, mapping and exact body
+hashing, including requester cancellation. Private confirmation binds the actual
+repository-read original and exact receipt bytes to the complete native export.
+Final storage CAS rechecks the live head and digest. Public sidecar serialization
+is preflighted before persistence; returning a committed export has no later
+fallible codec or deadline gate. The existing SQLite transaction timeout remains
+independent of the CPU/admission deadline.
+
+## Project bundle contract
 
 Export selection includes a page, selected subpages or a supported complete set.
 The bundle contains `ersatzrs-teletext-project.json`, editable TTI documents and

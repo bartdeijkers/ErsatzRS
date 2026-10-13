@@ -2724,6 +2724,110 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-13 native original export checkpoint:
+Criterion: connect captured addon metadata and complete frozen native originals to
+selected TTI files, external metadata and authoritative retained export baselines.
+This addresses the specific missing native file/resource mapping and confirmation
+adapter from3769b32f/41d0125a; editable concepts and engine acceptance remain open.
+
+The host reuses immutable original reload, complete native compilation, one actual-
+worker admission/deadline and the existing required application confirmation port.
+An explicit revision/digest/live-head target supports all or selected exact display
+addresses, including subsets excluding the original entry. One file maps editor
+PN rawBCD and ordinal0/SC0 to an original decimal page/hexadecimal subcode. Exact
+per-page language/kind/header controls and navigation remain separate from service
+entry/language/region. Sanitized original producer/profile/install pins and captured
+template/theme/zone/dynamic fields exclude effective settings and secret references.
+
+Strict logical projection accepts only clean native protected codewords and parity;
+correctable packet damage is rejected with unit/row/column locations. Complete
+header/base/triplet records retain order and payload. X27/0's38 protected nibbles
+and2 rawCRC bytes are distinct from X27/4 triplets. Where native X28 is absent,
+actual M29 supplies a marked editor-only X28 context. Every original M29 and full
+resource page remains a hashed protected46-byte-unit asset, including subset
+exports. Exact original pages/resources are never rewritten by export.
+
+The version1 project/private receipt/public sidecar codecs preflight closed JSON,
+duplicate keys/depth, flat paths, file/producer/byte/unit counts and mapping shape.
+Uploaded hash strings are structural claims only. Private native confirmation
+checks both actual repository-read original and exact built receipt digests; final
+storage CAS checks the live head again. A maximum-ID sidecar preflight occurs
+before commit. A saved export is returned typed, without a later fallible encoding
+or deadline check. Receipt creation advances no design head, pending intent or
+accepted generation; no package runs or configuration changes.
+
+Read-only targeted review found project.pages used max_units during JSON preflight,
+allowing excess mapping allocation before max_files rejection. The corrected scoped
+limit retains complete producer metadata for valid subset exports. A new parser
+regression proves both admission boundaries. No general audit or measurement
+expansion follows from this checkpoint.
+
+Verification: final packet projection runbf739035-03b5-4b46-8f76-a339db387fef
+passes11/11, including every18-bit data word against re-encoding, literal protection
+oracles, parity/control/header ownership, magazine scope and damaged-unit rejection.
+Application run35daf4cc-5e6f-4d15-96c2-99eb9af85e33 passes27/27:18 new project
+codec identities and9 unchanged TTI regressions. The former includes the scoped
+page-allocation correction, required-null metadata, decimal/BCD, subset, per-page
+kind/language and private/public file coverage without trusting digest claims.
+
+Native rund604c97b-104d-4cac-9aeb-d63d23465083 passes8/9. Five helpers/negative
+confirmations and three installed-fixture cases are valid and reused: actual same-
+addon two-channel day/night metadata/palette context, complete POP binary retention,
+private receipt/file digests, durable reopen/no reinvocation and unchanged originals,
+configuration, pending/accepted pointers and recovered native output on rejection.
+The subset fixture first lacked required Newsflash boxing; after correction it
+incorrectly assumed V1 emitted no X28. Actual V1 region encoding supplies page X28,
+which the final fixture now compares exactly against native words rather than
+omitting it or marking it as M29 materialization. Final affected run
+7e6ea700-f07f-4d29-a360-3e3bb2fa3237 passes1/1 after helper extraction. It proves
+non-entry export, mixed service/page language, kind, exact subcode and region/X28
+preservation. Both failed native receipts are retained; no wholly green9-test
+native run or unchanged defective-fixture acceptance is claimed. The successful
+union is47 unique Rust identities, with repeated tests counted once.
+
+Strict all-target Clippy passes app/ffmpeg/web; final web all-target Clippy follows
+the test-only helper correction. All long functions were split without new lint
+exemptions. Workspace formatting, architecture-lint (four ratchets zero) and
+progress validation pass. There are no new dependencies/migrations/admin/runtime
+encoder or transport changes. Unchanged previous headed/decoder/TSDuck/client/AV
+receipts remain applicable; there is no new editor, HTTP/admin, six-platform or
+full-CI acceptance claim. Proof: tmp/phase9-native-export/identity.json and immutable
+receipt-sha256.txt, SHA256cb19a17b7b1d2336e93a09a4dbd6a664621935e267dd0e0ad886622cae75e93e. The receipt binds final source/
+logs and excludes mutable progress prose.
+
+
+Current criterion-to-next-step map (reuse detailed earlier receipts below):
+| Criterion | Implemented/proven | Missing evidence or concrete next blocker |
+| --- | --- | --- |
+| Original addon templates/themes/zones | V3 capture and exact durable reload; sanitized export metadata | Imported free/zone/generated and indirect-effect validation |
+| Authoritative export baseline | Complete native file/resource mapping, private body confirmation and retained receipt CAS | Admin/agent operational file delivery and import actions |
+| Edited concept -> same preview -> explicit Publish | Original-only preview/publication/ordinary stream is already proven | Checked physical-base-row overlay propagated through existing semantic composition and saved concepts; original responses stay exact |
+| Actual pinned QTM workflow | Prior calibration reused; native per-page export is present | Real host export/open/edit/save/import/preview/publish; X28 national-option/PS normalization and resource dependency loading |
+| Full engine acceptance | Prior representative independent decoding/TSDuck/client/AV evidence retained | Remaining full Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and six-platform gates |
+
+Concrete next action: implement a separately versioned private concept overlay
+from a trusted receipt, using the existing physical layout/base trace and the same
+semantic service, compiler/raster/preview. There is no lossless Unicode draft
+inverse for arbitrary TTI C0 rows. A checked physical-base-row input avoids guessed
+national glyph restoration; changed raw cells retain coded rather than invented
+Unicode intent. Existing compiled-display/native-default/main-composition layouts
+must consume the same overlay. Keep generated X26/resource definitions protected
+until their editing is independently validated. Trace/geometry comparisons must
+also reject in-zone control changes that affect protected cells to the right or
+through double-height footprints, not merely compare edited byte coordinates.
+Existing incomplete raw-control coverage remains full-engine debt, never silently
+normalized or accepted as a permanent subset. Reuse saved-document head CAS and
+explicit publication fences; original addon bytes/OriginalOnly remain intact.
+
+Protected .dvb assets prove complete preservation but are not QTeletextMaker-
+loadable POP/MOT/DRCS dependency files. Faithful external dependency loading,
+resource-dependent editor preview and validated resource editing remain required.
+Pinned editor source also shows X28 loading can normalize national-option status
+bits; actual baseline reconciliation remains open. These are explicit current
+integration gaps, not accepted engine/editor limitations or waived criteria.
+No milestone status, dependency or acceptance text changes. Engine-first and
+NOS200–299-only production guide sequencing remain; no push or publication.
+
 2026-10-13 negotiated authoring-metadata checkpoint:
 Criterion: preserve addon-owned templates/themes/zones/dynamic-field declarations
 with the authoritative original before connecting the agreed editor/sidecar flow.
@@ -2789,25 +2893,9 @@ Proof: tmp/phase9-authoring-metadata/identity.json and immutable
 receipt-sha256.txt, SHA256087ef11d6c1a9a0426a8aef2a03b6a8f53854dd2383f7705fdea2351009c68ab.
 The receipt binds source/native logs and excludes mutable progress prose.
 
-Current criterion-to-next-step map (remaining detailed evidence stays below):
-| Criterion | Implemented/proven | Missing evidence or concrete next blocker |
-| --- | --- | --- |
-| Preserve original addon authoring declarations | V3 capture, strict bounds, two themes, exact durable reload | No operational TTI/sidecar export yet |
-| Server-owned export/edit baseline | Immutable export receipt/CAS and syntax codec from41d0125a | Native file/resource mapping and required export-confirmation adapter |
-| Edited concept -> preview -> explicit publication | Original-only flow is proven; metadata grants no edit permission | Private validated overlay, indirect protected-resource comparison and exact-head save |
-| Actual QTM roundtrip | Pinned editor calibration is reused | Host export -> edit/save -> import/preview/publish still unproven |
-| Full engine acceptance | Prior representative stream/client and standards receipts retained | All open Level2.5/fallback, source/Next, Lua/timing, warm-transition/restart/drain, localized admin and six-platform gates remain |
-
-Next implement a server-owned file/resource/edit baseline from the frozen original
-and captured declarations, then connect native TTI/sidecar export confirmation.
-Use a synthetic editable zone to prove exact protected content/resources and
-navigation, stale-export rejection, unpublished concept preview and unchanged
-broadcast until explicit publication. Continue through the actual pinned editor
-and ordinary stream/client flow. Do not convert OriginalOnly descriptions into
-permission flags or edit installed package files. Resource/geometry/editor gaps
-remain accepted requirements, not silent restrictions. Production TV-guide work
-still waits for independent complete engine acceptance; milestone statuses,
-dependencies and acceptance text are unchanged. No push or publication.
+The current criterion/next-step map is maintained in the native export checkpoint
+above. This historical capture checkpoint leaves all milestone authority and
+complete engine/editor requirements unchanged.
 
 2026-10-13 trusted interchange prerequisite checkpoint:
 Criterion: retain the authoritative export revision/edit baseline independently

@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Export saved native teletext originals through a bounded host API to exact
+  per-page TTI mappings and versioned sidecars, backed by retained server receipts.
+  Preserve full resource/magazine packets, original subcodes/navigation and
+  addon-owned metadata without changing broadcast state. Editor-only palette
+  context is explicit; edited concepts and complete QTeletextMaker dependency
+  loading/roundtrip remain open.
 - Capture addon-owned teletext template revisions, named themes, typed overrides,
   free areas, custom zones and generated-field bindings through negotiated v3.
   Validate exact page coverage and actual side-panel bounds; preserve metadata
