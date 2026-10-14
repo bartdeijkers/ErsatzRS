@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -86,7 +86,7 @@ jobs:
           python3 scripts/release/package-next-source.py --payload next-payload \
             --source-provenance .next-source/ersatzrs-source.json --rid "$NEXT_RID" \
             --output packages --rustc "$(rustc --version)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: next-source-candidate-${{ matrix.rid }}
           path: |
