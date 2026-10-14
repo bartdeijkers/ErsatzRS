@@ -23,7 +23,7 @@ futures-util = "0.3"
 getrandom = "0.4"
 fs4 = { version = "1.1", default-features = false, features = ["sync"] }
 md-5 = "0.11"
-minijinja = "2"
+minijinja = "3"
 process-wrap = { version = "10.0", features = ["tokio1"] }
 percent-encoding = "2"
 quick-xml = { workspace = true }
@@ -45,7 +45,7 @@ toml = "1"
 tracing = "0.1"
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
