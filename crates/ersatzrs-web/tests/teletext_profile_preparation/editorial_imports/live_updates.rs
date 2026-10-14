@@ -3,6 +3,10 @@
 
 #[path = "live_updates/live_http.rs"]
 mod live_http;
+#[path = "live_updates/live_tcp.rs"]
+mod live_tcp;
+#[path = "live_updates/live_tcp_clock.rs"]
+mod live_tcp_clock;
 
 use super::*;
 use ersatzrs_core::repositories::{

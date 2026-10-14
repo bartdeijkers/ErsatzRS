@@ -3902,6 +3902,51 @@ installed package, and proves cold MAIN display/navigation only. Full authored
 Level2.5/fallback, sparse X27, panels, warm controls, editor-resource workflow,
 Lua/restart, localized admin and six-platform acceptance remain required.
 
+### Warm ordinary-URL client workflow
+
+The ignored selector `warm_ordinary_tcp_views_wait_for_headed` uses three original
+ordinary TCP responses: two owned headed clients and one independent observer.
+Set `ERSATZRS_TELETEXT_WARM_CLIENT_DIR` to a new destination and use the same exact
+FFmpeg/ffprobe overrides and `ERSATZRS_TELETEXT_TEST_TSANALYZE` as the cold workflow.
+Run the selector through the preparation integration binary with
+`--run-ignored ignored-only`. Promptly after its closed `ready.json` appears, run
+`python3 scripts/e2e/teletext-live-update-client-trial.py "$READY_JSON"` on the real
+X11 display. The fixture declares three producer slots and four native-work slots
+before its configuration baseline; product defaults are unchanged.
+
+The same URLs/processes survive initial Off, fresh acceptance, concept replacement,
+Off and fresh acceptance. The helper uses actual native teletext controls,
+including decoder reselection where this client loses its selected track after
+withdrawal/readdition. It writes five closed capture markers and fourteen owned
+window images. These markers synchronize the actor; they never certify rendering.
+Independently inspect actual `124.20 ->125.20 ->124.20`, simultaneous red/day and
+blue/night, channel1-only whiteQ after replacement, ordinary video whileOff and
+fresh acceptance withoutQ. Wait for both owned clients to finish. Only then publish
+the exact five-field completion identity from `ready.json`, atomically without
+replacement, to `client-complete.json` before the single180-second native deadline.
+Require nextest exit0 and `success.json`; screenshots alone do not prove transport,
+retained state or cleanup. Synchronous raster comparisons run after producers
+stop so the current-thread test actor cannot starve their delivery timers.
+
+The verifier keeps complete raw captures and original full TSDuck JSON. Each
+authored-PID PTS leap must equal an independently qualified raw PMT-Off interval:
+complete CRC-valid ownership, next-version reannouncement, continuous counters,
+no authored packet whileOff and every PTS frame on the unchanged source PCR/packet
+clock. All other transport assertions stay strict. Discovery through the bounded
+60-second/48-MiB synthetic epoch sees late PMT activation; warm audio decoding has
+a6-MiB PCM cap. Cold discovery/capture limits remain unchanged. No analyzer threshold,
+clock reset, packet rewriting or added discontinuity is used.
+
+To reuse retained synthetic captures separately, set
+`ERSATZRS_TELETEXT_WARM_OFFLINE_DIR` and run ignored `offline_warm_raw_captures`.
+Its create-new `offline-native-proof` output preserves input hashes and explicitly
+excludes the original trial's HTTP cleanup, headed rendering and engine acceptance.
+This pinned Linux-x64/X11 tooling is an intentional test exception. Candidate
+decoder reselection, resource-free representative pages and successful transport
+do not establish full authored Level2.5, resources/panels, retained/Next, Lua,
+editor, localized admin or six-platform acceptance. P9A-04 owns canonical receipts
+and the criterion/gap map.
+
 ### Initially absent transport epochs and startup freshness
 
 `TeletextOutputGate::new_absent` and `new_absent_retained` reserve and validate

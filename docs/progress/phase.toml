@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: direct same-response controls/transport proven; next warm client navigation; slate clocks and full acceptance open'
+current_focus = 'P9A-04: representative warm client flow proven; next Scripted/Lua intervals; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1334,8 +1334,17 @@ On/concept replacement/Off/re-enable and missing profiles without new requests;
 TSDuck, independent text decoding, source AV and owned cleanup pass. Two channel1
 viewers stay aligned while channel2 retains its own theme. Monitor races/errors
 and receiver-close cancellation pass; actual blocking-worker ownership reuses
-the prior verified admission. Next prove warm headed client rendering/navigation
-on that same live URL, then full resource/cache transitions and UI applied state.
+the prior verified admission. The complete same-URL warm headed trial now proves
+both themes,124->125->124, channel1-only publishedQ, Off/fresh acceptance,
+independent decoding/AV, exact PMT/source-clock gap provenance and owned cleanup.
+Move synchronous fixture raster comparisons after producer shutdown to avoid
+starving its current-thread runtime; product timing/error handling is unchanged.
+VLC requires explicit teletext reselection after some withdrawal/readdition;
+automatic selection and full client/engine acceptance remain unproven. P9A-04
+owns canonical successes, retained negatives and the criterion/gap map.
+Next connect ADR0122 Scripted/Lua cursor-bound intervals through the existing
+application/scheduling seams, with base precedence/rollback/restart/isolation.
+Full resource/cache transitions and UI applied state still require proof.
 Retained/Next, whole-host open-client drain and full Lua timing stay open.
 Stable wait-slate muxing separately needs compatible codec/caption/audio topology;
 H264 slate and MPEG2 source cannot be blindly combined. Keep that defect open.

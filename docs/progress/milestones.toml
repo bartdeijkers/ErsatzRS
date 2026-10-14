@@ -2724,6 +2724,72 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 warm same-URL client checkpoint (representative, not engine acceptance):
+Criterion: profile/validated preview/separate publication -> ordinary TCP routes ->
+same-client display/navigation, multiple viewers and channel/theme isolation.
+Final native runa82d9bb4-54e9-41d1-addf-b91f23cb9da2 passes1/1. Two original
+VLC3.0.20-3build6/libzvbi0.2.42-2 processes/URLs and one independent observer
+survive five states: initialOff -> fresh acceptance -> receipt-bound conceptQ/
+explicit replacement -> Off -> fresh acceptance. Both headed clients exit0.
+Root inspects all14 actual screenshots, including simultaneous red/blue124.20 ->
+125.20 ->124.20, whiteQ only on channel1, ordinary source video whileOff, and
+fresh acceptance withoutQ. Stage markers explicitly do not certify rendering;
+only the separate root visual record releases final completion. Each viewer makes
+one request. Actual owned observer/server/producer cleanup and retained originals,
+export receipts, package/config, other-channel generation and playout silence pass.
+
+Full unmodified captures retain every packet. TSDuck3.44-4676 checks sync/TEI,
+referenced PIDs, language/PES, counters, source AV/PCR and exact total packets.
+Its original authored512 PTS-leap counts are1/1/0 (day/observer/night), not zero.
+A separate raw-byte oracle qualifies each large PTS gap against complete CRC-valid
+PAT/PMT ownership, withdrawal/next-version reannouncement, absence of authored
+packets whileOff, uninterrupted counters, every authored20ms PTS frame and exact
+original PCR/packet time. The3.86s deliberateOff interval preserves the clock;
+no analyzer threshold, stream reset/split, dropped packet or DI spoof is used.
+ffprobe9 confirms source video/audio and DVB teletext; independent FFmpeg/libzvbi
+text seesAZ and channel1-onlyQ. Every decoded video hash belongs to the source
+and the literal440Hz audio survives. The observer continues beyond the client
+screens; source/transport timing limits remain unchanged.
+
+Five focused clock mutation groups pass. Offline retained-native3 verification
+also passes unchanged raw captures/AV/text, explicitly excluding that earlier
+trial's HTTP/body cleanup or client acceptance. Final focused/native union7:
+offline+mutation runfe512d7d-9074-4428-b639-b0572c78a448 and final native above;
+final-source mutation run907d2abe-85b3-422d-8a54-35d24244195f passes5/5.
+Cold probe/decode bounds stay
+unchanged. Warm-only bounded60s/48MiB discovery sees later PMT activation, and
+60s PCM decoding has an explicit6MiB cap. Earlier attempts exposed a test oracle
+rejecting FFmpeg's first startupDI and cold discovery stopping beforeOn; both
+are corrected without permitting later discontinuity or dropping assertions.
+
+Retain failures honestly: native1 lacked prompt client attachment; native2 showed
+replacement without client reselection. Native3/4/5 hit a real delivery-deadline
+error in the current-thread test runtime. Native5 failure-only diagnosis identifies
+packet_sleep_completed119ms behind due (unchanged100ms allowance). The fixture
+performed four synchronous raster comparisons immediately after the final stage,
+starving the paced responses. Move those exact comparisons after owned producers
+stop, preserving all assertions; native6 then passes. Temporary failure diagnosis
+is removed from product code after preserving its source/logs. No product timing,
+capacity, clock or error-handling changes. An unrelated production capacity-wait
+slate clock reset remains open; no shared-cancellation/HTTP-timeout cause is inferred.
+
+VLC requires explicit teletext reselection after some withdrawal/readdition events,
+including replacement. This is a recorded candidate limitation, not automatic
+warm selection or full suitable-client/Level2.5 acceptance. Resource-free pages
+prove this representative connection; full M29/MOT/DRCS retirement, charset/panel,
+QTM supported-set editing, retained/Next, Lua/timing/error/restart, per-response
+admin state, source/track/playback and all-six-platform gates remain open. Existing
+pinned QTM/cold client and72 localized headed admin receipts are reused; no UI,
+WASM, dependency or production FFmpeg-argv change. No milestone/status/dependency
+or acceptance clause changes; production NOS200–299 content remains gated.
+Strict preparation-test Clippy, workspace formatting, Python compile/help,
+architecture/new-allowance and structured progress checks pass. Native6 behavioral
+proof is reused after removal of its failure-only diagnostic and non-behavioral
+lint/name/format corrections; no full-closeout/exact-SHA CI claim. Receipt:
+`tmp/phase9-warm-live-client/identity.json`,
+SHA256289553934d30fb37ecc1a3b56aa5a570cf03f059e258f4c8eb1896ecbbe889a5.
+Preparatory checkpoint stays local; no milestone achieved or push/publication.
+
 2026-10-14 same-response direct control checkpoint:
 Criterion: connect profile selection/validated preview/separate publication to
 existing ordinary output, including initially Off, multiple viewers and channel
@@ -3262,18 +3328,17 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | --- | --- | --- |
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
 | Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
-| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two actual ordinary HTTP clients, simultaneous themes and124->125->124; normal HTTP TSDuck plus prior exact-model/AV/decoding and72 localized headed flows | Ordinary Off-start/replacement/Off control connection, capacity-slate clocks and full panel/feature coverage |
+| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two actual ordinary HTTP clients, simultaneous themes and124->125->124; normal HTTP TSDuck plus prior exact-model/AV/decoding and72 localized headed flows | Direct Router and actual warm TCP Off/On/replacement/Off/re-enable pass with manual client reselection; capacity-slate clocks, full resources/panels/features and applied-state admin proof remain open |
 | Actual pinned QTM workflow | Actual v1.0 NOS, indexed0+1 and sparse1-only dependency load/pixels/Save As; dense native/stream decode, Legacy/V2/V3 recovery | Sparse normative X27 decoding/client, remaining charset/resource editing and full supported set/subpage edits |
 | Full engine acceptance | Initially-absent native epoch/AV/PSI/decode/TSDuck, startup fences and earlier representative client receipts retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
-Concrete next action: connect the initially-absent engine binding and bounded,
-response-owned accepted-state monitor to the actual ordinary route. Prove the
-same HTTP response through replacement/Off/re-enable, two viewers, other-channel
-isolation, cancelled callers and failed/superseded recovery. Current accepted
-bindings have no control and Off-at-start takes raw copy; the new generic gate
-alone does not connect either path. The unverified monitor prototype remains
-worktree work, not accepted evidence. Do not create a generic event bus or rely
-only on hints that can be lost after durable commit.
+Concrete next action: connect Scripted/Lua teletext selections to the accepted
+ADR0122 cursor-bound interval/application contract, preserving admin base state,
+scheduling transaction ownership, rollback/error/restart and channel isolation.
+The representative direct/warm TCP flow is now proven above; do not repeat a
+general engine audit after this checkpoint. Full M29/MOT/DRCS warm transitions,
+per-response admin applied state and retained/Next connection remain required.
+No representative success grants full engine acceptance.
 The capacity-wait defect is independently visible: repeated finite slates reset
 clocks, while a stable copy mux cannot safely combine its current H264/one-audio
 slate with MPEG2/caption/alternate-audio source topology. Resolve compatible
