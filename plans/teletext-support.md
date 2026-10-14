@@ -559,7 +559,16 @@ It is required Phase 9 work, with implementation and independent acceptance open
   excluded before profile validation. Off has no producer and retains its fence.
   The same contract parser and native encoder must retain those origins without
   fabricated base revisions, then recheck after joined CPU work. Keep accepted
-  base history independently recoverable for expiry. This is partial implementation,
+  base history independently recoverable for expiry. ADR 0124 now adds distinct
+  version-2 immutable effective originals with exact requests, source/V3 metadata,
+  producer associations and bounded native historical reload without invocation.
+  The compatible revision migration preserves version-1 bytes and references;
+  existing base publication and editor/export paths explicitly retain that role.
+  Next connect independent scoped current pointers and same-transaction expiry
+  confirmation to the ordinary stream startup and its existing live monitor.
+  All-Off must be accepted absence, not a stale On fallback; expiry restores the
+  independently accepted base. P9A-04 owns the evidence and remaining flow gaps.
+  This is partial implementation,
   not effective On or full Lua acceptance. P9A-04 owns the verification/gap map;
   the callable contract is in `docs/reference/scripted-build-context.md`.
 - Publish override intervals atomically with the schedule. An uncaught script

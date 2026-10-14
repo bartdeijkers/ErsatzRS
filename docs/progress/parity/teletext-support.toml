@@ -2,9 +2,9 @@ feature    = 'Teletext support'
 etv_source = 'No teletext-specific policy was located in the 2026-10-10 `$ERSATZTV_SRC` audit at 46118d43313b7828780fbfcfb46e980390ea8b0d; p9a-01 records existing subtitle behavior as the baseline and authored pages as an ErsatzRS extension under ADRs 0120/0121'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging, `crates/ersatzrs-addon-contract`, one new tvguide teletext add-on in the separate ErsatzRS-Addons repository'
 status     = 'In progress'
-adr        = ['0120', '0121', '0122', '0123']
+adr        = ['0120', '0121', '0122', '0123', '0124']
 summary    = '''
-P9A-04 precedes NOS200–299 guide addon, P9B-01.
+P9A-04 precedes NOS200–299 guide addon.
 ADR0123: authored Level2.5/fallback, pinned QTeletextMaker TTI/sidecar,
 TSDuck/independent decoding, actual client display/navigation; Kodi optional.
 
@@ -43,8 +43,8 @@ Producer caps;13 quotas;100-number flow;workers survive cancellation.
 Direct/reopen AV,200→201 pass; RSS/bounds open.
 Two-channel client themes; nine-culture Health pass.
 Profiles/preview/publication; candidate reads pass.
-Lua/native originals pass; scoped promotion/live open.
-Health:nine-culture headed proof passes.
+Lua/effective originals save/reload without replay; scoped promotion/live open.
+Nine-culture Health passes.
 Themes/pending/Off/decode/client/smoke pass;12 headed passes.
 Copy fixed; finite restart/AV pass.
 V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
@@ -75,6 +75,14 @@ gates. Slate handover, activation/publication/refresh/restart, localized managem
 full source/client/browser/smoke/TSDuck stay open. UCU waives no gates.
 Content waits for p9a-04; Phase10 for p9b-02.
 '''
+
+[[debt]]
+id          = 'teletext-effective-scoped-publication-and-recovery'
+adr         = '0124'
+description = 'Connect exact effective originals to independent scoped request/accepted current pointers and the ordinary stream startup/live monitor. Require same-transaction origin, original-expiry, design/digest and pointer-CAS checks, explicit all-Off absence, guide freshness, bounded recovery without producer/Lua replay and independent accepted-base restoration. Prove untouched bindings, requested/applied state and same-URL Lua changes/expiry/restart with ordinary AV and suitable-client navigation. No full engine acceptance or permanent authoring restriction is accepted.'
+discovered  = '2026-10-14'
+evidence    = 'P9A-04 owns the version-2 codec, opaque storage, compatible SQLx upgrade/rollback, base/editor role checks and two-channel native save/preview/reopen proof. Historical restoration grants no current authority. Existing base guard still suppresses complete authored output during active intervals; scoped pointers/runtime remain the next concrete connection.'
+resolved    = false
 
 [[debt]]
 id          = 'teletext-warm-direct-delivery-deadline'

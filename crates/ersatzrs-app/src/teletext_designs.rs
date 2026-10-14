@@ -4,7 +4,12 @@ use async_trait::async_trait;
 use ersatzrs_core::repositories::{TeletextDesignMutation, TeletextDesignSave};
 use ersatzrs_domain::{EntityId, TeletextDesignHead, TeletextDesignRevision};
 
-use crate::{teletext_design_documents::EncodedTeletextDesignDocuments, ApplicationServices};
+use crate::{
+    teletext_design_documents::{
+        EncodedEffectiveTeletextDesignDocuments, EncodedTeletextDesignDocuments,
+    },
+    ApplicationServices,
+};
 
 /// Static confirmation failure without producer content or private settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -37,6 +42,20 @@ pub trait TeletextOriginalDesignValidator: Send + Sync {
     ) -> Result<EncodedTeletextDesignDocuments, TeletextOriginalDesignValidationError>;
 }
 
+/// Complete host admission of exact effective originals, distinct from base
+/// bindings. Confirmation retains whole origins, Off and producer associations;
+/// it grants no current-selection, expiry, publication or editor authority.
+#[async_trait]
+pub trait TeletextEffectiveOriginalDesignValidator: Send + Sync {
+    /// Confirm these exact bytes against their complete native candidate.
+    /// # Errors
+    /// Rejects missing, expired or mismatched complete native validation.
+    async fn confirm_original(
+        &self,
+        document: EncodedEffectiveTeletextDesignDocuments,
+    ) -> Result<EncodedEffectiveTeletextDesignDocuments, TeletextOriginalDesignValidationError>;
+}
+
 /// Storage failures retain no raw repository, producer or settings diagnostics.
 #[derive(Debug, thiserror::Error)]
 pub enum TeletextDesignStoreError {
@@ -49,6 +68,40 @@ pub enum TeletextDesignStoreError {
 }
 
 impl ApplicationServices {
+    /// Save effective originals as an unpublished immutable draft after complete
+    /// native confirmation. Historical saving does not select a current scope,
+    /// notify playout, activate packages or change accepted base/scoped pointers.
+    /// # Errors
+    /// Rejects missing native confirmation, unavailable storage and storage errors;
+    /// bounds, CAS and deletion rejections remain explicit mutation results.
+    pub async fn save_effective_original_teletext_design(
+        &self,
+        name: String,
+        existing: Option<(EntityId, i64)>,
+        document: EncodedEffectiveTeletextDesignDocuments,
+        validator: &dyn TeletextEffectiveOriginalDesignValidator,
+        max_document_bytes: usize,
+    ) -> Result<TeletextDesignMutation<TeletextDesignHead>, TeletextDesignStoreError> {
+        let repository = self
+            .ports()
+            .teletext_designs()
+            .ok_or(TeletextDesignStoreError::Unavailable)?;
+        let document = validator.confirm_original(document).await?;
+        let document_version = document.version();
+        repository
+            .save(
+                &TeletextDesignSave {
+                    name,
+                    existing,
+                    document_version,
+                    document: document.into_bytes(),
+                },
+                max_document_bytes,
+            )
+            .await
+            .map_err(|_| TeletextDesignStoreError::StorageUnavailable)
+    }
+
     /// Save an original-only draft after complete host admission, using CAS.
     ///
     /// The caller supplies trusted byte bounds and native confirmation. Saving

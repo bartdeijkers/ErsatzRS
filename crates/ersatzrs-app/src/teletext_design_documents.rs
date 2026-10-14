@@ -459,6 +459,15 @@ stored_map!(Transmission {
     last_subpage: bool
 });
 
+mod effective;
+pub use effective::{
+    decode_teletext_effective_design_documents,
+    encode_teletext_effective_design_documents_with_requests,
+    encode_teletext_effective_design_documents_with_source,
+    EncodedEffectiveTeletextDesignDocuments, RestoredEffectiveTeletextDesignDocuments,
+    TeletextEffectiveDesignDocumentInput, TeletextRestoredEffectiveDesignDocumentParts,
+};
+
 impl From<&TeletextInstallationSnapshot> for Installation {
     fn from(v: &TeletextInstallationSnapshot) -> Self {
         Self {
@@ -723,8 +732,21 @@ fn borrow_sources<'a>(
     if input.sources.len() != input.selection.bindings.len() {
         return Err(failure(TeletextDesignDocumentFailure::Association));
     }
+    borrow_source_documents(input.sources, budget)
+}
+
+fn borrow_source_documents(
+    sources: &[TeletextValidatedDocumentSource],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<Vec<BorrowedDocument<'_>>, TeletextDesignDocumentError> {
+    limit(
+        sources.len(),
+        budget.max_documents.min(MAX_BINDINGS),
+        "documents",
+    )?;
+    storage::<BorrowedDocument<'_>>(sources.len())?;
     let mut bytes = 0_usize;
-    for source in input.sources {
+    for source in sources {
         bytes = bytes
             .checked_add(source.bytes().len())
             .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
@@ -735,8 +757,7 @@ fn borrow_sources<'a>(
         )?;
         limit(bytes, budget.max_response_bytes, "responses")?;
     }
-    input
-        .sources
+    sources
         .iter()
         .map(|source| {
             Ok(BorrowedDocument {
@@ -884,19 +905,32 @@ fn parse_sources(
     sources: &[BorrowedDocument<'_>],
     budget: TeletextProfileDocumentBudget,
 ) -> Result<ParsedSources, TeletextDesignDocumentError> {
-    if selection.bindings.len() != sources.len() {
+    parse_source_documents(
+        selection.bindings.iter().map(|binding| binding.contract),
+        generation,
+        sources,
+        budget,
+    )
+}
+
+fn parse_source_documents(
+    contracts: impl ExactSizeIterator<Item = TeletextPageContract>,
+    generation: &str,
+    sources: &[BorrowedDocument<'_>],
+    budget: TeletextProfileDocumentBudget,
+) -> Result<ParsedSources, TeletextDesignDocumentError> {
+    if contracts.len() != sources.len() {
         return Err(failure(TeletextDesignDocumentFailure::Association));
     }
     storage::<TeletextProfileDocument>(sources.len())?;
     storage::<Option<ersatzrs_addon_contract::TeletextAuthoringMetadataWire>>(sources.len())?;
     let mut documents = Vec::with_capacity(sources.len());
     let mut authoring = Vec::with_capacity(sources.len());
-    for (index, source) in sources.iter().enumerate() {
+    for (index, (selected, source)) in contracts.zip(sources).enumerate() {
         let error = |reason| TeletextDesignDocumentError {
             binding: Some(index),
             reason,
         };
-        let selected = selection.bindings[index].contract;
         if source.contract != selected.schema_version() || source.generation != generation {
             return Err(error(TeletextDesignDocumentFailure::Association));
         }
@@ -951,21 +985,34 @@ fn validate_entry(
         .bindings
         .iter()
         .any(|v| v.contract == TeletextPageContract::V1);
+    let index = addon.and_then(|addon| selection.bindings.iter().position(|v| v.addon_id == addon));
+    validate_producer_entry(index, addon.is_some(), entry, region, documents, has_v1)
+}
+
+fn validate_producer_entry(
+    index: Option<usize>,
+    addon_present: bool,
+    entry: Option<TeletextPageAddress>,
+    region: Option<TeletextSavedV1Region>,
+    documents: &[TeletextProfileDocument],
+    has_v1: bool,
+) -> Result<(), TeletextDesignDocumentError> {
     if has_v1 != region.is_some() {
         return Err(failure(TeletextDesignDocumentFailure::Region));
     }
-    if selection.bindings.is_empty() {
-        return if addon.is_none() && entry.is_none() {
+    if documents.is_empty() {
+        return if !addon_present && entry.is_none() {
             Ok(())
         } else {
             Err(failure(TeletextDesignDocumentFailure::Entry))
         };
     }
-    let index = addon
-        .and_then(|addon| selection.bindings.iter().position(|v| v.addon_id == addon))
-        .ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?;
+    let index = index.ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?;
     let entry = entry.ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?;
-    let base = match &documents[index] {
+    let base = match documents
+        .get(index)
+        .ok_or_else(|| failure(TeletextDesignDocumentFailure::Entry))?
+    {
         TeletextProfileDocument::Base(base) => base,
         TeletextProfileDocument::Authored(service) => service.semantic().base(),
     };
@@ -1021,19 +1068,29 @@ fn validate_context(
     limit(bytes, budget.max_context_bytes, "context")
 }
 fn binding_strings(binding: &TeletextSelectionSnapshot) -> impl Iterator<Item = &str> {
-    let v = &binding.installation;
-    [
+    profile_strings(
         &binding.addon_id,
-        &v.addon_id,
-        &v.state_revision,
-        &v.version,
-        &v.package_sha256,
-        &v.content_sha256,
-        &v.manifest_sha256,
+        &binding.installation,
+        &binding.effective_settings,
+    )
+}
+
+fn profile_strings<'a>(
+    addon_id: &'a str,
+    v: &'a TeletextInstallationSnapshot,
+    settings: &'a [TeletextProfileSetting],
+) -> impl Iterator<Item = &'a str> {
+    [
+        addon_id,
+        v.addon_id.as_str(),
+        v.state_revision.as_str(),
+        v.version.as_str(),
+        v.package_sha256.as_str(),
+        v.content_sha256.as_str(),
+        v.manifest_sha256.as_str(),
     ]
     .into_iter()
-    .map(String::as_str)
-    .chain(binding.effective_settings.iter().flat_map(|setting| {
+    .chain(settings.iter().flat_map(|setting| {
         let value = match &setting.value {
             TeletextProfileValue::Literal(v)
             | TeletextProfileValue::SecretReference { reference: v, .. } => v,
@@ -1045,20 +1102,41 @@ fn validate_binding(
     binding: &TeletextSelectionSnapshot,
     channel_id: EntityId,
 ) -> Result<(), TeletextDesignDocumentError> {
-    let v = &binding.installation;
-    if binding.channel_id != channel_id
-        || binding.profile_id <= 0
-        || binding.binding_revision <= 0
-        || binding.profile_revision <= 0
-        || v.addon_id != binding.addon_id
+    if binding.binding_revision <= 0 {
+        return Err(failure(TeletextDesignDocumentFailure::Context));
+    }
+    validate_profile_identity(
+        binding.channel_id,
+        channel_id,
+        &binding.addon_id,
+        binding.profile_id,
+        binding.profile_revision,
+        &binding.installation,
+        &binding.effective_settings,
+    )
+}
+
+fn validate_profile_identity(
+    observed_channel: EntityId,
+    channel_id: EntityId,
+    addon_id: &str,
+    profile_id: EntityId,
+    profile_revision: i64,
+    v: &TeletextInstallationSnapshot,
+    settings: &[TeletextProfileSetting],
+) -> Result<(), TeletextDesignDocumentError> {
+    if observed_channel != channel_id
+        || profile_id <= 0
+        || profile_revision <= 0
+        || v.addon_id != addon_id
         || v.state_revision.is_empty()
         || v.version.is_empty()
-        || binding.addon_id.len() > 255
-        || ersatzrs_addon_contract::validate_addon_id(&binding.addon_id).is_err()
+        || addon_id.len() > 255
+        || ersatzrs_addon_contract::validate_addon_id(addon_id).is_err()
         || [&v.package_sha256, &v.content_sha256, &v.manifest_sha256]
             .iter()
             .any(|value| value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        || validate_teletext_profile_values("saved originals", &binding.effective_settings).is_err()
+        || validate_teletext_profile_values("saved originals", settings).is_err()
     {
         return Err(failure(TeletextDesignDocumentFailure::Context));
     }
@@ -1169,6 +1247,12 @@ enum Path {
     Other,
     Root,
     Selection,
+    EffectiveSelection,
+    EffectiveBindings,
+    EffectiveBinding,
+    PublishedOverride,
+    OverrideState,
+    ProducerBindings,
     Bindings,
     Binding,
     Settings,
@@ -1190,6 +1274,7 @@ enum Path {
 }
 struct Scan {
     budget: TeletextDesignDocumentBudget,
+    effective: bool,
     responses: usize,
     context: usize,
     editorial_items: usize,
@@ -1338,6 +1423,16 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
             self.scan.check(limit(key.len(), 128, "key"))?;
             let path = match (self.path, key.as_str()) {
                 (Path::Root, "selection") => Path::Selection,
+                (Path::Root, "effective_selection") if self.scan.effective => {
+                    Path::EffectiveSelection
+                }
+                (Path::Root, "producer_bindings") if self.scan.effective => Path::ProducerBindings,
+                (Path::EffectiveSelection, "bindings") => Path::EffectiveBindings,
+                (Path::EffectiveBinding, "base") | (Path::OverrideState, "candidate") => {
+                    Path::Binding
+                }
+                (Path::EffectiveBinding, "scripted") => Path::PublishedOverride,
+                (Path::PublishedOverride, "state") => Path::OverrideState,
                 (Path::Root, "documents") => Path::Documents,
                 (Path::Root, "resource_transmissions") => Path::Transmissions,
                 (Path::Root, "guide_inputs") => Path::GuideInputs,
@@ -1364,6 +1459,16 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
     }
     fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> Result<(), A::Error> {
         let (maximum, path, dimension) = match self.path {
+            Path::EffectiveBindings => (
+                2 * MAX_BINDINGS,
+                Path::EffectiveBinding,
+                "effective bindings",
+            ),
+            Path::ProducerBindings => (
+                self.scan.budget.max_documents.min(MAX_BINDINGS),
+                Path::Other,
+                "producer bindings",
+            ),
             Path::Bindings => (
                 self.scan.budget.max_documents.min(MAX_BINDINGS),
                 Path::Binding,
@@ -1424,12 +1529,21 @@ fn preflight_json(
     bytes: &[u8],
     budget: TeletextDesignDocumentBudget,
 ) -> Result<(), TeletextDesignDocumentError> {
+    preflight_json_for_format(bytes, budget, false)
+}
+
+fn preflight_json_for_format(
+    bytes: &[u8],
+    budget: TeletextDesignDocumentBudget,
+    effective: bool,
+) -> Result<(), TeletextDesignDocumentError> {
     limit(bytes.len(), budget.max_serialized_bytes, "serialized")?;
     limit(bytes.len(), isize::MAX as usize, "storage")?;
     storage::<Member>(budget.max_documents.min(MAX_BINDINGS))?;
     storage::<Transmission>(budget.max_resource_transmissions)?;
     let mut scan = Scan {
         budget,
+        effective,
         responses: 0,
         context: 0,
         editorial_items: 0,

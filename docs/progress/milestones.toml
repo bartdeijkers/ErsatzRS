@@ -2724,6 +2724,75 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 effective-original save/reload checkpoint:
+Criterion: retain exact channel/addon/profile associations, independent themes,
+Lua origin/expiry and shared validated native preview through immutable storage
+and reopen without producer/Lua replay. Version-2 originals now preserve complete
+base/published origins, owning playout and interval bounds, explicit Off, earliest
+transition, producer indices, exact V1/V2/V3 responses/requests, entry/region,
+resource lifecycle and V3 theme/template/zone/dynamic-field metadata. Closed
+parsing and nested/aggregate preallocation bounds reject invalid associations and
+broadened edit policy. The exact legacy version-1 empty writer remains unchanged.
+
+Actual application -> Lua schedule publication -> two channel profiles of one
+installed fixture addon -> native validation -> immutable save -> historical
+preview -> file-backed database reopen now retains both distinct complete
+services/rasters and zero producer calls on reload. Deleted bindings/profiles and
+removed installation do not destroy those historical previews. Off plus an
+unaffected V1 producer retains its exact ordinal/region; all-Off retains absent
+content without consulting an unhealthy package. Expired originals remain
+previewable with their original interval, while a fresh save allowance cannot
+revive an expired candidate. No current output authority is inferred from this.
+
+Native save holds actual CPU/hash workers under the original cumulative deadline
+and existing cancellation ownership; admitted database commit settlement stays
+truthful. Fresh bounded reload uses the same origin-free cold encoder, without
+producer/Lua invocation. A correct version-2 body/digest redeclared as version1
+rejects before CPU admission, including with a zero-unit compiler policy. Base
+publication/generation admission/current confirmation and legacy editor exports
+require version1 explicitly; history/pointers survive rejection and corruption.
+
+The compatible actual SQLx upgrade preserves all legacy rowids/bytes/digests,
+heads/tombstones, pending/accepted/export references, child schema, sequences and
+old migration checksums. Foreign keys stay enabled through the migration-owned
+transaction; temporary copy/recreation/reinsertion and the affected-orphan guard
+commit valid history and roll back malformed old versions or dangling children.
+Reopen retains enforcement, restored immutable triggers and no temporary tables.
+An unreferenced new revision deletion proves the delete trigger independently of
+foreign-key RESTRICT. Existing schema dirty/checksum/future-version health and
+bootstrap refusal/connection-default tests also pass; no production DB is touched.
+
+147 unique focused successes, including24 new cases:140 unaffected passes in
+39bcbae8-6b8f-440e-85d1-cbbbaf78c974;10 in
+73234e3f-7d0c-4d1e-a2a0-177f85e51c23 overlap3 and add7.
+Final12 codec/migration rechecks pass in7666299b-cf4f-4670-8045-0ffd5578765f.
+The negative rollback fixture now uses the existing BEGIN IMMEDIATE helper and
+passes again ine192b171-1cbd-4c43-90ba-874538390184; unchanged cases are reused.
+Retain the first old corruption-fixture failure: version2 is now a supported
+opaque envelope, so its unsupported-version probe changes to3; new tests separately
+prove valid version2 cannot enter base/editor roles. Test-only SHA2 byte formatting
+and explicit imports, identical match-arm merging, semicolons/helper extraction
+resolve compilation/strict-lint findings without changing limits or semantics.
+Strict affected five-crate all-target Clippy, formatting, architecture, hydration,
+new-allow and progress checks pass. Independent native authority/content and
+migration reviews are clean after the targeted corrections. Proof:
+tmp/phase9-effective-originals/identity.json; SHA256bc0abf65a8d10b7fb900d2e42e7464ef2f39b70b7b5e32d2293321dd8a99b03d.
+Existing unchanged headed admin, encoding/decoder/TSDuck and ordinary AV/client
+receipts remain valid only within their original scope; no new live output claim.
+
+Next concrete blocker/criterion: separate scoped request/accepted pointers and
+same-transaction scope/original-expiry/design/digest/CAS checks are not connected.
+Reuse immutable histories while preserving independently accepted base output.
+Add explicit all-Off accepted absence and bounded recovery without producer/Lua
+replay, then connect ordinary stream startup and its existing live monitor. Prove
+same-URL Lua On/Off/profile transitions, untouched bindings, expiry/base restore,
+pending/applied state and actual restart with AV plus suitable-client navigation.
+Current base guard still suppresses the complete generation during an interval.
+Historical preview is neither scoped runtime recovery nor whole-host restart.
+Full authored Level2.5/fallback, QTM/metadata/themes/zones, localized headed admin,
+source/Next/platform and independent engine acceptance remain open and unchanged.
+No production NOS200–299 guide addon begins. This checkpoint is local only.
+
 2026-10-14 effective Lua/native preparation checkpoint:
 Criterion: shared Lua controls, cursor/expiry fences, isolated profiles/themes,
 Off with unaffected bindings, shared validated preview/encoding and actual-worker

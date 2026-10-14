@@ -3676,7 +3676,7 @@ claims. Kodi is optional; TSDuck alone does not prove Level 2.5 display.
 ### Durable original-document capture and historical preview
 
 The native host can capture a complete cold channel candidate as a named design
-without publishing it. The private version-1 envelope retains exact UTF-8 V1/V2
+without publishing it. The private version-1 envelope retains exact UTF-8 V1/V2/V3
 response bytes in binding order, historical selection/install pins and unresolved
 settings, original correlation, exact entry, actual V1 lift region and explicit
 resource lifecycle. It is private database content, not an editor sidecar or a
@@ -3717,6 +3717,38 @@ This API seam has no admin controls or automatic transmission. Explicit publicat
 still needs an immutable design/revision/digest, fresh whole-channel and resource
 ownership fences and the durable promotion owner. The representative localized
 preview/publication/client flow and full independent engine acceptance remain open.
+
+### Effective original capture and historical preview
+
+The distinct version-2 envelope records a complete
+`TeletextEffectiveChannelSelectionSnapshot`: tagged base or published Scripted
+members, owning playout, original interval bounds, earliest transition and explicit
+Off. Canonically ordered producer indices identify exactly the enabled members;
+Off never acquires a response. Exact contract/response/request bytes, entry,
+region, lifecycle and source/V3 metadata remain associated with those producers.
+The closed codec checks aggregate and nested bounds before restoration and grants
+only `original_only` edit policy. Historical expiry is retained, not renewed.
+
+`save_effective_original_teletext_design_candidate` consumes a private checked
+native candidate. Its original operation deadline also bounds capture and exact
+native confirmation; caller cancellation does not release a running worker's
+admission. The application uses the same opaque immutable repository and CAS.
+An admitted database transaction retains truthful commit-settlement behavior.
+
+`reload_effective_original_teletext_design_revision` requires stored version 2
+before decoding and uses a fresh bounded historical operation. It recompiles exact
+originals through the existing cold encoder and preview model without producer or
+Lua invocation, including after expiry or profile/package removal. It restores
+producer associations and saved entry/region/lifecycle; caller policy supplies
+bounds. It grants no current scope, guide freshness, publication or editor role.
+
+Opaque revision storage accepts exactly versions 1 and 2. The compatible migration
+preserves legacy rowids/bytes/digests and existing pending/accepted/export foreign
+references. Base publication/generation and existing editor exports require
+version 1 explicitly. Scoped current pointers and ordinary-route promotion/recovery
+remain the next integration step. All-Off needs explicit accepted absence, and
+interval expiry must restore independently accepted base output. ADR 0124 owns the
+decision; P9A-04 owns verification and the remaining userflow criteria.
 
 ### Explicit pending publication requests
 

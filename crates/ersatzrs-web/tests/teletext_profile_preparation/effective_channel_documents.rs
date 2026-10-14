@@ -19,7 +19,7 @@ use ersatzrs_web::host::{
     teletext_preview::{project_teletext_preview, TeletextPreviewBudget},
 };
 
-async fn publish(
+pub(super) async fn publish(
     fixture: &Fixture,
     channel: i64,
     target: Option<&TeletextProfile>,
@@ -52,7 +52,7 @@ async fn publish(
     interval
 }
 
-async fn candidate(
+pub(super) async fn candidate(
     fixture: &Fixture,
     channel: i64,
     entry: Option<&str>,

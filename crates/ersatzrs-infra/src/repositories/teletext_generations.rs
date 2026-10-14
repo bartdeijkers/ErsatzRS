@@ -156,6 +156,9 @@ async fn check_revision(
     else {
         return Ok(Err(R::Publication(P::MissingRevision)));
     };
+    if revision.document_version != ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION {
+        return Ok(Err(R::Publication(P::InvalidValues)));
+    }
     if revision.digest != request.digest {
         return Ok(Err(R::Publication(P::DigestConflict)));
     }

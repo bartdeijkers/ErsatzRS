@@ -6,6 +6,9 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 
 use super::*;
 
+#[path = "teletext_effective_designs_tests.rs"]
+mod effective;
+
 // Synthetic opaque envelope: mixed original v1/v2 documents, not active pages.
 pub(super) const DOCUMENT: &[u8] = b"{\"version\":1,\"sources\":[{\"schema\":1,\"bytes\":\"base\"},{\"schema\":2,\"bytes\":\"authored\"}]}\r\n";
 
@@ -150,7 +153,7 @@ async fn invalid_bounds_stale_missing_and_overflow_do_not_advance_heads() {
     invalid_requests[0].name.clear();
     invalid_requests[1].name = "é".repeat(129);
     invalid_requests[2].name = "synthetic\0name".to_owned();
-    invalid_requests[3].document_version = 2;
+    invalid_requests[3].document_version = 3;
     invalid_requests[4].document.clear();
     invalid_requests[5].existing = Some((0, 1));
     invalid_requests[6].name = "\u{2003}".to_owned();
@@ -264,7 +267,7 @@ async fn corrupt_or_oversized_stored_documents_are_errors_not_absence() {
     for statement in [
         r#"UPDATE "TeletextDesignRevision" SET "Digest" = 'bad'"#,
         r#"UPDATE "TeletextDesignRevision" SET "Digest" = printf('%064d', 0)"#,
-        r#"UPDATE "TeletextDesignRevision" SET "DocumentVersion" = 2"#,
+        r#"UPDATE "TeletextDesignRevision" SET "DocumentVersion" = 3"#,
         r#"UPDATE "TeletextDesignRevision" SET "Document" = zeroblob(2048)"#,
     ] {
         sqlx::query(r#"UPDATE "TeletextDesignRevision" SET "Digest" = ?, "DocumentVersion" = 1, "Document" = ?"#)

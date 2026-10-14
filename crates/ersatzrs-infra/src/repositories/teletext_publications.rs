@@ -129,6 +129,11 @@ impl SqliteTeletextPublicationRepository {
         else {
             return Ok(Err(R::MissingRevision));
         };
+        if revision.document_version != ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION {
+            // Opaque storage also retains effective originals. Only the separate
+            // scoped role may qualify those; they cannot become base requests.
+            return Ok(Err(R::InvalidValues));
+        }
         if revision.digest != save.digest {
             return Ok(Err(R::DigestConflict));
         }
