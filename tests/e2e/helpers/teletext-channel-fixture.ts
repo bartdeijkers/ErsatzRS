@@ -130,18 +130,33 @@ export class TeletextChannelFixture {
     this.originalUi = new Map(['pages.language', 'pages.is_dark_mode',
       'teletext.authoring.policy', 'teletext.output.policy', 'teletext.work.max_concurrent']
       .map(key => [key, this.setting(key)]));
-    const base = 600_000 + Number.parseInt(randomUUID().slice(0, 5), 16);
-    this.channels = [base, base + 1];
     const profile = this.database.prepare('SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1')
       .get() as { Id: number } | undefined;
     if (!profile) throw new Error('Disposable E2E database lacks an FFmpeg profile.');
-    for (const [index, id] of this.channels.entries()) {
-      this.database.prepare(`INSERT INTO "Channel" (
-        "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
-        "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
-        "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg"
-      ) VALUES (?, ?, ?, ?, ?, 'E2E teletext', ?, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)`)
-        .run(id, randomUUID(), String(id), id, `Synthetic teletext ${index + 1}`, profile.Id);
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      // Playback histories intentionally retain channels. Reserve above existing
+      // IDs/numbers, including the tables sharing these IDs in playback fixtures.
+      const tables = ['Channel', ...(this.playback ? ['Resolution', 'FFmpegProfile',
+        'MediaSource', 'PlexMediaSource', 'Library', 'PlexLibrary', 'LibraryPath', 'Playout'] : [])];
+      const maxima = tables.map(table => `SELECT MAX("Id") AS id FROM "${table}"`);
+      const { base } = this.database.prepare(`SELECT MAX(id) + 1 AS base FROM (
+        SELECT 599999 AS id UNION ALL ${maxima.join(' UNION ALL ')}
+        UNION ALL SELECT MAX(CAST("Number" AS INTEGER)) FROM "Channel"
+      )`).get() as { base: number };
+      this.channels = [base, base + 1];
+      for (const [index, id] of this.channels.entries()) {
+        this.database.prepare(`INSERT INTO "Channel" (
+          "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
+          "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
+          "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg"
+        ) VALUES (?, ?, ?, ?, ?, 'E2E teletext', ?, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)`)
+          .run(id, randomUUID(), String(id), id, `Synthetic teletext ${index + 1}`, profile.Id);
+      }
+      this.database.exec('COMMIT;');
+    } catch (error) {
+      this.database.exec('ROLLBACK;');
+      throw error;
     }
     const producerScript = options.editorPages ? authoredScript.replace('teletext.pages.v2', 'teletext.pages.v3') : authoredScript;
     this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? producerScript : scriptBody));

@@ -62,6 +62,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-14 UCU-10 final verification amendment: full Chromium and every
+non-browser CI gate pass at3ec5c345. Firefox case329 fails before UI acceptance
+because the helper's random channel IDs collide with existing rows. Atomic
+database-aware allocation preserves retained histories; exactly that no-JS/dark
+Firefox visual case passes headed in11.3s. The maintainer explicitly requests
+only this case be rerun and no new full CI. The original Firefox job finishes
+with345 passed,30 skipped and only case329 failed. Deliver the fixture-only correction with [skip ci] and
+reuse the existing passed checks. Canonical ucu-10 evidence records the scoped
+receipt; the old CI failure is not a new green exact-commit run.
+
 2026-10-14 UCU-10 responsive browser fixture correction: Chromium CI and a
 headed reproduction show a conditional toggle reopening navigation after its
 responsive listener closes it. Remove that race from both rejection cases;

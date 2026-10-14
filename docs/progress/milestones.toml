@@ -21990,11 +21990,33 @@ pending233–236. This amendment authorizes the UCU-10 application branch push,
 required exact-source CI and merge only after acceptance, followed by green CI
 on the resulting remote/main commit. It authorizes no new release or UCU-11
 publication. The existing main checkout's unrelated work remains untouched.
-Integrated local acceptance passes below. Remote delivery requires terminal
-full CI on the final commit before merge and green CI for that exact commit on
-remote main. Canonical remote receipts are the UCU-10 application PR and its
-CI check suite, followed by the main push run; inspect their exact SHA rather
-than inferring remote delivery from this local milestone status.
+Integrated local acceptance passes below. Remote delivery originally requires
+terminal full CI on the final commit before merge. The maintainer's focused
+verification amendment below supersedes that rerun requirement for the final
+test-fixture-only correction. Canonical receipts are the UCU-10 application PR,
+its original CI check suite and the explicitly scoped headed Firefox receipt;
+inspect their source revisions rather than inferring remote delivery from this
+local milestone status. Do not describe the original failed run as green CI on
+the corrected commit.
+
+Focused verification amendment (2026-10-14): the maintainer explicitly requests
+only the failing Firefox case329 be rerun, with no new full CI after its fix.
+Run38623973857 at3ec5c345 passes Chromium and every non-browser gate; Firefox
+reports a Channel.Id collision before the no-JS/dark teletext visual case can
+start. The shared fixture selects two IDs from only20 random bits, overlapping
+unrelated fixtures and intentionally retained immutable playback histories.
+Reserve both channel IDs/numbers atomically above existing values instead;
+playback allocation also accounts for its shared profile/media/playout IDs.
+Keep all retained records, cleanup guards, production code and UI assertions.
+Exactly the reported case passes headed Firefox in11.3s, with no retries or
+skips. Receipts: tmp/ucu10-runtime-audit/teletext-329-firefox.log and
+tmp/ucu10-runtime-audit/teletext-329-firefox/playwright-results.json.
+Reuse the existing passed gates; use [skip ci] for this
+fixture-only commit so neither its branch push nor main push starts full CI.
+The original Firefox job finishes with345 passed,30 skipped and only case329
+failed; receipt: tmp/ucu10-runtime-audit/ucu10-pr105-final-firefox-fixture-failed.log.
+Its historical failed result remains visible; this amendment does not
+claim a new fully executed green CI run on the corrected fixture commit.
 
 Responsive browser fixture correction (2026-10-14): run38602305218 at2194f698
 passes every non-browser gate, including Test and Next engine, but Chromium
