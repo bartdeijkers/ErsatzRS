@@ -4,8 +4,8 @@ use std::{fmt, num::NonZeroU64, sync::Arc, time::Duration};
 
 use ersatzrs_ffmpeg::teletext::{
     EncodedTeletextAuthoredService, TeletextMultiplexError, TeletextOutputAcknowledgement,
-    TeletextOutputError, TeletextOutputGate, TeletextPmtInstallError, TeletextPsiError,
-    TeletextTransportError,
+    TeletextOutputError, TeletextOutputGate, TeletextOutputSchedule, TeletextPmtInstallError,
+    TeletextPsiError, TeletextTransportError,
 };
 use tokio::sync::watch;
 
@@ -116,6 +116,13 @@ impl fmt::Debug for TeletextOutputTransitionStatus {
 pub struct TeletextOutputControl {
     updates: watch::Receiver<Option<TeletextOutputUpdate>>,
     status: watch::Sender<TeletextOutputTransitionStatus>,
+    trace_id: uuid::Uuid,
+}
+
+impl TeletextOutputControl {
+    pub(in crate::transport::iptv) const fn trace_id(&self) -> uuid::Uuid {
+        self.trace_id
+    }
 }
 
 /// Create bounded watch slots, without tasks or current-generation authority.
@@ -136,6 +143,7 @@ pub fn teletext_output_control_channel() -> (
         TeletextOutputControl {
             updates: receiver,
             status,
+            trace_id: uuid::Uuid::new_v4(),
         },
         observer,
     )
@@ -150,6 +158,9 @@ enum InstalledAction {
 pub(in crate::transport::iptv) struct PumpControl {
     control: TeletextOutputControl,
     epoch: Arc<()>,
+    trace_epoch: uuid::Uuid,
+    // Observation only: latest successful gate installation, never latest proposal.
+    trace_active_sequence: u64,
     initialized: bool,
     seen: u64,
     desired: Option<TeletextOutputUpdate>,
@@ -162,6 +173,8 @@ impl PumpControl {
         Self {
             control,
             epoch: Arc::new(()),
+            trace_epoch: uuid::Uuid::new_v4(),
+            trace_active_sequence: 0,
             initialized: false,
             seen: 0,
             desired: None,
@@ -169,6 +182,94 @@ impl PumpControl {
             capped_failed: false,
             source_ended: false,
         }
+    }
+    pub(in crate::transport::iptv) fn trace_window_prepared(
+        &self,
+        gate: &TeletextOutputGate,
+        schedule: &TeletextOutputSchedule,
+        now: Duration,
+    ) {
+        tracing::debug!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            event = "sink_window_prepared",
+            proposal_slot = %self.control.trace_id,
+            output_epoch = %self.trace_epoch,
+            active_sequence = self.trace_active_sequence,
+            authored_selected = gate.authored_payload_selected(),
+            first_packet = schedule.first_packet(),
+            end_packet = u128::from(schedule.first_packet()) + schedule.packet_count() as u128,
+            first_due_elapsed_ns = schedule.first_due().as_nanos(),
+            prepared_elapsed_ns = now.as_nanos(),
+            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            "teletext sink window prepared before delivery"
+        );
+    }
+    pub(in crate::transport::iptv) fn trace_first_packet_written(
+        &self,
+        first_packet: u64,
+        packet: &[u8; 188],
+        now: Duration,
+    ) {
+        tracing::debug!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            event = "sink_window_first_packet_written",
+            first_packet_sha256 = %packet_sha256(packet),
+            proposal_slot = %self.control.trace_id,
+            output_epoch = %self.trace_epoch,
+            active_sequence = self.trace_active_sequence,
+            first_packet,
+            written_elapsed_ns = now.as_nanos(),
+            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            "teletext sink wrote the first packet of a prepared window"
+        );
+    }
+    pub(in crate::transport::iptv) fn trace_window(
+        &self,
+        gate: &TeletextOutputGate,
+        receipt: &TeletextOutputAcknowledgement,
+        first_packet: u64,
+        now: Duration,
+    ) {
+        tracing::debug!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            event = "sink_window_flushed",
+            active_sequence = self.trace_active_sequence,
+            authored_selected = gate.authored_payload_selected(),
+            proposal_slot = %self.control.trace_id,
+            output_epoch = %self.trace_epoch,
+            first_packet,
+            end_packet = receipt.end_packet(),
+            accepted_elapsed_ns = now.as_nanos(),
+            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            cycle_boundary = receipt.is_cycle_boundary(),
+            complete_cycle = receipt.contains_complete_cycle(),
+            signalling_announced = receipt.signalling_announced(),
+            "teletext sink accepted a flushed window"
+        );
+    }
+    fn trace_transition(
+        &self,
+        event: &'static str,
+        sequence: NonZeroU64,
+        action: InstalledAction,
+        receipt: &TeletextOutputAcknowledgement,
+        now: Duration,
+    ) {
+        tracing::debug!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            event,
+            proposal_slot = %self.control.trace_id,
+            output_epoch = %self.trace_epoch,
+            sequence = sequence.get(),
+            action = match action { InstalledAction::Replace => "replace", InstalledAction::Withdraw => "withdraw" },
+            end_packet = receipt.end_packet(),
+            accepted_elapsed_ns = now.as_nanos(),
+            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            cycle_boundary = receipt.is_cycle_boundary(),
+            complete_cycle = receipt.contains_complete_cycle(),
+            signalling_announced = receipt.signalling_announced(),
+            "teletext transition at an actual sink acknowledgement"
+        );
     }
     fn publish(&self, sequence: NonZeroU64, phase: TeletextOutputTransitionPhase) {
         self.control
@@ -276,6 +377,7 @@ impl PumpControl {
                 }
             };
             if delivered {
+                self.trace_transition("transition_applied", sequence, action, receipt, now);
                 self.publish(sequence, TeletextOutputTransitionPhase::Applied);
                 self.installed = None;
             }
@@ -294,6 +396,23 @@ impl PumpControl {
             }
             Action::Withdraw => gate.withdraw_at_acknowledged_boundary(receipt, now),
         };
+        if result.is_ok() {
+            self.trace_transition(
+                if already_withdrawn {
+                    "transition_applied"
+                } else {
+                    "transition_installed"
+                },
+                update.sequence,
+                match update.action {
+                    Action::Replace(_) => InstalledAction::Replace,
+                    Action::Withdraw => InstalledAction::Withdraw,
+                },
+                receipt,
+                now,
+            );
+            self.trace_active_sequence = update.sequence();
+        }
         self.finish_proposal(update, result, already_withdrawn)
     }
     fn finish_proposal(
@@ -350,6 +469,17 @@ impl PumpControl {
         }
         Ok(())
     }
+}
+
+// Called only from an enabled tracing field expression, once per window.
+fn packet_sha256(packet: &[u8; 188]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut hash = String::with_capacity(64);
+    for byte in <sha2::Sha256 as sha2::Digest>::digest(packet) {
+        hash.push(char::from(HEX[usize::from(byte >> 4)]));
+        hash.push(char::from(HEX[usize::from(byte & 15)]));
+    }
+    hash
 }
 
 #[cfg(test)]

@@ -18,6 +18,7 @@ use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, Appl
 use ersatzrs_domain::TeletextAcceptedGeneration;
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use tokio::{sync::watch, task::JoinHandle, time::Instant};
+use tracing::Instrument;
 
 use crate::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy;
 
@@ -127,26 +128,69 @@ pub(super) fn start_accepted_updates(
     let timing = context.timing;
     let channel_id = context.channel_id;
     let (updates, control, mut status) = teletext_output_control_channel();
+    let trace_id = control.trace_id();
+    if let Some(candidate) = &initial {
+        trace_native_candidate(candidate, trace_id, "monitor_initial");
+    }
     let observe = move || {
         let value = status.borrow_and_update();
         value.sequence().map(|sequence| (sequence, value.phase()))
     };
-    let task = tokio::spawn(run_monitor(
-        NativeBackend {
-            next_transition: Mutex::new(
-                initial
-                    .as_ref()
-                    .and_then(|candidate| candidate.next_transition()),
-            ),
-            context,
-        },
-        channel_id,
-        timing,
-        initial,
-        updates,
-        observe,
-    ));
+    let task = tokio::spawn(
+        run_monitor(
+            NativeBackend {
+                trace_id,
+                next_transition: Mutex::new(
+                    initial
+                        .as_ref()
+                        .and_then(|candidate| candidate.next_transition()),
+                ),
+                context,
+            },
+            channel_id,
+            timing,
+            initial,
+            updates,
+            observe,
+        )
+        .instrument(tracing::debug_span!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            "teletext_accepted_monitor",
+            proposal_slot = %trace_id,
+            channel_id,
+        )),
+    );
     Ok((control, TeletextAcceptedUpdatesOwner { task: Some(task) }))
+}
+
+fn trace_native_candidate(
+    candidate: &SelectedTeletextOutputCandidate,
+    trace_id: uuid::Uuid,
+    event: &'static str,
+) {
+    let identity = candidate.generation();
+    let valid_until = match candidate {
+        SelectedTeletextOutputCandidate::Base(..) => None,
+        SelectedTeletextOutputCandidate::Effective(selected, _) => selected.selection().valid_until,
+    };
+    let now = Instant::now();
+    tracing::debug!(
+        target: "ersatzrs_web::transport::iptv::teletext_provenance",
+        event,
+        proposal_slot = %trace_id,
+        channel_id = candidate.channel_id(),
+        generation_id = identity.id,
+        request_id = identity.request.id,
+        design_id = identity.request.design_id,
+        revision = identity.request.revision,
+        artifact_version = identity.artifact_version,
+        authored_selected = candidate.service().is_some(),
+        original_valid_until = ?valid_until,
+        next_transition_remaining_ns = ?candidate.next_transition().map(|next| next.saturating_duration_since(now).as_nanos()),
+        next_transition_overdue_ns = ?candidate.next_transition().and_then(|next| now.checked_duration_since(next)).map(|elapsed| elapsed.as_nanos()),
+        observed_utc = %chrono::Utc::now().to_rfc3339(),
+        "teletext monitor observed a sealed candidate"
+    );
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -176,6 +220,7 @@ trait UpdateBackend: Send + Sync + 'static {
 }
 
 struct NativeBackend {
+    trace_id: uuid::Uuid,
     context: TeletextAcceptedUpdatesContext,
     next_transition: Mutex<Option<Instant>>,
 }
@@ -230,7 +275,7 @@ impl UpdateBackend for NativeBackend {
     }
 
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure> {
-        load_selected_teletext_output_candidate(
+        let candidate = load_selected_teletext_output_candidate(
             &self.context.application,
             self.context.channel_id,
             self.context.budget,
@@ -238,7 +283,11 @@ impl UpdateBackend for NativeBackend {
             deadline.into_std(),
         )
         .await
-        .map_err(|_| ReadFailure)
+        .map_err(|_| ReadFailure)?;
+        if let Some(candidate) = &candidate {
+            trace_native_candidate(candidate, self.trace_id, "monitor_recovered");
+        }
+        Ok(candidate)
     }
 }
 
@@ -273,6 +322,12 @@ impl<C> MonitorState<C> {
         };
         self.sequence = sequence;
         self.active = false;
+        tracing::debug!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            event = "monitor_proposal", sequence, action = "withdraw",
+            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            "teletext monitor proposed withdrawal"
+        );
         self.proposal = Some((sequence, None));
         updates.send_replace(Some(update));
         true
@@ -297,6 +352,15 @@ impl<C> MonitorState<C> {
         };
         self.sequence = sequence;
         self.active = true;
+        tracing::debug!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            event = "monitor_proposal", sequence, action = "replace",
+            channel_id = identity.request.channel_id,
+            generation_id = identity.id, request_id = identity.request.id,
+            design_id = identity.request.design_id, revision = identity.request.revision,
+            observed_utc = %chrono::Utc::now().to_rfc3339(),
+            "teletext monitor proposed a recovered generation"
+        );
         self.proposal = Some((sequence, Some(identity.clone())));
         updates.send_replace(Some(update));
         true
@@ -451,6 +515,15 @@ async fn run_monitor<B: UpdateBackend>(
             break;
         }
         if backend.take_expired_transition(Instant::now()) {
+            tracing::debug!(
+                target: "ersatzrs_web::transport::iptv::teletext_provenance",
+                event = "scope_boundary_expired",
+                generation_id = ?state.cached.as_ref().map(|candidate| B::identity(candidate).id),
+                design_id = ?state.cached.as_ref().map(|candidate| B::identity(candidate).request.design_id),
+                revision = ?state.cached.as_ref().map(|candidate| B::identity(candidate).request.revision),
+                observed_utc = %chrono::Utc::now().to_rfc3339(),
+                "teletext monitor reached its original transition boundary"
+            );
             // Withdraw first; a blocked read cannot extend the previous scope.
             state.cached = None;
             if !state.withdraw(&updates) {

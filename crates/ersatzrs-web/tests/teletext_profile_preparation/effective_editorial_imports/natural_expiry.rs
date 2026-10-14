@@ -459,7 +459,7 @@ async fn native_trial(
 async fn original_ordinary_responses_restore_accepted_base_after_natural_scoped_expiry() {
     let directory = PathBuf::from(client_capture::selected(DIRECTORY_ENV));
     std::fs::create_dir(&directory).unwrap();
-    shared::terminal_trace(&directory).unwrap();
+    shared::terminal_trace_with_provenance(&directory, true).unwrap();
     let ffmpeg = client_capture::selected("ERSATZRS_TELETEXT_TEST_FFMPEG");
     let ffprobe = client_capture::selected("FFPROBE_PATH");
     let tsanalyze = client_capture::selected("ERSATZRS_TELETEXT_TEST_TSANALYZE");

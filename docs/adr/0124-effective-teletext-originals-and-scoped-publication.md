@@ -168,6 +168,15 @@ acknowledgement provenance. No grace or authoring restriction is accepted.
 P9A-04 and the scoped-expiry debt own evidence and the next bounded observation;
 full natural expiry/client/engine acceptance stays open.
 
+Private DEBUG provenance now connects the existing ordinary monitor's proposal
+slot and original expiry to a distinct pump epoch, successfully installed active
+sequence, prepared window and actual sink-flushed acknowledgement. One exact
+first-written TS packet hash per window permits byte-coordinate qualification;
+ambiguous or truncated evidence is rejected. Prepared and first-written windows
+are not complete delivery. This adds no durable authority, deadline extension,
+public applied-state projection or accepted limitation. P9A-04 owns results and
+the remaining exact capture/boundary and headed clearing proof.
+
 ## Alternatives Considered
 
 - Store an interval as a base snapshot: loses authority and original expiry.

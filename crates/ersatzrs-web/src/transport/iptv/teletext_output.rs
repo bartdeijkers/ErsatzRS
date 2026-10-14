@@ -298,20 +298,9 @@ async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             if !started {
                 return Err(TeletextPumpError::EmptyOutput);
             }
-            if gate.prepare_final_window(epoch.elapsed())? {
-                let schedule = gate.pending_schedule()?;
-                let count = u64::try_from(schedule.packet_count())
-                    .map_err(|_| TeletextOutputError::Arithmetic)?;
-                write_window(sink, &mut gate, &schedule, config, epoch, &mut prefetch).await?;
-                let receipt = gate.acknowledge_window_with_receipt(schedule, epoch.elapsed())?;
-                if let Some(control) = &mut progress.control {
-                    control.acknowledge(&mut gate, &receipt, epoch.elapsed(), false)?;
-                }
-                progress.emitted = progress
-                    .emitted
-                    .checked_add(count)
-                    .ok_or(TeletextOutputError::Arithmetic)?;
-            }
+            progress
+                .forward_final(sink, &mut gate, config, epoch, &mut prefetch)
+                .await?;
             gate.finish(epoch.elapsed())?;
             return progress
                 .emitted
@@ -350,6 +339,44 @@ struct ForwardProgress {
     control: Option<PumpControl>,
 }
 impl ForwardProgress {
+    async fn forward_final<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+        &mut self,
+        sink: &mut W,
+        gate: &mut TeletextOutputGate,
+        config: TeletextOutputConfig,
+        epoch: Instant,
+        prefetch: &mut SourcePrefetch<'_, R>,
+    ) -> Result<(), TeletextPumpError> {
+        if gate.prepare_final_window(epoch.elapsed())? {
+            let schedule = gate.pending_schedule()?;
+            let count = u64::try_from(schedule.packet_count())
+                .map_err(|_| TeletextOutputError::Arithmetic)?;
+            if let Some(control) = &self.control {
+                control.trace_window_prepared(gate, &schedule, epoch.elapsed());
+            }
+            write_window(
+                sink,
+                gate,
+                &schedule,
+                config,
+                epoch,
+                prefetch,
+                self.control.as_ref(),
+            )
+            .await?;
+            let first_packet = schedule.first_packet();
+            let receipt = gate.acknowledge_window_with_receipt(schedule, epoch.elapsed())?;
+            if let Some(control) = &mut self.control {
+                control.trace_window(gate, &receipt, first_packet, epoch.elapsed());
+                control.acknowledge(gate, &receipt, epoch.elapsed(), false)?;
+            }
+            self.emitted = self
+                .emitted
+                .checked_add(count)
+                .ok_or(TeletextOutputError::Arithmetic)?;
+        }
+        Ok(())
+    }
     async fn forward_ready<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         &mut self,
         sink: &mut W,
@@ -371,10 +398,24 @@ impl ForwardProgress {
             if count <= gate.retained_packets()? {
                 if gate.prepare_window(count, epoch.elapsed())? {
                     let schedule = gate.pending_schedule()?;
-                    write_window(sink, gate, &schedule, config, epoch, prefetch).await?;
+                    if let Some(control) = &self.control {
+                        control.trace_window_prepared(gate, &schedule, epoch.elapsed());
+                    }
+                    write_window(
+                        sink,
+                        gate,
+                        &schedule,
+                        config,
+                        epoch,
+                        prefetch,
+                        self.control.as_ref(),
+                    )
+                    .await?;
+                    let first_packet = schedule.first_packet();
                     let receipt =
                         gate.acknowledge_window_with_receipt(schedule, epoch.elapsed())?;
                     if let Some(control) = &mut self.control {
+                        control.trace_window(gate, &receipt, first_packet, epoch.elapsed());
                         // Prefetch can discover EOF during this exact write.
                         // Never install a new service with no future full cycle.
                         if prefetch.ended {
@@ -409,6 +450,7 @@ async fn write_window<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     config: TeletextOutputConfig,
     epoch: Instant,
     prefetch: &mut SourcePrefetch<'_, R>,
+    control: Option<&PumpControl>,
 ) -> Result<(), TeletextPumpError> {
     for index in 0..schedule.packet_count() {
         let packet = gate.pending_packets(epoch.elapsed())?[index];
@@ -429,6 +471,15 @@ async fn write_window<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
                     .map_err(|error| TeletextPumpError::Write(error.kind()))
             })
             .await?;
+        if index == 0 {
+            if let Some(control) = control {
+                control.trace_first_packet_written(
+                    schedule.first_packet(),
+                    &packet,
+                    epoch.elapsed(),
+                );
+            }
+        }
         if Instant::now() >= deadline {
             return Err(TeletextOutputError::Deadline.into());
         }

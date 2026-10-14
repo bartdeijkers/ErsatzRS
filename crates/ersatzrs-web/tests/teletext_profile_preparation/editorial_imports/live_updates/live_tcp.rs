@@ -31,14 +31,15 @@ const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_WARM_CLIENT_DIR";
 const MAX_MARKER: usize = 16 * 1024;
 const TRIAL_TIMEOUT: Duration = Duration::from_mins(3);
 const MAX_TERMINAL_LOG: usize = 512 * 1024;
+const MAX_PROVENANCE_LOG: usize = 4 * 1024 * 1024;
 
 #[derive(Clone)]
-struct TerminalLog(Arc<Mutex<(std::fs::File, usize)>>);
+struct TerminalLog(Arc<Mutex<(std::fs::File, usize, usize)>>);
 
 impl io::Write for TerminalLog {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let mut state = self.0.lock().unwrap();
-        let count = bytes.len().min(MAX_TERMINAL_LOG - state.1);
+        let count = bytes.len().min(state.2 - state.1);
         state.0.write_all(&bytes[..count])?;
         state.1 += count;
         // The diagnostic cap must never change the observed stream lifetime.
@@ -51,27 +52,46 @@ impl io::Write for TerminalLog {
 }
 
 pub(in super::super::super) fn terminal_trace(directory: &Path) -> io::Result<()> {
+    terminal_trace_with_provenance(directory, false)
+}
+
+pub(in super::super::super) fn terminal_trace_with_provenance(
+    directory: &Path,
+    provenance: bool,
+) -> io::Result<()> {
     use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(directory.join("stream-terminal.log"))?;
-    let writer = TerminalLog(Arc::new(Mutex::new((file, 0))));
+    // Three packet-window observers exceed the warning-only cap before expiry.
+    // Keep the opt-in proof bounded, and let its verifier reject truncation.
+    let maximum = if provenance {
+        MAX_PROVENANCE_LOG
+    } else {
+        MAX_TERMINAL_LOG
+    };
+    let writer = TerminalLog(Arc::new(Mutex::new((file, 0, maximum))));
     // This ignored gate runs alone in its owned nextest process. Its subscriber
     // must cover the real producer tasks, without initializing host logging or
     // changing the application's subscriber/filter configuration.
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::filter::Targets::new()
-                .with_target(
-                    "ersatzrs_web::transport::iptv::stream",
-                    tracing::Level::WARN,
-                )
-                .with_target(
-                    "ersatzrs_web::transport::iptv::teletext_output",
-                    tracing::Level::WARN,
-                ),
+    let mut targets = tracing_subscriber::filter::Targets::new()
+        .with_target(
+            "ersatzrs_web::transport::iptv::stream",
+            tracing::Level::WARN,
         )
+        .with_target(
+            "ersatzrs_web::transport::iptv::teletext_output",
+            tracing::Level::WARN,
+        );
+    if provenance {
+        targets = targets.with_target(
+            "ersatzrs_web::transport::iptv::teletext_provenance",
+            tracing::Level::DEBUG,
+        );
+    }
+    tracing_subscriber::registry()
+        .with(targets)
         .with(
             tracing_subscriber::fmt::layer()
                 .with_ansi(false)

@@ -233,8 +233,10 @@ fn split_pmt_at_capped_ff_falls_back_to_growth_then_later_ack_without_dropping_p
         TeletextOutputUpdate::replace(1, Arc::clone(&next)).unwrap(),
     ));
     let mut control = PumpControl::new(control);
+    assert_eq!(control.trace_active_sequence, 0);
     let cap = control.window_end(&gate, 8).unwrap().unwrap();
     assert_eq!(cap, boundary);
+    assert_eq!(control.trace_active_sequence, 0);
     assert!(!gate
         .prepare_window(usize::try_from(cap - first).unwrap(), now)
         .unwrap());
@@ -246,15 +248,18 @@ fn split_pmt_at_capped_ff_falls_back_to_growth_then_later_ack_without_dropping_p
     assert!(!receipt.is_cycle_boundary());
     control.acknowledge(&mut gate, &receipt, now, true).unwrap();
     assert!(control.desired.is_some());
+    assert_eq!(control.trace_active_sequence, 0);
     let end = control.window_end(&gate, 8).unwrap().unwrap();
     let (receipt, output) = deliver_prefix(&mut gate, end, normal, &mut now);
     bytes.extend(output);
     assert!(receipt.is_cycle_boundary());
+    assert_eq!(receipt.end_packet(), end);
     control.acknowledge(&mut gate, &receipt, now, true).unwrap();
     assert_eq!(
         status.borrow().phase(),
         TeletextOutputTransitionPhase::Waiting
     );
+    assert_eq!(control.trace_active_sequence, 1);
     let final_end = control.window_end(&gate, 8).unwrap().unwrap();
     let (receipt, output) = deliver_prefix(&mut gate, final_end, end, &mut now);
     bytes.extend(output);
@@ -263,6 +268,12 @@ fn split_pmt_at_capped_ff_falls_back_to_growth_then_later_ack_without_dropping_p
         status.borrow().phase(),
         TeletextOutputTransitionPhase::Applied
     );
+    assert_eq!(receipt.end_packet(), final_end);
+    assert_eq!(control.trace_active_sequence, 1);
+    sender.send_replace(Some(TeletextOutputUpdate::withdraw(2).unwrap()));
+    control.observe();
+    assert_eq!(control.desired.as_ref().unwrap().sequence(), 2);
+    assert_eq!(control.trace_active_sequence, 1);
     assert_av_and_extent(&bytes, &original[..usize::try_from(final_end).unwrap()]);
 }
 
@@ -271,6 +282,8 @@ fn initial_latest_update_and_epoch_scoped_status_are_not_lost_or_aggregate_autho
     let (sender, control, status) = teletext_output_control_channel();
     assert!(TeletextOutputUpdate::withdraw(0).is_err());
     sender.send_replace(Some(TeletextOutputUpdate::withdraw(2).unwrap()));
+    let shared_trace = control.trace_id();
+    assert_eq!(control.clone().trace_id(), shared_trace);
     let mut first = PumpControl::new(control.clone());
     first.observe();
     assert_eq!(status.borrow().sequence(), Some(2));
@@ -280,6 +293,8 @@ fn initial_latest_update_and_epoch_scoped_status_are_not_lost_or_aggregate_autho
     );
     let first_epoch = status.borrow().clone();
     let mut second = PumpControl::new(control);
+    assert_eq!(first.control.trace_id(), second.control.trace_id());
+    assert_ne!(first.trace_epoch, second.trace_epoch);
     second.observe();
     assert!(!status.borrow().same_epoch(&first_epoch));
     sender.send_replace(Some(TeletextOutputUpdate::withdraw(1).unwrap()));

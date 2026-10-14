@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: classify scoped expiry Q tail with actual ordinary sink-boundary provenance; full engine acceptance open'
+current_focus = 'P9A-04: correlate original requests with scoped expiry pump epochs, then qualify exact captured boundaries; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,29 +62,30 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-14 natural-expiry diagnostic: the new same-response fixture connects
-fresh independently accepted bases to a real trimmed12s Lua Reset/command-free
-Continue and a new scoped Q original with immutable expiry. Regular metadata passes;
-existing active-On base guard stays intact. Both live trials remain failed: first
-insufficient received packets, then Q in the exact observedUTC-expiry fragment.
-Two base cycles return on all original responses and state/source/actor cleanup
-checks complete before the latter decoder failure. First-seen base is not Applied.
-Retained bytes independently pass three transport/AV checks and six200/201 decodes;
-legacy124 offline reuse also passes after helper factoring. Clippy/format pass.
-P9A-04 owns exact receipt, all failures, semantics and source/tool evidence.
-Next prove whether the Q prefix was sink-accepted before expiry or emitted late:
-observe existing ordinary proposal generation/originaldeadline and actual applied
-epoch/sequence/window-end/time at ForwardProgress::forward_ready/PumpControl::acknowledge.
-Use bounded existing observation, preserve source/ownership/counters, correct any
-late expired cycle, then rerun exact oracle and actual headed clearing/navigation.
-Do not trim raw prefix, invent grace or substitute injected output for ordinary proof.
-The genuine short new scope resolves60s/four-minute fixture mismatch; expiry
-acceptance remains open. Prior warm Q/QR/Lua Off and all-culture/pinned editor proof
-remain valid for unchanged production/UI inputs. Complete engine/editor/resource/
-zone/restart/applied/guide/native/Next/source/platform/playback gates remain; ordinary
-continuous legacy selected-teletext hookup and default-capacity wait-slate timing
-are separate gaps. Engine-first forbids production guide before acceptance. No
-push to remote/main until UCU10/UCU11 merge and Phase9 is invited back; preserve UCU.
+2026-10-14 ordinary expiry provenance: private DEBUG observations now join original
+monitor deadlines/proposals to actual prepared/written/flushed pump windows and
+installed/applied sequences. P9A-04 owns final source/check/trial receipts. Native1
+has a truncated log; native2 retains Q and fails. Native3 passes unchanged native
+wire/decoder/AV/cleanup assertions, but its UTC tap is67.493084ms after original
+expiry. Exact first-packet hashes match both Day and Observer, so the ownership
+validator rejects ambiguity rather than assigning favorable offsets. Neither the
+PASS nor the trace clears the earlier negative expiry evidence.
+Next connect existing original-request ownership to private proposal/pump epochs;
+then qualify complete PES/cycle closure and exact post-ACK suffix beside the raw
+UTC fragment, correct any actual late cycle and prove headed clearing/navigation.
+Do not rerun the live trial without resolving this concrete correlation gap.
+No timing/oracle/criterion relaxation or production-guide delivery is accepted.
+Local checkpoints remain authorized; remote/main waits for UCU10/UCU11 merges
+and the maintainer's explicit return of Phase9's remote turn. Preserve UCU deltas.
+
+Reuse the prior valid metadata, retained-byte transport/AV/page200/201 and legacy124
+results; P9A-04 owns all historical receipts and failures. The genuine12s Reset/
+command-free Continue fixture preserves fresh bases, accepted history, immutable
+expiry and source clocks. Prior warm Q/QR/Lua Off and all-culture/pinned editor
+proof remain valid for unchanged production/UI inputs. Complete engine/editor/
+resource/zone/restart/applied/guide/native/Next/source/platform/playback gates
+remain; ordinary continuous legacy selected-teletext hookup and default-capacity
+wait-slate timing are separate gaps. Engine-first remains unchanged.
 
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly

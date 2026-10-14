@@ -2724,6 +2724,66 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 ordinary-output expiry provenance checkpoint (acceptance incomplete):
+Criterion: qualify original scoped expiry against actual sink-flushed boundaries
+on the original ordinary responses, then prove suitable-client clearing/navigation.
+Canonical tmp/phase9-expiry-provenance/identity.json SHA256
+600a68c838966326350675ec0e1fe3f078f5d56481f1799a195b523eae61f101
+binds baseb0f55571,
+final seven source hashes, all three new trials and the retained foreign deltas.
+This is private DEBUG instrumentation of existing monitor/control/pump mechanisms:
+proposal slot, original deadline, initial generation, distinct pump epoch, active
+sequence changed only by actual installation, prepared window, exact first-written
+TS packet hash, flushed gate receipt and installed/applied end packet/time.
+No authority, timing policy, scope, output bounds, serializer, package, admin,
+FFmpeg argv or dependency changes. SHA evaluation is inside the enabled DEBUG
+field expression, once per window, with no raw page/configuration logging.
+
+Native1 fails the unchanged observed-UTC no-Q oracle and its512KiB opt-in log
+truncates BEFORE expiry. No provenance classification uses it. The measured log
+volume justifies4MiB for this isolated probe; normal warning-only logs keep512KiB.
+Native2 run21371dc2-49e9-481a-8c6a-9524afe4b847 fails the same oracle in15.328s.
+Its complete2,220,170-byte trace observes both original-expiry timer wakes and
+later Base installations at acknowledged complete-cycle ends36563/36629. A
+preliminary cycle interpretation is NOT byte-qualified or expiry acceptance;
+partial windows and physical PES positions cannot substitute for exact ownership.
+The raw UTC prefix, Q and all failed results remain preserved.
+
+Native3 run4d1c0c9c-a38a-469c-89ed-a5e983f97108 passes one case in18.276s;
+178 filtered cases are not coverage. Its unchanged strict observed-UTC suffix
+independently decodes Base200/201 AZ without Q/R on all three original bodies,
+with three full raw clock/TSDuck/FFprobe/AV checks and six full page decodes,
+immutable scope/source/state and bounded confirmed cleanup. All three clock
+receipts have zero qualified gaps and no partial tails. Original expiry is
+21:17:09.674493700Z, but the tap observes21:17:09.741986784Z,67.493084ms
+later; no arbitrary grace was configured. The native PASS therefore does NOT
+classify prior negative prefixes or establish exact original-deadline clearing.
+
+Exact packet-hash qualification rejects an ambiguous join: one Day epoch matches
+572/572 Day and573/573 Observer samples at their unchanged zero-based packet
+coordinates. Similar content can be byte-identical; choosing an assignment by
+capture length or time would fabricate ownership. The existing two-channel
+isolation remains proven, but the two original channel1 responses need explicit
+request/output correlation before exact ACK-cut qualification. The first-written
+sample must also join its matching flushed receipt; it alone can precede failure.
+
+Strict final web all-target Clippy and formatting pass. Focused run
+66230655-be90-4e92-bcb9-202c89b06228 passes36 control/monitor/pump and
+retained-producer tests;1148 filtered cases are not coverage. Initial
+private-visibility and lint failures are retained. Source-only review found no
+blocking semantic change. The final-window block is mechanically factored and
+the retained test pins the grown forward future, without lint exemptions.
+Next concrete action: connect existing original request ownership to the private
+proposal/pump epoch, reject ambiguity, qualify complete PES/cycle closure and
+independently decode the exact post-ACK suffix beside the unchanged UTC prefix.
+Correct any genuinely new expired cycle, then prove actual headed clearing and
+navigation. Do not repeat a live trial without this new ownership hypothesis.
+No accepted criterion is changed; full authoredLevel2.5/fallback, editor/metadata/
+resources/zones, Lua/restart, localized headed admin, guide, source/Next/native/
+platform/playback and the separate legacy/wait-slate gaps remain open. Engine-first
+still forbids production-guide delivery. No remote/main push until UCU10/UCU11
+merge and the maintainer explicitly returns Phase9's remote turn.
+
 2026-10-14 natural-expiry diagnostic checkpoint (acceptance incomplete):
 Criterion: natural original Lua expiry -> independent accepted-base restoration
 on the SAME ordinary responses, followed by suitable-client clearing/navigation.

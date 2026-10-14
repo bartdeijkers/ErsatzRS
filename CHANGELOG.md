@@ -54,6 +54,10 @@ release section when tagging a release.
   retains the original scope and exposes old content at the observed expiry
   boundary; independent saved-byte transport/AV checks pass, while sink-boundary
   qualification and actual client clearing remain required.
+  Private opt-in diagnostics now connect original scoped expiry, monitor
+  proposals and actual flushed output boundaries to exact written-packet hashes
+  for retained-byte qualification, preserving the original expiry oracle and
+  playback policy.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

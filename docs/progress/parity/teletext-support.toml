@@ -82,6 +82,14 @@ adr         = '0124'
 description = 'Prove natural scoped expiry and independent accepted-base return on original ordinary responses with correct safe-output timing. Distinguish pre-expiry sink-accepted queued bytes from new expired scoped emission; preserve source AV, complete packets, counters, immutable expiry and current-base recovery. Prove actual headed clearing/navigation after the native boundary is qualified. Do not waive criteria, invent grace or silently trim the raw expiry prefix.'
 discovered  = '2026-10-14'
 evidence    = '''
+P9A-04 also owns the subsequent ordinary-output DEBUG provenance checkpoint.
+Native1's truncated log is unusable; native2 retains its Q failure. Native3 passes
+native wire/decoder/AV/cleanup assertions, but the UTC tap is67.493084ms late.
+Exact first-written hashes match both Day and Observer; qualification correctly
+rejects ambiguous ownership. Correlate original requests to private proposal/pump
+epochs, then verify PES/cycle closure and post-ACK decoding alongside the retained
+UTC fragment before actual headed clearing/navigation. No new criterion, grace,
+expiry acceptance or guide delivery follows from this representative PASS.
 P9A-04 owns exact natural-expiry receipt and two failed live trials. Real12s trim/
 Reset plus command-free Continue creates a new scoped Q original and restores
 fresh independently accepted200/201 bases on all three original bodies. State,
@@ -94,9 +102,9 @@ Actual ordinary successful Applied epoch/sequence/end-packet/time is private.
 Classification as safe queued tail versus late expired emission remains unproved.
 Retained bytes pass three offline clock/transport/AV checks and six page decodes;
 legacy helper rechecks and focused metadata/Clippy/format pass. Offline success
-never repairs native/HTTP/client failure. Next add a bounded observation of the
-existing ordinary sink acknowledgement/proposal deadline, classify the tail and
-correct any late cycle, then rerun strict native and headed clearing/navigation.
+never repairs native/HTTP/client failure. The later checkpoint adds bounded
+ordinary sink acknowledgement/proposal observations; exact ownership correlation
+now determines tail classification before any corrected native/headed trial.
 '''
 resolved    = false
 

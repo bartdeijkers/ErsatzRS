@@ -314,7 +314,7 @@ async fn retained_failure_waits_for_the_raw_producer_completion_notification() {
         assert!(stream.next().await.is_none());
     };
     let ((), result, ()) = tokio::time::timeout(Duration::from_secs(2), async {
-        tokio::join!(produce, forward, receive)
+        tokio::join!(produce, Box::pin(forward), receive)
     })
     .await
     .unwrap();

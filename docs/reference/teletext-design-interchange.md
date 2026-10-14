@@ -4035,12 +4035,35 @@ is previewed and explicitly published before expiry.
 The oracle waits actual UTC expiry, records exact complete-packet positions and
 requires two fresh independently accepted Base cycles plus the decoder's existing
 packet floor. It decodes from the EXACT observed expiry offset, preserving any
-old-content prefix. Current native trials remain failed on that no-Q assertion.
+old-content prefix. Earlier native trials fail that no-Q assertion; a later
+representative success observes UTC expiry late and does not qualify those failures.
 Observed byte time, first-seen Base and fragment-relative SRT timestamps do not
 prove sink acceptance or Applied; `txt_duration` is not observed display time.
 No grace, prefix trimming or acceptance follows from later Base restoration.
 P9A-04 owns receipts, the unclassified buffered-versus-late tail and required
-ordinary-output acknowledgement provenance. Actual headed clearing remains open.
+ordinary-output acknowledgement qualification. Actual headed clearing remains open.
+
+This isolated selector enables the private DEBUG target
+`ersatzrs_web::transport::iptv::teletext_provenance`. Its monitor proposal slot
+joins generation/design/revision and original expiry to a distinct output epoch.
+Sequence zero identifies the initial candidate; later active sequences change
+only on successful gate installation. Prepared windows, their first successfully
+written packet and sink-flushed acknowledgements are separate observations.
+The first-written event includes the SHA256 of that exact TS packet, calculated
+only when its DEBUG event is enabled. It is one sample per existing window,
+not one event per packet, and carries no raw content or configuration.
+
+The opt-in log is bounded to 4 MiB; normal warning-only trial logs retain their
+512 KiB cap. A full or truncated log cannot establish provenance. Qualification
+must reject ambiguous epoch/capture matches, correlate multiple packet hashes at
+their exact zero-based offsets, and require matching prepared/written/flushed
+window extents. A single repeated/null packet is insufficient. Receipt end
+positions are exclusive packet counts; verify startup-prefix coordinates and
+complete PES/cycle closure against retained bytes before decoding a suffix.
+Retain the original UTC fragment beside any qualified post-ACK suffix. Neither
+first-written nor prepared alone proves successful delivery, and later Base
+appearance does not identify the exact safe transition. These diagnostics do
+not change authority, publication, deadlines or the native oracle.
 
 The separate ignored selector
 `offline_natural_expiry_raw_captures_verify_clock_transport_av_and_pages200201`
