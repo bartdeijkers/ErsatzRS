@@ -68,6 +68,7 @@ pub enum TeletextOutputTransitionRejection {
     ResourceUpdate,
     CacheReconciliation,
     Proposal,
+    SourceEnded,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeletextOutputTransitionPhase {
@@ -154,6 +155,7 @@ pub(in crate::transport::iptv) struct PumpControl {
     desired: Option<TeletextOutputUpdate>,
     installed: Option<(NonZeroU64, InstalledAction)>,
     capped_failed: bool,
+    source_ended: bool,
 }
 impl PumpControl {
     pub(in crate::transport::iptv) fn new(control: TeletextOutputControl) -> Self {
@@ -165,6 +167,7 @@ impl PumpControl {
             desired: None,
             installed: None,
             capped_failed: false,
+            source_ended: false,
         }
     }
     fn publish(&self, sequence: NonZeroU64, phase: TeletextOutputTransitionPhase) {
@@ -202,6 +205,31 @@ impl PumpControl {
         self.seen = update.sequence();
         self.publish(update.sequence, TeletextOutputTransitionPhase::Waiting);
         self.desired = Some(update);
+        self.reject_late_replacement();
+    }
+    /// Actual EOF closes new activation, while requested removal remains valid.
+    /// Already installed content must still satisfy its complete-cycle checks.
+    pub(in crate::transport::iptv) fn source_ended(&mut self) {
+        self.source_ended = true;
+        self.observe();
+        self.reject_late_replacement();
+    }
+    fn reject_late_replacement(&mut self) {
+        if !self.source_ended {
+            return;
+        }
+        if let Some(update) = &self.desired {
+            if matches!(update.action, Action::Replace(_)) {
+                let sequence = update.sequence;
+                self.desired = None;
+                self.publish(
+                    sequence,
+                    TeletextOutputTransitionPhase::Rejected(
+                        TeletextOutputTransitionRejection::SourceEnded,
+                    ),
+                );
+            }
+        }
     }
     pub(in crate::transport::iptv) fn window_end(
         &mut self,

@@ -2724,6 +2724,149 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 scoped publication/recovery checkpoint:
+Criterion: exact effective originals -> independent pending -> explicit native
+acceptance -> bounded recovery -> ordinary output, preserving channel isolation,
+independent themes, Off and original expiry without producer/Lua replay.
+Existing immutable histories now have separate scoped current pointers. Native
+artifact2 records explicit presence/absence; base framing/pointers stay unchanged.
+Same-transaction checks match the complete current AND immutable original scope,
+head/revision/digest, profile/install state, original half-open expiry and CAS.
+Fresh valid interval/profile/base observations cannot relabel older originals.
+A streaming structural comparer bounds expected material and rejects loss,
+unknown/duplicate fields and wrong shapes without parsing the whole document tree.
+The compatible SQLx accepted-history upgrade preserves exact rows/references,
+immutable triggers and advanced autoincrement sequence; malformed old versions or
+deferred dangling references roll back atomically. Health confirms only durable
+selected-state association under an explicit configured cap, never sink Applied.
+
+Ninety unique focused successes:57 in33642152-1a53-4b69-ada9-a07c8bf00529
+plus33 ine83b5804-f472-4464-a4e5-cdda2f2df319. The latter corrects the sole
+corruption-fixture failure and proves existing base/source/CAS behavior; its
+intentional offline corruption restores FK/CHECK enforcement before reader use.
+Native b17ee394-57dd-47c3-9ebe-d761589f94f3 adds one actual two-channel flow:
+real Lua publication -> pending (ordinary AV only) -> explicit scoped acceptance
+-> ordinary direct route -> database reopen. Same installed addon, opposite
+profiles/themes, exact complete page/M29 units, independent200/201 decoding,
+TSDuck integrity and AV checks pass with retained base histories and zero replay.
+This raises unique successes to91; it is not suitable-client/full-engine proof.
+
+The same native run's Off-expiry case initially fails near finite source end.
+Off-only bc69e1b7-1bbe-459a-ab70-16b6a8c051ee retains the typed cause: output
+ended before a complete authored cycle. Source prefetch can discover EOF while
+an ordinary window is still pacing; its acknowledgement previously installed a
+fresh replacement without enough future source for a complete cycle. The small
+EOF latch now rejects only uninstalled Replace proposals with SourceEnded;
+withdrawal, installed-action acknowledgements, physical AV, all original timing
+and strict full-cycle/EOF checks remain intact. No fake Applied or cycle rollback.
+
+Off-only c484d7cc-6faa-4d96-8fd7-f00490289952 passes: actual Lua Continue retains
+the genuine12-second Off finish, absent output preserves AV, and a following
+ordinary response restores the independently accepted base. Both pointers,
+checkpoints/settings and producer-call counts stay unchanged. This is finite
+response proof, not same-URL warm-client or whole-host restart acceptance.
+Final88908526-f20d-4f98-acc6-179b2be78bfb passes58 focused transport/control/
+monitor/stream-terminal tests, adding48 unique cases for140 total successes.
+A paused tracked-source regression proves EOF -> new proposal -> first boundary
+ordering, exact raw byte/PMT preservation and explicit rejection. Existing early
+replacement, withdrawal, installed-unclosed-cycle, cancellation and deadline
+oracles stay unchanged. Independent small-hunk ownership/safety review is clean.
+
+Retain negatives: initial native attempts stopped before flow on an unset runtime9
+path and incorrect Scripted fixture enum; both are corrected. The first focused
+compile was SIGKILL/OOM during parallel UCU builds; one compile job completed
+without cache cleanup or changing UCU. A new deterministic test's helper import
+was corrected before final execution. Strict affected five-crate all-target
+Clippy, formatting, architecture, hydration31-baseline, new-allow and progress
+checks pass. Tools: FFmpeg/ffprobe n9.0-20261006 from runtime2.0.6; TSDuck3.44-4676.
+No new headed-client or admin proof is claimed; prior evidence remains valid only
+within its original scope. Ordinary smoke remains due after build-cache
+maintenance: target63GiB exceeds the60GiB threshold, with UCU checks still active.
+Do not clean their live artifacts or use another target path.
+
+Proof: tmp/phase9-effective-publication/identity.json; SHA2564446215fa3cd7c56fb878fd6cc873de112170c8bb488c1cb6005fb63871b2fcb.
+
+Next userflow gate: the existing admin observes/prepares only base scope. Expose a
+separate opaque effective observation/eligible producer list, preserve base
+configuration, dispatch historical preview/pending/acceptance by stored role and
+reuse existing localized controls. Active Lua On over base Off is inaccessible
+there today. Selected must not be relabelled Applied. Automatic schedule-to-native
+promotion needs explicit authoring inputs and scope/CAS/restart handling; stream
+recovery cannot invoke producers or invent it. Guide current-role qualification,
+version1 startup-only scoped delivery, effective editor interchange, whole-host
+restart and same-URL suitable-client transitions remain open. All full Level2.5,
+QTM/themes/zones, nine-culture headed admin, source/Next/platform gates and
+engine-first dependency/acceptance criteria remain unchanged.
+
+2026-10-14 effective-original save/reload checkpoint:
+Criterion: retain exact channel/addon/profile associations, independent themes,
+Lua origin/expiry and shared validated native preview through immutable storage
+and reopen without producer/Lua replay. Version-2 originals now preserve complete
+base/published origins, owning playout and interval bounds, explicit Off, earliest
+transition, producer indices, exact V1/V2/V3 responses/requests, entry/region,
+resource lifecycle and V3 theme/template/zone/dynamic-field metadata. Closed
+parsing and nested/aggregate preallocation bounds reject invalid associations and
+broadened edit policy. The exact legacy version-1 empty writer remains unchanged.
+
+Actual application -> Lua schedule publication -> two channel profiles of one
+installed fixture addon -> native validation -> immutable save -> historical
+preview -> file-backed database reopen now retains both distinct complete
+services/rasters and zero producer calls on reload. Deleted bindings/profiles and
+removed installation do not destroy those historical previews. Off plus an
+unaffected V1 producer retains its exact ordinal/region; all-Off retains absent
+content without consulting an unhealthy package. Expired originals remain
+previewable with their original interval, while a fresh save allowance cannot
+revive an expired candidate. No current output authority is inferred from this.
+
+Native save holds actual CPU/hash workers under the original cumulative deadline
+and existing cancellation ownership; admitted database commit settlement stays
+truthful. Fresh bounded reload uses the same origin-free cold encoder, without
+producer/Lua invocation. A correct version-2 body/digest redeclared as version1
+rejects before CPU admission, including with a zero-unit compiler policy. Base
+publication/generation admission/current confirmation and legacy editor exports
+require version1 explicitly; history/pointers survive rejection and corruption.
+
+The compatible actual SQLx upgrade preserves all legacy rowids/bytes/digests,
+heads/tombstones, pending/accepted/export references, child schema, sequences and
+old migration checksums. Foreign keys stay enabled through the migration-owned
+transaction; temporary copy/recreation/reinsertion and the affected-orphan guard
+commit valid history and roll back malformed old versions or dangling children.
+Reopen retains enforcement, restored immutable triggers and no temporary tables.
+An unreferenced new revision deletion proves the delete trigger independently of
+foreign-key RESTRICT. Existing schema dirty/checksum/future-version health and
+bootstrap refusal/connection-default tests also pass; no production DB is touched.
+
+147 unique focused successes, including24 new cases:140 unaffected passes in
+39bcbae8-6b8f-440e-85d1-cbbbaf78c974;10 in
+73234e3f-7d0c-4d1e-a2a0-177f85e51c23 overlap3 and add7.
+Final12 codec/migration rechecks pass in7666299b-cf4f-4670-8045-0ffd5578765f.
+The negative rollback fixture now uses the existing BEGIN IMMEDIATE helper and
+passes again ine192b171-1cbd-4c43-90ba-874538390184; unchanged cases are reused.
+Retain the first old corruption-fixture failure: version2 is now a supported
+opaque envelope, so its unsupported-version probe changes to3; new tests separately
+prove valid version2 cannot enter base/editor roles. Test-only SHA2 byte formatting
+and explicit imports, identical match-arm merging, semicolons/helper extraction
+resolve compilation/strict-lint findings without changing limits or semantics.
+Strict affected five-crate all-target Clippy, formatting, architecture, hydration,
+new-allow and progress checks pass. Independent native authority/content and
+migration reviews are clean after the targeted corrections. Proof:
+tmp/phase9-effective-originals/identity.json; SHA256bc0abf65a8d10b7fb900d2e42e7464ef2f39b70b7b5e32d2293321dd8a99b03d.
+Existing unchanged headed admin, encoding/decoder/TSDuck and ordinary AV/client
+receipts remain valid only within their original scope; no new live output claim.
+
+Next concrete blocker/criterion: separate scoped request/accepted pointers and
+same-transaction scope/original-expiry/design/digest/CAS checks are not connected.
+Reuse immutable histories while preserving independently accepted base output.
+Add explicit all-Off accepted absence and bounded recovery without producer/Lua
+replay, then connect ordinary stream startup and its existing live monitor. Prove
+same-URL Lua On/Off/profile transitions, untouched bindings, expiry/base restore,
+pending/applied state and actual restart with AV plus suitable-client navigation.
+Current base guard still suppresses the complete generation during an interval.
+Historical preview is neither scoped runtime recovery nor whole-host restart.
+Full authored Level2.5/fallback, QTM/metadata/themes/zones, localized headed admin,
+source/Next/platform and independent engine acceptance remain open and unchanged.
+No production NOS200–299 guide addon begins. This checkpoint is local only.
+
 2026-10-14 effective Lua/native preparation checkpoint:
 Criterion: shared Lua controls, cursor/expiry fences, isolated profiles/themes,
 Off with unaffected bindings, shared validated preview/encoding and actual-worker
@@ -21817,6 +21960,11 @@ Dependency-publication amendment (2026-10-14): the maintainer explicitly
 authorizes only the verified20-asset Next release next-7f75012-ersatzrs.1 and
 anonymous download/cold-start acceptance. No application/main push, application
 CI or application/add-on/FFmpeg release is authorized by this exception.
+Application-delivery amendment (2026-10-14): the maintainer subsequently
+authorizes completing UCU-10 first by pushing its application branch, requiring
+green full CI, merging into remote main and requiring green full CI on that
+resulting main commit. Preserve newer main work and the separate UCU-11
+candidate. This amendment authorizes no release publication.
 Record each row's justified disposition and source map; implement demonstrated
 behavior gaps and maintain health, persistence, provider, scheduling and browser
 contracts. Review compatibility and retire temporary runtime patches individually
@@ -21832,6 +21980,171 @@ acceptance assertions and update changelog/documentation. Advance the baseline
 only with accepted ordered row dispositions; keep existing UCU-00–09 evidence.
 """
 evidence = """
+Application-delivery amendment (2026-10-14): the maintainer explicitly requests
+UCU-10 first, including push, merge and green CI with remote main. The accepted
+local checkpoint92a736fc is integrated separately with verified remote main
+fc22dac8; preserve all newer teletext work and the future pending UCU-11 rows.
+Resolve the five merge conflicts by retaining both changelog/session histories,
+YAML/Ammonia security changes, new ZIP support and accepted rows1–232 alongside
+pending233–236. This amendment authorizes the UCU-10 application branch push,
+required exact-source CI and merge only after acceptance, followed by green CI
+on the resulting remote/main commit. It authorizes no new release or UCU-11
+publication. The existing main checkout's unrelated work remains untouched.
+Integrated local acceptance passes below. Remote delivery originally requires
+terminal full CI on the final commit before merge. The maintainer's focused
+verification amendment below supersedes that rerun requirement for the final
+test-fixture-only correction. Canonical receipts are the UCU-10 application PR,
+its original CI check suite and the explicitly scoped headed Firefox receipt;
+inspect their source revisions rather than inferring remote delivery from this
+local milestone status. Do not describe the original failed run as green CI on
+the corrected commit.
+
+Focused verification amendment (2026-10-14): the maintainer explicitly requests
+only the failing Firefox case329 be rerun, with no new full CI after its fix.
+Run38623973857 at3ec5c345 passes Chromium and every non-browser gate; Firefox
+reports a Channel.Id collision before the no-JS/dark teletext visual case can
+start. The shared fixture selects two IDs from only20 random bits, overlapping
+unrelated fixtures and intentionally retained immutable playback histories.
+Reserve both channel IDs/numbers atomically above existing values instead;
+playback allocation also accounts for its shared profile/media/playout IDs.
+Keep all retained records, cleanup guards, production code and UI assertions.
+Exactly the reported case passes headed Firefox in11.3s, with no retries or
+skips. Receipts: tmp/ucu10-runtime-audit/teletext-329-firefox.log and
+tmp/ucu10-runtime-audit/teletext-329-firefox/playwright-results.json.
+Reuse the existing passed gates; use [skip ci] for this
+fixture-only commit so neither its branch push nor main push starts full CI.
+The original Firefox job finishes with345 passed,30 skipped and only case329
+failed; receipt: tmp/ucu10-runtime-audit/ucu10-pr105-final-firefox-fixture-failed.log.
+Its historical failed result remains visible; this amendment does not
+claim a new fully executed green CI run on the corrected fixture commit.
+
+Responsive browser fixture correction (2026-10-14): run38602305218 at2194f698
+passes every non-browser gate, including Test and Next engine, but Chromium
+reports one Classic rejection case failure. Its trace shows the responsive
+listener has closed navigation before the test's conditional toggle click,
+which reopens it. The existing headed wrapper reproduces that exact failure.
+Remove the racing toggle from the Classic and Scripted rejection cases and
+await the responsive closed state instead. All four affected headed cases pass
+in Chromium/Firefox (74.6s), preserving English/Dutch, no-JS, published preview,
+timeline identity, mobile bounds and error assertions. Production code and
+matched web assets remain unchanged. Receipts:
+tmp/ucu10-runtime-audit/nav-resize-{before,after}.log and
+tmp/ucu10-runtime-audit/ucu10-pr105-retry-navigation/trace.zip.
+The preceding full Firefox job is preserved; require full green CI on the
+corrected final head before remote main delivery.
+
+Security/resource CI correction (2026-10-14): run38582861679 at865407e0
+passes Chromium, but new same-day RustSec advisories reject Rustls0.23.45.
+Update only that locked package to0.23.46; keep every audit policy intact.
+Fresh strict workspace Clippy and canonical closeout pass6,312 nextest cases
+(287 skipped, one slow), followed by all11 workspace doctest stages. Actual
+cold managed FFmpeg206 acquisition passes through the updated HTTPS client,
+including normal archive checksums and capability validation; fresh matched
+Leptos and real served JS/WASM verification also pass. Logs:
+tmp/ucu10-runtime-audit/ucu10-rustls-security-{deny,clippy,test-closeout,
+https-acquisition,matched-build,matched-bundle}.log.
+Next021's unchanged source/features use private HTTP loopback callbacks in this
+application, without custom TLS-store Debug or Brotli decompression; its older
+Rustls0.23.40 is outside the ECH regression range. No demonstrated reachable
+Next package correction or new dependency publication is required for this use.
+This is not a claim that arbitrary standalone Next HTTPS use is patched.
+The Test compiler receives SIGKILL immediately after the kernel's14:50:35Z
+global OOM; four compilers retain28.8GiB RSS and swap is exhausted. Limit the
+self-hosted Test build to one compiler, Next to two, and Next execution to four
+test slots; keep every selection/assertion and avoid concurrent local heavy
+builds. The Next preview fixture reports Failed without its underlying error;
+capture the existing redacted WARN diagnostics in that isolated child without
+extending its30-second deadline or changing independence/cleanup assertions.
+Host-permission recheck passes all416 Next component/runtime cases in308s,
+including normal/preview independence and cleanup in34.8s (five slow cases).
+Every original assertion remains intact. The first sandboxed attempt cannot
+bind disposable listeners and is not acceptance evidence; the complete valid
+receipt is tmp/ucu10-runtime-audit/ucu10-resource-next-components-host.log.
+Fresh affected strict web Clippy passes after the diagnostic change. Existing
+Native/Next smoke, TSDuck and headed browser receipts remain valid because no
+production playback, graphics, routes, islands or runtime pins changed. Fresh
+progress, formatting, architecture and hydration checks pass; reuse the just-run
+workspace closeout and strict lint instead of repeating them. Structural receipt:
+tmp/ucu10-runtime-audit/ucu10-resource-structural.log. Full green CI on the final
+exact head remains required before remote main.
+
+Browser CI correction (2026-10-14): full run38562390156 atc1a62516 passes
+Format, Clippy, Test, Next engine, Cargo deny, documentation and commit lint.
+Chromium reports one failure: the playout adaptation browser fixture retains
+a synthetic Scripted channel without a checkpoint, contaminating the later
+global Scripted Health result. The existing headed runner reproduces the exact
+failure with only the adaptation and Health cases. Remove only this spec's
+owned channels after each case, using foreign-key cascades and a transaction;
+retain every exact Health, timeline and UI assertion. All26 affected headed
+Chromium/Firefox cases then pass in6.4m, including both themes and JavaScript
+enabled/disabled. Logs: tmp/ucu10-runtime-audit/health-leak-{before,after}.log.
+No production source or runtime identity changes; previous Rust/runtime gates
+remain valid. Let the original Firefox job finish: both full suites report
+only this same failure, with367 Chromium passes/5 skips and342 Firefox
+passes/30 skips; each has three unrun serial successors. Preserve both job
+logs and original failure contexts/traces under tmp/ucu10-runtime-audit/.
+Require green full CI on the corrected exact head before remote main.
+
+New-main integration (2026-10-14): the maintainer identifies remote main
+35c74ee04b40fa20f10489a7ad0dec2e0b5c245e after application head1e3f5d89 is pushed
+in PR105. Integrate all three new main commits, preserving their Phase9 work;
+resolve only three documentation conflicts by retaining both histories.
+All production UCU-10 changes remain separate; the sole Rust overlap preserves
+the two-worker fixture admission alongside newly registered teletext tests.
+Fresh strict workspace Clippy and test-closeout pass:6,312 nextest cases,287
+skipped, one slow, all doctest stages; run e0c8bbcf-8d47-4d99-a0dd-7d3735abaf47.
+Fresh ordinary Native HTTP/lifecycle smoke, parity/architecture/hydration,
+matched Leptos build and actual JS/WASM consistency gate pass on this integration.
+New main changes configured Native non-hybrid teletext recovery, with explicit
+Next exclusion and absent-policy return. It changes no admin components,
+dependencies, FFmpeg graphs or Next implementation/pin. Reuse the preceding
+six headed search cases, Next playback and87/83 TSDuck results for those unchanged
+paths. The source audit also verifies42/42 source and12/12 retained-capture hashes
+against main35 for publication receipt4446215fa3cd7c56fb878fd6cc873de112170c8bb488c1cb6005fb63871b2fcb;
+these are scoped Phase9 receipts, not full Phase9 acceptance. All existing open
+Phase9 and approved hardware/platform debt remain unverified.
+Fresh logs: tmp/ucu10-runtime-audit/ucu10-main35-{clippy,test-closeout,parity,
+native-http-smoke,matched-build,matched-bundle}.log. Canonical remote delivery:
+https://github.com/bartdeijkers/ErsatzRS/pull/105 and its exact-source CI check
+suite; merge only after full green CI and verify resulting remote main.
+
+Final integrated local acceptance (2026-10-14): all 6,250 nextest cases pass
+(one slow, 285 skipped), followed by every workspace doctest stage; run
+4dafff07-79b2-4b62-88f7-7987e0411d77. Strict workspace Clippy, dependency audit,
+parity/progress/architecture/hydration, formatting and lint-exemption policy
+pass. Native, bundled Next Copy and Next Convert real-host lifecycle gates
+pass with verified FFmpeg206 and published Next021, without ETV_NEXT_FOLDER.
+Next proves decoded Dutch audio, burned subtitles or selected Dutch WebVTT,
+cached TS/HLS reconnects, preview, private callbacks and idle cleanup.
+Native TSDuck passes 87 checks; Next Copy passes 83, both with zero failures.
+The initial Next Copy seed races a startup SQLite writer; add the existing
+bounded 30s wait, bail on errors and transact both engine/profile updates.
+The corrected gate passes without changing any transport assertion. Retain
+the failed log as history and reuse unchanged Native/HTTP results explicitly.
+The final matched Leptos build and actual JS/WASM bundle gate pass. All six
+headed Chromium/Firefox search cases pass (31.2s), covering hydration/no-JS,
+current smart collections, artwork identities, navigation and mobile bounds.
+Logs under tmp/ucu10-runtime-audit/ use prefix ucu10-main-integration- and
+suffixes test-closeout-corrected,clippy-corrected,deny-verified,parity,
+native-http-smoke,next-http-smoke,next-convert-http-smoke,native-tsduck,
+next-copy-tsduck-corrected,matched-build,matched-bundle,search-browser.log.
+Approved hardware/platform debt remains
+explicitly unverified. No application or runtime publication is authorized.
+
+Integrated test checkpoint (2026-10-14): workspace Clippy, dependency audit,
+architecture/hydration lint, formatting, progress validation and lint-exemption
+policy pass. The first complete nextest run selects 6,250 tests: 6,249 pass and one
+Next publisher test races its cancelled blocking worker's private-file cleanup.
+Synchronize that assertion by reacquiring the existing publisher admission;
+retain the 200ms deadline and no-publication assertions. This changes only the
+test, not production behavior. All four focused publisher tests pass, followed
+by the complete corrected closeout and integrated acceptance recorded above.
+Logs: tmp/ucu10-runtime-audit/ucu10-main-integration-{clippy,deny-verified,
+test-closeout,publication-fix}.log. After all running owned tests finish,
+package-scoped web cleanup removes 18.6GiB above the 60GiB threshold, preserving
+dependencies, source, runtime packages and evidence; the target returns to 50GiB.
+Log: ucu10-main-integration-threshold-cleanup.log.
+
 Final closure consistency (2026-10-14): the two focused embedded release-note
 checks pass after the published dependency notes are updated. A final matched
 Leptos build succeeds (native build 2m08s), followed by the actual server/site
@@ -22397,6 +22710,26 @@ The previous UCU-10 source-only CI and Next-only publication exceptions do not
 extend to this window; further deliveries need explicit maintainer instruction.
 """
 evidence = """
+Integrated local checkpoint (2026-10-14): preserve the existing UCU-11 work in
+e3ee3a36, then merge delivered remote main32c12793. All eleven conflicts retain
+both windows and newer teletext work. The delivered Rustls0.23.46 lock and both
+browser fixture corrections remain identical to main. Strict affected infra,
+web and FFmpeg all-targets Clippy passes4m42s after extracting the unchanged
+subtitle assertions and sharing case-insensitive segment selection. Formatting
+and progress validation pass; the parity summary remains within its budget.
+Receipt: tmp/ucu11-runtime-audit/ucu11-main32-affected-clippy.log.
+Both affected actual Next022 subtitle cases pass in7.087s (2440 filtered skips),
+run ed5c7cc9-d915-486f-98a2-87db8aeae923. The unchanged assertions prove
+Burn/Convert/off, selected Dutch audio, seek exclusion, repeated full cue times
+and WebVTT settings using the reviewed staged Linux package, payload SHA256
+3dec877fd5494bb4f796ab8dcca1d11026be34e9f41a5f5d36407c758c966975.
+Receipt: tmp/ucu11-runtime-audit/ucu11-main32-subtitle-runtime.log.
+The existing twenty-asset Next022 distribution kit passes all19 checksums;
+the exact staged Linux payload matches its reviewed receipt. Public managed
+download/adoption still needs separately requested publication approval; no
+publication, application push or CI is performed. Focused integrated runtime
+adoption and final window gates remain open.
+
 Window approved and version clarified on2026-10-14. Local upstream tag and primary
 GitHub tag/release identity agree at f75abe53; shared source checkout is unchanged.
 Application remote main bd1bc256 is21 commits ahead of the UCU-10 base18290023,
@@ -22474,6 +22807,19 @@ reviewed022 manifest. Remote branch equality is verified before dispatch. This
 exception authorizes no main/application push, application CI or publication.
 Canonical production pin stays on published021 until complete reviewed022
 adoption/availability proof.
-Required integrated actual-host/final gates remain open; no application commit,
-main push, application CI or publication is claimed.
+Authorized macOS source-candidate run38542065540 is terminal success at exact
+source-only100f2d35615584f6429d047484d67081442d3bb3. Both osx-arm64 and osx-x64
+jobs pass native startup and provenance packaging; receipt:
+tmp/next022-audit/macos-next022-ci-result.json. Downloaded source identities,
+native version strings and the six-RID candidate distribution checks pass;
+tmp/next022-audit/distribution-ready-verification.log owns the scoped receipt.
+This is source/runtime packaging evidence, not macOS application acceptance or
+publication. Production remains the published021 pin;022 remains unpublished.
+
+UCU-10 is now delivered through PR105 on verified remote main
+32c127932647fd23568a4499f7e62db64aeb10eb, under its explicit focused-verification
+amendment. Integrating that main into this separate UCU-11 checkpoint preserves
+both histories and newer teletext work; affected integration acceptance is still
+required. Required actual-host/final gates remain open. UCU-11 rows233–236 remain
+pending; no main push, application CI or publication is authorized or claimed.
 """

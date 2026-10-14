@@ -559,8 +559,22 @@ It is required Phase 9 work, with implementation and independent acceptance open
   excluded before profile validation. Off has no producer and retains its fence.
   The same contract parser and native encoder must retain those origins without
   fabricated base revisions, then recheck after joined CPU work. Keep accepted
-  base history independently recoverable for expiry. This is partial implementation,
-  not effective On or full Lua acceptance. P9A-04 owns the verification/gap map;
+  base history independently recoverable for expiry. ADR 0124 now adds distinct
+  version-2 immutable effective originals with exact requests, source/V3 metadata,
+  producer associations and bounded native historical reload without invocation.
+  The compatible revision migration preserves version-1 bytes and references;
+  existing base publication and editor/export paths explicitly retain that role.
+  Independent scoped pointers now reuse immutable histories and confirm exact
+  original/current scope, expiry and CAS in one transaction. Native explicit
+  acceptance/recovery connects frozen synthetic originals to the existing
+  version-2 live ordinary route. All-Off retains accepted absence; the monitor
+  wakes and withdraws at the original transition before blocked reads can extend
+  authority, then validates the independent base. Guide freshness, automatic
+  schedule-to-output publication, localized pending/applied controls, version-1
+  startup-only scoped delivery, whole-host restart and suitable-client same-URL
+  transitions remain concrete gaps, not accepted limitations. This is partial
+  implementation, not full Lua or independent engine acceptance. P9A-04 owns
+  the evidence and next userflow connection;
   the callable contract is in `docs/reference/scripted-build-context.md`.
 - Publish override intervals atomically with the schedule. An uncaught script
   error rolls back the entire candidate. Restart restores current published

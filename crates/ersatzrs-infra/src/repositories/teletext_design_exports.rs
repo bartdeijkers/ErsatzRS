@@ -31,6 +31,9 @@ pub(super) async fn create(
     else {
         return Ok(M::Rejected(R::MissingDesign));
     };
+    if original.document_version != TELETEXT_DESIGN_DOCUMENT_VERSION {
+        return Ok(M::Rejected(R::InvalidValues));
+    }
     if original.digest != save.design_digest {
         return Ok(M::Rejected(R::Conflict));
     }
@@ -112,6 +115,9 @@ pub(super) async fn read(
     else {
         return Err(corrupt("export original revision"));
     };
+    if original.document_version != TELETEXT_DESIGN_DOCUMENT_VERSION {
+        return Err(corrupt("export original version"));
+    }
     if original.digest != receipt.metadata.design_digest {
         return Err(corrupt("export original digest"));
     }

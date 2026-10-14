@@ -104,7 +104,7 @@ pub(super) fn frozen_original(design: &RestoredOriginalTeletextDesign) -> bool {
 
 // Frame exact wire bodies without concatenating or cloning the service. Original
 // document digest independently retains its preview/layout/semantic identity.
-fn artifact_digest(
+pub(super) fn artifact_digest(
     service: &EncodedTeletextAuthoredService,
     deadline: Instant,
 ) -> Result<String, NativeTeletextGenerationError> {

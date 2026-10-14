@@ -77,8 +77,8 @@ remaining debt are tracked in [docs/progress/](docs/progress/README.md).
 
 Unreleased development extends the accepted catch-up through **v26.11.2**,
 retains the Native engine, and adopts the reviewed Next v0.2.1 dependency.
-Its packages are publicly available; the application changes have local
-acceptance and await separate application delivery. Approved hardware/platform
+Its packages are publicly available, and the application changes are integrated
+on main; a new application release is not published. Approved hardware/platform
 acceptance debt remains explicitly unverified.
 
 The next local catch-up window is **v26.11.3**. Its Next v0.2.2 candidates

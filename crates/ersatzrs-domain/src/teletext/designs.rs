@@ -11,6 +11,9 @@ use crate::EntityId;
 /// Current durable original-document envelope version, separate from page schemas.
 pub const TELETEXT_DESIGN_DOCUMENT_VERSION: u16 = 1;
 
+/// Effective-original envelope with distinct base/published Scripted origins.
+pub const TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION: u16 = 2;
+
 /// Design storage names reuse the existing profile-name allocation convention.
 /// This bounds stored names and places no limit on authored page content.
 pub const MAX_TELETEXT_DESIGN_NAME_BYTES: usize = super::MAX_TELETEXT_PROFILE_NAME_BYTES;

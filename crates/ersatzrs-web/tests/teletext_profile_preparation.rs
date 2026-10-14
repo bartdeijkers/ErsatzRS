@@ -58,6 +58,14 @@ mod documents;
 mod editorial_imports;
 #[path = "teletext_profile_preparation/effective_channel_documents.rs"]
 mod effective_channel_documents;
+#[path = "teletext_profile_preparation/effective_designs.rs"]
+mod effective_designs;
+#[path = "teletext_profile_preparation/effective_generations.rs"]
+mod effective_generations;
+#[path = "teletext_profile_preparation/effective_ordinary_stream_flow.rs"]
+mod effective_ordinary_stream_flow;
+#[path = "teletext_profile_preparation/effective_publications.rs"]
+mod effective_publications;
 #[path = "teletext_profile_preparation/export_receipts.rs"]
 mod export_receipts;
 #[path = "teletext_profile_preparation/generations.rs"]

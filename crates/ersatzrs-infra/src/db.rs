@@ -1994,3 +1994,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "db_effective_teletext_migration_tests.rs"]
+mod effective_teletext_migration_tests;

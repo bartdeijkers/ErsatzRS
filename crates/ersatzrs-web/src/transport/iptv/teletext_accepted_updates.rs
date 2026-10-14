@@ -8,24 +8,27 @@
 //! rejections that leave unauthorized PES running. A reported rejected withdrawal
 //! is therefore a defensive ownership/sequence fault, not an applied disable.
 
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
-use ersatzrs_core::repositories::TeletextGenerationMutation;
 use ersatzrs_domain::TeletextAcceptedGeneration;
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use tokio::{sync::watch, task::JoinHandle, time::Instant};
 
-use crate::host::{
-    teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
-    teletext_generations::AcceptedTeletextOutputCandidate,
-};
+use crate::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy;
 
 use crate::transport::iptv::{
-    teletext_accepted_output::load_accepted_teletext_output_intent,
     teletext_binding::{
         teletext_output_control_channel, TeletextOutputControl, TeletextOutputTransitionPhase,
         TeletextOutputUpdate,
+    },
+    teletext_selected_output::{
+        load_selected_teletext_output_candidate, observe_selected_teletext_output,
+        SelectedTeletextOutputCandidate,
     },
     teletext_source_policy::TeletextSourcePolicy,
 };
@@ -107,7 +110,7 @@ impl Drop for TeletextAcceptedUpdatesOwner {
 /// Pending requests and package invocation are deliberately absent from this API.
 pub(super) fn start_accepted_updates(
     context: TeletextAcceptedUpdatesContext,
-    initial: Option<Arc<AcceptedTeletextOutputCandidate>>,
+    initial: Option<Arc<SelectedTeletextOutputCandidate>>,
 ) -> Result<
     (TeletextOutputControl, TeletextAcceptedUpdatesOwner),
     TeletextAcceptedUpdatesConfigurationError,
@@ -116,7 +119,7 @@ pub(super) fn start_accepted_updates(
         || context.budget.max_serialized_bytes == 0
         || initial.as_ref().is_some_and(|candidate| {
             candidate.generation().request.channel_id != context.channel_id
-                || candidate.selection().channel_id != context.channel_id
+                || candidate.channel_id() != context.channel_id
         })
     {
         return Err(TeletextAcceptedUpdatesConfigurationError);
@@ -129,7 +132,14 @@ pub(super) fn start_accepted_updates(
         value.sequence().map(|sequence| (sequence, value.phase()))
     };
     let task = tokio::spawn(run_monitor(
-        NativeBackend(context),
+        NativeBackend {
+            next_transition: Mutex::new(
+                initial
+                    .as_ref()
+                    .and_then(|candidate| candidate.next_transition()),
+            ),
+            context,
+        },
         channel_id,
         timing,
         initial,
@@ -149,58 +159,85 @@ trait UpdateBackend: Send + Sync + 'static {
     type Candidate: Clone + Send + Sync + 'static;
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration;
-    fn service(candidate: &Self::Candidate) -> Arc<EncodedTeletextAuthoredService>;
+    fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>>;
+    fn next_transition(&self) -> Option<Instant> {
+        None
+    }
+    fn take_expired_transition(&self, _now: Instant) -> bool {
+        false
+    }
     async fn current(&self) -> Result<Option<TeletextAcceptedGeneration>, ReadFailure>;
-    async fn confirm(&self, candidate: &Self::Candidate) -> Result<bool, ReadFailure>;
+    async fn confirm(
+        &self,
+        candidate: &Self::Candidate,
+        deadline: Instant,
+    ) -> Result<bool, ReadFailure>;
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure>;
 }
 
-struct NativeBackend(TeletextAcceptedUpdatesContext);
+struct NativeBackend {
+    context: TeletextAcceptedUpdatesContext,
+    next_transition: Mutex<Option<Instant>>,
+}
 
 #[async_trait::async_trait]
 impl UpdateBackend for NativeBackend {
-    type Candidate = Arc<AcceptedTeletextOutputCandidate>;
+    type Candidate = Arc<SelectedTeletextOutputCandidate>;
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration {
         candidate.generation()
     }
 
-    fn service(candidate: &Self::Candidate) -> Arc<EncodedTeletextAuthoredService> {
-        Arc::clone(candidate.service())
+    fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>> {
+        candidate.service().map(Arc::clone)
+    }
+
+    fn next_transition(&self) -> Option<Instant> {
+        self.next_transition.lock().ok().and_then(|next| *next)
+    }
+
+    fn take_expired_transition(&self, now: Instant) -> bool {
+        if let Ok(mut next) = self.next_transition.lock() {
+            if next.is_some_and(|boundary| now >= boundary) {
+                *next = None;
+                return true;
+            }
+        }
+        false
     }
 
     async fn current(&self) -> Result<Option<TeletextAcceptedGeneration>, ReadFailure> {
-        self.0
-            .application
-            .accepted_teletext_generation(self.0.channel_id)
-            .await
-            .map_err(|_| ReadFailure)
+        let observed =
+            observe_selected_teletext_output(&self.context.application, self.context.channel_id)
+                .await
+                .map_err(|_| ReadFailure)?;
+        *self.next_transition.lock().map_err(|_| ReadFailure)? = observed.next_transition;
+        Ok(observed.generation)
     }
 
-    async fn confirm(&self, candidate: &Self::Candidate) -> Result<bool, ReadFailure> {
-        self.0
-            .application
-            .confirm_current_teletext_generation(
-                candidate.generation(),
-                candidate.selection(),
-                self.0.budget.max_serialized_bytes,
+    async fn confirm(
+        &self,
+        candidate: &Self::Candidate,
+        deadline: Instant,
+    ) -> Result<bool, ReadFailure> {
+        Ok(candidate
+            .confirm(
+                &self.context.application,
+                self.context.budget.max_serialized_bytes,
+                deadline.into_std(),
             )
-            .await
-            .map(|value| matches!(value, TeletextGenerationMutation::Accepted(())))
-            .map_err(|_| ReadFailure)
+            .await)
     }
 
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure> {
-        load_accepted_teletext_output_intent(
-            &self.0.application,
-            self.0.channel_id,
-            self.0.budget,
-            self.0.encoding.clone(),
-            self.0.source,
+        load_selected_teletext_output_candidate(
+            &self.context.application,
+            self.context.channel_id,
+            self.context.budget,
+            self.context.encoding.clone(),
             deadline.into_std(),
         )
         .await
-        .map(|intent| intent.map(|intent| Arc::clone(intent.candidate())))
         .map_err(|_| ReadFailure)
     }
 }
@@ -349,15 +386,17 @@ async fn reconcile<B: UpdateBackend>(
         let Some(candidate) = candidate else {
             return false;
         };
-        let Some(confirmed) = bounded(updates, deadline, backend.confirm(candidate)).await else {
+        let Some(confirmed) =
+            bounded(updates, deadline, backend.confirm(candidate, deadline)).await
+        else {
             return false;
         };
         return match confirmed {
-            Ok(true) if state.active => true,
-            Ok(true) => {
-                let service = B::service(candidate);
-                state.replace(updates, &identity, service)
-            }
+            Ok(true) => match B::service(candidate) {
+                Some(_) if state.active => true,
+                Some(service) => state.replace(updates, &identity, service),
+                None => state.withdraw(updates),
+            },
             _ => state.withdraw(updates),
         };
     }
@@ -378,14 +417,18 @@ async fn reconcile<B: UpdateBackend>(
     if state.rejected.as_ref() == Some(B::identity(&candidate)) {
         return true;
     }
-    let Some(confirmed) = bounded(updates, deadline, backend.confirm(&candidate)).await else {
+    let Some(confirmed) = bounded(updates, deadline, backend.confirm(&candidate, deadline)).await
+    else {
         return false;
     };
     if !matches!(confirmed, Ok(true)) {
         return true;
     }
     // No await separates exact current confirmation from this latest proposal.
-    let replacement = state.replace(updates, B::identity(&candidate), B::service(&candidate));
+    let replacement = match B::service(&candidate) {
+        Some(service) => state.replace(updates, B::identity(&candidate), service),
+        None => state.withdraw(updates),
+    };
     if replacement {
         state.cached = Some(candidate);
         state.rejected = None;
@@ -402,22 +445,36 @@ async fn run_monitor<B: UpdateBackend>(
     mut observe: impl FnMut() -> Option<(u64, TeletextOutputTransitionPhase)> + Send + 'static,
 ) {
     let mut state = MonitorState::new(initial);
+    state.active = state.cached.as_ref().and_then(B::service).is_some();
     loop {
         if updates.is_closed() || !state.observe_rejection(observe(), &updates, channel_id) {
             break;
         }
-        let Some(deadline) = Instant::now().checked_add(timing.recovery_timeout) else {
+        if backend.take_expired_transition(Instant::now()) {
+            // Withdraw first; a blocked read cannot extend the previous scope.
+            state.cached = None;
+            if !state.withdraw(&updates) {
+                break;
+            }
+        }
+        let Some(mut deadline) = Instant::now().checked_add(timing.recovery_timeout) else {
             state.withdraw(&updates);
             break;
         };
+        if let Some(boundary) = backend.next_transition() {
+            deadline = deadline.min(boundary);
+        }
         if !reconcile(&backend, &mut state, &updates, channel_id, deadline).await {
             state.withdraw(&updates);
             break;
         }
-        let Some(next) = Instant::now().checked_add(timing.poll_interval) else {
+        let Some(mut next) = Instant::now().checked_add(timing.poll_interval) else {
             state.withdraw(&updates);
             break;
         };
+        if let Some(boundary) = backend.next_transition() {
+            next = next.min(boundary);
+        }
         // One operation at a time, no tick catch-up burst or detached recovery.
         tokio::select! {
             biased;
@@ -441,6 +498,7 @@ mod tests {
     struct Candidate {
         identity: TeletextAcceptedGeneration,
         service: Arc<EncodedTeletextAuthoredService>,
+        service_present: bool,
     }
 
     fn candidate(id: i64, channel_id: i64) -> Candidate {
@@ -457,6 +515,7 @@ mod tests {
                 artifact_version: 1,
                 artifact_digest: "b".repeat(64),
             },
+            service_present: true,
             service: Arc::new(
                 crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(3),
             ),
@@ -481,6 +540,7 @@ mod tests {
         read_entered: Arc<Notify>,
         recovery_entered: Arc<Notify>,
         recovering: Arc<AtomicUsize>,
+        transition: Arc<Mutex<Option<Instant>>>,
     }
 
     impl Backend {
@@ -500,6 +560,7 @@ mod tests {
                 read_entered: Arc::new(Notify::new()),
                 recovery_entered: Arc::new(Notify::new()),
                 recovering: Arc::new(AtomicUsize::new(0)),
+                transition: Arc::new(Mutex::new(None)),
             }
         }
     }
@@ -518,8 +579,22 @@ mod tests {
         fn identity(candidate: &Candidate) -> &TeletextAcceptedGeneration {
             &candidate.identity
         }
-        fn service(candidate: &Candidate) -> Arc<EncodedTeletextAuthoredService> {
-            Arc::clone(&candidate.service)
+        fn service(candidate: &Candidate) -> Option<Arc<EncodedTeletextAuthoredService>> {
+            candidate
+                .service_present
+                .then(|| Arc::clone(&candidate.service))
+        }
+        fn next_transition(&self) -> Option<Instant> {
+            *self.transition.lock().unwrap()
+        }
+        fn take_expired_transition(&self, now: Instant) -> bool {
+            let mut next = self.transition.lock().unwrap();
+            if next.is_some_and(|boundary| now >= boundary) {
+                *next = None;
+                true
+            } else {
+                false
+            }
         }
         async fn current(&self) -> Result<Option<TeletextAcceptedGeneration>, ReadFailure> {
             self.reads.fetch_add(1, Ordering::SeqCst);
@@ -541,7 +616,11 @@ mod tests {
                 Ok(value.map(|candidate| candidate.identity))
             }
         }
-        async fn confirm(&self, candidate: &Candidate) -> Result<bool, ReadFailure> {
+        async fn confirm(
+            &self,
+            candidate: &Candidate,
+            _deadline: Instant,
+        ) -> Result<bool, ReadFailure> {
             self.confirmations
                 .lock()
                 .unwrap()
@@ -824,5 +903,54 @@ mod tests {
         let reads = backend.reads.load(Ordering::SeqCst);
         tokio::time::advance(Duration::from_mins(1)).await;
         assert_eq!(backend.reads.load(Ordering::SeqCst), reads);
+    }
+    #[tokio::test(start_paused = true)]
+    async fn accepted_absence_is_cached_and_confirmed_without_repeated_recovery() {
+        let initial = candidate(1, 9);
+        let mut absent = candidate(2, 9);
+        absent.service_present = false;
+        let backend = Backend::new(Some(absent));
+        let (updates, _control, _) = teletext_output_control_channel();
+        let mut state = MonitorState::new(Some(initial));
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        assert!(!state.active);
+        assert_eq!(state.cached.as_ref().unwrap().identity.id, 2);
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 1);
+        assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 1);
+        assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 1);
+        assert_eq!(*backend.confirmations.lock().unwrap(), vec![2, 2]);
+        assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn original_transition_withdraws_while_read_waits_before_long_poll_or_recovery_limit() {
+        let initial = candidate(1, 9);
+        let backend = Backend::new(Some(initial.clone()));
+        *backend.transition.lock().unwrap() = Some(Instant::now() + Duration::from_secs(1));
+        backend.store.lock().unwrap().read_release = Some(Arc::new(Notify::new()));
+        let timing =
+            TeletextAcceptedUpdatePolicy::new(Duration::from_secs(10), Duration::from_secs(20))
+                .unwrap();
+        let (updates, control, _) = teletext_output_control_channel();
+        let mut observed = updates.subscribe();
+        let owner = tokio::spawn(run_monitor(
+            backend.clone(),
+            9,
+            timing,
+            Some(initial),
+            updates,
+            || None,
+        ));
+        backend.read_entered.notified().await;
+        backend.store.lock().unwrap().eligible = false;
+        tokio::time::advance(Duration::from_secs(1)).await;
+        observed.changed().await.unwrap();
+        assert_eq!(observed.borrow().as_ref().unwrap().sequence(), 1);
+        assert_eq!(backend.recoveries.load(Ordering::SeqCst), 0);
+        assert!(backend.confirmations.lock().unwrap().is_empty());
+        drop(observed);
+        drop(control);
+        owner.await.unwrap();
     }
 }

@@ -502,54 +502,59 @@ async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool, sett
         .await
         .unwrap();
         let playlist = handle.trim_playlist().await.unwrap();
-        let segment = playlist
-            .lines()
-            .find(|line| {
-                !line.starts_with('#')
-                    && Path::new(line)
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
-            })
-            .unwrap();
-        let segment_duration: f64 = playlist
-            .lines()
-            .find_map(|line| line.strip_prefix("#EXTINF:"))
-            .unwrap()
-            .trim_end_matches(',')
-            .parse()
-            .unwrap();
-        let vtt_path = output.join(segment).with_extension("vtt");
-        let body = read_vtt_segment(&vtt_path).await;
-        let converted = convert && !off && !after_final_cue;
-        let cue = assert_text_vtt(&body, converted, segment_duration);
-        if converted {
-            let second = playlist
-                .lines()
-                .filter(|line| !line.starts_with('#') && line.ends_with(".ts"))
-                .nth(1)
-                .expect("adjacent complete segment for a spanning cue");
-            let adjacent = read_vtt_segment(&output.join(second).with_extension("vtt")).await;
-            assert_eq!(
-                assert_text_vtt(&adjacent, true, segment_duration),
-                cue,
-                "overlapping segments must repeat identical mapped full cue times"
-            );
-            if settings {
-                assert!(body.contains("align:start position:20%"));
-                assert!(adjacent.contains("align:start position:20%"));
-            }
-        }
-        assert_text_video_and_audio(
-            &ffmpeg,
-            &output.join(segment),
-            !convert && !off && !after_final_cue,
+        let segment = assert_text_playlist(
+            &output,
+            &playlist,
+            convert && !off && !after_final_cue,
+            settings,
         )
         .await;
+        assert_text_video_and_audio(&ffmpeg, &segment, !convert && !off && !after_final_cue).await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
         callback.stop().await;
         assert!(!output.exists());
     }
+}
+
+async fn assert_text_playlist(
+    output: &Path,
+    playlist: &str,
+    converted: bool,
+    settings: bool,
+) -> PathBuf {
+    let mut segments = playlist.lines().filter(|line| {
+        !line.starts_with('#')
+            && Path::new(line)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
+    });
+    let segment = segments.next().unwrap();
+    let segment_duration: f64 = playlist
+        .lines()
+        .find_map(|line| line.strip_prefix("#EXTINF:"))
+        .unwrap()
+        .trim_end_matches(',')
+        .parse()
+        .unwrap();
+    let body = read_vtt_segment(&output.join(segment).with_extension("vtt")).await;
+    let cue = assert_text_vtt(&body, converted, segment_duration);
+    if converted {
+        let second = segments
+            .next()
+            .expect("adjacent complete segment for a spanning cue");
+        let adjacent = read_vtt_segment(&output.join(second).with_extension("vtt")).await;
+        assert_eq!(
+            assert_text_vtt(&adjacent, true, segment_duration),
+            cue,
+            "overlapping segments must repeat identical mapped full cue times"
+        );
+        if settings {
+            assert!(body.contains("align:start position:20%"));
+            assert!(adjacent.contains("align:start position:20%"));
+        }
+    }
+    output.join(segment)
 }
 
 async fn read_vtt_segment(path: &Path) -> String {

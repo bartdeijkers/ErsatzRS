@@ -2,10 +2,11 @@
 
 ## Accepted release boundary
 
-UCU-10 is locally complete through v26.11.2/row232 on 2026-10-14. All232 ledger
-rows have accepted dispositions. The current pin is authoritative in
-`docs/automation/parity-baseline.md`; main and the shared upstream checkout are
-unchanged. Approved hardware/platform debt remains explicitly unverified.
+UCU-10 is complete through v26.11.2/row232 on 2026-10-14 and delivered through
+PR105 on remote main32c12793. All232 ledger rows have accepted dispositions.
+The current pin is authoritative in `docs/automation/parity-baseline.md`; the
+shared upstream checkout is unchanged. UCU-11 rows233–236 remain pending through
+fixed v26.11.3/f75abe53. Approved hardware/platform debt remains explicitly unverified.
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
@@ -25,14 +26,19 @@ The separate branch combines verified remote main with accepted UCU-10 work;
 main's ongoing teletext work stays intact. Main push, CI and publication remain
 withheld. The approved hardware/platform debt remains explicitly unverified.
 
-## UCU-10 completed local window
+## UCU-10 completed window
 
 The maintainer authorized rows209–232 through verified v26.11.2 on 2026-10-13.
 UCU-09 remains complete at v26.11.1. UCU-10 owns current acceptance and evidence
-in `docs/progress/milestones.toml`; its delivery is local to a separate branch
-and worktree. The maintainer separately authorized the source-only branch push,
-two-job macOS candidate CI and verified Next dependency publication. No application
-push, full application CI or application release is performed. Next021's exact
+in `docs/progress/milestones.toml`. The maintainer separately authorized the
+source-only branch push, two-job macOS candidate CI, verified Next dependency
+publication and later application push/CI/merge. PR105 delivers remote main32c12793.
+Full CI38623973857 passes every non-browser gate and Chromium; Firefox finishes
+345 passed,30 skipped and only fixture-collision case329 failed. The maintainer
+explicitly requires only the corrected headed case rerun, which passes11.3s,
+with no new full CI. The fixture-only commit uses [skip ci] and reuses passed
+checks; no new full green exact-commit run is claimed. No application release
+is performed. Next021's exact
 six-RID packages are publicly available with verified anonymous checksums; actual
 Linux/Windows bundled, cold-download and managed-restart startup passes.
 Native remains supported alongside Next; upstream legacy retirement is not ported.
@@ -777,15 +783,6 @@ remain. See `post-publication-cleanup.json`.
   release v26.11.2 as pending rows 231-232; all 230 existing SHA/subject pairs
   remain an exact prefix. Row 232 is the finish line the dashboard now shows for
   UCU-10.
-  A later 2026-10-13 refresh appends the Next HLS subtitle rendition fix and the
-  v0.2.2 develop pin as pending rows 233-234; all 232 existing SHA/subject pairs
-  remain an exact prefix. Those rows sit after the v26.11.2 boundary.
-  A later 2026-10-13 refresh appends the MPEG-TS initial burst as pending row
-  235; all 234 existing SHA/subject pairs remain an exact prefix.
-  A further 2026-10-13 refresh appends upstream release v26.11.3 as pending row
-  236; all 235 existing SHA/subject pairs remain an exact prefix. Upstream cut
-  three releases in one day, so the dashboard's finish line for UCU-10 moves to
-  that newest release row.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows209–232 now belong to the maintainer-authorized UCU-10 milestone.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to

@@ -167,6 +167,55 @@ async fn count(repository: &SqliteTeletextGenerationRepository) -> i64 {
 }
 
 #[tokio::test]
+async fn effective_original_version_cannot_enter_or_confirm_base_generation_authority() {
+    for already_accepted in [false, true] {
+        let fixture = Fixture::new().await;
+        let repository = SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+        let input = save(&fixture).await;
+        let generation = if already_accepted {
+            Some(accepted(
+                repository.accept(&input, MAX_DOCUMENT).await.unwrap(),
+            ))
+        } else {
+            None
+        };
+        // Negative storage-corruption fixture: the native base body/digest and
+        // valid live selection cannot substitute for its declared original role.
+        sqlx::query(r#"DROP TRIGGER "TR_TeletextDesignRevision_ImmutableUpdate""#)
+            .execute(&repository.0)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"UPDATE "TeletextDesignRevision" SET "DocumentVersion" = 2
+            WHERE "DesignId" = ? AND "Revision" = 1"#,
+        )
+        .bind(fixture.design_id)
+        .execute(&repository.0)
+        .await
+        .unwrap();
+        let rejection = R::Publication(P::InvalidValues);
+        if let Some(generation) = generation {
+            assert_eq!(
+                repository
+                    .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+                    .await
+                    .unwrap(),
+                M::Rejected(rejection)
+            );
+            assert_eq!(repository.current(1).await.unwrap(), Some(generation));
+            assert_eq!(count(&repository).await, 1);
+        } else {
+            assert_eq!(
+                repository.accept(&input, MAX_DOCUMENT).await.unwrap(),
+                M::Rejected(rejection)
+            );
+            assert!(repository.current(1).await.unwrap().is_none());
+            assert_eq!(count(&repository).await, 0);
+        }
+    }
+}
+
+#[tokio::test]
 async fn pending_is_not_accepted_and_selected_identity_survives_reopen_without_activation() {
     let fixture = Fixture::new().await;
     let repository = SqliteTeletextGenerationRepository(fixture.repo.0.clone());

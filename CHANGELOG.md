@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Security
 
+- Update the locked HTTPS client runtime to Rustls 0.23.46, addressing
+  [RUSTSEC-2026-0346](https://rustsec.org/advisories/RUSTSEC-2026-0346.html),
+  [RUSTSEC-2026-0347](https://rustsec.org/advisories/RUSTSEC-2026-0347.html),
+  [RUSTSEC-2026-0348](https://rustsec.org/advisories/RUSTSEC-2026-0348.html) and
+  [RUSTSEC-2026-0349](https://rustsec.org/advisories/RUSTSEC-2026-0349.html).
 - Require Ammonia 4.2.3 for release-note HTML sanitization, addressing
   RUSTSEC-2021-0157 and RUSTSEC-2021-0158 without weakening sanitizer policy.
 
@@ -30,7 +35,11 @@ release section when tagging a release.
   native preparation now combines exact published Lua and unoverridden base
   profiles, retains Off membership and transition expiry, and uses the same
   page validation, encoder and preview model. Abandoned requests retain actual
-  worker admission. Scoped publication and live Lua acceptance remain open.
+  worker admission. Exact effective originals now use independent scoped pending
+  and accepted pointers, explicit Off absence and original-expiry confirmation.
+  Native recovery connects synthetic scoped acceptance to version-2 live direct
+  streams while retaining independent accepted base history. Current guide
+  qualification and full admin/Lua/client delivery remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy
@@ -251,7 +260,13 @@ release section when tagging a release.
   controls disabled. Synthetic restart checks retain both accepted themes and a
   newer pending-only design across real process replacement and reloaded admin
   views. Open-client graceful shutdown remains unproven. Guide/editor interchange,
-  effective Lua controls, warm activation and complete live acceptance remain pending.
+  Effective Lua originals now save their complete base/interval origins, Off
+  membership, producer associations and exact source/theme metadata as distinct
+  immutable drafts. Historical native preview restores them after expiry or
+  profile removal without producer or Lua replay; existing base originals and
+  publication/export roles remain separate. Scoped Lua publication/recovery,
+  guide/editor interchange, warm activation and complete live acceptance remain
+  pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is
@@ -265,7 +280,6 @@ release section when tagging a release.
 
 - Start HLS-to-MPEG-TS playback with a six-second read burst in the generated
   wrapper and bundled Unix/Windows scripts, then resume realtime pacing.
-
 
 - Replace the archived YAML parser with the maintained YAML organization fork
   across scheduling, media scanning, graphics and script handling (ADR 0125),
@@ -532,7 +546,15 @@ release section when tagging a release.
   and advertise it only for Convert, without marking it as the default track.
   MPEG-TS continues to use the authenticated audio/video media playlist directly.
 
-
+- Limit simultaneous compilation on shared self-hosted CI runners to avoid
+  exhausting memory during workspace and Next acceptance. Preserve all test
+  selections and capture existing Next lifecycle errors in the isolated preview
+  fixture instead of reporting only its failed readiness state.
+- Clean up owned browser-test playouts after each case so synthetic Scripted
+  failures do not contaminate later Health acceptance checks.
+- Prevent Next Copy playback verification from failing on startup database
+  writers; seed its isolated engine/profile settings with a bounded wait and
+  one transaction.
 - Recognize native Windows YAML schedule-file paths and resolve their imports
   instead of decoding the path itself as an inline schedule.
 
@@ -554,6 +576,10 @@ release section when tagging a release.
   prevents FFmpeg startup failures. Reuse bounded image timing and file reopening
   for finite and infinite APNG canvas animation, preserving still PNG and JPEG XL
   behavior without rebuilding the FFmpeg runtime.
+- Preserve ordinary MPEG-TS playback when a new teletext generation arrives
+  after the finite source has ended. Reject late activation before it can install
+  an incomplete cycle, retain withdrawal and full-cycle checks, and load accepted
+  base output in the next response. Keep typed terminal failures visible.
 - Recheck accepted teletext selection after source discovery before its first
   authored write. Late disable or generation replacement preserves exact ordinary
   playback in both direct and retained output.
@@ -1064,7 +1090,6 @@ acceptance debt remains explicitly unverified.
 - Refresh unchanged local PQ/HLG media once so stored HDR/Dolby Vision metadata
   is populated, and expose Dolby Vision profile and HDR10 metadata presence in
   Media Info JSON while preserving non-video field omission.
-
 
 - Expose native and Next playlist-worker reports through authenticated
   `GET /api/sessions`, including last access and a nullable transcode cursor.
@@ -2841,7 +2866,6 @@ separate changelog section.
   top of the viewport restating what the tab strip already names, so the counts
   moved into the tab titles: `Installed add-ons (2/3)` reads as enabled over
   installed, and `Updates` and `Sources` carry their own totals.
-
 
 - The add-on list editor leads with the source URL and the add-on, followed by
   the fields the resolved add-on populates.

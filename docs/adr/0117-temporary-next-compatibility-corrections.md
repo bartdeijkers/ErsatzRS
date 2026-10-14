@@ -21,10 +21,11 @@ UCU-11 update (2026-10-14): the maintainer approves local catch-up through
 v26.11.3. Reviewed released Next0.2.2 corrects HLS cue intervals, timestamp maps
 and WebVTT settings; its unchanged two unpatched runtime regressions still fail.
 The patched candidate passes actual Linux subtitle/seek/settings, image and
-HTTP/RTSP acceptance, plus source checks. Four local RID candidates are verified;
-macOS candidates, production adoption and final application gates remain open.
-No new FFmpeg amendment is demonstrated. UCU-11 owns current evidence and the
-separate source-only push/CI request; this window authorizes no publication.
+HTTP/RTSP acceptance, plus source checks. Four local RID candidates and both
+separately authorized macOS source jobs are verified; production adoption and
+final application gates remain open. No new FFmpeg amendment is demonstrated.
+UCU-11 owns current evidence and the bounded source-only push/CI exception;
+this window authorizes no publication or application push/CI.
 
 UCU-10 update (2026-10-14): the maintainer separately authorizes the v26.11.2
 local catch-up, the source-only macOS candidate push/CI and verified Next021
@@ -33,8 +34,10 @@ both minimal patches are retained with independent removal criteria. The exact
 six-RID `next-7f75012-ersatzrs.1` release is published; all20 assets pass anonymous
 download/checksum checks. Linux/Windows bundled startup, cold acquisition,
 managed restart and decoded lifecycle proof pass. This does not publish an
-application or FFmpeg release, push main or verify the approved platform/hardware
-debt. UCU-10 owns source identities and detailed acceptance.
+application or FFmpeg release or verify the approved platform/hardware debt.
+The later separately authorized application delivery is integrated on main
+through PR105, with the maintainer's final fixture-only focused-verification
+amendment. UCU-10 owns source identities and detailed acceptance.
 
 Earlier row186 corrections are implemented and accepted. The runtime
 distinguishes static WebP from animated WebP and repeats
