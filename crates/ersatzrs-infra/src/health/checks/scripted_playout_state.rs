@@ -3,12 +3,97 @@ use super::super::{
     HealthCheckStatus, Pool, Result, Row,
 };
 use crate::repositories::common::{decode_datetime, decode_enum_column, encode_enum};
-use crate::repositories::SqlitePlayoutRepository;
+use crate::repositories::{
+    SqlitePlayoutRepository, SqliteTeletextGenerationRepository, SqliteTeletextProfileRepository,
+};
 use chrono::{DateTime, Utc};
-use ersatzrs_core::repositories::PlayoutRepository as _;
+use ersatzrs_core::repositories::{
+    PlayoutRepository as _, TeletextGenerationMutation, TeletextGenerationRepository as _,
+    TeletextProfileMutation, TeletextProfileRepository as _,
+};
 use ersatzrs_core::scheduling::validate_scripted_checkpoint;
 use ersatzrs_domain::{PlayoutScheduleKind, PlayoutScriptedCheckpoint, TeletextOverrideState};
-use std::collections::BTreeMap;
+use serde::{de::IgnoredAny, Deserialize, Deserializer};
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
+
+// Match the host's bounded policy input, not the unrelated page-wire budget.
+const TELETEXT_POLICY_BYTES: i64 = 65_536;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TeletextPolicyProjection {
+    version: u32,
+    #[serde(deserialize_with = "policy_object")]
+    design: TeletextDesignProjection,
+    #[serde(rename = "recovery_timeout_ms")]
+    _recovery_timeout_ms: IgnoredAny,
+    #[serde(rename = "input")]
+    _input: IgnoredAny,
+    #[serde(rename = "validation")]
+    _validation: IgnoredAny,
+    #[serde(rename = "composition")]
+    _composition: IgnoredAny,
+    #[serde(rename = "encoding")]
+    _encoding: IgnoredAny,
+    #[serde(rename = "source")]
+    _source: IgnoredAny,
+    #[serde(default, rename = "live_updates")]
+    _live_updates: Option<IgnoredAny>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TeletextDesignProjection {
+    max_serialized_bytes: usize,
+    #[serde(rename = "max_documents")]
+    _max_documents: IgnoredAny,
+    #[serde(rename = "max_response_bytes")]
+    _max_response_bytes: IgnoredAny,
+    #[serde(rename = "max_context_bytes")]
+    _max_context_bytes: IgnoredAny,
+    #[serde(rename = "max_context_field_bytes")]
+    _max_context_field_bytes: IgnoredAny,
+    #[serde(rename = "max_resource_transmissions")]
+    _max_resource_transmissions: IgnoredAny,
+}
+
+fn policy_object<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> std::result::Result<T, D::Error> {
+    struct Object<T>(std::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for Object<T> {
+        type Value = T;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("an object")
+        }
+
+        fn visit_map<M: serde::de::MapAccess<'de>>(
+            self,
+            map: M,
+        ) -> std::result::Result<T, M::Error> {
+            T::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+        }
+    }
+    deserializer.deserialize_map(Object(std::marker::PhantomData))
+}
+
+fn document_limit(value: &str) -> Option<usize> {
+    let mut deserializer = serde_json::Deserializer::from_str(value);
+    let policy: TeletextPolicyProjection = policy_object(&mut deserializer).ok()?;
+    deserializer.end().ok()?;
+    let maximum = policy.design.max_serialized_bytes;
+    // This projection establishes only the explicit document bound. The host
+    // still owns complete policy validation and native/stream readiness.
+    (matches!(policy.version, 1 | 2)
+        && maximum > 0
+        && isize::try_from(maximum).is_ok()
+        && i64::try_from(maximum).is_ok())
+    .then_some(maximum)
+}
 
 pub(crate) struct ScriptedPlayoutStateHealthCheck {
     pool: Pool<Db>,
@@ -17,6 +102,19 @@ pub(crate) struct ScriptedPlayoutStateHealthCheck {
 impl ScriptedPlayoutStateHealthCheck {
     pub(crate) fn new(pool: Pool<Db>) -> Self {
         Self { pool }
+    }
+
+    async fn teletext_document_limit(&self) -> Result<Option<usize>> {
+        let value: Option<Option<String>> = sqlx::query_scalar(
+            r#"SELECT CASE WHEN TYPEOF("Value") = 'text'
+                AND LENGTH(CAST("Value" AS BLOB)) <= ? THEN "Value" END
+               FROM "ConfigElement" WHERE "Key" = 'teletext.output.policy'"#,
+        )
+        .bind(TELETEXT_POLICY_BYTES)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(sqlx_error)?;
+        Ok(value.flatten().and_then(|value| document_limit(&value)))
     }
 
     async fn checkpoint_failures(&self) -> Result<Vec<String>> {
@@ -99,30 +197,75 @@ impl ScriptedPlayoutStateHealthCheck {
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_error)?;
-        let repository = SqlitePlayoutRepository(self.pool.clone());
         let mut failures = Vec::new();
         for channel in channels {
-            let reason = match repository
-                .published_teletext_intervals_at(channel, when)
-                .await
-            {
-                Err(_) => Some("active override is unavailable"),
-                Ok(intervals)
-                    if intervals.iter().any(|interval| {
-                        matches!(interval.state, TeletextOverrideState::Enabled(_))
-                    }) =>
-                {
-                    // Scoped generation preparation/promotion is still pending.
-                    // Native confirmation refuses the base while On is active.
-                    Some("scoped native generation is not available")
-                }
-                Ok(_) => None,
-            };
+            // Reuse SQLite's existing read/busy bound once for the complete
+            // channel projection. Later configuration and confirmation reads
+            // never renew it, including the stored-original association check.
+            let deadline = Instant::now()
+                + Duration::from_millis(u64::from(crate::db::SQLITE_BUSY_TIMEOUT_MS));
+            let reason = tokio::time::timeout_at(
+                tokio::time::Instant::from_std(deadline),
+                self.teletext_channel_failure(channel, when, deadline),
+            )
+            .await
+            .unwrap_or(Some("active override is unavailable"));
             if let Some(reason) = reason {
                 failures.push(format!("Scripted teletext interval for channel {channel}: {reason}; the published timeline is retained."));
             }
         }
         Ok(failures)
+    }
+
+    async fn teletext_channel_failure(
+        &self,
+        channel: i64,
+        when: DateTime<Utc>,
+        deadline: Instant,
+    ) -> Option<&'static str> {
+        const UNAVAILABLE: &str = "active override is unavailable";
+        const PENDING: &str = "scoped native generation is not available";
+        let Ok(intervals) = SqlitePlayoutRepository(self.pool.clone())
+            .published_teletext_intervals_at(channel, when)
+            .await
+        else {
+            return Some(UNAVAILABLE);
+        };
+        if !intervals
+            .iter()
+            .any(|interval| matches!(interval.state, TeletextOverrideState::Enabled(_)))
+        {
+            // Off is safe without healthy profiles/packages or an output policy.
+            return None;
+        }
+        let maximum = match self.teletext_document_limit().await {
+            Ok(Some(maximum)) => maximum,
+            Ok(None) => return Some(PENDING),
+            Err(_) => return Some(UNAVAILABLE),
+        };
+        let Ok(TeletextProfileMutation::Saved(selection)) =
+            SqliteTeletextProfileRepository(self.pool.clone())
+                .effective_channel_snapshot(channel, when)
+                .await
+        else {
+            return Some(UNAVAILABLE);
+        };
+        let generations = SqliteTeletextGenerationRepository(self.pool.clone());
+        let generation = match generations.current_effective(channel).await {
+            Ok(Some(generation)) => generation,
+            Ok(None) => return Some(PENDING),
+            Err(_) => return Some(UNAVAILABLE),
+        };
+        match generations
+            .confirm_current_effective(&generation, &selection, maximum, deadline)
+            .await
+        {
+            // This verifies durable pointer/original/current-scope association,
+            // not native artifact reconstruction, stream admission or sink use.
+            Ok(TeletextGenerationMutation::Accepted(())) => None,
+            Ok(TeletextGenerationMutation::Rejected(_)) => Some(PENDING),
+            Err(_) => Some(UNAVAILABLE),
+        }
     }
 }
 

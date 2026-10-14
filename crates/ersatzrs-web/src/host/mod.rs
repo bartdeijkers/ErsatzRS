@@ -26,6 +26,8 @@ mod teletext_editorial_effects;
 mod teletext_editorial_tti;
 pub mod teletext_effective_channel_documents;
 pub mod teletext_effective_designs;
+pub mod teletext_effective_generations;
+pub mod teletext_effective_publications;
 mod teletext_export_project;
 pub mod teletext_generations;
 pub mod teletext_guide;

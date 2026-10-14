@@ -2724,6 +2724,80 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 scoped publication/recovery checkpoint:
+Criterion: exact effective originals -> independent pending -> explicit native
+acceptance -> bounded recovery -> ordinary output, preserving channel isolation,
+independent themes, Off and original expiry without producer/Lua replay.
+Existing immutable histories now have separate scoped current pointers. Native
+artifact2 records explicit presence/absence; base framing/pointers stay unchanged.
+Same-transaction checks match the complete current AND immutable original scope,
+head/revision/digest, profile/install state, original half-open expiry and CAS.
+Fresh valid interval/profile/base observations cannot relabel older originals.
+A streaming structural comparer bounds expected material and rejects loss,
+unknown/duplicate fields and wrong shapes without parsing the whole document tree.
+The compatible SQLx accepted-history upgrade preserves exact rows/references,
+immutable triggers and advanced autoincrement sequence; malformed old versions or
+deferred dangling references roll back atomically. Health confirms only durable
+selected-state association under an explicit configured cap, never sink Applied.
+
+Ninety unique focused successes:57 in33642152-1a53-4b69-ada9-a07c8bf00529
+plus33 ine83b5804-f472-4464-a4e5-cdda2f2df319. The latter corrects the sole
+corruption-fixture failure and proves existing base/source/CAS behavior; its
+intentional offline corruption restores FK/CHECK enforcement before reader use.
+Native b17ee394-57dd-47c3-9ebe-d761589f94f3 adds one actual two-channel flow:
+real Lua publication -> pending (ordinary AV only) -> explicit scoped acceptance
+-> ordinary direct route -> database reopen. Same installed addon, opposite
+profiles/themes, exact complete page/M29 units, independent200/201 decoding,
+TSDuck integrity and AV checks pass with retained base histories and zero replay.
+This raises unique successes to91; it is not suitable-client/full-engine proof.
+
+The same native run's Off-expiry case initially fails near finite source end.
+Off-only bc69e1b7-1bbe-459a-ab70-16b6a8c051ee retains the typed cause: output
+ended before a complete authored cycle. Source prefetch can discover EOF while
+an ordinary window is still pacing; its acknowledgement previously installed a
+fresh replacement without enough future source for a complete cycle. The small
+EOF latch now rejects only uninstalled Replace proposals with SourceEnded;
+withdrawal, installed-action acknowledgements, physical AV, all original timing
+and strict full-cycle/EOF checks remain intact. No fake Applied or cycle rollback.
+
+Off-only c484d7cc-6faa-4d96-8fd7-f00490289952 passes: actual Lua Continue retains
+the genuine12-second Off finish, absent output preserves AV, and a following
+ordinary response restores the independently accepted base. Both pointers,
+checkpoints/settings and producer-call counts stay unchanged. This is finite
+response proof, not same-URL warm-client or whole-host restart acceptance.
+Final88908526-f20d-4f98-acc6-179b2be78bfb passes58 focused transport/control/
+monitor/stream-terminal tests, adding48 unique cases for140 total successes.
+A paused tracked-source regression proves EOF -> new proposal -> first boundary
+ordering, exact raw byte/PMT preservation and explicit rejection. Existing early
+replacement, withdrawal, installed-unclosed-cycle, cancellation and deadline
+oracles stay unchanged. Independent small-hunk ownership/safety review is clean.
+
+Retain negatives: initial native attempts stopped before flow on an unset runtime9
+path and incorrect Scripted fixture enum; both are corrected. The first focused
+compile was SIGKILL/OOM during parallel UCU builds; one compile job completed
+without cache cleanup or changing UCU. A new deterministic test's helper import
+was corrected before final execution. Strict affected five-crate all-target
+Clippy, formatting, architecture, hydration31-baseline, new-allow and progress
+checks pass. Tools: FFmpeg/ffprobe n9.0-20261006 from runtime2.0.6; TSDuck3.44-4676.
+No new headed-client or admin proof is claimed; prior evidence remains valid only
+within its original scope. Ordinary smoke remains due after build-cache
+maintenance: target63GiB exceeds the60GiB threshold, with UCU checks still active.
+Do not clean their live artifacts or use another target path.
+
+Proof: tmp/phase9-effective-publication/identity.json; SHA2564446215fa3cd7c56fb878fd6cc873de112170c8bb488c1cb6005fb63871b2fcb.
+
+Next userflow gate: the existing admin observes/prepares only base scope. Expose a
+separate opaque effective observation/eligible producer list, preserve base
+configuration, dispatch historical preview/pending/acceptance by stored role and
+reuse existing localized controls. Active Lua On over base Off is inaccessible
+there today. Selected must not be relabelled Applied. Automatic schedule-to-native
+promotion needs explicit authoring inputs and scope/CAS/restart handling; stream
+recovery cannot invoke producers or invent it. Guide current-role qualification,
+version1 startup-only scoped delivery, effective editor interchange, whole-host
+restart and same-URL suitable-client transitions remain open. All full Level2.5,
+QTM/themes/zones, nine-culture headed admin, source/Next/platform gates and
+engine-first dependency/acceptance criteria remain unchanged.
+
 2026-10-14 effective-original save/reload checkpoint:
 Criterion: retain exact channel/addon/profile associations, independent themes,
 Lua origin/expiry and shared validated native preview through immutable storage

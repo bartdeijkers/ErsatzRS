@@ -3,10 +3,14 @@
 use std::{fmt, time::Instant};
 
 use async_trait::async_trait;
-use ersatzrs_domain::{EntityId, TeletextChannelSelectionSnapshot, TeletextPublicationRequest};
+use ersatzrs_domain::{
+    EntityId, TeletextChannelSelectionSnapshot, TeletextEffectiveChannelSelectionSnapshot,
+    TeletextPublicationRequest,
+};
 
 use super::{
-    Result, TeletextGuideSourceCheckLimits, TeletextGuideSourceFence, TeletextProfileRejection,
+    RepositoryError, Result, TeletextGuideSourceCheckLimits, TeletextGuideSourceFence,
+    TeletextProfileRejection,
 };
 
 /// Exact target and complete current-selection fence for a pending request.
@@ -36,6 +40,33 @@ impl fmt::Debug for TeletextPublicationRequestSave {
             .field("expected_request_id", &self.expected_request_id)
             .field("channel_id", &self.selection.channel_id)
             .field("binding_count", &self.selection.bindings.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Exact effective-original target and independent scoped pending-pointer CAS.
+/// Its whole selection retains Scripted Off and interval ownership/expiry;
+/// it cannot substitute for base request authority.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextEffectivePublicationRequestSave {
+    pub design_id: EntityId,
+    pub revision: i64,
+    pub digest: String,
+    pub expected_design_head: i64,
+    pub expected_request_id: Option<EntityId>,
+    pub selection: TeletextEffectiveChannelSelectionSnapshot,
+}
+
+impl fmt::Debug for TeletextEffectivePublicationRequestSave {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextEffectivePublicationRequestSave")
+            .field("design_id", &self.design_id)
+            .field("revision", &self.revision)
+            .field("expected_design_head", &self.expected_design_head)
+            .field("expected_request_id", &self.expected_request_id)
+            .field("channel_id", &self.selection.channel_id)
+            .field("binding_count", &self.selection.bindings.len())
+            .field("valid_until", &self.selection.valid_until)
             .finish_non_exhaustive()
     }
 }
@@ -85,6 +116,55 @@ pub enum TeletextPublicationMutation<T> {
 /// Pending intents with atomic design, whole-channel and current-request fences.
 #[async_trait]
 pub trait TeletextPublicationRepository: Send + Sync {
+    /// Request version-2 originals under exact current effective scope and an
+    /// independent scoped pointer. Check scope/expiry, design and CAS in the
+    /// same write transaction. The deadline bounds admission; an admitted commit
+    /// retains normal database settlement. No base pointer or binding changes.
+    /// # Errors
+    /// Returns unsupported/storage failures without falling back to base requests.
+    async fn request_effective(
+        &self,
+        _save: &TeletextEffectivePublicationRequestSave,
+        _max_document_bytes: usize,
+        _deadline: Instant,
+    ) -> Result<TeletextPublicationMutation<TeletextPublicationRequest>> {
+        Err(RepositoryError::unavailable(
+            "effective teletext publication request",
+            "effective teletext publication is unsupported",
+        ))
+    }
+
+    /// Retain the guide association and same-transaction semantic recapture in
+    /// addition to scoped request fences. This proves no current Now/Next role.
+    /// # Errors
+    /// Returns unsupported/storage failures, never discarding the source fence.
+    async fn request_effective_with_source(
+        &self,
+        _save: &TeletextEffectivePublicationRequestSave,
+        _fence: &TeletextGuideSourceFence,
+        _limits: TeletextGuideSourceCheckLimits,
+        _max_document_bytes: usize,
+        _deadline: Instant,
+    ) -> Result<TeletextPublicationMutation<TeletextPublicationRequest>> {
+        Err(RepositoryError::unavailable(
+            "source-bound effective teletext publication request",
+            "effective teletext publication is unsupported",
+        ))
+    }
+
+    /// Retained scoped pending metadata, not active output or an unexpired scope.
+    /// # Errors
+    /// Returns unsupported/storage failures; corruption is never absent state.
+    async fn current_effective(
+        &self,
+        _channel_id: EntityId,
+    ) -> Result<Option<TeletextPublicationRequest>> {
+        Err(RepositoryError::unavailable(
+            "effective teletext publication request read",
+            "effective teletext publication is unsupported",
+        ))
+    }
+
     /// Persist an intent after complete native validation by the application.
     /// One immediate transaction verifies the live design head, bounded exact
     /// immutable revision/digest, canonical full channel selection and request

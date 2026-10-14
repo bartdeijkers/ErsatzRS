@@ -27,6 +27,15 @@ use crate::{
 #[derive(Clone)]
 pub struct SqliteTeletextProfileRepository(pub DbPool);
 
+/// Recheck a complete effective origin in the caller's existing transaction.
+pub(super) async fn recheck_effective_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    expected: &TeletextEffectiveChannelSelectionSnapshot,
+    when: DateTime<Utc>,
+) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+    effective_selection::recheck_in_transaction(tx, expected, when).await
+}
+
 #[path = "teletext_effective_selection.rs"]
 mod effective_selection;
 

@@ -9,9 +9,11 @@ contract. It changes no engine-first, standards, editor or acceptance requiremen
 ## Implementation
 
 Partial — distinct version-2 originals, bounded native save/reload, compatible
-immutable-history migration and explicit base/editor role checks are implemented.
-P9A-04 owns the focused verification. Scoped publication/current pointers,
-same-route recovery and expiry remain open; no full engine acceptance is claimed.
+immutable-history migrations and explicit base/editor role checks are implemented.
+Separate scoped request/accepted pointers, original-scope confirmation, native
+promotion/recovery and version-2 live direct-route selection are connected.
+P9A-04 owns verification and remaining userflow gaps. This does not establish
+same-URL suitable-client transitions or full engine acceptance.
 
 ## Context
 
@@ -22,8 +24,8 @@ base bindings only. Converting an interval into a base binding would lose its
 owner, lifetime and authority. Replacing the only accepted base pointer would
 also prevent correct restoration at interval expiry.
 
-The immutable revision table currently permits document version 1 only, and
-publication/export readers rely on that restriction. Supporting another opaque
+The original immutable revision schema permitted document version 1 only, and
+publication/export readers relied on that restriction. Supporting another opaque
 version requires explicit role checks before widening storage. Existing byte,
 digest, type, CAS, tombstone and immutable-history guarantees must remain intact.
 
@@ -47,6 +49,37 @@ expiry checks are required. The independently accepted base remains recoverable;
 an expired scoped generation cannot replace or erase it. Guide-bearing originals
 retain the existing current-role guide-freshness requirement.
 
+Retain immutable request and accepted-generation histories. Add separate effective
+current-pointer tables with the same channel/composite-reference constraints.
+Scoped native artifact framing version 2 includes explicit presence/absence and
+the complete service fingerprint; version-1 base framing stays byte-identical.
+All-Off is an accepted absence after complete native/transactional confirmation,
+never a substitute for invalid or pending On. Widen the accepted-history artifact
+check to versions 1 and 2 through the same compatible recreation/reinsertion
+procedure, retaining row identities, references, immutable triggers and the exact
+autoincrement sequence. Current reads/confirmation retain explicit base/scoped
+roles. Metadata selection alone is still not a stream acknowledgement.
+
+Confirm the supplied whole scope against the immutable original envelope as well
+as current database state. A fresh valid interval/profile/base observation must
+not retarget an older original. Compare the bounded scope structurally without
+loading the complete untrusted document tree; unknown, missing and duplicate
+fields reject. Equivalent UTC timestamp spelling does not alter literal settings.
+
+The existing version-2 live policy selects the applicable base/scoped role before
+native recovery. Active pending, invalid or expired scoped output cannot fall
+through to base. All-Off retains a confirmed cached absence. Preserve the
+earliest observed transition as a conservative monotonic deadline; withdraw at
+that boundary before a potentially blocked reread. Recover the independently
+accepted base only after current authority and native checks permit it. Response
+ownership and actual worker admission survive cancellation as before.
+
+Actual source EOF closes new activation in that response: reject an uninstalled
+replacement before it can announce a service with no complete future cycle. Keep
+requested withdrawal, installed-action acknowledgements, physical AV, deadlines
+and strict EOF/full-cycle checks. Independently accepted output remains available
+for the next response. Do not undo an already installed incomplete cycle.
+
 Rebuild the revision table in the migration-owned transaction to widen its check
 constraint while keeping all rows, rowids, bytes, digests, composite identities,
 foreign keys and immutable triggers. Use transaction-local foreign-key deferral
@@ -65,10 +98,14 @@ behavior. No production database is modified as part of development verification
 Upgrade proof must include existing pending/accepted/export references, exact
 legacy content, foreign-key enforcement and atomic rollback.
 
-Version-2 save/reload is an unpublished foundation. Scoped promotion/recovery,
-pending/applied state, same-route expiry/restart and suitable-client proof remain
-required. Retain the existing base guard until the scoped runtime is connected.
-The parity record and P9A-04 own this remaining work and verification.
+The scoped native promotion path currently qualifies frozen synthetic originals;
+guide-bearing originals still require current-role guide freshness and reject
+instead of emitting stale output. This is an integration gap, not an accepted
+authoring restriction. Version-1 startup-only delivery keeps its base-only guard.
+Automatic preparation/publication following schedule controls, localized scoped
+pending/applied administration, the complete delivery matrix, whole-host restart
+and same-URL suitable-client proof remain required. The parity record and P9A-04
+own verification and the next concrete connection.
 
 ## Alternatives Considered
 

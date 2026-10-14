@@ -28,7 +28,9 @@ use ersatzrs_web::host::{
     teletext_preview::{project_teletext_preview, TeletextPreviewBudget},
 };
 
-async fn installed(v3: bool) -> (Fixture, TeletextProfile, TeletextProfile, TeletextProfile) {
+pub(super) async fn installed(
+    v3: bool,
+) -> (Fixture, TeletextProfile, TeletextProfile, TeletextProfile) {
     let fixture = Fixture::new_persistent().await;
     if v3 {
         authoring_metadata::install(&fixture).await;
@@ -57,7 +59,7 @@ async fn installed(v3: bool) -> (Fixture, TeletextProfile, TeletextProfile, Tele
     (fixture, base, day, night)
 }
 
-async fn save(
+pub(super) async fn save(
     fixture: &Fixture,
     candidate: EncodedEffectiveChannelTeletextDocumentCandidate,
     existing: Option<(i64, i64)>,
@@ -73,7 +75,7 @@ async fn save(
     )
     .await
 }
-fn saved_design(
+pub(super) fn saved_design(
     value: TeletextDesignMutation<SavedEffectiveOriginalDesign>,
 ) -> SavedEffectiveOriginalDesign {
     match value {
@@ -81,7 +83,11 @@ fn saved_design(
         TeletextDesignMutation::Rejected(reason) => panic!("unexpected rejection {reason:?}"),
     }
 }
-async fn reload(fixture: &Fixture, id: i64, revision: i64) -> RestoredEffectiveOriginalDesign {
+pub(super) async fn reload(
+    fixture: &Fixture,
+    id: i64,
+    revision: i64,
+) -> RestoredEffectiveOriginalDesign {
     reload_effective_original_teletext_design_revision(
         &fixture.state.application,
         id,
@@ -94,7 +100,7 @@ async fn reload(fixture: &Fixture, id: i64, revision: i64) -> RestoredEffectiveO
     .unwrap()
     .unwrap()
 }
-fn pixels(
+pub(super) fn pixels(
     encoded: &EncodedTeletextAuthoredService,
     page: u16,
     subcode: u16,

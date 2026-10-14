@@ -25,7 +25,11 @@ release section when tagging a release.
   native preparation now combines exact published Lua and unoverridden base
   profiles, retains Off membership and transition expiry, and uses the same
   page validation, encoder and preview model. Abandoned requests retain actual
-  worker admission. Scoped publication and live Lua acceptance remain open.
+  worker admission. Exact effective originals now use independent scoped pending
+  and accepted pointers, explicit Off absence and original-expiry confirmation.
+  Native recovery connects synthetic scoped acceptance to version-2 live direct
+  streams while retaining independent accepted base history. Current guide
+  qualification and full admin/Lua/client delivery remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy
@@ -508,6 +512,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve ordinary MPEG-TS playback when a new teletext generation arrives
+  after the finite source has ended. Reject late activation before it can install
+  an incomplete cycle, retain withdrawal and full-cycle checks, and load accepted
+  base output in the next response. Keep typed terminal failures visible.
 - Recheck accepted teletext selection after source discovery before its first
   authored write. Late disable or generation replacement preserves exact ordinary
   playback in both direct and retained output.

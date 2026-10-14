@@ -28,8 +28,57 @@ use crate::db::{Db, DbPool, DbRow};
 #[derive(Clone)]
 pub struct SqliteTeletextPublicationRepository(pub DbPool);
 
+#[path = "teletext_effective_publications.rs"]
+pub(super) mod effective;
+
+#[path = "teletext_effective_scope.rs"]
+pub(super) mod effective_scope;
+
 #[async_trait]
 impl TeletextPublicationRepository for SqliteTeletextPublicationRepository {
+    async fn request_effective(
+        &self,
+        save: &ersatzrs_core::repositories::TeletextEffectivePublicationRequestSave,
+        max_document_bytes: usize,
+        deadline: Instant,
+    ) -> Result<M<TeletextPublicationRequest>> {
+        effective::request(&self.0, save, max_document_bytes, deadline, None).await
+    }
+
+    async fn request_effective_with_source(
+        &self,
+        save: &ersatzrs_core::repositories::TeletextEffectivePublicationRequestSave,
+        fence: &TeletextGuideSourceFence,
+        limits: TeletextGuideSourceCheckLimits,
+        max_document_bytes: usize,
+        deadline: Instant,
+    ) -> Result<M<TeletextPublicationRequest>> {
+        effective::request(
+            &self.0,
+            save,
+            max_document_bytes,
+            deadline,
+            Some(SourceCheck {
+                fence,
+                limits,
+                deadline,
+            }),
+        )
+        .await
+    }
+
+    async fn current_effective(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<Option<TeletextPublicationRequest>> {
+        if channel_id <= 0 {
+            return Err(invalid_identity());
+        }
+        // Read-only transaction: role-specific pending metadata grants no output.
+        let mut tx = self.0.begin().await.repository()?;
+        effective::current_in_transaction(&mut tx, channel_id).await
+    }
+
     async fn request(
         &self,
         save: &TeletextPublicationRequestSave,

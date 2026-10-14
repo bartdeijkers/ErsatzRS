@@ -14,6 +14,7 @@ use crate::host::{
 use super::super::{
     teletext_accepted_output::load_accepted_teletext_output_intent,
     teletext_binding::TeletextOutputAdmission, teletext_live_output::TeletextLiveOutputIntent,
+    teletext_selected_output::load_selected_teletext_output_candidate,
 };
 
 /// No producer invocation, publication, queue or independently renewed startup
@@ -59,28 +60,24 @@ pub(super) async fn recover_optional_output(
     let live = policy
         .live_updates
         .map(|timing| (timing, policy.encoding.clone()));
-    let recovered = load_accepted_teletext_output_intent(
-        &state.application,
-        channel_id,
-        policy.design,
-        policy.encoding,
-        policy.source,
-        bounded_deadline.into_std(),
-    )
-    .await;
     if let Some((timing, encoding)) = live {
-        let initial = match recovered {
-            Ok(Some(intent)) => Some(Arc::clone(intent.candidate())),
-            Ok(None) => None,
-            Err(_) => {
-                tracing::warn!(
-                    channel_id,
-                    "selected teletext recovery rejected; starting live output without authored pages"
-                );
+        let initial =
+            if let Ok(candidate) = load_selected_teletext_output_candidate(
+                &state.application,
+                channel_id,
+                policy.design,
+                policy.encoding,
+                bounded_deadline.into_std(),
+            )
+            .await
+            {
+                candidate
+            } else {
+                tracing::warn!(channel_id,
+                "selected teletext recovery rejected; starting live output without authored pages");
                 None
-            }
-        };
-        let intent = TeletextLiveOutputIntent::new(
+            };
+        let intent = TeletextLiveOutputIntent::new_selected(
             Arc::clone(&state.application),
             channel_id,
             policy.design,
@@ -95,6 +92,15 @@ pub(super) async fn recover_optional_output(
             startup_deadline,
         ));
     }
+    let recovered = load_accepted_teletext_output_intent(
+        &state.application,
+        channel_id,
+        policy.design,
+        policy.encoding,
+        policy.source,
+        bounded_deadline.into_std(),
+    )
+    .await;
     match recovered {
         Ok(Some(intent)) => TeletextOutputAdmission::with_optional_accepted(
             Arc::new(intent),

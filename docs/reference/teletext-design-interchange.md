@@ -3745,10 +3745,41 @@ bounds. It grants no current scope, guide freshness, publication or editor role.
 Opaque revision storage accepts exactly versions 1 and 2. The compatible migration
 preserves legacy rowids/bytes/digests and existing pending/accepted/export foreign
 references. Base publication/generation and existing editor exports require
-version 1 explicitly. Scoped current pointers and ordinary-route promotion/recovery
-remain the next integration step. All-Off needs explicit accepted absence, and
-interval expiry must restore independently accepted base output. ADR 0124 owns the
-decision; P9A-04 owns verification and the remaining userflow criteria.
+version 1 explicitly. Historical restoration remains independent of current
+publication and output authority.
+
+### Scoped pending, acceptance and ordinary output
+
+`request_effective_original_teletext_design_publication` reloads an exact
+version-2 design/revision/digest under the original operation and saved transition
+deadline. It rechecks the complete current scope before encoding, without invoking
+producers or Lua. `accept_effective_original_teletext_generation` performs separate
+explicit native acceptance of that pending request. Artifact version 2 retains
+the complete native fingerprint and explicit service presence/absence.
+
+The existing immutable request/generation histories are reused. Separate
+`TeletextEffectivePublicationRequestCurrent` and
+`TeletextEffectiveAcceptedGenerationCurrent` pointers preserve independently
+accepted base output. Same-transaction checks include channel, exact original
+scope, design head/revision/digest, pointer CAS, profile/install state and original
+half-open interval expiry. A fresh valid scope cannot relabel an older original.
+All-Off may accept genuine absence without consulting an unhealthy disabled
+profile; missing or invalid On cannot substitute absence or stale base output.
+
+`reload_accepted_effective_teletext_generation` uses bounded native recovery and
+final current confirmation without replay. The existing version-2 live direct
+stream policy selects base/scoped authority before recovery, caches accepted
+absence, and wakes at the earliest observed interval transition. It withdraws
+before a blocked reread can extend old authority. Expiry can recover the retained
+base only through its current native fences; ordinary AV stays independently
+owned. Metadata confirmation does not acknowledge sink application.
+
+Current native scoped promotion qualifies frozen synthetic originals. A
+guide-bearing original still rejects until current-role guide freshness is
+connected. The version-1 startup-only policy remains base-only. Automatic scoped
+preparation/publication, admin pending/applied controls, the complete delivery
+matrix and whole-host/client transition proof remain open; these are not accepted
+product limitations. P9A-04 owns the proof and next userflow connection.
 
 ### Explicit pending publication requests
 

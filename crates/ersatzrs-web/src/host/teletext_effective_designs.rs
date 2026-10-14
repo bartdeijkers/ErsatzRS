@@ -88,6 +88,10 @@ pub struct RestoredEffectiveOriginalDesign {
 }
 impl RestoredEffectiveOriginalDesign {
     #[must_use]
+    pub(super) fn into_encoded_service(self) -> Option<EncodedTeletextAuthoredService> {
+        self.originals.encoded
+    }
+    #[must_use]
     pub const fn design_id(&self) -> EntityId {
         self.design_id
     }
@@ -349,13 +353,107 @@ pub(super) async fn reload_effective_original_teletext_design_revision_with_hold
     application: &ApplicationServices,
     id: EntityId,
     revision: i64,
-    mut budget: TeletextDesignDocumentBudget,
+    budget: TeletextDesignDocumentBudget,
     policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<Option<RestoredEffectiveOriginalDesign>, NativeTeletextDesignError> {
+    let Some((stored, parts)) = read_original_parts(
+        application,
+        id,
+        revision,
+        budget,
+        &policy,
+        (deadline, hold.clone()),
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    let restored = super::teletext_work::spawn_blocking(hold, move || {
+        compile_restored(stored, parts, policy, deadline)
+    })
+    .await
+    .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
+    Ok(Some(restored))
+}
+
+/// Live scoped qualification uses the original saved transition boundary.
+/// Historical reload above remains independent of current profile/clock state.
+pub(super) async fn reload_effective_original_for_publication_with_hold(
+    application: &ApplicationServices,
+    id: EntityId,
+    revision: i64,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<Option<(RestoredEffectiveOriginalDesign, Instant)>, NativeTeletextDesignError> {
+    let Some((stored, parts)) = read_original_parts(
+        application,
+        id,
+        revision,
+        budget,
+        &policy,
+        (deadline, hold.clone()),
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    if !parts.selection.bindings.iter().any(|b| {
+        matches!(
+            b,
+            ersatzrs_domain::TeletextEffectiveBindingSnapshot::Scripted(_)
+        )
+    }) {
+        return Err(context_error());
+    }
+    let boundary = parts.selection.valid_until.ok_or_else(context_error)?;
+    let now = Instant::now();
+    let remaining = (boundary - chrono::Utc::now())
+        .to_std()
+        .map_err(|_| NativeTeletextDesignError::TimedOut)?;
+    let deadline = deadline
+        .min(now + remaining.min(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT));
     check_deadline(deadline)?;
-    budget.max_documents = budget.max_documents.min(maximum_producers(&policy));
+    application.recheck_effective_channel_teletext_document_selection(&parts.selection,deadline).await
+        .map_err(|error|NativeTeletextDesignError::Encoding(Box::new(super::teletext_channel_documents::ChannelTeletextDocumentEncodingError::Preparation(error))))?;
+    let restored = super::teletext_work::spawn_blocking(hold, move || {
+        compile_restored(stored, parts, policy, deadline)
+    })
+    .await
+    .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
+    check_deadline(deadline)?;
+    Ok(Some((restored, deadline)))
+}
+
+fn context_error() -> NativeTeletextDesignError {
+    NativeTeletextDesignError::Document(
+        ersatzrs_app::teletext_design_documents::TeletextDesignDocumentError {
+            binding: None,
+            reason: ersatzrs_app::teletext_design_documents::TeletextDesignDocumentFailure::Context,
+        },
+    )
+}
+
+async fn read_original_parts(
+    application: &ApplicationServices,
+    id: EntityId,
+    revision: i64,
+    mut budget: TeletextDesignDocumentBudget,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+    admission: (Instant, TeletextWorkHold),
+) -> Result<
+    Option<(
+        TeletextDesignRevision,
+        TeletextRestoredEffectiveDesignDocumentParts,
+    )>,
+    NativeTeletextDesignError,
+> {
+    let (deadline, hold) = admission;
+    check_deadline(deadline)?;
+    budget.max_documents = budget.max_documents.min(maximum_producers(policy));
     let Some(stored) = application
         .teletext_design_revision(id, revision, budget.max_serialized_bytes)
         .await?
@@ -371,15 +469,16 @@ pub(super) async fn reload_effective_original_teletext_design_revision_with_hold
             },
         ));
     }
-    let restored = super::teletext_work::spawn_blocking(hold, move || {
+    let parts = super::teletext_work::spawn_blocking(hold, move || {
         check_deadline(deadline)?;
         let parts =
             decode_teletext_effective_design_documents(&stored.document, budget)?.into_parts();
-        compile_restored(stored, parts, policy, deadline)
+        check_deadline(deadline)?;
+        Ok::<_, NativeTeletextDesignError>((stored, parts))
     })
     .await
     .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
-    Ok(Some(restored))
+    Ok(Some(parts))
 }
 
 fn compile_restored(

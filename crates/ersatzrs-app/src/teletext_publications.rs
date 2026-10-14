@@ -2,7 +2,8 @@
 
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
-    TeletextGuideSourceCheckLimits, TeletextGuideSourceFence, TeletextPublicationMutation,
+    TeletextEffectivePublicationRequestSave, TeletextGuideSourceCheckLimits,
+    TeletextGuideSourceFence, TeletextPublicationMutation, TeletextPublicationRepository,
     TeletextPublicationRequestSave,
 };
 use ersatzrs_domain::{EntityId, TeletextPublicationRequest};
@@ -44,6 +45,33 @@ pub trait TeletextPublicationValidator: Send + Sync {
     }
 }
 
+/// Exact native admission of effective originals, distinct from base controls.
+/// Historical preview or a saved digest never grants current scoped authority.
+#[async_trait]
+pub trait TeletextEffectivePublicationValidator: Send + Sync {
+    /// Confirm complete compilation and exact whole-scope request association
+    /// under the original admission deadline, including an all-Off absence.
+    /// # Errors
+    /// Rejects uncompiled/mismatched requests or expired native admission.
+    async fn confirm_request(
+        &self,
+        request: &TeletextEffectivePublicationRequestSave,
+        deadline: Instant,
+    ) -> Result<(), TeletextPublicationValidationError>;
+
+    /// Confirm the historical source fence without discarding its association.
+    /// # Errors
+    /// Rejects unsupported source validation, mismatches or expired admission.
+    async fn confirm_request_with_source(
+        &self,
+        _request: &TeletextEffectivePublicationRequestSave,
+        _fence: &TeletextGuideSourceFence,
+        _deadline: Instant,
+    ) -> Result<(), TeletextPublicationValidationError> {
+        Err(TeletextPublicationValidationError::Association)
+    }
+}
+
 /// Redacted storage/admission failures, separate from typed CAS rejections.
 #[derive(Debug, thiserror::Error)]
 pub enum TeletextPublicationStoreError {
@@ -56,6 +84,81 @@ pub enum TeletextPublicationStoreError {
 }
 
 impl ApplicationServices {
+    /// Request exact effective originals through independent scoped pointer CAS.
+    /// No base configuration, accepted output or live stream changes. Once the
+    /// repository admits a write, its atomic settlement result remains truthful.
+    /// # Errors
+    /// Rejects missing native proof/ports, expired admission or redacted storage failures.
+    pub async fn request_effective_teletext_design_publication(
+        &self,
+        request: TeletextEffectivePublicationRequestSave,
+        validator: &dyn TeletextEffectivePublicationValidator,
+        max_document_bytes: usize,
+        deadline: Instant,
+    ) -> Result<
+        TeletextPublicationMutation<TeletextPublicationRequest>,
+        TeletextPublicationStoreError,
+    > {
+        let repository = self
+            .ports()
+            .teletext_publications()
+            .ok_or(TeletextPublicationStoreError::Unavailable)?;
+        request_effective_with_repository(
+            repository,
+            &request,
+            validator,
+            max_document_bytes,
+            deadline,
+        )
+        .await
+    }
+
+    /// Preserve guide association and same-transaction semantic recapture during
+    /// scoped request admission. This does not establish current Now/Next role.
+    /// # Errors
+    /// Rejects missing source proof, expired admission or redacted storage failures.
+    pub async fn request_source_bound_effective_teletext_design_publication(
+        &self,
+        request: TeletextEffectivePublicationRequestSave,
+        validator: &dyn TeletextEffectivePublicationValidator,
+        fence: &TeletextGuideSourceFence,
+        limits: TeletextGuideSourceCheckLimits,
+        max_document_bytes: usize,
+        deadline: Instant,
+    ) -> Result<
+        TeletextPublicationMutation<TeletextPublicationRequest>,
+        TeletextPublicationStoreError,
+    > {
+        let repository = self
+            .ports()
+            .teletext_publications()
+            .ok_or(TeletextPublicationStoreError::Unavailable)?;
+        check_source_deadline(deadline)?;
+        validator
+            .confirm_request_with_source(&request, fence, deadline)
+            .await?;
+        check_source_deadline(deadline)?;
+        repository
+            .request_effective_with_source(&request, fence, limits, max_document_bytes, deadline)
+            .await
+            .map_err(|_| TeletextPublicationStoreError::StorageUnavailable)
+    }
+
+    /// Retained scoped pending metadata; it grants no active interval authority.
+    /// # Errors
+    /// Reports unsupported/corrupt storage without base pending-request fallback.
+    pub async fn effective_teletext_publication_request(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<Option<TeletextPublicationRequest>, TeletextPublicationStoreError> {
+        self.ports()
+            .teletext_publications()
+            .ok_or(TeletextPublicationStoreError::Unavailable)?
+            .current_effective(channel_id)
+            .await
+            .map_err(|_| TeletextPublicationStoreError::StorageUnavailable)
+    }
+
     /// Request a guide-bound exact revision after source-aware native validation.
     /// The repository compares stored association and recaptures semantic context
     /// within its transaction. This creates pending intent, never output authority.
@@ -130,6 +233,23 @@ impl ApplicationServices {
     }
 }
 
+async fn request_effective_with_repository(
+    repository: &dyn TeletextPublicationRepository,
+    request: &TeletextEffectivePublicationRequestSave,
+    validator: &dyn TeletextEffectivePublicationValidator,
+    max_document_bytes: usize,
+    deadline: Instant,
+) -> Result<TeletextPublicationMutation<TeletextPublicationRequest>, TeletextPublicationStoreError>
+{
+    check_source_deadline(deadline)?;
+    validator.confirm_request(request, deadline).await?;
+    check_source_deadline(deadline)?;
+    repository
+        .request_effective(request, max_document_bytes, deadline)
+        .await
+        .map_err(|_| TeletextPublicationStoreError::StorageUnavailable)
+}
+
 fn check_source_deadline(deadline: Instant) -> Result<(), TeletextPublicationValidationError> {
     if Instant::now() >= deadline {
         Err(TeletextPublicationValidationError::TimedOut)
@@ -137,6 +257,10 @@ fn check_source_deadline(deadline: Instant) -> Result<(), TeletextPublicationVal
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "teletext_effective_publications_tests.rs"]
+mod effective_tests;
 
 #[cfg(test)]
 mod tests {
