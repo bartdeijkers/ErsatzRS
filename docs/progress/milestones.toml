@@ -2724,6 +2724,64 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 indexed DRCS editor-set checkpoint:
+Criterion: preserve actual native logical S1 in QTM's attached PN-list indexing,
+including valid sparse banks without inventing broadcast resources. CarrierV4
+adds one protected set per normal/global raw bank and a bounded16-entry nullable
+resource-name mapping. Real groups retain exact projected PTU/modes/flags; null
+editor-only groups have all-F X28/3 and no PTU. Native assets/counts/model remain
+unchanged. Complete bank coverage, duplicate S1/counters, hidden/other-bank
+references, wrong PN/SC and padding mutations reject. Legacy/V2/V3 factories,
+resource names, retained concepts and receipt bytes remain exact.
+
+Runbd65c56d-0d4d-452d-8efd-dadca964ec3e passes57/57 affected app/host/export/import
+cases, including8 new codec/dense/sparse/V3-history regressions. Both themes,
+120 literal pixels at each of two glyph cells per page, sparse native absence,
+protected set rejection, explicit publication and two reopens are checked.
+Actual pinned QTM1.0/cac2167/Qt6.10.2 loads both pages of a dense0+1 set and a
+sparse1-only set with unavailable index0, checking120 actual glyph pixels per page.
+Each uses two real Save As results, Q only day124. Twelve captures per flow are
+retained; the two dense saved views are inspected. Dense native roundtrip passes
+run335d0463-84c5-4f9d-b5f4-e46fd52abb6a,1/1, for58 unique Rust successes.
+Concurrent ordinary Router streams retain exact emitted models, TSDuck3.44-4676
+and source audio/video using FFmpeg9n9.0-20261006. Independent libzvbi0.2.42
+fetches normal bank16/F400 on124 and17/F440 on125; all120 bitmap/PAL8 pixels per
+page and both red/blue palettes pass on ordered actual captures.
+
+Retained negative evidence is explicit. Dense editor trial1 fails second-window
+exposure; bounded actual Qt exposure replaces startup-only timing. Trial2 reaches
+bank1 but fails actual Save As selection; a separate identical125 trial passes.
+Actual filename focus/click/commit and bounded exact Save-button selection correct
+the stale directory-selection path; dense trial3 passes. No false completion
+marker releases either failed native waiter. Sparse actual QTM succeeds on both
+pages, but its complete native stream test fails the installed FFmpeg/zvbi SRT
+oracle (glyphs absent); independent ordered-unit decoding likewise fails. Exact
+pinned upstream sources match the earlier canonical audit: normative X27 fields
+are extracted with wrong shifts, and normal DRCS reads POP slot25 instead of27.
+Keep the correct native mask2/1C0 and real bank1-only inventory. A suitable correct
+X27 decoder/client is required; no sparse-address waiver or native packet spoof.
+
+Actual headed VLC3.0.20/libzvbi0.2.42 renders both distinct bitmaps/palettes and
+124.20->125.20->124.20 on both channels; Q stays only day124. All six client-3
+images are inspected, with byte-identical finite served-capture replay and owned
+process/replay exits0. Clients1/2 leave night Return on125; fresh coordinates and
+longer focus settling do not solve that failure. Owned-window X11 button events
+then drive the actual Qt controls successfully. No client/decoder/source-packet
+rewrite occurs. This proves MAIN glyphs/navigation, not bound live attachment,
+open-generation transitions or full56-column panel rendering.
+Strict app all-target and web library/preparation-test Clippy, formatting and
+architecture checks pass. Existing57/57 and dense runtime results are reused
+after only explicit imports, redundant-closure replacement and terminating
+semicolons for lint; semantics/inputs remain unchanged. No admin/WASM/dependency
+change; prior72 localized headed file flows and unchanged prerequisites remain
+valid. Sparse source decoding failure remains a blocker, not a passed test.
+Receipt: tmp/phase9-drcs-indexed/identity.json,
+SHA2566eea3ac7357709afd3feb44e23c3abc19edeef287ae2b540c51544b496c8368d. Final source/tool/artifact identities bind all positive/negative trials;
+mutable progress prose is excluded. Progress validation passes; all milestone
+acceptance/status/dependencies compare unchanged.
+No acceptance/status/dependency changes, full engine/editor/platform/CI claim,
+production guide, push or publication.
+
 2026-10-14 protected DRCS editor dependency checkpoint:
 Criterion: connect an existing authored resource to the actual pinned editor,
 then the same native concept/preview/publication and ordinary two-channel flow.
@@ -3039,25 +3097,29 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
 | Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
 | Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two-channel exact route/TSDuck/AV/decoding and actual 124->125->124 client proof; localized native forms and 8-case/all-nine-culture headed flow proven | Bound live client/open-generation transitions and full panel/feature coverage |
-| Actual pinned QTM workflow | Actual v1.0 NOS and DRCS0 dependency load/pixels/edit/Save As/import/preview/publish/reopen/stream/client flows; Legacy/V2 concepts recover unchanged | Remaining charset/resource editing, higher-S1 dependency-set mapping and full supported page-set/subpage edits |
+| Actual pinned QTM workflow | Actual v1.0 NOS, indexed0+1 and sparse1-only dependency load/pixels/Save As; dense native/stream decode, Legacy/V2/V3 recovery | Sparse normative X27 decoding/client, remaining charset/resource editing and full supported set/subpage edits |
 | Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
-Concrete next action: extend the proven DRCS0 dependency flow to a representative
-higher-S1 supported set. Pinned QTM ignores SC and indexes PN groups by list order;
-exact resource-to-editor indexing must be explicit, with no guessed/filler banks.
-The single-companion mapping currently proves S1=0 only. Preserve raw assets and
-old receipts, then prove actual loading, the same native preview/publication and
-independent decoding. Attached-resource editing has no QTM save action and remains
-an explicit required integration gap; it is not silently accepted as a restriction.
-Do not introduce another general audit or metric expansion. Literal and actual
-PS/NOS fidelity plus old concept recovery are now proven; no status/packet mask
-is accepted. Full charset/resource/editor/panel, live-bound/open-client and remaining
+Concrete next action: expose the existing accepted/editor fixture through a
+test-owned loopback listener and prove cold actual ordinary live-URL client
+navigation and simultaneous themes. Keep existing12-second capture receipts and
+use an explicitly bounded longer synthetic-source variant. Existing accepted
+source preparation creates a binding without control; freshness is checked at
+startup, and application Off only mutates stored state. Open-stream replacement/
+withdrawal therefore needs a bridge to the existing engine proposal controls,
+followed by same-response transition proof. This concrete behavior gap determines
+the next integration work; do not start another general audit or metric expansion.
+Sparse native/editor indexing is valid; the current decoder's audited normative
+X27 defects block its streamed glyph proof. Select/verify a correct independent
+candidate and actual client; never shift native packet fields or add native S1=0.
+Attached-resource editing has no QTM save action and remains required integration
+work. Full charset/resource/editor/panel, live-bound/open-client and remaining
 admin/Lua flows stay required. Base-row-only import, unchanged-file refusal,
 protected enhancement/PS edits and repeated-overlay refusal remain pending
 implementation/proof; none is a permanent accepted limitation.
 No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing
-remains; production guide waits for independent generic acceptance. No push,
-installation or publication occurs; no full editor/engine/platform/CI claim.
+remains; production guide waits for independent generic acceptance. No remote push,
+production installation or publication occurs; no full editor/engine/platform/CI claim.
 
 2026-10-13 private concept codec and durable rejection checkpoint:
 Criterion: preserve editable row data alongside exact captured originals through

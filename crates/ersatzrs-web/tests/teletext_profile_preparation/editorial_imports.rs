@@ -788,7 +788,7 @@ mod external_editor_probe {
         for exported in &flow.exported {
             assert_eq!(
                 exported.sidecar().project.editor_profile,
-                "qteletextmaker-1.0-carrier-v3"
+                "qteletextmaker-1.0-carrier-v4"
             );
             for mapping in &exported.sidecar().project.pages {
                 assert_eq!(mapping.header_controls, expected_header);
@@ -941,13 +941,18 @@ mod external_editor_probe {
         editor_source_commit: String,
         editor_binary_sha256: String,
         saved_file: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        saved_page_125: Option<String>,
     }
 
     fn read_completion(directory: &Path) -> io::Result<EditorSaved> {
         let bytes = read_bounded(&directory.join("editor-saved.json"), 4096)?;
         let marker: EditorSaved = serde_json::from_slice(&bytes)
             .map_err(|_| io::Error::other("editor completion does not match its schema"))?;
-        if marker.probe_version != 1
+        if !matches!(marker.probe_version, 1 | 2)
+            || (marker.probe_version == 1 && marker.saved_page_125.is_some())
+            || (marker.probe_version == 2
+                && marker.saved_page_125.as_deref() != Some("edited-125.tti"))
             || marker.editor_name != "QTeletextMaker"
             || marker.editor_version != "1.0"
             || marker.editor_source_commit != EDITOR_COMMIT
@@ -982,6 +987,7 @@ mod external_editor_probe {
     fn read_editor_request(
         directory: &Path,
         flow: &Flow,
+        marker: &EditorSaved,
     ) -> io::Result<NativeTeletextEditorialImportRequest> {
         for (index, exported) in flow.exported.iter().enumerate() {
             let channel = directory.join(format!("channel-{}", index + 1));
@@ -1006,10 +1012,25 @@ mod external_editor_probe {
         }
         let exported = &flow.exported[0];
         let page_name = &exported.sidecar().project.pages[0].name;
+        let second_page = exported
+            .sidecar()
+            .project
+            .pages
+            .iter()
+            .find(|page| page.page.page == 125 && page.page.subcode == 32);
+        if marker.saved_page_125.is_some() && second_page.is_none() {
+            return Err(io::Error::other(
+                "saved second page absent from original project",
+            ));
+        }
         let mut files = Vec::new();
         for file in exported.files() {
             let bytes = if &file.name == page_name {
                 read_bounded(&directory.join("edited.tti"), policy().tti.max_bytes)?
+            } else if marker.saved_page_125.is_some()
+                && second_page.is_some_and(|page| page.name == file.name)
+            {
+                read_bounded(&directory.join("edited-125.tti"), policy().tti.max_bytes)?
             } else {
                 read_bounded(
                     &directory.join("channel-1").join(&file.name),
@@ -1041,7 +1062,7 @@ mod external_editor_probe {
     ) -> (EditorSaved, NativeTeletextEditorialImportRequest) {
         let result = async {
             let marker = wait_for_editor(directory).await?;
-            let request = read_editor_request(directory, flow)?;
+            let request = read_editor_request(directory, flow, &marker)?;
             Ok::<_, io::Error>((marker, request))
         }
         .await;
@@ -1142,7 +1163,7 @@ mod external_editor_probe {
         (fixture, source_path)
     }
 
-    fn preview_page(
+    pub(super) fn preview_page(
         service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
         page: u16,
     ) -> TeletextRaster {
@@ -1178,12 +1199,18 @@ mod external_editor_probe {
             let filename = format!("channel-{channel}-page-{page}.srt");
             write_new(&directory.join(&filename), text.as_bytes()).unwrap();
             let original_glyph = if drcs_companion::has_drcs(service) {
-                "\u{f400}Z"
+                format!(
+                    "{}Z",
+                    char::from_u32(u32::from(drcs_companion::expected_drcs_unicode(
+                        service, page
+                    )))
+                    .unwrap()
+                )
             } else {
-                "AZ"
+                "AZ".to_owned()
             };
             assert!(
-                text.contains(original_glyph),
+                text.contains(&original_glyph),
                 "actual decode must retain the original enhanced glyph and Z"
             );
             let edited = channel == 1 && page == 124;
@@ -1336,6 +1363,30 @@ mod external_editor_probe {
         .await;
     }
 
+    #[tokio::test]
+    #[ignore = "requires pinned headed QTeletextMaker indexed DRCS loading, FFmpeg/ffprobe9 and TSDuck"]
+    async fn pinned_external_editor_indexed_drcs_preserves_native_resources() {
+        Box::pin(run_pinned_probe_policy(
+            drcs_companion::dense_response,
+            drcs_companion::dense_encoding_policy,
+            0x0081,
+            0xc040,
+        ))
+        .await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires pinned headed QTeletextMaker sparse DRCS loading, FFmpeg/ffprobe9 and TSDuck"]
+    async fn pinned_external_editor_sparse_drcs_preserves_native_resources() {
+        Box::pin(run_pinned_probe_policy(
+            drcs_companion::sparse_response,
+            drcs_companion::sparse_encoding_policy,
+            0x0081,
+            0xc040,
+        ))
+        .await;
+    }
+
     async fn run_pinned_probe(
         response: fn(&str, u16, u16) -> serde_json::Value,
         expected_header: u16,
@@ -1413,7 +1464,7 @@ mod external_editor_probe {
         .await;
         let success = serde_json::json!({"probe_version":1,"scope":"native application interchange and ordinary MPEG-TS flow",
             "editor_completion":marker,"edited_tti_sha256":edited_hash,
-            "editor_profile":"qteletextmaker-1.0-carrier-v3",
+            "editor_profile":"qteletextmaker-1.0-carrier-v4",
             "native_header_controls":expected_header,"editor_status":expected_status,
             "native_headers_enhancements_and_link_targets_unchanged":true,
             "edited_page_content_crc_changed":true,

@@ -140,7 +140,7 @@ fn v2_editor_profile_round_trips_without_changing_receipt_schema_or_raw_controls
 }
 #[test]
 fn unknown_editor_carrier_profiles_are_rejected() {
-    for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v4"] {
+    for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v5"] {
         let mut value = valid_project();
         value.editor_profile = profile.into();
         assert_eq!(
@@ -727,4 +727,271 @@ fn drcs_companion_scope_remains_closed_nonnullable_and_redacted() {
     );
     assert!(!debug.contains("resource-0000"));
     assert!(!debug.contains(&"c".repeat(64)));
+}
+
+fn drcs_set_receipt(subpages: &[u8]) -> TeletextExportReceiptBody {
+    use crate::teletext_tti::{write_teletext_tti, TeletextTtiDocument};
+    let mut body = receipt();
+    body.project.editor_profile = "qteletextmaker-1.0-carrier-v4".into();
+    let highest = *subpages.iter().max().unwrap();
+    let mut resource_names = vec![None; usize::from(highest) + 1];
+    for &subpage in subpages {
+        let name = format!("resource-{subpage:04}.dvb");
+        body.project.assets.push(TeletextExportAssetMapping {
+            name: name.clone(),
+            scope: TeletextExportAssetScope::Resource {
+                identity: TeletextResourceIdentityWire {
+                    kind: TeletextResourceKindWire::Drcs,
+                    page: ersatzrs_addon_contract::TeletextRawDataPageNumberWire {
+                        magazine: 2,
+                        page: 0xc0,
+                    },
+                    subpage,
+                },
+                physical_subcode: 0x0110 | u16::from(subpage),
+            },
+            unit_count: 1,
+            bytes: 46,
+            sha256: "b".repeat(64),
+        });
+        body.files.push(TeletextExportFile {
+            name: name.clone(),
+            bytes: vec![0x55 + subpage; 46],
+        });
+        resource_names[usize::from(subpage)] = Some(name);
+    }
+    let mut records = Vec::new();
+    for (subpage, resource) in resource_names.iter().enumerate() {
+        records.extend([
+            TeletextTtiRecord::PageNumber {
+                page: 0x2c0,
+                editor_ordinal: u64::try_from(subpage).unwrap(),
+            },
+            TeletextTtiRecord::SubpageOrdinal(u64::try_from(subpage).unwrap()),
+        ]);
+        if resource.is_some() {
+            records.push(TeletextTtiRecord::PageStatus(0x8000));
+            records.push(TeletextTtiRecord::BaseRow {
+                row: 1,
+                cells: [b'A'; 40],
+            });
+        } else {
+            records.push(TeletextTtiRecord::Packet {
+                row: 28,
+                designation: 3,
+                words: [
+                    5, 0x3ffff, 0x3ffff, 0x3ffff, 0x3ffff, 0x3ffff, 0x3ffff, 0x3ffff, 0x3ffff,
+                    0x3ffff, 0x3ffff, 0xfff, 0,
+                ],
+            });
+        }
+    }
+    let tti_budget = TeletextTtiBudget {
+        max_bytes: budget().max_file_bytes,
+        max_records: budget().max_units,
+    };
+    let document = TeletextTtiDocument::checked_from_records(records, tti_budget).unwrap();
+    let bytes = write_teletext_tti(&document, tti_budget).unwrap();
+    body.project.assets.push(TeletextExportAssetMapping {
+        name: "drcs-set-normal-2c0.tti".into(),
+        scope: TeletextExportAssetScope::DrcsTtiSet { resource_names },
+        unit_count: 0,
+        bytes: bytes.len(),
+        sha256: "c".repeat(64),
+    });
+    body.files.push(TeletextExportFile {
+        name: "drcs-set-normal-2c0.tti".into(),
+        bytes,
+    });
+    body
+}
+
+fn replace_set_tti(body: &mut TeletextExportReceiptBody, bytes: Vec<u8>) {
+    body.project.assets.last_mut().unwrap().bytes = bytes.len();
+    body.files.last_mut().unwrap().bytes = bytes;
+}
+
+#[test]
+fn drcs_set_v4_dense_leading_and_interior_holes_round_trip_exact_native_assets() {
+    for subpages in [&[0, 1][..], &[1][..], &[0, 2][..], &[15][..]] {
+        let body = drcs_set_receipt(subpages);
+        let mut bounds = budget();
+        bounds.max_files = body.files.len();
+        // Sixteen editor positions can coexist with only three actual files.
+        let encoded = write_teletext_export_receipt_body(&body, bounds).unwrap();
+        let restored = parse_teletext_export_receipt_body(&encoded, bounds).unwrap();
+        assert_eq!(restored, body);
+        for (index, &subpage) in subpages.iter().enumerate() {
+            assert_eq!(restored.files[index + 1].bytes, vec![0x55 + subpage; 46]);
+        }
+        let mut unit_bounds = bounds;
+        unit_bounds.max_units = subpages.len();
+        assert!(body.project.validate(unit_bounds).is_ok());
+        let project_bytes = write_teletext_export_project(&body.project, unit_bounds).unwrap();
+        assert_eq!(
+            parse_teletext_export_project(&project_bytes, unit_bounds).unwrap(),
+            body.project
+        );
+    }
+}
+
+#[test]
+fn drcs_set_rejects_incomplete_hidden_reordered_and_cross_bank_resources() {
+    for case in [
+        "empty",
+        "all-null",
+        "trailing",
+        "hidden",
+        "truncated",
+        "swapped",
+        "duplicate",
+        "missing",
+    ] {
+        let mut body = drcs_set_receipt(&[0, 2]);
+        let TeletextExportAssetScope::DrcsTtiSet { resource_names } =
+            &mut body.project.assets.last_mut().unwrap().scope
+        else {
+            panic!("set fixture")
+        };
+        match case {
+            "empty" => resource_names.clear(),
+            "all-null" => resource_names.fill(None),
+            "trailing" => resource_names.push(None),
+            "hidden" => resource_names[0] = None,
+            "truncated" => resource_names.truncate(1),
+            "swapped" => resource_names.swap(0, 2),
+            "duplicate" => resource_names[2] = resource_names[0].clone(),
+            _ => resource_names[2] = Some("missing.dvb".into()),
+        }
+        assert!(body.project.validate(budget()).is_err());
+    }
+    for field in ["bank", "kind", "logical"] {
+        let mut body = drcs_set_receipt(&[0, 1]);
+        if let TeletextExportAssetScope::Resource { identity, .. } =
+            &mut body.project.assets[1].scope
+        {
+            match field {
+                "bank" => identity.page.page = 0xc1,
+                "kind" => identity.kind = TeletextResourceKindWire::Gdrcs,
+                _ => identity.subpage = 0,
+            }
+        }
+        assert!(body.project.validate(budget()).is_err());
+    }
+    let mut body = drcs_set_receipt(&[0, 1]);
+    let mut duplicate = body.project.assets[0].clone();
+    duplicate.name = "another-counter.dvb".into();
+    if let TeletextExportAssetScope::Resource {
+        physical_subcode, ..
+    } = &mut duplicate.scope
+    {
+        *physical_subcode = 0x0120;
+    }
+    body.project.assets.push(duplicate);
+    assert!(body.project.validate(budget()).is_err());
+}
+
+#[test]
+fn drcs_set_scope_is_v4_only_closed_and_preallocation_bounded_at_sixteen() {
+    for profile in [
+        "qteletextmaker-1.0",
+        "qteletextmaker-1.0-carrier-v2",
+        "qteletextmaker-1.0-carrier-v3",
+    ] {
+        let mut body = drcs_set_receipt(&[0, 1]);
+        body.project.editor_profile = profile.into();
+        assert!(body.project.validate(budget()).is_err());
+    }
+    let body = drcs_set_receipt(&[1]);
+    for scope in [
+        json!({"kind":"drcs_tti_set","resource_names":null}),
+        json!({"kind":"drcs_tti_set","resource_names":[false,"resource-0001.dvb"]}),
+        json!({"kind":"drcs_tti_set","resource_names":[null,"resource-0001.dvb"],"extra":true}),
+        json!({"kind":"drcs_tti_set"}),
+    ] {
+        let mut value = serde_json::to_value(&body.project).unwrap();
+        value["assets"][1]["scope"] = scope;
+        assert!(parse_teletext_export_project(&as_bytes(&value), budget()).is_err());
+    }
+    let mut value = serde_json::to_value(&body.project).unwrap();
+    value["assets"][1]["scope"]["resource_names"] = json!(vec![None::<String>; 17]);
+    assert_eq!(
+        parse_teletext_export_project(&as_bytes(&value), budget())
+            .unwrap_err()
+            .kind,
+        TeletextExportProjectFailure::Limit
+    );
+}
+
+#[test]
+fn drcs_set_receipt_rejects_wrong_truncated_duplicate_and_missing_group_identities() {
+    let original = drcs_set_receipt(&[0, 1]);
+    let tti = String::from_utf8(original.files.last().unwrap().bytes.clone()).unwrap();
+    for changed in [
+        tti.replace("PN,2C001", "PN,2C101"),
+        tti.replace("PN,2C001", "PN,2C002"),
+        tti.replace("SC,0001", "SC,0000"),
+        tti.replace("SC,0001\r\n", ""),
+        tti.split("PN,2C001").next().unwrap().to_owned(),
+        format!("{tti}PN,2C002\r\nSC,0002\r\n"),
+    ] {
+        let mut body = original.clone();
+        replace_set_tti(&mut body, changed.into_bytes());
+        assert_eq!(
+            body.validate(budget()).unwrap_err().kind,
+            TeletextExportProjectFailure::Tti
+        );
+    }
+}
+
+#[test]
+fn drcs_set_padding_requires_all_undefined_modes_and_no_ptu_or_extra_packets() {
+    use crate::teletext_tti::{write_teletext_tti, TeletextTtiDocument};
+    let original = drcs_set_receipt(&[1]);
+    let tti_budget = TeletextTtiBudget {
+        max_bytes: budget().max_file_bytes,
+        max_records: budget().max_units,
+    };
+    let parsed = parse_teletext_tti(&original.files.last().unwrap().bytes, tti_budget).unwrap();
+    for change in ["defined", "function", "missing", "row", "packet", "status"] {
+        let mut records = parsed.records().to_vec();
+        match change {
+            "defined" | "function" => {
+                if let TeletextTtiRecord::Packet { words, .. } = &mut records[2] {
+                    if change == "defined" {
+                        words[1] &= !15;
+                    } else {
+                        words[0] = 4;
+                    }
+                }
+            }
+            "missing" => {
+                records.remove(2);
+            }
+            "row" => records.insert(
+                2,
+                TeletextTtiRecord::BaseRow {
+                    row: 1,
+                    cells: [b' '; 40],
+                },
+            ),
+            "status" => records.insert(2, TeletextTtiRecord::PageStatus(0x8000)),
+            _ => records.insert(
+                2,
+                TeletextTtiRecord::Packet {
+                    row: 26,
+                    designation: 0,
+                    words: [0; 13],
+                },
+            ),
+        }
+        let document = TeletextTtiDocument::checked_from_records(records, tti_budget).unwrap();
+        let bytes = write_teletext_tti(&document, tti_budget).unwrap();
+        let mut body = original.clone();
+        replace_set_tti(&mut body, bytes);
+        assert_eq!(
+            body.validate(budget()).unwrap_err().kind,
+            TeletextExportProjectFailure::Tti
+        );
+    }
 }

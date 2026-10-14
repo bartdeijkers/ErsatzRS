@@ -40,6 +40,8 @@ use sha2::{Digest, Sha256};
 
 use super::teletext_designs::RestoredOriginalTeletextDesign;
 
+mod drcs_sets;
+
 /// Located failures without original text, settings or file bodies.
 #[derive(Debug, thiserror::Error)]
 pub enum NativeTeletextExportProjectError {
@@ -86,6 +88,7 @@ pub(super) enum TeletextEditorCarrier {
     Legacy,
     V2,
     V3,
+    V4,
 }
 impl TeletextEditorCarrier {
     pub(super) fn from_profile(profile: &str) -> Option<Self> {
@@ -93,6 +96,7 @@ impl TeletextEditorCarrier {
             "qteletextmaker-1.0" => Some(Self::Legacy),
             "qteletextmaker-1.0-carrier-v2" => Some(Self::V2),
             "qteletextmaker-1.0-carrier-v3" => Some(Self::V3),
+            "qteletextmaker-1.0-carrier-v4" => Some(Self::V4),
             _ => None,
         }
     }
@@ -101,6 +105,7 @@ impl TeletextEditorCarrier {
             Self::Legacy => "qteletextmaker-1.0",
             Self::V2 => "qteletextmaker-1.0-carrier-v2",
             Self::V3 => "qteletextmaker-1.0-carrier-v3",
+            Self::V4 => "qteletextmaker-1.0-carrier-v4",
         }
     }
     /// Keep native flags separate from QTM's single effective primary NOS.
@@ -115,7 +120,7 @@ impl TeletextEditorCarrier {
             // Its C12 means numeric NOS bit 0, unlike compact native bit 8.
             // Use the resolved X28/M29/header primary; retain native flags in
             // the mapping, including an independently authored fallback NOS.
-            Self::V2 | Self::V3 => {
+            Self::V2 | Self::V3 | Self::V4 => {
                 let primary = u16::from(effective_primary);
                 ((primary & 1) << 9) | ((primary & 2) << 7) | ((primary & 4) << 5)
             }
@@ -334,6 +339,13 @@ fn selected_inventory<'a>(
             )
         })
         .ok_or(NativeTeletextExportProjectError::Budget)?;
+    let asset_count = if carrier == TeletextEditorCarrier::V4 {
+        asset_count
+            .checked_add(drcs_sets::count_banks(encoded, deadline)?)
+            .ok_or(NativeTeletextExportProjectError::Budget)?
+    } else {
+        asset_count
+    };
     if selected_count == 0
         || selected.is_some_and(|pages| selected_count != pages.len())
         || selected_count
@@ -740,6 +752,9 @@ fn assemble_files(
             }
         }
     }
+    if carrier == TeletextEditorCarrier::V4 {
+        drcs_sets::append_sets(encoded, &mut assets, &mut files, tti_budget, deadline)?;
+    }
     for (magazine, unit) in magazines.iter().zip(encoded.magazine_units()) {
         check_deadline(deadline)?;
         charge_units(&mut units, 1, project_budget.max_units)?;
@@ -856,13 +871,14 @@ mod tests {
             TeletextEditorCarrier::Legacy,
             TeletextEditorCarrier::V2,
             TeletextEditorCarrier::V3,
+            TeletextEditorCarrier::V4,
         ] {
             assert_eq!(
                 TeletextEditorCarrier::from_profile(carrier.profile()),
                 Some(carrier)
             );
         }
-        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v4"] {
+        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v5"] {
             assert_eq!(TeletextEditorCarrier::from_profile(profile), None);
         }
     }

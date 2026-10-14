@@ -38,6 +38,8 @@ static void capture(const char *name) {
 // single-page trial. Basenames are confined to /work and never read as code.
 struct DriverContext {
     bool singlePage;
+    bool editZone;
+    int drcsSubpage;
     QByteArray inputName;
     QByteArray outputName;
     QString inputPath;
@@ -77,12 +79,13 @@ static DriverContext driverContext() {
         if (!input.isEmpty() || !output.isEmpty()
             || !qgetenv("ERSATZRS_QTM_LEFT_PANEL_COLUMNS").isEmpty()
             || !qgetenv("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS").isEmpty()
-            || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME").isEmpty())
+            || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME").isEmpty()
+            || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE").isEmpty())
             qFatal("Native basenames/panels require explicit single-page driver mode");
-        return {false, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
+        return {false, true, 0, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
             "/work/synthetic-editor-audit.tti", "/work/edited-editor-audit.tti", {}, 0, 0};
     }
-    if (mode != "single-page-zone-q" || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save") || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -90,7 +93,16 @@ static DriverContext driverContext() {
     if (!drcs.isEmpty() && (!safeTtiBasename(drcs) || drcs == input || drcs == output))
         qFatal("Invalid explicit protected Normal DRCS companion name");
     if (left + right > 16) qFatal("Native Level 2.5 panel counts exceed sixteen columns");
-    return {true, input, output, QString("/work/") + QString::fromLatin1(input),
+    int drcsSubpage = 0;
+    const QByteArray suppliedSubpage = qgetenv("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE");
+    if (!suppliedSubpage.isEmpty()) {
+        bool valid = false;
+        drcsSubpage = suppliedSubpage.toInt(&valid, 10);
+        if (!valid || drcsSubpage < 0 || drcsSubpage > 1
+            || suppliedSubpage != QByteArray::number(drcsSubpage) || drcs.isEmpty())
+            qFatal("Synthetic DRCS pixel oracle supports only explicit S1=0 or S1=1");
+    }
+    return {true, mode == "single-page-zone-q", drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
         QString("/work/") + QString::fromLatin1(output), drcs, left, right};
 }
 static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
@@ -133,22 +145,25 @@ static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
         if (action->text() == QString("Normal DRCS: ") + QString::fromLatin1(context.drcsName)) attached = true;
     if (!attached) qFatal("Actual Normal DRCS attachment did not complete");
     capture(context.captureName("drcs-loaded").toUtf8().constData());
-    // Fixed opt-in synthetic fixture: Normal S1=0/slot0 at Main(1,8),
+    // Fixed opt-in synthetic fixture: Normal S1=0 or S1=1/slot0 at Main(1,8),
     // asymmetric literal bitmap, day CLUT2 foreground red/background black.
     // An attachment label alone would also succeed for an empty/wrong file.
     auto view = editor();
     if (!view) qFatal("Actual DRCS editor view absent");
     const QImage bitmap = view->grab().toImage();
     if (bitmap.size() != view->size()) qFatal("Expected one-to-one DRCS pixel capture");
-    const unsigned short rows[10] = {0x801, 0x800, 0x400, 0x200, 0x100,
-        0x080, 0x040, 0x020, 0x010, 0x009};
+    const unsigned short patterns[2][10] = {
+        {0x801, 0x800, 0x400, 0x200, 0x100, 0x080, 0x040, 0x020, 0x010, 0x009},
+        {0x801, 0x001, 0x002, 0x004, 0x008, 0x010, 0x020, 0x040, 0x080, 0x900}
+    };
+    const auto &rows = patterns[context.drcsSubpage];
     for (int y = 0; y < 10; ++y)
         for (int x = 0; x < 12; ++x) {
             const QColor expected = ((rows[y] >> (11 - x)) & 1) ? QColor(255, 0, 0) : QColor(0, 0, 0);
             if (bitmap.pixelColor((context.leftPanelColumns + 8) * 12 + x, 10 + y) != expected)
                 qFatal("Actual attached DRCS pixels/palette differ from synthetic literal");
         }
-    std::puts("QTM actual Normal DRCS glyph: all 120 literal bitmap/day palette pixels match");
+    std::printf("QTM actual Normal DRCS glyph: S1=%d all 120 literal bitmap/day palette pixels match\n", context.drcsSubpage);
     std::printf("QTM actual Normal DRCS Load file complete: %s\n", context.drcsName.constData());
 }
 static void saveAs(QMainWindow *main, const DriverContext &context) {
@@ -166,13 +181,31 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
                     || dialog->windowTitle() != "Save As") continue;
                 auto name = dialog->findChild<QLineEdit *>("fileNameEdit");
                 if (!name) qFatal("Actual filename input absent");
+                QTest::mouseClick(name, Qt::LeftButton);
+                if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000))
+                    qFatal("Actual Save As filename input did not receive focus");
                 name->selectAll();
                 QTest::keyClicks(name, context.outputPath, Qt::NoModifier, 5);
+                // Commit the actual filename field before selecting Save. A
+                // directory-completion candidate can otherwise keep Open active.
+                QTest::keyClick(name, Qt::Key_Tab);
                 QTimer::singleShot(200, qApp, [dialog, context] {
+                    const bool selected = QTest::qWaitFor([dialog, context] {
+                        if (dialog->selectedFiles() != QStringList{context.outputPath}) return false;
+                        for (QPushButton *button : dialog->findChildren<QPushButton *>()) {
+                            QString text = button->text(); text.remove('&');
+                            if (text == "Save" && button->isEnabled()) return true;
+                        }
+                        return false;
+                    }, 3000);
                     if (!dialog->grab().save(QString("/work/") + context.captureName("save-dialog")))
                         qFatal("Save dialog capture failed");
-                    if (dialog->selectedFiles() != QStringList{context.outputPath})
+                    if (!selected) {
+                        std::fprintf(stderr, "Save context title=%s mode=%d filemode=%d expected=%s selected=%s\n",
+                            dialog->windowTitle().toUtf8().constData(), int(dialog->acceptMode()), int(dialog->fileMode()),
+                            context.outputPath.toUtf8().constData(), dialog->selectedFiles().join("|").toUtf8().constData());
                         qFatal("Unexpected selected audit destination");
+                    }
                     for (QPushButton *button : dialog->findChildren<QPushButton *>()) {
                         QString text = button->text(); text.remove('&');
                         if (text == "Save" && button->isEnabled()) { button->click(); return; }
@@ -193,8 +226,8 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             qFatal("Actual Save As did not complete");
         capture(context.captureName("saved").toUtf8().constData());
         if (context.singlePage) {
-            std::printf("QTM actual single-page widget edit/Save As complete: row=2 column=8 key=Q input=%s output=%s\n",
-                context.inputName.constData(), context.outputName.constData());
+            std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
+                context.editZone, context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -209,6 +242,10 @@ extern "C" int _ZN16QCoreApplication4execEv() {
         if (QGuiApplication::platformName() != "xcb"
             || main->windowFilePath() != context.inputPath)
             qFatal("Expected visible X11 synthetic editor context");
+        // A second real X11 process may expose later than the fixed timer.
+        // Wait on Qt's actual window state; retain capture's strict headed gate.
+        if (!QTest::qWaitForWindowExposed(main, 5000))
+            qFatal("Actual editor window was not exposed before bounded deadline");
         const QFileInfo source(context.inputPath);
         if (!source.isFile() || source.isSymLink()) qFatal("Expected synthetic regular input file");
         const QFileInfo destination(context.outputPath);
@@ -232,9 +269,11 @@ extern "C" int _ZN16QCoreApplication4execEv() {
                 qFatal("Actual widget geometry disagrees with the native Level 2.5 panel counts");
             std::printf("QTM actual widget geometry: width=%d height=%d left=%d right=%d; target row=2 column=8\n",
                 view->width(), view->height(), context.leftPanelColumns, context.rightPanelColumns);
-            QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
-                QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));
-            QTest::keyClicks(view, "Q", Qt::NoModifier, 20);
+            if (context.editZone) {
+                QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
+                    QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));
+                QTest::keyClicks(view, "Q", Qt::NoModifier, 20);
+            }
             QTimer::singleShot(100, qApp, [main, context] {
                 capture(context.captureName("edited").toUtf8().constData());
                 saveAs(main, context);

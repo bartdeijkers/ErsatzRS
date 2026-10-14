@@ -13,7 +13,7 @@ use sha2::{Digest as _, Sha256};
 use std::fmt::Write as _;
 
 const LEGACY_PROFILE: &str = "qteletextmaker-1.0";
-const CURRENT_PROFILE: &str = "qteletextmaker-1.0-carrier-v3";
+const CURRENT_PROFILE: &str = "qteletextmaker-1.0-carrier-v4";
 const LEGACY_PS: u16 = 0xC0C0;
 const CURRENT_PS: u16 = 0xC240;
 

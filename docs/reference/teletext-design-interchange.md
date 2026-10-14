@@ -4777,7 +4777,8 @@ positive/negative codec, native import and durable qualification evidence.
 
 Schema1 `project.editor_profile` distinguishes the retained
 `qteletextmaker-1.0` carrier from V2 `qteletextmaker-1.0-carrier-v2` exports
-and fresh V3 `qteletextmaker-1.0-carrier-v3` exports.
+retained V3 `qteletextmaker-1.0-carrier-v3` receipts and fresh V4
+`qteletextmaker-1.0-carrier-v4` exports.
 It versions the adapter for the same pinned QTeletextMaker1.0 editor, not the
 editor itself or the authored document/receipt schemas. Unknown names reject.
 Stored receipts select reconstruction; uploaded metadata cannot select another
@@ -4806,32 +4807,48 @@ and resource/page-set proof remains open in its complete acceptance map.
 
 ### Protected DRCS editor dependencies
 
-Fresh exports use `qteletextmaker-1.0-carrier-v3`, retaining the V2 display/NOS
-mapping. Stored Legacy/V2 receipts still select their original exact factory;
-companions do not renumber or replace their original DVB assets. Schemas remain1.
+Fresh exports use `qteletextmaker-1.0-carrier-v4`, retaining the V2 display/NOS
+mapping. Stored Legacy/V2/V3 receipts select their original exact factory;
+companions do not renumber or replace original DVB assets. Schemas remain1.
 
-A `drcs_tti` asset references its unchanged resource DVB filename and editor
-ordinal0. Native identity, normal/global kind, logical S1, physical subcode,
-update/lifecycle controls and exact X28/3 remain owned by that resource mapping
-and immutable original. Companion TTI carries raw hexadecimal PN, SC0, exact
-seven-bit PTU/SPACE rows and all X28/3 words, derived by the strict existing
-packet inverse. Its unit count is0 because these are derived file bytes, not
-additional transmitted packets; existing file/byte/record bounds still apply.
-Import requires both companion and DVB bytes unchanged. It never grants resource
-editing, display overlay, installation or publication authority.
+A V4 `drcs_tti_set` asset holds `resource_names`, an ordered array of one through
+16 nullable DVB filenames for one normal/global raw-page bank. Its array index
+is both the native logical S1 and the QTM attached page-list index. Every real
+resource in that bank appears exactly once at its actual S1; the last member is
+real. Other banks, duplicate native S1 identities, omitted resources and wrong
+indices reject. File limits bound real assets; the intrinsic16-entry bound also
+applies before metadata allocation, independently of file count.
 
-Pinned QTM1.0/cac2167 loads attached tables through View -> DRCS pages -> Normal
+A null explicitly marks an editor-only unavailable list position where the
+retained native bank has no resource. Its group contains PN/SC for that index
+and canonical all-F X28/3, with **no PTU/base rows**. QTM ignores modes when
+looking up Level2.5 glyphs, so a SPACE row would incorrectly make glyphs available.
+Padding adds no native page, physical header, DVB asset or broadcast authority.
+An original containing only S1=1 therefore maps as `[null, "resource-name.dvb"]`;
+publication and preview still use that original inventory. The host reconstructs
+this exact mapping from the retained original; uploaded nulls cannot hide a bank.
+
+Real groups carry raw hexadecimal PN with ordinal and SC equal to S1, exact
+seven-bit PTU/SPACE rows, original resource PS flags and all X28/3 words from the
+strict existing packet inverse. Their unchanged DVB mappings own normal/global
+kind, native S1, physical subcode and update/lifecycle controls. The companion
+unit count is0: these are derived file bytes, not additional transmitted packets.
+Existing total/file-byte and TTI-record bounds cover every group including nulls.
+The complete set, including padding, and all DVB bytes stay protected on import.
+Editing those files never grants resource editing, display overlay, package
+installation or publication authority.
+
+Retained V3 `drcs_tti` assets keep their original singleton S1=0 recipe, filename,
+resource reference and ordinal0. No V4 migration rewrites old receipts/concepts.
+Pinned QTM1.0/cac2167 loads attached sets through View -> DRCS pages -> Normal
 or Global DRCS -> Load file. Ordinary File/Open treats a resource as a display;
 do not use it for this dependency. The attached loader indexes PN groups by
-list order, ignoring SC and PN suffixes, and renders monochrome mode0. Initial
-companions therefore address logical S1=0 only; other subtables keep their exact
-DVB assets. QTM has no attached-resource edit/save action. These are current
-implementation/editor limits, not accepted waivers of full authored Level2.5,
-resource editing or complete interchange. The generic engine and native authored
-resource model keep their original scope. P9A-04 owns the actual loader/rendering
-proof, remaining set mapping and editor acceptance; the structured agent workflow
-uses the same versioned files, immutable receipt, validation, preview and separate
-publication actions.
+list order, ignoring SC and PN suffixes, and renders monochrome mode0.
+QTM has no attached-resource edit/save action. That integration gap and complete
+resource/enhancement editing remain required work, with no permanent restriction
+accepted. P9A-04 owns actual editor, native stream and independent decoding proof;
+the structured agent workflow uses these same versioned files, immutable receipt,
+validation, preview and separate publication actions.
 
 ### Receipt-bound native concept import
 

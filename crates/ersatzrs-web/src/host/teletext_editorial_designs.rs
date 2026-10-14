@@ -422,16 +422,16 @@ fn reconcile_files(
                     tti,
                     deadline,
                 ),
-                TeletextEditorCarrier::V2 | TeletextEditorCarrier::V3 => {
-                    reconcile_teletext_editorial_tti_with_status(
-                        mapping,
-                        &original.bytes,
-                        &edited.bytes,
-                        tti,
-                        deadline,
-                        expected_status,
-                    )
-                }
+                TeletextEditorCarrier::V2
+                | TeletextEditorCarrier::V3
+                | TeletextEditorCarrier::V4 => reconcile_teletext_editorial_tti_with_status(
+                    mapping,
+                    &original.bytes,
+                    &edited.bytes,
+                    tti,
+                    deadline,
+                    expected_status,
+                ),
             }?;
             if let Some(overlay) = overlay {
                 overlays.push(overlay);

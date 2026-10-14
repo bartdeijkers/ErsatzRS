@@ -5,30 +5,50 @@
 Use the same pinned QTM1.0/cac2167 binary, image, Qt6.10.2 SDK and visible X11
 setup below. Compile the maintained widget driver after source changes. Its
 optional `ERSATZRS_QTM_NORMAL_DRCS_BASENAME` is a flat TTI filename in `/work`,
-valid only with `single-page-zone-q`. Select the V3 `drcs_tti` companion from the
-authenticated sidecar, verify its hash and linked original DVB asset, and pass
-that unchanged file. The actual View/Normal DRCS/Load file action uses its owned
-Open dialog; six captures retain before/after load, edit and Save As. The fixed
-synthetic trial also checks all120 actual Qt glyph/day-palette pixels.
+valid with `single-page-zone-q` or `single-page-save`. Select the V4 `drcs_tti_set`
+from the authenticated sidecar, verify its hash and all linked original DVB
+assets, and pass that unchanged file. See the canonical
+[indexed set contract](../../docs/reference/teletext-design-interchange.md#protected-drcs-editor-dependencies)
+for explicit null editor slots and retained V3 singleton recipes.
 
-The ignored native selector is `test(pinned_external_editor_drcs_companion)` in
-`ersatzrs-web`; use the same FFmpeg9/ffprobe/TSDuck environment and create-new
-interchange directory as the existing probe below. Do not issue a completion
-marker until the actual editor exits0 and its saved file/captures are checked.
-It imports only a Free-row2 Q edit, previews, explicitly publishes, reopens twice
-and captures both ordinary channel routes. Missing/modified companions reject in
-the regular `test(drcs_companion)` cases; retained V2 receipts remain recoverable.
+The actual View/Normal DRCS/Load file action uses its owned Open dialog.
+`ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE` defaults to0; the fixed synthetic pixel oracle
+also accepts explicit1, checking the distinct mirrored bitmap at all120 actual
+Qt glyph/day-palette pixels. This option chooses the expected oracle; the editor
+still selects its actual bank from authored X26. It does not alter any file or
+QTM decoding. `single-page-save` opens/loads/checks/saves without adding Q.
+Six captures per page retain before/after load, optional edit and actual Save As.
+
+Ignored native selectors in `ersatzrs-web` are
+`test(pinned_external_editor_drcs_companion)` (singleton),
+`test(pinned_external_editor_indexed_drcs)` (real S1=0+1), and
+`test(pinned_external_editor_sparse_drcs)` (only real S1=1 with null editor slot0).
+Use the same FFmpeg9/ffprobe/TSDuck environment and create-new interchange
+directory as the existing probe below. Do not issue a completion marker until
+the actual editor exits0 and saved files/captures are checked. Existing markerV1
+imports `edited.tti`; closed test markerV2 additionally requires
+`saved_page_125: "edited-125.tti"`. Open/load/save page125 in the actual editor,
+without another Q, before importing both actual saved pages. Protected source
+sets/sidecars remain byte-exact. Native proof covers Free-row2 Q, shared preview,
+separate publication, two reopens and both ordinary channel routes. Regular
+`test(drcs_companion)` cases cover missing/modified dependencies, null-slot PTU
+rejection, native resource absence, channel isolation and retained V2/V3 receipts.
 
 Ordered captured units are `channel-1-drcs-units.json` and
-`channel-2-drcs-units.json`. Run `teletext-editor-drcs-decoder.py <units> day|night`
-with the installed pinned libzvbi0.2.42. It reuses the frozen ABI helper and checks
-literal normal S1=0/slot0 bitmap, palette and all120 rendered MAIN pixels on both
-pages124/125:0020. Record actual library/helper/script/input hashes alongside
-TSDuck, exact-model and source-AV proof. Actual client navigation is a separate
-headed trial of the exact served captures. MAIN41-column proof does not establish
-56-column panels; attached-resource editing, higher-S1 set mapping and complete
-Level2.5/editor acceptance remain open in P9A-04. No fixture grants package edits
-or automatic publication.
+`channel-2-drcs-units.json`. Run
+`teletext-editor-drcs-decoder.py <units> day|night [indexed|sparse]`
+with installed pinned libzvbi0.2.42. Omit the third argument for the original
+singleton oracle. It reuses the frozen ABI helper and checks literal S1=0/1
+bitmaps, palettes and all120 rendered MAIN pixels on pages124/125:0020.
+Record actual library/helper/script/input hashes alongside TSDuck, exact-model
+and source-AV proof. Client navigation remains a separate headed trial of the
+exact served captures. MAIN41-column proof does not establish56-column panels;
+attached-resource editing and full Level2.5/editor acceptance remain open in
+P9A-04. The sparse ignored stream probe currently fails with the installed
+FFmpeg/zvbi candidate's audited normative X27 field/normal-DRCS slot defects;
+retain that negative evidence and correct native bytes. QTM loading and native
+sparse preview/publication do not waive its independent/client proof. No fixture
+grants package edits or automatic publication.
 
 ## QTeletextMaker headed synthetic calibration
 

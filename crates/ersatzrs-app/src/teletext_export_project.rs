@@ -6,7 +6,7 @@
 
 use crate::{
     teletext_design_documents::TeletextSavedV1Region,
-    teletext_tti::{parse_teletext_tti, TeletextTtiBudget, TeletextTtiRecord},
+    teletext_tti::{parse_teletext_tti, TeletextTtiBudget, TeletextTtiDocument, TeletextTtiRecord},
 };
 use ersatzrs_addon_contract::{
     TeletextAuthoringMetadataWire, TeletextNavigationLinkWire, TeletextPageAddressWire,
@@ -215,6 +215,11 @@ pub enum TeletextExportAssetScope {
         resource_name: String,
         editor_ordinal: u64,
     },
+    /// Ordered bank through its highest authored S1. Null is protected,
+    /// editor-only undefined padding; it never creates a native resource.
+    DrcsTtiSet {
+        resource_names: Vec<Option<String>>,
+    },
 }
 impl fmt::Debug for TeletextExportAssetScope {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -237,6 +242,9 @@ impl<'de> Deserialize<'de> for TeletextExportAssetScope {
                 resource_name: String,
                 editor_ordinal: u64,
             },
+            DrcsTtiSet {
+                resource_names: Vec<Option<String>>,
+            },
         }
         Ok(match map_only(d)? {
             Fields::Resource {
@@ -254,6 +262,7 @@ impl<'de> Deserialize<'de> for TeletextExportAssetScope {
                 resource_name,
                 editor_ordinal,
             },
+            Fields::DrcsTtiSet { resource_names } => Self::DrcsTtiSet { resource_names },
         })
     }
 }
@@ -334,6 +343,7 @@ impl TeletextExportProject {
                 "qteletextmaker-1.0"
                     | "qteletextmaker-1.0-carrier-v2"
                     | "qteletextmaker-1.0-carrier-v3"
+                    | "qteletextmaker-1.0-carrier-v4"
             )
             || self.original.document_version != 1
         {
@@ -464,7 +474,7 @@ fn validate_pages(project: &TeletextExportProject, b: TeletextExportProjectBudge
     }
     Ok(())
 }
-fn linked_drcs_resource<'a>(
+fn linked_drcs_bank_resource<'a>(
     project: &'a TeletextExportProject,
     resource_name: &str,
 ) -> Option<&'a TeletextResourceIdentityWire> {
@@ -478,9 +488,60 @@ fn linked_drcs_resource<'a>(
     (matches!(
         identity.kind,
         TeletextResourceKindWire::Drcs | TeletextResourceKindWire::Gdrcs
-    ) && identity.subpage == 0
-        && identity.page.page != 0xff)
+    ) && identity.page.page != 0xff)
         .then_some(identity)
+}
+
+fn linked_drcs_resource<'a>(
+    project: &'a TeletextExportProject,
+    resource_name: &str,
+) -> Option<&'a TeletextResourceIdentityWire> {
+    linked_drcs_bank_resource(project, resource_name).filter(|identity| identity.subpage == 0)
+}
+
+fn same_drcs_bank(
+    left: &TeletextResourceIdentityWire,
+    right: &TeletextResourceIdentityWire,
+) -> bool {
+    left.kind == right.kind && left.page == right.page
+}
+
+fn linked_drcs_set_bank<'a>(
+    project: &'a TeletextExportProject,
+    resource_names: &[Option<String>],
+) -> Option<&'a TeletextResourceIdentityWire> {
+    if resource_names.is_empty() || resource_names.len() > 16 || resource_names.last()?.is_none() {
+        return None;
+    }
+    let anchor_name = resource_names.iter().find_map(Option::as_deref)?;
+    let bank = linked_drcs_bank_resource(project, anchor_name)?;
+    for (index, name) in resource_names.iter().enumerate() {
+        if let Some(name) = name {
+            let identity = linked_drcs_bank_resource(project, name)?;
+            if !flat_name(name)
+                || usize::from(identity.subpage) != index
+                || !same_drcs_bank(identity, bank)
+            {
+                return None;
+            }
+        }
+    }
+    // Every original resource in this bank must be the exact referenced file.
+    // This rejects hidden resources under nulls, omitted high S1, and duplicate
+    // native S1 with different physical update counters. No filler is authored.
+    for asset in &project.assets {
+        if let TeletextExportAssetScope::Resource { identity, .. } = &asset.scope {
+            if same_drcs_bank(identity, bank)
+                && resource_names
+                    .get(usize::from(identity.subpage))?
+                    .as_deref()
+                    != Some(asset.name.as_str())
+            {
+                return None;
+            }
+        }
+    }
+    Some(bank)
 }
 
 fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudget) -> Result<()> {
@@ -532,8 +593,22 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
                 }
                 format!("d:{resource_name}")
             }
+            TeletextExportAssetScope::DrcsTtiSet { resource_names } => {
+                if project.editor_profile != "qteletextmaker-1.0-carrier-v4" || a.unit_count != 0 {
+                    return Err(indexed(K::Mapping, i));
+                }
+                let bank = linked_drcs_set_bank(project, resource_names)
+                    .ok_or_else(|| indexed(K::Mapping, i))?;
+                format!(
+                    "s:{:?}:{}:{}",
+                    bank.kind, bank.page.magazine, bank.page.page
+                )
+            }
         };
-        let raw_units = !matches!(&a.scope, TeletextExportAssetScope::DrcsTti { .. });
+        let raw_units = !matches!(
+            &a.scope,
+            TeletextExportAssetScope::DrcsTti { .. } | TeletextExportAssetScope::DrcsTtiSet { .. }
+        );
         if !flat_name(&a.name)
             || !names.insert(a.name.as_str())
             || !scopes.insert(identity)
@@ -548,6 +623,21 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
     }
     Ok(())
 }
+fn parse_bounded_tti(
+    bytes: &[u8],
+    budget: TeletextExportProjectBudget,
+    index: usize,
+) -> Result<TeletextTtiDocument> {
+    parse_teletext_tti(
+        bytes,
+        TeletextTtiBudget {
+            max_bytes: budget.max_file_bytes,
+            max_records: budget.max_units,
+        },
+    )
+    .map_err(|_| indexed(TeletextExportProjectFailure::Tti, index))
+}
+
 fn validate_tti_identity(
     bytes: &[u8],
     editor_page: u16,
@@ -556,14 +646,7 @@ fn validate_tti_identity(
     index: usize,
 ) -> Result<()> {
     use TeletextExportProjectFailure as K;
-    let tti = parse_teletext_tti(
-        bytes,
-        TeletextTtiBudget {
-            max_bytes: budget.max_file_bytes,
-            max_records: budget.max_units,
-        },
-    )
-    .map_err(|_| indexed(K::Tti, index))?;
+    let tti = parse_bounded_tti(bytes, budget, index)?;
     let mut pn = 0;
     let mut sc = 0;
     for record in tti.records() {
@@ -587,6 +670,117 @@ fn validate_tti_identity(
         }
     }
     if pn != 1 || sc != 1 {
+        return Err(indexed(K::Tti, index));
+    }
+    Ok(())
+}
+
+struct DrcsTtiSetGroup {
+    ordinal: usize,
+    padding: bool,
+    subcode_seen: bool,
+    undefined_modes_seen: bool,
+}
+impl DrcsTtiSetGroup {
+    fn finish(&self, index: usize) -> Result<()> {
+        if !self.subcode_seen || (self.padding && !self.undefined_modes_seen) {
+            return Err(indexed(TeletextExportProjectFailure::Tti, index));
+        }
+        Ok(())
+    }
+    fn record(
+        &mut self,
+        record: &TeletextTtiRecord,
+        undefined_modes: &[u32; 13],
+        index: usize,
+    ) -> Result<()> {
+        use TeletextExportProjectFailure as K;
+        match record {
+            TeletextTtiRecord::SubpageOrdinal(ordinal) => {
+                if self.subcode_seen || u64::try_from(self.ordinal).ok() != Some(*ordinal) {
+                    return Err(indexed(K::Tti, index));
+                }
+                self.subcode_seen = true;
+            }
+            TeletextTtiRecord::Packet {
+                row: 28,
+                designation: 3,
+                words,
+            } if self.padding => {
+                if self.undefined_modes_seen || words != undefined_modes {
+                    return Err(indexed(K::Tti, index));
+                }
+                self.undefined_modes_seen = true;
+            }
+            _ if self.padding => return Err(indexed(K::Tti, index)),
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+fn undefined_drcs_modes(kind: TeletextResourceKindWire) -> [u32; 13] {
+    // Editor-only canonical X28/3: monochrome coding zero, all 48 modes F,
+    // reserved bits zero. These words define no glyph or native resource.
+    let mut words = [0; 13];
+    words[0] = if kind == TeletextResourceKindWire::Gdrcs {
+        4
+    } else {
+        5
+    };
+    words[1..11].fill(0x3ffff);
+    words[11] = 0xfff;
+    words
+}
+
+fn validate_tti_set_identity(
+    bytes: &[u8],
+    project: &TeletextExportProject,
+    resource_names: &[Option<String>],
+    budget: TeletextExportProjectBudget,
+    index: usize,
+) -> Result<()> {
+    use TeletextExportProjectFailure as K;
+    let bank =
+        linked_drcs_set_bank(project, resource_names).ok_or_else(|| indexed(K::Mapping, index))?;
+    let page = (u16::from(bank.page.magazine) << 8) | u16::from(bank.page.page);
+    let undefined_modes = undefined_drcs_modes(bank.kind);
+    let tti = parse_bounded_tti(bytes, budget, index)?;
+    let mut groups = 0;
+    let mut current: Option<DrcsTtiSetGroup> = None;
+    for record in tti.records() {
+        if let TeletextTtiRecord::PageNumber {
+            page: actual,
+            editor_ordinal,
+        } = record
+        {
+            if let Some(group) = &current {
+                group.finish(index)?;
+            }
+            if *actual != page
+                || u64::try_from(groups).ok() != Some(*editor_ordinal)
+                || groups >= resource_names.len()
+            {
+                return Err(indexed(K::Tti, index));
+            }
+            current = Some(DrcsTtiSetGroup {
+                ordinal: groups,
+                padding: resource_names[groups].is_none(),
+                subcode_seen: false,
+                undefined_modes_seen: false,
+            });
+            groups += 1;
+        } else {
+            current
+                .as_mut()
+                .ok_or_else(|| indexed(K::Tti, index))?
+                .record(record, &undefined_modes, index)?;
+        }
+    }
+    current
+        .ok_or_else(|| indexed(K::Tti, index))?
+        .finish(index)?;
+    if groups != resource_names.len() {
         return Err(indexed(K::Tti, index));
     }
     Ok(())
@@ -630,16 +824,28 @@ impl TeletextExportReceiptBody {
                 if file.bytes.len() != mapping.bytes {
                     return Err(indexed(K::Files, i));
                 }
-                if let TeletextExportAssetScope::DrcsTti {
-                    resource_name,
-                    editor_ordinal,
-                } = &mapping.scope
-                {
-                    let identity = linked_drcs_resource(&self.project, resource_name)
-                        .ok_or_else(|| indexed(K::Mapping, i))?;
-                    let editor_page =
-                        (u16::from(identity.page.magazine) << 8) | u16::from(identity.page.page);
-                    validate_tti_identity(&file.bytes, editor_page, *editor_ordinal, b, i)?;
+                match &mapping.scope {
+                    TeletextExportAssetScope::DrcsTti {
+                        resource_name,
+                        editor_ordinal,
+                    } => {
+                        let identity = linked_drcs_resource(&self.project, resource_name)
+                            .ok_or_else(|| indexed(K::Mapping, i))?;
+                        let editor_page = (u16::from(identity.page.magazine) << 8)
+                            | u16::from(identity.page.page);
+                        validate_tti_identity(&file.bytes, editor_page, *editor_ordinal, b, i)?;
+                    }
+                    TeletextExportAssetScope::DrcsTtiSet { resource_names } => {
+                        validate_tti_set_identity(
+                            &file.bytes,
+                            &self.project,
+                            resource_names,
+                            b,
+                            i,
+                        )?;
+                    }
+                    TeletextExportAssetScope::Resource { .. }
+                    | TeletextExportAssetScope::Magazine { .. } => {}
                 }
             } else {
                 return Err(indexed(K::Files, i));
@@ -729,6 +935,8 @@ impl<'de> Visitor<'de> for Scan<'_> {
     fn visit_seq<A: SeqAccess<'de>>(self, mut a: A) -> std::result::Result<(), A::Error> {
         let max = match self.field {
             Some("files" | "assets") => self.budget.max_files,
+            // Undefined editor positions are not files or native units.
+            Some("resource_names") => 16,
             Some("pages") if !self.authoring => self.budget.max_files,
             Some("producers") => self.budget.max_producers,
             Some("bytes") => self.budget.max_file_bytes,
