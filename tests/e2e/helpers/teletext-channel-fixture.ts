@@ -353,11 +353,17 @@ export class TeletextChannelFixture {
   designs(channel?: number): { Id: number; Name: string; Revision: number; IsDeleted: number; ChannelId: number; Digest: string }[] {
     const channels = channel === undefined ? this.channels : [channel, channel];
     if (!channels.every(value => this.channels.includes(value))) throw new Error('Design lookup must stay within the fixture channels.');
+    // The stored declared role selects its exact private codec association;
+    // never treat an effective original as a base selection via COALESCE.
+    const owner = `CASE r."DocumentVersion"
+      WHEN 1 THEN json_extract(CAST(r."Document" AS TEXT),'$.selection.channel_id')
+      WHEN 2 THEN json_extract(CAST(r."Document" AS TEXT),'$.effective_selection.channel_id')
+      END`;
     return this.database.prepare(`SELECT h."Id",h."Name",h."Revision",h."IsDeleted",r."Digest",
-      json_extract(CAST(r."Document" AS TEXT),'$.selection.channel_id') AS "ChannelId"
+      ${owner} AS "ChannelId"
       FROM "TeletextDesign" h JOIN "TeletextDesignRevision" r
       ON r."DesignId"=h."Id" AND r."Revision"=h."Revision"
-      WHERE json_extract(CAST(r."Document" AS TEXT),'$.selection.channel_id') IN (?,?) ORDER BY h."Id"`)
+      WHERE ${owner} IN (?,?) ORDER BY h."Id"`)
       .all(...channels) as ReturnType<TeletextChannelFixture['designs']>;
   }
 

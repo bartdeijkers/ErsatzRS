@@ -6,6 +6,10 @@ attach directly to ErsatzRS URLs. No replay server or packet rewrite is used.
 Requested page controls and screenshots require independent visual inspection;
 this script does not certify navigation, panels or complete Level 2.5 acceptance
 and never releases the native completion marker automatically.
+
+Explicit --captured-replay uses two byte-identical finite /synthetic.ts replays
+of hash-checked ordinary captures. That mode does not attach to the application
+and proves neither live updates nor source provenance on its own.
 """
 
 import argparse
@@ -26,6 +30,7 @@ WHERE = REPO / "scripts/e2e/teletext-native-where.py"
 MAX_READY = 64 * 1024
 MAX_IMAGE = 16 * 1024 * 1024
 MAX_LOG = 8 * 1024 * 1024
+MAX_CAPTURE = 8 * 1024 * 1024
 TRIAL_SECONDS = 120
 RECEIPTED = {
     GUI: "2ae2f7d95241027194f1355341a1fe51cde6860bce6a248c5b181194ba3eaf15",
@@ -88,10 +93,51 @@ def settle(deadline, seconds):
     time.sleep(seconds)
 
 
+def replay_ready(ready, directory):
+    if (set(ready) != {"probe_version", "mode", "expected_pages", "subcode", "viewers"}
+            or type(ready["probe_version"]) is not int or ready["probe_version"] != 1
+            or ready["mode"] != "captured-ordinary-replay"
+            or ready["expected_pages"] != [200, 201]
+            or type(ready["subcode"]) is not int or ready["subcode"] != 0
+            or not isinstance(ready["viewers"], list) or len(ready["viewers"]) != 2):
+        raise RuntimeError("Expected closed captured-ordinary replay manifest for pages 200/201")
+    by_theme, ports = {}, set()
+    for item in ready["viewers"]:
+        if (not isinstance(item, dict) or set(item) != {"viewer", "url", "capture"}
+                or item["viewer"] not in ["day", "night"] or item["viewer"] in by_theme):
+            raise RuntimeError("Expected two distinct replay viewer labels without application IDs")
+        provenance = item["capture"]
+        if (not isinstance(provenance, dict) or set(provenance) != {"file", "bytes", "sha256"}
+                or not isinstance(provenance["file"], str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,159}", provenance["file"])
+                or type(provenance["bytes"]) is not int
+                or not isinstance(provenance["sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", provenance["sha256"])):
+            raise RuntimeError("Expected bounded capture basename, exact byte count and SHA256")
+        body = bounded_bytes(directory / provenance["file"], MAX_CAPTURE)
+        if (len(body) != provenance["bytes"] or digest(body) != provenance["sha256"]
+                or len(body) % 188 or any(body[offset] != 0x47 for offset in range(0, len(body), 188))):
+            raise RuntimeError("Captured ordinary bytes do not match their replay manifest")
+        if not isinstance(item["url"], str):
+            raise RuntimeError("Expected literal owned replay URL")
+        parsed = urlsplit(item["url"])
+        if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
+                or parsed.username is not None or parsed.password is not None
+                or not parsed.port or parsed.path != "/synthetic.ts" or parsed.query or parsed.fragment):
+            raise RuntimeError("Captured replay requires exact loopback /synthetic.ts URLs")
+        ports.add(parsed.port)
+        by_theme[item["viewer"]] = item
+    if set(by_theme) != {"day", "night"} or len(ports) != 2:
+        raise RuntimeError("Expected two distinct owned one-request replay server ports")
+    return by_theme
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("native_ready_file", type=Path)
     parser.add_argument("new_output_directory", type=Path)
+    parser.add_argument("--captured-replay", action="store_true",
+                        help="explicit finite captured-ordinary replay manifest; no live application attachment")
     args = parser.parse_args()
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("A real headed X11 display is required")
@@ -121,24 +167,28 @@ def main():
     if ready.get("probe_version") != 1:
         raise RuntimeError("Unsupported native readiness version")
     channels = ready.get("channels")
-    if (not isinstance(channels, list) or len(channels) != 2
-            or not all(isinstance(v, dict) for v in channels)):
-        raise RuntimeError("Expected two native ready channels")
-    by_theme, ports = {}, set()
-    for expected_id, theme in [(1, "day"), (2, "night")]:
-        channel = next((v for v in channels if v.get("channel_id") == expected_id), None)
-        if not channel or channel.get("theme") != theme:
-            raise RuntimeError("Native readiness channel/theme mismatch")
-        parsed = urlsplit(channel.get("url", ""))
-        if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
-                or parsed.username is not None or parsed.password is not None
-                or not parsed.port or parsed.path != f"/iptv/hls-direct/{expected_id}.ts"
-                or parsed.query or parsed.fragment):
-            raise RuntimeError("Native trial requires exact loopback ordinary URLs")
-        ports.add(parsed.port)
-        by_theme[theme] = channel
-    if len(ports) != 1:
-        raise RuntimeError("Expected one owned native host port")
+    if args.captured_replay:
+        by_theme = replay_ready(ready, ready_path.parent)
+    else:
+        if (not isinstance(channels, list) or len(channels) != 2
+                or not all(isinstance(v, dict) for v in channels)):
+            raise RuntimeError("Expected two native ready channels")
+        by_theme, ports = {}, set()
+        for expected_id, theme in [(1, "day"), (2, "night")]:
+            channel = next((v for v in channels if v.get("channel_id") == expected_id), None)
+            if not channel or channel.get("theme") != theme:
+                raise RuntimeError("Native readiness channel/theme mismatch")
+            parsed = urlsplit(channel.get("url", ""))
+            if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
+                    or parsed.username is not None or parsed.password is not None
+                    or not parsed.port or parsed.path != f"/iptv/hls-direct/{expected_id}.ts"
+                    or parsed.query or parsed.fragment):
+                raise RuntimeError("Native trial requires exact loopback ordinary URLs")
+            ports.add(parsed.port)
+            by_theme[theme] = channel
+        if len(ports) != 1:
+            raise RuntimeError("Expected one owned native host port")
+    first_page, next_page = ("200", "201") if args.captured_replay else ("124", "125")
     destination = args.new_output_directory.absolute()
     destination.mkdir()  # Existing directories/files/symlinks are never overwritten.
     record = (destination / "trial.ndjson").open("x", encoding="utf-8")
@@ -152,12 +202,19 @@ def main():
         print(encoded, flush=True)
 
     try:
-        emit({"event": "identity", "sources": sources, "native_ready_sha256": digest(raw_ready),
-              "channels": channels, "source": ready.get("source"),
+        emit({"event": "identity", "sources": sources,
+              **({"replay_manifest_sha256": digest(raw_ready), "viewers": ready["viewers"],
+                  "captured_ordinary_replay": True, "live_application_url_attachment": False,
+                  "expected_replay_pacing_rate": 0.25, "client_playback_rate": 0.25,
+                  "source_provenance_proven": False}
+                 if args.captured_replay else {"native_ready_sha256": digest(raw_ready),
+                                              "channels": channels, "source": ready.get("source")}),
               "client": "VLC 3.0.20-3build6", "decoder": "libzvbi 0.2.42-2",
-              "scope": "MAIN glyph/palette and requested page navigation inspection",
+              "scope": "Finite captured-ordinary MAIN palette/AZ and requested page navigation inspection"
+                       if args.captured_replay else "MAIN glyph/palette and requested page navigation inspection",
               "panel_display_proven": False, "rendered_navigation_proven": False,
-              "limitations": "Installed formatter has 41 columns; 56-column side panels remain unproven."})
+              "limitations": "Interactive numeric entry remains unproven; WSLg keyboard input can cross owned windows. Installed formatter has 41 columns; 56-column side panels remain unproven."
+                             if args.captured_replay else "Installed formatter has 41 columns; 56-column side panels remain unproven."})
         for index, theme in enumerate(["day", "night"]):
             before = windows(deadline)
             owned = {"theme": theme}
@@ -174,7 +231,8 @@ def main():
             client = subprocess.Popen(
                 ["/usr/bin/vlc", "--no-one-instance", "--no-media-library", "--no-qt-privacy-ask",
                  "--ignore-config", "--no-metadata-network-access", "--aout=adummy", "--vout=xcb_x11",
-                 "--network-caching=100", "--rate=1", "--vbi-opaque", "--vbi-page=124", "--key-subtitle-track=v",
+                 "--network-caching=100", "--rate=0.25" if args.captured_replay else "--rate=1",
+                 "--vbi-opaque", f"--vbi-page={first_page}", "--key-subtitle-track=v",
                  "--no-video-title-show", "--no-fullscreen", "--no-qt-video-autoresize",
                  "--vbi-level=2", "--no-vbi-text", "--play-and-exit", "--verbose=2", metadata["url"]],
                 env=env, stdout=client_log, stderr=client_log, cwd=REPO,
@@ -223,7 +281,7 @@ def main():
                 if time.monotonic() >= activation_deadline:
                     raise RuntimeError("Native subtitle-track activation did not start zvbi")
                 settle(deadline, 0.2)
-        for page, stage in [("124", "first"), ("125", "next"), ("124", "return")]:
+        for page, stage in [(first_page, "first"), (next_page, "next"), (first_page, "return")]:
             for owned in clients:
                 assert_owned_window(owned["window"], owned["client"].pid, deadline)
                 x, y = owned["origin"]["x"], owned["origin"]["y"]
@@ -247,11 +305,12 @@ def main():
                 image_hash = digest(bounded_bytes(image, MAX_IMAGE))
                 emit({"event": "captured", "theme": owned["theme"], "requested_page": page,
                       "stage": stage, "image": image.name, "sha256": image_hash,
-                      "rendered_page_verified": False, "expected_header": f"{page}.20"})
+                      "rendered_page_verified": False, "expected_header": f"{page}.00" if args.captured_replay else f"{page}.20"})
         for owned in clients:
             client_exit = owned["client"].wait(timeout=remaining(deadline, 80))
             emit({"event": "finished", "theme": owned["theme"], "client_exit": client_exit,
-                  "ordinary_url": owned["metadata"]["url"]})
+                  **({"replay_url": owned["metadata"]["url"]} if args.captured_replay
+                     else {"ordinary_url": owned["metadata"]["url"]})})
             if client_exit != 0:
                 raise RuntimeError("Owned live-route client did not exit successfully")
             for key in ["client_log"]:
@@ -259,10 +318,18 @@ def main():
                 body = bounded_bytes(Path(owned[key].name), MAX_LOG) if Path(owned[key].name).stat().st_size else b""
                 emit({"event": "log", "theme": owned["theme"], "name": Path(owned[key].name).name,
                       "bytes": len(body), "sha256": digest(body)})
-        emit({"event": "trial_complete", "ordinary_live_url_attachment_and_client_exit_proven": True,
+        emit({"event": "trial_complete",
+              **({"captured_ordinary_replay_and_client_exit_proven": True,
+                  "ordinary_live_url_attachment_proven": False, "source_provenance_proven": False,
+                  "expected_replay_pacing_rate": 0.25, "client_playback_rate": 0.25,
+                  "interactive_numeric_entry_verified": False,
+                  "limitations": "Interactive numeric entry remains unproven; this trial requests pages through the owned Qt spin arrows.",
+                  "next": "Inspect actual 200/201 headers, AZ and distinct palettes; link original admin capture provenance separately."}
+                 if args.captured_replay else {"ordinary_live_url_attachment_and_client_exit_proven": True,
+                                               "next": "Inspect actual headers, day-only Q and red/blue indexed DRCS/Z in six captured windows."}),
               "native_completion_released": False,
               "rendered_navigation_proven": False, "theme_isolation_proven": False,
-              "panel_display_proven": False, "next": "Inspect actual headers, day-only Q and red/blue indexed DRCS/Z in six captured windows."})
+              "panel_display_proven": False})
     except Exception as failure:
         emit({"event": "failed", "reason": str(failure), "rendered_navigation_proven": False})
         raise

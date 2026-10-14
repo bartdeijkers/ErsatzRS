@@ -66,12 +66,32 @@ async function baseOff(page: Page, fixture: TeletextChannelFixture, channel: num
 }
 async function resetScript(page: Page, fixture: TeletextChannelFixture, channel: number, id: number | null, count: number): Promise<void> {
   fixture.writeScriptedControls(channel, id, count);
-  const response = await page.request.post('/admin-api/rebuild_playout', {
-    form: { id: String(channel), mode: 'reset', preserve_current: 'false' }, maxRedirects: 0,
+  const text = translations('en_us');
+  await page.goto('/playouts'); await ready(page, true);
+  const observed = fixture.database.prepare('SELECT "Name" FROM "Channel" WHERE "Id"=?').get(channel) as { Name: string } | undefined;
+  expect(observed).toBeDefined();
+  await page.getByPlaceholder(text('SearchForPlayouts'), { exact: true }).fill(observed!.Name);
+  const row = page.getByRole('row').filter({
+    has: page.locator(`a[href="/playouts/scripted/${channel}"]`),
   });
+  await expect(row).toHaveCount(1);
+  await row.getByRole('button', { name: text('RebuildPlayout'), exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: text('RebuildPlayout'), exact: true });
+  await dialog.getByLabel(text('PlayoutRebuildMode'), { exact: true }).selectOption('reset');
+  await dialog.getByRole('checkbox', { name: text('KeepCurrentProgramme'), exact: true }).uncheck();
+  // Observe the URL emitted by the actual hydrated action. Server function
+  // paths carry build hashes; the harness must not guess a registered URL.
+  const posted = page.waitForResponse(response => response.request().method() === 'POST'
+    && new URL(response.url()).pathname.startsWith('/admin-api/rebuild_playout'));
+  await dialog.getByRole('button', { name: text('QueuePlayoutBuild'), exact: true }).click();
+  const response = await posted;
   expect(response.status()).toBe(200);
-  const body = await response.json();
-  expect(body).toEqual({ accepted: 1, coalesced: 0 });
+  const fields = new URLSearchParams(response.request().postData() ?? '');
+  expect(fields.get('id')).toBe(String(channel));
+  expect(fields.get('mode')).toBe('reset');
+  expect(fields.get('preserve_current')).toBe('false');
+  expect(await response.json()).toEqual({ accepted: 1, coalesced: 0 });
+  await expect(dialog).toBeHidden();
   await expect.poll(() => {
     const rows = fixture.scriptedIntervals(channel);
     if (rows.length !== 1 || rows[0].State !== Number(id !== null) || rows[0].ProfileId !== id) return false;
@@ -199,7 +219,7 @@ async function localized(page: Page, fixture: TeletextChannelFixture, url: strin
     await expect(active.getByRole('heading')).toHaveText(text('TeletextEffectiveAuthoringTitle'));
     await expect(active).toContainText(text('TeletextEffectiveAuthoringHelp'));
     await expect(active).toContainText(text('TeletextEffectiveScopeExpiry'));
-    await expect(active.locator('[name="entry_addon_id"] option').filter({ hasText: 'Synthetic teletext themes' })).toHaveValue(fixture.addonId);
+    await expect(active.locator('[name="entry_addon_id"] option').filter({ hasText: 'Synthetic teletext themes' })).toHaveAttribute('value', fixture.addonId);
     await expect(page.getByTestId('teletext-authoring-form').getByRole('button')).toBeDisabled();
     await assertPreview(page, theme);
     const publicationView = page.getByTestId('teletext-publication');
@@ -250,7 +270,15 @@ for (const js of [true, false]) for (const dark of [false, true]) {
     test.skip(!process.env.FFMPEG_PATH, 'Requires the explicitly selected FFmpeg 9 playback fixture.');
     test.setTimeout(480_000);
     testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
+    testInfo.annotations.push({ type: 'scripted-setup', description: 'The existing hydrated Playouts Reset action prepares Lua scopes; the authoring pages retain their configured JavaScript/no-JS mode.' });
     const fixture = new TeletextChannelFixture(databasePath!, { authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+    // The real Playouts search matches Channel.Name, not Channel.Number.
+    // Unique initial owned names avoid ten-row pagination collisions with
+    // retained fixtures; all later authoring/publication must preserve them.
+    for (const channel of fixture.channels) {
+      fixture.database.prepare('UPDATE "Channel" SET "Name"=? WHERE "Id"=?')
+        .run(`Synthetic effective teletext ${channel}`, channel);
+    }
     fixture.configureScripted(); fixture.setAuthoringPolicy();
     const capturePrefix = js && !dark && process.env.ERSATZRS_TELETEXT_EFFECTIVE_ADMIN_CAPTURE
       ? `${process.env.ERSATZRS_TELETEXT_EFFECTIVE_ADMIN_CAPTURE}.${testInfo.project.name}` : undefined;
@@ -266,8 +294,10 @@ for (const js of [true, false]) for (const dark of [false, true]) {
     const foreignBefore = foreign(fixture);
     const context = await browser.newContext({ baseURL, javaScriptEnabled: js, viewport: { width: 1280, height: 900 } });
     const pages = [await context.newPage(), await context.newPage()];
+    const schedulingContext = await browser.newContext({ baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
+    const schedulingPage = await schedulingContext.newPage();
     const errors: string[] = [];
-    for (const page of pages) {
+    for (const page of [...pages, schedulingPage]) {
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     }
@@ -278,7 +308,7 @@ for (const js of [true, false]) for (const dark of [false, true]) {
       const night = await profile(pages[0], fixture, 'night', js);
       for (const [index, id] of [[0, day], [1, night]] as const) {
         await baseOff(pages[index], fixture, fixture.channels[index], id, js);
-        await resetScript(pages[index], fixture, fixture.channels[index], id, 80);
+        await resetScript(schedulingPage, fixture, fixture.channels[index], id, 80);
       }
       expect(fixture.calls()).toEqual([]);
       const safe = safety(fixture);
@@ -290,6 +320,11 @@ for (const js of [true, false]) for (const dark of [false, true]) {
       }
       expect(fixture.calls()).toEqual(['day', 'night']);
       expect(fixture.designs()).toHaveLength(2);
+      for (const channel of fixture.channels) {
+        const designs = fixture.designs(channel);
+        expect(designs).toHaveLength(1);
+        expect(designs[0].ChannelId).toBe(channel);
+      }
       expect(fixture.request('day')?.channels).toEqual([]);
       expect(fixture.request('night')?.channels).toEqual([]);
       expect(publication(fixture).map(rows => rows.length)).toEqual([0, 0, 0, 0]);
@@ -334,7 +369,7 @@ for (const js of [true, false]) for (const dark of [false, true]) {
       expect(fixture.calls()).toEqual(['day', 'night']);
       await responsive(pages[0], testInfo);
       await language(pages[0], 'en-us', dark);
-      await resetScript(pages[0], fixture, fixture.channels[0], null, capturePrefix ? 8 : 4);
+      await resetScript(schedulingPage, fixture, fixture.channels[0], null, capturePrefix ? 8 : 4);
       await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], js);
       await expect(pages[0].getByTestId('teletext-effective-authoring')).toHaveAttribute('data-state', 'absent');
       const absentUrl = await prepare(pages[0], fixture, 'absent', js, true);
@@ -395,7 +430,10 @@ for (const js of [true, false]) for (const dark of [false, true]) {
           language: fixture.originalUi.get('pages.language') ?? 'en-us',
           is_dark_mode: String(/^(1|true)$/i.test(fixture.originalUi.get('pages.is_dark_mode') ?? 'True')),
         }, maxRedirects: 0 });
-      } finally { await context.close(); fixture.close(); }
+      } finally {
+        try { await context.close(); }
+        finally { try { await schedulingContext.close(); } finally { fixture.close(); } }
+      }
     }
   });
 }

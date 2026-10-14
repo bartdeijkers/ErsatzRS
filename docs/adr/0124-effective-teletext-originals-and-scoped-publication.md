@@ -14,7 +14,10 @@ Separate scoped request/accepted pointers, original-scope confirmation, native
 promotion/recovery and version-2 live direct-route selection are connected.
 The channel admin now observes effective scope and dispatches concept preparation,
 immutable preview and explicit request/acceptance by stored revision role,
-including absence without invented content. Headed integration proof is pending.
+including absence without invented content. A representative headed all-culture
+admin/Lua flow now reaches ordinary output and independently decoded, visibly
+navigable two-theme captured replay. Effective-role editor interchange and live
+application-client transitions remain open.
 P9A-04 owns verification and remaining userflow gaps. This does not establish
 same-URL suitable-client transitions or full engine acceptance.
 

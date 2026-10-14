@@ -32,7 +32,10 @@ release section when tagging a release.
   now prepares, previews and explicitly selects effective-scope originals,
   including Lua On over base Off and genuine absence concepts. Historical
   previews survive expiry; fresh publication retains whole-scope checks and
-  separate base/effective pointers. Current guide qualification, scoped editor
+  separate base/effective pointers. The synthetic flow is now verified through
+  localized hydrated/no-JS admin forms, ordinary AV-safe streams and independently
+  decoded client navigation with contrasting channel themes. Current guide
+  qualification, scoped editor
   interchange and complete admin/Lua/client delivery remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require

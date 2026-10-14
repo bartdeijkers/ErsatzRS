@@ -2724,7 +2724,48 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
-2026-10-14 effective admin integration (native proof; headed proof pending):
+2026-10-14 representative effective admin -> ordinary route -> client flow:
+Criterion proven in this slice: one installed synthetic producer, two channels
+with independently chosen day/night profiles, actual Lua Reset selection over
+saved base Off, bounded validation/concept save, same-model preview/navigation,
+explicit scoped request/publication, and actual ordinary-route output.
+Eight headed identities pass: Chromium151.0.7922.34 and Firefox153.0, each
+JavaScript on/off x light/dark, all nine cultures, native authoring forms,
+320px keyboard focus and200-percent zoom. The existing hydrated Playouts Reset
+sets up Lua; independent no-JS authoring contexts remain genuinely no-JS.
+Seven exact finite ordinary TCP captures preserve AV decoding and pass TSDuck
+3.44-4676: sync/TEI, all-PID continuity/duplicates/PCR/PTS/DTS leap checks and
+expected PSI/teletext presence. Pending, rejected Off publication and explicit
+Off retain AV without authored PID; only selected day/night contain it.
+Four FFmpeg9/libzvbi page decodes independently recover200/201 AZ. Actual owned
+VLC3.0.20-3build6/libzvbi0.2.42-2 windows render the unchanged selected captures,
+with red/blue AZ simultaneously and visually checked Qt navigation200->201->200.
+This is finite byte-identical replay with matching quarter pacing/playback,
+not a live application-client or same-response transition/restart proof.
+The41-column installed formatter does not prove side panels/full Level2.5;
+numeric keyboard entry remains unproven. No restriction is accepted.
+Initial UI harness failures and both negative client trials are retained:
+real Reset modal/Name search, exact stored-role association and option attribute
+correct the harness; owned Qt controls avoid WSLg crossed keyboard focus, and
+matching replay/client rates correct the observed clock mismatch. No production
+encoding, deadlines, acceptance or packages were changed for these corrections.
+Ordinary smoke passes legacy/hybrid MPEG-TS and segmenter/direct HLS.
+Reuse the42 native/SSR passes and strict Clippy below: all compiled source hashes
+remain unchanged. Matched served binary/pkg hashes are retained for all runs.
+Canonical flow receipt: tmp/phase9-effective-admin/flow-identity.json, SHA256
+ d1fd805b267bb68c606dbb04c3679e93cd10e1990a11338215ba77e9fe186b69.
+It links sources, logs, versions, all7 captures, independent decoder/transport
+receipts and six inspected client frames. Existing Playwright output cleanup
+rotated earlier Chromium JSON/screenshots; terminal logs, exact captures and
+kept databases remain. Firefox JSON/24 screenshots are retained outside cleanup;
+future runs use distinct --output paths. This is representative partial proof,
+not full engine acceptance. Next connect effective-role QTeletextMaker interchange
+through saved original metadata and protected edit boundaries; current-guide
+qualification, automatic scoped readiness/applied acknowledgement, same-response
+live client changes, whole-host restart and all existing engine/editor/Lua/
+Next/native/platform/playback criteria remain open. No milestone is closed.
+
+2026-10-14 effective admin integration (earlier native checkpoint):
 Criterion: actual published Lua profile selection -> bounded native validation and
 immutable concept -> same-model preview -> explicit scoped publication;
 ordinary-route and suitable-client evidence must then qualify the connected flow.
@@ -2763,8 +2804,8 @@ immutable restored design inside the same owned worker; functional evidence is
 retained with unchanged output/deadline semantics. Formatting and progress pass.
 Canonical receipt: tmp/phase9-effective-admin/identity.json, SHA256
 346d526f335d37831372aac6c71a280b26d3d3b4ddbc93fa650bda136c59609e.
-It records exact sources, logs, failures and pending proof. The matched headed
-Chromium flow is live in process57491; no browser/client result is claimed.
+It records exact sources, logs, failures and the then-pending proof. The subsequent
+representative flow receipt above owns current headed/client results.
 No acceptance/status/dependency is changed. Full
 authored Level2.5, editor role interchange, themes/zones,
 Lua/Continue/Refresh/Reset/restart, source/Next/platform and playback safety
