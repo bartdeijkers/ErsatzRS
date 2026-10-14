@@ -62,6 +62,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-14 browser CI correction: PR105's Chromium job demonstrates a leaked
+synthetic Scripted playout from a preceding browser case. Scoped per-case
+fixture cleanup fixes it; all26 affected headed Chromium/Firefox tests pass
+with strict Health assertions intact. All non-browser CI gates pass. Both
+original full browser jobs finish with only the same fixture failure; their
+logs and failure contexts/traces are retained. Push the correction and require
+full green CI on the final exact head before remote main. No release is authorized.
+
 2026-10-14 new-main integration: PR105 preserves remote main35c74ee0 and all
 ongoing Phase9 work. Fresh6312 nextest/doctests, workspace Clippy, ordinary
 Native lifecycle smoke, structural parity and matched bundle gates pass.

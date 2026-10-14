@@ -534,6 +534,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Clean up owned browser-test playouts after each case so synthetic Scripted
+  failures do not contaminate later Health acceptance checks.
 - Prevent Next Copy playback verification from failing on startup database
   writers; seed its isolated engine/profile settings with a bounded wait and
   one transaction.

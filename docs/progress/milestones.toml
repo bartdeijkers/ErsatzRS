@@ -21996,6 +21996,23 @@ remote main. Canonical remote receipts are the UCU-10 application PR and its
 CI check suite, followed by the main push run; inspect their exact SHA rather
 than inferring remote delivery from this local milestone status.
 
+Browser CI correction (2026-10-14): full run38562390156 atc1a62516 passes
+Format, Clippy, Test, Next engine, Cargo deny, documentation and commit lint.
+Chromium reports one failure: the playout adaptation browser fixture retains
+a synthetic Scripted channel without a checkpoint, contaminating the later
+global Scripted Health result. The existing headed runner reproduces the exact
+failure with only the adaptation and Health cases. Remove only this spec's
+owned channels after each case, using foreign-key cascades and a transaction;
+retain every exact Health, timeline and UI assertion. All26 affected headed
+Chromium/Firefox cases then pass in6.4m, including both themes and JavaScript
+enabled/disabled. Logs: tmp/ucu10-runtime-audit/health-leak-{before,after}.log.
+No production source or runtime identity changes; previous Rust/runtime gates
+remain valid. Let the original Firefox job finish: both full suites report
+only this same failure, with367 Chromium passes/5 skips and342 Firefox
+passes/30 skips; each has three unrun serial successors. Preserve both job
+logs and original failure contexts/traces under tmp/ucu10-runtime-audit/.
+Require green full CI on the corrected exact head before remote main.
+
 New-main integration (2026-10-14): the maintainer identifies remote main
 35c74ee04b40fa20f10489a7ad0dec2e0b5c245e after application head1e3f5d89 is pushed
 in PR105. Integrate all three new main commits, preserving their Phase9 work;
