@@ -8,6 +8,12 @@ use tokio::time::Instant;
 
 use super::{TeletextOutputBinding, TeletextOutputRole, TeletextPumpError};
 use crate::transport::iptv::teletext_accepted_output::TeletextAcceptedOutputIntent;
+use crate::transport::iptv::teletext_live_output::TeletextLiveOutputIntent;
+
+pub(crate) struct LiveTeletextAdmission {
+    pub intent: Arc<TeletextLiveOutputIntent>,
+    pub deadline: Instant,
+}
 
 /// Original route ownership; a command snapshot belongs to a particular child.
 pub(crate) struct AcceptedTeletextAdmission {
@@ -23,6 +29,7 @@ pub struct TeletextOutputAdmission {
     role: TeletextOutputRole,
     binding: Option<Arc<TeletextOutputBinding>>,
     accepted: Option<Arc<AcceptedTeletextAdmission>>,
+    live: Option<Arc<LiveTeletextAdmission>>,
     command: Option<Arc<FfmpegCommand>>,
     optional_accepted: bool,
 }
@@ -35,6 +42,7 @@ impl TeletextOutputAdmission {
             role,
             binding: None,
             accepted: None,
+            live: None,
             command: None,
             optional_accepted: false,
         }
@@ -107,6 +115,22 @@ impl TeletextOutputAdmission {
         }
     }
 
+    /// Opt-in response-owned selection is tied to one final direct source clock.
+    pub(crate) fn with_optional_live(
+        intent: Arc<TeletextLiveOutputIntent>,
+        deadline: Instant,
+    ) -> Self {
+        Self {
+            live: Some(Arc::new(LiveTeletextAdmission { intent, deadline })),
+            optional_accepted: true,
+            ..Self::plain(TeletextOutputRole::FinalDirectMpegTs)
+        }
+    }
+
+    pub(crate) fn live(&self) -> Option<&LiveTeletextAdmission> {
+        self.live.as_deref()
+    }
+
     /// Explicit boundary identity supplied by the process owner.
     #[must_use]
     pub const fn role(&self) -> TeletextOutputRole {
@@ -126,7 +150,7 @@ impl TeletextOutputAdmission {
     /// Authored output requires terminal supervision even after raw fallback.
     #[must_use]
     pub const fn has_authored_output(&self) -> bool {
-        self.binding.is_some() || self.accepted.is_some()
+        self.binding.is_some() || self.accepted.is_some() || self.live.is_some()
     }
 
     pub(crate) fn accepted(&self) -> Option<&AcceptedTeletextAdmission> {
@@ -141,16 +165,19 @@ impl TeletextOutputAdmission {
     /// Opaque retry commands replace earlier hints too; no policy is inferred.
     pub(crate) fn with_command(&self, command: &FfmpegCommand) -> Self {
         let mut next = self.clone();
-        if next.accepted.is_some() {
+        if next.accepted.is_some() || next.live.is_some() {
             next.command = Some(Arc::new(command.clone()));
         }
         next
     }
 
     pub(crate) fn matches_channel(&self, channel_id: i64) -> bool {
-        self.accepted.as_ref().is_none_or(|accepted| {
-            accepted.intent.candidate().generation().request.channel_id == channel_id
-        })
+        self.live
+            .as_ref()
+            .is_none_or(|live| live.intent.channel_id() == channel_id)
+            && self.accepted.as_ref().is_none_or(|accepted| {
+                accepted.intent.candidate().generation().request.channel_id == channel_id
+            })
     }
 
     /// Verify the actual generated format before a process is launched.

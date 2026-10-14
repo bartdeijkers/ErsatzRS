@@ -184,6 +184,15 @@ impl TeletextPsiDiscovery {
         self.plan_optional(Some(service))
     }
 
+    /// Reserve authored output ownership while keeping the source PMT unchanged.
+    /// This applies the same complete PSI, program and PID collision checks as
+    /// active planning. It provides no PCR rate or publication authority.
+    /// # Errors
+    /// Incomplete discovery is retryable; source ownership failures prevent admission.
+    pub fn plan_without_authored(&self) -> Result<TeletextPmtPlan, TeletextPsiError> {
+        self.plan_optional(None)
+    }
+
     pub(super) fn plan_optional(
         &self,
         service: Option<&TeletextServiceDescriptor>,

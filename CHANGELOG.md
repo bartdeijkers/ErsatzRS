@@ -17,8 +17,12 @@ release section when tagging a release.
 
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
-  acknowledged PMT announcement before page data; open-stream host activation
-  remains to be connected.
+  acknowledged PMT announcement before page data. An explicit version-2 policy
+  connects bounded accepted-state recovery to existing direct stream responses,
+  including initially Off, without restarting the source. Invalid selection or
+  rejected replacement withdraws authored output while ordinary playback continues;
+  non-transient withdrawal faults terminate the epoch. Warm client/resource and
+  retained/Next acceptance remain open.
 - Preserve exact physical teletext editor rows through the shared native compiler
   and preview raster, with per-page/subpage isolation and existing bounded work.
   A separate versioned private concept codec retains original addon/request bytes,

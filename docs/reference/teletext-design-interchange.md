@@ -4646,6 +4646,38 @@ The existing localized Health page reads policy afresh over its cached baseline;
 in-order SSR completes that asynchronous snapshot without JavaScript. Valid
 configuration is not evidence of delivery, full Level 2.5 or memory bounds.
 
+Policy version 2 retains all version-1 required bounds and additionally requires
+`live_updates: {"poll_interval_ms": ..., "recovery_timeout_ms": ...}`. Both
+timings must be positive and representable; missing/null/unknown/duplicate fields
+reject. Version 1 rejects this additional field and retains startup-only behavior.
+No implicit live-monitor cadence or production preset is introduced.
+
+With version 2, each compatible ordinary final direct response owns a separate
+bounded accepted-state monitor and its safe-boundary control. Initially Off uses
+an absent gate: original PSI and AV continue, and later explicitly accepted native
+output can use the same source clock. Pending drafts remain unpublished. A stale
+initial candidate is rechecked after source discovery and starts absent. Unsupported
+source qualification or precommit admission still forwards the original prefix.
+Hybrid/retained/Next and separate-clock capacity slates remain outside this route
+connection; their accepted delivery obligations remain open.
+
+The monitor reconciles immediately, then waits the configured poll interval after
+each bounded reconciliation. Each read/recovery shares one fresh configured
+deadline. Changes become output only at the pump's existing safe acknowledged
+boundary; they are not instantaneous at the admin commit. A different accepted
+generation first proposes withdrawal before native recovery. Read errors, timeout,
+missing/invalid selection and rejected replacement retire the previous authored
+service while ordinary AV continues. Unchanged rejected identities are not retried
+until a different accepted identity exists. Non-transient withdrawal invariant
+faults terminate the output epoch rather than retaining unauthorized page data.
+Actual per-epoch acknowledgements remain distinct from publication acceptance.
+
+Dropping a response aborts its monitor; admitted blocking native work retains its
+worker-owned hold until the actual worker ends. A reopened response recovers durable
+current accepted selection afresh. This adds no package invocation, script replay,
+publication action or durable monitoring task. Full warm resource/cache retirement,
+Lua interval semantics and suitable-client proof remain separate P9A-04 gates.
+
 The opt-in `ordinary_stream_flow::` native tests connect one installed synthetic
 addon's separate profiles on two channels to exact validation/native previews,
 saved originals, explicit acceptance, reopened services and concurrent ordinary

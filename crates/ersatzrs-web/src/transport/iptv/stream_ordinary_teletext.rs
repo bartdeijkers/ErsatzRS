@@ -13,7 +13,7 @@ use crate::host::{
 
 use super::super::{
     teletext_accepted_output::load_accepted_teletext_output_intent,
-    teletext_binding::TeletextOutputAdmission,
+    teletext_binding::TeletextOutputAdmission, teletext_live_output::TeletextLiveOutputIntent,
 };
 
 /// No producer invocation, publication, queue or independently renewed startup
@@ -54,6 +54,11 @@ pub(super) async fn recover_optional_output(
     let bounded_deadline = now
         .checked_add(policy.recovery_timeout)?
         .min(recovery_deadline);
+    // Version 1 retains its startup-only path without cloning encoding policy.
+    // Live output also needs the exact explicit policy for later owned recovery.
+    let live = policy
+        .live_updates
+        .map(|timing| (timing, policy.encoding.clone()));
     let recovered = load_accepted_teletext_output_intent(
         &state.application,
         channel_id,
@@ -63,6 +68,33 @@ pub(super) async fn recover_optional_output(
         bounded_deadline.into_std(),
     )
     .await;
+    if let Some((timing, encoding)) = live {
+        let initial = match recovered {
+            Ok(Some(intent)) => Some(Arc::clone(intent.candidate())),
+            Ok(None) => None,
+            Err(_) => {
+                tracing::warn!(
+                    channel_id,
+                    "selected teletext recovery rejected; starting live output without authored pages"
+                );
+                None
+            }
+        };
+        let intent = TeletextLiveOutputIntent::new(
+            Arc::clone(&state.application),
+            channel_id,
+            policy.design,
+            encoding,
+            policy.source,
+            timing,
+            initial,
+        )
+        .ok()?;
+        return Some(TeletextOutputAdmission::with_optional_live(
+            Arc::new(intent),
+            startup_deadline,
+        ));
+    }
     match recovered {
         Ok(Some(intent)) => TeletextOutputAdmission::with_optional_accepted(
             Arc::new(intent),

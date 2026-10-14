@@ -118,6 +118,30 @@ pub(super) async fn probe_teletext_source(
     candidate_pid: u16,
     policy: TeletextSourceProbePolicy,
 ) -> Result<TeletextSourceProbeAdmission, TeletextSourceProbeFailure> {
+    probe_teletext_source_core(source, Some(service), candidate_pid, policy).await
+}
+
+/// Discover the same bounded source with authored content active or absent.
+/// Absence reserves the candidate PID but preserves the source PMT exactly;
+/// it does not waive topology or provide clock/publication authority.
+pub(super) async fn probe_teletext_source_optional(
+    source: &mut (impl AsyncRead + Unpin),
+    service: Option<&TeletextServiceDescriptor>,
+    candidate_pid: u16,
+    policy: TeletextSourceProbePolicy,
+) -> Result<TeletextSourceProbeAdmission, TeletextSourceProbeFailure> {
+    match service {
+        Some(service) => probe_teletext_source(source, service, candidate_pid, policy).await,
+        None => probe_teletext_source_core(source, None, candidate_pid, policy).await,
+    }
+}
+
+async fn probe_teletext_source_core(
+    source: &mut (impl AsyncRead + Unpin),
+    service: Option<&TeletextServiceDescriptor>,
+    candidate_pid: u16,
+    policy: TeletextSourceProbePolicy,
+) -> Result<TeletextSourceProbeAdmission, TeletextSourceProbeFailure> {
     let epoch = Instant::now();
     let mut probe = Probe {
         bytes: Vec::new(),
@@ -197,7 +221,11 @@ pub(super) async fn probe_teletext_source(
             }
         }
         observed = packets.len();
-        let plan = match discovery.plan(service) {
+        let planned = match service {
+            Some(service) => discovery.plan(service),
+            None => discovery.plan_without_authored(),
+        };
+        let plan = match planned {
             Ok(plan) => plan,
             Err(TeletextPsiError::Incomplete) => continue,
             Err(error) => return Err(probe.fail(TeletextSourceProbeError::Psi(error))),

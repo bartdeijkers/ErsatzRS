@@ -18,7 +18,7 @@ use super::{
     teletext_output::TeletextPumpError,
     teletext_retained_output::{allocation_model, RetainedTeletextError},
     teletext_source_probe::{
-        probe_teletext_source, TeletextSourceProbeError, TeletextSourceProbeFailure,
+        probe_teletext_source_optional, TeletextSourceProbeError, TeletextSourceProbeFailure,
         TeletextSourceProbePolicy,
     },
     teletext_startup::TeletextStartupPrefix,
@@ -38,9 +38,10 @@ async fn prepare_source(
     let deadline = Instant::now()
         .checked_add(maximum_time)
         .ok_or_else(invalid)?;
-    let admitted = probe_teletext_source(
+    let descriptor = binding.optional_service_descriptor();
+    let admitted = probe_teletext_source_optional(
         source,
-        &binding.service_descriptor(),
+        descriptor.as_ref(),
         binding.config().elementary_pid,
         TeletextSourceProbePolicy {
             maximum_bytes,

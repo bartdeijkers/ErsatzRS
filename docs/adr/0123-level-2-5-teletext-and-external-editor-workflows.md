@@ -20,7 +20,7 @@ encoding/raster failures. Separate bounded native actions now request pending
 intent and explicitly select that exact static original for new compatible
 streams using existing immutable qualification and atomic publication fences.
 Selection changes disable publication controls without erasing historical
-preview or pointer observations. Existing streams retain their captured output.
+preview or pointer observations. Version-1 streams retain their captured output.
 This connection grants no TTI/editor/zone or full authored Level 2.5 acceptance.
 A finite-client whole-host restart trial retains two selected themes and a newer
 pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
@@ -30,11 +30,15 @@ The generic transport gate now admits an initially absent authored epoch with
 unchanged source PSI/version and no placeholder page model. First activation
 uses that same source clock/counter and acknowledges changed PMT before PES.
 The host also fences selection changes committed during source discovery before
-its first authored write. These independently tested components do not establish
-ongoing application controls: initially-Off normal routes still raw-copy, and
-accepted bindings still lack response-owned updates. P9A-04 owns the concrete
-connection/cancellation/recovery proof and the separate capacity-slate codec,
-track-topology and clock defect. No acceptance obligation is narrowed.
+its first authored write. An explicit version-2 host policy now connects a
+response-owned bounded accepted-state monitor to compatible final direct routes,
+including initially Off. Each response uses its own actual safe-boundary control;
+pending drafts never activate output. Poll/recovery bounds, error withdrawal,
+worker cancellation ownership and version-1 compatibility are specified in the
+interchange reference. P9A-04 owns the concrete connection/cancellation/recovery
+proof and the separate capacity-slate codec, track-topology and clock defect.
+Retained/Next routes and complete warm resource/cache retirement remain open.
+No acceptance obligation is narrowed.
 
 Preparatory immutable export receipts now use the existing design repository,
 exact head/original-digest checks and bounded read-only snapshot verification.

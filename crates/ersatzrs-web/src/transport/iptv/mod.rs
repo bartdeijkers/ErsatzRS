@@ -15,6 +15,7 @@ pub mod streaming_specs;
 pub mod teletext_accepted_output;
 pub mod teletext_binding;
 mod teletext_discovery_output;
+pub mod teletext_live_output;
 pub mod teletext_optional_output;
 pub mod teletext_output;
 mod teletext_retained_output;

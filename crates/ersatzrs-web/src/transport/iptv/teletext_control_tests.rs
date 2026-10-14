@@ -538,3 +538,58 @@ fn rejected_pmt_section_capacity_keeps_old_gate_delivering_complete_cycles() {
     }
     assert_eq!(last_pmt_pids(&bytes), [300, 512]);
 }
+
+#[test]
+fn withdrawal_requeues_only_transient_safe_boundary_errors() {
+    for error in [
+        TeletextOutputError::Boundary,
+        TeletextOutputError::Pending,
+        TeletextOutputError::Psi(TeletextPsiError::Incomplete),
+        TeletextOutputError::Pmt(TeletextPmtInstallError::Incomplete),
+    ] {
+        let (sender, control, status) = teletext_output_control_channel();
+        sender.send_replace(Some(TeletextOutputUpdate::withdraw(1).unwrap()));
+        let mut control = PumpControl::new(control);
+        control.observe();
+        let update = control.desired.take().unwrap();
+        control.finish_proposal(update, Err(error), false).unwrap();
+        assert_eq!(control.desired.as_ref().unwrap().sequence(), 1);
+        assert!(control.installed.is_none());
+        assert_eq!(
+            status.borrow().phase(),
+            TeletextOutputTransitionPhase::Waiting
+        );
+    }
+}
+
+#[test]
+fn failed_withdrawal_is_terminal_instead_of_rejecting_and_continuing_old_output() {
+    for error in [
+        TeletextOutputError::Configuration,
+        TeletextOutputError::Transport(TeletextTransportError::Pid),
+        TeletextOutputError::CacheReconciliationRequired,
+        TeletextOutputError::Pmt(TeletextPmtInstallError::Reconfiguration),
+        TeletextOutputError::Pmt(TeletextPmtInstallError::Multiplex(
+            TeletextMultiplexError::SectionCapacity,
+        )),
+        TeletextOutputError::Closed,
+    ] {
+        let (sender, control, status) = teletext_output_control_channel();
+        sender.send_replace(Some(TeletextOutputUpdate::withdraw(1).unwrap()));
+        let mut control = PumpControl::new(control);
+        control.observe();
+        let update = control.desired.take().unwrap();
+        assert_eq!(
+            control.finish_proposal(update, Err(error.clone()), false),
+            Err(error)
+        );
+        assert!(control.desired.is_none());
+        assert!(control.installed.is_none());
+        // There is no recoverable rejection claiming ordinary forwarding may
+        // continue: the terminal error is returned to the owning pump.
+        assert_eq!(
+            status.borrow().phase(),
+            TeletextOutputTransitionPhase::Waiting
+        );
+    }
+}

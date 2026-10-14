@@ -2724,6 +2724,66 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 same-response direct control checkpoint:
+Criterion: connect profile selection/validated preview/separate publication to
+existing ordinary output, including initially Off, multiple viewers and channel
+isolation. Explicit closed runtime policy v2 adds positive poll/recovery timings;
+v1 remains startup-only. Each actual final direct response owns a bounded monitor
+of durable accepted state, its own safe-boundary control and current native source
+clock. Missing/invalid selection, read/timeout failure or rejected replacement
+withdraws authored output without package invocation or ordinary AV damage.
+Permanent withdrawal invariant failures terminate the epoch. No hint is required
+and no pending draft becomes output. Worker-owned native admission is reused;
+dropping the response aborts its monitor, not the actual admitted blocking worker.
+The interchange reference owns exact cadence, deadline and restart semantics.
+
+Run161303f5-6301-4549-8d42-f1585d4f8161 passes8 monitor cases. Affected run
+187c8254-3272-48a7-a09e-edf886ec7858 passes68/69: all monitor/policy/binding/
+probe/optional-pump/control cases pass, but the three-viewer fixture's operator
+correctly receives Work(Saturated) under default native limit1. The fixture now
+explicitly declares4 native owners before its configuration baseline:3 monitors
+plus operator. Product defaults/admission are unchanged; no retry or oracle
+relaxation is added. Real-source capacity is3 for the three response owners.
+Final run93ec754d-d0aa-4cb6-8011-1719ecf17b11 passes2/2, literal and actual native
+ordinary responses. Union of successful Rust identities70. Nine new absent-binding/
+probe/optional regressions and two withdrawal-classifier regressions are included.
+
+Three already-open /iptv/hls-direct/{channel}.ts Router bodies use actual pinned
+FFmpeg9n9.0-20261006. Two channel1 viewers and isolated channel2 observe initially
+Off -> fresh acceptance -> receipt-bound Free-rowQ concept/explicit replacement ->
+Off -> fresh acceptance -> rejected MissingProfile/no change -> selected-profile
+tombstone/withdrawal. Channel2 retains its frozen blue service; both channel1
+viewers follow the same red profile and concept. No successor request restarts a
+viewer. Independent PMT/PES/counter/unit observations retain complete immutable
+page/theme/navigation units, allowing only documented repeat-header C4 clearing.
+TSDuck3.44-4676 checks every complete captured packet, rate, sync/TEI, referenced
+PIDs, language/PES and zero counter/PTS/PCR errors. ffprobe9 confirms ordinary
+video/audio and DVB teletext. Independent FFmpeg/libzvbi0.2.42 text decoding sees
+AZ and channel1-only Q; decoded source video hashes and literal440Hz audio survive.
+Closing all original bodies releases all3 actual producer capacity holds within5s.
+The separate literal8-second source proves exact source PCR/elementary packet bytes
+and total consumed/written EOF counts. Package/config/originals/export receipts,
+other-channel generation and playout silence remain unchanged in both flows.
+
+This is actual native Router/FFmpeg transport proof, not a TCP/headed client,
+whole-host open-client shutdown, complete warm cache/resource or platform gate.
+Next use the existing owned loopback/headed client scaffold to demonstrate warm
+rendering/navigation on the same live URL, recording actual applied boundaries.
+Retained/hybrid/Next connection, per-response admin applied-state projection,
+full resource/M29/MOT retirement, Lua interval/error/restart, six platforms and
+full authored Level2.5/editor/source acceptance remain open. Existing pinned QTM,
+cold actual-URL client/navigation and72 localized headed admin proofs are reused;
+there is no UI/WASM/dependency/production FFmpeg-argv change. Capacity-slate clock
+resets remain a separate demonstrated defect requiring compatible codec and
+caption/alternate-audio topology before stable final-mux handoff. No engine or
+milestone acceptance is inferred; production NOS200–299 content remains gated.
+Strict web library/preparation-test and FFmpeg all-target Clippy, formatting,
+progress/architecture/new-allow checks and actual disposable-host legacy/hybrid
+MPEG-TS/HLS smoke pass. Documentation-only lint corrections reuse behavioral
+proof; no suppressions or full-closeout/CI claim. All acceptance/status/dependency
+fields remain exact. Receipt: tmp/phase9-live-updates/identity.json,
+SHA256ccea5e4e7c1193bb52d80f90abbab2969c85f60aeb44f7628783f78f81ba43d8. Checkpoint remains local; no push/publication.
+
 2026-10-14 initially absent epoch and startup-freshness checkpoint:
 Criterion: support later activation without a new source clock or placeholder
 pages, and preserve ordinary playback when selection changes during discovery.

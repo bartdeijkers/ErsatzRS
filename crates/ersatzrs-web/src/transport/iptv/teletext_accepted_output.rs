@@ -223,7 +223,7 @@ async fn prepare_source(
     }
 }
 
-fn source_error(reason: TeletextSourceProbeError) -> (TeletextPumpError, bool) {
+pub(super) fn source_error(reason: TeletextSourceProbeError) -> (TeletextPumpError, bool) {
     match reason {
         TeletextSourceProbeError::Read(kind) => (TeletextPumpError::Read(kind), true),
         TeletextSourceProbeError::Empty => (TeletextPumpError::EmptyOutput, true),

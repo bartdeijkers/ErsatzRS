@@ -354,7 +354,7 @@ async fn serve_channel_stream_with_output(
     };
 
     if !output.matches_channel(channel.id)
-        || (output.accepted().is_some()
+        || ((output.accepted().is_some() || output.live().is_some())
             && channel.streaming_mode == StreamingMode::TransportStreamHybrid)
     {
         return teletext_output_unavailable();
@@ -1040,7 +1040,7 @@ async fn serve_channel_stream_admitted_inner(
     if interval_source.is_some() {
         output = output.without_optional_accepted();
     }
-    if interval_source.is_some() && output.accepted().is_some() {
+    if interval_source.is_some() && (output.accepted().is_some() || output.live().is_some()) {
         return teletext_output_unavailable();
     }
     if interval_source.is_some() && interval_admission.is_some() && output.has_authored_output() {
@@ -2239,7 +2239,7 @@ async fn serve_channel_stream_admitted_inner(
             Ok(Some(reservation)) => Some(reservation),
             Ok(None) => {
                 output = output.without_optional_accepted();
-                if output.accepted().is_some() {
+                if output.accepted().is_some() || output.live().is_some() {
                     // A slate and the later media command are distinct source
                     // epochs; this explicit accepted owner cannot join them.
                     cancel_retained_startup(
@@ -5873,6 +5873,22 @@ async fn supervise_stream_process_with_retry_context(
                         stdout, writer, binding,
                     )
                     .await
+                }
+                None if output.live().is_some() => {
+                    let live = output.live().ok_or(TeletextPumpError::Configuration)?;
+                    let command = output.command().ok_or(TeletextPumpError::Configuration)?;
+                    let result = super::teletext_live_output::forward_live_teletext_output(
+                        stdout,
+                        writer,
+                        command,
+                        &live.intent,
+                        live.deadline,
+                    )
+                    .await?;
+                    if let Some(rejection) = result.rejection {
+                        tracing::debug!(%rejection, "live teletext rejected before commitment; preserving raw output");
+                    }
+                    Ok(result.bytes)
                 }
                 None if output.accepted().is_some() => {
                     let accepted = output.accepted().ok_or(TeletextPumpError::Configuration)?;

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: absent engine epochs/startup fences proven; next same-response controls; capacity-slate clocks and full acceptance open'
+current_focus = 'P9A-04: direct same-response controls/transport proven; next warm client navigation; slate clocks and full acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1328,10 +1328,15 @@ resets; this is a production playback defect, not a waived transport criterion.
 Generic initially-absent epochs now preserve exact source bytes/PMT and later
 activate on the same acknowledged clock, with real AV/decode/TSDuck proof.
 Post-discovery selection fences also preserve direct/retained playback across
-late Off/replacement. Next connect the absent binding and response-owned bounded
-accepted-state monitor to actual ordinary responses, then prove warm controls,
-multiple viewers/isolation and cancelled/failed recovery. The monitor prototype
-is retained unverified in the worktree; current Off-at-start still raw-copies.
+late Off/replacement. Explicit v2 now connects bounded response-owned accepted
+state to initially-Off direct routes. Three actual ordinary responses prove
+On/concept replacement/Off/re-enable and missing profiles without new requests;
+TSDuck, independent text decoding, source AV and owned cleanup pass. Two channel1
+viewers stay aligned while channel2 retains its own theme. Monitor races/errors
+and receiver-close cancellation pass; actual blocking-worker ownership reuses
+the prior verified admission. Next prove warm headed client rendering/navigation
+on that same live URL, then full resource/cache transitions and UI applied state.
+Retained/Next, whole-host open-client drain and full Lua timing stay open.
 Stable wait-slate muxing separately needs compatible codec/caption/audio topology;
 H264 slate and MPEG2 source cannot be blindly combined. Keep that defect open.
 Full resource
