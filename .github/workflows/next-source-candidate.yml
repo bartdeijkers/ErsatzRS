@@ -14,6 +14,16 @@ on:
       - scripts/release/test-prepare-next-source.py
       - scripts/release/test-package-next-source.py
   workflow_dispatch:
+    inputs:
+      review_manifest:
+        description: Reviewed Next source to build without changing production downloads
+        type: choice
+        required: true
+        default: scripts/release/next-patches/manifest.json
+        options:
+          - scripts/release/next-patches/manifest.json
+          - scripts/release/next-patches/v0.2.1/manifest.json
+          - scripts/release/next-patches/v0.2.2/manifest.json
 
 permissions:
   contents: read
@@ -36,6 +46,8 @@ jobs:
             rid: osx-arm64
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
+    env:
+      NEXT_REVIEW_MANIFEST: ${{ inputs.review_manifest || 'scripts/release/next-patches/manifest.json' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -52,9 +64,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          revision=$(python3 -c 'import json; print(json.load(open("scripts/release/next-patches/manifest.json"))["upstream_revision"])')
-          curl --fail --location --retry 3 --output next-source.tar.gz "https://codeload.github.com/ErsatzTV/next/legacy.tar.gz/$revision"
-          python3 scripts/release/prepare-next-source.py --source-archive next-source.tar.gz --output .next-source
+          source_url=$(python3 -c 'import json,os; m=json.load(open(os.environ["NEXT_REVIEW_MANIFEST"])); print(m.get("source_archive_url", "https://codeload.github.com/ErsatzTV/next/legacy.tar.gz/" + m["upstream_revision"]))')
+          curl --fail --location --retry 3 --output next-source.tar.gz "$source_url"
+          python3 scripts/release/prepare-next-source.py --source-archive next-source.tar.gz --output .next-source --manifest "$NEXT_REVIEW_MANIFEST"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .next-source
@@ -69,7 +81,7 @@ jobs:
           set -euo pipefail
           ETV_VERSION=$(python3 -c 'import json; print(json.load(open("ersatzrs-source.json"))["distribution_version"])')
           export ETV_VERSION
-          cargo build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel
+          cargo +1.97.1 build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel
           python3 -c 'import hashlib,json; assert hashlib.sha256(open("Cargo.lock","rb").read()).hexdigest() == json.load(open("ersatzrs-source.json"))["cargo_lock_sha256"]'
           mkdir ../next-payload
           cp "target/$NEXT_TARGET/release/ersatztv-channel" LICENSE ../next-payload/
@@ -85,7 +97,7 @@ jobs:
         run: |
           python3 scripts/release/package-next-source.py --payload next-payload \
             --source-provenance .next-source/ersatzrs-source.json --rid "$NEXT_RID" \
-            --output packages --rustc "$(rustc --version)"
+            --output packages --rustc "$(rustc +1.97.1 --version)" --manifest "$NEXT_REVIEW_MANIFEST"
       - uses: actions/upload-artifact@v4
         with:
           name: next-source-candidate-${{ matrix.rid }}
