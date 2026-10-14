@@ -62,6 +62,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-14 UCU-10 security/resource correction: same-day advisories require
+locked Rustls0.23.46; strict workspace lint,6312 nextest/doctests, normal cold
+managed HTTPS acquisition and matched served JS/WASM pass. Confirmed CI OOM
+requires bounded shared-host compilation; Next execution now uses four slots.
+All416 actual Next component/runtime cases pass on the host, including the
+normal/preview fixture with unchanged deadlines and captured failure diagnostics.
+Detailed receipts belong to ucu-10 evidence. Finish full exact-head CI and
+remote main delivery through PR105 before UCU-11; no release is authorized.
+
 2026-10-14 browser CI correction: PR105's Chromium job demonstrates a leaked
 synthetic Scripted playout from a preceding browser case. Scoped per-case
 fixture cleanup fixes it; all26 affected headed Chromium/Firefox tests pass

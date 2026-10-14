@@ -201,7 +201,7 @@ jobs:
     needs: fmt
     # Leave headroom for the other runners and the interactive WSL session.
     env:
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "1"
       NEXTEST_TEST_THREADS: "4"
     steps:
       - uses: actions/checkout@v7
@@ -328,7 +328,8 @@ jobs:
     needs: fmt
     timeout-minutes: 45
     env:
-      CARGO_BUILD_JOBS: "8"
+      CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
+      NEXTEST_TEST_THREADS: "4"
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
       - uses: actions/checkout@v7

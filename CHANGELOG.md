@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Security
 
+- Update the locked HTTPS client runtime to Rustls 0.23.46, addressing
+  [RUSTSEC-2026-0346](https://rustsec.org/advisories/RUSTSEC-2026-0346.html),
+  [RUSTSEC-2026-0347](https://rustsec.org/advisories/RUSTSEC-2026-0347.html),
+  [RUSTSEC-2026-0348](https://rustsec.org/advisories/RUSTSEC-2026-0348.html) and
+  [RUSTSEC-2026-0349](https://rustsec.org/advisories/RUSTSEC-2026-0349.html).
 - Require Ammonia 4.2.3 for release-note HTML sanitization, addressing
   RUSTSEC-2021-0157 and RUSTSEC-2021-0158 without weakening sanitizer policy.
 
@@ -534,6 +539,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Limit simultaneous compilation on shared self-hosted CI runners to avoid
+  exhausting memory during workspace and Next acceptance. Preserve all test
+  selections and capture existing Next lifecycle errors in the isolated preview
+  fixture instead of reporting only its failed readiness state.
 - Clean up owned browser-test playouts after each case so synthetic Scripted
   failures do not contaminate later Health acceptance checks.
 - Prevent Next Copy playback verification from failing on startup database

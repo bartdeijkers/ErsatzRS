@@ -308,8 +308,11 @@ Keep the edit loop cheap by **not** flipping configurations while iterating:
   share a single nextest test-group slot in local and CI profiles: each complete
   500-display service retains several GiB of semantic preview state. Other test
   suites keep their normal concurrency. The self-hosted Test job additionally
-  limits compilation to two jobs and test execution to four slots, leaving
-  headroom for other runners and interactive work on the shared machine.
+  limits compilation to one job and test execution to four slots. The dedicated
+  Next engine job limits execution to four test slots and compilation to two jobs
+  on the same self-hosted machine (eight on a hosted runner). Avoid overlapping
+  local heavy builds with CI builds:
+  multiple web-crate compilers can exhaust the shared machine's memory and swap.
 - **UI work:** `./run.sh dev` (`cargo leptos watch`) — keeps the SSR binary and
   WASM bundle in lockstep; never pair a standalone `cargo leptos build` with a
   separate `cargo run` while iterating.

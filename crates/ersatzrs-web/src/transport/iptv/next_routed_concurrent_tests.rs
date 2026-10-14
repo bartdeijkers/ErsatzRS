@@ -16,6 +16,10 @@ async fn real_next_routed_normal_preview_have_independent_producer_lifetimes() {
 #[tokio::test]
 #[ignore = "isolated child of real_next_routed_normal_preview_have_independent_producer_lifetimes"]
 async fn fixture_child_concurrent_producers() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(std::io::stderr)
+        .try_init();
     let root = tempfile::tempdir().unwrap();
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");

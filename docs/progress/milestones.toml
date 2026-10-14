@@ -21996,6 +21996,41 @@ remote main. Canonical remote receipts are the UCU-10 application PR and its
 CI check suite, followed by the main push run; inspect their exact SHA rather
 than inferring remote delivery from this local milestone status.
 
+Security/resource CI correction (2026-10-14): run38582861679 at865407e0
+passes Chromium, but new same-day RustSec advisories reject Rustls0.23.45.
+Update only that locked package to0.23.46; keep every audit policy intact.
+Fresh strict workspace Clippy and canonical closeout pass6,312 nextest cases
+(287 skipped, one slow), followed by all11 workspace doctest stages. Actual
+cold managed FFmpeg206 acquisition passes through the updated HTTPS client,
+including normal archive checksums and capability validation; fresh matched
+Leptos and real served JS/WASM verification also pass. Logs:
+tmp/ucu10-runtime-audit/ucu10-rustls-security-{deny,clippy,test-closeout,
+https-acquisition,matched-build,matched-bundle}.log.
+Next021's unchanged source/features use private HTTP loopback callbacks in this
+application, without custom TLS-store Debug or Brotli decompression; its older
+Rustls0.23.40 is outside the ECH regression range. No demonstrated reachable
+Next package correction or new dependency publication is required for this use.
+This is not a claim that arbitrary standalone Next HTTPS use is patched.
+The Test compiler receives SIGKILL immediately after the kernel's14:50:35Z
+global OOM; four compilers retain28.8GiB RSS and swap is exhausted. Limit the
+self-hosted Test build to one compiler, Next to two, and Next execution to four
+test slots; keep every selection/assertion and avoid concurrent local heavy
+builds. The Next preview fixture reports Failed without its underlying error;
+capture the existing redacted WARN diagnostics in that isolated child without
+extending its30-second deadline or changing independence/cleanup assertions.
+Host-permission recheck passes all416 Next component/runtime cases in308s,
+including normal/preview independence and cleanup in34.8s (five slow cases).
+Every original assertion remains intact. The first sandboxed attempt cannot
+bind disposable listeners and is not acceptance evidence; the complete valid
+receipt is tmp/ucu10-runtime-audit/ucu10-resource-next-components-host.log.
+Fresh affected strict web Clippy passes after the diagnostic change. Existing
+Native/Next smoke, TSDuck and headed browser receipts remain valid because no
+production playback, graphics, routes, islands or runtime pins changed. Fresh
+progress, formatting, architecture and hydration checks pass; reuse the just-run
+workspace closeout and strict lint instead of repeating them. Structural receipt:
+tmp/ucu10-runtime-audit/ucu10-resource-structural.log. Full green CI on the final
+exact head remains required before remote main.
+
 Browser CI correction (2026-10-14): full run38562390156 atc1a62516 passes
 Format, Clippy, Test, Next engine, Cargo deny, documentation and commit lint.
 Chromium reports one failure: the playout adaptation browser fixture retains
