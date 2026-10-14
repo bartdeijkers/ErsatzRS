@@ -39,8 +39,10 @@ release section when tagging a release.
   originals now share protected native editor export/import-as-draft and preview,
   retaining real Lua origins, Off membership and original expiry through versioned
   metadata. Imported concepts do not publish or change packages; explicit
-  publication still requires the original current scope. Full pinned-editor and
-  repeat-edit acceptance remain open.
+  publication still requires the original current scope. A representative scoped
+  QTeletextMaker edit now reaches validated preview, explicit publication and
+  independently decoded client navigation without changing the other channel.
+  Complete editor, repeat-edit and engine acceptance remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

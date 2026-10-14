@@ -450,7 +450,9 @@ async function localized(page: Page, fixture: TeletextChannelFixture, url: strin
       .toHaveText(text('TeletextEditorExportSet'));
     await expect(editor.getByTestId('teletext-editor-export-page-form').getByRole('button'))
       .toHaveText(text('TeletextEditorExportPage'));
-    await expect(editor.getByTestId('teletext-editor-import-form').getByRole('button'))
+    await expect(editor.getByTestId('teletext-editor-import-form').getByRole('button', {
+      name: text('TeletextEditorImport'), exact: true,
+    }))
       .toHaveText(text('TeletextEditorImport'));
     await expect(editor.locator('form')).toHaveCount(3);
     await page.getByTestId('teletext-preview-model').locator('ul a').click(); await ready(page, js);

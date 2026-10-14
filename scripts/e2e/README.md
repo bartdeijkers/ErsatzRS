@@ -355,6 +355,128 @@ admin, Lua behavior and six-platform acceptance retain their existing separate
 requirements. The production TV-guide addon still follows independent engine
 acceptance; no milestone completion follows from this probe alone.
 
+### Replay a Scripted original through the headed admin
+
+Use [the effective authoring spec](../../tests/e2e/teletext-effective-authoring-flow.spec.ts)
+to connect actual Lua scheduling to admin export, external editing, concept
+import, preview, explicit publication and ordinary stream capture. The optional
+GUI handshake runs only in Chromium with JavaScript enabled and light mode. It
+uses the same pinned QTeletextMaker 1.0 source, executable, offline Qt image and
+unchanged widget driver as the preceding recipe. Verify their identities against
+the retained tool receipt before setting the two SHA256 variables below.
+
+Choose a **nonexistent** child directory; create only its parent. The spec creates
+the child itself and refuses a previous attempt. The wrapper owns the disposable
+database and matched SSR/WASM build. Point all FFmpeg/FFprobe overrides at the same
+verified FFmpeg9 candidate:
+
+```bash
+qtm_probe_root="$PWD/tmp/phase9-qtm-effective-admin/editor-run-01"
+qtm_tools=/path/to/verified-native-editor-tools
+mkdir -p "$(dirname "$qtm_probe_root")"
+test ! -e "$qtm_probe_root"
+test ! -L "$qtm_probe_root"
+qtm_binary_hash="$(sha256sum "$qtm_tools/qteletextmaker" | cut -d ' ' -f1)"
+qtm_driver_hash="$(sha256sum "$qtm_tools/native-gui-driver.so" | cut -d ' ' -f1)"
+ERSATZRS_TELETEXT_EFFECTIVE_QTM_REPLAY_DIR="$qtm_probe_root" \
+  ERSATZRS_TELETEXT_EFFECTIVE_QTM_BINARY_SHA256="$qtm_binary_hash" \
+  ERSATZRS_TELETEXT_EFFECTIVE_QTM_DRIVER_SHA256="$qtm_driver_hash" \
+  ERSATZRS_TELETEXT_EFFECTIVE_ADMIN_CAPTURE="$PWD/tmp/phase9-qtm-effective-admin/capture-01" \
+  ERSATZRS_E2E_RESULT_DIR="$PWD/tmp/phase9-qtm-effective-admin/results-01" \
+  ERSATZRS_E2E_KEEP_TEMP=1 \
+  ERSATZRS_E2E_PORT=8539 \
+  FFMPEG_PATH=/path/to/verified-ffmpeg-9/ffmpeg \
+  FFPROBE_PATH=/path/to/verified-ffmpeg-9/ffprobe \
+  ErsatzRS_FFMPEG__PATH=/path/to/verified-ffmpeg-9/ffmpeg \
+  ErsatzRS_FFPROBE__PATH=/path/to/verified-ffmpeg-9/ffprobe \
+  scripts/e2e/playwright-e2e.sh tests/e2e/teletext-effective-authoring-flow.spec.ts \
+    --project chromium --headed --workers 1 \
+    --grep 'JavaScript true, dark false' \
+    --output tmp/phase9-qtm-effective-admin/browser-01
+```
+
+Use a free test port and distinct result/output directories for each run. Reuse
+a matched build only after verifying its server and hydration bundle identities.
+In the second terminal, set `qtm_probe_root` and `qtm_tools` to the same paths
+and wait for the actual `ready.json`. The spec has already written the downloaded
+page200/0000 bytes to `native-input.tti`, with the unchanged
+`project.ersatzrs.json` sidecar. Readiness records the original role2 scope/expiry,
+receipt, requested row2/column8 `Q`, tool identities and file hashes. The marker
+wait is bounded to **90 seconds from readiness**; each retry needs a new directory.
+
+Reuse the preceding offline Docker launch with this `qtm_probe_root` and the same
+verified tools/image, `single-page-zone-q`, input `native-input.tti` and output
+`edited.tti`. Set `qtm_left=0` and `qtm_right=0`: this synthetic page has zero side
+panels. Omit the preceding first-channel copy and geometry-extraction scripts;
+this readiness has `editor_geometry.left_panel_columns` and
+`editor_geometry.right_panel_columns`, both zero. Retain the editor exit status,
+completion log and all four actual widget/Save As captures listed above. Inspect
+the loaded page, inserted `Q`, selected saved path and cleared modified state.
+Do not rewrite the editor's saved bytes or append the programmatic `R` edit.
+
+Only after the editor exits zero and the actual result is independently inspected,
+create this **exact ten-field** completion marker. The six-field marker used by
+the preceding native probe is not accepted here. This script computes the actual
+input/output/tool hashes, checks them against readiness and releases the marker
+atomically without overwriting a prior completion:
+
+```bash
+python3 - "$qtm_probe_root" "$qtm_tools" <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+
+root, tools = map(Path, sys.argv[1:])
+ready = json.loads((root / "ready.json").read_bytes())
+saved = root / "edited.tti"
+assert saved.is_file() and not saved.is_symlink() and 0 < saved.stat().st_size <= 65536
+hash_file = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+binary_hash = hash_file(tools / "qteletextmaker")
+driver_hash = hash_file(tools / "native-gui-driver.so")
+input_hash = hash_file(root / "native-input.tti")
+assert binary_hash == ready["editor"]["binary_sha256"]
+assert driver_hash == ready["editor"]["driver_sha256"]
+assert input_hash == ready["input_sha256"]
+assert hash_file(root / "project.ersatzrs.json") == ready["sidecar_sha256"]
+marker = {
+    "probe_version": 1,
+    "editor_name": "QTeletextMaker",
+    "editor_version": "1.0",
+    "editor_source_commit": "cac2167bac933a6160cca45a45d5d4ee95355898",
+    "editor_binary_sha256": binary_hash,
+    "editor_driver_sha256": driver_hash,
+    "input_sha256": input_hash,
+    "saved_file": "edited.tti",
+    "saved_sha256": hash_file(saved),
+    "saved_bytes": saved.stat().st_size,
+}
+temporary = root / "editor-saved.ready"
+with temporary.open("x", encoding="utf-8") as output:
+    json.dump(marker, output, indent=2)
+    output.write("\n")
+os.link(temporary, root / "editor-saved.json")
+temporary.unlink()
+PY
+```
+
+The spec rejects unknown marker fields, wrong identities, nonregular/oversized
+files and inconsistent hashes or byte counts. This is an **evidence handshake**,
+never import or publication authority. The native application authenticates the
+unchanged sidecar against its retained original/export receipt and checks the
+role2 scope, original expiry and edit boundaries. Other exported files/assets
+remain byte-identical. Import saves a concept; the separate explicit request and
+publication actions select it for output. Selected status is not an output-applied
+acknowledgement.
+
+Retain the terminal Playwright result, independently inspected editor evidence
+and exact stream captures. Standard identities without the GUI opt-in edit `Q`
+in the free area and `R` in a custom zone programmatically; they prove the browser
+connection and do not claim actual QTeletextMaker use. Canonical results and
+remaining editor, client and engine limits belong to
+[P9A-04](../../docs/progress/milestones.toml), queried with
+`cargo xtask progress milestones --id p9a-04 --full`.
 
 ## Next copy-mode transport acceptance
 

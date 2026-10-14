@@ -666,8 +666,11 @@ not establish per-output application. Effective originals now share the existing
 native editor forms and protected receipt-backed concept/preview/compiler path.
 Metadata project schema2 keeps real producing origins, Off-aware binding indices
 and the exact nullable saved expiry; base schema1 stays unchanged. Historical
-editing cannot renew authority. Headed pinned-editor flow and bounded repeat-edit
-baselines remain required, not permanent permission restrictions.
+editing cannot renew authority. A representative headed pinned-editor save now
+reaches concept import, preview, explicit publication and ordinary stream/client
+replay. P9A-04 owns the exact proof and remaining criteria. Bounded repeat-edit
+baselines, complete editor coverage and live client transitions remain required,
+not permanent permission restrictions.
 
 Hydration source map for this integration:
 

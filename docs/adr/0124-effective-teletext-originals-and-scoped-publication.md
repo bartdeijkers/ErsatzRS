@@ -20,9 +20,11 @@ navigable two-theme captured replay. Effective originals now connect native edit
 export/import-as-concept and authenticated overlay restoration through the same
 compiler. Public project schema2 records real producing origins and nullable saved
 expiry; schema1 and outer receipt/sidecar schemas remain compatible. Historical
-editing preserves expired scope while publication retains fresh authority. Headed
-pinned-editor integration, repeat-edit baselines and live application-client
-transitions remain open.
+editing preserves expired scope while publication retains fresh authority. A
+representative actual pinned-editor save now passes through concept import,
+preview, explicit publication, ordinary stream capture and independently decoded,
+visually inspected two-theme client replay. Repeat-edit baselines, complete editor
+coverage and live application-client transitions remain open.
 P9A-04 owns verification and remaining userflow gaps. This does not establish
 same-URL suitable-client transitions or full engine acceptance.
 
