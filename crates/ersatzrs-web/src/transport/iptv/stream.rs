@@ -5732,7 +5732,12 @@ fn stream_output_result(outcome: &DirectStreamOutcome) -> Result<(), &'static st
         DirectStreamOutcome::Completed => Ok(()),
         DirectStreamOutcome::Cancelled => Err("encoded output was cancelled"),
         DirectStreamOutcome::Failed(_) => Err("encoded output producer failed"),
-        DirectStreamOutcome::TransportFailed(_) => Err("teletext transport failed"),
+        DirectStreamOutcome::TransportFailed(error) => {
+            // A successful producer exit can still leave a terminal pump fault.
+            // Retain its typed cause while keeping the response error static.
+            tracing::warn!(%error, "teletext transport ended unsuccessfully");
+            Err("teletext transport failed")
+        }
         DirectStreamOutcome::CleanupUnconfirmed => Err("encoded output cleanup is unconfirmed"),
     }
 }

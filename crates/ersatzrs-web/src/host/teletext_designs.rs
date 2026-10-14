@@ -388,6 +388,15 @@ pub(super) async fn reload_original_teletext_design_revision_with_hold(
     else {
         return Ok(None);
     };
+    if stored.document_version != ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION {
+        return Err(NativeTeletextDesignError::Document(
+            TeletextDesignDocumentError {
+                binding: None,
+                reason:
+                    ersatzrs_app::teletext_design_documents::TeletextDesignDocumentFailure::Version,
+            },
+        ));
+    }
     let (stored, parts) = super::teletext_work::spawn_blocking(hold.clone(), move || {
         check_deadline(deadline)?;
         let parts = decode_teletext_design_documents(&stored.document, budget)?.into_parts();

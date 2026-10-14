@@ -929,6 +929,71 @@ async fn pending_sleep_prefetches_and_stages_finite_eof_until_delivery_is_acknow
     }
 }
 
+#[tokio::test(start_paused = true)]
+async fn replacement_observed_after_prefetched_eof_cannot_activate_during_finite_drain() {
+    use crate::transport::iptv::{
+        teletext_binding::{
+            authored_tests::authored_service_with_counter, teletext_output_control_channel,
+            TeletextOutputContent, TeletextOutputTransitionPhase,
+            TeletextOutputTransitionRejection, TeletextOutputUpdate,
+        },
+        teletext_output::forward_teletext_output_with_control,
+    };
+    let original = fixture(4)[..fixture(1).len() + 17].to_vec();
+    let input = flatten(&original);
+    let mut source = TrackedSource::new(input.clone(), fixture(1).len() * 188, Tail::Eof);
+    let trace = Arc::clone(&source.trace);
+    let progress = Arc::clone(&source.progress);
+    let mut sink = Sink::new(SinkMode::Ready);
+    let writes = Arc::clone(&sink.writes);
+    let (sender, control, status) = teletext_output_control_channel();
+    let mut config = policy();
+    config.playout_delay = Duration::from_millis(250);
+    config.max_hold = Duration::from_secs(1);
+    let operation = forward_teletext_output_with_control(
+        &mut source,
+        &mut sink,
+        config,
+        TeletextOutputContent::Absent,
+        Duration::from_millis(40),
+        Some(control),
+    );
+    tokio::pin!(operation);
+    tokio::time::timeout(Duration::from_millis(180), async {
+        loop {
+            if trace.lock().unwrap().eof_reads != 0 { break; }
+            tokio::select! {
+                () = progress.notified() => (),
+                result = &mut operation => panic!("source must prefetch EOF before first acknowledgement: {result:?}"),
+            }
+        }
+    }).await.expect("source EOF must be known while the first delivery is pending");
+    assert_eq!(trace.lock().unwrap().bytes, input.len());
+    assert_eq!(trace.lock().unwrap().eof_reads, 1);
+    assert!(writes.lock().unwrap().bytes.is_empty());
+    sender.send_replace(Some(
+        TeletextOutputUpdate::replace(1, Arc::new(authored_service_with_counter(4))).unwrap(),
+    ));
+    assert!(futures_util::poll!(&mut operation).is_pending());
+    let delivered = tokio::time::timeout(Duration::from_secs(2), &mut operation)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(delivered, u64::try_from(input.len()).unwrap());
+    assert_eq!(writes.lock().unwrap().bytes, input);
+    assert!(writes
+        .lock()
+        .unwrap()
+        .bytes
+        .chunks_exact(188)
+        .all(|p| ((u16::from(p[1] & 0x1f) << 8) | u16::from(p[2])) != 512));
+    assert_eq!(status.borrow().sequence(), Some(1));
+    assert_eq!(
+        status.borrow().phase(),
+        TeletextOutputTransitionPhase::Rejected(TeletextOutputTransitionRejection::SourceEnded)
+    );
+}
+
 #[tokio::test]
 async fn blocked_pending_sink_prefetch_respects_shared_capacity_and_remains_cancellable() {
     use tokio::io::AsyncWriteExt as _;

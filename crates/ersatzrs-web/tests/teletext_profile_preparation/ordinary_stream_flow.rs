@@ -37,14 +37,14 @@ const PROFILE_SCRIPT: &str = r#"test "$1" = pages || exit 9
  cat "../ordinary-response-$theme.json"
 "#;
 
-struct Tools {
-    ffmpeg: String,
-    ffprobe: String,
-    tsanalyze: String,
+pub(super) struct Tools {
+    pub(super) ffmpeg: String,
+    pub(super) ffprobe: String,
+    pub(super) tsanalyze: String,
 }
 
 impl Tools {
-    async fn load() -> Self {
+    pub(super) async fn load() -> Self {
         let tools = Self {
             ffmpeg: client_capture::selected("ERSATZRS_TELETEXT_TEST_FFMPEG"),
             ffprobe: client_capture::selected("FFPROBE_PATH"),
@@ -55,7 +55,7 @@ impl Tools {
     }
 }
 
-async fn setting(fixture: &Fixture, key: &'static str, value: &str) {
+pub(super) async fn setting(fixture: &Fixture, key: &'static str, value: &str) {
     fixture
         .state
         .application
@@ -96,7 +96,7 @@ fn themed_pages(theme: &str) -> Value {
     document
 }
 
-async fn installed_profiles(tools: &Tools) -> (Fixture, Vec<u8>) {
+pub(super) async fn installed_profiles(tools: &Tools) -> (Fixture, Vec<u8>) {
     let fixture = Fixture::new_persistent().await;
     channel_documents::install_contract(&fixture, ADDON, "first", 2).await;
     tokio::fs::write(
@@ -189,7 +189,7 @@ async fn pending(fixture: &Fixture, channel: i64) -> ersatzrs_domain::TeletextPu
     requested.request().clone()
 }
 
-async fn accept(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputCandidate {
+pub(super) async fn accept(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputCandidate {
     let request = pending(fixture, channel).await;
     let result = accept_original_teletext_generation(
         &fixture.state.application,
@@ -223,7 +223,7 @@ async fn reload(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputCandid
     .unwrap()
 }
 
-fn raster(
+pub(super) fn raster(
     service: &EncodedTeletextAuthoredService,
     page: u16,
 ) -> ersatzrs_ffmpeg::teletext::TeletextRaster {
@@ -317,7 +317,7 @@ pub(super) fn assert_emitted_model(bytes: &[u8], service: &Arc<EncodedTeletextAu
     );
 }
 
-async fn verify_authored(
+pub(super) async fn verify_authored(
     tools: &Tools,
     source: &[u8],
     bytes: &[u8],
@@ -331,7 +331,7 @@ async fn verify_authored(
     }
 }
 
-async fn verify_plain(tools: &Tools, source: &[u8], bytes: &[u8]) {
+pub(super) async fn verify_plain(tools: &Tools, source: &[u8], bytes: &[u8]) {
     assert!(bytes
         .chunks_exact(188)
         .all(|packet| ((u16::from(packet[1] & 0x1f) << 8) | u16::from(packet[2])) != 512));

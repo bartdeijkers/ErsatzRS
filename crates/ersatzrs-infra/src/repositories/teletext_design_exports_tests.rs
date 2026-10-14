@@ -386,7 +386,7 @@ async fn export_creation_and_read_recheck_original_digest_and_version() {
         .unwrap();
     for statement in [
         r#"UPDATE "TeletextDesignRevision" SET "Digest" = printf('%064d', 0)"#,
-        r#"UPDATE "TeletextDesignRevision" SET "DocumentVersion" = 2"#,
+        r#"UPDATE "TeletextDesignRevision" SET "DocumentVersion" = 3"#,
         r#"UPDATE "TeletextDesignRevision" SET "Document" = X'00'"#,
     ] {
         sqlx::query(statement).execute(&repo.0).await.unwrap();

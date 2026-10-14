@@ -1,17 +1,19 @@
 //! Durable selected generations with separate native and transactional fences.
 
-use std::fmt;
+use std::{fmt, time::Instant};
 
 use async_trait::async_trait;
 use ersatzrs_domain::{
     EntityId, TeletextAcceptedGeneration, TeletextChannelSelectionSnapshot,
-    TeletextPublicationRequest,
+    TeletextEffectiveChannelSelectionSnapshot, TeletextPublicationRequest,
 };
 
-use super::{Result, TeletextPublicationRejection};
+use super::{RepositoryError, Result, TeletextPublicationRejection};
 
 /// Latest native compiled-artifact fingerprint framing, independent of documents.
 pub const TELETEXT_GENERATION_ARTIFACT_VERSION: u16 = 1;
+/// Scoped artifact framing includes an explicit authored-service/absence role.
+pub const TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION: u16 = 2;
 
 /// Fresh promotion target and independent accepted-pointer CAS.
 #[derive(Clone, PartialEq, Eq)]
@@ -41,6 +43,31 @@ impl fmt::Debug for TeletextGenerationSave {
     }
 }
 
+/// Explicit scoped promotion, independent of the accepted base pointer.
+/// Whole membership includes non-producing Off and captured transition expiry.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextEffectiveGenerationSave {
+    pub request: TeletextPublicationRequest,
+    pub expected_design_head: i64,
+    pub expected_generation_id: Option<EntityId>,
+    pub selection: TeletextEffectiveChannelSelectionSnapshot,
+    pub artifact_version: u16,
+    pub artifact_digest: String,
+}
+
+impl fmt::Debug for TeletextEffectiveGenerationSave {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TeletextEffectiveGenerationSave")
+            .field("request", &self.request)
+            .field("expected_design_head", &self.expected_design_head)
+            .field("expected_generation_id", &self.expected_generation_id)
+            .field("channel_id", &self.selection.channel_id)
+            .field("binding_count", &self.selection.bindings.len())
+            .field("valid_until", &self.selection.valid_until)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Explicit no-write outcomes; rejected promotion preserves old selected output.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TeletextGenerationRejection {
@@ -66,6 +93,55 @@ pub enum TeletextGenerationMutation<T> {
 /// Atomic durable publication and exact read-only runtime revalidation.
 #[async_trait]
 pub trait TeletextGenerationRepository: Send + Sync {
+    /// Accept scoped originals after native proof under independent scoped CAS.
+    /// The write transaction repeats exact current scope/expiry, version-2
+    /// revision, request and artifact fences. Admission uses the deadline;
+    /// admitted commit settlement remains truthful without altering base output.
+    /// # Errors
+    /// Returns unsupported/storage failures without base promotion fallback.
+    async fn accept_effective(
+        &self,
+        _save: &TeletextEffectiveGenerationSave,
+        _max_document_bytes: usize,
+        _deadline: Instant,
+    ) -> Result<TeletextGenerationMutation<TeletextAcceptedGeneration>> {
+        Err(RepositoryError::unavailable(
+            "effective teletext generation acceptance",
+            "effective teletext generation selection is unsupported",
+        ))
+    }
+
+    /// Retained scoped accepted metadata only; expiry/current scope is separate.
+    /// # Errors
+    /// Returns unsupported/storage failures; pending/base records never substitute.
+    async fn current_effective(
+        &self,
+        _channel_id: EntityId,
+    ) -> Result<Option<TeletextAcceptedGeneration>> {
+        Err(RepositoryError::unavailable(
+            "effective teletext generation read",
+            "effective teletext generation selection is unsupported",
+        ))
+    }
+
+    /// Recheck exact scoped pointer, revision/digest and current effective scope
+    /// including interval expiry in one read transaction. Native artifact proof
+    /// remains the caller's duty; no expired generation becomes a base fallback.
+    /// # Errors
+    /// Returns unsupported/storage failures or deadline admission failure.
+    async fn confirm_current_effective(
+        &self,
+        _generation: &TeletextAcceptedGeneration,
+        _selection: &TeletextEffectiveChannelSelectionSnapshot,
+        _max_document_bytes: usize,
+        _deadline: Instant,
+    ) -> Result<TeletextGenerationMutation<()>> {
+        Err(RepositoryError::unavailable(
+            "effective teletext generation confirmation",
+            "effective teletext generation selection is unsupported",
+        ))
+    }
+
     /// Accept after trusted native confirmation; recheck current pending request,
     /// design head/revision/digest, complete selection and accepted-pointer CAS
     /// in one immediate transaction. Dynamic guide content needs fresh role proof.

@@ -292,6 +292,9 @@ async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         }
         if read == 0 {
             prefetch.ended = true;
+            if let Some(control) = &mut progress.control {
+                control.source_ended();
+            }
             if !started {
                 return Err(TeletextPumpError::EmptyOutput);
             }
@@ -372,6 +375,11 @@ impl ForwardProgress {
                     let receipt =
                         gate.acknowledge_window_with_receipt(schedule, epoch.elapsed())?;
                     if let Some(control) = &mut self.control {
+                        // Prefetch can discover EOF during this exact write.
+                        // Never install a new service with no future full cycle.
+                        if prefetch.ended {
+                            control.source_ended();
+                        }
                         control.acknowledge(gate, &receipt, epoch.elapsed(), true)?;
                     }
                     self.emitted = end;

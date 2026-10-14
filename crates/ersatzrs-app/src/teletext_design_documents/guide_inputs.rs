@@ -122,13 +122,28 @@ impl StoredGuideInputs {
         budget: TeletextDesignDocumentBudget,
         source: Option<&TeletextGuideSourceFence>,
     ) -> Result<TeletextSavedGuideInputs, TeletextDesignDocumentError> {
+        self.restore_for_contracts(
+            contract_presence(selection.bindings.iter().map(|binding| binding.contract)),
+            generation,
+            budget,
+            source,
+        )
+    }
+
+    pub(super) fn restore_for_contracts(
+        self,
+        contracts: [bool; 3],
+        generation: &str,
+        budget: TeletextDesignDocumentBudget,
+        source: Option<&TeletextGuideSourceFence>,
+    ) -> Result<TeletextSavedGuideInputs, TeletextDesignDocumentError> {
         if self.input_version != INPUT_VERSION {
             return Err(failure(TeletextDesignDocumentFailure::GuideInputs));
         }
         // The parent preflight already admitted all context, including requests,
         // before allocating these strings; validate their wire integrity here.
         let request = validate(
-            selection,
+            contracts,
             generation,
             [
                 self.v1.0.as_deref(),
@@ -167,6 +182,39 @@ pub(super) fn borrow<'a>(
     budget: TeletextDesignDocumentBudget,
     source: Option<&TeletextGuideSourceFence>,
 ) -> Result<BorrowedGuideInputs<'a>, TeletextDesignDocumentError> {
+    borrow_for_contracts(
+        requests,
+        contract_presence(selection.bindings.iter().map(|binding| binding.contract)),
+        generation,
+        context_bytes,
+        budget,
+        source,
+    )
+}
+
+pub(super) fn contract_presence(
+    contracts: impl IntoIterator<Item = TeletextPageContract>,
+) -> [bool; 3] {
+    let mut selected = [false; 3];
+    for contract in contracts {
+        let index = match contract {
+            TeletextPageContract::V1 => 0,
+            TeletextPageContract::V2 => 1,
+            TeletextPageContract::V3 => 2,
+        };
+        selected[index] = true;
+    }
+    selected
+}
+
+pub(super) fn borrow_for_contracts<'a>(
+    requests: &'a TeletextChannelRequestTemplates,
+    contracts: [bool; 3],
+    generation: &str,
+    context_bytes: usize,
+    budget: TeletextDesignDocumentBudget,
+    source: Option<&TeletextGuideSourceFence>,
+) -> Result<BorrowedGuideInputs<'a>, TeletextDesignDocumentError> {
     let text = |contract| {
         requests
             .request(contract)
@@ -177,7 +225,7 @@ pub(super) fn borrow<'a>(
     let v1 = text(TeletextPageContract::V1)?;
     let v2 = text(TeletextPageContract::V2)?;
     let v3 = text(TeletextPageContract::V3)?;
-    let request = validate(selection, generation, [v1, v2, v3], context_bytes, budget)?;
+    let request = validate(contracts, generation, [v1, v2, v3], context_bytes, budget)?;
     if let Some(source) = source {
         super::source_fence::associate(source, request.as_ref())?;
     }
@@ -190,7 +238,7 @@ pub(super) fn borrow<'a>(
 }
 
 fn validate(
-    selection: &TeletextChannelSelectionSnapshot,
+    selected_contracts: [bool; 3],
     generation: &str,
     requests: [Option<&str>; 3],
     mut context_bytes: usize,
@@ -201,11 +249,8 @@ fn validate(
         (TeletextPageContract::V2, requests[1]),
         (TeletextPageContract::V3, requests[2]),
     ];
-    for (contract, input) in inputs {
-        let selected = selection
-            .bindings
-            .iter()
-            .any(|binding| binding.contract == contract);
+    for (index, (_, input)) in inputs.iter().enumerate() {
+        let selected = selected_contracts[index];
         if selected != input.is_some() {
             return Err(failure(TeletextDesignDocumentFailure::GuideInputs));
         }

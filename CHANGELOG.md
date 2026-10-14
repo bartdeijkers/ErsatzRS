@@ -30,7 +30,11 @@ release section when tagging a release.
   native preparation now combines exact published Lua and unoverridden base
   profiles, retains Off membership and transition expiry, and uses the same
   page validation, encoder and preview model. Abandoned requests retain actual
-  worker admission. Scoped publication and live Lua acceptance remain open.
+  worker admission. Exact effective originals now use independent scoped pending
+  and accepted pointers, explicit Off absence and original-expiry confirmation.
+  Native recovery connects synthetic scoped acceptance to version-2 live direct
+  streams while retaining independent accepted base history. Current guide
+  qualification and full admin/Lua/client delivery remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy
@@ -251,7 +255,13 @@ release section when tagging a release.
   controls disabled. Synthetic restart checks retain both accepted themes and a
   newer pending-only design across real process replacement and reloaded admin
   views. Open-client graceful shutdown remains unproven. Guide/editor interchange,
-  effective Lua controls, warm activation and complete live acceptance remain pending.
+  Effective Lua originals now save their complete base/interval origins, Off
+  membership, producer associations and exact source/theme metadata as distinct
+  immutable drafts. Historical native preview restores them after expiry or
+  profile removal without producer or Lua replay; existing base originals and
+  publication/export roles remain separate. Scoped Lua publication/recovery,
+  guide/editor interchange, warm activation and complete live acceptance remain
+  pending.
 - Functionally probe the selected FFmpeg runtime's optional teletext decoder
   with synthetic full-page and subtitle fixtures, checking exact page selection,
   text and colour bitmap output within bounded processes. Missing support is
@@ -548,6 +558,10 @@ release section when tagging a release.
   prevents FFmpeg startup failures. Reuse bounded image timing and file reopening
   for finite and infinite APNG canvas animation, preserving still PNG and JPEG XL
   behavior without rebuilding the FFmpeg runtime.
+- Preserve ordinary MPEG-TS playback when a new teletext generation arrives
+  after the finite source has ended. Reject late activation before it can install
+  an incomplete cycle, retain withdrawal and full-cycle checks, and load accepted
+  base output in the next response. Keep typed terminal failures visible.
 - Recheck accepted teletext selection after source discovery before its first
   authored write. Late disable or generation replacement preserves exact ordinary
   playback in both direct and retained output.

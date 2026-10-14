@@ -7,11 +7,10 @@
 use std::sync::Arc;
 
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
-use ersatzrs_core::repositories::TeletextGenerationMutation;
 use ersatzrs_ffmpeg::FfmpegCommand;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    time::{timeout_at, Instant},
+    time::Instant,
 };
 
 use crate::host::{
@@ -26,6 +25,7 @@ use super::{
         forward_optional_seeded_teletext_output, replay_direct_prefix, OptionalTeletextOutput,
     },
     teletext_output::TeletextPumpError,
+    teletext_selected_output::SelectedTeletextOutputCandidate,
     teletext_source_policy::TeletextSourcePolicy,
     teletext_source_probe::{probe_teletext_source_optional, TeletextSourceProbePolicy},
 };
@@ -39,7 +39,7 @@ pub use updates::{TeletextAcceptedUpdatePolicy, TeletextAcceptedUpdatesConfigura
 /// task. Forwarding starts a fresh monitor owned by that actual response.
 pub struct TeletextLiveOutputIntent {
     context: TeletextAcceptedUpdatesContext,
-    initial: Option<Arc<AcceptedTeletextOutputCandidate>>,
+    initial: Option<Arc<SelectedTeletextOutputCandidate>>,
 }
 
 impl TeletextLiveOutputIntent {
@@ -56,11 +56,33 @@ impl TeletextLiveOutputIntent {
         timing: TeletextAcceptedUpdatePolicy,
         initial: Option<Arc<AcceptedTeletextOutputCandidate>>,
     ) -> Result<Self, TeletextPumpError> {
+        Self::new_selected(
+            application,
+            channel_id,
+            budget,
+            encoding,
+            source,
+            timing,
+            initial
+                .map(|candidate| Arc::new(SelectedTeletextOutputCandidate::Base(candidate, None))),
+        )
+    }
+
+    /// Internal ordinary-route selection includes sealed scoped absence.
+    pub(crate) fn new_selected(
+        application: Arc<ApplicationServices>,
+        channel_id: i64,
+        budget: TeletextDesignDocumentBudget,
+        encoding: TeletextChannelDocumentEncodingPolicy,
+        source: TeletextSourcePolicy,
+        timing: TeletextAcceptedUpdatePolicy,
+        initial: Option<Arc<SelectedTeletextOutputCandidate>>,
+    ) -> Result<Self, TeletextPumpError> {
         if channel_id <= 0
             || budget.max_serialized_bytes == 0
             || initial.as_ref().is_some_and(|candidate| {
                 candidate.generation().request.channel_id != channel_id
-                    || candidate.selection().channel_id != channel_id
+                    || candidate.channel_id() != channel_id
             })
         {
             return Err(TeletextPumpError::Configuration);
@@ -87,22 +109,16 @@ impl TeletextLiveOutputIntent {
     async fn current_initial(
         &self,
         deadline: Instant,
-    ) -> Option<Arc<AcceptedTeletextOutputCandidate>> {
+    ) -> Option<Arc<SelectedTeletextOutputCandidate>> {
         let candidate = self.initial.as_ref()?;
-        let current = timeout_at(
-            deadline,
-            self.context
-                .application
-                .confirm_current_teletext_generation(
-                    candidate.generation(),
-                    candidate.selection(),
-                    self.context.budget.max_serialized_bytes,
-                ),
-        )
-        .await;
-        (Instant::now() < deadline
-            && matches!(current, Ok(Ok(TeletextGenerationMutation::Accepted(())))))
-        .then(|| Arc::clone(candidate))
+        candidate
+            .confirm(
+                &self.context.application,
+                self.context.budget.max_serialized_bytes,
+                deadline.into_std(),
+            )
+            .await
+            .then(|| Arc::clone(candidate))
     }
 }
 
@@ -165,14 +181,16 @@ pub async fn forward_live_teletext_output(
     let binding = qualified
         .output_config(&admitted.plan)
         .map_err(|_| TeletextPumpError::Configuration)
-        .and_then(|config| match initial.as_ref() {
-            Some(candidate) => TeletextOutputBinding::new_authored_shared(
-                config,
-                Arc::clone(candidate.service()),
-                limits.first_byte_timeout,
-            ),
-            None => TeletextOutputBinding::new_absent(config, limits.first_byte_timeout),
-        });
+        .and_then(
+            |config| match initial.as_ref().and_then(|candidate| candidate.service()) {
+                Some(service) => TeletextOutputBinding::new_authored_shared(
+                    config,
+                    Arc::clone(service),
+                    limits.first_byte_timeout,
+                ),
+                None => TeletextOutputBinding::new_absent(config, limits.first_byte_timeout),
+            },
+        );
     let binding = match binding {
         Ok(binding) => binding,
         Err(error) => {

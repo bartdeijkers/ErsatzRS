@@ -10,6 +10,7 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{
     EntityId, TeletextDesignExportMetadata, TeletextDesignExportReceipt, TeletextDesignHead,
     TeletextDesignRevision, MAX_TELETEXT_DESIGN_NAME_BYTES, TELETEXT_DESIGN_DOCUMENT_VERSION,
+    TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
 use sha2::{Digest as _, Sha256};
 use sqlx::{Executor, Row as _, Transaction};
@@ -252,12 +253,21 @@ fn valid_name(name: &str) -> bool {
 
 fn valid_save(save: &TeletextDesignSave, maximum: usize) -> bool {
     valid_name(&save.name)
-        && save.document_version == TELETEXT_DESIGN_DOCUMENT_VERSION
+        && supported_document_version(save.document_version)
         && !save.document.is_empty()
         && save.document.len() <= maximum
         && save
             .existing
             .is_none_or(|(id, revision)| id > 0 && revision > 0)
+}
+
+// This admits opaque persistence only. Each checked consumer must select its
+// own envelope version; version 2 never becomes a base publication receipt.
+fn supported_document_version(version: u16) -> bool {
+    matches!(
+        version,
+        TELETEXT_DESIGN_DOCUMENT_VERSION | TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION
+    )
 }
 
 fn mutation_rejection(head: &TeletextDesignHead, expected: i64) -> Option<R> {
@@ -302,6 +312,7 @@ fn decode_revision(row: &DbRow) -> Result<TeletextDesignRevision> {
     let version_type: String = row.try_get("VersionType").repository()?;
     let version: Option<i64> = row.try_get("DocumentVersion").repository()?;
     let version = version.ok_or_else(|| corrupt("revision metadata"))?;
+    let document_version = u16::try_from(version).map_err(|_| corrupt("revision integrity"))?;
     let document_type: String = row.try_get("DocumentType").repository()?;
     let stored_length: i64 = row.try_get("DocumentBytes").repository()?;
     let document: Option<Vec<u8>> = row.try_get("BoundedDocument").repository()?;
@@ -309,7 +320,7 @@ fn decode_revision(row: &DbRow) -> Result<TeletextDesignRevision> {
     let document = document.ok_or_else(|| corrupt("document bounds or type"))?;
     let digest = digest.ok_or_else(|| corrupt("digest bounds or type"))?;
     if version_type != "integer"
-        || version != i64::from(TELETEXT_DESIGN_DOCUMENT_VERSION)
+        || !supported_document_version(document_version)
         || document_type != "blob"
         || usize::try_from(stored_length).ok() != Some(document.len())
         || digest != sha256_hex(&document)
@@ -319,7 +330,7 @@ fn decode_revision(row: &DbRow) -> Result<TeletextDesignRevision> {
     Ok(TeletextDesignRevision {
         design_id: row.try_get("DesignId").repository()?,
         revision: row.try_get("Revision").repository()?,
-        document_version: TELETEXT_DESIGN_DOCUMENT_VERSION,
+        document_version,
         digest,
         document,
     })

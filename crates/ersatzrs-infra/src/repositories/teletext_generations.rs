@@ -24,8 +24,42 @@ use crate::db::{Db, DbPool, DbRow};
 #[derive(Clone)]
 pub struct SqliteTeletextGenerationRepository(pub DbPool);
 
+#[path = "teletext_effective_generations.rs"]
+mod effective;
+
 #[async_trait]
 impl TeletextGenerationRepository for SqliteTeletextGenerationRepository {
+    async fn accept_effective(
+        &self,
+        save: &ersatzrs_core::repositories::TeletextEffectiveGenerationSave,
+        max_document_bytes: usize,
+        deadline: std::time::Instant,
+    ) -> Result<M<TeletextAcceptedGeneration>> {
+        effective::accept(&self.0, save, max_document_bytes, deadline).await
+    }
+
+    async fn current_effective(
+        &self,
+        channel_id: EntityId,
+    ) -> Result<Option<TeletextAcceptedGeneration>> {
+        if channel_id <= 0 {
+            return Err(corrupt("generation channel identity"));
+        }
+        // Read-only transaction: role-specific metadata is not runtime admission.
+        let mut tx = self.0.begin().await.repository()?;
+        effective::current_in_transaction(&mut tx, channel_id).await
+    }
+
+    async fn confirm_current_effective(
+        &self,
+        generation: &TeletextAcceptedGeneration,
+        selection: &ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot,
+        max_document_bytes: usize,
+        deadline: std::time::Instant,
+    ) -> Result<M<()>> {
+        effective::confirm(&self.0, generation, selection, max_document_bytes, deadline).await
+    }
+
     async fn accept(
         &self,
         save: &TeletextGenerationSave,
@@ -151,13 +185,38 @@ async fn check_revision(
     request: &TeletextPublicationRequest,
     maximum: usize,
 ) -> Result<std::result::Result<(), R>> {
+    check_revision_for_version(
+        transaction,
+        request,
+        maximum,
+        ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION,
+        None,
+    )
+    .await
+}
+
+async fn check_revision_for_version(
+    transaction: &mut Transaction<'_, Db>,
+    request: &TeletextPublicationRequest,
+    maximum: usize,
+    expected_version: u16,
+    expected_scope: Option<&ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+) -> Result<std::result::Result<(), R>> {
     let Some(revision) =
         revision_in_transaction(transaction, request.design_id, request.revision, maximum).await?
     else {
         return Ok(Err(R::Publication(P::MissingRevision)));
     };
+    if revision.document_version != expected_version {
+        return Ok(Err(R::Publication(P::InvalidValues)));
+    }
     if revision.digest != request.digest {
         return Ok(Err(R::Publication(P::DigestConflict)));
+    }
+    if expected_scope.is_some_and(|scope| {
+        !super::teletext_publications::effective_scope::matches(&revision.document, scope)
+    }) {
+        return Ok(Err(R::Publication(P::SelectionChanged)));
     }
     match stored_fence(&revision.document) {
         Ok(Some(_)) => Ok(Err(R::GuideFreshnessRequired)),
@@ -217,6 +276,14 @@ async fn current_in_transaction(
 }
 
 fn decode_generation(row: &DbRow, channel_id: EntityId) -> Result<TeletextAcceptedGeneration> {
+    decode_generation_for_version(row, channel_id, TELETEXT_GENERATION_ARTIFACT_VERSION)
+}
+
+fn decode_generation_for_version(
+    row: &DbRow,
+    channel_id: EntityId,
+    expected_version: u16,
+) -> Result<TeletextAcceptedGeneration> {
     let number = |column: &str| -> Result<i64> {
         row.try_get::<Option<i64>, _>(column)
             .repository()?
@@ -234,7 +301,7 @@ fn decode_generation(row: &DbRow, channel_id: EntityId) -> Result<TeletextAccept
         u16::try_from(number("ArtifactVersion")?).map_err(|_| corrupt("artifact version"))?;
     let artifact_digest: Option<String> = row.try_get("ArtifactDigest").repository()?;
     let artifact_digest = artifact_digest.ok_or_else(|| corrupt("artifact digest"))?;
-    if !valid_artifact(artifact_version, &artifact_digest) {
+    if artifact_version != expected_version || !valid_digest(&artifact_digest) {
         return Err(corrupt("artifact metadata"));
     }
     let digest: Option<String> = row.try_get("Digest").repository()?;
