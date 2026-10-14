@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect scoped cumulative replacement/Off to warm ordinary-client responses; full engine acceptance open'
+current_focus = 'P9A-04: prove natural Lua expiry/base return on continuous ordinary playback; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,27 +62,28 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-14 cumulative scoped live client integration: the existing real Router
-now serves actual ordinary URLs after installed V3/Lua profiles, cumulative Q/R
-imports, preview, explicit scoped publication and reopen. Two simultaneous pinned
-VLC/libzvbi clients attach at normal rate, navigate200->201->200 with day-only Q/R
-and red/blue theme isolation, and both exit0. Two20-second TSDuck gates pass21
-checks each; four independent decodes, PID/language and full captured AV checks
-pass. P9A-04 owns exact source/tool/input/image/native receipts, the missing periodic
-delivery-monitor samples and retained initial compiler/lint failures. Root-only
-completion then proves unchanged scope/expiry/roots/pointers/packages/configuration/
-producer calls and bounded owned-server closure. One regular native metadata case,
-one actual ignored live case, ten pure Python cases and strict web Clippy/formatting
-pass. Reuse unchanged prior actualQTM/headed nine-culture admin/decoder evidence.
-Next adapt existing warm TCP/client barriers for role2 cumulative replacement/Off
-on the original responses; do not repeat the cold trial without changed inputs.
-Warm Lua changes/natural expiry, whole-host restart, automatic scoped readiness/
-applied acknowledgement, current guide qualification and full authored Level2.5/
-fallback/editor/source/Next/native/platform/playback acceptance remain open.
-Application reconstruction does not prove whole-host restart; default-capacity
-wait-slate timing remains separate open debt. Engine-first still forbids production
-guide work. No push until UCU-10 and UCU-11 merge and Phase9 is invited to resume
-remote delivery. Preserve concurrent UCU work.
+2026-10-14 scoped warm client checkpoint: real installed V3/Lua profiles now
+connect Q-only concept, validation/preview/explicit publication, cumulative QR
+replacement and genuine Scripted Lua Off to three original ordinary responses.
+Two unchanged pinned VLC/libzvbi processes navigate200->201->200 with isolated
+red/day versus blue/night themes; actual QR and Off frames pass root inspection.
+VLC Day decoder reselection after PMT replacement is required and recorded.
+Both clients exit0 after owned SIGTERM. The native case exits0 after root-only
+completion, unchanged scope/expiry/roots/configuration/packages/other channel and
+bounded cleanup. Three raw transport/AV checks and18 independent page decodes,
+two unique normal metadata cases,12 protocol cases, strict web Clippy and format
+pass. P9A-04 owns exact receipt and all three retained negative native trials.
+Reuse unchanged pinned QTM/headed all-culture admin evidence; no production/UI
+code changed. This representative flow does not close complete engine acceptance.
+Next prove natural original Lua expiry and independent accepted-base restoration
+on continuous ordinary playback. Concrete fixture gap:60-second clip versus real
+four-minute scope; use supported scheduling/source lifetime without rewriting
+interval rows, original expiry, source clocks or EOF. Whole-host restart, automatic
+scoped readiness/applied acknowledgement, current guide qualification and full
+authored Level2.5/fallback/editor/resource/zone/source/Next/native/platform/playback
+acceptance remain open. Default-capacity wait-slate timing remains separate debt.
+Engine-first forbids production guide work until independent acceptance. No push
+to remote/main until UCU10/UCU11 merge and Phase9 is invited back; preserve UCU work.
 
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly

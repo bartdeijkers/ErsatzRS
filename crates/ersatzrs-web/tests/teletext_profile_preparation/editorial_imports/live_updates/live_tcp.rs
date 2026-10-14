@@ -50,7 +50,7 @@ impl io::Write for TerminalLog {
     }
 }
 
-fn terminal_trace(directory: &Path) -> io::Result<()> {
+pub(in super::super::super) fn terminal_trace(directory: &Path) -> io::Result<()> {
     use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
     let file = std::fs::OpenOptions::new()
         .write(true)
@@ -82,7 +82,7 @@ fn terminal_trace(directory: &Path) -> io::Result<()> {
         .map_err(|_| io::Error::other("warm isolated terminal subscriber could not be installed"))
 }
 
-fn hash(bytes: &[u8]) -> String {
+pub(in super::super::super) fn hash(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut value = String::with_capacity(64);
     for byte in sha2::Sha256::digest(bytes) {
@@ -91,7 +91,7 @@ fn hash(bytes: &[u8]) -> String {
     value
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(in super::super::super) fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write as _;
     let directory = path
         .parent()
@@ -107,7 +107,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
     temporary.close()
 }
 
-fn read_bounded(path: &Path, maximum: usize) -> io::Result<Vec<u8>> {
+pub(in super::super::super) fn read_bounded(path: &Path, maximum: usize) -> io::Result<Vec<u8>> {
     use std::io::Read as _;
     let metadata = std::fs::symlink_metadata(path)?;
     if !metadata.file_type().is_file() || metadata.len() > u64::try_from(maximum).unwrap() {
@@ -125,7 +125,11 @@ fn read_bounded(path: &Path, maximum: usize) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-async fn wait_file(directory: &Path, name: &str, deadline: Instant) -> io::Result<Vec<u8>> {
+pub(in super::super::super) async fn wait_file(
+    directory: &Path,
+    name: &str,
+    deadline: Instant,
+) -> io::Result<Vec<u8>> {
     timeout_at(deadline, async {
         let path = directory.join(name);
         loop {
@@ -239,14 +243,17 @@ async fn tee_response(State(state): State<Tee>, request: Request, next: Next) ->
     Response::from_parts(parts, Body::from_stream(stream))
 }
 
-struct Origin {
+pub(in super::super::super) struct Origin {
     base: String,
     state: Tee,
     task: JoinHandle<io::Result<()>>,
 }
 
 impl Origin {
-    async fn start(fixture: &Fixture, directory: &Path) -> io::Result<Self> {
+    pub(in super::super::super) async fn start(
+        fixture: &Fixture,
+        directory: &Path,
+    ) -> io::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
         let state = Tee {
@@ -273,13 +280,13 @@ impl Origin {
             task,
         })
     }
-    fn url(&self, channel: u8, viewer: &str) -> String {
+    pub(in super::super::super) fn url(&self, channel: u8, viewer: &str) -> String {
         format!(
             "{}/iptv/hls-direct/{channel}.ts?teletext_test_viewer={viewer}",
             self.base
         )
     }
-    async fn close(&mut self) -> io::Result<()> {
+    pub(in super::super::super) async fn close(&mut self) -> io::Result<()> {
         self.state.stop.cancel();
         match tokio::time::timeout(Duration::from_secs(5), &mut self.task).await {
             Ok(Ok(result)) => result,
@@ -291,6 +298,9 @@ impl Origin {
             }
         }
     }
+    pub(in super::super::super) fn captures(&self) -> &[Capture; 3] {
+        &self.state.captures
+    }
 }
 
 impl Drop for Origin {
@@ -300,13 +310,13 @@ impl Drop for Origin {
     }
 }
 
-struct Observer {
+pub(in super::super::super) struct Observer {
     stop: CancellationToken,
     task: JoinHandle<io::Result<()>>,
 }
 
 impl Observer {
-    fn start(origin: &Origin) -> Self {
+    pub(in super::super::super) fn start(origin: &Origin) -> Self {
         let stop = CancellationToken::new();
         let cancel = stop.clone();
         let url = origin.url(1, "observer");
@@ -340,7 +350,7 @@ impl Observer {
         });
         Self { stop, task }
     }
-    async fn close(&mut self) -> io::Result<()> {
+    pub(in super::super::super) async fn close(&mut self) -> io::Result<()> {
         self.stop.cancel();
         match tokio::time::timeout(Duration::from_secs(5), &mut self.task).await {
             Ok(Ok(result)) => result,
@@ -365,26 +375,26 @@ impl Drop for Observer {
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ClientIdentity {
-    viewer: String,
-    pid: u32,
+pub(in super::super::super) struct ClientIdentity {
+    pub(in super::super::super) viewer: String,
+    pub(in super::super::super) pid: u32,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Screenshot {
-    viewer: String,
-    page: Option<u16>,
-    file: String,
-    sha256: String,
+pub(in super::super::super) struct Screenshot {
+    pub(in super::super::super) viewer: String,
+    pub(in super::super::super) page: Option<u16>,
+    pub(in super::super::super) file: String,
+    pub(in super::super::super) sha256: String,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct StageCaptured {
-    probe_version: u8,
-    stage: u8,
-    ready_sha256: String,
-    clients: Vec<ClientIdentity>,
-    screenshots: Vec<Screenshot>,
+pub(in super::super::super) struct StageCaptured {
+    pub(in super::super::super) probe_version: u8,
+    pub(in super::super::super) stage: u8,
+    pub(in super::super::super) ready_sha256: String,
+    pub(in super::super::super) clients: Vec<ClientIdentity>,
+    pub(in super::super::super) screenshots: Vec<Screenshot>,
 }
 
 fn valid_digest(value: &str) -> bool {
@@ -395,6 +405,28 @@ fn valid_digest(value: &str) -> bool {
 }
 
 fn validate_images(marker: &StageCaptured) -> io::Result<()> {
+    let navigation = [Some(124), Some(125), Some(124)];
+    let single = [Some(124)];
+    let off = [None];
+    let day = if marker.stage == 2 {
+        &navigation[..]
+    } else if matches!(marker.stage, 1 | 4) {
+        &off[..]
+    } else {
+        &single[..]
+    };
+    let night = if marker.stage == 2 {
+        &navigation[..]
+    } else {
+        &single[..]
+    };
+    validate_images_for(marker, [day, night])
+}
+
+pub(in super::super::super) fn validate_images_for(
+    marker: &StageCaptured,
+    expected: [&[Option<u16>]; 2],
+) -> io::Result<()> {
     if marker.screenshots.len() > 12 {
         return Err(io::Error::other("warm stage image count exceeds bound"));
     }
@@ -414,21 +446,14 @@ fn validate_images(marker: &StageCaptured) -> io::Result<()> {
             return Err(io::Error::other("warm stage image label/digest is invalid"));
         }
     }
-    for viewer in ["day", "night"] {
+    for (index, viewer) in ["day", "night"].into_iter().enumerate() {
         let pages: Vec<_> = marker
             .screenshots
             .iter()
             .filter(|image| image.viewer == viewer)
             .map(|image| image.page)
             .collect();
-        let expected = if marker.stage == 2 {
-            vec![Some(124), Some(125), Some(124)]
-        } else if viewer == "day" && matches!(marker.stage, 1 | 4) {
-            vec![None]
-        } else {
-            vec![Some(124)]
-        };
-        if pages != expected {
+        if pages != expected[index] {
             return Err(io::Error::other(
                 "warm stage requested-page sequence is incomplete",
             ));
@@ -701,7 +726,10 @@ async fn transitions(
     Ok(current)
 }
 
-async fn wait_attached(origin: &Origin, deadline: Instant) -> io::Result<()> {
+pub(in super::super::super) async fn wait_attached(
+    origin: &Origin,
+    deadline: Instant,
+) -> io::Result<()> {
     // Client process launch is external orchestration, not a new source-clock
     // deadline. Start the existing five-second physical predicates only after
     // all three distinct real responses have actually yielded complete packets.
@@ -724,7 +752,7 @@ async fn wait_attached(origin: &Origin, deadline: Instant) -> io::Result<()> {
     .map_err(|_| io::Error::other("warm viewers did not attach within overall deadline"))
 }
 
-async fn wait_for_cleanup() -> io::Result<()> {
+pub(in super::super::super) async fn wait_for_cleanup() -> io::Result<()> {
     tokio::time::timeout(Duration::from_secs(5), async {
         while ersatzrs_infra::transcode_capacity::active_transcode_snapshot(3).active != 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -734,7 +762,7 @@ async fn wait_for_cleanup() -> io::Result<()> {
     .map_err(|_| io::Error::other("warm response producers did not release owned capacity"))
 }
 
-fn save_captures(directory: &Path, origin: &Origin) -> io::Result<()> {
+pub(in super::super::super) fn save_captures(directory: &Path, origin: &Origin) -> io::Result<()> {
     for (index, name) in ["day", "observer", "night"].iter().enumerate() {
         write_new(
             &directory.join(format!("{name}-ordinary.ts")),
@@ -749,6 +777,17 @@ async fn verify_native(
     tools: (&str, &str, &str),
     source: &[u8],
     views: &[Capture; 3],
+) {
+    verify_native_pages(directory, tools, source, views, &["124"], false).await;
+}
+
+pub(in super::super::super) async fn verify_native_pages(
+    directory: &Path,
+    tools: (&str, &str, &str),
+    source: &[u8],
+    views: &[Capture; 3],
+    pages: &[&str],
+    zone_edit: bool,
 ) {
     let (ffmpeg, ffprobe, tsanalyze) = tools;
     for (index, capture) in views.iter().enumerate() {
@@ -787,22 +826,31 @@ async fn verify_native(
         .await;
         // At most60s mono48kHz s16 PCM; the cold12s helper keeps its2MiB cap.
         client_capture::verify_av_with_audio_bound(ffmpeg, source, &bytes, 6 * 1024 * 1024).await;
-        let text =
-            client_capture::decode_page_text_with_discovery(ffmpeg, &bytes, "124", true).await;
-        assert!(
-            text.contains("AZ"),
-            "actual decoder lost original enhanced source glyphs"
-        );
-        assert_eq!(
-            text.contains('Q'),
-            index != 2,
-            "actual decoder mixed channel-specific concept edits"
-        );
-        write_new(
-            &directory.join(format!("{name}-decoded-124.srt")),
-            text.as_bytes(),
-        )
-        .unwrap();
+        for (ordinal, page) in pages.iter().enumerate() {
+            let text =
+                client_capture::decode_page_text_with_discovery(ffmpeg, &bytes, page, true).await;
+            assert!(
+                text.contains("AZ"),
+                "actual decoder lost original enhanced source glyphs"
+            );
+            assert_eq!(
+                text.contains('Q'),
+                index != 2 && ordinal == 0,
+                "actual decoder mixed channel-specific concept edits"
+            );
+            if zone_edit {
+                assert_eq!(
+                    text.contains('R'),
+                    index != 2 && ordinal == 0,
+                    "actual decoder mixed cumulative zone edits"
+                );
+            }
+            write_new(
+                &directory.join(format!("{name}-decoded-{page}.srt")),
+                text.as_bytes(),
+            )
+            .unwrap();
+        }
     }
 }
 

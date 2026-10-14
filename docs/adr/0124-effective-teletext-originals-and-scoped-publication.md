@@ -150,8 +150,12 @@ instead of emitting stale output. This is an integration gap, not an accepted
 authoring restriction. Version-1 startup-only delivery keeps its base-only guard.
 Automatic preparation/publication following schedule controls, headed localized
 scoped administration and per-output applied acknowledgement, the complete
-delivery matrix, whole-host restart
-and same-URL suitable-client proof remain required. The parity record and P9A-04
+delivery matrix and whole-host restart remain required. P9A-04 now records
+a representative same-URL Q -> cumulative QR -> genuine Scripted Lua Off trial
+with simultaneous isolated themes, actual client navigation and independent
+transport/decoding/AV proof. Existing VLC decoder reselection after PMT replacement
+is required; natural original expiry/base return, automatic resource/cache
+retirement and complete suitable-client/engine acceptance remain open. The parity record and P9A-04
 own verification and the next concrete connection.
 
 ## Alternatives Considered

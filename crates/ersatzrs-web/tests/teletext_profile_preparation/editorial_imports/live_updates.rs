@@ -4,7 +4,7 @@
 #[path = "live_updates/live_http.rs"]
 mod live_http;
 #[path = "live_updates/live_tcp.rs"]
-mod live_tcp;
+pub(in super::super) mod live_tcp;
 #[path = "live_updates/live_tcp_clock.rs"]
 mod live_tcp_clock;
 
@@ -64,7 +64,7 @@ fn same_unit(expected: &[u8; 46], actual: &[u8; 46]) -> bool {
 }
 
 #[derive(Default)]
-struct Wire {
+pub(in super::super) struct Wire {
     bytes: Vec<u8>,
     parsed: usize,
     pmt: Option<bool>,
@@ -149,7 +149,7 @@ impl Wire {
 }
 
 #[derive(Clone)]
-struct Capture {
+pub(in super::super) struct Capture {
     wire: Arc<Mutex<Wire>>,
     changed: Arc<Notify>,
 }
@@ -161,10 +161,10 @@ impl Capture {
             changed: Arc::new(Notify::new()),
         }
     }
-    fn position(&self) -> usize {
+    pub(in super::super) fn position(&self) -> usize {
         self.wire.lock().unwrap().parsed
     }
-    fn bytes(&self) -> Vec<u8> {
+    pub(in super::super) fn bytes(&self) -> Vec<u8> {
         self.wire.lock().unwrap().bytes.clone()
     }
     async fn wait(&self, predicate: impl Fn(&Wire) -> bool) {
@@ -180,15 +180,22 @@ impl Capture {
         .await
         .expect("same output did not reach its required wire state");
     }
-    async fn off(&self, after: usize) {
+    pub(in super::super) async fn off(&self, after: usize) {
         self.wait(|wire| wire.parsed >= after + 188 * 200 && wire.pmt == Some(false))
             .await;
     }
     async fn service(&self, after: usize, candidate: &AcceptedTeletextOutputCandidate) {
-        let expected: Vec<_> = designs::units(candidate.service())
+        self.service_encoded(after, candidate.service()).await;
+    }
+    pub(in super::super) async fn service_encoded(
+        &self,
+        after: usize,
+        service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    ) {
+        let expected: Vec<_> = designs::units(service)
             .into_iter()
             .flatten()
-            .chain(candidate.service().magazine_units().iter().copied())
+            .chain(service.magazine_units().iter().copied())
             .collect();
         assert!(!expected.is_empty());
         self.wait(|wire| {

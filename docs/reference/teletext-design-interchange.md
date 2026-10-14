@@ -3981,6 +3981,45 @@ installed package, and proves cold MAIN display/navigation only. Full authored
 Level2.5/fallback, sparse X27, panels, warm controls, editor-resource workflow,
 Lua/restart, localized admin and six-platform acceptance remain required.
 
+### Scoped cumulative warm ordinary-URL workflow
+
+The ignored selector
+`warm_scoped_cumulative_tcp_views_wait_for_headed_q_qr_and_lua_off` uses
+`ERSATZRS_TELETEXT_SCOPED_WARM_CLIENT_DIR`, exact FFmpeg9/ffprobe/TSDuck overrides
+and the existing three-owned-response server. Closed readiness version2 binds
+installed V3/Lua Q-only Day revision2 and untouched Night revision1, actual
+ordinary URLs, authenticated originals/receipts and original expiry. The source
+is bounded to60s/48MiB; original scope and source timestamps are never rewritten.
+
+Run `scripts/e2e/teletext-live-update-client-trial.py` against its `ready.json`
+on X11. It retains the same two owned VLC processes/URLs through exactly three
+stages: Q with200->201->200 on each channel; cumulative QR on Day200 and unchanged
+Night200; genuine Scripted Lua Off with normal Day video and unchanged Night200.
+The native fixture uses the existing builder and transactional schedule commit
+for Off, creates an absence concept and explicitly publishes it. It never edits
+interval rows or lets import publish automatically. Every stage marker binds exact
+readiness hash, unchanged client PIDs and image hashes; it proves synchronization,
+not visual correctness. Stage decode prefixes end after actual capture/navigation
+and before the next publication, rather than at early wire readiness.
+
+The helper reselects the existing Day decoder after PMT replacement without
+reconnecting or replacing the client. This required VLC action does not establish
+automatic cache/resource retirement. The client uses one original150s deadline;
+new Off authority cannot renew it. Inspect all ten frames and wait for both owned
+clients to exit0 after controlled SIGTERM. Root alone then atomically writes the
+five-field `final_completion` as `client-complete.json` before the original180s
+native deadline. Require actual nextest exit0 and `success.json`; late markers,
+correct images alone or driver exit0 are insufficient. Native success additionally
+checks immutable state, bounded actor closure, three raw transport/AV captures,
+twelve stage-prefix and six full-capture independent page decodes.
+
+This is representative resource-free MAIN evidence. P9A-04 owns positive/negative
+receipts and remaining criteria. Natural original expiry/base return needs an
+ordinary source lifetime beyond the current60s clip and original four-minute Lua
+scope; do not extend captured authority or replay bytes after EOF. Whole-host
+restart, automatic scoped readiness/applied acknowledgement, full authored
+Level2.5/fallback/editor/resources/panels and platform/playback acceptance remain.
+
 ### Warm ordinary-URL client workflow
 
 The ignored selector `warm_ordinary_tcp_views_wait_for_headed` uses three original

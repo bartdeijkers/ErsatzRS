@@ -1394,3 +1394,16 @@ before opening the actual ordinary URLs. Inspect cumulative free Q/zone R only o
 day200 and the isolated night theme. The linked workflow retains the same explicit
 root completion, genuine EOF and cleanup requirements. Cold direct attachment
 does not establish warm changes/expiry, whole-host restart or full engine acceptance.
+
+
+The scoped warm selector
+`warm_scoped_cumulative_tcp_views_wait_for_headed_q_qr_and_lua_off` uses
+`ERSATZRS_TELETEXT_SCOPED_WARM_CLIENT_DIR` and closed readiness version2 with the
+existing `teletext-live-update-client-trial.py` helper. It exercises Q navigation,
+cumulative QR replacement and actual Lua Off on the original responses, keeping
+the same two processes and isolated themes. Follow the
+[scoped warm workflow and completion bounds](../../docs/reference/teletext-design-interchange.md#scoped-cumulative-warm-ordinary-url-workflow).
+Required existing-decoder reselection is explicit; controlled client closure,
+root image inspection and native exit0/success are separate checks. A successful
+representative warm flow does not prove natural expiry, whole-host restart,
+resource retirement or full engine acceptance.

@@ -45,11 +45,11 @@ use std::{
 const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_SCOPED_LIVE_CLIENT_DIR";
 const SOURCE_MAXIMUM: usize = 48 * 1024 * 1024;
 
-struct Flow {
-    fixture: AuthoringFixture,
-    roots: [TeletextDesignRevision; 2],
-    root_exports: [ExportedOriginalTeletextDesign; 2],
-    accepted: [AcceptedEffectiveTeletextOutputCandidate; 2],
+pub(super) struct Flow {
+    pub(super) fixture: AuthoringFixture,
+    pub(super) roots: [TeletextDesignRevision; 2],
+    pub(super) root_exports: [ExportedOriginalTeletextDesign; 2],
+    pub(super) accepted: [AcceptedEffectiveTeletextOutputCandidate; 2],
 }
 
 fn two_pages(theme: &str) -> Value {
@@ -79,7 +79,7 @@ fn two_pages(theme: &str) -> Value {
     first
 }
 
-async fn fixture() -> AuthoringFixture {
+pub(super) async fn fixture() -> AuthoringFixture {
     let fixture = v3_fixture().await;
     // All settings and synthetic response changes precede scoped capture.
     ordinary_stream_flow::setting(&fixture.fixture, "teletext.work.max_concurrent", "4").await;
@@ -96,12 +96,24 @@ async fn fixture() -> AuthoringFixture {
 }
 
 async fn publish_lua(fixture: &AuthoringFixture, channel: i64, index: usize) {
+    publish_lua_state(fixture, channel, Some(index)).await;
+}
+
+pub(super) async fn publish_lua_off(fixture: &AuthoringFixture) {
+    publish_lua_state(fixture, 1, None).await;
+}
+
+async fn publish_lua_state(fixture: &AuthoringFixture, channel: i64, index: Option<usize>) {
     let file = fixture
         .fixture
         .root
         .path()
         .join(format!("controls-{channel}.lua"));
-    std::fs::write(&file, format!("assert(teletext_profile('{ADDON}',{}).ok)\nassert(teletext_enabled('{ADDON}',true).ok)\nadd_count('clip',4)", fixture.profiles[index].id)).unwrap();
+    let controls = index.map_or_else(
+        || format!("assert(teletext_enabled('{ADDON}',false).ok)"),
+        |index| format!("assert(teletext_profile('{ADDON}',{}).ok)\nassert(teletext_enabled('{ADDON}',true).ok)",fixture.profiles[index].id),
+    );
+    std::fs::write(&file, format!("{controls}\nadd_count('clip',4)")).unwrap();
     let start = (Utc::now() - chrono::Duration::seconds(1))
         .with_nanosecond(0)
         .unwrap();
@@ -176,12 +188,20 @@ async fn prepare(fixture: &AuthoringFixture, channel: i64) -> TeletextAuthoringI
     saved.identity
 }
 
-async fn publish(fixture: &AuthoringFixture, identity: TeletextAuthoringIdentity) {
+pub(super) async fn publish(fixture: &AuthoringFixture, identity: TeletextAuthoringIdentity) {
+    publish_with_owner(fixture, identity, Some(channel_documents::address(200, 0))).await;
+}
+
+pub(super) async fn publish_with_owner(
+    fixture: &AuthoringFixture,
+    identity: TeletextAuthoringIdentity,
+    owner: Option<ersatzrs_domain::TeletextPageAddress>,
+) {
     let request = || TeletextAuthoringPreviewRequest {
         channel_id: identity.channel_id,
         design_id: identity.design_id,
         revision: identity.revision,
-        owner: Some(channel_documents::address(200, 0)),
+        owner,
     };
     let preview = preview_original_teletext_design(
         &fixture.fixture.state.application,
@@ -237,7 +257,11 @@ async fn publish(fixture: &AuthoringFixture, identity: TeletextAuthoringIdentity
     .unwrap();
 }
 
-async fn complete(mut fixture: AuthoringFixture) -> Flow {
+async fn complete(fixture: AuthoringFixture) -> Flow {
+    complete_with_zone(fixture, true).await
+}
+
+pub(super) async fn complete_with_zone(mut fixture: AuthoringFixture, zone: bool) -> Flow {
     for (index, channel) in [1, 2].into_iter().enumerate() {
         publish_lua(&fixture, channel, index).await;
     }
@@ -263,19 +287,23 @@ async fn complete(mut fixture: AuthoringFixture) -> Flow {
         design_id: q.head().id,
         revision: q.head().revision,
     };
-    let q_revision = original(&fixture.fixture, q_identity).await;
-    let q_export = export(&fixture.fixture, &q_revision).await;
-    let r = import(
-        &fixture.fixture,
-        repeated_editorial_imports::request(&q_export, 2, &[(owner, 3, b'R')]),
-    )
-    .await;
-    let identity = TeletextAuthoringIdentity {
-        channel_id: 1,
-        design_id: r.head().id,
-        revision: r.head().revision,
+    let identity = if zone {
+        let q_revision = original(&fixture.fixture, q_identity).await;
+        let q_export = export(&fixture.fixture, &q_revision).await;
+        let r = import(
+            &fixture.fixture,
+            repeated_editorial_imports::request(&q_export, 2, &[(owner, 3, b'R')]),
+        )
+        .await;
+        TeletextAuthoringIdentity {
+            channel_id: 1,
+            design_id: r.head().id,
+            revision: r.head().revision,
+        }
+    } else {
+        q_identity
     };
-    assert_eq!(identity.revision, 3);
+    assert_eq!(identity.revision, if zone { 3 } else { 2 });
     let current = original(&fixture.fixture, identity).await;
     let restored =
         decode_teletext_effective_design_documents(&current.document, designs::budget()).unwrap();
@@ -289,7 +317,7 @@ async fn complete(mut fixture: AuthoringFixture) -> Flow {
     );
     assert_eq!(overlay.provenance().original_digest, roots[0].digest);
     assert_eq!(overlay.pages().len(), 1);
-    assert_eq!(overlay.pages()[0].rows().len(), 2);
+    assert_eq!(overlay.pages()[0].rows().len(), if zone { 2 } else { 1 });
     publish(&fixture, identity).await;
     publish(&fixture, second).await;
     assert_eq!(fixture.calls(), calls);
@@ -314,30 +342,33 @@ async fn complete(mut fixture: AuthoringFixture) -> Flow {
     }
 }
 
-async fn recover(fixture: &Fixture, channel: i64) -> AcceptedEffectiveTeletextOutputCandidate {
+pub(super) async fn recover(
+    fixture: &Fixture,
+    channel: i64,
+) -> AcceptedEffectiveTeletextOutputCandidate {
     effective_generations::recover(fixture, channel)
         .await
         .unwrap()
         .unwrap()
 }
 
-fn same_output(
+pub(super) fn same_output(
     actual: &AcceptedEffectiveTeletextOutputCandidate,
     expected: &AcceptedEffectiveTeletextOutputCandidate,
 ) {
     assert_eq!(actual.generation(), expected.generation());
     assert_eq!(actual.selection(), expected.selection());
-    assert_eq!(
-        designs::units(actual.service().unwrap()),
-        designs::units(expected.service().unwrap())
-    );
-    assert_eq!(
-        actual.service().unwrap().magazine_units(),
-        expected.service().unwrap().magazine_units()
-    );
+    match (actual.service(), expected.service()) {
+        (Some(actual), Some(expected)) => {
+            assert_eq!(designs::units(actual), designs::units(expected));
+            assert_eq!(actual.magazine_units(), expected.magazine_units());
+        }
+        (None, None) => {}
+        _ => panic!("output presence changed"),
+    }
 }
 
-fn channel_facts(flow: &Flow, index: usize) -> Value {
+pub(super) fn channel_facts(flow: &Flow, index: usize) -> Value {
     let accepted = &flow.accepted[index];
     let TeletextEffectiveBindingSnapshot::Scripted(published) = &accepted.selection().bindings[0]
     else {
@@ -365,7 +396,7 @@ fn channel_facts(flow: &Flow, index: usize) -> Value {
       "edited_q_cell":{"row":2,"column":8},"edited_r_cell":{"row":3,"column":8}})
 }
 
-async fn configure_source(fixture: &Fixture, source: &Path) {
+pub(super) async fn configure_source(fixture: &Fixture, source: &Path) {
     client_capture::configure_source_for_channels(fixture, source, &[]).await;
     let repositories = ersatzrs_infra::repositories::make_repositories(fixture.state.pool.clone());
     for channel in [1, 2] {
@@ -495,7 +526,7 @@ async fn retained_state(fixture: &Fixture) -> Vec<Vec<String>> {
 
 #[tokio::test]
 async fn cumulative_scoped_live_client_metadata_preserves_real_role_scope_and_two_edits() {
-    let flow = complete(fixture().await).await;
+    let flow = Box::pin(complete(fixture().await)).await;
     let day = channel_facts(&flow, 0);
     let night = channel_facts(&flow, 1);
     assert_eq!(day["design_revision"], 3);
@@ -536,7 +567,7 @@ async fn cumulative_scoped_originals_serve_live_ordinary_urls() {
     let source = read_bounded(&source_path, SOURCE_MAXIMUM).unwrap();
     assert!(!source.is_empty() && source.len().is_multiple_of(188));
     write_new(&directory.join("source.ts"), &source).unwrap();
-    let flow = complete(fixture).await;
+    let flow = Box::pin(complete(fixture)).await;
     assert_eq!(
         ersatzrs_infra::transcode_capacity::load_active_transcode_limit(
             &flow.fixture.fixture.state.pool
