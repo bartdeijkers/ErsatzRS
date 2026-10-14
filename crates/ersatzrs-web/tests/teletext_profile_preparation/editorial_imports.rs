@@ -50,7 +50,7 @@ mod live_updates;
 #[path = "editorial_imports/qtm_carrier.rs"]
 mod qtm_carrier;
 
-fn policy() -> NativeTeletextExportPolicy {
+pub(super) fn policy() -> NativeTeletextExportPolicy {
     NativeTeletextExportPolicy {
         document: designs::budget(),
         encoding: channel_documents::policy(),
@@ -235,7 +235,13 @@ async fn prepare_with_policy(
     .unwrap()
 }
 
-fn edit_cell(files: &mut [TeletextExportFile], name: &str, row: u8, column: usize, code: u8) {
+pub(super) fn edit_cell(
+    files: &mut [TeletextExportFile],
+    name: &str,
+    row: u8,
+    column: usize,
+    code: u8,
+) {
     let file = files.iter_mut().find(|file| file.name == name).unwrap();
     let parsed = parse_teletext_tti(&file.bytes, policy().tti).unwrap();
     let mut records = parsed.records().to_vec();

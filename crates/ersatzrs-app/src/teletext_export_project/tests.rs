@@ -1,6 +1,9 @@
 use super::*;
 use serde_json::{json, Value};
 
+#[path = "effective_tests.rs"]
+mod effective_tests;
+
 fn budget() -> TeletextExportProjectBudget {
     TeletextExportProjectBudget {
         max_bytes: 65536,
@@ -33,7 +36,7 @@ fn project() -> TeletextExportProject {
             ordinal: 0,
             addon_id: "org.ersatzrs.synthetic-guide".into(),
             contract: 2,
-            binding_revision: 2,
+            binding_revision: Some(2),
             profile_id: 3,
             profile_revision: 4,
             installation: TeletextExportInstallation {
@@ -44,6 +47,7 @@ fn project() -> TeletextExportProject {
                 manifest_sha256: digest.clone(),
             },
             authoring: None,
+            effective_origin: None,
         }],
         pages: vec![TeletextExportPageMapping {
             name: "200-0123.tti".into(),
@@ -63,6 +67,7 @@ fn project() -> TeletextExportProject {
             tti_sha256: digest,
         }],
         assets: Vec::new(),
+        effective_scope: None,
     }
 }
 fn receipt() -> TeletextExportReceiptBody {

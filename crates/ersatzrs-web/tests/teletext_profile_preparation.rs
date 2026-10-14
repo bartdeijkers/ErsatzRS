@@ -62,6 +62,8 @@ mod effective_authoring;
 mod effective_channel_documents;
 #[path = "teletext_profile_preparation/effective_designs.rs"]
 mod effective_designs;
+#[path = "teletext_profile_preparation/effective_editorial_imports.rs"]
+mod effective_editorial_imports;
 #[path = "teletext_profile_preparation/effective_generations.rs"]
 mod effective_generations;
 #[path = "teletext_profile_preparation/effective_ordinary_stream_flow.rs"]

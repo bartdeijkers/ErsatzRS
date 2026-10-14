@@ -35,8 +35,12 @@ release section when tagging a release.
   separate base/effective pointers. The synthetic flow is now verified through
   localized hydrated/no-JS admin forms, ordinary AV-safe streams and independently
   decoded client navigation with contrasting channel themes. Current guide
-  qualification, scoped editor
-  interchange and complete admin/Lua/client delivery remain open.
+  qualification and complete admin/Lua/client delivery remain open. Scoped
+  originals now share protected native editor export/import-as-draft and preview,
+  retaining real Lua origins, Off membership and original expiry through versioned
+  metadata. Imported concepts do not publish or change packages; explicit
+  publication still requires the original current scope. Full pinned-editor and
+  repeat-edit acceptance remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

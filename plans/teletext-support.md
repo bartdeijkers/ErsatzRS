@@ -662,8 +662,12 @@ compilation and concept save. Preview and publication dispatch from the stored
 revision version, never a submitted role. Historical previews remain readable
 after expiry or profile removal; publication requires fresh current authority.
 Keep effective and base pending/accepted pointers independent. Selection does
-not establish per-output application. Scoped editor interchange is unfinished
-work, not a permanent permission restriction.
+not establish per-output application. Effective originals now share the existing
+native editor forms and protected receipt-backed concept/preview/compiler path.
+Metadata project schema2 keeps real producing origins, Off-aware binding indices
+and the exact nullable saved expiry; base schema1 stays unchanged. Historical
+editing cannot renew authority. Headed pinned-editor flow and bounded repeat-edit
+baselines remain required, not permanent permission restrictions.
 
 Hydration source map for this integration:
 
@@ -673,8 +677,8 @@ Hydration source map for this integration:
 - Data boundary: bounded redacted base/effective observations and immutable
   preview projection; absence has no page, raster or navigation payload.
 - Server functions/API: existing channel/preview reads and native prepare,
-  request and explicit publish POST endpoints; stored revision role selects
-  the application function.
+  request, editor export/import and explicit publish POST endpoints; stored
+  revision role selects the application function.
 - No-JS path: separate native forms with unique effective input IDs; existing
   base forms and CAS observations retain their identities.
 - Shared primitives: existing button classes, fieldsets, status feedback,

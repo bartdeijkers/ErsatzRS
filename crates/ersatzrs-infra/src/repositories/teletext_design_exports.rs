@@ -3,7 +3,7 @@
 use ersatzrs_core::repositories::TeletextDesignExportSave;
 use ersatzrs_domain::{
     TeletextDesignExportMetadata, TeletextDesignExportReceipt,
-    TELETEXT_DESIGN_EXPORT_RECEIPT_VERSION,
+    TELETEXT_DESIGN_EXPORT_RECEIPT_VERSION, TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
 use sqlx::Row as _;
 
@@ -31,7 +31,10 @@ pub(super) async fn create(
     else {
         return Ok(M::Rejected(R::MissingDesign));
     };
-    if original.document_version != TELETEXT_DESIGN_DOCUMENT_VERSION {
+    if !matches!(
+        original.document_version,
+        TELETEXT_DESIGN_DOCUMENT_VERSION | TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION
+    ) {
         return Ok(M::Rejected(R::InvalidValues));
     }
     if original.digest != save.design_digest {
@@ -115,7 +118,10 @@ pub(super) async fn read(
     else {
         return Err(corrupt("export original revision"));
     };
-    if original.document_version != TELETEXT_DESIGN_DOCUMENT_VERSION {
+    if !matches!(
+        original.document_version,
+        TELETEXT_DESIGN_DOCUMENT_VERSION | TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION
+    ) {
         return Err(corrupt("export original version"));
     }
     if original.digest != receipt.metadata.design_digest {

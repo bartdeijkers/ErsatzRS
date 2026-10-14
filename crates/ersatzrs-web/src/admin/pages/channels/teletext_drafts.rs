@@ -24,6 +24,7 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "editorial-mismatch" => TextKey::TeletextEditorMismatch,
         "editorial-protected" => TextKey::TeletextEditorProtected,
         "editorial-no-changes" => TextKey::TeletextEditorNoChanges,
+        "editorial-no-pages" => TextKey::TeletextPreviewAbsent,
         "editorial-syntax" => TextKey::TeletextEditorSyntax,
         "editorial-missing-receipt" => TextKey::TeletextEditorMissingReceipt,
         "busy" => TextKey::TeletextWorkBusy,
@@ -363,11 +364,11 @@ fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
 }
 
 fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
-    if data.effective {
+    if data.effective && data.owner.is_none() {
         return view! {
             <section data-testid="teletext-editor-controls" data-state="unavailable">
                 <h3>{tr(TextKey::TeletextEditorTitle)}</h3>
-                <p role="status">{tr(TextKey::TeletextEffectiveEditorUnavailable)}</p>
+                <p role="status">{tr(TextKey::TeletextPreviewAbsent)}</p>
             </section>
         }
         .into_any();
@@ -1054,6 +1055,40 @@ mod tests {
     }
 
     #[test]
+    fn effective_historical_preview_retains_native_editor_forms_without_role_authority() {
+        let context = Owner::new();
+        let mut data = preview();
+        data.effective = true;
+        data.valid_until = Some("2020-01-01T00:00:00Z".to_owned());
+        data.publication = Some(TeletextDraftPublicationObservation {
+            digest: "b".repeat(64),
+            current_design_head: 3,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: false,
+            can_publish: false,
+            replaces_pending: false,
+        });
+        let html = context.with(|| editorial_controls(&data).to_html());
+        assert!(html.contains("data-state=\"available\""));
+        for form in [
+            "teletext-editor-export-all-form",
+            "teletext-editor-export-page-form",
+            "teletext-editor-import-form",
+        ] {
+            assert!(html.contains(form));
+        }
+        assert!(html.contains("name=\"expected_design_head\" value=\"3\""));
+        assert!(html.contains("name=\"channel_id\" value=\"44\""));
+        assert!(html.contains(tr(TextKey::TeletextEditorNoPublicationHelp)));
+        assert!(!html.contains("<fieldset disabled"));
+        for role_field in ["document_version", "scope", "effective_selection"] {
+            assert!(!html.contains(&format!("name=\"{role_field}\"")));
+        }
+    }
+
+    #[test]
     fn effective_absence_preview_has_no_fake_page_or_editor_authority() {
         let context = Owner::new();
         let mut data = preview();
@@ -1076,7 +1111,7 @@ mod tests {
         assert!(html.contains(tr(TextKey::TeletextPreviewAbsent)));
         assert!(html.contains("name=\"preview_absence\" value=\"1\""));
         assert!(html.contains("absence=1"));
-        assert!(html.contains(tr(TextKey::TeletextEffectiveEditorUnavailable)));
+        assert!(!html.contains(tr(TextKey::TeletextEffectiveEditorUnavailable)));
         for forbidden in [
             "<img",
             "name=\"preview_page\"",

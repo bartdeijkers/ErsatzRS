@@ -112,6 +112,7 @@ fn channel_page(
             | "editorial-mismatch"
             | "editorial-protected"
             | "editorial-no-changes"
+            | "editorial-no-pages"
             | "editorial-syntax"
             | "editorial-missing-receipt"
             | "editorial-limit"

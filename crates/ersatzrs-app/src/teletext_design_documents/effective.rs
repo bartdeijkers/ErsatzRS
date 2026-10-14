@@ -13,15 +13,15 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 
 use super::{
-    borrow_source_documents, contract, failure, guide_inputs, limit, map_only,
+    borrow_source_documents, contract, editorial_overlay, failure, guide_inputs, limit, map_only,
     parse_source_documents, preflight_json_for_format, profile_strings, restore_original_sources,
     source_fence, storage, validate_binding, validate_producer_entry, validate_profile_identity,
     validate_transmissions, BorrowedDocument, BoundedWriter, Document, EditPolicy, Entry,
     Installation, Member, Required, Setting, TeletextDesignDocumentBudget,
     TeletextDesignDocumentError, TeletextDesignDocumentFailure, TeletextGuideSourceFence,
     TeletextProfileDocument, TeletextSavedDocumentSource, TeletextSavedEditPolicy,
-    TeletextSavedGuideInputs, TeletextSavedResourceTransmission, TeletextSavedV1Region,
-    TeletextValidatedDocumentSource, Transmission, MAX_BINDINGS,
+    TeletextSavedEditorialOverlay, TeletextSavedGuideInputs, TeletextSavedResourceTransmission,
+    TeletextSavedV1Region, TeletextValidatedDocumentSource, Transmission, MAX_BINDINGS,
 };
 use crate::teletext_channel_documents::TeletextChannelRequestTemplates;
 
@@ -92,6 +92,7 @@ pub struct TeletextRestoredEffectiveDesignDocumentParts {
     pub edit_policy: TeletextSavedEditPolicy,
     pub guide_inputs: Option<TeletextSavedGuideInputs>,
     pub guide_source: Option<TeletextGuideSourceFence>,
+    pub editorial_overlay: Option<TeletextSavedEditorialOverlay>,
 }
 impl RestoredEffectiveTeletextDesignDocuments {
     #[must_use]
@@ -143,6 +144,10 @@ impl RestoredEffectiveTeletextDesignDocuments {
         self.parts.guide_source.as_ref()
     }
     #[must_use]
+    pub fn editorial_overlay(&self) -> Option<&TeletextSavedEditorialOverlay> {
+        self.parts.editorial_overlay.as_ref()
+    }
+    #[must_use]
     pub fn into_parts(self) -> TeletextRestoredEffectiveDesignDocumentParts {
         self.parts
     }
@@ -153,6 +158,7 @@ impl fmt::Debug for TeletextRestoredEffectiveDesignDocumentParts {
             .field("binding_count", &self.selection.bindings.len())
             .field("document_count", &self.documents.len())
             .field("resource_count", &self.resource_transmissions.len())
+            .field("editorial_overlay", &self.editorial_overlay)
             .finish_non_exhaustive()
     }
 }
@@ -169,7 +175,8 @@ stored_map!(EffectiveEnvelope { format_version: u16, effective_selection: Effect
     entry: Required<Entry>, v1_region: Required<TeletextSavedV1Region>, edit_policy: EditPolicy,
     resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
     guide_inputs: guide_inputs::StoredGuideInputs,
-    #[serde(default)] guide_source: source_fence::OptionalGuideSource });
+    #[serde(default)] guide_source: source_fence::OptionalGuideSource,
+    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay });
 stored_map!(EffectiveSelection { channel_id: EntityId, bindings: Vec<EffectiveMember>,
     valid_until: Required<DateTime<Utc>> });
 stored_map!(EffectiveMember { origin: String, base: Required<Member>, scripted: Required<Published> });
@@ -492,6 +499,11 @@ pub fn decode_teletext_effective_design_documents(
         })
         .collect::<Vec<_>>();
     validate_transmissions(&transmissions, budget)?;
+    let editorial_overlay = envelope
+        .editorial_overlay
+        .0
+        .map(|overlay| overlay.restore(&parsed.documents, budget))
+        .transpose()?;
     let sources = restore_original_sources(envelope.documents, parsed.authoring)?;
     Ok(RestoredEffectiveTeletextDesignDocuments {
         parts: TeletextRestoredEffectiveDesignDocumentParts {
@@ -507,8 +519,32 @@ pub fn decode_teletext_effective_design_documents(
             edit_policy: TeletextSavedEditPolicy::OriginalOnly,
             guide_inputs: Some(guide_inputs),
             guide_source,
+            editorial_overlay,
         },
     })
+}
+
+/// Append bounded concept rows to exact role-2 originals, preserving every
+/// original byte, origin, Off member, producer mapping and transition boundary.
+/// Provenance is structural only: the native host must authenticate receipts,
+/// enforce editable regions and validate output before saving or publication.
+/// # Errors
+/// Rejects cross-role/invalid originals, existing overlays, invalid owners and
+/// budgets without modifying stored originals or granting edit authority.
+pub fn append_teletext_effective_design_editorial_overlay(
+    original_bytes: &[u8],
+    overlay: &TeletextSavedEditorialOverlay,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedEffectiveTeletextDesignDocuments, TeletextDesignDocumentError> {
+    let original = decode_teletext_effective_design_documents(original_bytes, budget)?;
+    if original.editorial_overlay().is_some() {
+        return Err(failure(TeletextDesignDocumentFailure::EditorialOverlay));
+    }
+    editorial_overlay::validate_association(overlay, original.documents(), budget)?;
+    drop(original);
+    let bytes = editorial_overlay::append_overlay_bytes(original_bytes, overlay, budget)?;
+    decode_teletext_effective_design_documents(&bytes, budget)?;
+    Ok(EncodedEffectiveTeletextDesignDocuments { bytes })
 }
 
 fn binding_contract(binding: &Binding) -> Option<TeletextPageContract> {

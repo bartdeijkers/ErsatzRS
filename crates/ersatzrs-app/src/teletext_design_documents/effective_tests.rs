@@ -316,10 +316,22 @@ fn all_off_scope_preserves_members_without_sources_or_unused_entry() {
         budget(),
     )
     .unwrap();
+    assert_eq!(encoded.bytes(), br#"{"format_version":2,"effective_selection":{"channel_id":9,"bindings":[{"origin":"scripted","base":null,"scripted":{"playout_id":42,"start":"2020-01-01T12:00:00Z","finish":"2020-01-01T12:10:00Z","state":{"kind":"off","channel_id":9,"addon_id":"org.example.b","candidate":null}}}],"valid_until":"2020-01-01T12:10:00Z"},"producer_bindings":[],"generation":"effective-original-fixture","entry_addon_id":null,"entry":null,"v1_region":null,"edit_policy":{"policy_version":1,"kind":"original_only"},"resource_transmissions":[],"documents":[],"guide_inputs":{"input_version":1,"v1":null,"v2":null}}"#);
     let restored = decode_teletext_effective_design_documents(encoded.bytes(), budget()).unwrap();
     assert_eq!(*restored.selection(), selection);
     assert!(restored.sources().is_empty());
     assert!(!restored.guide_inputs().unwrap().has_guide_channels());
+    assert!(restored.editorial_overlay().is_none());
+    assert_eq!(
+        append_teletext_effective_design_editorial_overlay(
+            encoded.bytes(),
+            &editorial_tests::overlay(),
+            budget()
+        )
+        .unwrap_err()
+        .reason,
+        TeletextDesignDocumentFailure::EditorialOverlay
+    );
 }
 
 #[test]
@@ -550,7 +562,11 @@ fn effective_guide_fence_requests_and_lifecycle_survive_without_live_authority()
         );
     }
     assert_invalid_guide_and_lifecycle(&encoded);
+    editorial_tests::assert_preserved_original(encoded.bytes());
 }
+
+#[path = "effective_editorial_tests.rs"]
+mod editorial_tests;
 
 fn assert_invalid_guide_and_lifecycle(encoded: &EncodedEffectiveTeletextDesignDocuments) {
     let mut invalid = serde_json::from_slice::<Value>(encoded.bytes()).unwrap();

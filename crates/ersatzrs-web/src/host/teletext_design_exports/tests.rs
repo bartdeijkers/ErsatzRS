@@ -1,5 +1,6 @@
 use super::*;
 use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+use ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION;
 use std::time::Duration;
 
 fn inputs() -> (TeletextDesignRevision, TeletextDesignExportSave) {

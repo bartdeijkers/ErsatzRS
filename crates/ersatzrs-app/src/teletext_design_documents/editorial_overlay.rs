@@ -243,7 +243,7 @@ impl StoredOverlay {
     }
 }
 
-fn validate_association(
+pub(super) fn validate_association(
     overlay: &TeletextSavedEditorialOverlay,
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,
@@ -375,6 +375,19 @@ pub fn append_teletext_design_editorial_overlay(
     }
     validate_association(overlay, original.documents(), budget)?;
     drop(original);
+    let bytes = append_overlay_bytes(original_bytes, overlay, budget)?;
+    decode_teletext_design_documents(&bytes, budget)?;
+    Ok(EncodedTeletextDesignDocuments { bytes })
+}
+
+// Callers first decode the exact role and validate original owner association,
+// then repeat their own role decoder over this bounded result. This helper only
+// appends bytes; it grants neither role selection nor provenance authentication.
+pub(super) fn append_overlay_bytes(
+    original_bytes: &[u8],
+    overlay: &TeletextSavedEditorialOverlay,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<Vec<u8>, TeletextDesignDocumentError> {
     let end = original_bytes
         .iter()
         .rposition(|byte| !byte.is_ascii_whitespace())
@@ -396,10 +409,7 @@ pub fn append_teletext_design_editorial_overlay(
             invalid()
         }
     })?;
-    decode_teletext_design_documents(&writer.bytes, budget)?;
-    Ok(EncodedTeletextDesignDocuments {
-        bytes: writer.bytes,
-    })
+    Ok(writer.bytes)
 }
 fn write_appended(
     writer: &mut BoundedWriter,

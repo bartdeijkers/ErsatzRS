@@ -22,7 +22,10 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use ersatzrs_app::{
-    teletext_design_documents::{decode_teletext_design_documents, TeletextDesignDocumentBudget},
+    teletext_design_documents::{
+        decode_teletext_design_documents, decode_teletext_effective_design_documents,
+        TeletextDesignDocumentBudget,
+    },
     teletext_export_project::{
         parse_teletext_export_sidecar, write_teletext_export_sidecar, TeletextExportFile,
     },
@@ -31,7 +34,8 @@ use ersatzrs_app::{
 use ersatzrs_core::repositories::{TeletextDesignMutation, TeletextDesignRejection};
 use ersatzrs_domain::{
     TeletextDesignRevision, TeletextPageAddress, TeletextPageNumber, TeletextSubcode,
-    MAX_TELETEXT_DESIGN_NAME_BYTES,
+    MAX_TELETEXT_DESIGN_NAME_BYTES, TELETEXT_DESIGN_DOCUMENT_VERSION,
+    TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -174,9 +178,24 @@ async fn check_revision_owner(
     hold: ersatzrs_core::locking::TeletextWorkHold,
 ) -> Result<()> {
     editorial_transfer_work(hold, end, move || {
-        let restored = decode_teletext_design_documents(&original.document, budget)
-            .map_err(|_| Failure::new("encoding"))?;
-        if restored.selection().channel_id != channel {
+        // The repository-read role determines the decoder. Uploaded metadata
+        // cannot borrow a base binding or change an effective original's role.
+        let owner = match original.document_version {
+            TELETEXT_DESIGN_DOCUMENT_VERSION => {
+                decode_teletext_design_documents(&original.document, budget)
+                    .map_err(|_| Failure::new("encoding"))?
+                    .selection()
+                    .channel_id
+            }
+            TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION => {
+                decode_teletext_effective_design_documents(&original.document, budget)
+                    .map_err(|_| Failure::new("encoding"))?
+                    .selection()
+                    .channel_id
+            }
+            _ => return Err(Failure::new("encoding")),
+        };
+        if owner != channel {
             return Err(Failure::new("foreign-channel"));
         }
         Ok(())
@@ -334,6 +353,14 @@ fn export_error(error: NativeTeletextExportError) -> Failure {
         NativeTeletextExportError::Design(error) => authoring(&design_error(error)),
         NativeTeletextExportError::TimedOut => Failure::new("expired"),
         NativeTeletextExportError::WorkerFailed => Failure::new("worker"),
+        NativeTeletextExportError::Mapping(error)
+            if matches!(
+                *error,
+                crate::host::teletext_design_exports::NativeTeletextExportProjectError::NoDisplay
+            ) =>
+        {
+            Failure::new("editorial-no-pages")
+        }
         _ => Failure::new("editorial-mismatch"),
     }
 }

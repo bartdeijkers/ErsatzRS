@@ -37,7 +37,7 @@ pub use editorial_overlay::{
     TeletextSavedEditorialProvenance,
 };
 
-const MAX_BINDINGS: usize = 1024;
+pub(crate) const MAX_BINDINGS: usize = 1024;
 const MAX_DEPTH: usize = 32;
 
 /// Trusted storage limits, separate from producer/model and native admission.
@@ -461,7 +461,7 @@ stored_map!(Transmission {
 
 mod effective;
 pub use effective::{
-    decode_teletext_effective_design_documents,
+    append_teletext_effective_design_editorial_overlay, decode_teletext_effective_design_documents,
     encode_teletext_effective_design_documents_with_requests,
     encode_teletext_effective_design_documents_with_source,
     EncodedEffectiveTeletextDesignDocuments, RestoredEffectiveTeletextDesignDocuments,

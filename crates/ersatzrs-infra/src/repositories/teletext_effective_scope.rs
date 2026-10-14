@@ -279,7 +279,7 @@ impl Visitor<'_> for Key<'_> {
     }
 }
 
-const ROOT_KEYS: [&str; 12] = [
+const ROOT_KEYS: [&str; 13] = [
     "format_version",
     "effective_selection",
     "producer_bindings",
@@ -292,6 +292,10 @@ const ROOT_KEYS: [&str; 12] = [
     "documents",
     "guide_inputs",
     "guide_source",
+    // Native restoration authenticates this extension against its retained
+    // receipt. Scope association still compares only the complete saved scope;
+    // this field cannot replace it or grant current publication authority.
+    "editorial_overlay",
 ];
 struct Root<'a>(&'a Value);
 impl<'de> DeserializeSeed<'de> for Root<'_> {
@@ -306,7 +310,7 @@ impl<'de> Visitor<'de> for Root<'_> {
         f.write_str("an effective original envelope")
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
-        let mut seen = [false; 12];
+        let mut seen = [false; ROOT_KEYS.len()];
         while let Some(index) = map.next_key_seed(RootKey)? {
             if seen[index] {
                 return Err(mismatch());
@@ -350,5 +354,44 @@ impl Visitor<'_> for RootKey {
             .iter()
             .position(|key| *key == value)
             .ok_or_else(mismatch)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editorial_extension_keeps_exact_scope_association_without_granting_authority() {
+        let selection = Selection {
+            channel_id: 9,
+            bindings: Vec::new(),
+            valid_until: None,
+        };
+        let original = json!({"format_version":2,"effective_selection":test_scope(&selection)});
+        assert!(matches(&serde_json::to_vec(&original).unwrap(), &selection));
+        let mut edited = original.clone();
+        edited["editorial_overlay"] = json!({
+            "schema_version":1,"export_receipt_id":1,"export_receipt_digest":"a".repeat(64),
+            "original_design_id":1,"original_revision":1,"original_digest":"b".repeat(64),
+            "pages":[{"owner":{"page":200,"subcode":0},"rows":[{"row":2,"cells":vec![32;40]}]}]
+        });
+        let bytes = serde_json::to_vec(&edited).unwrap();
+        // This matcher does not authenticate overlay content, editor permissions
+        // or current state. Those remain the native and transactional gates.
+        assert!(matches(&bytes, &selection));
+        let mut foreign = selection.clone();
+        foreign.channel_id = 10;
+        assert!(!matches(&bytes, &foreign));
+        edited["effective_selection"]["valid_until"] = json!("2030-01-01T00:00:00Z");
+        assert!(!matches(&serde_json::to_vec(&edited).unwrap(), &selection));
+        let duplicate = format!(
+            "{},\"editorial_overlay\":{{}}}}",
+            std::str::from_utf8(&bytes[..bytes.len() - 1]).unwrap()
+        );
+        assert!(!matches(duplicate.as_bytes(), &selection));
+        let mut unknown = original;
+        unknown["unknown_overlay"] = json!({});
+        assert!(!matches(&serde_json::to_vec(&unknown).unwrap(), &selection));
     }
 }

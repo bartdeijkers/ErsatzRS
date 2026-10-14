@@ -185,6 +185,17 @@ struct NativeEffectiveConfirmation {
     deadline: Instant,
     hold: TeletextWorkHold,
 }
+pub(super) fn native_effective_confirmation(
+    digest: String,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> impl TeletextEffectiveOriginalDesignValidator {
+    NativeEffectiveConfirmation {
+        digest,
+        deadline,
+        hold,
+    }
+}
 #[async_trait]
 impl TeletextEffectiveOriginalDesignValidator for NativeEffectiveConfirmation {
     async fn confirm_original(
@@ -370,11 +381,16 @@ pub(super) async fn reload_effective_original_teletext_design_revision_with_hold
     else {
         return Ok(None);
     };
-    let restored = super::teletext_work::spawn_blocking(hold, move || {
-        compile_restored(stored, parts, policy, deadline)
-    })
-    .await
-    .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
+    let restored = Box::pin(restore_parts(
+        application,
+        stored,
+        parts,
+        budget,
+        policy,
+        deadline,
+        hold,
+    ))
+    .await?;
     Ok(Some(restored))
 }
 
@@ -419,11 +435,16 @@ pub(super) async fn reload_effective_original_for_publication_with_hold(
     check_deadline(deadline)?;
     application.recheck_effective_channel_teletext_document_selection(&parts.selection,deadline).await
         .map_err(|error|NativeTeletextDesignError::Encoding(Box::new(super::teletext_channel_documents::ChannelTeletextDocumentEncodingError::Preparation(error))))?;
-    let restored = super::teletext_work::spawn_blocking(hold, move || {
-        compile_restored(stored, parts, policy, deadline)
-    })
-    .await
-    .map_err(|_| NativeTeletextDesignError::WorkerFailed)??;
+    let restored = Box::pin(restore_parts(
+        application,
+        stored,
+        parts,
+        budget,
+        policy,
+        deadline,
+        hold,
+    ))
+    .await?;
     check_deadline(deadline)?;
     Ok(Some((restored, deadline)))
 }
@@ -481,13 +502,48 @@ async fn read_original_parts(
     Ok(Some(parts))
 }
 
-fn compile_restored(
+async fn restore_parts(
+    application: &ApplicationServices,
+    stored: TeletextDesignRevision,
+    parts: TeletextRestoredEffectiveDesignDocumentParts,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<RestoredEffectiveOriginalDesign, NativeTeletextDesignError> {
+    let baseline = if let Some(overlay) = &parts.editorial_overlay {
+        Some(super::teletext_editorial_designs::read_editorial_baseline(
+            application, overlay.provenance(), stored.design_id, Some(stored.revision), budget, &policy, deadline,
+        ).await.map_err(|error| match error {
+            super::teletext_editorial_designs::NativeTeletextEditorialImportError::MissingReceipt => NativeTeletextDesignError::EditorialValidationUnavailable,
+            error => NativeTeletextDesignError::Editorial(Box::new(error)),
+        })?)
+    } else {
+        None
+    };
+    super::teletext_work::spawn_blocking(hold, move || match baseline {
+        Some(baseline) => super::teletext_editorial_designs::restore_editorial_effective_design(
+            stored, parts, baseline, budget, policy, deadline,
+        )
+        .map_err(|error| NativeTeletextDesignError::Editorial(Box::new(error))),
+        None => compile_effective_restored_parts(stored, parts, policy, deadline, Vec::new()),
+    })
+    .await
+    .map_err(|_| NativeTeletextDesignError::WorkerFailed)?
+}
+
+/// Physical overlays must already have passed retained-receipt and effect checks.
+pub(super) fn compile_effective_restored_parts(
     stored: TeletextDesignRevision,
     parts: TeletextRestoredEffectiveDesignDocumentParts,
     mut policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
+    overlays: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
 ) -> Result<RestoredEffectiveOriginalDesign, NativeTeletextDesignError> {
     check_deadline(deadline)?;
+    if parts.editorial_overlay.is_some() && overlays.is_empty() {
+        return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
+    }
     policy.entry = parts.entry;
     policy.transmissions = parts
         .resource_transmissions
@@ -514,7 +570,7 @@ fn compile_restored(
     let originals = encode_original_producer_documents(
         entry,
         parts.documents,
-        Vec::new(),
+        overlays,
         deadline,
         region,
         policy,

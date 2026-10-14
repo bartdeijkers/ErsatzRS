@@ -2724,6 +2724,74 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 effective-role native editor connection (partial checkpoint):
+Criterion: saved Lua/channel profile selection -> retained export -> protected
+concept import -> same-model preview -> explicit scoped publication. Stored
+role2 now uses the existing native editor pipeline, without coercing it to role1
+or fabricating base binding revisions. Project metadata2 preserves the real
+producer-to-full-binding index, Base/Scripted origin and original nullable expiry;
+outer receipts/sidecars and legacy project1 bytes remain unchanged. Complete Off
+members, settings and guide/lifecycle provenance remain in the authenticated
+immutable original. Public metadata is descriptive, never new activation authority.
+A shared bounded adapter reloads either stored role through the same compiler,
+retained receipt and protected effects gate. Appending the optional overlay keeps
+all original source bytes and role/scope. Fresh operation deadlines do not renew
+Lua expiry. Import neither selects output nor mutates installed packages/settings.
+
+Final application83 passes (9e687b9f-8d17-41af-82a6-4d495ec6eb26), including
+strict metadata2 origins/nullability/bounds and literal project1 compatibility.
+Export storage10 passes (dfd437e0-5bb2-41f7-8ca4-775f3972933a), including role2
+receipt reopen without publication. Scope/publication12 passes
+(a4538dc7-dd17-4938-95ef-ddf16e9bc60b), retaining original association,
+rollback, expiry and head/CAS checks. Native6 passes
+(82ee4bf9-2ca7-4b5e-bb2c-2f7b48819f57): actual installed V3 producer and Lua
+publication, two distinct themes, free/zone concepts, protected metadata/content
+rejections, explicit publication, actual expired historical export/import/preview,
+all-Off absence, nullable pure-Base scope and producer indices across an Off gap.
+Producer calls, packages, configuration and publication pointers stay unchanged
+before explicit acceptance. SSR/export12 passes
+(34e81ef0-e5c7-446e-96d1-4bab1e6babe4), including historical editor forms and
+genuine absence. Twenty-five unchanged legacy/effective cases passed in mixed
+run3451b583-6d58-4296-bc79-f2adc2ff290b and are reused only in their original
+scope; its four initial new-fixture failures do not make that whole run green.
+
+The positive integration exposed a concrete publication defect: the complete
+scope matcher rejected the qualified optional editorial_overlay root key. Its
+known-field association matcher now accepts that extension while still rejecting
+foreign scope, expiry drift, duplicate or unknown fields. Native authentication
+still validates the overlay and receipt; the storage matcher grants no edit
+permissions. Initial failures also identified a stale fixture installation token,
+wrong preview page owner and compilation errors. Each was corrected against the
+actual V3 fixture and native role without weakening profile/publication guards.
+Strict affected app/infra/web all-target Clippy passes (clippy-3.log), after
+the structural extraction of the same
+save/confirmation operation and boxing only the two new restore futures; worker
+hold, deadline, digest and role-specific save semantics remain unchanged. Five
+missing test-only semicolons were corrected after the second strict lint run;
+the functional assertions and mutation values are unchanged.
+
+Changed admin uses the existing localized export/import forms and feedback in all
+nine cultures. SSR is proven; new headed execution and actual QTeletextMaker GUI
+roundtrip are not yet proven. The eight-identity headed spec is collected, with a
+bounded opt-in pinned-editor handshake and edited ordinary-route captures, but
+collection is not execution. P9A-04 retains the earlier unchanged representative
+client/transport proof below; those bytes do not prove the new edited output.
+Next run a matched headed Chromium editor open/edit/save -> native concept import
+-> preview -> explicit publication -> ordinary-route capture, then Firefox/no-JS/
+light/dark and independent decoder/TSDuck/suitable-client checks of edited bytes.
+Repeat export from an already edited concept still needs a qualified baseline;
+that concrete gap is recorded, not accepted as a permanent restriction. Live
+same-URL client transitions, restart, complete Level2.5/editor/resource coverage,
+source/Next/native/platform safety and automatic scoped readiness/applied state
+remain open. Every milestone status, dependency and criterion is unchanged.
+Native checkpoint receipt: tmp/phase9-effective-editor/identity.json, SHA256
+ba2c2fb14e5d178d264435b97ad5c10f4a47a1fcf61bc25cfa54ec42a3c0ff58.
+It records final sources, exact focused runs, scoped reuse, retained failures and
+pending headed/client gates. Formatting, architecture and hydration-lint pass
+(no new findings;31 existing hydration baseline suppressions). Progress validates.
+Remote/main delivery is suspended until UCU10/UCU11 merge and the maintainer
+returns the turn; local checkpoint commits remain authorized.
+
 2026-10-14 representative effective admin -> ordinary route -> client flow:
 Criterion proven in this slice: one installed synthetic producer, two channels
 with independently chosen day/night profiles, actual Lua Reset selection over

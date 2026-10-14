@@ -1,6 +1,7 @@
 import { expect, Locator, Page, test } from '@playwright/test';
-import { constants, copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { closeSync, constants, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitForHydration } from './hydration';
@@ -207,6 +208,215 @@ async function captureOrdinary(fixture: TeletextChannelFixture, baseURL: string,
   // retained exact TCP captures; PID/FFmpeg checks alone do not prove rendering.
 }
 
+type EditorFile = { name: string; mimeType: string; buffer: Buffer };
+function editorFiles(archive: string): EditorFile[] {
+  // Standard bounded ZIP extraction of this synthetic download. This exercises
+  // browser/backend interchange, not opening or saving in QTeletextMaker.
+  const script = String.raw`import base64,json,sys,zipfile
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    entries=archive.infolist()
+    assert 0<len(entries)<=64 and sum(e.file_size for e in entries)<=1048576
+    assert len({e.filename for e in entries})==len(entries)
+    print(json.dumps([{'name':e.filename,'base64':base64.b64encode(archive.read(e)).decode()} for e in entries]))
+`;
+  const raw = execFileSync('python3', ['-c', script, archive],
+    { encoding: 'utf8', timeout: 10_000, maxBuffer: 2 * 1024 * 1024 });
+  return (JSON.parse(raw) as { name: string; base64: string }[]).map(value => {
+    expect(value.name).toMatch(/^[A-Za-z0-9_.-]+$/);
+    return { name: value.name, mimeType: 'application/octet-stream', buffer: Buffer.from(value.base64, 'base64') };
+  });
+}
+function editRow(input: EditorFile[], row: number, character: string): EditorFile[] {
+  expect(character).toMatch(/^[QR]$/);
+  expect(input.filter(file => file.name === 'page-200-0000.tti')).toHaveLength(1);
+  return input.map(file => {
+    if (file.name !== 'page-200-0000.tti') return file;
+    let body = file.buffer.toString('latin1');
+    const pattern = new RegExp(`^OL,${row},([^\\r\\n]*)(\\r?)(?=\\n|$)`, 'm');
+    const changed = ' '.repeat(8) + character + ' '.repeat(31);
+    if (pattern.test(body)) {
+      body = body.replace(pattern, (_match, cells: string, ending: string) => {
+        expect(cells).toBe(' '.repeat(40));
+        return `OL,${row},${changed}${ending}`;
+      });
+    } else {
+      const offset = body.indexOf('OL,'); expect(offset).toBeGreaterThan(-1);
+      body = body.slice(0, offset) + `OL,${row},${changed}\n` + body.slice(offset);
+    }
+    return { ...file, buffer: Buffer.from(body, 'latin1') };
+  });
+}
+function storedDocument(fixture: TeletextChannelFixture, channel: number): {
+  DesignId: number; Revision: number; DocumentVersion: number; Digest: string; document: Record<string, unknown>;
+} {
+  const designs = fixture.designs(channel);
+  expect(designs).toHaveLength(1);
+  const value = fixture.database.prepare('SELECT "DesignId","Revision","DocumentVersion","Digest","Document" FROM "TeletextDesignRevision" WHERE "DesignId"=? AND "Revision"=?')
+    .get(designs[0].Id, designs[0].Revision) as { DesignId: number; Revision: number; DocumentVersion: number; Digest: string; Document: Uint8Array };
+  expect(value).toBeDefined();
+  const { Document, ...identity } = value;
+  return { ...identity, document: JSON.parse(Buffer.from(Document).toString('utf8')) };
+}
+async function editPixels(page: Page, row: number): Promise<number> {
+  const image = page.getByTestId('teletext-preview-model').locator('img');
+  await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).complete
+    && (element as HTMLImageElement).naturalWidth > 0)).toBe(true);
+  return image.evaluate((element, row) => {
+    const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 250;
+    const context = canvas.getContext('2d')!; context.imageSmoothingEnabled = false;
+    context.drawImage(element as HTMLImageElement, 0, 0, 480, 250);
+    const pixels = context.getImageData(96, row * 10, 12, 10).data;
+    let white = 0;
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      if (pixels[offset] === 255 && pixels[offset + 1] === 255 && pixels[offset + 2] === 255) white++;
+    }
+    return white;
+  }, row);
+}
+function sha256(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+function boundedEditorFile(path: string, maximum: number): Buffer {
+  if (!lstatSync(path).isFile()) throw new Error('Editor proof requires a regular file.');
+  // This opt-in shares the spec's intentional POSIX-only fixture boundary.
+  const file = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = fstatSync(file);
+    if (!stat.isFile() || stat.size < 1 || stat.size > maximum) throw new Error('Editor proof file exceeds its bounds.');
+    const bytes = Buffer.alloc(maximum + 1);
+    const count = readSync(file, bytes, 0, bytes.length, 0);
+    if (count < 1 || count > maximum || count !== stat.size) throw new Error('Editor proof file changed during bounded reading.');
+    return bytes.subarray(0, count);
+  } finally { closeSync(file); }
+}
+async function replayEditor(directory: string, exported: EditorFile[], metadata: Record<string, any>): Promise<EditorFile[]> {
+  const binaryHash = process.env.ERSATZRS_TELETEXT_EFFECTIVE_QTM_BINARY_SHA256;
+  const driverHash = process.env.ERSATZRS_TELETEXT_EFFECTIVE_QTM_DRIVER_SHA256;
+  expect(binaryHash).toMatch(/^[a-f0-9]{64}$/); expect(driverHash).toMatch(/^[a-f0-9]{64}$/);
+  const sourceCommit = 'cac2167bac933a6160cca45a45d5d4ee95355898';
+  const input = exported.find(file => file.name === 'page-200-0000.tti')!;
+  const sidecar = exported.find(file => file.name === 'project.ersatzrs.json')!;
+  expect(input.buffer.length).toBeLessThanOrEqual(65_536);
+  expect(sidecar.buffer.length).toBeLessThanOrEqual(65_536);
+  // New directory only; no stale completion or edited file may satisfy the gate.
+  mkdirSync(directory);
+  writeFileSync(join(directory, 'native-input.tti'), input.buffer, { flag: 'wx' });
+  writeFileSync(join(directory, 'project.ersatzrs.json'), sidecar.buffer, { flag: 'wx' });
+  const ready = Buffer.from(JSON.stringify({
+    probe_version: 1, flow: 'effective-admin-native-import',
+    channel_id: metadata.project.channel_id, original: metadata.project.original,
+    receipt_id: metadata.receipt_id, receipt_digest: metadata.receipt_digest,
+    effective_scope: metadata.project.effective_scope,
+    editor_input: 'native-input.tti', input_sha256: sha256(input.buffer),
+    sidecar: 'project.ersatzrs.json', sidecar_sha256: sha256(sidecar.buffer),
+    editor_geometry: { left_panel_columns: 0, right_panel_columns: 0 },
+    edit: { row: 2, column: 8, code: 81 }, save_as: 'edited.tti', completion: 'editor-saved.json',
+    editor: { name: 'QTeletextMaker', version: '1.0', source_commit: sourceCommit,
+      binary_sha256: binaryHash, driver_sha256: driverHash, driver_mode: 'single-page-zone-q' },
+    publication: 'Only after native import, preview, explicit request and acceptance.',
+  }, null, 2));
+  expect(ready.length).toBeLessThanOrEqual(16_384);
+  writeFileSync(join(directory, 'ready.json'), ready, { flag: 'wx' });
+  await expect.poll(() => existsSync(join(directory, 'editor-saved.json')),
+    { timeout: 90_000, intervals: [100] }).toBe(true);
+  const marker = JSON.parse(boundedEditorFile(join(directory, 'editor-saved.json'), 4096).toString('utf8'));
+  expect(Object.keys(marker).sort()).toEqual(['probe_version', 'editor_name', 'editor_version',
+    'editor_source_commit', 'editor_binary_sha256', 'editor_driver_sha256', 'input_sha256',
+    'saved_file', 'saved_sha256', 'saved_bytes'].sort());
+  expect(marker).toMatchObject({ probe_version: 1, editor_name: 'QTeletextMaker', editor_version: '1.0',
+    editor_source_commit: sourceCommit, editor_binary_sha256: binaryHash, editor_driver_sha256: driverHash,
+    input_sha256: sha256(input.buffer), saved_file: 'edited.tti' });
+  const edited = boundedEditorFile(join(directory, 'edited.tti'), 65_536);
+  expect(marker.saved_sha256).toBe(sha256(edited)); expect(marker.saved_bytes).toBe(edited.length);
+  expect(boundedEditorFile(join(directory, 'native-input.tti'), 65_536).equals(input.buffer)).toBe(true);
+  expect(boundedEditorFile(join(directory, 'project.ersatzrs.json'), 65_536).equals(sidecar.buffer)).toBe(true);
+  // The marker is an evidence handshake, not editor or publication authority.
+  // Root independently observes the GUI and exact tool identities. Native
+  // import still authenticates the unchanged sidecar against its stored receipt.
+  return exported.map(file => file.name === input.name ? { ...file, buffer: edited } : file);
+}
+
+async function editorConcept(pages: Page[], fixture: TeletextChannelFixture, urls: string[], js: boolean,
+  testInfo: { outputPath(name: string): string }, qtmDirectory?: string): Promise<void> {
+  const page = pages[0];
+  await page.goto(urls[0]); await ready(page, js);
+  const original = storedDocument(fixture, fixture.channels[0]);
+  const night = storedDocument(fixture, fixture.channels[1]);
+  const beforePointers = publication(fixture);
+  const beforeSafety = safety(fixture);
+  const downloadReady = page.waitForEvent('download');
+  await page.getByTestId('teletext-editor-export-all-form').getByRole('button', {
+    name: translations('en_us')('TeletextEditorExportSet'), exact: true,
+  }).click();
+  const download = await downloadReady;
+  expect(download.suggestedFilename()).toBe(`teletext-${original.DesignId}-${original.Revision}.zip`);
+  const archive = testInfo.outputPath('effective-original-editor.zip'); await download.saveAs(archive);
+  const exported = editorFiles(archive);
+  expect(exported.filter(file => file.name.endsWith('.tti')).map(file => file.name).sort())
+    .toEqual(['page-200-0000.tti', 'page-201-0000.tti']);
+  const sidecar = exported.find(file => file.name === 'project.ersatzrs.json')!;
+  expect(sidecar).toBeDefined();
+  const metadata = JSON.parse(sidecar.buffer.toString('utf8'));
+  expect(metadata.schema_version).toBe(1);
+  expect(metadata.project.schema_version).toBe(2);
+  expect(metadata.project.channel_id).toBe(fixture.channels[0]);
+  expect(metadata.project.original.document_version).toBe(2);
+  expect(metadata.project.original.digest).toBe(original.Digest);
+  expect(metadata.project.effective_scope.binding_count).toBe(1);
+  const scope = original.document.effective_selection as { valid_until: string };
+  // Chrono's public RFC3339 projection uses +00:00 while stored UTC JSON may
+  // use Z. Preserve every fractional digit and the exact original boundary.
+  expect(metadata.project.effective_scope.valid_until.replace(/\+00:00$/, 'Z'))
+    .toBe(scope.valid_until.replace(/\+00:00$/, 'Z'));
+  expect(metadata.project.producers).toHaveLength(1);
+  const producer = metadata.project.producers[0];
+  expect(producer.binding_revision).toBeNull();
+  expect(producer.effective_origin).toEqual(expect.objectContaining({ origin: 'scripted', binding_index: 0, playout_id: fixture.channels[0] }));
+  expect(producer.authoring.template).toEqual({ id: 'synthetic-editor', revision: 'r1' });
+  expect(producer.authoring.theme).toEqual({ id: 'day', overrides: [] });
+  expect(producer.authoring.pages[0].regions.map((region: { kind: string }) => region.kind)).toEqual(['free', 'zone', 'generated']);
+  expect(producer.authoring.pages[0].dynamic_fields).toEqual([{ id: 'guide-title', region: 'guide-content', binding: 'guide.title' }]);
+  const edited = qtmDirectory ? await replayEditor(qtmDirectory, exported, metadata)
+    : editRow(editRow(exported, 2, 'Q'), 3, 'R');
+  expect(edited.find(file => file.name === 'project.ersatzrs.json')!.buffer.equals(sidecar.buffer)).toBe(true);
+  for (const file of exported.filter(file => file.name !== 'page-200-0000.tti')) {
+    expect(edited.find(candidate => candidate.name === file.name)!.buffer.equals(file.buffer)).toBe(true);
+  }
+  for (const file of edited) writeFileSync(testInfo.outputPath(file.name), file.buffer, { flag: 'wx' });
+  const form = page.getByTestId('teletext-editor-import-form');
+  await expect(form).toHaveAttribute('enctype', 'multipart/form-data');
+  await form.locator('[name="name"]').fill('Synthetic scoped free and custom-zone edit');
+  await form.locator('[name="sidecar"]').setInputFiles(edited.filter(file => file.name === 'project.ersatzrs.json'));
+  await form.locator('[name="files"]').setInputFiles(edited.filter(file => file.name !== 'project.ersatzrs.json'));
+  await submit(page, form, 'TeletextEditorImport', js);
+  await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
+  urls[0] = page.url();
+  const concept = storedDocument(fixture, fixture.channels[0]);
+  expect(concept.DesignId).toBe(original.DesignId); expect(concept.Revision).toBe(original.Revision + 1);
+  expect(concept.DocumentVersion).toBe(2); expect(concept.Digest).not.toBe(original.Digest);
+  const { editorial_overlay, ...immutable } = concept.document;
+  expect(editorial_overlay).toBeDefined(); expect(immutable).toEqual(original.document);
+  expect(storedDocument(fixture, fixture.channels[1])).toEqual(night);
+  expect(publication(fixture)).toEqual(beforePointers); expect(safety(fixture)).toEqual(beforeSafety);
+  expect(fixture.calls()).toEqual(['day', 'night']); expect(fixture.unchangedPackage()).toBe(true);
+  await assertPreview(page, 'day');
+  expect(await editPixels(page, 2)).toBeGreaterThan(0);
+  if (qtmDirectory) expect(await editPixels(page, 3)).toBe(0);
+  else expect(await editPixels(page, 3)).toBeGreaterThan(0);
+  await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'unrequested');
+  await pages[1].goto(urls[1]); await ready(pages[1], js); await assertPreview(pages[1], 'night');
+  expect(await editPixels(pages[1], 2)).toBe(0); expect(await editPixels(pages[1], 3)).toBe(0);
+  await page.getByTestId('teletext-preview-model').locator('img').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('effective-edited-concept.png'), fullPage: false });
+  await submit(page, page.getByTestId('teletext-publication-request-form'), 'TeletextPublicationRequest', js);
+  expect(publication(fixture).map(rows => rows.length)).toEqual([3, 2, 2, 2]);
+  await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'pending');
+  await submit(page, page.getByTestId('teletext-publication-publish-form'), 'TeletextPublicationPublish', js);
+  expect(publication(fixture).map(rows => rows.length)).toEqual([3, 2, 3, 2]);
+  await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
+  expect(safety(fixture)).toEqual(beforeSafety); expect(fixture.calls()).toEqual(['day', 'night']);
+}
+
 async function localized(page: Page, fixture: TeletextChannelFixture, url: string, theme: 'day' | 'night',
   state: 'unrequested' | 'pending' | 'selected', js: boolean, dark: boolean,
   testInfo: { outputPath(name: string): string }): Promise<void> {
@@ -232,9 +442,17 @@ async function localized(page: Page, fixture: TeletextChannelFixture, url: strin
       await expect(publicationView).not.toHaveAttribute('data-state', 'applied');
     }
     const editor = page.getByTestId('teletext-editor-controls');
-    await expect(editor).toHaveAttribute('data-state', 'unavailable');
-    await expect(editor).toContainText(text('TeletextEffectiveEditorUnavailable'));
-    await expect(editor.locator('form')).toHaveCount(0);
+    await expect(editor).toHaveAttribute('data-state', 'available');
+    await expect(editor).toContainText(text('TeletextEditorHelp'));
+    await expect(editor).toContainText(text('TeletextEditorOwnershipHelp'));
+    await expect(editor).toContainText(text('TeletextEditorTemplateHelp'));
+    await expect(editor.getByTestId('teletext-editor-export-all-form').getByRole('button'))
+      .toHaveText(text('TeletextEditorExportSet'));
+    await expect(editor.getByTestId('teletext-editor-export-page-form').getByRole('button'))
+      .toHaveText(text('TeletextEditorExportPage'));
+    await expect(editor.getByTestId('teletext-editor-import-form').getByRole('button'))
+      .toHaveText(text('TeletextEditorImport'));
+    await expect(editor.locator('form')).toHaveCount(3);
     await page.getByTestId('teletext-preview-model').locator('ul a').click(); await ready(page, js);
     await assertPreview(page, theme, '201');
     if ((culture === 'en-us' || culture === 'nl') && state === 'selected') {
@@ -270,8 +488,11 @@ for (const js of [true, false]) for (const dark of [false, true]) {
     test.skip(!process.env.FFMPEG_PATH, 'Requires the explicitly selected FFmpeg 9 playback fixture.');
     test.setTimeout(480_000);
     testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
+    const qtmDirectory = js && !dark && testInfo.project.name === 'chromium'
+      ? process.env.ERSATZRS_TELETEXT_EFFECTIVE_QTM_REPLAY_DIR : undefined;
+    if (qtmDirectory) testInfo.annotations.push({ type: 'editor-workflow', description: 'Actual separately observed pinned QTeletextMaker save is required before native import; the marker alone is not acceptance.' });
     testInfo.annotations.push({ type: 'scripted-setup', description: 'The existing hydrated Playouts Reset action prepares Lua scopes; the authoring pages retain their configured JavaScript/no-JS mode.' });
-    const fixture = new TeletextChannelFixture(databasePath!, { authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+    const fixture = new TeletextChannelFixture(databasePath!, { authoredPages: true, editorPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
     // The real Playouts search matches Channel.Name, not Channel.Number.
     // Unique initial owned names avoid ten-row pagination collisions with
     // retained fixtures; all later authoring/publication must preserve them.
@@ -357,6 +578,13 @@ for (const js of [true, false]) for (const dark of [false, true]) {
         await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'publication-selected');
       }
       expect(publication(fixture).map(rows => rows.length)).toEqual([2, 2, 2, 2]);
+      for (const [index, theme] of [[0, 'day'], [1, 'night']] as const) await localized(pages[index], fixture, urls[index], theme, 'selected', js, dark, testInfo);
+      expect(safety(fixture)).toEqual(safe);
+      expect(fixture.calls()).toEqual(['day', 'night']);
+      await responsive(pages[0], testInfo);
+      await language(pages[0], 'en-us', dark);
+      await editorConcept(pages, fixture, urls, js, testInfo, qtmDirectory);
+      expect(publication(fixture).map(rows => rows.length)).toEqual([3, 2, 3, 2]);
       if (capturePrefix) {
         const beforeCapture = publication(fixture);
         await Promise.all(fixture.channels.map((channel, index) =>
@@ -364,11 +592,6 @@ for (const js of [true, false]) for (const dark of [false, true]) {
         expect(publication(fixture)).toEqual(beforeCapture);
         expect(safety(fixture)).toEqual(safe);
       }
-      for (const [index, theme] of [[0, 'day'], [1, 'night']] as const) await localized(pages[index], fixture, urls[index], theme, 'selected', js, dark, testInfo);
-      expect(safety(fixture)).toEqual(safe);
-      expect(fixture.calls()).toEqual(['day', 'night']);
-      await responsive(pages[0], testInfo);
-      await language(pages[0], 'en-us', dark);
       await resetScript(schedulingPage, fixture, fixture.channels[0], null, capturePrefix ? 8 : 4);
       await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], js);
       await expect(pages[0].getByTestId('teletext-effective-authoring')).toHaveAttribute('data-state', 'absent');
@@ -391,7 +614,7 @@ for (const js of [true, false]) for (const dark of [false, true]) {
       await submit(pages[0], pages[0].getByTestId('teletext-publication-request-form'), 'TeletextPublicationRequest', js);
       await submit(pages[0], pages[0].getByTestId('teletext-publication-publish-form'), 'TeletextPublicationPublish', js);
       const selected = publication(fixture);
-      expect(selected.map(rows => rows.length)).toEqual([3, 2, 3, 2]);
+      expect(selected.map(rows => rows.length)).toEqual([4, 2, 4, 2]);
       if (capturePrefix) {
         await captureOrdinary(fixture, baseURL!, fixture.channels[0], `${capturePrefix}.off.ts`, false);
         expect(publication(fixture)).toEqual(selected);

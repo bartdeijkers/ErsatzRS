@@ -89,6 +89,60 @@ async fn migration_and_exact_historical_exports_reopen_without_activation() {
 }
 
 #[tokio::test]
+async fn effective_historical_export_reopens_with_its_stored_role_and_no_publication() {
+    let (directory, repo) = fixture().await;
+    let mut original = request(None);
+    original.document_version = TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION;
+    let head = saved(repo.save(&original, DOCUMENT.len()).await.unwrap());
+    let mut next = request(Some((head.id, head.revision)));
+    next.document_version = TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION;
+    next.document.extend_from_slice(b" next effective revision");
+    let current = saved(repo.save(&next, 1024).await.unwrap());
+    let metadata = exported(
+        repo.create_export(&export_request(&current), RECEIPT.len(), DOCUMENT.len())
+            .await
+            .unwrap(),
+    );
+    assert_eq!(metadata.revision, 1);
+    assert_eq!(metadata.expected_design_head, 2);
+    assert_eq!(repo.head(head.id).await.unwrap(), Some(current.clone()));
+    repo.0.close().await;
+    let reopened =
+        SqliteTeletextDesignRepository(open(&directory.path().join("designs.sqlite")).await);
+    let stored = reopened
+        .export(metadata.id, RECEIPT.len(), DOCUMENT.len())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.metadata, metadata);
+    assert_eq!(stored.receipt, RECEIPT);
+    let revision = reopened
+        .revision(head.id, 1, DOCUMENT.len())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        revision.document_version,
+        TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION
+    );
+    assert_eq!(revision.document, DOCUMENT);
+    assert_eq!(reopened.head(head.id).await.unwrap(), Some(current));
+    assert_eq!(count(&reopened).await, 1);
+    for query in [
+        r#"SELECT COUNT(*) FROM "TeletextPublicationRequest""#,
+        r#"SELECT COUNT(*) FROM "TeletextAcceptedGeneration""#,
+        r#"SELECT COUNT(*) FROM "TeletextEffectivePublicationRequestCurrent""#,
+        r#"SELECT COUNT(*) FROM "TeletextEffectiveAcceptedGenerationCurrent""#,
+    ] {
+        let rows: i64 = sqlx::query_scalar(query)
+            .fetch_one(&reopened.0)
+            .await
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+}
+
+#[tokio::test]
 async fn invalid_export_metadata_and_zero_or_overflow_bounds_never_write() {
     let (_directory, repo) = fixture().await;
     let head = saved(repo.save(&request(None), DOCUMENT.len()).await.unwrap());

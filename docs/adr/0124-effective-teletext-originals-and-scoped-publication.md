@@ -16,8 +16,13 @@ The channel admin now observes effective scope and dispatches concept preparatio
 immutable preview and explicit request/acceptance by stored revision role,
 including absence without invented content. A representative headed all-culture
 admin/Lua flow now reaches ordinary output and independently decoded, visibly
-navigable two-theme captured replay. Effective-role editor interchange and live
-application-client transitions remain open.
+navigable two-theme captured replay. Effective originals now connect native editor
+export/import-as-concept and authenticated overlay restoration through the same
+compiler. Public project schema2 records real producing origins and nullable saved
+expiry; schema1 and outer receipt/sidecar schemas remain compatible. Historical
+editing preserves expired scope while publication retains fresh authority. Headed
+pinned-editor integration, repeat-edit baselines and live application-client
+transitions remain open.
 P9A-04 owns verification and remaining userflow gaps. This does not establish
 same-URL suitable-client transitions or full engine acceptance.
 
@@ -47,8 +52,16 @@ context and source allocations before structural/content restoration. Historical
 restoration and preview remain possible after expiry without producer/Lua replay;
 they grant no current publication or template/editor authority.
 
-Opaque immutable storage accepts exactly versions 1 and 2. Base publication,
-generation admission and existing export receipts require version 1 explicitly.
+Opaque immutable storage accepts exactly versions 1 and 2. Base publication and
+base generation admission require version1 explicitly. Historical native exports
+retain either known original role, using exact stored-version/digest/head checks
+and original-byte/receipt-byte confirmation. Effective public project schema2
+records actual Base/Scripted producing origins and complete-list indices; it never
+fabricates a base revision or producer for Off. Nullable UTC expiry preserves pure
+base absence and actual Scripted boundaries. Version1 project bytes and outer
+receipt/sidecar schemas1 remain compatible. Imports regenerate the same role's
+retained baseline and validate captured edit boundaries before concept save;
+metadata is descriptive and cannot install packages, modify templates or publish.
 Scoped publication uses separate typed request/current/accept/confirmation roles
 on the existing repositories. Same-transaction scope, original, pointer and
 expiry checks are required. The independently accepted base remains recoverable;

@@ -5,7 +5,7 @@
 //! The private receipt body retains exact files; the public sidecar never does.
 
 use crate::{
-    teletext_design_documents::TeletextSavedV1Region,
+    teletext_design_documents::{TeletextSavedV1Region, MAX_BINDINGS},
     teletext_tti::{parse_teletext_tti, TeletextTtiBudget, TeletextTtiDocument, TeletextTtiRecord},
 };
 use ersatzrs_addon_contract::{
@@ -18,6 +18,10 @@ use serde::{
     Deserialize, Deserializer, Serialize,
 };
 use std::{cell::Cell, collections::BTreeSet, fmt, io};
+
+#[path = "teletext_export_project/effective.rs"]
+mod effective;
+pub use effective::{TeletextExportEffectiveOrigin, TeletextExportEffectiveScope};
 
 /// Explicit caller limits, checked before allocating or encoding document bodies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +166,8 @@ object! {
         pub producers: Vec<TeletextExportProducer>,
         pub pages: Vec<TeletextExportPageMapping>,
         pub assets: Vec<TeletextExportAssetMapping>,
+        #[serde(default, skip_serializing_if="Option::is_none", deserialize_with="effective::optional_object")]
+        pub effective_scope: Option<TeletextExportEffectiveScope>,
     }
 }
 object! {
@@ -172,9 +178,12 @@ object! {
     /// Selected producer identity; omits effective settings and secret references.
     pub struct TeletextExportProducer {
         pub ordinal: usize, pub addon_id: String, pub contract: u32,
-        pub binding_revision: i64, pub profile_id: i64, pub profile_revision: i64,
+        #[serde(deserialize_with="nullable")] pub binding_revision: Option<i64>,
+        pub profile_id: i64, pub profile_revision: i64,
         pub installation: TeletextExportInstallation,
         #[serde(deserialize_with="nullable")] pub authoring: Option<TeletextAuthoringMetadataWire>,
+        #[serde(default, skip_serializing_if="Option::is_none", deserialize_with="effective::optional_object")]
+        pub effective_origin: Option<TeletextExportEffectiveOrigin>,
     }
 }
 object! {
@@ -337,18 +346,7 @@ impl TeletextExportProject {
     pub fn validate(&self, b: TeletextExportProjectBudget) -> Result<()> {
         use TeletextExportProjectFailure as K;
         validate_budget(b)?;
-        if self.schema_version != 1
-            || !matches!(
-                self.editor_profile.as_str(),
-                "qteletextmaker-1.0"
-                    | "qteletextmaker-1.0-carrier-v2"
-                    | "qteletextmaker-1.0-carrier-v3"
-                    | "qteletextmaker-1.0-carrier-v4"
-            )
-            || self.original.document_version != 1
-        {
-            return Err(failure(K::Schema));
-        }
+        effective::validate_schema(self)?;
         if self.original.design_id <= 0
             || self.original.revision <= 0
             || self.original.expected_head < self.original.revision
@@ -361,6 +359,7 @@ impl TeletextExportProject {
         }
         if self.producers.is_empty()
             || self.producers.len() > b.max_producers
+            || self.producers.len() > MAX_BINDINGS
             || self.pages.is_empty()
             || self
                 .pages
@@ -371,6 +370,7 @@ impl TeletextExportProject {
             return Err(failure(K::Limit));
         }
         validate_producers(&self.producers)?;
+        effective::validate_origins(self)?;
         if self.producers.iter().any(|p| p.contract == 1) != self.v1_region.is_some() {
             return Err(failure(K::Mapping));
         }
@@ -387,7 +387,7 @@ fn validate_producers(producers: &[TeletextExportProducer]) -> Result<()> {
             || ersatzrs_addon_contract::validate_addon_id(&p.addon_id).is_err()
             || !addons.insert(p.addon_id.as_str())
             || !(1..=3).contains(&p.contract)
-            || p.binding_revision <= 0
+            || p.binding_revision.is_some_and(|revision| revision <= 0)
             || p.profile_id <= 0
             || p.profile_revision <= 0
             || !text(&p.installation.state_revision)
@@ -938,7 +938,7 @@ impl<'de> Visitor<'de> for Scan<'_> {
             // Undefined editor positions are not files or native units.
             Some("resource_names") => 16,
             Some("pages") if !self.authoring => self.budget.max_files,
-            Some("producers") => self.budget.max_producers,
+            Some("producers") => self.budget.max_producers.min(MAX_BINDINGS),
             Some("bytes") => self.budget.max_file_bytes,
             _ => self.budget.max_units,
         };

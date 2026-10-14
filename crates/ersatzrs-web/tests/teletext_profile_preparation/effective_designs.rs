@@ -8,6 +8,7 @@ use super::{
 use ersatzrs_app::teletext_design_documents::{
     TeletextDesignDocumentBudget, TeletextSavedEditPolicy,
 };
+use ersatzrs_app::teletext_export_project::TeletextExportEffectiveOrigin;
 use ersatzrs_core::repositories::{TeletextDesignMutation, TeletextDesignRejection};
 use ersatzrs_domain::{
     TeletextColourPixelOptions, TeletextEffectiveBindingSnapshot as Binding, TeletextFlashPhase,
@@ -15,6 +16,10 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextRasterPixel};
 use ersatzrs_web::host::{
+    teletext_design_exports::{
+        export_original_teletext_design, ExportedOriginalTeletextDesign,
+        NativeTeletextExportRequest,
+    },
     teletext_designs::{
         reload_original_teletext_design_revision, request_original_teletext_design_publication,
         NativeTeletextDesignError,
@@ -185,6 +190,96 @@ fn assert_original(
     );
 }
 
+async fn export(
+    fixture: &Fixture,
+    saved: &SavedEffectiveOriginalDesign,
+) -> ExportedOriginalTeletextDesign {
+    let result = export_original_teletext_design(
+        &fixture.state.application,
+        NativeTeletextExportRequest {
+            design_id: saved.head().id,
+            revision: saved.head().revision,
+            design_digest: saved.digest().to_owned(),
+            expected_design_head: saved.head().revision,
+            pages: None,
+        },
+        super::editorial_imports::policy(),
+        designs::deadline(),
+    )
+    .await
+    .unwrap();
+    let TeletextDesignMutation::Saved(value) = result else {
+        panic!("actual effective original must export")
+    };
+    value
+}
+
+#[tokio::test]
+async fn effective_pure_base_export_preserves_null_scope_and_real_binding_revision_without_invocation(
+) {
+    let (mut fixture, base, _, _) = installed(false).await;
+    let before = designs::config(&fixture).await;
+    let value = saved_design(
+        save(
+            &fixture,
+            effective::candidate(&fixture, 1, Some(ADDON))
+                .await
+                .unwrap(),
+            None,
+            designs::budget(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(value.candidate().selection().valid_until, None);
+    assert_eq!(value.candidate().producer_bindings(), [0]);
+    let Binding::Base(binding) = &value.candidate().selection().bindings[0] else {
+        panic!("unexpected Scripted origin")
+    };
+    assert_eq!(binding.profile_id, base.id);
+    let calls = std::fs::read(fixture.root.path().join("document-calls-day")).unwrap();
+    let exported = export(&fixture, &value).await;
+    let project = &exported.sidecar().project;
+    assert_eq!(project.schema_version, 2);
+    assert_eq!(project.original.document_version, 2);
+    assert_eq!(project.original.digest, value.digest());
+    let scope = project.effective_scope.as_ref().unwrap();
+    assert_eq!(scope.binding_count, 1);
+    assert_eq!(scope.valid_until, None);
+    assert_eq!(project.producers.len(), 1);
+    let producer = &project.producers[0];
+    assert_eq!(producer.ordinal, 0);
+    assert_eq!(producer.addon_id, ADDON);
+    assert_eq!(producer.profile_id, base.id);
+    assert_eq!(producer.binding_revision, Some(binding.binding_revision));
+    assert_eq!(
+        producer.effective_origin,
+        Some(TeletextExportEffectiveOrigin::Base { binding_index: 0 })
+    );
+    let restored = reload(&fixture, value.head().id, 1).await;
+    assert_original(&restored, &value);
+    assert_eq!(
+        std::fs::read(fixture.root.path().join("document-calls-day")).unwrap(),
+        calls
+    );
+    assert!(!fixture.root.path().join("document-calls-night").exists());
+    assert_eq!(designs::config(&fixture).await, before);
+    assert_eq!(revision_count(&fixture).await, 1);
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .teletext_design_head(value.head().id)
+            .await
+            .unwrap()
+            .unwrap()
+            .revision,
+        1
+    );
+    assert_no_native_publication(&fixture).await;
+    assert!(fixture.playout.try_recv().is_err());
+}
+
 #[tokio::test]
 async fn actual_lua_v3_effective_originals_save_and_reopen_without_invocation_or_profile_health() {
     let (mut fixture, _, day, night) = installed(true).await;
@@ -274,6 +369,86 @@ async fn actual_lua_v3_effective_originals_save_and_reopen_without_invocation_or
     assert!(fixture.playout.try_recv().is_err());
 }
 
+async fn assert_off_gap_export(
+    fixture: &Fixture,
+    saved: &SavedEffectiveOriginalDesign,
+    restored: &RestoredEffectiveOriginalDesign,
+    other_profile_id: i64,
+) {
+    let original = fixture
+        .state
+        .application
+        .teletext_design_revision(saved.head().id, 1, designs::budget().max_serialized_bytes)
+        .await
+        .unwrap()
+        .unwrap();
+    let exported = export(fixture, saved).await;
+    let project = &exported.sidecar().project;
+    assert_eq!(project.schema_version, 2);
+    assert_eq!(project.original.document_version, 2);
+    assert_eq!(project.original.digest, saved.digest());
+    let scope = project.effective_scope.as_ref().unwrap();
+    assert_eq!(scope.binding_count, 2);
+    assert_eq!(
+        scope.valid_until,
+        saved
+            .candidate()
+            .selection()
+            .valid_until
+            .map(|boundary| boundary.to_rfc3339())
+    );
+    assert!(scope.valid_until.is_some());
+    assert_eq!(project.producers.len(), 1);
+    let producer = &project.producers[0];
+    let Binding::Base(binding) = &restored.selection().bindings[1] else {
+        panic!("unaffected base must keep its real origin")
+    };
+    assert_eq!(producer.ordinal, 0);
+    assert_eq!(producer.addon_id, SECONDARY);
+    assert_eq!(producer.contract, 1);
+    assert_eq!(producer.profile_id, other_profile_id);
+    assert_eq!(producer.binding_revision, Some(binding.binding_revision));
+    assert_eq!(
+        producer.effective_origin,
+        Some(TeletextExportEffectiveOrigin::Base { binding_index: 1 })
+    );
+    assert_eq!(
+        project.v1_region,
+        Some(ersatzrs_app::teletext_design_documents::TeletextSavedV1Region::WesternLatin)
+    );
+    assert_eq!(project.pages.len(), 1);
+    assert_eq!(project.pages[0].producer_ordinal, 0);
+    assert_eq!(project.pages[0].page.page, 223);
+    let after = fixture
+        .state
+        .application
+        .teletext_design_revision(saved.head().id, 1, designs::budget().max_serialized_bytes)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.document, original.document);
+    assert_eq!(after.digest, original.digest);
+    assert_eq!(revision_count(fixture).await, 1);
+    assert_eq!(
+        fixture
+            .state
+            .application
+            .teletext_design_head(saved.head().id)
+            .await
+            .unwrap()
+            .unwrap()
+            .revision,
+        1
+    );
+    let disabled: i64 =
+        sqlx::query_scalar(r#"SELECT "Enabled" FROM "AddonInstallation" WHERE "AddonId"=?"#)
+            .bind(ADDON)
+            .fetch_one(&fixture.state.pool)
+            .await
+            .unwrap();
+    assert_eq!(disabled, 0);
+}
+
 #[tokio::test]
 async fn effective_off_member_and_unaffected_base_preserve_exact_producer_map_and_v1_region() {
     let (mut fixture, base, _, _) = installed(false).await;
@@ -328,6 +503,7 @@ async fn effective_off_member_and_unaffected_base_preserve_exact_producer_map_an
         Binding::Scripted(_)
     ));
     assert_eq!(restored.sources().len(), 1);
+    assert_off_gap_export(&fixture, &value, &restored, other.id).await;
     assert_eq!(
         std::fs::read(fixture.root.path().join("channel-calls")).unwrap(),
         calls

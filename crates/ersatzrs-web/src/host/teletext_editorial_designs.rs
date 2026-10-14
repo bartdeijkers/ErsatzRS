@@ -4,8 +4,10 @@ use std::{fmt, fmt::Write as _, time::Instant};
 
 use ersatzrs_app::{
     teletext_design_documents::{
-        append_teletext_design_editorial_overlay, decode_teletext_design_documents,
-        EncodedTeletextDesignDocuments, TeletextDesignDocumentBudget, TeletextDesignDocumentError,
+        append_teletext_design_editorial_overlay,
+        append_teletext_effective_design_editorial_overlay,
+        EncodedEffectiveTeletextDesignDocuments, EncodedTeletextDesignDocuments,
+        TeletextDesignDocumentBudget, TeletextDesignDocumentError,
         TeletextRestoredDesignDocumentParts, TeletextSavedEditorialOverlay,
         TeletextSavedEditorialProvenance,
     },
@@ -30,17 +32,18 @@ use super::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
     teletext_design_exports::NativeTeletextExportPolicy,
     teletext_designs::{
-        compile_restored_parts, native_design_confirmation, NativeTeletextDesignError,
-        RestoredOriginalTeletextDesign,
+        native_design_confirmation, NativeTeletextDesignError, RestoredOriginalTeletextDesign,
     },
     teletext_editorial_effects::validate_teletext_editorial_effects,
     teletext_editorial_tti::{
         reconcile_teletext_editorial_tti, reconcile_teletext_editorial_tti_with_status,
     },
+    teletext_effective_designs::{native_effective_confirmation, RestoredEffectiveOriginalDesign},
     teletext_export_project::{
         build_native_teletext_export_project, editor_primary_for_page,
         NativeTeletextExportProjectError, TeletextEditorCarrier,
     },
+    teletext_stored_designs::{RestoredStoredTeletextDesign, StoredDesignParts},
 };
 pub use super::{
     teletext_editorial_effects::{TeletextEditorialEffectsError, TeletextEditorialEffectsFailure},
@@ -226,7 +229,7 @@ pub(super) async fn read_editorial_baseline(
 struct QualifiedBaseline {
     body: TeletextExportReceiptBody,
     carrier: TeletextEditorCarrier,
-    original: RestoredOriginalTeletextDesign,
+    original: RestoredStoredTeletextDesign,
     original_document: Vec<u8>,
 }
 fn qualify_baseline(
@@ -253,8 +256,8 @@ fn qualify_baseline(
     {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let parts = decode_teletext_design_documents(&baseline.original.document, budget)?.into_parts();
-    if parts.editorial_overlay.is_some() {
+    let parts = StoredDesignParts::decode(&baseline.original, budget)?;
+    if parts.overlay().is_some() {
         return Err(NativeTeletextEditorialImportError::Association);
     }
     let selected = body
@@ -271,10 +274,11 @@ fn qualify_baseline(
         })
         .collect::<Result<Vec<_>>>()?;
     let original_document = baseline.original.document.clone();
-    let original = compile_restored_parts(baseline.original, parts, policy, deadline, Vec::new())
+    let original = parts
+        .compile(baseline.original, policy, deadline, Vec::new())
         .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?;
     let generated = build_native_teletext_export_project(
-        &original,
+        original.view(),
         meta.expected_design_head,
         Some(&selected),
         project,
@@ -296,26 +300,28 @@ fn qualify_baseline(
 
 fn qualify_rows(
     stored: TeletextDesignRevision,
-    parts: TeletextRestoredDesignDocumentParts,
+    parts: StoredDesignParts,
     baseline: &QualifiedBaseline,
     policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
-) -> Result<RestoredOriginalTeletextDesign> {
+) -> Result<RestoredStoredTeletextDesign> {
     let overlays = parts
-        .editorial_overlay
-        .as_ref()
+        .overlay()
         .ok_or(NativeTeletextEditorialImportError::Association)?
         .pages()
         .to_vec();
     let encoding = policy.encoding;
-    let edited = compile_restored_parts(stored, parts, policy, deadline, overlays.clone())
+    let edited = parts
+        .compile(stored, policy, deadline, overlays.clone())
         .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?;
     validate_teletext_editorial_effects(
         baseline
             .original
+            .view()
             .encoded()
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         edited
+            .view()
             .encoded()
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
@@ -337,14 +343,63 @@ pub(super) fn restore_editorial_design(
     policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> Result<RestoredOriginalTeletextDesign> {
+    match restore_stored_editorial_design(
+        stored,
+        StoredDesignParts::Base(parts),
+        baseline,
+        budget,
+        policy,
+        deadline,
+    )? {
+        RestoredStoredTeletextDesign::Base(value) => Ok(value),
+        RestoredStoredTeletextDesign::Effective(_) => {
+            Err(NativeTeletextEditorialImportError::Association)
+        }
+    }
+}
+
+pub(super) fn restore_editorial_effective_design(
+    stored: TeletextDesignRevision,
+    parts: ersatzrs_app::teletext_design_documents::TeletextRestoredEffectiveDesignDocumentParts,
+    baseline: EditorialBaseline,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<RestoredEffectiveOriginalDesign> {
+    match restore_stored_editorial_design(
+        stored,
+        StoredDesignParts::Effective(parts),
+        baseline,
+        budget,
+        policy,
+        deadline,
+    )? {
+        RestoredStoredTeletextDesign::Effective(value) => Ok(value),
+        RestoredStoredTeletextDesign::Base(_) => {
+            Err(NativeTeletextEditorialImportError::Association)
+        }
+    }
+}
+
+fn restore_stored_editorial_design(
+    stored: TeletextDesignRevision,
+    parts: StoredDesignParts,
+    baseline: EditorialBaseline,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<RestoredStoredTeletextDesign> {
     let (project, tti) = reload_limits(budget, &policy);
     let baseline = qualify_baseline(baseline, budget, policy.clone(), project, tti, deadline)?;
     let overlay = parts
-        .editorial_overlay
-        .as_ref()
+        .overlay()
         .ok_or(NativeTeletextEditorialImportError::Association)?;
-    let expected =
-        append_teletext_design_editorial_overlay(&baseline.original_document, overlay, budget)?;
+    let expected = append_overlay(
+        baseline.original.view().document_version(),
+        &baseline.original_document,
+        overlay,
+        budget,
+    )?;
     if expected.bytes() != stored.document {
         return Err(NativeTeletextEditorialImportError::Association);
     }
@@ -411,7 +466,7 @@ fn reconcile_files(
                 subcode: TeletextSubcode::new(mapping.page.subcode)
                     .map_err(|_| NativeTeletextEditorialImportError::Association)?,
             };
-            let primary = editor_primary_for_page(&baseline.original, address)
+            let primary = editor_primary_for_page(baseline.original.view(), address)
                 .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
             let expected_status = baseline.carrier.status(mapping.header_controls, primary);
             let overlay = match baseline.carrier {
@@ -446,12 +501,49 @@ fn reconcile_files(
     Ok(overlays)
 }
 
+enum EncodedStoredDesign {
+    Base(EncodedTeletextDesignDocuments),
+    Effective(EncodedEffectiveTeletextDesignDocuments),
+}
+impl EncodedStoredDesign {
+    fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Base(value) => value.bytes(),
+            Self::Effective(value) => value.bytes(),
+        }
+    }
+    fn version(&self) -> u16 {
+        match self {
+            Self::Base(value) => value.version(),
+            Self::Effective(value) => value.version(),
+        }
+    }
+}
+fn append_overlay(
+    version: u16,
+    original: &[u8],
+    overlay: &TeletextSavedEditorialOverlay,
+    budget: TeletextDesignDocumentBudget,
+) -> Result<EncodedStoredDesign> {
+    match version {
+        ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION => Ok(EncodedStoredDesign::Base(
+            append_teletext_design_editorial_overlay(original, overlay, budget)?,
+        )),
+        ersatzrs_domain::TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION => {
+            Ok(EncodedStoredDesign::Effective(
+                append_teletext_effective_design_editorial_overlay(original, overlay, budget)?,
+            ))
+        }
+        _ => Err(NativeTeletextEditorialImportError::Association),
+    }
+}
+
 fn import_document(
     request: &NativeTeletextEditorialImportRequest,
     baseline: EditorialBaseline,
     policy: NativeTeletextExportPolicy,
     deadline: Instant,
-) -> Result<(EncodedTeletextDesignDocuments, String)> {
+) -> Result<(EncodedStoredDesign, String)> {
     let (project, tti) = import_limits(&policy);
     check_request(request, project)?;
     let sidecar = parse_teletext_export_sidecar(&request.sidecar, project)?;
@@ -479,15 +571,15 @@ fn import_document(
     }
     let overlays = reconcile_files(&baseline, &request.files, tti, deadline)?;
     let overlay = TeletextSavedEditorialOverlay::new(provenance, overlays)?;
-    let document = append_teletext_design_editorial_overlay(
+    let document = append_overlay(
+        baseline.original.view().document_version(),
         &baseline.original_document,
         &overlay,
         policy.document,
     )?;
-    let parts = decode_teletext_design_documents(document.bytes(), policy.document)?.into_parts();
     let document_digest = digest(document.bytes());
     let stored = TeletextDesignRevision {
-        design_id: baseline.original.design_id(),
+        design_id: baseline.original.view().design_id(),
         revision: request
             .expected_design_head
             .checked_add(1)
@@ -496,6 +588,7 @@ fn import_document(
         digest: document_digest.clone(),
         document: document.bytes().to_vec(),
     };
+    let parts = StoredDesignParts::decode(&stored, policy.document)?;
     qualify_rows(stored, parts, &baseline, policy.encoding, deadline)?;
     Ok((document, document_digest))
 }
@@ -580,18 +673,57 @@ pub async fn import_teletext_editorial_design(
         })
         .await
         .map_err(|_| NativeTeletextEditorialImportError::WorkerFailed)??;
-    let confirmation =
-        native_design_confirmation(document_digest.clone(), deadline, guard.hold_work());
-    match application
-        .save_original_teletext_design(
-            name,
-            Some((head.id, head.revision)),
-            document,
-            &confirmation,
-            maximum,
-        )
-        .await?
-    {
+    save_editorial_concept(
+        application,
+        name,
+        (head.id, head.revision),
+        document,
+        document_digest,
+        maximum,
+        (deadline, guard.hold_work()),
+    )
+    .await
+}
+
+async fn save_editorial_concept(
+    application: &ApplicationServices,
+    name: String,
+    existing: (EntityId, i64),
+    document: EncodedStoredDesign,
+    document_digest: String,
+    maximum: usize,
+    admission: (Instant, ersatzrs_core::locking::TeletextWorkHold),
+) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
+    let (deadline, hold) = admission;
+    let mutation = match document {
+        EncodedStoredDesign::Base(document) => {
+            let confirmation =
+                native_design_confirmation(document_digest.clone(), deadline, hold.clone());
+            application
+                .save_original_teletext_design(
+                    name,
+                    Some(existing),
+                    document,
+                    &confirmation,
+                    maximum,
+                )
+                .await?
+        }
+        EncodedStoredDesign::Effective(document) => {
+            let confirmation =
+                native_effective_confirmation(document_digest.clone(), deadline, hold.clone());
+            application
+                .save_effective_original_teletext_design(
+                    name,
+                    Some(existing),
+                    document,
+                    &confirmation,
+                    maximum,
+                )
+                .await?
+        }
+    };
+    match mutation {
         TeletextDesignMutation::Saved(head) => Ok(TeletextDesignMutation::Saved(
             SavedEditorialTeletextDesign {
                 head,

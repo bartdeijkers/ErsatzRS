@@ -4942,10 +4942,41 @@ return fields use `preview_absence=1`, mutually exclusive with page/subcode.
 Preview preserves historical pages or absence after expiry/removal, but publication
 requires fresh complete current scope and the original transition deadline.
 
-Scoped editor interchange is not yet connected. The localized preview states
-that limitation and offers no export/import authority for this role; full
-interchange remains required rather than excluded. P9A-04 owns native, headed,
-ordinary-stream/client proof and all remaining engine criteria.
+Saved effective originals now use the same native export/import forms as base
+originals. The repository-read document version selects a private native role
+adapter; uploaded metadata cannot choose that role or borrow a base binding.
+True absence has no display to export and shows the localized absence status,
+with no editor forms. A direct absent export returns `editorial-no-pages`.
+
+Effective exports use `project.schema_version:2` with `original.document_version:2`
+and the existing `qteletextmaker-1.0-carrier-v4`. Outer sidecar and receipt schemas
+remain1; valid base schema1 JSON bytes remain unchanged. `effective_scope` retains
+the complete original binding count and required-nullable `valid_until`: pure
+base scope keeps null, while Scripted scope keeps its original UTC boundary.
+Every exported producer has a closed `effective_origin`, with its real index into
+the complete binding list. Base keeps its actual positive `binding_revision`;
+Scripted has null plus owning playout/start/finish, never an invented base revision.
+Off members are not exported producers. Their full captured state, requests,
+settings and original expiry remain in the authenticated immutable original;
+public metadata omits settings and cannot grant permissions.
+
+Historical export, import-as-concept and preview use fresh bounded operations
+without refreshing the original scope. Native import regenerates the exact retained
+export from that same stored role, checks receipt/sidecar/files and protected effects,
+then appends the overlay to exact original bytes and saves by head CAS. It does not
+request/select publication, invoke producers/Lua or edit packages/templates. Native
+restoration authenticates that overlay before using the existing common compiler;
+rows cannot be ignored under an edited digest. Explicit effective publication
+retains whole-scope/current-pointer/UTC-expiry checks; the repository association
+parser recognizes the optional native-qualified overlay without changing its scope
+comparison or granting overlay authority.
+
+P9A-04 owns native, headed, real pinned-editor, ordinary-stream/client proof and all
+remaining engine criteria. Full interchange remains required. Re-exporting an
+already edited concept currently cannot form an import baseline: the retained
+qualifier rejects another overlay-bearing original. Repeat editing needs a deliberate
+bounded baseline solution; an available export must not imply completed repeat-edit
+acceptance. This gap does not establish a permanent editor or Level2.5 restriction.
 
 
 ### Physical base-row concept compilation seam
@@ -4993,8 +5024,9 @@ owner/row counts and fixed row content before allocating owned arrays/vectors,
 using existing document/service limits. Native composition still owns full
 original-plus-overlay cold limits.
 
-`append_teletext_design_editorial_overlay` validates the existing stored original
-and exact unambiguous owner membership, then preserves its JSON prefix and tail
+`append_teletext_design_editorial_overlay` and its effective-role counterpart
+`append_teletext_effective_design_editorial_overlay` validate the stored original
+and exact unambiguous owner membership, then preserve its JSON prefix and tail
 byte-for-byte while inserting this closed subdocument. Original producer strings,
 guide requests/source fences, installation/settings context, resource lifecycle,
 entry/region, metadata and `original_only` capture policy remain exact. Appending

@@ -38,7 +38,7 @@ use ersatzrs_ffmpeg::teletext::{
 };
 use sha2::{Digest, Sha256};
 
-use super::teletext_designs::RestoredOriginalTeletextDesign;
+use super::teletext_stored_designs::OriginalDesignView;
 
 mod drcs_sets;
 
@@ -51,6 +51,8 @@ pub enum NativeTeletextExportProjectError {
     Budget,
     #[error("teletext export selection or original ownership is invalid")]
     Association,
+    #[error("the effective teletext original has no enabled display pages to export")]
+    NoDisplay,
     #[error(transparent)]
     Projection(#[from] TeletextEncodedDisplayProjectionError),
     #[error(transparent)]
@@ -272,7 +274,7 @@ struct ExportInventory<'a> {
     asset_count: usize,
 }
 fn selected_inventory<'a>(
-    original: &'a RestoredOriginalTeletextDesign,
+    original: OriginalDesignView<'a>,
     expected_head: i64,
     selected: Option<&[TeletextPageAddress]>,
     project_budget: TeletextExportProjectBudget,
@@ -294,12 +296,15 @@ fn selected_inventory<'a>(
             return Err(NativeTeletextExportProjectError::Budget);
         }
     }
-    let bindings = &original.selection().bindings;
+    let producer_count = original.producer_count();
+    if matches!(original, OriginalDesignView::Effective(_)) && producer_count == 0 {
+        return Err(NativeTeletextExportProjectError::NoDisplay);
+    }
     if expected_head < original.revision()
-        || bindings.is_empty()
-        || bindings.len() > project_budget.max_producers
-        || original.producers().len() != bindings.len()
-        || original.sources().len() != bindings.len()
+        || producer_count == 0
+        || producer_count > project_budget.max_producers
+        || original.producers().len() != producer_count
+        || original.sources().len() != producer_count
     {
         return Err(NativeTeletextExportProjectError::Association);
     }
@@ -445,28 +450,127 @@ fn append_drcs_companion(
     Ok(mapping)
 }
 
+struct ProducerIdentity<'a> {
+    contract: ersatzrs_domain::TeletextPageContract,
+    addon_id: &'a str,
+    binding_revision: Option<i64>,
+    profile_id: i64,
+    profile_revision: i64,
+    pin: &'a ersatzrs_domain::TeletextInstallationSnapshot,
+    effective_origin: Option<ersatzrs_app::teletext_export_project::TeletextExportEffectiveOrigin>,
+}
+fn producer_identity(
+    original: OriginalDesignView<'_>,
+    ordinal: usize,
+) -> Result<ProducerIdentity<'_>> {
+    let (contract, addon_id, binding_revision, profile_id, profile_revision, pin, effective_origin) =
+        match original {
+            OriginalDesignView::Base(v) => {
+                let binding = v
+                    .selection()
+                    .bindings
+                    .get(ordinal)
+                    .ok_or(NativeTeletextExportProjectError::Association)?;
+                (
+                    binding.contract,
+                    binding.addon_id.as_str(),
+                    Some(binding.binding_revision),
+                    binding.profile_id,
+                    binding.profile_revision,
+                    &binding.installation,
+                    None,
+                )
+            }
+            OriginalDesignView::Effective(v) => {
+                use ersatzrs_app::teletext_export_project::TeletextExportEffectiveOrigin as Origin;
+                use ersatzrs_domain::{
+                    TeletextEffectiveBindingSnapshot as Binding, TeletextOverrideState,
+                };
+                let index = *v
+                    .producer_bindings()
+                    .get(ordinal)
+                    .ok_or(NativeTeletextExportProjectError::Association)?;
+                match v
+                    .selection()
+                    .bindings
+                    .get(index)
+                    .ok_or(NativeTeletextExportProjectError::Association)?
+                {
+                    Binding::Base(binding) => (
+                        binding.contract,
+                        binding.addon_id.as_str(),
+                        Some(binding.binding_revision),
+                        binding.profile_id,
+                        binding.profile_revision,
+                        &binding.installation,
+                        Some(Origin::Base {
+                            binding_index: index,
+                        }),
+                    ),
+                    Binding::Scripted(published) => {
+                        let TeletextOverrideState::Enabled(candidate) = &published.interval.state
+                        else {
+                            return Err(NativeTeletextExportProjectError::Association);
+                        };
+                        (
+                            candidate.contract,
+                            candidate.addon_id.as_str(),
+                            None,
+                            candidate.profile_id,
+                            candidate.profile_revision,
+                            &candidate.installation,
+                            Some(Origin::Scripted {
+                                binding_index: index,
+                                playout_id: published.playout_id,
+                                start: published.interval.start.to_rfc3339(),
+                                finish: published.interval.finish.to_rfc3339(),
+                            }),
+                        )
+                    }
+                }
+            }
+        };
+    Ok(ProducerIdentity {
+        contract,
+        addon_id,
+        binding_revision,
+        profile_id,
+        profile_revision,
+        pin,
+        effective_origin,
+    })
+}
+
 fn capture_producers(
-    original: &RestoredOriginalTeletextDesign,
+    original: OriginalDesignView<'_>,
     project_budget: TeletextExportProjectBudget,
     deadline: Instant,
 ) -> Result<(Vec<TeletextExportProducer>, usize)> {
-    let bindings = &original.selection().bindings;
+    let producer_count = original.producer_count();
     let mut metadata_bytes = ByteCounter {
         remaining: project_budget.max_bytes,
     };
-    let mut producers = Vec::with_capacity(bindings.len());
-    for (ordinal, (binding, source)) in bindings.iter().zip(original.sources()).enumerate() {
+    let mut producers = Vec::with_capacity(producer_count);
+    for (ordinal, source) in original.sources().iter().enumerate() {
         check_deadline(deadline)?;
-        if source.contract() != binding.contract {
+        let ProducerIdentity {
+            contract,
+            addon_id,
+            binding_revision,
+            profile_id,
+            profile_revision,
+            pin,
+            effective_origin,
+        } = producer_identity(original, ordinal)?;
+        if source.contract() != contract {
             return Err(NativeTeletextExportProjectError::Association);
         }
         // Bound before cloning; source metadata was validated against the actual
         // producer identities, editable zones and effective panel geometry.
         serde_json::to_writer(&mut metadata_bytes, &source.authoring())
             .map_err(|_| NativeTeletextExportProjectError::Budget)?;
-        let pin = &binding.installation;
         for value in [
-            &binding.addon_id,
+            addon_id,
             &pin.state_revision,
             &pin.version,
             &pin.package_sha256,
@@ -478,11 +582,12 @@ fn capture_producers(
         }
         producers.push(TeletextExportProducer {
             ordinal,
-            addon_id: binding.addon_id.clone(),
-            contract: binding.contract.schema_version(),
-            binding_revision: binding.binding_revision,
-            profile_id: binding.profile_id,
-            profile_revision: binding.profile_revision,
+            addon_id: addon_id.to_owned(),
+            contract: contract.schema_version(),
+            binding_revision,
+            effective_origin,
+            profile_id,
+            profile_revision,
             installation: TeletextExportInstallation {
                 state_revision: pin.state_revision.clone(),
                 version: pin.version.clone(),
@@ -502,7 +607,7 @@ struct DisplayOwner<'a> {
     presentation: &'a TeletextProducerPagePresentation,
 }
 fn display_owner(
-    original: &RestoredOriginalTeletextDesign,
+    original: OriginalDesignView<'_>,
     address: TeletextPageAddress,
 ) -> Result<DisplayOwner<'_>> {
     let mut owner = None;
@@ -534,7 +639,7 @@ fn display_owner(
 
 /// Recover the editor charset from the trusted exact-owner presentation.
 pub(super) fn editor_primary_for_page(
-    original: &RestoredOriginalTeletextDesign,
+    original: OriginalDesignView<'_>,
     address: TeletextPageAddress,
 ) -> Result<u8> {
     Ok(display_owner(original, address)?
@@ -605,7 +710,7 @@ fn display_records(
 }
 
 fn append_display(
-    original: &RestoredOriginalTeletextDesign,
+    original: OriginalDesignView<'_>,
     display: &EncodedTeletextPage,
     magazines: &[TeletextEncodedMagazineRecord],
     files: &mut Files,
@@ -684,7 +789,7 @@ struct ExportFiles {
     files: Vec<TeletextExportFile>,
 }
 fn assemble_files(
-    original: &RestoredOriginalTeletextDesign,
+    original: OriginalDesignView<'_>,
     inventory: ExportInventory<'_>,
     remaining: usize,
     project_budget: TeletextExportProjectBudget,
@@ -776,8 +881,8 @@ fn assemble_files(
 /// Build a private exact-file receipt from a fully restored original.
 /// A subset may omit the original entry; export never changes that entry.
 /// Sources, selected settings and the live output remain unchanged.
-pub(super) fn build_native_teletext_export_project(
-    original: &RestoredOriginalTeletextDesign,
+pub(super) fn build_native_teletext_export_project<'a>(
+    original: impl Into<OriginalDesignView<'a>>,
     expected_head: i64,
     selected: Option<&[TeletextPageAddress]>,
     project_budget: TeletextExportProjectBudget,
@@ -785,6 +890,7 @@ pub(super) fn build_native_teletext_export_project(
     deadline: Instant,
     carrier: TeletextEditorCarrier,
 ) -> Result<TeletextExportReceiptBody> {
+    let original = original.into();
     let inventory = selected_inventory(
         original,
         expected_head,
@@ -810,21 +916,33 @@ pub(super) fn build_native_teletext_export_project(
     let body = TeletextExportReceiptBody {
         schema_version: 1,
         project: TeletextExportProject {
-            schema_version: 1,
+            schema_version: u32::from(original.document_version()),
             editor_profile: carrier.profile().to_owned(),
             original: TeletextExportOriginal {
                 design_id: original.design_id(),
                 revision: original.revision(),
                 digest: original.digest().to_owned(),
                 expected_head,
-                document_version: 1,
+                document_version: original.document_version(),
             },
-            channel_id: original.selection().channel_id,
+            channel_id: original.channel_id(),
             entry: wire_address(metadata.entry),
             language: metadata.language.as_str().to_owned(),
             v1_region: original.v1_region().map(|region| match region {
                 TeletextEncodingRegion::WesternLatin => TeletextSavedV1Region::WesternLatin,
             }),
+            effective_scope: match original {
+                OriginalDesignView::Base(_) => None,
+                OriginalDesignView::Effective(v) => Some(
+                    ersatzrs_app::teletext_export_project::TeletextExportEffectiveScope {
+                        binding_count: v.selection().bindings.len(),
+                        valid_until: v
+                            .selection()
+                            .valid_until
+                            .map(|boundary| boundary.to_rfc3339()),
+                    },
+                ),
+            },
             producers,
             pages: exported.pages,
             assets: exported.assets,

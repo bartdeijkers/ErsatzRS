@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect effective-role editor interchange after verified representative admin/ordinary-route/client flow; full engine acceptance open'
+current_focus = 'P9A-04: prove effective-role editor interchange in the headed admin and edited ordinary stream; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -77,10 +77,17 @@ TSDuck; independent page decoding and inspected byte-identical captured replay
 show both themes with client navigation200->201->200. Ordinary smoke passes.
 P9A-04 owns exact versions, receipts and negative harness/client hypotheses;
 this representative flow does not establish full engine acceptance, live
-application-client transitions or whole-host restart. Next connect effective-role
-QTeletextMaker export/import to saved original metadata and protected edits,
-using the same validator/preview and explicit publication. This requires exact
-scope/expiry and immutable package/template boundaries, not relaxing role guards.
+application-client transitions or whole-host restart. Effective-role native editor
+export/import now retains exact original metadata/scope/nullable expiry and
+protected free/zone concepts through the same validator/preview and explicit
+publication. P9A-04 owns application83, storage10, scope/publication12, native6
+and SSR/export12 passing results plus scoped legacy reuse. A concrete optional-
+overlay association rejection was corrected without weakening publication guards.
+Next run the matched headed actual QTeletextMaker open/edit/save -> native import
+-> preview -> explicit publication -> edited ordinary-route capture, then the
+remaining localized browser identities and independent transport/decoder/client
+proof. Repeat export from edited concepts still needs qualified baseline support;
+no permanent restriction is accepted. Package/template boundaries remain immutable.
 Automatic schedule-to-output
 promotion and applied acknowledgement remain missing. Full engine, editor,
 source/Next/platform acceptance stays open. Per the maintainer's latest instruction,

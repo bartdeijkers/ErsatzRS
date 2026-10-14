@@ -23,16 +23,14 @@ use ersatzrs_core::{
 };
 use ersatzrs_domain::{
     EntityId, TeletextDesignExportMetadata, TeletextDesignRevision, TeletextPageAddress,
-    TELETEXT_DESIGN_DOCUMENT_VERSION, TELETEXT_DESIGN_EXPORT_RECEIPT_VERSION,
+    TELETEXT_DESIGN_EXPORT_RECEIPT_VERSION,
 };
 use sha2::{Digest, Sha256};
 
 pub use super::teletext_export_project::NativeTeletextExportProjectError;
 use super::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
-    teletext_designs::{
-        reload_original_teletext_design_revision_with_hold, NativeTeletextDesignError,
-    },
+    teletext_designs::NativeTeletextDesignError,
     teletext_export_project::{build_native_teletext_export_project, TeletextEditorCarrier},
 };
 
@@ -182,7 +180,7 @@ impl TeletextDesignExportValidator for NativeExportConfirmation {
         }
         if original.design_id != self.original.design_id
             || original.revision != self.original.revision
-            || original.document_version != TELETEXT_DESIGN_DOCUMENT_VERSION
+            || original.document_version != self.original.document_version
             || original.digest != self.original.digest
             || export.design_id != self.original.design_id
             || export.revision != self.original.revision
@@ -243,7 +241,7 @@ pub async fn export_original_teletext_design(
     let guard = super::teletext_work::begin(application, Some(deadline))
         .await
         .map_err(NativeTeletextDesignError::from)?;
-    let Some(original) = reload_original_teletext_design_revision_with_hold(
+    let Some(original) = super::teletext_stored_designs::reload_stored_with_hold(
         application,
         request.design_id,
         request.revision,
@@ -258,7 +256,7 @@ pub async fn export_original_teletext_design(
             TeletextDesignRejection::MissingDesign,
         ));
     };
-    if original.digest() != request.design_digest {
+    if original.view().digest() != request.design_digest {
         return Ok(TeletextDesignMutation::Rejected(
             TeletextDesignRejection::Conflict,
         ));
@@ -268,7 +266,7 @@ pub async fn export_original_teletext_design(
         super::teletext_work::spawn_blocking(guard.hold_work(), move || {
             check_deadline(deadline)?;
             let body = build_native_teletext_export_project(
-                &original,
+                original.view(),
                 request.expected_design_head,
                 request.pages.as_deref(),
                 project_budget,

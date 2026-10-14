@@ -18,7 +18,7 @@ use ersatzrs_web::host::teletext_authoring::{
     TeletextAuthoringStatus,
 };
 
-async fn lua(
+pub(super) async fn lua(
     fixture: &AuthoringFixture,
     channel: i64,
     profile: Option<&TeletextProfile>,
@@ -79,7 +79,7 @@ fn request(
     request
 }
 
-async fn prepare(
+pub(super) async fn prepare(
     fixture: &AuthoringFixture,
     channel: i64,
 ) -> (
@@ -104,7 +104,7 @@ async fn prepare(
     (saved.identity, raster, publication)
 }
 
-async fn preview(
+pub(super) async fn preview(
     fixture: &AuthoringFixture,
     identity: TeletextAuthoringIdentity,
     absent: bool,
@@ -123,7 +123,7 @@ async fn preview(
     .unwrap()
 }
 
-fn target(
+pub(super) fn target(
     identity: TeletextAuthoringIdentity,
     observed: &TeletextAuthoringPublicationObservation,
 ) -> TeletextAuthoringPublicationTarget {
@@ -135,7 +135,7 @@ fn target(
     }
 }
 
-async fn select(
+pub(super) async fn select(
     fixture: &AuthoringFixture,
     identity: TeletextAuthoringIdentity,
     observed: &TeletextAuthoringPublicationObservation,
@@ -196,7 +196,7 @@ async fn history(fixture: &AuthoringFixture) -> Vec<Vec<String>> {
     result
 }
 
-async fn base_selected(fixture: &AuthoringFixture) -> (i64, TeletextRaster) {
+pub(super) async fn base_selected(fixture: &AuthoringFixture) -> (i64, TeletextRaster) {
     let saved = prepare_static_teletext_design(
         &fixture.fixture.state.application,
         AuthoringFixture::request(1, fixture.observe(1).await),
@@ -231,7 +231,7 @@ async fn base_selected(fixture: &AuthoringFixture) -> (i64, TeletextRaster) {
     (accepted.generation_id, raster)
 }
 
-async fn disable_base(fixture: &AuthoringFixture, channel: i64) {
+pub(super) async fn disable_base(fixture: &AuthoringFixture, channel: i64) {
     assert!(
         !saved(
             fixture
