@@ -60,7 +60,7 @@ Carousel/PSI/PCR preserve AV/EOF. ACK/cycle ends fence proposals;
 changed PMT precedes PES; withdrawal retains clock/counters;
 Rejected standalone proposals retain old output; v2 withdraws replacements.
 Epoch status is not publication. Warm resources,
-Q/QR/Off/native expiry pass; headed expiry open. Q failures retained.
+Q/QR/Off/expiry pass; headed clear/nav, Base reselect. Reds retained.
 Restart/applied/retained/Next open.
 
 MPEG-TS wrapper/encoder leases, lifecycle/Health remain.
@@ -82,6 +82,17 @@ adr         = '0124'
 description = 'Prove natural scoped expiry and independent accepted-base return on original ordinary responses with correct safe-output timing. Distinguish pre-expiry sink-accepted queued bytes from new expired scoped emission; preserve source AV, complete packets, counters, immutable expiry and current-base recovery. Prove actual headed clearing/navigation after the native boundary is qualified. Do not waive criteria, invent grace or silently trim the raw expiry prefix.'
 discovered  = '2026-10-14'
 evidence    = '''
+P9A-04 now also records a fresh headed35s Lua scope on the original60s source:
+twelve inspected frames, original clients/URLs, automatic Q removal to Day video,
+unchanged blue Night, then explicit Day selection and both200/201/200 navigations.
+Native TSDuck/clock/AV, twelve page decodes, exact state and cleanup pass. Automatic
+Day Base rendering is NOT proven: the receipted VLC decoder loses selection after
+withdrawal. This is an observed client limitation, not a permanent scope waiver;
+full suitable-client/resource updates remain open. Older exact owner-ACK proof is
+reused separately; new model-observed suffixes do not invent ACKs. Next connect
+ordinary continuous legacy selection with existing recovery/admission and retain
+all client/engine criteria. Canonical P9A-04 owns exact receipts and history:
+
 P9A-04 now owns explicit original request/intent/slot/epoch qualification and the
 fresh native4 integrated PASS: three original responses, exact unchanged expiry,
 complete Scoped/PES closure, real sink ACK, first restored200 C4, four post-cut

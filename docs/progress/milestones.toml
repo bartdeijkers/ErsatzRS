@@ -2724,6 +2724,65 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 headed natural-expiry userflow checkpoint (representative, not engine acceptance):
+Criterion: genuine Lua expiry on original ordinary responses, with two contrasting
+channel/profile themes, actual old-content clearing and200 ->201 ->200 navigation.
+Canonical tmp/phase9-headed-expiry/identity.json SHA256
+a90c8f5bd44212dc5821da0bc4c8dec2f31c96b0fb6423e2bfc275d517f6fb0f
+binds base67e22e26, the final three source hashes, native/client results, twelve
+actually inspected PNGs, exact original deadlines and five identity/time negatives.
+No production output policy, encoder, dependency, admin or acceptance changes.
+A private test helper keeps the existing12s case exact while admitting a NEW35s
+Scripted Reset/command-free Continue interval on the actual60s source/reference.
+Source bytes37132068/SHA9f127d636735594cf2235271840244c6d4d7a338edcc4566a785d2f1951e512c
+remain unchanged;48MiB source/capture and normal512KiB log limits remain.
+
+Native run7c83cb70-c949-4fcb-9654-867fb91c9cf2 passes120.848s, one case/182 filtered,
+including bounded root-review wait; owned client driver exits0. Two original VLC
+processes/URLs and observer use the ordinary hls-direct routes exactly once each.
+Base200 images precede fresh Q concept validation/preview/explicit scoped
+publication. Q capture completes before ORIGINAL35s finish2026-10-14T22:48:22.272469Z;
+no identity, expiry, source clock or programme duration is extended/relabelled.
+After real expiry, two per-page Base observations precede the automatic PNG pair.
+Root inspected ALL12 frames: initial red Day/blue Night AZ; Day alone gains Q;
+Day's automatic post-expiry frame at22:48:25.679264Z shows original red video
+with no Q or teletext, while Night keeps blue Base200 AZ. BEFORE ANY stage3 control,
+Day's decoder is inactive and Night's remains active. Explicit Day teletext
+selection then renders red Base200,201,200 AZ with no Q/R; unchanged Night renders
+blue200,201,200. Both owned clients exit0 without replaced PIDs or reconnected URLs.
+This proves observed Q clearing and later navigation, NOT automatic Base display,
+immediate UTC clearing or general resource-cache retirement. VLC reselection is
+an observed limitation of the tested client, not an accepted permanent scope cut.
+Complete suitable-client/Level2.5/resource updates remain open.
+
+Only after actual image review does root release exact closed completion. Actual
+native producer/body/server cleanup, exact source/package bytes, originals/Base/
+historical scoped generations/config/profiles/settings and producer calls survive.
+Three retained captures pass clock/TSDuck/FFprobe/AV and six full200/201 decodes;
+six independent observed-Base suffix decodes show AZ/no Q/R. All raw bytes/UTC
+offsets remain. That model-observed suffix is explicitly NOT a new owner-ACK cut;
+unchanged qualified native ACK evidence from67e22e26 remains separately valid.
+No offline or screenshot marker substitutes for real native/client termination.
+
+Focused run d3121dc6-a20b-46ab-ac12-3e3aafe163f4 passes the existing genuine12s
+metadata/Continue/Base regression (one/182 filtered). Strict web all-target Clippy,
+workspace format and Python syntax pass. Actual three closed stage objects pass
+validation; separate copies with expiry-minus1ns, Q exactly at expiry,1ns scope
+extension, changed root receipt and foreign Night generation all reject. Corrected
+nanosecond precision and both-owned-client cleanup were source-reviewed before
+execution. Valid pinned editor, all-culture headed admin and warm Q/QR/Off evidence
+is reused for unchanged inputs. No full CI, milestone or engine completion claimed.
+
+Next connect the missing ordinary continuous legacy selected-teletext invocation
+through existing recovery/admission, with normal-route/caption/audio/cancellation
+and clock proof. Keep observed client reselection/resource limits visible; complete
+authored Level2.5/fallback, QTM GUI/metadata/zones, restart/applied, source acquisition,
+native/Next/all-six-platform and playback/slate gates remain unchanged. The sole
+NOS200–299 production guide addon waits for independent full engine acceptance.
+Push only after UCU11 is on origin/main and complete combined CI covers prior reds.
+
+Historical receipts follow; this bounded trial does not retroactively accept
+negative UTC/ownership trials or prove complete client/engine acceptance:
 2026-10-15 owner-qualified native scoped-expiry checkpoint (engine acceptance open):
 Criterion: original ordinary responses restore independently accepted bases at
 actual acknowledged safe-output boundaries; actual headed clearing/navigation is

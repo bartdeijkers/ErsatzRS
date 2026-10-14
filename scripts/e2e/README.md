@@ -1409,10 +1409,21 @@ representative warm flow does not prove natural expiry, whole-host restart,
 resource retirement or full engine acceptance.
 
 
+The opt-in headed selector
+`original_headed_clients_observe_natural_expiry_and_navigate_restored_base`
+uses `ERSATZRS_TELETEXT_EXPIRY_CLIENT_DIR` and
+`teletext-expiry-client-trial.py <ready.json>`. Its new genuine35s Lua scope uses
+the unchanged measured60s source and the same two client processes/URLs. Automatic
+post-expiry images precede all controls; later selection/navigation is separately
+recorded. The root must inspect images before writing readiness's exact final
+completion. See the [headed natural-expiry workflow](../../docs/reference/teletext-design-interchange.md#headed-natural-expiry-on-original-clients)
+for original deadlines, negative evidence and the existing separate ACK proof.
+
 The native-only natural-expiry selectors and their retained-byte verifier use
 actual Reset trimming, command-free Continue and exact observer-UTC boundaries.
 Follow the [natural-expiry diagnostic and offline inputs](../../docs/reference/teletext-design-interchange.md#natural-expiry-same-response-diagnostic).
-The owner-qualified native safe-boundary gate now passes; actual headed expiry
-clearing/navigation remains open. Earlier strict receiver-UTC failures remain
-retained negative history;
-correct later Base output or green offline checks do not certify client clearing.
+The owner-qualified native safe-boundary gate passes. The headed trial records
+automatic Q clearing and navigation after explicit Base selection; automatic
+Base rendering/resource retirement and complete engine acceptance stay open.
+Earlier strict receiver-UTC failures remain retained negative history; correct
+later Base output or green offline checks do not certify client clearing.

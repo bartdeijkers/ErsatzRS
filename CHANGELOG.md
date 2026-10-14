@@ -56,8 +56,10 @@ release section when tagging a release.
   for retained-byte qualification. Native expiry now qualifies original request
   ownership, full scoped-cycle closure and independent post-ACK Base decoding,
   retaining raw UTC diagnostics and the agreed playback policy. Page acquisition
-  no longer borrows matching rows from a different page. Actual headed expiry
-  clearing and complete engine acceptance remain required.
+  no longer borrows matching rows from a different page. A headed natural-expiry
+  trial now records old-Q removal before controls, isolated themes and navigation
+  on both original clients. VLC requires explicit Base teletext selection after
+  withdrawal; automatic Base rendering and complete engine acceptance stay open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

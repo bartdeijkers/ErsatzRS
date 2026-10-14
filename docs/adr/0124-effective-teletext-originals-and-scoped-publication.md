@@ -154,8 +154,8 @@ delivery matrix and whole-host restart remain required. P9A-04 now records
 a representative same-URL Q -> cumulative QR -> genuine Scripted Lua Off trial
 with simultaneous isolated themes, actual client navigation and independent
 transport/decoding/AV proof. Existing VLC decoder reselection after PMT replacement
-is required; natural original expiry/base return, automatic resource/cache
-retirement and complete suitable-client/engine acceptance remain open. The parity record and P9A-04
+is required; automatic resource/cache retirement and complete suitable-client/
+engine acceptance remain open. The parity record and P9A-04
 own verification and the next concrete connection.
 
 The natural-expiry probe now uses a genuinely new trimmed Scripted scope and
@@ -172,8 +172,13 @@ first-written windows alone are not delivery. Terminal captured Base prefixes
 are reported without asserting complete EOF. The shared page observation also
 rejects borrowing rows from other pages or repeated-header intervals. Private
 trace IDs add no durable authority, public applied-state projection or deadline
-extension. P9A-04 owns the representative native proof and remaining headed
-clearing/navigation, cache/resource, full engine and platform acceptance.
+extension. A fresh genuine35s headed trial now records automatic old-Q removal
+before controls, unchanged other-channel presentation and200/201/200 navigation
+on both original clients after explicit Day teletext selection. The receipted VLC
+shows ordinary video automatically after expiry; automatic Base rendering remains
+unproven. This observed limitation does not waive suitable-client/resource gates.
+P9A-04 owns the representative native/headed proof, exact selection boundary and
+remaining cache/resource, full engine and platform acceptance.
 
 ## Alternatives Considered
 

@@ -4072,8 +4072,9 @@ partial PES/cycle state without claiming complete EOF delivery. The opt-in
 private DEBUG log remains capped at4MiB, versus512KiB for warning-only trials.
 Full/truncated logs, conflicting ownership, bad packet hashes and foreign ACKs
 reject. This proof is resource-free200/201 conformance, not a general presentation
-decoder or full engine acceptance. Actual headed clearing/navigation remains due.
-P9A-04 owns all receipts, negative trials and reused evidence.
+decoder or full engine acceptance. The separate headed workflow below records
+clearing/navigation and its explicit client-selection limits. P9A-04 owns all
+receipts, negative trials and reused evidence.
 
 For an independently retained trial, use a new output filename:
 
@@ -4098,6 +4099,44 @@ checks source/capture bytes remain exact and writes `offline-verification.json`.
 This checks complete captures, including Q before expiry; success cannot repair a
 failed exact-expiry, HTTP cleanup, client or engine acceptance. The legacy offline
 124 selector retains its own page/ownership checks through the same helper.
+
+### Headed natural expiry on original clients
+
+The ignored selector
+`original_headed_clients_observe_natural_expiry_and_navigate_restored_base`
+uses `ERSATZRS_TELETEXT_EXPIRY_CLIENT_DIR` with the same pinned FFmpeg9/ffprobe/
+TSDuck overrides. Start it through the preparation integration binary with
+`--run-ignored ignored-only`. When its closed `ready.json` appears, run:
+
+```bash
+python3 scripts/e2e/teletext-expiry-client-trial.py "$READY_JSON"
+```
+
+This opt-in Linux/X11 trial keeps two owned VLC processes on their original
+ordinary URLs, plus an independent native observer. The actual source and media
+reference remain60s under48MiB. Initial Base200 captures precede a NEW genuine35s
+Lua Reset/command-free Continue interval, Q concept preview and explicit scoped
+publication. No interval is extended for the client trial. The Q capture barrier
+must complete before its immutable finish. The single180s actor deadline also
+bounds post-expiry observation and is never renewed.
+
+After natural expiry and two per-page Base observations, the helper captures
+both automatic frames before any activation, focus or page control. It records
+later teletext selection separately, followed by200 ->201 ->200 controls and
+captures. Inspect all images, especially the automatic pair, independently.
+Markers certify requested controls and capture identity, never pixels. If Q
+remains or navigation/presentation is wrong, retain that negative evidence and
+leave root completion absent. The helper closes both owned clients on failure.
+
+Only the root, after actual image review and controlled client teardown, may
+write the exact closed `final_completion` object from readiness to
+`client-complete.json`. The native selector then checks state/source/package
+preservation, actual actor cleanup, original captures and independent Base-suffix
+200/201 decoding plus TSDuck/clock/AV. That suffix is explicitly an observed-model
+boundary; it does not manufacture a new owner-qualified sink ACK. Earlier valid
+ACK evidence remains separately owned by P9A-04. Immediate UTC clearing, resource
+cache retirement, complete Level2.5 and platform acceptance remain distinct gates.
+P9A-04 owns actual positive/negative results and remaining client limitations.
 
 ### Warm ordinary-URL client workflow
 

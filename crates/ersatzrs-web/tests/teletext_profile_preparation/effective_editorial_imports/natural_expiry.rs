@@ -39,6 +39,9 @@ use tokio::time::{timeout_at, Instant};
 const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_NATURAL_EXPIRY_DIR";
 const MAX_SOURCE: usize = 48 * 1024 * 1024;
 
+#[path = "natural_expiry/client_trial.rs"]
+mod client_trial;
+
 #[tokio::test]
 #[ignore = "requires explicit retained natural-expiry captures, create-new offline output and pinned FFmpeg9/TSDuck; proves no live cleanup or headed acceptance"]
 async fn offline_natural_expiry_raw_captures_verify_clock_transport_av_and_pages200201() {
@@ -197,13 +200,18 @@ struct Scoped {
 }
 
 async fn short_on(base: &Base) -> Scoped {
+    on_for(base, 12).await
+}
+
+async fn on_for(base: &Base, seconds: u8) -> Scoped {
+    assert!(matches!(seconds, 12 | 35));
     let fixture = &base.fixture.fixture;
-    let script=format!("assert(teletext_profile('{ADDON}',{}).ok)\nassert(teletext_enabled('{ADDON}',true).ok)\nadd_duration('clip','00:00:12',{{trim=true,stop_before_end=true}})",base.fixture.profiles[0].id);
+    let script=format!("assert(teletext_profile('{ADDON}',{}).ok)\nassert(teletext_enabled('{ADDON}',true).ok)\nadd_duration('clip','00:00:{seconds:02}',{{trim=true,stop_before_end=true}})",base.fixture.profiles[0].id);
     let short = schedule(fixture, 1, &script, None).await;
     assert_eq!(short.added_items.len(), 1);
     assert_eq!(
         short.added_items[0].finish - short.added_items[0].start,
-        chrono::Duration::seconds(12)
+        chrono::Duration::seconds(i64::from(seconds))
     );
     assert_eq!(short.teletext_intervals.len(), 1);
     let interval = &short.teletext_intervals[0];
