@@ -26,6 +26,16 @@ A finite-client whole-host restart trial retains two selected themes and a newer
 pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
 the exact proof and negative shutdown receipt.
 P9A-04 owns current independent proof and all remaining obligations.
+The generic transport gate now admits an initially absent authored epoch with
+unchanged source PSI/version and no placeholder page model. First activation
+uses that same source clock/counter and acknowledges changed PMT before PES.
+The host also fences selection changes committed during source discovery before
+its first authored write. These independently tested components do not establish
+ongoing application controls: initially-Off normal routes still raw-copy, and
+accepted bindings still lack response-owned updates. P9A-04 owns the concrete
+connection/cancellation/recovery proof and the separate capacity-slate codec,
+track-topology and clock defect. No acceptance obligation is narrowed.
+
 Preparatory immutable export receipts now use the existing design repository,
 exact head/original-digest checks and bounded read-only snapshot verification.
 The application requires a trusted native export confirmation port; its production

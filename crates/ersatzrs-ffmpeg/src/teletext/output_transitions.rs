@@ -1,7 +1,7 @@
 //! Nonterminal proposals against an exact sink-acknowledged physical boundary.
 
 use super::{
-    Arc, Duration, EncodedTeletextAuthoredService, TeletextOutputAcknowledgement,
+    Arc, Duration, EncodedTeletextAuthoredService, TeletextCarousel, TeletextOutputAcknowledgement,
     TeletextOutputError, TeletextOutputGate, TeletextPsiError, TeletextServiceDescriptor,
 };
 
@@ -22,6 +22,8 @@ impl TeletextOutputGate {
         }
         let intervals = self
             .carousel
+            .as_ref()
+            .ok_or(TeletextOutputError::Configuration)?
             .batches_until_boundary(intervals)?
             .unwrap_or(intervals);
         self.window_end(intervals)
@@ -55,11 +57,22 @@ impl TeletextOutputGate {
     ) -> Result<(), TeletextOutputError> {
         self.check_transition(receipt, now)?;
         self.check_warm_metadata(service)?;
+        let first = if self.carousel.is_none() {
+            let mut carousel = TeletextCarousel::new_authored_shared(Arc::clone(service))?;
+            carousel.advance_empty_at_boundary(self.batch_ticks)?;
+            Some(carousel)
+        } else {
+            None
+        };
         let prepared = self
             .carousel
-            .prepare_authored_shared_replacement_at_boundary(Arc::clone(service))?;
+            .as_ref()
+            .map(|carousel| {
+                carousel.prepare_authored_shared_replacement_at_boundary(Arc::clone(service))
+            })
+            .transpose()?;
         let descriptor = TeletextServiceDescriptor::from_authored_service(service);
-        let changed = !self.payload.active || descriptor != self.service;
+        let changed = !self.payload.active || self.service.as_ref() != Some(&descriptor);
         if changed {
             let installer = self
                 .installer
@@ -70,8 +83,12 @@ impl TeletextOutputGate {
             // is infallible and no cursor/history work intervenes after preflight.
             installer.reconfigure(plan)?;
         }
-        self.carousel.commit_prepared_replacement(prepared);
-        self.service = descriptor;
+        if let (Some(carousel), Some(prepared)) = (self.carousel.as_mut(), prepared) {
+            carousel.commit_prepared_replacement(prepared);
+        } else {
+            self.carousel = first;
+        }
+        self.service = Some(descriptor);
         self.payload.active = true;
         self.payload.signalling_ready = !changed;
         self.completed_cycle = false;
@@ -128,7 +145,10 @@ impl TeletextOutputGate {
             return Err(TeletextOutputError::Acknowledgement);
         }
         if !receipt.cycle_boundary
-            || !self.carousel.is_cycle_boundary()
+            || !self
+                .carousel
+                .as_ref()
+                .is_none_or(TeletextCarousel::is_cycle_boundary)
             || !self.payload.signalling_ready
         {
             return Err(TeletextOutputError::Boundary);

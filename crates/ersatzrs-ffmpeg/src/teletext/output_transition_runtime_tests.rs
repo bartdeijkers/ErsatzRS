@@ -384,3 +384,115 @@ async fn real_runtime_gate_replaces_withdraws_and_reenables_without_changing_av(
         std::fs::write(path, bytes).unwrap();
     }
 }
+
+#[tokio::test]
+#[ignore = "requires exact FFmpeg 9/libzvbi and TSDuck; initially-Off real AV epoch, not live-client acceptance"]
+async fn real_runtime_initial_absence_activates_without_rewriting_source_or_resetting_clock() {
+    let ffmpeg = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_FFMPEG"])
+        .expect("set the exact FFmpeg executable");
+    let tsanalyze = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_TSANALYZE"])
+        .expect("set the TSDuck tsanalyze executable");
+    let source = crate::teletext_probe::run_probe(&ffmpeg, SOURCE_ARGS, &[], 4 * 1024 * 1024)
+        .await
+        .unwrap();
+    let input: Vec<[u8; 188]> = source
+        .chunks_exact(188)
+        .map(|chunk| chunk.try_into().unwrap())
+        .collect();
+    assert_eq!(input.len() * 188, source.len());
+    let service = simple_with_text("nld", None, "ALPHA");
+    let mut output = Forwarding {
+        gate: TeletextOutputGate::new_absent(TeletextOutputConfig {
+            program: 10,
+            elementary_pid: 512,
+            clock: fixture_clock_policy(256),
+            max_buffer_packets: 1024,
+            max_hold: Duration::from_millis(500),
+            playout_delay: Duration::from_millis(100),
+            max_lateness: Duration::from_millis(20),
+        })
+        .unwrap(),
+        source: &input,
+        read: 0,
+        output: Vec::with_capacity(input.len()),
+        now: Duration::ZERO,
+    };
+    let mut receipt = output.next().unwrap();
+    for _ in 0..9 {
+        receipt = output.next().unwrap();
+    }
+    assert_eq!(output.output, input[..output.output.len()]);
+    assert_no_authored_pid(&output.output);
+    let inactive_end = output.output.len();
+    output
+        .gate
+        .replace_authored_at_acknowledged_boundary(&receipt, &service, output.now)
+        .unwrap();
+    output.announcement();
+    output.cycle();
+    output.cycle();
+    let active_end = output.output.len();
+    let output = output.finish();
+    assert_eq!(
+        verify_fixture_clock(&output, 256).unwrap(),
+        verify_fixture_clock(&input, 256).unwrap()
+    );
+    for (before, after) in input.iter().zip(&output) {
+        if ![8191, 4096].contains(&u16::from(Packet::new(before).pid())) {
+            assert_eq!(before, after);
+        }
+    }
+    verify_initial_absence_pmt_transition(&input, &output);
+    let active: Vec<u8> = output[inactive_end..active_end]
+        .iter()
+        .flatten()
+        .copied()
+        .collect();
+    let text = crate::teletext_probe::run_probe(
+        &ffmpeg,
+        crate::teletext_probe::TEXT_PROBE_ARGUMENTS,
+        &active,
+        64 * 1024,
+    )
+    .await
+    .unwrap();
+    assert!(String::from_utf8(text).unwrap().contains("ALPHA"));
+    let bytes: Vec<u8> = output.iter().flatten().copied().collect();
+    let (before, after) = tokio::join!(
+        crate::teletext_probe::run_probe(&ffmpeg, AV_DIGEST_ARGS, &source, 256 * 1024),
+        crate::teletext_probe::run_probe(&ffmpeg, AV_DIGEST_ARGS, &bytes, 256 * 1024),
+    );
+    assert_eq!(
+        before.unwrap(),
+        after.unwrap(),
+        "initial-Off activation changed decoded AV/timestamps"
+    );
+    verify_transport(&tsanalyze, &bytes).await;
+    if let Some(path) =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_OUTPUT_TRANSITION_TS"])
+    {
+        std::fs::write(path, bytes).unwrap();
+    }
+}
+
+fn verify_initial_absence_pmt_transition(input: &[[u8; 188]], output: &[[u8; 188]]) {
+    let original = sections(input)[0].clone();
+    let expected = expected_pmt(&original, 1, Some(b"nld"));
+    let mut versions = Vec::new();
+    for section in sections(output) {
+        assert_eq!(mpegts_crc::sum32(&section), 0);
+        let version = (section[5] >> 1) & 31;
+        assert_eq!(
+            section,
+            if version == 0 {
+                original.clone()
+            } else {
+                expected.clone()
+            }
+        );
+        if versions.last() != Some(&version) {
+            versions.push(version);
+        }
+    }
+    assert_eq!(versions, [0, 1]);
+}

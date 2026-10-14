@@ -3902,6 +3902,30 @@ installed package, and proves cold MAIN display/navigation only. Full authored
 Level2.5/fallback, sparse X27, panels, warm controls, editor-resource workflow,
 Lua/restart, localized admin and six-platform acceptance remain required.
 
+### Initially absent transport epochs and startup freshness
+
+`TeletextOutputGate::new_absent` and `new_absent_retained` reserve and validate
+source ownership, PID, clocks and existing window/holding limits without any
+authored descriptor or carousel. Ordinary AV/PSI bytes and the initial PMT version
+remain unchanged. At a sink-acknowledged boundary, the existing replacement API
+accepts a complete compiled service on that same clock/batch timeline. It retains
+the source-derived PMT counter and requires changed-table acknowledgement before
+PES. No blank page or fabricated descriptor is broadcast to bootstrap this state.
+The real-source ignored probe `real_runtime_initial_absence` uses the same pinned
+FFmpeg9/TSDuck procedure as the existing transition probe; simulated sink times
+are separate from actual HTTP/client evidence. It compares source packets and
+physical clocks, decoded AV/timestamps, complete PMT versions and independent
+ALPHA text decoding. P9A-04 owns the receipt and current integration gap map.
+
+Accepted host output now confirms its stored selection both before discovery and
+after waiting for actual source PSI. Off/replacement committed during that await
+returns the exact consumed prefix to ordinary direct/retained playback before an
+authored write. This startup fence is not ongoing freshness or immediate-disable
+acceptance. Current Off-at-start ordinary responses still lack a controlled gate;
+a bounded response-owned monitor prototype is unverified and not yet connected.
+Same-response activation/replacement/withdrawal, durable changes after request
+cancellation and real client/transport proof remain necessary next work.
+
 ### Bounded accepted guide-source reads
 
 The additive infra `external_json::snapshot::accepted_on` borrows the caller's

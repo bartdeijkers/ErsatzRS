@@ -200,7 +200,7 @@ fn long_cycle_refreshes_resources_at_physical_deadlines_before_acknowledged_comp
         assert!(!proof.gate.completed_cycle);
         if completes {
             assert!(refreshed);
-            assert!(proof.gate.carousel.is_cycle_boundary());
+            assert!(proof.gate.carousel.as_ref().unwrap().is_cycle_boundary());
             // Preparing and exposing the FF-containing window do not certify
             // its delivery. Only acknowledgement establishes completion.
             proof.gate.pending_packets(schedule.first_due()).unwrap();
@@ -217,7 +217,7 @@ fn long_cycle_refreshes_resources_at_physical_deadlines_before_acknowledged_comp
             return;
         }
         assert!(!proof.gate.completed_cycle);
-        assert!(!proof.gate.carousel.is_cycle_boundary());
+        assert!(!proof.gate.carousel.as_ref().unwrap().is_cycle_boundary());
     }
     panic!("complete display cycle was not delivered");
 }
@@ -232,7 +232,7 @@ fn eof_after_acknowledged_internal_refresh_still_rejects_incomplete_display_cycl
         assert!(!proof.gate.completed_cycle);
         if proof.refreshed() {
             proof.assert_repetition();
-            assert!(!proof.gate.carousel.is_cycle_boundary());
+            assert!(!proof.gate.carousel.as_ref().unwrap().is_cycle_boundary());
             assert_eq!(
                 proof.gate.prepare_final_window(proof.now),
                 Err(TeletextOutputError::Unterminated)

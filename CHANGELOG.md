@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Let generic teletext transport epochs begin without authored content, preserving
+  original audio/video and PSI until later activation on the same clock. Require
+  acknowledged PMT announcement before page data; open-stream host activation
+  remains to be connected.
 - Preserve exact physical teletext editor rows through the shared native compiler
   and preview raster, with per-page/subpage isolation and existing bounded work.
   A separate versioned private concept codec retains original addon/request bytes,
@@ -482,6 +486,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Recheck accepted teletext selection after source discovery before its first
+  authored write. Late disable or generation replacement preserves exact ordinary
+  playback in both direct and retained output.
 - Preserve native fallback header controls while adapting new teletext exports to
   QTeletextMaker's effective primary charset. Explicitly version the editor
   carrier and retain legacy receipts and qualified concepts without rewriting

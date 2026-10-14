@@ -2724,6 +2724,65 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 initially absent epoch and startup-freshness checkpoint:
+Criterion: support later activation without a new source clock or placeholder
+pages, and preserve ordinary playback when selection changes during discovery.
+Generic new_absent/new_absent_retained epochs have no authored descriptor or
+carousel. Initial source AV/PSI/startup flags and PMT version remain byte-exact;
+existing source-clock/PID/topology/retention/deadline bounds still apply. The
+same sink-acknowledged epoch later admits the full authored service, using its
+source-derived PMT counter and existing batch timeline. Changed PMT announcement
+must be acknowledged before any authored PES. No source/session rebase occurs.
+
+Runb877bd77-5183-416b-8955-64a800fbf03a passes146/146 affected gate/PSI/PMT/signalling
+cases, including7 new absent-epoch regressions. The first146-case run passes145;
+one synthetic startup-flag fixture misinterprets its existing adaptation field
+as payload and correctly fails Psi(Framing). Setting the flag in that original
+valid field fixes the fixture; production framing validation is unchanged.
+Initial compilation also finds3 old private carousel-field reads; explicit Some
+assertions preserve their predicates. Native run613e869c-7428-4b65-a51e-43db4685b7c1
+passes1/1 against exact FFmpeg9n9.0-20261006/libzvbi0.2.42/TSDuck3.44-4676:
+initial bytes and PMTversion0 are exact, activation announces version1 beforePES,
+independent decoding sees ALPHA, all source AV/other elementary packets and
+physical PCR clock remain exact, decoded AV frame/timestamp digests match and
+transport errors are zero. This is a real-source engine probe with simulated
+sink times, not HTTP/warm-client, full Level2.5 or platform acceptance.
+
+The accepted-output host now rechecks the exact stored selection after actual
+source discovery, before its first authored write. A late Off or accepted
+replacement replays every consumed prefix and keeps direct or retained ordinary
+playback; retained cancellation/deadline ownership is unchanged. Deterministic
+oneshot latches commit each mutation while discovery is suspended. Final race
+run0fb49db5-94b4-4dd3-a538-4792d31b38e9 passes1/1 across all four Off/replacement x
+direct/retained branches, with exact source bytes/counts and no reinvocation.
+Earlier runcb6c5d01-8c62-4f8d-afad-39ed63033695 passes41/41, including13 affected
+accepted-source cases. Union of successful test identities179. Lint-only helper
+extractions/borrow/doc formatting preserve earlier evidence; native and final
+race probes run after their relevant final changes. Strict FFmpeg all-target
+and web library/preparation-test Clippy pass without new suppressions.
+Actual disposable-host cargo xtask smoke passes legacy/hybrid MPEG-TS and HLS
+playback with the same exact FFmpeg9; no full pipeline/platform/CI claim.
+
+The actual open-response connection remains incomplete: accepted bindings have
+no control, while initially-Off normal routes raw-copy and cannot later activate.
+A response-owned reread/control monitor prototype exists in the worktree but is
+not wired, compiled or verified, and is excluded from this checkpoint. Next
+connect the new absent binding and bounded accepted-state recovery to the same
+ordinary response, then prove replacement/Off/re-enable, multiple viewers,
+channel isolation, recovery races and cancellation without losing committed
+changes. A notification alone is insufficient after requester cancellation.
+Capacity-wait correction remains separately blocked on compatible source/slate
+codec and track topology: H264 slate vs demonstrated MPEG2 source, with source
+caption/alternate-audio preservation required before stable final-mux handoff.
+The recorded slate clock defect is not waived. Reuse pinned editor/cold actual
+URL/72 localized headed admin receipts; no UI/WASM/argv/dependency change.
+Full Level2.5/fallback/resource/editor/panel/Lua/restart/source/Next/admin/platform
+and warm cache/retirement requirements stay open; production NOS200–299 guide
+still waits for independent generic engine acceptance.
+Receipt: tmp/phase9-initial-off/identity.json, SHA25687d4fc289f0c4cd1c0b66630a75889eaabfefcdb988905b4cb5b079a29b52178.
+No milestone/acceptance/status/dependency change, full engine claim, push or
+publication. Pending monitor source is retained separately, not certified.
+
 2026-10-14 cold actual ordinary-URL checkpoint:
 Criterion: attach a suitable headed client to the actual ordinary stream after
 profile selection, native validation/shared preview, separate publication and
@@ -3143,19 +3202,24 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | --- | --- | --- |
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
 | Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
-| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two actual ordinary HTTP clients, simultaneous themes and124->125->124; normal HTTP TSDuck plus prior exact-model/AV/decoding and72 localized headed flows | Capacity-slate clock correctness, open-generation/Off transitions and full panel/feature coverage |
+| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two actual ordinary HTTP clients, simultaneous themes and124->125->124; normal HTTP TSDuck plus prior exact-model/AV/decoding and72 localized headed flows | Ordinary Off-start/replacement/Off control connection, capacity-slate clocks and full panel/feature coverage |
 | Actual pinned QTM workflow | Actual v1.0 NOS, indexed0+1 and sparse1-only dependency load/pixels/Save As; dense native/stream decode, Legacy/V2/V3 recovery | Sparse normative X27 decoding/client, remaining charset/resource editing and full supported set/subpage edits |
-| Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
+| Full engine acceptance | Initially-absent native epoch/AV/PSI/decode/TSDuck, startup fences and earlier representative client receipts retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
-Concrete next action: correct repeated capacity-wait slate clocks and source
-handoff through an existing stable final mux without bypassing admission or
-losing codec/track topology. The live-URL flow reproduced this playback defect;
-its four-slot normal-route success is not capacity-wait acceptance. Existing
-accepted source preparation also creates a binding without control; freshness
-is checked at startup, and application Off only mutates stored state. Connect
-replacement/withdrawal to existing engine proposal controls and prove transitions
-on the same open response. These concrete behavior gaps determine integration
-work; do not start another general audit or metric expansion.
+Concrete next action: connect the initially-absent engine binding and bounded,
+response-owned accepted-state monitor to the actual ordinary route. Prove the
+same HTTP response through replacement/Off/re-enable, two viewers, other-channel
+isolation, cancelled callers and failed/superseded recovery. Current accepted
+bindings have no control and Off-at-start takes raw copy; the new generic gate
+alone does not connect either path. The unverified monitor prototype remains
+worktree work, not accepted evidence. Do not create a generic event bus or rely
+only on hints that can be lost after durable commit.
+The capacity-wait defect is independently visible: repeated finite slates reset
+clocks, while a stable copy mux cannot safely combine its current H264/one-audio
+slate with MPEG2/caption/alternate-audio source topology. Resolve compatible
+admission/final-mux handoff without bypassing capacity or dropping tracks.
+Four-slot normal-route success does not establish wait-slate acceptance. These
+concrete behavior gaps determine integration work; no general audit expansion.
 Sparse native/editor indexing is valid; the current decoder's audited normative
 X27 defects block its streamed glyph proof. Select/verify a correct independent
 candidate and actual client; never shift native packet fields or add native S1=0.

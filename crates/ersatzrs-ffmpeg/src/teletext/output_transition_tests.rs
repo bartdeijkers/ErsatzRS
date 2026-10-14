@@ -161,7 +161,11 @@ fn terminator_followed_by_next_cycle_is_not_a_replacement_boundary() {
     );
     assert!(gate.failure.is_none());
     assert!(Arc::ptr_eq(
-        gate.carousel.authored_service_shared().unwrap(),
+        gate.carousel
+            .as_ref()
+            .unwrap()
+            .authored_service_shared()
+            .unwrap(),
         &old
     ));
     assert_eq!(
@@ -220,7 +224,11 @@ fn same_descriptor_replacement_shares_exact_model_and_keeps_clock_and_packetizer
         cc
     );
     assert!(Arc::ptr_eq(
-        gate.carousel.authored_service_shared().unwrap(),
+        gate.carousel
+            .as_ref()
+            .unwrap()
+            .authored_service_shared()
+            .unwrap(),
         &next
     ));
     // The same accepted stamp cannot be reused merely because position is unchanged.
@@ -339,7 +347,11 @@ fn invalid_resource_lifecycle_preserves_current_content_signalling_and_next_outp
     ));
     assert!(gate.failure.is_none());
     assert!(Arc::ptr_eq(
-        gate.carousel.authored_service_shared().unwrap(),
+        gate.carousel
+            .as_ref()
+            .unwrap()
+            .authored_service_shared()
+            .unwrap(),
         &old
     ));
     assert_eq!(
@@ -369,7 +381,11 @@ fn retired_m29_and_mot_banks_require_reconciliation_without_damaging_existing_ou
         );
         assert!(gate.failure.is_none());
         assert!(Arc::ptr_eq(
-            gate.carousel.authored_service_shared().unwrap(),
+            gate.carousel
+                .as_ref()
+                .unwrap()
+                .authored_service_shared()
+                .unwrap(),
             &old
         ));
         assert_eq!(

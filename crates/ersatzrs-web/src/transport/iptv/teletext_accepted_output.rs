@@ -263,6 +263,15 @@ pub async fn forward_accepted_teletext_output(
     let qualified = qualified.ok_or(TeletextPumpError::Configuration)?;
     match prepare_source(source, intent, qualified, deadline, false).await {
         Ok((binding, prefix)) => {
+            // Source discovery awaited bytes after the first authority read.
+            // A selection changed during that await must not start a stale
+            // authored epoch; preserve its exact consumed prefix instead.
+            if !intent.current(application, deadline).await {
+                return Ok(OptionalTeletextOutput {
+                    bytes: replay_direct_prefix(source, sink, prefix.into_bytes()).await?,
+                    rejection: Some(TeletextPumpError::Configuration),
+                });
+            }
             forward_optional_seeded_teletext_output(
                 source,
                 sink,
@@ -385,6 +394,19 @@ fn retained_seed_preflight(
         .ok_or(RetainedTeletextError::Configuration)
 }
 
+async fn current_retained_intent(
+    intent: &TeletextAcceptedOutputIntent,
+    application: &ApplicationServices,
+    startup: Instant,
+    cancel: &Notify,
+) -> Result<bool, AcceptedRetainedTeletextError> {
+    tokio::select! { biased;
+        () = cancel.notified() => Err(RetainedTeletextError::Reserve(ReserveError::Cancelled).into()),
+        () = tokio::time::sleep_until(startup) => Err(RetainedTeletextError::Reserve(ReserveError::Deadline).into()),
+        current = intent.current(application, startup) => Ok(current),
+    }
+}
+
 /// Use the original reserve/startup/cancellation with a late actual-source binding.
 /// Checks requested allocation overlap before probing or allocating a validation
 /// gate. Missing authority and pre-write rejection preserve ordinary playback.
@@ -416,11 +438,7 @@ pub async fn forward_accepted_retained_teletext_output(
     // a repository lookup. Preserve ordinary reserve progress even if optional
     // generation storage is currently waiting for a connection.
     let current = qualified.is_some()
-        && tokio::select! { biased;
-            () = cancel.notified() => return Err(RetainedTeletextError::Reserve(ReserveError::Cancelled).into()),
-            () = tokio::time::sleep_until(startup) => return Err(RetainedTeletextError::Reserve(ReserveError::Deadline).into()),
-            current = intent.current(application, startup) => current,
-        };
+        && current_retained_intent(intent, application, startup, cancel).await?;
     let Some(qualified) = qualified.filter(|_| current) else {
         let bytes =
             replay_retained_prefix(source, sink, reserve, terminal, startup, cancel, Vec::new())
@@ -437,6 +455,24 @@ pub async fn forward_accepted_retained_teletext_output(
     };
     match prepared {
         Ok((binding, prefix)) => {
+            // Retain the original reserve/cancellation deadline while fencing
+            // mutations that committed during actual source discovery.
+            let current = current_retained_intent(intent, application, startup, cancel).await?;
+            if !current {
+                return Ok(AcceptedRetainedTeletextOutput {
+                    bytes: replay_retained_prefix(
+                        source,
+                        sink,
+                        reserve,
+                        terminal,
+                        startup,
+                        cancel,
+                        prefix.into_bytes(),
+                    )
+                    .await?,
+                    rejection: Some(RetainedTeletextError::Configuration.into()),
+                });
+            }
             let output = forward_optional_seeded_retained_output(
                 source,
                 sink,
