@@ -25,8 +25,12 @@ representative actual pinned-editor save now passes through concept import,
 preview, explicit publication, ordinary stream capture and independently decoded,
 visually inspected two-theme client replay. Repeated concept imports now retain
 one authenticated original and cumulative rows; the latest export supplies each
-new edit's authority. Native correction tests pass; the new headed repeated-editor
-flow, complete editor coverage and live application-client transitions remain open.
+new edit's authority. Native correction tests and representative repeated-editor
+headed Chromium/Firefox flows now pass, with independent cumulative Q/R decoding
+and visibly navigable isolated client replay. Actual pinned-editor GUI/capture
+evidence is composed with complete supplementary browser cases; the interrupted
+long GUI/capture case is not a complete pass. Complete editor coverage, direct live
+application-client attachment, warm transitions and whole-host restart remain open.
 P9A-04 owns verification and remaining userflow gaps. This does not establish
 same-URL suitable-client transitions or full engine acceptance.
 

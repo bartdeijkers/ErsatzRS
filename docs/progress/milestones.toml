@@ -2724,6 +2724,64 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 cumulative editor -> headed admin -> ordinary stream -> client:
+Criterion: re-export an imported concept, add a permitted zone edit while retaining
+the earlier free-content edit, validate/preview and explicitly publish; retain
+the actual original Lua scope/expiry, other channel/theme and ordinary playback.
+Canonical composed receipt tmp/phase9-repeat-flow/flow-identity.json SHA256
+740d27ffc90eb29d47ffceee1c131e7d8e4190a51b9cb6dca3b5606b0acc50e9
+binds source6a3f3d2e2a92132ff87ff9746b258d9fa6a35c0f, the matched SSR/WASM
+pair, native receipt68488fe8 below, exact runtime/tool/input hashes and results.
+All nine frozen Rust/TypeScript inputs match the native checkpoint. Its28 unique
+successes, strict lint/format/architecture/hydration results and unchanged earlier
+eight-identity localization/layout proof remain valid; no repeated Rust gate.
+
+Complete headed Chromium151.0.7922.34 JavaScript/light and Firefox153.0 no-JS/dark
+cases pass in every supported culture, each terminal0 with one expected pass,
+zero skips, unexpected results or flaky retries. Both retain genuine Lua Reset,
+two separate export/import/preview/publication rounds, exact scope/expiry,
+unpublished concepts, protected bytes, packages/configuration/call counts, isolated
+night output, Off and natural expiry. Their Q then R edits are programmatic.
+Result JSONs: chromium-results-03/ and firefox-results-01/ under the receipt root.
+
+A separate fresh actual QTeletextMaker1.0 GUI session uses the unchanged pinned
+artifact/sourcecac2167bac933a6160cca45a45d5d4ee95355898 and Qt6.10.2 image.
+Root inspected its loaded, edited, Save As dialog and saved windows before releasing
+the unchanged create-new handshake. The saved1357-byte TTI has SHA256
+415689c42cf14a61fab48ddef5482d0864dc61ebcc088cfbc6909454fd09ff00.
+It adds Q in free content; the subsequent re-export adds R in the permitted zone
+programmatically, not through a second GUI save. Import/preview/separate explicit
+publication and all seven closed ordinary /iptv/hls-direct/{channel}.ts captures
+are retained in chromium-artifacts-02/ and ordinary-repeat-02.chromium.*.ts.
+The first attempt missed the unchanged90-second GUI handshake because the parent
+did not launch the editor in time. The second wrapper terminated143 after captures;
+its owned browser/server actors were absent and port free. Cause remains unknown.
+Neither attempt is a green complete browser case; the complete supplementary cases
+above and independently checked captured bytes compose the representative proof.
+
+All seven source/pending/selected/rejected/Off captures pass TSDuck3.44-4676 and
+full-file FFmpeg9 audio/video decoding. Transport checks retain PSI, teletext
+language/PID presence or absence, continuity, PCR/PTS/PES and original AV bounds.
+Four independent libzvbi page decodes retain AZ on200/201 on both channels, with
+both Q and R in every day200 cue and neither on day201 or night pages.
+Two VLC3.0.20-3build6/libzvbi0.2.42-2 clients consume byte-identical finite captured
+ordinary streams at matching quarter-rate delivery/playback. Root inspected all
+six actual200->201->200 frames: day red AZ with white Q/R, night blue AZ without
+Q/R, matching rendered page/subpage headers and edit-free201. Both full deliveries
+and natural exits finish0. Native page controls are exercised; interactive numeric
+entry and56-column side panels remain unproved. This is captured replay, not
+direct live application attachment, warm same-response expiry or whole-host restart.
+
+Next connect role2 cumulative-editor originals to the existing60-second real-Router
+ordinary-client fixture, with actual channel IDs and200/201/0000 navigation. Reuse
+existing source/client/completion bounds; preserve original expiry and source clocks.
+Do not add duplicate playout owners or silently extend scopes. Warm changes/expiry,
+whole-host restart, automatic scoped readiness/applied acknowledgement, current
+guide qualification and complete authored Level2.5/fallback/editor/Lua/source/Next/
+native/platform/playback requirements remain open. No milestone status, dependency
+or acceptance changes; production guide work waits for independent engine acceptance.
+No push until UCU10/UCU11 merge and Phase9 is invited to resume remote delivery.
+
 2026-10-14 cumulative concept-import correction (native checkpoint):
 Criterion: an editor workflow can continue from an imported concept without losing
 previous permitted edits, original scope/expiry, isolated channel state or explicit
@@ -2759,8 +2817,10 @@ corrections preserve admission/deadlines/logic and reuse valid behavior evidence
 Workspace formatting, architecture lint and hydration lint pass; hydration has
 zero new findings and31 existing baseline suppressions. Browser collection passes.
 Final structured-source validation is recorded in progress-2.log.
-The opt-in ERSATZRS_TELETEXT_EFFECTIVE_REPEAT_EDITOR=1 browser mode is implemented
-and collects eight identities; it has not run. Next use a newly matched SSR/WASM
+At this native checkpoint the opt-in ERSATZRS_TELETEXT_EFFECTIVE_REPEAT_EDITOR=1
+browser mode collects eight identities but has not run. The follow-up evidence
+above now proves the two selected identities and composed output. The next step
+at this checkpoint was to use a newly matched SSR/WASM
 pair for Chromium JavaScript/light and Firefox no-JS/dark, retaining actual second
 export/import/preview/publication and new ordinary captures with cumulativeQ+R only
 on day200. Verify those exact bytes with TSDuck, independent decoding and actual

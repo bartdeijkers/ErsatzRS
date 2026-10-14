@@ -44,8 +44,10 @@ release section when tagging a release.
   independently decoded client navigation without changing the other channel.
   Repeated concept imports retain earlier free/zone rows and explicit undo over
   one immutable original, including edits across separate export subsets. Each
-  import remains unpublished and rechecks protected boundaries. Complete editor
-  and engine acceptance remain open.
+  import remains unpublished and rechecks protected boundaries. Representative
+  repeated edits now pass localized headed admin, ordinary-stream validation and
+  isolated two-theme captured-client navigation. Direct live-client transitions,
+  complete editor coverage and engine acceptance remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy
