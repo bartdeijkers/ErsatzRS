@@ -1,9 +1,9 @@
 use super::ScriptState;
-use crate::repositories::Result;
+use crate::repositories::{RepositoryError, Result, TeletextProfileMutation};
 use crate::scheduling::{
     SchedulingContentResolver, SchedulingContentSource, SchedulingMediaItem, SchedulingPlaylistItem,
 };
-use ersatzrs_domain::EntityId;
+use ersatzrs_domain::{EntityId, TeletextProfileCandidateSnapshot, TeletextScriptedBaseSelection};
 
 /// Fallible repository access from the synchronous Lua scheduling worker.
 /// Implementations keep storage and async-runtime details outside the core.
@@ -31,6 +31,36 @@ pub trait ScriptedContentResolver: std::fmt::Debug + Send + Sync {
     /// # Errors
     /// Returns a repository lookup failure.
     fn graphics_id(&self, path: &str) -> Result<Option<EntityId>>;
+    /// Read existing channel/add-on membership and base state for Lua controls.
+    /// Legacy source adapters fail honestly rather than enabling a fallback.
+    ///
+    /// # Errors
+    /// Returns a lookup failure or explicit unsupported-adapter error.
+    fn teletext_base(
+        &self,
+        _channel_id: EntityId,
+        _addon_id: &str,
+    ) -> Result<TeletextProfileMutation<TeletextScriptedBaseSelection>> {
+        Err(RepositoryError::unavailable(
+            "scripted teletext base validation",
+            "scripted teletext controls are unsupported",
+        ))
+    }
+    /// Validate the requested existing profile without changing base selection.
+    ///
+    /// # Errors
+    /// Returns a lookup failure or explicit unsupported-adapter error.
+    fn teletext_candidate(
+        &self,
+        _channel_id: EntityId,
+        _addon_id: &str,
+        _profile_id: EntityId,
+    ) -> Result<TeletextProfileMutation<TeletextProfileCandidateSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "scripted teletext profile validation",
+            "scripted teletext controls are unsupported",
+        ))
+    }
 }
 
 impl ScriptState {

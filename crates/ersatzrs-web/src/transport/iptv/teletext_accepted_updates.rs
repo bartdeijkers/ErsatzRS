@@ -798,7 +798,7 @@ mod tests {
         assert_eq!(proposals.borrow().as_ref().unwrap().sequence(), 1);
         assert_eq!(backend.reads.load(Ordering::SeqCst), 1);
         assert_eq!(backend.recoveries.load(Ordering::SeqCst), 0);
-        tokio::time::advance(Duration::from_secs(60)).await;
+        tokio::time::advance(Duration::from_mins(1)).await;
         assert_eq!(backend.reads.load(Ordering::SeqCst), 1);
     }
 
@@ -822,7 +822,7 @@ mod tests {
         owner.stopped().await.unwrap();
         assert_eq!(backend.recovering.load(Ordering::SeqCst), 0);
         let reads = backend.reads.load(Ordering::SeqCst);
-        tokio::time::advance(Duration::from_secs(60)).await;
+        tokio::time::advance(Duration::from_mins(1)).await;
         assert_eq!(backend.reads.load(Ordering::SeqCst), reads);
     }
 }

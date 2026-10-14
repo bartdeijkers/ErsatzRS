@@ -3,8 +3,11 @@ use super::super::{
     HealthCheckStatus, Pool, Result, Row,
 };
 use crate::repositories::common::{decode_datetime, decode_enum_column, encode_enum};
+use crate::repositories::SqlitePlayoutRepository;
+use chrono::{DateTime, Utc};
+use ersatzrs_core::repositories::PlayoutRepository as _;
 use ersatzrs_core::scheduling::validate_scripted_checkpoint;
-use ersatzrs_domain::{PlayoutScheduleKind, PlayoutScriptedCheckpoint};
+use ersatzrs_domain::{PlayoutScheduleKind, PlayoutScriptedCheckpoint, TeletextOverrideState};
 use std::collections::BTreeMap;
 
 pub(crate) struct ScriptedPlayoutStateHealthCheck {
@@ -81,15 +84,50 @@ impl ScriptedPlayoutStateHealthCheck {
             "Scripted source comparison failed for library {library}, playout {playout}; the published timeline is retained and comparison will retry."
         )).collect())
     }
+
+    async fn teletext_failures(&self, when: DateTime<Utc>) -> Result<Vec<String>> {
+        // Actual owning output channel only; mirror source identities never
+        // grant override state. Include retained Scripted intervals even when
+        // the operator has changed the future scheduler kind.
+        let channels: Vec<i64> = sqlx::query_scalar(
+            r#"SELECT DISTINCT p."ChannelId"
+            FROM "PlayoutTeletextInterval" i JOIN "Playout" p ON p."Id" = i."PlayoutId"
+            WHERE i."Start" <= ? AND i."Finish" > ? ORDER BY p."ChannelId""#,
+        )
+        .bind(crate::repositories::common::encode_datetime(when))
+        .bind(crate::repositories::common::encode_datetime(when))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(sqlx_error)?;
+        let repository = SqlitePlayoutRepository(self.pool.clone());
+        let mut failures = Vec::new();
+        for channel in channels {
+            let reason = match repository
+                .published_teletext_intervals_at(channel, when)
+                .await
+            {
+                Err(_) => Some("active override is unavailable"),
+                Ok(intervals)
+                    if intervals.iter().any(|interval| {
+                        matches!(interval.state, TeletextOverrideState::Enabled(_))
+                    }) =>
+                {
+                    // Scoped generation preparation/promotion is still pending.
+                    // Native confirmation refuses the base while On is active.
+                    Some("scoped native generation is not available")
+                }
+                Ok(_) => None,
+            };
+            if let Some(reason) = reason {
+                failures.push(format!("Scripted teletext interval for channel {channel}: {reason}; the published timeline is retained."));
+            }
+        }
+        Ok(failures)
+    }
 }
 
-#[async_trait]
-impl HealthCheck for ScriptedPlayoutStateHealthCheck {
-    fn title(&self) -> &'static str {
-        "Scripted Playout State"
-    }
-
-    async fn check(&self) -> Result<HealthCheckResult> {
+impl ScriptedPlayoutStateHealthCheck {
+    async fn check_at(&self, when: DateTime<Utc>) -> Result<HealthCheckResult> {
         let rows = sqlx::query(
             r#"SELECT p."Id", p."ScheduleKind", c."Number", c."Name", b."Message"
                FROM "Playout" p
@@ -124,6 +162,7 @@ impl HealthCheck for ScriptedPlayoutStateHealthCheck {
         }
         failures.extend(self.checkpoint_failures().await?);
         failures.extend(self.dependency_failures().await?);
+        failures.extend(self.teletext_failures(when).await?);
         if failures.is_empty() {
             return Ok(HealthCheckResult::pass(self.title()));
         }
@@ -135,3 +174,18 @@ impl HealthCheck for ScriptedPlayoutStateHealthCheck {
         ))
     }
 }
+
+#[async_trait]
+impl HealthCheck for ScriptedPlayoutStateHealthCheck {
+    fn title(&self) -> &'static str {
+        "Scripted Playout State"
+    }
+
+    async fn check(&self) -> Result<HealthCheckResult> {
+        self.check_at(Utc::now()).await
+    }
+}
+
+#[cfg(test)]
+#[path = "scripted_playout_teletext_tests.rs"]
+mod teletext_tests;

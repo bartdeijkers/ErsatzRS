@@ -318,6 +318,7 @@ async fn capture_handover(
             .with_preservation(PlayoutPreservation::KeepCurrent),
         Utc::now(),
         ersatzrs_infra::maintenance::PlayoutExecution {
+            scripted_teletext: None,
             hls_sessions: Some(registry),
             next,
             cancelled: None,

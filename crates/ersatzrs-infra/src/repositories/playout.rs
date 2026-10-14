@@ -24,6 +24,7 @@ pub use publication::PendingPlayoutBuild;
 mod classic_timeline;
 mod scripted_checkpoints;
 mod scripted_timeline;
+pub(super) mod teletext_intervals;
 mod yaml_checkpoints;
 use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
@@ -141,6 +142,16 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         read_items(&mut connection, playout_id, start, finish).await
     }
 
+    async fn published_teletext_intervals_at(
+        &self,
+        channel_id: EntityId,
+        when: DateTime<Utc>,
+    ) -> Result<Vec<ersatzrs_domain::TeletextOverrideInterval>> {
+        // Read-only transaction: observe intervals and their current target fences together.
+        let mut tx = self.0.begin().await.repository()?;
+        teletext_intervals::active_in_transaction(&mut tx, channel_id, when).await
+    }
+
     async fn replace_runtime_state(
         &self,
         playout: &Playout,
@@ -220,12 +231,15 @@ impl PlayoutRepository for SqlitePlayoutRepository {
     }
 
     async fn delete_items_before(&self, playout_id: EntityId, cutoff: DateTime<Utc>) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
             .bind(playout_id)
             .bind(encode_datetime(cutoff))
-            .execute(&self.0)
+            .execute(&mut *tx)
             .await
             .repository()?;
+        teletext_intervals::expire(&mut tx, playout_id, cutoff).await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -1366,6 +1380,7 @@ async fn erase_items_and_history_admin(pool: &crate::db::DbPool, id: EntityId) -
         .repository()?;
     for table in [
         "PlayoutItem",
+        "PlayoutTeletextInterval",
         "PlayoutHistory",
         "PlayoutProgramScheduleAnchor",
         "RerunHistory",

@@ -469,6 +469,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockPlayoutState => "Zustand der Block-Ausstrahlung",
         TextKey::YamlPlayoutState => "Zustand der YAML-Ausstrahlung",
         TextKey::ScriptedPlayoutState => "Zustand der skriptgesteuerten Ausstrahlung",
+        TextKey::ScriptedTeletextOverrideUnavailable => "Kanal {channel}: Die aktive Teletext-Auswahl ist nicht verfügbar. Der veröffentlichte Sendeplan bleibt erhalten.",
+        TextKey::ScriptedTeletextGenerationUnavailable => "Kanal {channel}: Die Seiten des aktiven Teletextprofils sind nicht bereit. Der veröffentlichte Sendeplan bleibt erhalten.",
         TextKey::ScriptedTimelineRejected => "Die Zeitleiste wurde abgelehnt. Veröffentlichte Programme bleiben unverändert. Korrigieren Sie das Skript und versuchen Sie es erneut.",
         TextKey::ItemDetailsNotRequested => "Details nicht abgerufen",
         TextKey::ItemDetailsFailed => "Detailabruf fehlgeschlagen",

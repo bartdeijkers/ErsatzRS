@@ -2724,6 +2724,81 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 Scripted cursor publication checkpoint (partial runtime):
+Criterion: shared admin/Lua profile validation, cursor timing, isolated themes,
+atomic schedule rollback, half-open expiry and restart observations. Strict
+teletext_profile(addon_id, profile_id) / teletext_enabled(addon_id, boolean)
+use the existing ApplicationServices injection and owned Lua worker. Existing
+bindings only; no base/global-setting writes, package activation or invocation.
+Off validates membership without requiring a healthy package/profile. Profile
+selection preserves enabled state; On revalidates the last selected profile.
+Typed static rejection tables preserve prior state; uncaught errors discard the
+whole candidate. Same-cursor commands coalesce. Intervals end at the actual last
+accepted item finish, not the requested horizon; no-item builds publish none.
+Continue starts from base; Refresh/Reset use the existing programme seam.
+
+The existing BEGIN IMMEDIATE playout transaction rechecks exact target identity
+and persists timeline/checkpoints/intervals together. Retention, clipping and
+expiry use set-based SQL; indexed overlap checks reject conflicting intervals.
+A distinct version1 database codec retains unresolved references. Read admission
+bounds aggregate serialized bytes before fetching payloads, then bounds decoded
+material; invalid/stale active state errors until original expiry rather than
+falling back to base. Actual output channel determines lookup, not mirror sources.
+One original30-second teletext lookup deadline covers the build; existing worker
+cancellation and ownership remain. Provisional1024-command/4MiB material limits
+are host admission bounds, not permanent authored-page restrictions.
+
+Real app -> owned Lua -> prepare/explicit SQL commit -> file-backed reopen now
+passes with one package on two channels and opposing profile themes, Enabled->Off,
+exact item/checkpoint clocks, handled missing profiles and uncaught rollback.
+No native producer or teletext accepted-generation publication occurs in that
+proof. Fresh profile/package/settings drift rejects while base edits alone do
+not alter captured targets. Reopen is interval/configuration proof, not actual
+running-client/whole-host Lua restart acceptance.
+
+Base confirm_current refuses active intervals in the same read transaction,
+without deleting accepted base history. This preparatory guard suppresses the
+complete base authored generation; preserving unaffected bindings and producing
+Lua-selected pages remain required. Existing Scripted Health reports unavailable
+active state or not-ready pages with static content-free reasons; valid Off is
+configuration-valid, not stream-application proof. New strings are localized in
+all nine catalogs; exact changed-message headed Health proof is still pending.
+
+Verification:175 unique successful focused cases, reusing167 from Nextest
+5762c188-dfdb-413e-9b5b-7dce112a273d and35 final-source passes from
+cc95ea95-61a0-4c6c-b00a-aa1b57e98f59. These include14 core controls,6 interval
+SQLite groups,3 owned-worker bridge cases,4 real application/Lua cases,2 generation
+admission cases,4 Health groups,2 all-culture/unknown-message tests and relevant
+legacy Scripted/profile/generation/migration guards. Initial build rejected a
+formatted test SQL string under SQLx0.9; literal statements fix that helper.
+The initial169-case run had167 passes and2 failures because new fixtures omitted
+mandatory Playout.Seed. Corrected fixtures pass without changing production
+validation. No failure is hidden by retries. Strict six-crate all-target Clippy, formatting,
+architecture/hydration and structured progress checks pass. Tests/Clippy are reused
+after only read-only-transaction comments required by architecture lint. Existing
+warm native/client and worker-lifetime receipts remain valid: no transport, FFmpeg
+argv, source clock, cleanup policy or producer implementation changed. Ordinary real-host playback smoke passes against the same FFmpeg9 candidate:
+legacy/hybrid MPEG-TS each serve8192bytes, segmenter/direct HLS playlists return
+200 and public internal callbacks return404. This is ordinary unbound playback
+regression proof, not actual Lua teletext or complete transport/client acceptance.
+
+Next authority seam: transaction-owned effective whole-channel selection with
+Base versus published-interval origins, owning PlayoutId/addon/bounds and Off
+membership. Exclude overridden base profiles before validating remaining base
+members. The present interval DTO omits owning PlayoutId, and app preparation,
+native prelaunch, publication/promotion/recovery still require base-only tokens.
+Do not invent binding revisions or cast candidate observations into authority.
+Reuse shared compiler/provenance and safe-boundary proposals after scoped native
+preparation; preserve separately recoverable accepted base and original expiry.
+Then prove real Lua On/Off/profile/expiry/restart and unchanged other bindings
+through ordinary AV, independent decoding/transport and suitable-client navigation.
+New headed Health proof, requested/applied state, retained/Next, warm resources,
+full authored Level2.5/fallback, complete pinned QTM/metadata/zones workflow,
+localized admin and source/playback/platform criteria all remain unchanged.
+This checkpoint is not independent engine acceptance or a completed milestone;
+production NOS200-299-only TV-guide content still waits. No push/publication.
+Proof:tmp/phase9-lua-intervals/identity.json; SHA25646a57ba617d547acbe5d162591d46ab52a670f0aa17c185e9d72598fc15b9047.
+
 2026-10-14 candidate-profile validation prerequisite:
 Criterion: Lua must select an existing bound-channel profile or turn an Off base
 On without mutating the admin base or auto-enabling packages. Existing enabled-base

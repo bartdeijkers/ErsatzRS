@@ -28,7 +28,7 @@ pub struct SchedulerOptions {
     pub transcode_dir: Option<PathBuf>,
     /// Optional channel-guide cache folder pruned of orphaned XML files.
     pub channel_guide_dir: Option<PathBuf>,
-    /// Shared application command boundary for periodic library scans.
+    /// Shared application boundary for periodic library scans and Scripted controls.
     pub application: Option<Arc<ersatzrs_app::ApplicationServices>>,
     /// Host-owned health runs shared with admin readers and refreshes.
     pub health: Option<ersatzrs_infra::health::HealthCheckCoordinator>,
@@ -93,7 +93,11 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
     // one, reuse it so the admin UI can observe playout lock state.
     let locker = locker.unwrap_or_default();
 
+    let scripted_teletext = application
+        .clone()
+        .map(|services| services as Arc<dyn ersatzrs_core::scheduling::ScriptedTeletextControl>);
     let execution = PlayoutExecution {
+        scripted_teletext: scripted_teletext.as_ref(),
         hls_sessions: hls_sessions.as_deref(),
         next: next.as_ref(),
         cancelled: Some(&cancelled),
@@ -205,6 +209,7 @@ fn maintenance_execution<'a>(
     artwork: Option<&'a ersatzrs_infra::artwork_cache_maintenance::ArtworkCacheMaintenance>,
 ) -> MaintenanceExecution<'a> {
     MaintenanceExecution {
+        scripted_teletext: execution.scripted_teletext,
         next: execution.next,
         cancelled: execution.cancelled,
         health,

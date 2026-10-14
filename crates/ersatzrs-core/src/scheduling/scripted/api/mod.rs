@@ -6,11 +6,12 @@ pub(in crate::scheduling::scripted) mod pre_roll;
 pub(in crate::scheduling::scripted) mod skipping;
 pub(in crate::scheduling::scripted) mod sources;
 pub(in crate::scheduling::scripted) mod state_queries;
+pub(in crate::scheduling::scripted) mod teletext;
 pub(in crate::scheduling::scripted) mod timing;
 pub(in crate::scheduling::scripted) mod watermark;
 
 #[cfg(test)]
-pub(super) const REGISTERED_GLOBALS: [&str; 39] = [
+pub(super) const REGISTERED_GLOBALS: [&str; 41] = [
     "build_mode",
     "start_time",
     "set_smart_shuffle_policy",
@@ -50,4 +51,6 @@ pub(super) const REGISTERED_GLOBALS: [&str; 39] = [
     "add_key",
     "add_marathon",
     "create_playlist",
+    "teletext_profile",
+    "teletext_enabled",
 ];

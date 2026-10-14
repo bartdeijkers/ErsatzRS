@@ -459,6 +459,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockPlayoutState => "État de la diffusion par blocs",
         TextKey::YamlPlayoutState => "État de la diffusion YAML",
         TextKey::ScriptedPlayoutState => "État de la diffusion par script",
+        TextKey::ScriptedTeletextOverrideUnavailable => "Chaîne {channel} : la sélection active du télétexte est indisponible. La programmation publiée est conservée.",
+        TextKey::ScriptedTeletextGenerationUnavailable => "Chaîne {channel} : les pages du profil de télétexte actif ne sont pas prêtes. La programmation publiée est conservée.",
         TextKey::ScriptedTimelineRejected => "La chronologie a été rejetée. Les programmes publiés restent inchangés. Corrigez le script et réessayez.",
         TextKey::ItemDetailsNotRequested => "Détails non récupérés",
         TextKey::ItemDetailsFailed => "Échec de récupération des détails",

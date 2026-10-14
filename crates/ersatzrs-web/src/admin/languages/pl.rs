@@ -1198,6 +1198,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockPlayoutState => "Stan emisji blokowej",
         TextKey::YamlPlayoutState => "Stan emisji YAML",
         TextKey::ScriptedPlayoutState => "Stan emisji sterowanej skryptem",
+        TextKey::ScriptedTeletextOverrideUnavailable => "Kanał {channel}: aktywny wybór teletekstu jest niedostępny. Opublikowany plan emisji zostaje zachowany.",
+        TextKey::ScriptedTeletextGenerationUnavailable => "Kanał {channel}: strony aktywnego profilu teletekstu nie są gotowe. Opublikowany plan emisji zostaje zachowany.",
         TextKey::ScriptedTimelineRejected => "Odrzucono oś czasu. Opublikowane programy pozostają bez zmian. Popraw skrypt i spróbuj ponownie.",
         TextKey::ItemDetailsNotRequested => "Nie pobrano szczegółów",
         TextKey::ItemDetailsFailed => "Pobieranie szczegółów nie powiodło się",

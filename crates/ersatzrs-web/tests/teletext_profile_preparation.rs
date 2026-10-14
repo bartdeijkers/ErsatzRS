@@ -76,6 +76,8 @@ mod preview;
 mod producer_admission;
 #[path = "teletext_profile_preparation/publications.rs"]
 mod publications;
+#[path = "teletext_profile_preparation/scripted_controls.rs"]
+mod scripted_controls;
 #[path = "teletext_profile_preparation/work_admission.rs"]
 mod work_admission;
 const SCRIPT: &str = r#"case "$1" in

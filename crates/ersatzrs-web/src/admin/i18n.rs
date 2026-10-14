@@ -2312,6 +2312,8 @@ pub enum TextKey {
     ClassicPlayout,
     ClassicPlayoutState,
     ScriptedPlayoutState,
+    ScriptedTeletextOverrideUnavailable,
+    ScriptedTeletextGenerationUnavailable,
     BlockPlayoutState,
     YamlPlayoutState,
     ExternalJsonPlayoutState,
@@ -4607,6 +4609,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
     TextKey::ScriptedPlayoutState,
+    TextKey::ScriptedTeletextOverrideUnavailable,
+    TextKey::ScriptedTeletextGenerationUnavailable,
     TextKey::BlockPlayoutState,
     TextKey::YamlPlayoutState,
     TextKey::ExternalJsonPlayoutState,
@@ -5496,6 +5500,32 @@ fn external_json_help_text(language: UiLanguage, key: TextKey) -> String {
         .replace("{reset}", text(language, TextKey::ResetPlayout))
 }
 
+// Match only the two static readiness clauses emitted by the infra check.
+// Unknown diagnostics and existing timeline-rejection details remain intact.
+fn scripted_teletext_health_message(language: UiLanguage, message: &str) -> Option<String> {
+    let mut recognized = false;
+    let localized = message.lines().map(|line| {
+        let Some((channel, reason)) = line.strip_prefix("Scripted teletext interval for channel ")
+            .and_then(|value| value.split_once(": ")) else {
+            return line.to_owned();
+        };
+        if channel.is_empty() || channel.len() > 19
+            || !channel.bytes().all(|byte| byte.is_ascii_digit())
+            || !channel.parse::<i64>().is_ok_and(|id| id > 0 && id.to_string() == channel)
+        {
+            return line.to_owned();
+        }
+        let key = match reason {
+            "active override is unavailable; the published timeline is retained." => TextKey::ScriptedTeletextOverrideUnavailable,
+            "scoped native generation is not available; the published timeline is retained." => TextKey::ScriptedTeletextGenerationUnavailable,
+            _ => return line.to_owned(),
+        };
+        recognized = true;
+        text(language, key).replace("{channel}", channel)
+    }).collect::<Vec<_>>().join("\n");
+    recognized.then_some(localized)
+}
+
 fn playout_health_message(language: UiLanguage, title: &str, message: &str) -> Option<String> {
     if title == "External JSON Playout State" {
         return Some(
@@ -5527,9 +5557,16 @@ fn playout_health_message(language: UiLanguage, title: &str, message: &str) -> O
                 .join("\n"),
         );
     }
-    if title == "Scripted Playout State" && message.contains("Scripted timeline rejected:") {
-        let guidance = text(language, TextKey::ScriptedTimelineRejected);
-        return Some(format!("{guidance}\n{message}"));
+    if title == "Scripted Playout State" {
+        let localized = scripted_teletext_health_message(language, message);
+        if message.contains("Scripted timeline rejected:") {
+            let guidance = text(language, TextKey::ScriptedTimelineRejected);
+            return Some(format!(
+                "{guidance}\n{}",
+                localized.as_deref().unwrap_or(message)
+            ));
+        }
+        return localized;
     }
     let marker = match title {
         "YAML Playout State" => ": missing or incompatible YAML boundary checkpoint;",
@@ -6375,6 +6412,91 @@ mod tests {
                 assert!(!localized.contains(ADDON_OPERATION_ERROR_MARKER));
                 assert!(!localized.starts_with(code));
             }
+        }
+    }
+
+    #[test]
+    fn scripted_teletext_readiness_health_is_localized_in_every_culture() {
+        let message = "Scripted teletext interval for channel 17: active override is unavailable; the published timeline is retained.\nScripted teletext interval for channel 23: scoped native generation is not available; the published timeline is retained.\nFuture diagnostic retained.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let localized = health_check_message_text(
+                language,
+                "Scripted Playout State",
+                message,
+                "2 state error(s)",
+            );
+            let lines = localized.lines().collect::<Vec<_>>();
+            assert_eq!(lines.len(), 3, "{}", definition.code);
+            assert!(lines[0].contains("17"));
+            assert!(lines[1].contains("23"));
+            assert_eq!(lines[2], "Future diagnostic retained.");
+            assert!(!localized.contains("{channel}"));
+            assert!(!localized.contains("active override is unavailable;"));
+            assert!(!localized.contains("scoped native generation is not available;"));
+            for key in [
+                TextKey::ScriptedTeletextOverrideUnavailable,
+                TextKey::ScriptedTeletextGenerationUnavailable,
+            ] {
+                assert_eq!(text(language, key).matches("{channel}").count(), 1);
+            }
+            if language != UiLanguage::English {
+                assert_ne!(
+                    localized,
+                    health_check_message_text(
+                        UiLanguage::English,
+                        "Scripted Playout State",
+                        message,
+                        ""
+                    )
+                );
+            }
+        }
+        assert_eq!(health_check_message_text(UiLanguage::English, "Scripted Playout State", message, ""),
+            "Channel 17: the active teletext selection is unavailable. The published schedule is retained.\nChannel 23: pages for the active teletext profile are not ready. The published schedule is retained.\nFuture diagnostic retained.");
+    }
+
+    #[test]
+    fn scripted_teletext_readiness_keeps_unknown_framing_and_timeline_rejection_details() {
+        let clause = "active override is unavailable; the published timeline is retained.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for channel in [
+                "0",
+                "-1",
+                "+17",
+                "017",
+                "x",
+                "9223372036854775808",
+                "123456789012345678901234567890",
+            ] {
+                let malformed =
+                    format!("Scripted teletext interval for channel {channel}: {clause}");
+                assert_eq!(
+                    health_check_message_text(language, "Scripted Playout State", &malformed, ""),
+                    malformed
+                );
+            }
+            let unknown = "Scripted teletext interval for channel 17: future diagnostic; the published timeline is retained.";
+            assert_eq!(
+                health_check_message_text(language, "Scripted Playout State", unknown, ""),
+                unknown
+            );
+            let recognized = format!("Scripted teletext interval for channel 17: {clause}");
+            assert_eq!(
+                health_check_message_text(language, "Other health title", &recognized, ""),
+                recognized
+            );
+            let combined = format!(
+                "{recognized}\nScripted timeline rejected: synthetic incompatible checkpoint"
+            );
+            let localized =
+                health_check_message_text(language, "Scripted Playout State", &combined, "");
+            assert!(localized.starts_with(text(language, TextKey::ScriptedTimelineRejected)));
+            assert!(localized.contains("17"));
+            assert!(localized
+                .ends_with("Scripted timeline rejected: synthetic incompatible checkpoint"));
+            assert!(!localized.contains(clause));
         }
     }
 

@@ -463,6 +463,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockPlayoutState => "Block Playout State",
         TextKey::YamlPlayoutState => "YAML Playout State",
         TextKey::ScriptedPlayoutState => "Scripted Playout State",
+        TextKey::ScriptedTeletextOverrideUnavailable => "Channel {channel}: the active teletext selection is unavailable. The published schedule is retained.",
+        TextKey::ScriptedTeletextGenerationUnavailable => "Channel {channel}: pages for the active teletext profile are not ready. The published schedule is retained.",
         TextKey::ScriptedTimelineRejected => "The timeline was rejected. Published programmes remain unchanged. Correct the script and try again.",
         TextKey::ItemDetailsNotRequested => "Details not fetched",
         TextKey::ItemDetailsFailed => "Detail fetch failed",

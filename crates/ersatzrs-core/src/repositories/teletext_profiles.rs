@@ -5,7 +5,7 @@ use ersatzrs_domain::{
     ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextChannelSelectionSnapshot,
     TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile,
     TeletextProfileCandidateSnapshot, TeletextProfileRead, TeletextProfileSetting,
-    TeletextSelectionSnapshot,
+    TeletextScriptedBaseSelection, TeletextSelectionSnapshot,
 };
 
 use super::{RepositoryError, Result};
@@ -111,6 +111,19 @@ pub trait TeletextProfileRepository: Send + Sync {
         Err(RepositoryError::unavailable(
             "teletext candidate profile validation",
             "candidate profile validation is unsupported",
+        ))
+    }
+    /// Observe existing channel/add-on membership and its operator base state
+    /// without requiring a healthy profile or package. Used by candidate Lua
+    /// controls, including Off, without changing any configuration or revisions.
+    async fn scripted_base_selection(
+        &self,
+        _channel_id: EntityId,
+        _addon_id: &str,
+    ) -> Result<TeletextProfileMutation<TeletextScriptedBaseSelection>> {
+        Err(RepositoryError::unavailable(
+            "teletext scripted base selection",
+            "scripted teletext base validation is unsupported",
         ))
     }
     /// Revalidate channel/binding presence and the candidate's exact profile,

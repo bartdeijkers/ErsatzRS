@@ -16,7 +16,17 @@ already-bound channel/add-on, including when its admin base is Off. They reuse
 the same installation/settings policy and expose a distinct candidate snapshot
 without base-binding or publication authority. Fresh rechecks preserve the
 target across base edits while rejecting target/profile/package/settings drift.
-Candidate validation alone does not implement Lua commands or published intervals.
+Scripted now uses these controls through the existing application injection and
+owned scheduling worker. Strict channel-bound Lua commands create bounded cursor
+intervals; the existing playout transaction persists exact unresolved snapshots
+with timeline/checkpoints, rechecks target identity, and retains/replaces intervals
+at the programme seam. Read-only interval lookup distinguishes active unavailable
+state from absence/expiry and restores published observations without Lua replay.
+Base generation admission refuses any active interval in the same read transaction;
+retained base history is unchanged. Complete interval-scoped generation provenance,
+preparation/promotion and per-binding runtime application remain unimplemented.
+The exact callable API and provisional worker bounds are documented in
+[Scripted build context](../reference/scripted-build-context.md#teletext-candidate-controls).
 The native host encodes exact retained authored originals through the shared
 compiler. A dedicated in-order SSR channel route connects named manifest-driven
 profiles and base binding controls to these application functions, independently

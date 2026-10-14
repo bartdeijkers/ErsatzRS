@@ -190,6 +190,19 @@ pub trait PlayoutRepository: Send + Sync {
         start: DateTime<Utc>,
         finish: DateTime<Utc>,
     ) -> Result<Vec<PlayoutItem>>;
+    /// Read half-open published Scripted overrides for the actual output channel.
+    /// This never inherits a mirror's source playout or replays a script. Invalid
+    /// active snapshots must fail closed, rather than masquerade as no override.
+    async fn published_teletext_intervals_at(
+        &self,
+        _channel_id: EntityId,
+        _when: DateTime<Utc>,
+    ) -> Result<Vec<ersatzrs_domain::TeletextOverrideInterval>> {
+        Err(super::RepositoryError::unavailable(
+            "published teletext intervals",
+            "published teletext interval reads are unsupported",
+        ))
+    }
     async fn replace_runtime_state(
         &self,
         playout: &Playout,

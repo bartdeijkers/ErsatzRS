@@ -10,8 +10,9 @@ use ersatzrs_domain::{
     validate_teletext_profile_values, ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId,
     TeletextChannelSelectionSnapshot, TeletextInstallationRead, TeletextInstallationSnapshot,
     TeletextProfile, TeletextProfileAvailability as A, TeletextProfileCandidateSnapshot,
-    TeletextProfileRead, TeletextProfileSetting, TeletextProfileValue, TeletextSecretReferenceKind,
-    TeletextSelectionSnapshot, MAX_TELETEXT_PAGE_RECORDS,
+    TeletextProfileRead, TeletextProfileSetting, TeletextProfileValue,
+    TeletextScriptedBaseSelection, TeletextSecretReferenceKind, TeletextSelectionSnapshot,
+    MAX_TELETEXT_PAGE_RECORDS,
 };
 use sqlx::{Row as _, Transaction};
 
@@ -121,6 +122,16 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         // Read-only transaction: candidate eligibility is independent of the base choice.
         let mut tx = self.0.begin().await.repository()?;
         candidate_in_transaction(&mut tx, channel_id, addon_id, profile_id).await
+    }
+
+    async fn scripted_base_selection(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+    ) -> Result<M<TeletextScriptedBaseSelection>> {
+        // Read-only transaction: membership observation grants no configuration write.
+        let mut tx = self.0.begin().await.repository()?;
+        scripted_base_in_transaction(&mut tx, channel_id, addon_id).await
     }
 
     async fn recheck_candidate_snapshot(
@@ -423,25 +434,14 @@ async fn selection_for_binding(
     }))
 }
 
-async fn candidate_in_transaction(
+pub(super) async fn candidate_in_transaction(
     tx: &mut Transaction<'_, Db>,
     channel_id: EntityId,
     addon_id: &str,
     profile_id: EntityId,
 ) -> Result<M<TeletextProfileCandidateSnapshot>> {
-    if !channel_exists(tx, channel_id).await? {
-        return Ok(M::Rejected(R::MissingChannel));
-    }
-    let bound: bool = sqlx::query_scalar(
-        r#"SELECT EXISTS(SELECT 1 FROM "ChannelTeletextBinding" WHERE "ChannelId" = ? AND "AddonId" = ?)"#,
-    )
-    .bind(channel_id)
-    .bind(addon_id)
-    .fetch_one(&mut **tx)
-    .await
-    .repository()?;
-    if !bound {
-        return Ok(M::Rejected(R::MissingBinding));
+    if let M::Rejected(reason) = scripted_base_in_transaction(tx, channel_id, addon_id).await? {
+        return Ok(M::Rejected(reason));
     }
     let validated = match validated_profile(tx, addon_id, profile_id).await? {
         M::Saved(validated) => validated,
@@ -455,6 +455,25 @@ async fn candidate_in_transaction(
         installation: validated.profile.validated_installation,
         effective_settings: validated.effective_settings,
         contract: validated.contract,
+    }))
+}
+
+pub(super) async fn scripted_base_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    channel_id: EntityId,
+    addon_id: &str,
+) -> Result<M<TeletextScriptedBaseSelection>> {
+    if !channel_exists(tx, channel_id).await? {
+        return Ok(M::Rejected(R::MissingChannel));
+    }
+    let Some(binding) = load_binding(tx, channel_id, addon_id).await? else {
+        return Ok(M::Rejected(R::MissingBinding));
+    };
+    Ok(M::Saved(TeletextScriptedBaseSelection {
+        channel_id,
+        addon_id: binding.addon_id,
+        profile_id: binding.profile_id,
+        enabled: binding.enabled,
     }))
 }
 

@@ -1189,6 +1189,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockPlayoutState => "Status blokuitzending",
         TextKey::YamlPlayoutState => "Status YAML-uitzending",
         TextKey::ScriptedPlayoutState => "Status scriptgestuurde uitzending",
+        TextKey::ScriptedTeletextOverrideUnavailable => "Kanaal {channel}: de actieve teletekstselectie is niet beschikbaar. De gepubliceerde uitzendplanning blijft behouden.",
+        TextKey::ScriptedTeletextGenerationUnavailable => "Kanaal {channel}: de pagina’s voor het actieve teletekstprofiel zijn niet gereed. De gepubliceerde uitzendplanning blijft behouden.",
         TextKey::ScriptedTimelineRejected => "De tijdlijn is afgewezen. Gepubliceerde programma’s blijven ongewijzigd. Corrigeer het script en probeer opnieuw.",
         TextKey::ItemDetailsNotRequested => "Details niet opgehaald",
         TextKey::ItemDetailsFailed => "Details ophalen mislukt",

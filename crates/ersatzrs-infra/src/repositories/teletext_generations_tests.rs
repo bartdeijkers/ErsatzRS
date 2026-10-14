@@ -14,6 +14,133 @@ use sqlx::Executor as _;
 
 const MAX_DOCUMENT: usize = 4096;
 
+#[tokio::test]
+async fn active_scripted_override_fences_base_output_without_replacing_accepted_history() {
+    use crate::repositories::common::encode_datetime;
+    let fixture = Fixture::new().await;
+    let repository = SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+    let generation = accepted(
+        repository
+            .accept(&save(&fixture).await, MAX_DOCUMENT)
+            .await
+            .unwrap(),
+    );
+    sqlx::query(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (1, 1, ?, 0), (2, 2, ?, 0)"#,
+    )
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::PlayoutScheduleKind::Scripted,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::PlayoutScheduleKind::Scripted,
+    ))
+    .execute(&repository.0)
+    .await
+    .unwrap();
+    let now = chrono::Utc::now();
+    let past = encode_datetime(now - chrono::Duration::hours(1));
+    let future = encode_datetime(now + chrono::Duration::hours(1));
+    let addon = &fixture.selection.bindings[0].addon_id;
+    sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State") VALUES (2, ?, ?, ?, 0)"#)
+        .bind(addon).bind(&past).bind(&future).execute(&repository.0).await.unwrap();
+    assert_eq!(
+        repository
+            .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+            .await
+            .unwrap(),
+        M::Accepted(())
+    );
+    sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State") VALUES (1, ?, ?, ?, 0)"#)
+        .bind(addon).bind(&past).bind(&future).execute(&repository.0).await.unwrap();
+    let reopened = SqliteTeletextGenerationRepository(
+        open(&fixture.root.path().join("requests.sqlite")).await,
+    );
+    assert_eq!(reopened.current(1).await.unwrap(), Some(generation.clone()));
+    assert_eq!(
+        reopened
+            .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+            .await
+            .unwrap(),
+        M::Rejected(R::Publication(P::SelectionChanged))
+    );
+    sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish" = ? WHERE "PlayoutId" = 1"#)
+        .bind(encode_datetime(now - chrono::Duration::minutes(1)))
+        .execute(&repository.0)
+        .await
+        .unwrap();
+    assert_eq!(
+        reopened
+            .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+            .await
+            .unwrap(),
+        M::Accepted(())
+    );
+    sqlx::query(
+        r#"UPDATE "PlayoutTeletextInterval" SET "Start" = ?, "Finish" = ? WHERE "PlayoutId" = 1"#,
+    )
+    .bind(&future)
+    .bind(encode_datetime(now + chrono::Duration::hours(2)))
+    .execute(&repository.0)
+    .await
+    .unwrap();
+    assert_eq!(
+        reopened
+            .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+            .await
+            .unwrap(),
+        M::Accepted(())
+    );
+    assert_eq!(count(&reopened).await, 1);
+}
+
+#[tokio::test]
+async fn corrupt_active_scripted_snapshot_is_unavailable_until_original_expiry() {
+    use crate::repositories::common::encode_datetime;
+    let fixture = Fixture::new().await;
+    let repository = SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+    let generation = accepted(
+        repository
+            .accept(&save(&fixture).await, MAX_DOCUMENT)
+            .await
+            .unwrap(),
+    );
+    sqlx::query(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (1, 1, ?, 0)"#,
+    )
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::PlayoutScheduleKind::Scripted,
+    ))
+    .execute(&repository.0)
+    .await
+    .unwrap();
+    let now = chrono::Utc::now();
+    sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State", "CandidateSnapshot") VALUES (1, ?, ?, ?, 1, '{}')"#)
+        .bind(&fixture.selection.bindings[0].addon_id)
+        .bind(encode_datetime(now - chrono::Duration::hours(1)))
+        .bind(encode_datetime(now + chrono::Duration::hours(1)))
+        .execute(&repository.0).await.unwrap();
+    assert!(repository
+        .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+        .await
+        .is_err());
+    assert_eq!(
+        repository.current(1).await.unwrap(),
+        Some(generation.clone())
+    );
+    sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish" = ?"#)
+        .bind(encode_datetime(now - chrono::Duration::minutes(1)))
+        .execute(&repository.0)
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+            .await
+            .unwrap(),
+        M::Accepted(())
+    );
+}
+
 async fn save(fixture: &Fixture) -> TeletextGenerationSave {
     TeletextGenerationSave {
         request: fixture.request(None).await,

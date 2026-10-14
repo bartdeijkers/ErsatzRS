@@ -201,6 +201,9 @@ impl Fixture {
 #[path = "teletext_profile_candidates_tests.rs"]
 mod candidates;
 
+#[path = "playout/teletext_intervals_tests.rs"]
+mod intervals;
+
 async fn insert_installation(pool: &DbPool, manifest: &AddonManifest) {
     manifest.validate().unwrap();
     sqlx::query(r#"INSERT INTO "AddonInstallation" ("AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256", "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt", "StateRevision")

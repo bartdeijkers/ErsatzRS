@@ -15,10 +15,12 @@ release section when tagging a release.
 
 ### Added
 
-- Validate an existing teletext profile candidate independently of its channel's
-  admin base selection, including when base teletext is Off. Shared application
-  reads retain the base and recheck exact profile/package/settings ownership.
-  Lua commands, published override intervals and live activation remain open.
+- Let Scripted Lua validate existing channel-bound teletext profiles and On/Off
+  choices through shared application controls without changing the admin base
+  or activating packages. Publish cursor intervals atomically with the schedule,
+  preserving target revisions, rollback, expiry and restart observations.
+  Bound the actual worker and snapshot reads; active overrides cannot emit a
+  stale base artifact. Scoped native activation and live Lua acceptance remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy
