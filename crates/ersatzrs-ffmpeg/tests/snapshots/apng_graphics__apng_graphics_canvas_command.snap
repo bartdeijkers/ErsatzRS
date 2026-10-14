@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/apng_graphics.rs
+assertion_line: 135
+expression: normalized
+---
+-nostdin -hide_banner -nostats -loglevel error -f lavfi -readrate 1 -i color=c=black@0.0:s=32x32:r=2/1,format=bgra -f concat -safe 0 -protocol_whitelist file -i <graphics>/9-apng.ffconcat -filter_complex [1:0]settb=AVTB,trim=start=0,setpts=PTS-0/TB[gi0];[0:0][gi0]overlay=x=0:y=0:format=rgb[vge0];[vge0]format=bgra[vpf] -map [vpf] -t 00:00:04.0000000 -an -c:v ffv1 -level 3 -slices 16 -slicecrc 0 -pix_fmt bgra -f nut pipe:1

@@ -3,8 +3,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.5";
-pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.1";
+pub const PLAYOUT_VERSION: &str = "https://ersatztv.org/playout/version/0.0.6";
+pub const CHANNEL_VERSION: &str = "https://ersatztv.org/channel/version/0.1.2";
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
@@ -22,6 +22,9 @@ pub struct ChannelConfig {
 pub struct Fallback {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_error: Option<bool>,
+    /// Minimum fallback duration after failed resolution; Next defaults to 60s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<u32>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -144,6 +147,15 @@ pub struct VideoFilters {
     pub libplacebo: LibplaceboOptions,
     pub tonemap: TonemapOptions,
     pub tonemap_opencl: TonemapOptions,
+    /// Software scaler options; omission preserves Next's bicubic default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<ScaleOptions>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct ScaleOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flags: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -358,6 +370,12 @@ pub enum Source {
         user_agent: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         timeout_us: Option<u64>,
+        /// Total resolution time including requests/backoff; 0 disables retries.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry_budget_ms: Option<u64>,
+        /// First retry delay; later delays double with runtime-owned jitter.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry_backoff_ms: Option<u64>,
     },
     Lavfi {
         params: String,

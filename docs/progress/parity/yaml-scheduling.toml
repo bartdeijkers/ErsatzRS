@@ -2,8 +2,15 @@ feature    = 'YAML scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/YamlScheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
 status     = 'Ported'
-adr        = ['0010', '0020']
+adr        = ['0010', '0020', '0125']
 summary    = '''
+UCU-10 row230 corrects nested filler repeat counts and inherited custom titles
+through existing bounded expansion once per build. All87 affected YAML tests,
+actual SQLite restart/preservation and strict core/infra lint pass. Global cycle
+refusal and existing state format/order fingerprints are retained. UCU-10 owns
+final window gates and evidence. Accepted ADR0125 now replaces the archived parser
+through the existing dependency alias. Affected compatibility, restarted state
+and native file/import loading pass on Linux/Windows; UCU-10 owns final gates.
 Ported: sequential dispatch, resolver-backed content sources, SQL-backed collection/multi-collection/smart collection/playlist/search/show/watermark/graphics lookups, show-name/show-GUID resolution, detail-based history resume, structured playlist and marathon child history, show/season marathon grouping, `play_all_items`, cleanup/reset, YAML imports (content/sequence merge with case-insensitive deduplication), expression-driven count (`count`/`random` variables and arithmetic), deterministic marathon shuffle-groups, and playlist batch/count child semantics. Named, priority-ordered date-range schedules select the active instruction list using the local calendar date, resume each list's position and ambient state, and persist list indices for Continue across a database restart. `wait_until` and `pad_until` use the local clock consistently with schedule selection. Scheduled sequences support integer repetition and active-list shuffle. The admin YAML validator accepts the scheduled structure. Driven through `PlayoutBuilder` for end-to-end builds; UCU-04 owns row-61 evidence and remaining window acceptance.
 '''
 
@@ -34,3 +41,17 @@ description = 'Continue loses active post-roll, mid-roll and graphics settings b
 discovered = '2026-09-29'
 resolved = true
 evidence = 'Upstream b3f7f3fe adds all three fields to YamlPlayoutContext.State. Three red core regressions confirm the missing anchor fields. Five checks pass after serialization and production graphics-reference loading are corrected, including three SQLite restart builds across midnight (ddb01a1f-03e5-4da5-a78c-7b44a2f0e5a3). All 78 YAML checks pass (49a372d6-8592-4acb-b3d2-7e2c2c917156), followed by six final checks after extracting the full persisted-item comparison (38efa297-9116-4158-83ff-ba6bf1780099). Imported/reset/named graphics lookup, strict core/infra all-target lint and native smoke pass. UCU-09 owns acceptance; row147 is Port.'
+
+[[debt]]
+id = 'ucu10-nested-filler-expansion'
+description = 'Nested pre/mid/post-roll sequences must retain repetition, custom titles and selection state across calls and continuation.'
+discovered = '2026-10-13'
+resolved = true
+evidence = 'UCU-10: baseline production-builder tests failed nested repetition/title and continuation, while cycle refusal passed. Existing bounded expansion once per build corrects the two fields without changing main/scheduled-list order fingerprints, schema or state formats. All87 affected YAML tests pass. SQLite persistence/reopen proves complete items, anchor and shared selection state after each real database restart; existing KeepCurrent Refresh, legacy-checkpoint refusal, explicit Reset and overlapping-rewind refusal remain green (ab7f6c79). Persisted shuffled sequence restart also passes (d6ebe22e). Strict core/infra all-target lint passes after final tests. No database repair or automatic reset is performed. Final ordered row230/window acceptance remains in UCU-10.'
+
+[[debt]]
+id = 'ucu10-windows-yaml-schedule-paths'
+description = 'Native Windows reference loading treats a rooted schedule-file path as inline YAML, preventing imports/reset/named-list graphics lookup. Use native path-root detection and prove the existing actual-file regression on both available platforms.'
+discovered = '2026-10-14'
+resolved = true
+evidence = 'UCU-10 owns104 passing native Windows YAML checks with exit0 and101 passing focused Linux YAML checks after portable path-root detection. The existing actual schedule-file/import/reset/named-list graphics regression passes on both platforms, along with nested filler and SQLite continuity. Strict affected core lint passes; application models, inline definitions and existing import behavior are preserved.'

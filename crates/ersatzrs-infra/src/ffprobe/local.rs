@@ -335,7 +335,7 @@ async fn read_stdout(mut stdout: impl AsyncRead + Unpin) -> Result<Vec<u8>, Loca
 }
 
 async fn read_stderr(mut stderr: impl AsyncRead + Unpin) -> Result<String, LocalProbeProblem> {
-    let mut bytes = VecDeque::with_capacity(MAX_LOCAL_STDERR_TAIL_BYTES);
+    let mut bytes = VecDeque::<u8>::with_capacity(MAX_LOCAL_STDERR_TAIL_BYTES);
     let mut chunk = [0; 4096];
     loop {
         let length = stderr

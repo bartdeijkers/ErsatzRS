@@ -285,7 +285,12 @@ async fn callback_connection(
                 let mut bytes = Vec::new();
                 while !bytes.ends_with(b"\r\n\r\n") {
                     assert!(bytes.len() < 16 * 1024, "callback headers exceed fixture limit");
-                    bytes.push(socket.read_u8().await.unwrap());
+                    let byte = match socket.read_u8().await {
+                        Ok(byte) => byte,
+                        Err(error) if matches!(error.kind(), std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted) => return,
+                        Err(error) => panic!("read callback headers: {error}"),
+                    };
+                    bytes.push(byte);
                 }
                 let request = std::str::from_utf8(&bytes).unwrap();
                 let mut lines = request.split("\r\n");
@@ -357,7 +362,10 @@ async fn callback_connection(
                         uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER)
                             .expect("official Next must expand the session header")).unwrap(), now, until).await {
                         Ok(item) => ("200 OK", serde_json::to_vec(&item).unwrap()),
-                        Err(error) => panic!("production callback for item {} failed: {error}", parts[1]),
+                        // Match the production next_media::get_dynamic boundary:
+                        // stale/preparation failures are HTTP 503, so the real
+                        // engine can apply its bounded retry policy.
+                        Err(_) => ("503 Service Unavailable", Vec::new()),
                     }
                 } else {
                     ("401 Unauthorized", Vec::new())

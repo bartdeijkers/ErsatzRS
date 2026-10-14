@@ -433,7 +433,7 @@ fn output_frame_rate_is_optional_and_retains_independent_copy_and_subtitle_polic
     let value = serde_json::to_value(&configuration).unwrap();
     assert_eq!(
         value["version"],
-        "https://ersatztv.org/channel/version/0.1.1"
+        "https://ersatztv.org/channel/version/0.1.2"
     );
     assert_eq!(value["normalization"]["video"]["frame_rate"], "30000/1001");
     assert_eq!(value["normalization"]["video"]["mode"], "copy");
@@ -657,7 +657,7 @@ async fn output_frame_rate_omits_mixed_target_rejected_by_packaged_next_integer_
     );
     assert_eq!(
         wire["version"],
-        "https://ersatztv.org/channel/version/0.1.1"
+        "https://ersatztv.org/channel/version/0.1.2"
     );
     let retained: String =
         sqlx::query_scalar(r#"SELECT "RFrameRate" FROM "MediaVersion" WHERE "Id"=101"#)

@@ -75,6 +75,12 @@ The v1.1.0 catch-up window covers ErsatzTV Legacy through **v26.11.1**.
 Implementation progress, acceptance evidence, deliberate deviations, and
 remaining debt are tracked in [docs/progress/](docs/progress/README.md).
 
+Unreleased development extends the accepted catch-up through **v26.11.2**,
+retains the Native engine, and adopts the reviewed Next v0.2.1 dependency.
+Its packages are publicly available; the application changes have local
+acceptance and await separate application delivery. Approved hardware/platform
+acceptance debt remains explicitly unverified.
+
 Teletext (Phase 9) and the "The Box" video-jukebox extension (Phase 10) are
 planned work. They are not advertised as features of this release.
 

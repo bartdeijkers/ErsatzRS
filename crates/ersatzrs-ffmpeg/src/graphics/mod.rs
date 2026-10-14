@@ -31,6 +31,8 @@ pub enum GraphicsTemplateError {
     InvalidScriptResult { id: i64 },
     #[error("graphics element {id} has invalid or unbounded JPEG XL timing")]
     InvalidJpegXlTiming { id: i64 },
+    #[error("graphics element {id} has invalid or unbounded image timing")]
+    InvalidImageTiming { id: i64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,17 +219,20 @@ pub struct GraphicsRenderContext {
     motion_source_durations: BTreeMap<i64, f64>,
     stream_offset: std::time::Duration,
     stream_duration: Option<std::time::Duration>,
-    jpeg_xl_sources: BTreeMap<i64, JpegXlTiming>,
+    image_sources: BTreeMap<i64, ImageTiming>,
 }
 
 /// Actual decoded frame timing; a single decoded frame is a still image.
 #[derive(Debug, Clone, PartialEq)]
-pub struct JpegXlTiming {
+pub struct ImageTiming {
     pub frame_count: usize,
     pub duration_seconds: f64,
     pub last_frame_seconds: f64,
     pub frame_timestamps: Vec<f64>,
 }
+
+/// Compatibility name for the original JPEG XL timing API.
+pub type JpegXlTiming = ImageTiming;
 
 impl GraphicsRenderContext {
     #[must_use]
@@ -238,7 +243,7 @@ impl GraphicsRenderContext {
             motion_source_durations: BTreeMap::new(),
             stream_offset: std::time::Duration::ZERO,
             stream_duration: None,
-            jpeg_xl_sources: BTreeMap::new(),
+            image_sources: BTreeMap::new(),
         }
     }
 
@@ -270,9 +275,15 @@ impl GraphicsRenderContext {
     }
 
     #[must_use]
-    pub fn with_jpeg_xl_timing(mut self, element_id: i64, timing: JpegXlTiming) -> Self {
+    pub fn with_jpeg_xl_timing(self, element_id: i64, timing: JpegXlTiming) -> Self {
+        self.with_image_timing(element_id, timing)
+    }
+
+    /// Decoded timing for image inputs that need bounded file reopening.
+    #[must_use]
+    pub fn with_image_timing(mut self, element_id: i64, timing: ImageTiming) -> Self {
         let duration = timing.duration_seconds;
-        self.jpeg_xl_sources.insert(element_id, timing);
+        self.image_sources.insert(element_id, timing);
         self.with_motion_source_duration(element_id, duration)
     }
 }
@@ -626,8 +637,8 @@ fn render_image_graphics_element(
     Ok(Some(RenderedGraphicsElement::NativeImage {
         id: element.id,
         z_index: element.z_index,
-        input: if crate::input::image_file_is_jpeg_xl(Path::new(image)) {
-            jpeg_xl_input(
+        input: if image_needs_timing(image) {
+            finite_image_input(
                 element.id,
                 image,
                 output_dir,
@@ -691,7 +702,7 @@ fn render_motion_graphics_element(
             id: element.id,
             field: "motion overlay",
         })?;
-    let jpeg_xl = crate::input::image_file_is_jpeg_xl(Path::new(video_path));
+    let timed_image = image_needs_timing(video_path);
     let mut input =
         InputFile::graphics_motion(video_path, config.end_behavior == MotionEndBehavior::Loop);
     let start = config.start_seconds.unwrap_or_default().max(0.0);
@@ -722,8 +733,8 @@ fn render_motion_graphics_element(
         && context
             .motion_source_duration(element.id)
             .is_some_and(|duration| seek >= duration && duration > 0.0);
-    if jpeg_xl {
-        input = jpeg_xl_input(
+    if timed_image {
+        input = finite_image_input(
             element.id,
             video_path,
             output_dir,
@@ -732,7 +743,7 @@ fn render_motion_graphics_element(
             if held_frame { 0.0 } else { seek },
         )?;
         if held_frame {
-            let timing = &context.jpeg_xl_sources[&element.id];
+            let timing = &context.image_sources[&element.id];
             input.filter_steps.push(format!(
                 "trim=start={},trim=end_frame=1,setpts=PTS-STARTPTS",
                 jpeg_xl_time(timing.last_frame_seconds)
@@ -805,7 +816,80 @@ fn jpeg_xl_time(value: f64) -> String {
         .to_owned()
 }
 
-fn jpeg_xl_input(
+fn image_needs_timing(source: &str) -> bool {
+    crate::input::image_file_is_jpeg_xl(Path::new(source))
+        || crate::input::image_file_is_apng(Path::new(source))
+}
+
+fn repeated_image_input(
+    id: i64,
+    source: &str,
+    output_dir: &Path,
+    duration: f64,
+    cycles: f64,
+    apng: bool,
+) -> Result<InputFile, GraphicsTemplateError> {
+    let invalid_timing = || {
+        if apng {
+            GraphicsTemplateError::InvalidImageTiming { id }
+        } else {
+            GraphicsTemplateError::InvalidJpegXlTiming { id }
+        }
+    };
+    let source_path =
+        std::fs::canonicalize(source).map_err(|source_error| GraphicsTemplateError::Io {
+            path: source.into(),
+            source: source_error,
+        })?;
+    let source = source_path.to_string_lossy();
+    if source.contains(['\n', '\r', '\0']) {
+        return Err(invalid_timing());
+    }
+    // ffconcat quoting is independent of filtergraph escaping. Native
+    // Windows paths use forward slashes; POSIX literal backslashes survive.
+    let source = if cfg!(windows) {
+        source
+            .strip_prefix(r"\\?\UNC\")
+            .map_or_else(
+                || source.strip_prefix(r"\\?\").unwrap_or(&source).to_owned(),
+                |rest| format!("//{rest}"),
+            )
+            .replace('\\', "/")
+    } else {
+        source.into_owned()
+    };
+    let mut record = format!(
+        "file '{}'\nduration {}\n",
+        source.replace('\'', "'\\''"),
+        jpeg_xl_time(duration)
+    );
+    if apng {
+        record.push_str("option ignore_loop 1\n");
+    }
+    let mut manifest = String::from("ffconcat version 1.0\n");
+    let mut cycle = 0.0;
+    while cycle < cycles {
+        if manifest.len().saturating_add(record.len()) > 8 * 1024 * 1024 {
+            return Err(invalid_timing());
+        }
+        manifest.push_str(&record);
+        cycle += 1.0;
+    }
+    let codec = if apng { "apng" } else { "jpeg-xl" };
+    let path = output_dir.join(format!("{id}-{codec}.ffconcat"));
+    std::fs::create_dir_all(output_dir)
+        .and_then(|()| std::fs::write(&path, manifest))
+        .map_err(|source| GraphicsTemplateError::Io {
+            path: path.clone(),
+            source,
+        })?;
+    Ok(
+        InputFile::new(crate::InputKind::GraphicsImage, path.to_string_lossy(), 0)
+            .with_input_options(["-f", "concat", "-safe", "0", "-protocol_whitelist", "file"]),
+    )
+}
+
+fn finite_image_input(
     id: i64,
     source: &str,
     output_dir: &Path,
@@ -813,17 +897,31 @@ fn jpeg_xl_input(
     repeat: bool,
     seek: f64,
 ) -> Result<InputFile, GraphicsTemplateError> {
+    let apng = crate::input::image_file_is_apng(Path::new(source));
+    let invalid_timing = || {
+        if apng {
+            GraphicsTemplateError::InvalidImageTiming { id }
+        } else {
+            GraphicsTemplateError::InvalidJpegXlTiming { id }
+        }
+    };
+    let loop_options = if apng {
+        vec!["-ignore_loop", "1"]
+    } else {
+        vec![]
+    };
     let timing = context
-        .jpeg_xl_sources
+        .image_sources
         .get(&id)
         .filter(|value| {
             value.frame_count > 0
                 && value.duration_seconds.is_finite()
                 && value.duration_seconds > 0.0
         })
-        .ok_or(GraphicsTemplateError::InvalidJpegXlTiming { id })?;
+        .ok_or_else(invalid_timing)?;
     if timing.frame_count == 1 {
-        let mut input = InputFile::new(crate::InputKind::GraphicsImage, source, 0);
+        let mut input = InputFile::new(crate::InputKind::GraphicsImage, source, 0)
+            .with_input_options(loop_options);
         input.filter_steps.push(format!(
             "loop=loop=-1:size=1:start=0,setpts=N*{}/TB",
             jpeg_xl_time(timing.duration_seconds)
@@ -838,59 +936,22 @@ fn jpeg_xl_input(
     let mut input = if repeat {
         let remaining = context
             .stream_duration
-            .ok_or(GraphicsTemplateError::InvalidJpegXlTiming { id })?
+            .ok_or_else(invalid_timing)?
             .as_secs_f64();
         let cycles = ((remaining + seek) / timing.duration_seconds).ceil() + 1.0;
         if !cycles.is_finite() || !(1.0..=100_000.0).contains(&cycles) {
-            return Err(GraphicsTemplateError::InvalidJpegXlTiming { id });
+            return Err(invalid_timing());
         }
-        let source_path =
-            std::fs::canonicalize(source).map_err(|source_error| GraphicsTemplateError::Io {
-                path: source.into(),
-                source: source_error,
-            })?;
-        let source = source_path.to_string_lossy();
-        if source.contains(['\n', '\r', '\0']) {
-            return Err(GraphicsTemplateError::InvalidJpegXlTiming { id });
-        }
-        // ffconcat quoting is independent of filtergraph escaping. Native
-        // Windows paths use forward slashes; POSIX literal backslashes survive.
-        let source = if cfg!(windows) {
-            source
-                .strip_prefix(r"\\?\UNC\")
-                .map_or_else(
-                    || source.strip_prefix(r"\\?\").unwrap_or(&source).to_owned(),
-                    |rest| format!("//{rest}"),
-                )
-                .replace('\\', "/")
-        } else {
-            source.into_owned()
-        };
-        let record = format!(
-            "file '{}'\nduration {}\n",
-            source.replace('\'', "'\\''"),
-            jpeg_xl_time(timing.duration_seconds)
-        );
-        let mut manifest = String::from("ffconcat version 1.0\n");
-        let mut cycle = 0.0;
-        while cycle < cycles {
-            if manifest.len().saturating_add(record.len()) > 8 * 1024 * 1024 {
-                return Err(GraphicsTemplateError::InvalidJpegXlTiming { id });
-            }
-            manifest.push_str(&record);
-            cycle += 1.0;
-        }
-        let path = output_dir.join(format!("{id}-jpeg-xl.ffconcat"));
-        std::fs::create_dir_all(output_dir)
-            .and_then(|()| std::fs::write(&path, manifest))
-            .map_err(|source| GraphicsTemplateError::Io {
-                path: path.clone(),
-                source,
-            })?;
-        InputFile::new(crate::InputKind::GraphicsImage, path.to_string_lossy(), 0)
-            .with_input_options(["-f", "concat", "-safe", "0", "-protocol_whitelist", "file"])
+        repeated_image_input(
+            id,
+            source,
+            output_dir,
+            timing.duration_seconds,
+            cycles,
+            apng,
+        )?
     } else {
-        InputFile::new(crate::InputKind::GraphicsImage, source, 0)
+        InputFile::new(crate::InputKind::GraphicsImage, source, 0).with_input_options(loop_options)
     };
     // Decode the compact source from its beginning. Reopening each concat
     // entry bounds decoded memory and supplies monotonic packet timestamps.
@@ -899,7 +960,7 @@ fn jpeg_xl_input(
         .iter()
         .rev()
         .find(|timestamp| **timestamp <= seek + 0.000_001)
-        .ok_or(GraphicsTemplateError::InvalidJpegXlTiming { id })?;
+        .ok_or_else(invalid_timing)?;
     if !repeat {
         input.filter_steps.push(format!(
             "tpad=stop_mode=clone:stop_duration={}",

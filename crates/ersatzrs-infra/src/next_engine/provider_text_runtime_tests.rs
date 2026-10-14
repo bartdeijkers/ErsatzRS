@@ -169,7 +169,7 @@ async fn assert_native_provider_sidecar(
         .args([
             "-ss", "5", "-t", "3", "-map", "0:v:0", "-map", "0:a:1", "-vf",
         ])
-        .arg(format!("subtitles={}", input.path))
+        .arg(ersatzrs_ffmpeg::filter::subtitles_filter(&input.path, None))
         .args([
             "-c:v",
             "libx264",

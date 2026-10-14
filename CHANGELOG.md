@@ -13,6 +13,11 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Security
+
+- Require Ammonia 4.2.3 for release-note HTML sanitization, addressing
+  RUSTSEC-2021-0157 and RUSTSEC-2021-0158 without weakening sanitizer policy.
+
 ### Added
 
 - Export saved native teletext originals through a bounded host API to exact
@@ -214,6 +219,23 @@ release section when tagging a release.
   generation and executable checksums in the troubleshooting report.
 
 ### Changed
+
+- Replace the archived YAML parser with the maintained YAML organization fork
+  across scheduling, media scanning, graphics and script handling (ADR 0125),
+  preserving existing YAML models and persistent state.
+
+- Pin the supported Rust compiler explicitly in reviewed Next source builds,
+  and verify the updated upstream Windows dispatcher checksum for Next v0.2.1.
+
+- Rebase the reviewed Next runtime to v0.2.1 across all six platforms, retaining
+  the demonstrated RTSP and scheduled-image corrections and exact package pins.
+  Verified public packages support automatic acquisition, bundled startup and
+  managed restart on Linux and Windows. Approved hardware and ARM/macOS
+  application acceptance remains explicitly unverified.
+
+- Read structured Next diagnostics with severity, channel and FFmpeg context,
+  retaining older text logs, bounded retention and credential/path redaction.
+  Flatten control characters so a message cannot forge another diagnostic line.
 
 - Expand Phase 9 to authored EN 300 706 Level 2.5 with correct base fallback and
   QTeletextMaker TTI import/export, versioned template/theme/zone metadata and
@@ -458,6 +480,28 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Recognize native Windows YAML schedule-file paths and resolve their imports
+  instead of decoding the path itself as an inline schedule.
+
+- Resolve smart collection list data before rendering its SSR response so saved
+  search links work with JavaScript disabled.
+
+- Specify the bounded ffprobe diagnostic byte-buffer type explicitly so native
+  Windows builds remain valid with their Unicode iterator dependencies.
+
+- Honor repeat counts and inherited custom titles in nested Sequential YAML
+  pre-roll, mid-roll and post-roll sequences while retaining shared selection
+  state and existing continuity checks.
+
+- Preserve relative paths in troubleshooting ZIPs so Native and Next reports
+  with the same filename remain separate entries instead of losing a report.
+
+- Detect APNG graphics by their animation-control chunks, including animations
+  stored with a `.png` extension, and select the animation loop option. This
+  prevents FFmpeg startup failures. Reuse bounded image timing and file reopening
+  for finite and infinite APNG canvas animation, preserving still PNG and JPEG XL
+  behavior without rebuilding the FFmpeg runtime.
 
 - Keep video-copy streams free of encoder-only profile, preset, tune and hardware
   options left in a saved transcoding profile. A retained H.264 `high` profile

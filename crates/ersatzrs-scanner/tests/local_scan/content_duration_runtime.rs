@@ -1065,17 +1065,19 @@ async fn local_scanned_content_duration_bounds_native_and_next_handoff() {
     let tools = Tools::load();
     let root = tempfile::tempdir().unwrap();
     let pool = test_db().await;
-    let proof = AssertUnwindSafe(async {
-        generate(&tools, &root.path().join("library")).await;
-        prove_conflict(&tools, root.path(), true).await;
-        let scanned = scan_and_rescan(&tools, root.path(), &pool).await;
-        seed_schedule(&pool, root.path(), &scanned).await;
-        let locker = EntityLocker::new();
-        native(&pool, &locker, &tools, root.path(), &scanned).await;
-        next(&pool, &locker, &tools, root.path(), &scanned).await;
-        export(root.path()).await;
-    })
-    .catch_unwind()
+    let proof = Box::pin(
+        AssertUnwindSafe(async {
+            generate(&tools, &root.path().join("library")).await;
+            prove_conflict(&tools, root.path(), true).await;
+            let scanned = scan_and_rescan(&tools, root.path(), &pool).await;
+            seed_schedule(&pool, root.path(), &scanned).await;
+            let locker = EntityLocker::new();
+            native(&pool, &locker, &tools, root.path(), &scanned).await;
+            next(&pool, &locker, &tools, root.path(), &scanned).await;
+            export(root.path()).await;
+        })
+        .catch_unwind(),
+    )
     .await;
     pool.close().await;
     if let Err(panic) = proof {

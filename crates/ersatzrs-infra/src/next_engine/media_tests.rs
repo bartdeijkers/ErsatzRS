@@ -403,10 +403,15 @@ async fn redirects_preserve_ranges_but_never_forward_credentials_across_origins(
 fn dynamic_publication_uses_a_shared_process_expanded_session_header() {
     let relay = MediaRelay::new();
     relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
+    let source = relay.dynamic_source(1, 2, "fixture", None).unwrap();
+    let value = serde_json::to_value(&source).unwrap();
+    assert_eq!(value["retry_budget_ms"], 25_000);
+    assert_eq!(value["retry_backoff_ms"], 250);
+    assert_eq!(value["timeout_us"], 35_000_000);
     let Source::Dynamic {
         headers: Some(headers),
         ..
-    } = relay.dynamic_source(1, 2, "fixture", None).unwrap()
+    } = source
     else {
         panic!("expected dynamic callback");
     };

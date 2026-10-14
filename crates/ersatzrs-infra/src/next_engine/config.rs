@@ -61,6 +61,7 @@ pub fn channel_config(
         version: Some(wire::CHANNEL_VERSION.to_owned()),
         fallback: Some(wire::Fallback {
             show_error: Some(true),
+            duration_seconds: None,
         }),
         playout: wire::PlayoutFolder {
             folder: runtime_path(playout_folder)?,
@@ -198,6 +199,7 @@ fn video(playback: &PlaybackProfile) -> Result<wire::Video, ConfigError> {
         accel,
         amf_device: None,
         filters: wire::VideoFilters {
+            scale: None,
             libplacebo: wire::LibplaceboOptions {
                 tonemapping: tonemap.to_owned(),
             },

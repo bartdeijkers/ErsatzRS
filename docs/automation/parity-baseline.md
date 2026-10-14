@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `46118d43313b7828780fbfcfb46e980390ea8b0d` |
-| **Commit subject** | `docs: prep for release v26.11.1` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/46118d43313b7828780fbfcfb46e980390ea8b0d |
+| **Pinned commit** | `e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0` |
+| **Commit subject** | `prep for release v26.11.2` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -61,10 +61,19 @@ The daily routine must **not** advance this pin on its own.
 
 The maintainer fixed UCU-09's target on 2026-10-06 at upstream release
 `v26.11.1`, commit `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208.
-There are **208 accepted and 0 pending in-scope rows**. This supersedes the
+UCU-09 has **208 accepted and 0 pending in-scope rows**. This supersedes the
 2026-09-19 moving-tip rule. Verify the release tag when refreshing upstream;
 retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
 Fetching refs never advances the parity pin.
+
+The explicitly authorized UCU-10 window adds rows209–232 through v26.11.2.
+Its local acceptance is complete on 2026-10-14: **232 accepted and 0 pending**
+across UCU-00–10, with the existing approved hardware/platform debt unverified.
+The Pin table above advances only in the isolated UCU-10 application worktree.
+Main and the shared upstream checkout remain untouched; substantive source
+review uses the exact fixed commit through `git show`, not a mismatched tree.
+Only the separately authorized source-candidate branch/CI and Next dependency
+publication occurred. Application push, CI and release remain separate gates.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not

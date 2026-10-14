@@ -56,6 +56,8 @@ fn dynamic() -> Source {
         headers: None,
         user_agent: None,
         timeout_us: Some(1_000_000),
+        retry_budget_ms: None,
+        retry_backoff_ms: None,
     }
 }
 

@@ -62,6 +62,29 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-14 maintainer sequencing: prepare UCU-10 as a separate application
+integration on remote mainfc22dac8 before landing UCU-11. Keep its accepted
+v26.11.2 boundary/Next021 pin and evidence; retain newer main teletext work.
+The independent UCU-11 branch/evidence and authorized macOS candidate CI remain
+preserved. Integration acceptance and application push/CI/merge instruction
+are still required; no application delivery or new release is claimed.
+
+2026-10-14 UCU-10 is locally Complete through v26.11.2/row232; all232 rows have
+accepted dispositions. Native remains supported. ADR0125, dependency audit,
+Linux/Windows YAML compatibility, workspace closeout/lint, paired bundle, six
+headed browser cases and actual Native/Next playback gates pass. Authorized
+macOS source CI38520704462 is green ondd043f94. The separately approved Next-only
+release publishes20 verified assets; all anonymous downloads match. Linux and
+Windows real bundled/cold-download/managed-restart startup pass against the new
+six-RID pin. Approved hardware/platform debt remains explicitly unverified.
+The accepted application slice is checkpointed locally for separate integration; no main/application push,
+application CI or application release is performed. Preserve other work below.
+
+2026-10-13: UCU-10 is active in a separate local branch/worktree through
+v26.11.2/row232. Keep Native as a supported streaming engine. No push, CI or
+release publication is authorized; the owning milestone records local gates.
+Main's ongoing teletext/add-on work and existing UCU-00–09 evidence remain intact.
+
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly
 166 owned episodes and enables the existing skip-missing policy, preserving
