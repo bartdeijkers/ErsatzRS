@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: support repeated protected concept editing after representative editor/admin/stream/client proof; full engine acceptance open'
+current_focus = 'P9A-04: prove the corrected cumulative editor flow through headed admin and ordinary streams; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -74,11 +74,15 @@ four independent page decodes and six inspected client frames prove isolated
 editor Q, contrasting themes and actual200->201->200 navigation. This is finite
 byte-identical replay, not live application-client changes or whole-host restart.
 The E2E README owns a reproducible bounded actual-editor handshake/file workflow.
-Next correct repeated concept editing: authenticate latest and original baselines,
-retain cumulative free/zone edits and legitimate undo, including another owner
+Native repeated concept editing now authenticates latest and original baselines,
+retains cumulative free/zone edits and legitimate undo, including another owner
 outside a previous subset, under existing budgets/worker/deadline/head/publication
-fences. The current overlay-bearing-baseline rejection is a concrete connection
-gap, not an accepted permanent single-edit limit. Automatic scoped readiness/
+fences. P9A-04 owns the28 unique native successes and the original fixture failure.
+Next build a matched SSR/WASM pair and run the opt-in two-round headed flow in
+Chromium JavaScript/light and Firefox no-JS/dark, then check its new ordinary
+captures and actual client Q+R navigation. Collection alone does not prove that
+flow; earlier single-round/editor/client evidence remains valid only for its
+recorded inputs. Automatic scoped readiness/
 applied acknowledgement, current guide qualification and full authored Level2.5/
 editor/Lua/source/Next/native/platform/playback acceptance remain open. Engine-first
 still forbids production guide work. Per the maintainer's latest instruction,

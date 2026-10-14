@@ -2724,6 +2724,55 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 cumulative concept-import correction (native checkpoint):
+Criterion: an editor workflow can continue from an imported concept without losing
+previous permitted edits, original scope/expiry, isolated channel state or explicit
+publication boundaries. The adapter authenticates the latest retained export and
+exactly one overlay-free original, regenerates latest files, merges physical rows
+by page/subcode/row and keeps one cumulative overlay. Replacements and explicit
+original-equal undo rows survive. Complete effects are checked against the root;
+incoming effects additionally retain latest-export permissions. New owners outside
+the first subset get a native-qualified union-root receipt through existing
+confirmation/head CAS under the same admitted work hold and original deadline.
+No recursive lineage, producer/Lua replay, package edit or automatic publication.
+A later stale-head save can leave an unused immutable receipt, never changed output.
+
+Native run07ee2db5-4818-4639-94b0-58c2da19bbf3 finished27/28 successfully and
+retains one failed fixture: adding two legal subpages made its entry ambiguous.
+Only the new test now selects actual owner124/32 using the existing explicit-entry
+policy; production ambiguity validation and old helper behavior are unchanged.
+Focused rerun8cd1d347-8d54-4fcc-ae0d-2d4c8e69373c passes that single corrected
+case. This is28 unique verified successes, not a green28-test initial run.
+The three new cases cover actual Lua/scoped repeated edits, replacement/undo,
+root-identical encoded units and pixels after full undo, one flat authenticated
+original, selected-owner union across124/32 and124/33, protected/resource/root-role
+and stale-head rejection, original context/expiry, reopen, unchanged second channel,
+package/configuration/Lua calls and separate explicit publication. Reuse unchanged
+legacy-carrier/DRCS, naturally expired scope, HTTP and clock cases from the27 passes.
+
+Canonical receipt tmp/phase9-repeat-editor/identity.json SHA256
+68488fe85aebe188e3ffba6af710891fb0b1aab5b1956dfd1960e53e2bd9a215
+retains final Rust/TypeScript source hashes, exact logs and proof boundaries.
+Strict web all-target Clippy passes in clippy-2.log after explicit imports and
+borrowing the request inside its unchanged owned worker closure. These mechanical
+corrections preserve admission/deadlines/logic and reuse valid behavior evidence.
+Workspace formatting, architecture lint and hydration lint pass; hydration has
+zero new findings and31 existing baseline suppressions. Browser collection passes.
+Final structured-source validation is recorded in progress-2.log.
+The opt-in ERSATZRS_TELETEXT_EFFECTIVE_REPEAT_EDITOR=1 browser mode is implemented
+and collects eight identities; it has not run. Next use a newly matched SSR/WASM
+pair for Chromium JavaScript/light and Firefox no-JS/dark, retaining actual second
+export/import/preview/publication and new ordinary captures with cumulativeQ+R only
+on day200. Verify those exact bytes with TSDuck, independent decoding and actual
+client display/navigation. Existing eight-identity localization/layout, actual
+pinned-editor and finite client receipts below remain valid for unchanged inputs;
+they do not prove this new two-round flow or a second actual editor GUI save.
+Live changes/restart, automatic scoped readiness/applied acknowledgement and every
+complete authored Level2.5/fallback/editor/Lua/source/Next/native/platform/playback
+requirement remain open. No milestone status, dependency or acceptance changes.
+No remote push while UCU10/UCU11 await merge; later delivery retains existing
+Phase9 milestone authorization.
+
 2026-10-14 representative effective editor -> admin -> ordinary stream -> client:
 Criterion: same installed synthetic addon on two channels, actual Lua Reset selects
 opposite profiles/themes over retained base Off, native original validation/save,

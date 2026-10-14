@@ -397,6 +397,17 @@ ERSATZRS_TELETEXT_EFFECTIVE_QTM_REPLAY_DIR="$qtm_probe_root" \
 
 Use a free test port and distinct result/output directories for each run. Reuse
 a matched build only after verifying its server and hydration bundle identities.
+Set `ERSATZRS_TELETEXT_EFFECTIVE_REPEAT_EDITOR=1` to exercise two separate
+export/import/publication rounds. The first imports free-row `Q`; the second
+exports that actual concept, edits custom-zone row `R`, imports cumulative `Q+R`
+and publishes explicitly again. The second round retains distinct ZIP, file and
+preview artifacts and checks one immutable original, unchanged scope/expiry and
+the opposite channel. Without the GUI handshake both edits are programmatic;
+with it, only the first edit is observed in QTeletextMaker. This flag does not
+claim a second external-editor GUI trial or complete interchange acceptance.
+Selected ordinary captures occur after the second publication and therefore
+require `Q+R` only on day200, with page201 and the night channel unchanged.
+
 In the second terminal, set `qtm_probe_root` and `qtm_tools` to the same paths
 and wait for the actual `ready.json`. The spec has already written the downloaded
 page200/0000 bytes to `native-input.tti`, with the unchanged

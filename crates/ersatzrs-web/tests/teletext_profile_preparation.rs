@@ -90,6 +90,8 @@ mod preview;
 mod producer_admission;
 #[path = "teletext_profile_preparation/publications.rs"]
 mod publications;
+#[path = "teletext_profile_preparation/repeated_editorial_imports.rs"]
+mod repeated_editorial_imports;
 #[path = "teletext_profile_preparation/scripted_controls.rs"]
 mod scripted_controls;
 #[path = "teletext_profile_preparation/work_admission.rs"]

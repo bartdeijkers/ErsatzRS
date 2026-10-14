@@ -133,7 +133,7 @@ async fn refresh_profiles_and_bindings(fixture: &mut AuthoringFixture) {
     }
 }
 
-async fn original(
+pub(super) async fn original(
     fixture: &Fixture,
     identity: TeletextAuthoringIdentity,
 ) -> TeletextDesignRevision {
@@ -150,7 +150,7 @@ async fn original(
         .unwrap()
 }
 
-async fn export(
+pub(super) async fn export(
     fixture: &Fixture,
     original: &TeletextDesignRevision,
 ) -> ExportedOriginalTeletextDesign {
@@ -173,14 +173,14 @@ async fn export(
     exported
 }
 
-struct Flow {
-    fixture: AuthoringFixture,
-    identities: [TeletextAuthoringIdentity; 2],
-    originals: [TeletextDesignRevision; 2],
-    exported: [ExportedOriginalTeletextDesign; 2],
-    pixels: [TeletextRaster; 2],
+pub(super) struct Flow {
+    pub(super) fixture: AuthoringFixture,
+    pub(super) identities: [TeletextAuthoringIdentity; 2],
+    pub(super) originals: [TeletextDesignRevision; 2],
+    pub(super) exported: [ExportedOriginalTeletextDesign; 2],
+    pub(super) pixels: [TeletextRaster; 2],
 }
-async fn setup() -> Flow {
+pub(super) async fn setup() -> Flow {
     let fixture = v3_fixture().await;
     for (channel, profile) in [1, 2].into_iter().zip(&fixture.profiles) {
         effective_authoring::lua(&fixture, channel, Some(profile)).await;
@@ -206,7 +206,7 @@ async fn setup() -> Flow {
     }
 }
 
-async fn stable_state(fixture: &Fixture) -> Vec<Vec<String>> {
+pub(super) async fn stable_state(fixture: &Fixture) -> Vec<Vec<String>> {
     let mut result = Vec::new();
     for statement in [
         r#"SELECT json_array("ChannelId","RequestId") FROM "TeletextPublicationRequestCurrent" ORDER BY "ChannelId""#,
@@ -258,7 +258,7 @@ fn edit(
     }
 }
 
-async fn import(
+pub(super) async fn import(
     fixture: &Fixture,
     request: NativeTeletextEditorialImportRequest,
 ) -> SavedEditorialTeletextDesign {
@@ -333,7 +333,7 @@ fn assert_project(
     );
 }
 
-async fn assert_concept(
+pub(super) async fn assert_concept(
     fixture: &Fixture,
     original: &TeletextDesignRevision,
     concept: &SavedEditorialTeletextDesign,
@@ -445,7 +445,7 @@ async fn actual_lua_scoped_v3_editor_free_and_custom_zone_concepts_preserve_isol
     explicit_select_concept(&flow.fixture, &zone).await;
 }
 
-async fn explicit_select_concept(
+pub(super) async fn explicit_select_concept(
     fixture: &AuthoringFixture,
     concept: &SavedEditorialTeletextDesign,
 ) {

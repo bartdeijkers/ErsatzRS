@@ -23,8 +23,10 @@ expiry; schema1 and outer receipt/sidecar schemas remain compatible. Historical
 editing preserves expired scope while publication retains fresh authority. A
 representative actual pinned-editor save now passes through concept import,
 preview, explicit publication, ordinary stream capture and independently decoded,
-visually inspected two-theme client replay. Repeat-edit baselines, complete editor
-coverage and live application-client transitions remain open.
+visually inspected two-theme client replay. Repeated concept imports now retain
+one authenticated original and cumulative rows; the latest export supplies each
+new edit's authority. Native correction tests pass; the new headed repeated-editor
+flow, complete editor coverage and live application-client transitions remain open.
 P9A-04 owns verification and remaining userflow gaps. This does not establish
 same-URL suitable-client transitions or full engine acceptance.
 
@@ -64,6 +66,23 @@ base absence and actual Scripted boundaries. Version1 project bytes and outer
 receipt/sidecar schemas1 remain compatible. Imports regenerate the same role's
 retained baseline and validate captured edit boundaries before concept save;
 metadata is descriptive and cannot install packages, modify templates or publish.
+Repeated imports authenticate both the latest retained export and exactly one
+overlay-free original receipt. Regenerate latest files before reconciling edits;
+an unchanged latest export remains a no-op. Merge physical rows by exact page,
+subcode and row, keeping previous edits, replacements and explicit original-equal
+undo rows in one cumulative overlay. Validate the complete overlay against the
+original, then validate only new effects against the latest export's permissions.
+Earlier edits cannot grant new permissions. The original document bytes, role,
+scope and expiry remain unchanged beneath that one overlay.
+
+A later export subset may edit an owner outside the first subset. When needed,
+retain a bounded native-generated original export covering the cumulative owner
+union through the existing export confirmation and current-head CAS. Requalify
+the concept against that actual receipt before saving. Use the same admitted work
+hold and original operation deadline throughout; do not acquire a nested work
+slot or replay producers/Lua. A later save conflict may leave an unused immutable
+export receipt, but changes no concept head, publication pointer or package.
+
 Scoped publication uses separate typed request/current/accept/confirmation roles
 on the existing repositories. Same-transaction scope, original, pointer and
 expiry checks are required. The independently accepted base remains recoverable;

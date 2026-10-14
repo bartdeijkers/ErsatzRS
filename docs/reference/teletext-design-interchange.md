@@ -4971,12 +4971,30 @@ retains whole-scope/current-pointer/UTC-expiry checks; the repository associatio
 parser recognizes the optional native-qualified overlay without changing its scope
 comparison or granting overlay authority.
 
+Repeated concept imports authenticate the latest export and exactly one retained
+overlay-free original receipt. Latest files and metadata are regenerated exactly
+before reconciling changes. An unchanged latest set returns `NoChanges`.
+Physical edits merge by exact page, subcode and row into one cumulative overlay;
+new rows replace earlier rows at the same address. Undo retains explicit
+original-equal rows, creating a new revision with original encoded output rather
+than erasing revision provenance. Original document bytes, role, scope, requests,
+settings and expiry remain unchanged beneath the overlay.
+
+Complete cumulative effects are checked against the original; newly submitted
+effects are also checked against the latest export's editable boundaries.
+Previous rows grant no extra permission. If later selected owners exceed the
+first export subset, the native host retains an original export covering the
+cumulative owner union under existing confirmation and head CAS, then binds the
+concept to that actual receipt. All work keeps the same operation deadline and
+admission hold, including after requester cancellation. A later stale-head save
+can leave an unused immutable export receipt, without changing the design head
+or publication. No recursive overlay chain, package/template mutation or
+producer/Lua replay is introduced.
+
 P9A-04 owns native, headed, real pinned-editor, ordinary-stream/client proof and all
-remaining engine criteria. Full interchange remains required. Re-exporting an
-already edited concept currently cannot form an import baseline: the retained
-qualifier rejects another overlay-bearing original. Repeat editing needs a deliberate
-bounded baseline solution; an available export must not imply completed repeat-edit
-acceptance. This gap does not establish a permanent editor or Level2.5 restriction.
+remaining engine criteria. The new headed repeated-edit flow and full interchange
+remain required; an available export alone proves neither. No permanent editor
+or Level2.5 restriction follows.
 
 
 ### Physical base-row concept compilation seam
@@ -5185,7 +5203,7 @@ preview, and request publication explicitly only after review. Installed package
 are never edited by import; template changes require the addon-version workflow.
 
 Current gaps are explicit: this connection accepts changed base rows, refuses
-unchanged imports, repeated overlays and protected enhancement/header/navigation
+unchanged imports, recursive overlays and protected enhancement/header/navigation
 edits, and keeps PS exact against its authenticated versioned carrier. Preserved DVB resource
 assets do not yet prove QTeletextMaker dependency loading. Enhanced resources,
 objects, DRCS, side-panel editing and the complete pinned editor roundtrip remain

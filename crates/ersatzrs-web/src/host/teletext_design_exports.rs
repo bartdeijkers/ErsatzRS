@@ -216,6 +216,54 @@ impl TeletextDesignExportValidator for NativeExportConfirmation {
     }
 }
 
+/// Retain an already qualified root projection under the observed live head.
+/// Only the native editorial adapter calls this after both protected effect
+/// comparisons; receipt settlement does not publish or advance that head.
+pub(super) async fn retain_native_root_export(
+    application: &ApplicationServices,
+    body: ersatzrs_app::teletext_export_project::TeletextExportReceiptBody,
+    document: TeletextDesignDocumentBudget,
+    project: TeletextExportProjectBudget,
+    admission: (Instant, TeletextWorkHold),
+) -> Result<TeletextDesignMutation<TeletextDesignExportMetadata>, NativeTeletextExportError> {
+    let (deadline, hold) = admission;
+    let (original, receipt, receipt_digest) =
+        super::teletext_work::spawn_blocking(hold.clone(), move || {
+            check_deadline(deadline)?;
+            let receipt = write_teletext_export_receipt_body(&body, project)?;
+            let receipt_digest = digest(&receipt);
+            preflight_sidecar(&body.project, &receipt_digest, project)?;
+            check_deadline(deadline)?;
+            Ok::<_, NativeTeletextExportError>((body.project.original, receipt, receipt_digest))
+        })
+        .await
+        .map_err(|_| NativeTeletextExportError::WorkerFailed)??;
+    let confirmation = NativeExportConfirmation {
+        original,
+        receipt_digest,
+        max_document_bytes: document.max_serialized_bytes,
+        max_receipt_bytes: project.max_bytes,
+        deadline,
+        hold,
+    };
+    application
+        .create_teletext_design_export(
+            TeletextDesignExportSave {
+                design_id: confirmation.original.design_id,
+                revision: confirmation.original.revision,
+                design_digest: confirmation.original.digest.clone(),
+                expected_design_head: confirmation.original.expected_head,
+                receipt_version: TELETEXT_DESIGN_EXPORT_RECEIPT_VERSION,
+                receipt,
+            },
+            &confirmation,
+            project.max_bytes,
+            document.max_serialized_bytes,
+        )
+        .await
+        .map_err(Into::into)
+}
+
 /// Export privately restored native originals and retain an exact server baseline.
 ///
 /// No package runs, design head advances, concept is saved or output is selected.

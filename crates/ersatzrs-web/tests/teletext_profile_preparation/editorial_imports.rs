@@ -68,9 +68,9 @@ pub(super) fn policy() -> NativeTeletextExportPolicy {
     }
 }
 
-struct Flow {
+pub(super) struct Flow {
     saved: [SavedOriginalTeletextDesign; 2],
-    originals: [TeletextDesignRevision; 2],
+    pub(super) originals: [TeletextDesignRevision; 2],
     exported: [ExportedOriginalTeletextDesign; 2],
     receipts: [TeletextDesignExportReceipt; 2],
     pending: [TeletextPublicationRequest; 2],
@@ -137,7 +137,9 @@ async fn setup() -> (Fixture, Flow) {
     setup_with_response(authoring_metadata::response).await
 }
 
-async fn setup_with_response(response: fn(&str, u16, u16) -> serde_json::Value) -> (Fixture, Flow) {
+pub(super) async fn setup_with_response(
+    response: fn(&str, u16, u16) -> serde_json::Value,
+) -> (Fixture, Flow) {
     Box::pin(setup_with_fixture(
         response,
         Fixture::new_persistent().await,
@@ -157,7 +159,7 @@ async fn setup_with_fixture(
     .await
 }
 
-async fn setup_with_fixture_policy(
+pub(super) async fn setup_with_fixture_policy(
     response: fn(&str, u16, u16) -> serde_json::Value,
     fixture: Fixture,
     encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
@@ -451,7 +453,7 @@ async fn assert_concept_preview(
     preview.raster().clone()
 }
 
-fn preview_budget() -> ersatzrs_web::host::teletext_preview::TeletextPreviewBudget {
+pub(super) fn preview_budget() -> ersatzrs_web::host::teletext_preview::TeletextPreviewBudget {
     ersatzrs_web::host::teletext_preview::TeletextPreviewBudget {
         max_pages: 16,
         max_model_records: 32_768,

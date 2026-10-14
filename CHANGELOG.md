@@ -42,7 +42,10 @@ release section when tagging a release.
   publication still requires the original current scope. A representative scoped
   QTeletextMaker edit now reaches validated preview, explicit publication and
   independently decoded client navigation without changing the other channel.
-  Complete editor, repeat-edit and engine acceptance remain open.
+  Repeated concept imports retain earlier free/zone rows and explicit undo over
+  one immutable original, including edits across separate export subsets. Each
+  import remains unpublished and rechecks protected boundaries. Complete editor
+  and engine acceptance remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

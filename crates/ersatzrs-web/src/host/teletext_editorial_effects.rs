@@ -88,8 +88,24 @@ pub(super) fn validate_teletext_editorial_effects(
     budget: &TeletextAuthoredServiceEncodingBudget,
     deadline: Instant,
 ) -> Result<()> {
+    validate_teletext_editorial_transition(
+        original, edited, project, overlays, overlays, budget, deadline,
+    )
+}
+
+/// Latest-export permissions apply only to incoming owners; the final service
+/// must independently contain exactly the complete cumulative replacement set.
+pub(super) fn validate_teletext_editorial_transition(
+    original: &EncodedTeletextAuthoredService,
+    edited: &EncodedTeletextAuthoredService,
+    project: &TeletextExportProject,
+    incoming: &[TeletextPhysicalBaseOverlay],
+    cumulative: &[TeletextPhysicalBaseOverlay],
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+) -> Result<()> {
     check_deadline(deadline)?;
-    check_service(original, edited, overlays, budget)?;
+    check_service(original, edited, cumulative, budget)?;
     for (before, after) in original.pages().iter().zip(edited.pages()) {
         check_deadline(deadline)?;
         let (Some((old_page, old)), Some((new_page, new))) = (display(before), display(after))
@@ -106,7 +122,7 @@ pub(super) fn validate_teletext_editorial_effects(
             continue;
         };
         let owner = old.owner();
-        let Some(overlay) = overlays.iter().find(|value| value.owner() == owner) else {
+        let Some(overlay) = incoming.iter().find(|value| value.owner() == owner) else {
             if before.data_units() != after.data_units() {
                 return Err(error(
                     Some(owner),
