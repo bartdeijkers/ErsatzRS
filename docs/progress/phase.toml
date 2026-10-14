@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: scoped publication/recovery and ordinary On/Off/expiry pass; next localized effective admin/client flow; full engine acceptance open'
+current_focus = 'P9A-04: verify localized effective admin preparation/preview/publication with genuine Lua controls, then ordinary client flow; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -67,14 +67,17 @@ original/current association and native recovery now pass focused checks and an
 actual two-theme ordinary-stream/reopen flow. P9A-04 owns the canonical evidence.
 The actual EOF/late-activation fault is corrected with unchanged AV/finish/deadline
 fences; finite Off expiry restores retained base output in a following response.
-Next expose effective-scope preparation/preview/publication on the existing
-localized channel page and prove suitable-client same-URL navigation. Complete
-ordinary smoke still needs a build after target maintenance: target63GiB exceeds
-the60GiB cleanup threshold, while concurrent UCU checks must remain undisturbed.
-Admin currently observes base only; automatic schedule-to-output promotion and
-applied acknowledgement remain missing. Full engine, editor, source/Next/platform
-acceptance stays open; no production guide work or milestone push is authorized
-by this partial checkpoint.
+The existing localized channel page now has separate effective-scope native
+forms, role-aware immutable preview/publication and genuine Off absence without
+invented content. Ten application scope regressions, four actual-Lua native cases and fourteen
+unchanged base regressions pass; headed browser evidence is pending. Next prove genuine served-host Lua Reset,
+two themes, explicit publication and ordinary suitable-client navigation.
+Configured target maintenance finished after confirming no active Cargo work;
+the outstanding ordinary smoke needs the new build. Automatic schedule-to-output
+promotion and applied acknowledgement remain missing. Full engine, editor,
+source/Next/platform acceptance stays open. Per the maintainer's latest instruction,
+do not push until UCU-10 and UCU-11 have merged and Phase 9 is invited to resume
+remote delivery. Preserve concurrent UCU work; no production guide work begins.
 
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly

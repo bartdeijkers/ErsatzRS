@@ -739,7 +739,12 @@ async fn assert_unavailable_historical(
     assert_eq!(preview.pages(), &[channel_documents::address(123, 16)]);
     assert_eq!(preview.navigation(), navigation);
     let projected = preview
-        .project(|preview| Ok((preview.raster().clone(), preview.navigation().to_vec())))
+        .project(|preview| {
+            Ok((
+                preview.raster().unwrap().clone(),
+                preview.navigation().to_vec(),
+            ))
+        })
         .await
         .unwrap();
     assert_eq!(&projected.0, raster);
@@ -763,7 +768,12 @@ async fn edited_enabled_profile_and_off_keep_historical_preview_but_disable_publ
     assert!(observed.current_pending_id.is_some());
     assert!(observed.current_accepted_id.is_some());
     let (raster, navigation) = preview
-        .project(|preview| Ok((preview.raster().clone(), preview.navigation().to_vec())))
+        .project(|preview| {
+            Ok((
+                preview.raster().unwrap().clone(),
+                preview.navigation().to_vec(),
+            ))
+        })
         .await
         .unwrap();
     let before = Safety::read(&fixture).await;

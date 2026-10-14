@@ -2724,6 +2724,54 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 effective admin integration (native proof; headed proof pending):
+Criterion: actual published Lua profile selection -> bounded native validation and
+immutable concept -> same-model preview -> explicit scoped publication;
+ordinary-route and suitable-client evidence must then qualify the connected flow.
+Separate redacted active-scope observations/forms include On over base Off and
+explicit absence without fabricated page/raster/content inputs. Stored revision
+versions dispatch preview/request/acceptance; form fields cannot change role.
+Historical preview survives expiry/removal, while fresh scoped gates and separate
+current pointers remain required for publication. A checked application seam
+compares complete expected scope before preflight and any producer invocation,
+retaining the original actual-work admission/deadline and final equality fence.
+Ten application tests pass (ef3fa509-3d32-4783-9d9f-af2dbfa22ffe). Hydration-lint
+has no new findings (31 existing baseline suppressions); architecture-lint passes.
+Four native controller cases pass (a7f73767-0388-477b-8351-3a4f0e01a28e): actual
+Lua On over saved base Off on two channels retains distinct themes and stored
+role2 through prepare/preview/request/explicit acceptance; actual all-Off has no
+owner, raster or fake entry and preserves independent base pointers; changed
+digest/wrong role rejects before producer/save; historical expiry/removal retains
+pixels but cannot publish. Fourteen unchanged base authoring/publication cases
+passed in 45612d05-8629-4924-9962-3496c4b5d030 and are reused. Its four new cases
+failed before controller work because the fixture supplied nanoseconds beyond
+SQLite's existing 100ns time representation; the initial clock is now whole-second
+before Lua runs. Published intervals and exact assertions are untouched. Two host
+compiler errors and one old nested-owner assertion were corrected; compilation
+failures are not passing runs. Nine SSR-form/projection regressions pass
+(0d7b45d7-fa39-4737-b1c1-4448fe6ce2f8), including effective On over base Off and
+genuine absence without fake owner or editor authority. Five existing native
+effective-preparation cases pass (90846a7e-f7c0-44df-833e-23d396dea643), retaining
+mixed origins, Off and unhealthy/invalid selected-package behavior through the
+preserved API. The unique focused successful union is42. Localized headed browser
+and ordinary TCP/decoder/client proof remain pending. The eight-identity headed
+spec uses actual served-host Reset and Lua/application publication, with opt-in
+genuine TCP captures; test collection passes, which does not establish browser
+execution or client rendering. Strict app/web all-target Clippy passes (clippy-2.log), with no new lint
+exceptions. Final changes replace equivalent method closures and borrow the
+immutable restored design inside the same owned worker; functional evidence is
+retained with unchanged output/deadline semantics. Formatting and progress pass.
+Canonical receipt: tmp/phase9-effective-admin/identity.json, SHA256
+346d526f335d37831372aac6c71a280b26d3d3b4ddbc93fa650bda136c59609e.
+It records exact sources, logs, failures and pending proof. The matched headed
+Chromium flow is live in process57491; no browser/client result is claimed.
+No acceptance/status/dependency is changed. Full
+authored Level2.5, editor role interchange, themes/zones,
+Lua/Continue/Refresh/Reset/restart, source/Next/platform and playback safety
+remain required. No production guide content starts. The maintainer has suspended
+remote/main pushes until UCU-10 and UCU-11 merge and Phase9 receives its turn;
+concurrent work is preserved.
+
 2026-10-14 scoped publication/recovery checkpoint:
 Criterion: exact effective originals -> independent pending -> explicit native
 acceptance -> bounded recovery -> ordinary output, preserving channel isolation,

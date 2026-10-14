@@ -110,6 +110,7 @@ export class TeletextChannelFixture {
   private readonly packageFiles = new Map<string, Buffer>();
   private readonly authoredPages: boolean;
   private readonly playback: boolean;
+  private scripted = false;
 
   constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; playback?: { ffmpeg: string } } = {}) {
     this.authoredPages = options.authoredPages === true;
@@ -234,6 +235,60 @@ export class TeletextChannelFixture {
       throw error;
     }
     this.resetSourceStart();
+  }
+
+  // Initial test-owned media/collection setup only. The real host Reset action
+  // must evaluate Lua and publish every interval/checkpoint; this helper never
+  // inserts or edits either authority-bearing table.
+  configureScripted(): void {
+    if (!this.playback || this.scripted) throw new Error('Scripted setup requires an unused playback fixture.');
+    const id = this.channels[0] + 10;
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      this.database.prepare('INSERT INTO "MediaSource" ("Id") VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO "LocalMediaSource" ("Id") VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO "Library" ("Id","MediaSourceId","MediaKind","Name") VALUES (?,?,1,\'Synthetic Scripted clip\')').run(id, id);
+      this.database.prepare('INSERT INTO "LocalLibrary" ("Id") VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO "LibraryPath" ("Id","LibraryId","Path") VALUES (?,?,?)').run(id, id, this.root);
+      this.database.prepare('INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (?,?,0)').run(id, id);
+      this.database.prepare('INSERT INTO "Movie" ("Id") VALUES (?)').run(id);
+      this.database.prepare('INSERT INTO "MovieMetadata" ("DateAdded","DateUpdated","MetadataKind","MovieId","Title") VALUES (\'2026-01-01\',\'2026-01-01\',0,?,\'Synthetic red video and tone\')').run(id);
+      this.database.prepare('INSERT INTO "MediaVersion" ("Id","DateAdded","DateUpdated","Duration","Height","MovieId","Name","RFrameRate","VideoScanKind","Width") VALUES (?,\'2026-01-01\',\'2026-01-01\',\'00:00:12\',90,?,\'Synthetic\',\'25/1\',1,160)').run(id, id);
+      this.database.prepare('INSERT INTO "MediaFile" ("MediaVersionId","Path","PathHash") VALUES (?,?,?)').run(id, join(this.root, 'synthetic-client-source.ts'), `synthetic-${id}`);
+      this.database.prepare('INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Channels","Default","Forced","MediaVersionId","PixelFormat") VALUES (0,\'mpeg2video\',1,0,1,0,?,\'yuv420p\')').run(id);
+      this.database.prepare('INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Default","Forced","MediaVersionId") VALUES (1,\'aac\',2,\'eng\',1,1,0,?)').run(id);
+      this.database.prepare('INSERT INTO "Collection" ("Id","Name","UseCustomPlaybackOrder") VALUES (?,?,0)').run(id, `Synthetic Scripted ${this.addonId}`);
+      this.database.prepare('INSERT INTO "CollectionItem" ("CollectionId","MediaItemId") VALUES (?,?)').run(id, id);
+      for (const channel of this.channels) {
+        const path = join(this.root, `synthetic-controls-${channel}.lua`);
+        writeFileSync(path, 'error("Synthetic controls are not configured")');
+        this.database.prepare('UPDATE "Playout" SET "ScheduleKind"=4,"ScheduleFile"=? WHERE "Id"=? AND "ChannelId"=?').run(path, channel, channel);
+      }
+      this.database.exec('COMMIT;');
+      this.scripted = true;
+    } catch (error) { this.database.exec('ROLLBACK;'); throw error; }
+  }
+
+  writeScriptedControls(channel: number, profile: number | null, count: number): void {
+    if (!this.scripted || !this.channels.includes(channel) || !Number.isInteger(count) || count < 1 || count > 80) {
+      throw new Error('Scripted controls must stay within the owned bounded fixture.');
+    }
+    if (profile !== null && !this.profiles().some(row => row.Id === profile && !row.IsDeleted)) {
+      throw new Error('Scripted controls require an existing fixture profile.');
+    }
+    const controls = profile === null
+      ? `assert(teletext_enabled('${this.addonId}',false).ok)`
+      : `assert(teletext_profile('${this.addonId}',${profile}).ok)\nassert(teletext_enabled('${this.addonId}',true).ok)`;
+    writeFileSync(join(this.root, `synthetic-controls-${channel}.lua`),
+      `add_collection('clip','Synthetic Scripted ${this.addonId}')\n${controls}\nadd_count('clip',${count})\n`);
+  }
+
+  scriptedIntervals(channel: number): { Start: string; Finish: string; State: number; ProfileId: number | null }[] {
+    if (!this.scripted || !this.channels.includes(channel)) throw new Error('Scripted interval lookup requires an owned channel.');
+    return this.database.prepare(`SELECT "Start","Finish","State",
+      json_extract("CandidateSnapshot",'$.profile') AS "ProfileId"
+      FROM "PlayoutTeletextInterval" WHERE "PlayoutId"=? AND "AddonId"=? ORDER BY "Start"`)
+      .all(channel, this.addonId) as ReturnType<TeletextChannelFixture['scriptedIntervals']>;
   }
 
   resetSourceStart(): void {
@@ -364,7 +419,7 @@ export class TeletextChannelFixture {
     for (const design of this.designs()) {
       this.database.prepare('UPDATE "TeletextDesign" SET "IsDeleted"=1 WHERE "Id"=?').run(design.Id);
     }
-    const retained = this.playback && (this.database.prepare(
+    const retained = this.scripted || this.playback && (this.database.prepare(
       'SELECT COUNT(*) AS count FROM "TeletextPublicationRequest" WHERE "ChannelId" IN (?,?)')
       .get(...this.channels) as { count: number }).count > 0;
     if (retained) {

@@ -12,6 +12,9 @@ Partial — distinct version-2 originals, bounded native save/reload, compatible
 immutable-history migrations and explicit base/editor role checks are implemented.
 Separate scoped request/accepted pointers, original-scope confirmation, native
 promotion/recovery and version-2 live direct-route selection are connected.
+The channel admin now observes effective scope and dispatches concept preparation,
+immutable preview and explicit request/acceptance by stored revision role,
+including absence without invented content. Headed integration proof is pending.
 P9A-04 owns verification and remaining userflow gaps. This does not establish
 same-URL suitable-client transitions or full engine acceptance.
 
@@ -102,8 +105,9 @@ The scoped native promotion path currently qualifies frozen synthetic originals;
 guide-bearing originals still require current-role guide freshness and reject
 instead of emitting stale output. This is an integration gap, not an accepted
 authoring restriction. Version-1 startup-only delivery keeps its base-only guard.
-Automatic preparation/publication following schedule controls, localized scoped
-pending/applied administration, the complete delivery matrix, whole-host restart
+Automatic preparation/publication following schedule controls, headed localized
+scoped administration and per-output applied acknowledgement, the complete
+delivery matrix, whole-host restart
 and same-URL suitable-client proof remain required. The parity record and P9A-04
 own verification and the next concrete connection.
 

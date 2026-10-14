@@ -5,7 +5,7 @@ use ersatzrs_app::commands::SetAdminSetting;
 use ersatzrs_web::host::teletext_authoring::{
     observe_teletext_authoring_selection, prepare_static_teletext_design,
     preview_original_teletext_design, TeletextAuthoringIdentity, TeletextAuthoringPrepare,
-    TeletextAuthoringPreviewRequest, TeletextAuthoringStatus,
+    TeletextAuthoringPreviewRequest, TeletextAuthoringScope, TeletextAuthoringStatus,
 };
 use ersatzrs_web::host::teletext_channel_documents::prepare_channel_teletext_document_candidate;
 use ersatzrs_web::host::teletext_work::{begin, MAX_CONCURRENT_SETTING};
@@ -28,7 +28,7 @@ const SCRIPT: &str = r#"test "$1" = pages || exit 9
  sed "s/native-profile-generation/$generation/" "../authoring-response-$theme.json"
 "#;
 
-fn policy() -> Value {
+pub(super) fn policy() -> Value {
     let mut value: Value =
         serde_json::from_str(include_str!("../fixtures/teletext-output-policy-v1.json")).unwrap();
     value.as_object_mut().unwrap().remove("source");
@@ -39,7 +39,7 @@ fn policy() -> Value {
     value
 }
 
-async fn setting(fixture: &Fixture, key: &'static str, value: &str) {
+pub(super) async fn setting(fixture: &Fixture, key: &'static str, value: &str) {
     fixture
         .state
         .application
@@ -51,12 +51,12 @@ async fn setting(fixture: &Fixture, key: &'static str, value: &str) {
         .unwrap();
 }
 
-struct AuthoringFixture {
-    fixture: Fixture,
-    profiles: [TeletextProfile; 2],
+pub(super) struct AuthoringFixture {
+    pub(super) fixture: Fixture,
+    pub(super) profiles: [TeletextProfile; 2],
 }
 impl AuthoringFixture {
-    async fn new() -> Self {
+    pub(super) async fn new() -> Self {
         let fixture = Fixture::new_persistent().await;
         channel_documents::install_contract(&fixture, ADDON, "first", 2).await;
         std::fs::write(fixture.root.path().join("package/fixture.sh"), SCRIPT).unwrap();
@@ -91,10 +91,10 @@ impl AuthoringFixture {
         setting(&fixture, MAX_CONCURRENT_SETTING, "1").await;
         Self { fixture, profiles }
     }
-    fn calls(&self) -> Vec<u8> {
+    pub(super) fn calls(&self) -> Vec<u8> {
         std::fs::read(self.fixture.root.path().join("authoring-calls")).unwrap_or_default()
     }
-    async fn observe(&self, channel: i64) -> String {
+    pub(super) async fn observe(&self, channel: i64) -> String {
         observe_teletext_authoring_selection(
             &self.fixture.state.application,
             channel,
@@ -103,8 +103,9 @@ impl AuthoringFixture {
         .await
         .unwrap()
     }
-    fn request(channel: i64, digest: String) -> TeletextAuthoringPrepare {
+    pub(super) fn request(channel: i64, digest: String) -> TeletextAuthoringPrepare {
         TeletextAuthoringPrepare {
+            scope: TeletextAuthoringScope::Base,
             channel_id: channel,
             selection_digest: digest,
             name: "Original synthetic authoring".to_owned(),
@@ -115,19 +116,21 @@ impl AuthoringFixture {
             .to_string(),
         }
     }
-    async fn design_count(&self) -> i64 {
+    pub(super) async fn design_count(&self) -> i64 {
         sqlx::query_scalar(r#"SELECT COUNT(*) FROM "TeletextDesignRevision""#)
             .fetch_one(&self.fixture.state.pool)
             .await
             .unwrap()
     }
 }
-fn preview_request(identity: TeletextAuthoringIdentity) -> TeletextAuthoringPreviewRequest {
+pub(super) fn preview_request(
+    identity: TeletextAuthoringIdentity,
+) -> TeletextAuthoringPreviewRequest {
     TeletextAuthoringPreviewRequest {
         channel_id: identity.channel_id,
         design_id: identity.design_id,
         revision: identity.revision,
-        owner: channel_documents::address(123, 16),
+        owner: Some(channel_documents::address(123, 16)),
     }
 }
 
@@ -169,10 +172,10 @@ async fn capacity_one_static_chain_saves_reloads_projects_and_isolates_two_profi
         assert_eq!(saved.identity.channel_id, channel);
         let preview = saved.preview.unwrap();
         assert_eq!(preview.pages(), &[channel_documents::address(123, 16)]);
-        assert!(preview.raster().diagnostics().is_empty());
+        assert!(preview.raster().unwrap().diagnostics().is_empty());
         assert_eq!(preview.navigation()[0].target.page.get(), 123);
         let raster = preview
-            .project(|preview| Ok(preview.raster().clone()))
+            .project(|preview| Ok(preview.raster().unwrap().clone()))
             .await
             .unwrap();
         let restored = preview_original_teletext_design(
@@ -182,7 +185,7 @@ async fn capacity_one_static_chain_saves_reloads_projects_and_isolates_two_profi
         )
         .await
         .unwrap();
-        assert_eq!(restored.raster(), &raster);
+        assert_eq!(restored.raster(), Some(&raster));
         drop(restored);
         rasters.push(raster);
     }
@@ -366,7 +369,7 @@ async fn historical_missing_foreign_revision_and_owner_fail_without_reinvocation
         .unwrap_err();
         assert_eq!(error.status, expected);
     }
-    request.owner = channel_documents::address(123, 17);
+    request.owner = Some(channel_documents::address(123, 17));
     let error = preview_original_teletext_design(
         &fixture.fixture.state.application,
         request,
@@ -375,7 +378,7 @@ async fn historical_missing_foreign_revision_and_owner_fail_without_reinvocation
     .await
     .unwrap_err();
     assert_eq!(error.status, TeletextAuthoringStatus::PreviewFailed);
-    assert_eq!(error.location.unwrap().owner, Some(request.owner));
+    assert_eq!(error.location.unwrap().owner, request.owner);
     assert_eq!(fixture.calls(), calls);
     assert_eq!(fixture.design_count().await, 1);
     assert_eq!(designs::config(&fixture.fixture).await, config);

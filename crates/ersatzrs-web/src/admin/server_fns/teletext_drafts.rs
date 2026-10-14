@@ -9,8 +9,10 @@ pub struct TeletextDraftPreviewData {
     pub channel_id: i64,
     pub design_id: i64,
     pub revision: i64,
-    pub owner: TeletextPageAddress,
-    pub image_url: String,
+    pub owner: Option<TeletextPageAddress>,
+    pub image_url: Option<String>,
+    pub effective: bool,
+    pub valid_until: Option<String>,
     pub pages: Vec<TeletextPageAddress>,
     pub navigation: Vec<TeletextNavigationLink>,
     pub diagnostics: Vec<TeletextDraftDiagnosticData>,
@@ -73,19 +75,10 @@ pub async fn load_teletext_draft_preview(
     channel_id: i64,
     design_id: i64,
     revision: i64,
-    page: u16,
-    subcode: u16,
+    owner: Option<TeletextPageAddress>,
 ) -> Result<TeletextDraftPreviewResult, ServerFnError> {
     let state = expect_context::<crate::host::state::AppState>();
-    let result = load_preview(
-        &state.application,
-        channel_id,
-        design_id,
-        revision,
-        page,
-        subcode,
-    )
-    .await;
+    let result = load_preview(&state.application, channel_id, design_id, revision, owner).await;
     Ok(match result {
         Ok(preview) => TeletextDraftPreviewResult {
             preview: Some(preview),
@@ -111,21 +104,15 @@ async fn load_preview(
     channel_id: i64,
     design_id: i64,
     revision: i64,
-    page: u16,
-    subcode: u16,
+    owner: Option<TeletextPageAddress>,
 ) -> Result<TeletextDraftPreviewData, crate::host::teletext_authoring::TeletextAuthoringError> {
     use crate::host::teletext_authoring::{
         preview_original_teletext_design, TeletextAuthoringError, TeletextAuthoringPreviewRequest,
         TeletextAuthoringStatus,
     };
-    use ersatzrs_domain::{TeletextPageNumber, TeletextSubcode};
     let invalid = || TeletextAuthoringError {
         status: TeletextAuthoringStatus::InvalidInput,
         location: None,
-    };
-    let owner = TeletextPageAddress {
-        page: TeletextPageNumber::new(page).map_err(|_| invalid())?,
-        subcode: TeletextSubcode::new(subcode).map_err(|_| invalid())?,
     };
     let deadline = std::time::Instant::now()
         .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT)
@@ -151,8 +138,8 @@ fn project_preview(
     use ersatzrs_ffmpeg::teletext::TeletextRasterCellFailure as Failure;
     let raster = preview.raster();
     let diagnostics = raster
-        .diagnostics()
-        .iter()
+        .into_iter()
+        .flat_map(ersatzrs_ffmpeg::teletext::TeletextRaster::diagnostics)
         .map(|diagnostic| {
             let category = match &diagnostic.reason {
                 Failure::MissingDisplayCell | Failure::Display { .. } => "display",
@@ -180,8 +167,11 @@ fn project_preview(
         channel_id: preview.identity.channel_id,
         design_id: preview.identity.design_id,
         revision: preview.identity.revision,
-        owner: raster.owner(),
-        image_url: raster_image(raster)?,
+        owner: raster.map(ersatzrs_ffmpeg::teletext::TeletextRaster::owner),
+        image_url: raster.map(raster_image).transpose()?,
+        effective: preview.scope()
+            == crate::host::teletext_authoring::TeletextAuthoringScope::Effective,
+        valid_until: preview.valid_until().map(|until| until.to_rfc3339()),
         pages: preview.pages().to_vec(),
         navigation: preview.navigation().to_vec(),
         diagnostics,

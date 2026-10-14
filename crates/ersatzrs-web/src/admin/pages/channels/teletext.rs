@@ -79,14 +79,8 @@ async fn load_channel_page(
     // Resolve every blocking load before the in-order SSR boundary is rendered.
     let preview = match preview {
         Some(query) => Some(
-            load_teletext_draft_preview(
-                channel_id,
-                query.design_id,
-                query.revision,
-                query.page,
-                query.subcode,
-            )
-            .await,
+            load_teletext_draft_preview(channel_id, query.design_id, query.revision, query.owner)
+                .await,
         ),
         None => None,
     };
@@ -154,6 +148,7 @@ fn channel_page(
     let channel_id = data.channel_id;
     let empty = data.addons.is_empty();
     let authoring = super::teletext_drafts::authoring_controls(&data);
+    let effective_authoring = super::teletext_drafts::effective_authoring_controls(&data);
     view! {
         <div class=style::page data-testid="channel-teletext-page" data-channel-id=channel_id>
             <header class=style::header>
@@ -169,6 +164,7 @@ fn channel_page(
             <a class=style::manage href="/settings/addons">{tr(TextKey::Addons)}</a>
             {data.addons.into_iter().map(|addon| addon_section(channel_id, &addon)).collect_view()}
             {authoring}
+            {effective_authoring}
             <super::teletext_drafts::TeletextDraftPreview preview=preview requested=requested redirected=redirected/>
         </div>
     }

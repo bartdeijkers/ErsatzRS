@@ -28,8 +28,12 @@ release section when tagging a release.
   worker admission. Exact effective originals now use independent scoped pending
   and accepted pointers, explicit Off absence and original-expiry confirmation.
   Native recovery connects synthetic scoped acceptance to version-2 live direct
-  streams while retaining independent accepted base history. Current guide
-  qualification and full admin/Lua/client delivery remain open.
+  streams while retaining independent accepted base history. The channel admin
+  now prepares, previews and explicitly selects effective-scope originals,
+  including Lua On over base Off and genuine absence concepts. Historical
+  previews survive expiry; fresh publication retains whole-scope checks and
+  separate base/effective pointers. Current guide qualification, scoped editor
+  interchange and complete admin/Lua/client delivery remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

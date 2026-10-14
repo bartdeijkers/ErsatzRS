@@ -4839,8 +4839,8 @@ These forms connect base profile configuration to the synthetic workflow. The
 separate static original-draft action below now supplies explicit authoring limits
 and per-channel entry/resource lifecycle, then previews exact immutable saved
 identities through the shared native compiler/raster. Runtime recovery policy
-still cannot supply fresh content or preview bounds. Explicit admin publication,
-fresh guide/editor/zone flows and full independent acceptance remain separate,
+still cannot supply fresh content or preview bounds. Fresh guide/editor/zone flows
+and full independent acceptance remain separate,
 without adopting test bounds as production defaults.
 P9A-04 holds current implementation and browser evidence and all remaining
 acceptance criteria.
@@ -4906,16 +4906,46 @@ round trip remains its own required workflow; this original-only connection does
 not claim it. P9A-04 owns current native/headed evidence, missing served-host
 publication/client proof and all remaining engine/editor/Lua/platform gates.
 
-The next admin connection must expose separate pending-request and acceptance
-actions with the exact rendered design digest/revision, live head revision,
-pending request and accepted generation CAS tokens. Properly saved static
+The admin exposes separate pending-request and acceptance actions with the exact
+rendered design digest/revision, live head revision, pending request and accepted
+generation CAS tokens. Properly saved static
 `channels: []` originals already qualify for the existing frozen-original
 publisher. Legacy absent guide inputs, guide-bearing inputs and source-associated
 designs still require current-role freshness; no synthetic fence substitutes for
-it. The ordinary route currently resolves accepted state at new-stream startup
-and retains its immutable generation thereafter. Running-stream adoption and
-receiver-cache transitions remain required, separate acceptance work. A selected
+it. Version-1 ordinary output retains its startup-only base role. Explicit
+version-2 policy connects the bounded live monitor and safe-boundary adoption;
+complete receiver-cache transitions remain required acceptance work. A selected
 durable pointer alone does not prove that any running client applied it.
+
+### Effective Scripted original drafts
+
+The same channel page has a separate active Scripted authoring form. Its native
+observation exposes enabled producer addon IDs, the earliest original transition
+and a bounded opaque SHA256 digest. Complete tagged origins, owning playout,
+intervals, Off members, installation/profile identities and unresolved settings
+participate in the digest. Lua On can choose an existing profile over base Off;
+this observation does not change saved bindings or invoke packages.
+
+Preparation carries `scope=effective` and the exact observed digest. Enabled
+producers require the existing explicit entry/region/resource input. An actual
+all-Off selection carries only channel, digest, name and scope: it creates an
+absence concept without an entry page, unused lifecycle or fictitious raster.
+The fresh complete selection must equal the expected observation before contract
+preflight and the first producer. Existing actual-work admission, cumulative
+deadline, joined validation/encoding and post-work/save fences remain in force.
+
+Immutable revision version selects every subsequent preview/request/acceptance
+role. Submitted fields cannot relabel originals or borrow base authority. Effective
+revisions use independent scoped current pointers. A preview address is optional
+only for genuine absence: URLs use `absence=1` and omit page/subcode; publication
+return fields use `preview_absence=1`, mutually exclusive with page/subcode.
+Preview preserves historical pages or absence after expiry/removal, but publication
+requires fresh complete current scope and the original transition deadline.
+
+Scoped editor interchange is not yet connected. The localized preview states
+that limitation and offers no export/import authority for this role; full
+interchange remains required rather than excluded. P9A-04 owns native, headed,
+ordinary-stream/client proof and all remaining engine criteria.
 
 
 ### Physical base-row concept compilation seam

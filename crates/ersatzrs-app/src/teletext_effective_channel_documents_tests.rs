@@ -221,6 +221,91 @@ fn deadline() -> Instant {
 }
 
 #[tokio::test]
+async fn effective_rendered_scope_is_checked_before_preflight_and_first_producer() {
+    let repo = mixed_repository();
+    // A changed scope must reject even before this malformed producer context
+    // is interpreted. No changed producer can execute under a rendered token.
+    let context = SuppliedTeletextGuideContext {
+        locale: "unsupported",
+        ..fixtures::context()
+    };
+    for change in 0..7 {
+        let mut expected = repo.selection.clone();
+        match change {
+            0 => {
+                let Binding::Base(base) = &mut expected.bindings[0] else {
+                    unreachable!()
+                };
+                base.profile_revision += 1;
+            }
+            1 => {
+                let Binding::Base(base) = &mut expected.bindings[0] else {
+                    unreachable!()
+                };
+                base.effective_settings[0].value =
+                    ersatzrs_domain::TeletextProfileValue::Literal("changed theme".to_owned());
+            }
+            2 => {
+                expected.bindings.pop();
+            }
+            3 => {
+                let Binding::Scripted(published) = &mut expected.bindings[1] else {
+                    unreachable!()
+                };
+                published.playout_id += 1;
+            }
+            4 => {
+                let Binding::Scripted(published) = &mut expected.bindings[1] else {
+                    unreachable!()
+                };
+                published.interval.start += chrono::Duration::seconds(1);
+            }
+            5 => expected.valid_until = Some(Utc::now() + chrono::Duration::minutes(1)),
+            _ => expected.channel_id += 1,
+        }
+        let result = prepare_with_ports_expected(
+            &repo,
+            9,
+            Some(C),
+            &context,
+            input_budget(),
+            |_, _, _, _| async { panic!("changed rendered scope invoked a producer") },
+            (deadline(), Some(&expected)),
+        )
+        .await;
+        assert!(matches!(result, Err(Error::SelectionChanged)));
+    }
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 7);
+}
+
+#[tokio::test]
+async fn effective_rendered_scope_preserves_original_deadline_and_final_fence() {
+    let repo = Repository::new(vec![Binding::Base(fixtures::binding(A, 1)), off()]);
+    let original_deadline = deadline();
+    let calls = AtomicUsize::new(0);
+    let result = prepare_with_ports_expected(
+        &repo,
+        9,
+        Some(A),
+        &fixtures::context(),
+        input_budget(),
+        |selection, addon, _, actual_deadline| {
+            assert_eq!(actual_deadline, original_deadline);
+            calls.fetch_add(1, Ordering::SeqCst);
+            let mut changed = (*selection).clone();
+            changed.bindings.pop();
+            *repo.final_selection.lock().unwrap() = Some(Mutation::Saved(changed));
+            async move { Ok(receipt(selection, addon, response(A))) }
+        },
+        (original_deadline, Some(&repo.selection)),
+    )
+    .await;
+    assert!(matches!(result, Err(Error::SelectionChanged)));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
 async fn effective_mixed_contracts_preserve_sources_metadata_off_and_whole_origin_association() {
     let repo = mixed_repository();
     let context = fixtures::context();

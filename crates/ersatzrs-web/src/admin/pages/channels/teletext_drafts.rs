@@ -78,7 +78,7 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
                         <option value="" selected disabled>{tr(TextKey::TeletextEntryProducer)}</option>
                         {options}
                     </select>
-                    {entry_fields()}
+                    {entry_fields("teletext")}
                     <label for="teletext-v1-region">{tr(TextKey::TeletextV1Region)}</label>
                     <select id="teletext-v1-region" name="v1_region" required>
                         <option value="" selected disabled>{tr(TextKey::TeletextV1Region)}</option>
@@ -98,14 +98,103 @@ pub(super) fn authoring_controls(data: &ChannelTeletextData) -> AnyView {
     }.into_any()
 }
 
-fn entry_fields() -> AnyView {
+pub(super) fn effective_authoring_controls(data: &ChannelTeletextData) -> AnyView {
+    let observed = data.effective_authoring.as_ref();
+    let available = observed.is_some();
+    let absent = observed.is_some_and(|scope| scope.is_absent);
+    let options = observed
+        .into_iter()
+        .flat_map(|scope| &scope.producer_addon_ids)
+        .map(|id| {
+            let name = data
+                .addons
+                .iter()
+                .find(|addon| addon.addon_id == *id)
+                .map_or_else(
+                    || id.clone(),
+                    |addon| {
+                        if addon.name_labels.is_empty() {
+                            addon.name.clone()
+                        } else {
+                            super::teletext::manifest_label(&addon.name_labels)
+                        }
+                    },
+                );
+            view! { <option value=id.clone()>{name}</option> }
+        })
+        .collect_view();
+    let content = (!absent).then(|| view! {
+        <label for="teletext-effective-entry-producer">{tr(TextKey::TeletextEntryProducer)}</label>
+        <select id="teletext-effective-entry-producer" name="entry_addon_id" required>
+            <option value="" selected disabled>{tr(TextKey::TeletextEntryProducer)}</option>{options}
+        </select>
+        {entry_fields("teletext-effective")}
+        <label for="teletext-effective-v1-region">{tr(TextKey::TeletextV1Region)}</label>
+        <select id="teletext-effective-v1-region" name="v1_region" required>
+            <option value="" selected disabled>{tr(TextKey::TeletextV1Region)}</option>
+            <option value="western_latin">{tr(TextKey::TeletextV1WesternLatin)}</option>
+        </select>
+        <label for="teletext-effective-resources">{tr(TextKey::TeletextResourceLifecycle)}</label>
+        <p id="teletext-effective-resources-help">{tr(TextKey::TeletextResourceLifecycleHelp)}</p>
+        <textarea id="teletext-effective-resources" name="resource_transmissions" required rows="5"
+            maxlength="65536" aria-describedby="teletext-effective-resources-help"
+            inner_html=textarea_content("")></textarea>
+    });
+    view! {
+        <section class=style::authoring data-testid="teletext-effective-authoring"
+            data-state=if absent { "absent" } else if available { "available" } else { "unavailable" }>
+            <h2>{tr(TextKey::TeletextEffectiveAuthoringTitle)}</h2>
+            <p>{tr(TextKey::TeletextEffectiveAuthoringHelp)}</p>
+            <p role="status" hidden=available>{tr(TextKey::TeletextEffectiveAuthoringUnavailable)}</p>
+            <p role="status" hidden=!absent>{tr(TextKey::TeletextEffectiveAuthoringAbsent)}</p>
+            {scope_expiry(observed.and_then(|scope| scope.valid_until.as_deref()))}
+            <form method="post" action="/admin-api/teletext/design/prepare"
+                data-testid="teletext-effective-authoring-form">
+                {hidden("channel_id", data.channel_id.to_string())}
+                {hidden("scope", "effective".to_owned())}
+                {hidden("selection_digest", observed.map_or_else(String::new, |scope| scope.selection_digest.clone()))}
+                <fieldset disabled=!available class=style::fields>
+                    <legend>{tr(TextKey::TeletextEffectiveAuthoringTitle)}</legend>
+                    <label for="teletext-effective-draft-name">{tr(TextKey::TeletextDesignName)}</label>
+                    <input id="teletext-effective-draft-name" name="name" required
+                        maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
+                    {content}
+                    <button type="submit" class=btn_class(ButtonVariant::Primary)>{tr(TextKey::TeletextValidateSaveDraft)}</button>
+                </fieldset>
+            </form>
+        </section>
+    }.into_any()
+}
+
+fn scope_expiry(until: Option<&str>) -> AnyView {
+    until.map(|until| view! {
+        <p data-testid="teletext-scope-expiry">{tr(TextKey::TeletextEffectiveScopeExpiry)}" "
+            <time datetime=until.to_owned()>{until.to_owned()}</time>
+        </p>
+    }).into_any()
+}
+
+fn preview_return_fields(owner: Option<TeletextPageAddress>) -> AnyView {
+    match owner {
+        Some(owner) => view! {
+            {hidden("preview_page", owner.page.get().to_string())}
+            {hidden("preview_subcode", format!("{:04X}", owner.subcode.get()))}
+        }
+        .into_any(),
+        None => hidden("preview_absence", "1".to_owned()),
+    }
+}
+
+fn entry_fields(prefix: &str) -> AnyView {
+    let page_id = format!("{prefix}-entry-page");
+    let subcode_id = format!("{prefix}-entry-subcode");
     view! {
         <div class=style::address>
-            <div><label for="teletext-entry-page">{tr(TextKey::TeletextEntryPage)}</label>
-                <input id="teletext-entry-page" name="entry_page" type="number"
+            <div><label for=page_id.clone()>{tr(TextKey::TeletextEntryPage)}</label>
+                <input id=page_id name="entry_page" type="number"
                     min="100" max="899" step="1" required/></div>
-            <div><label for="teletext-entry-subcode">{tr(TextKey::TeletextEntrySubpage)}</label>
-                <input id="teletext-entry-subcode" name="entry_subcode" pattern="[0-9a-fA-F]{4}"
+            <div><label for=subcode_id.clone()>{tr(TextKey::TeletextEntrySubpage)}</label>
+                <input id=subcode_id name="entry_subcode" pattern="[0-9a-fA-F]{4}"
                     minlength="4" maxlength="4" required/></div>
         </div>
     }
@@ -134,20 +223,32 @@ fn textarea_content(value: &str) -> String {
 pub(super) struct PreviewQuery {
     pub(super) design_id: i64,
     pub(super) revision: i64,
-    pub(super) page: u16,
-    pub(super) subcode: u16,
+    pub(super) owner: Option<TeletextPageAddress>,
 }
 
 pub(super) fn preview_query(values: &leptos_router::params::ParamsMap) -> Option<PreviewQuery> {
-    let subcode = values.get("subcode")?;
-    if subcode.len() != 4 || !subcode.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return None;
-    }
+    let owner = match values.get("absence").as_deref() {
+        Some("1") if values.get("page").is_none() && values.get("subcode").is_none() => None,
+        Some(_) => return None,
+        None => {
+            let subcode = values.get("subcode")?;
+            if subcode.len() != 4 || !subcode.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return None;
+            }
+            Some(TeletextPageAddress {
+                page: ersatzrs_domain::TeletextPageNumber::new(values.get("page")?.parse().ok()?)
+                    .ok()?,
+                subcode: ersatzrs_domain::TeletextSubcode::new(
+                    u16::from_str_radix(&subcode, 16).ok()?,
+                )
+                .ok()?,
+            })
+        }
+    };
     let query = PreviewQuery {
         design_id: values.get("design_id")?.parse().ok()?,
         revision: values.get("revision")?.parse().ok()?,
-        page: values.get("page")?.parse().ok()?,
-        subcode: u16::from_str_radix(&subcode, 16).ok()?,
+        owner,
     };
     (query.design_id > 0 && query.revision > 0).then_some(query)
 }
@@ -208,7 +309,7 @@ fn preview_url(data: &TeletextDraftPreviewData, owner: TeletextPageAddress) -> S
 
 fn page_link(data: &TeletextDraftPreviewData, owner: TeletextPageAddress) -> AnyView {
     view! {
-        <a href=preview_url(data, owner) aria-current=(owner == data.owner).then_some("page")>
+        <a href=preview_url(data, owner) aria-current=(Some(owner) == data.owner).then_some("page")>
             {address_text(owner)}
         </a>
     }
@@ -216,11 +317,21 @@ fn page_link(data: &TeletextDraftPreviewData, owner: TeletextPageAddress) -> Any
 }
 
 fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
-    let description = format!(
-        "{} · {}",
-        tr(TextKey::TeletextPreviewTitle),
-        address_text(data.owner)
+    let description = data.owner.map_or_else(
+        || tr(TextKey::TeletextPreviewAbsent).to_owned(),
+        |owner| {
+            format!(
+                "{} · {}",
+                tr(TextKey::TeletextPreviewTitle),
+                address_text(owner)
+            )
+        },
     );
+    let image = data.image_url.as_ref().map(|url| {
+        view! {
+            <img class=style::raster src=url.clone() alt=description.clone()/>
+        }
+    });
     let inventory = data
         .pages
         .iter()
@@ -233,12 +344,15 @@ fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
         .collect_view();
     let diagnostics = diagnostic_list(&data.diagnostics);
     view! {
-        <div data-testid="teletext-preview-model" data-page=data.owner.page.get()
-            data-subcode=format!("{:04X}", data.owner.subcode.get())>
+        <div data-testid="teletext-preview-model" data-scope=if data.effective { "effective" } else { "base" }
+            data-page=data.owner.map(|owner| owner.page.get())
+            data-subcode=data.owner.map(|owner| format!("{:04X}", owner.subcode.get()))>
             {preview_controls(data)}
-            <p>{address_text(data.owner)}</p>
-            <img class=style::raster src=data.image_url.clone() alt=description/>
-            {preview_legend()}
+            <p data-testid="teletext-preview-absence" role="status" hidden=data.owner.is_some()>{tr(TextKey::TeletextPreviewAbsent)}</p>
+            {data.owner.map(|owner| view! { <p>{address_text(owner)}</p> })}
+            {scope_expiry(data.valid_until.as_deref())}
+            {image}
+            {data.owner.map(|_| preview_legend())}
             <nav class=style::inventory aria-label=tr(TextKey::TeletextPreviewPage)>{inventory}</nav>
             <ul class=style::navigation>{navigation}</ul>
             {diagnostics}
@@ -249,6 +363,18 @@ fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
 }
 
 fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
+    if data.effective {
+        return view! {
+            <section data-testid="teletext-editor-controls" data-state="unavailable">
+                <h3>{tr(TextKey::TeletextEditorTitle)}</h3>
+                <p role="status">{tr(TextKey::TeletextEffectiveEditorUnavailable)}</p>
+            </section>
+        }
+        .into_any();
+    }
+    let Some(owner) = data.owner else {
+        return ().into_any();
+    };
     let Some(observation) = data.publication.as_ref() else {
         return view! {
             <section data-testid="teletext-editor-controls" data-state="unavailable">
@@ -276,8 +402,8 @@ fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
                 <form method="post" action="/admin-api/teletext/design/export"
                     data-testid="teletext-editor-export-page-form">
                     {editorial_export_fields(data, observation)}
-                    {hidden("export_page", data.owner.page.get().to_string())}
-                    {hidden("export_subcode", format!("{:04X}", data.owner.subcode.get()))}
+                    {hidden("export_page", owner.page.get().to_string())}
+                    {hidden("export_subcode", format!("{:04X}", owner.subcode.get()))}
                     <button type="submit" class=btn_class(ButtonVariant::Primary)>
                         {tr(TextKey::TeletextEditorExportPage)}
                     </button>
@@ -399,12 +525,14 @@ fn publication_fields(
         {hidden("expected_design_head", observation.current_design_head.to_string())}
         {hidden("expected_request_id", observation.current_pending_id.map_or_else(String::new, |id| id.to_string()))}
         // Preview navigation is a return destination, never the opening page.
-        {hidden("preview_page", data.owner.page.get().to_string())}
-        {hidden("preview_subcode", format!("{:04X}", data.owner.subcode.get()))}
+        {preview_return_fields(data.owner)}
     }.into_any()
 }
 
 fn preview_controls(data: &TeletextDraftPreviewData) -> AnyView {
+    let Some(owner) = data.owner else {
+        return view! { <a href=format!("/channels/{}/teletext?design_id={}&revision={}&absence=1", data.channel_id, data.design_id, data.revision)>{tr(TextKey::TeletextPreviewReload)}</a> }.into_any();
+    };
     view! {
         <form method="get" action=format!("/channels/{}/teletext", data.channel_id)
             class=style::preview_form data-testid="teletext-preview-form">
@@ -412,12 +540,12 @@ fn preview_controls(data: &TeletextDraftPreviewData) -> AnyView {
             {hidden("revision", data.revision.to_string())}
             <div><label for="teletext-preview-page">{tr(TextKey::TeletextPreviewPage)}</label>
                 <input id="teletext-preview-page" name="page" type="number" min="100" max="899"
-                    step="1" required value=data.owner.page.get()/></div>
+                    step="1" required value=owner.page.get()/></div>
             <div><label for="teletext-preview-subcode">{tr(TextKey::TeletextPreviewSubpage)}</label>
                 <input id="teletext-preview-subcode" name="subcode" pattern="[0-9a-fA-F]{4}"
-                    minlength="4" maxlength="4" required value=format!("{:04X}", data.owner.subcode.get())/></div>
+                    minlength="4" maxlength="4" required value=format!("{:04X}", owner.subcode.get())/></div>
             <button type="submit" class=btn_class(ButtonVariant::Primary)>{tr(TextKey::TeletextPreviewLoad)}</button>
-            <a href=preview_url(data, data.owner)>{tr(TextKey::TeletextPreviewReload)}</a>
+            <a href=preview_url(data, owner)>{tr(TextKey::TeletextPreviewReload)}</a>
         </form>
     }.into_any()
 }
@@ -621,6 +749,8 @@ mod tests {
             catalog_available: true,
             authoring_selection: Some("observed-membership".to_owned()),
             authoring_error: None,
+            effective_authoring: None,
+            effective_authoring_error: None,
             addons: vec![
                 addon("org.example.on", true),
                 addon("org.example.off", false),
@@ -633,8 +763,10 @@ mod tests {
             channel_id: 44,
             design_id: 8,
             revision: 3,
-            owner: owner(200, 0x10),
-            image_url: "data:image/svg+xml;base64,PHN2Zy8+".to_owned(),
+            owner: Some(owner(200, 0x10)),
+            image_url: Some("data:image/svg+xml;base64,PHN2Zy8+".to_owned()),
+            effective: false,
+            valid_until: None,
             pages: vec![owner(200, 0x10), owner(201, 0x20), owner(201, 0x30)],
             navigation: vec![TeletextNavigationLink {
                 role: TeletextNavigationRole::Red,
@@ -886,6 +1018,84 @@ mod tests {
     }
 
     #[test]
+    fn effective_forms_use_observed_producers_over_base_off_and_omit_absence_content() {
+        let context = Owner::new();
+        let mut data = channel();
+        data.effective_authoring = Some(
+            crate::admin::server_fns::teletext::TeletextEffectiveAuthoringData {
+                selection_digest: "a".repeat(64),
+                producer_addon_ids: vec!["org.example.off".to_owned()],
+                valid_until: Some("2026-10-14T12:00:00+00:00".to_owned()),
+                is_absent: false,
+            },
+        );
+        let html = context.with(|| effective_authoring_controls(&data).to_html());
+        assert!(html.contains("value=\"org.example.off\""));
+        assert!(!html.contains("value=\"org.example.on\""));
+        assert!(html.contains("name=\"scope\" value=\"effective\""));
+        assert!(html.contains("datetime=\"2026-10-14T12:00:00+00:00\""));
+        assert!(!html.contains("<fieldset disabled"));
+        let observed = data.effective_authoring.as_mut().unwrap();
+        observed.is_absent = true;
+        observed.producer_addon_ids.clear();
+        let html = context.with(|| effective_authoring_controls(&data).to_html());
+        assert!(html.contains(tr(TextKey::TeletextEffectiveAuthoringAbsent)));
+        for forbidden in [
+            "entry_addon_id",
+            "entry_page",
+            "entry_subcode",
+            "v1_region",
+            "resource_transmissions",
+        ] {
+            assert!(!html.contains(&format!("name=\"{forbidden}\"")));
+        }
+        assert!(html.contains("name=\"name\""));
+        assert!(!html.contains("<fieldset disabled"));
+    }
+
+    #[test]
+    fn effective_absence_preview_has_no_fake_page_or_editor_authority() {
+        let context = Owner::new();
+        let mut data = preview();
+        data.effective = true;
+        data.owner = None;
+        data.image_url = None;
+        data.pages.clear();
+        data.navigation.clear();
+        data.publication = Some(TeletextDraftPublicationObservation {
+            digest: "b".repeat(64),
+            current_design_head: 3,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: true,
+            can_publish: false,
+            replaces_pending: false,
+        });
+        let html = context.with(|| preview_view(&data).to_html());
+        assert!(html.contains(tr(TextKey::TeletextPreviewAbsent)));
+        assert!(html.contains("name=\"preview_absence\" value=\"1\""));
+        assert!(html.contains("absence=1"));
+        assert!(html.contains(tr(TextKey::TeletextEffectiveEditorUnavailable)));
+        for forbidden in [
+            "<img",
+            "name=\"preview_page\"",
+            "name=\"preview_subcode\"",
+            "teletext-editor-export-all-form",
+            "teletext-editor-import-form",
+        ] {
+            assert!(!html.contains(forbidden));
+        }
+        let mut values = leptos_router::params::ParamsMap::new();
+        for (key, value) in [("design_id", "8"), ("revision", "3"), ("absence", "1")] {
+            values.insert(key, value.to_owned());
+        }
+        assert!(preview_query(&values).unwrap().owner.is_none());
+        values.insert("page", "200".to_owned());
+        assert!(preview_query(&values).is_none());
+    }
+
+    #[test]
     fn preview_query_never_supplies_missing_design_or_address_defaults() {
         let mut values = leptos_router::params::ParamsMap::new();
         assert!(preview_query(&values).is_none());
@@ -894,7 +1104,10 @@ mod tests {
         }
         assert!(preview_query(&values).is_none());
         values.insert("subcode", "0010".to_owned());
-        assert_eq!(preview_query(&values).unwrap().subcode, 0x10);
+        assert_eq!(
+            preview_query(&values).unwrap().owner.unwrap().subcode.get(),
+            0x10
+        );
         values.insert("subcode", "10".to_owned());
         assert!(preview_query(&values).is_none());
         values.insert("error_row", "7".to_owned());

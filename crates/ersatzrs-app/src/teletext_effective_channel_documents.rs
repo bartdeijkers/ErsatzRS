@@ -215,8 +215,50 @@ impl ApplicationServices {
         budget: TeletextChannelDocumentInputBudget,
         admission: (Instant, TeletextWorkHold),
     ) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error> {
-        let (deadline, hold) = admission;
-        prepare_with_ports(
+        self.invoke_effective_channel_teletext_documents_with_optional_expectation(
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            (admission.0, admission.1, None),
+        )
+        .await
+    }
+
+    /// Invoke only if the fresh complete scope still equals the observed scope.
+    /// The expectation includes Off members and Scripted ownership/intervals;
+    /// comparison precedes contract preflight and every producer invocation.
+    /// # Errors
+    /// Rejects changed scope before invocation, and retains all ordinary
+    /// membership, deadline, runtime, content and final selection fences.
+    pub async fn invoke_effective_channel_teletext_documents_with_expected_hold(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+        admission: (Instant, TeletextWorkHold, &Selection),
+    ) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error> {
+        self.invoke_effective_channel_teletext_documents_with_optional_expectation(
+            channel_id,
+            entry_addon_id,
+            context,
+            budget,
+            (admission.0, admission.1, Some(admission.2)),
+        )
+        .await
+    }
+
+    async fn invoke_effective_channel_teletext_documents_with_optional_expectation(
+        &self,
+        channel_id: EntityId,
+        entry_addon_id: Option<&str>,
+        context: &SuppliedTeletextGuideContext<'_>,
+        budget: TeletextChannelDocumentInputBudget,
+        admission: (Instant, TeletextWorkHold, Option<&Selection>),
+    ) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error> {
+        let (deadline, hold, expected) = admission;
+        prepare_with_ports_expected(
             self.ports().teletext_profiles(),
             channel_id,
             entry_addon_id,
@@ -231,7 +273,7 @@ impl ApplicationServices {
                     hold.clone(),
                 )
             },
-            deadline,
+            (deadline, expected),
         )
         .await
     }
@@ -248,13 +290,14 @@ impl ApplicationServices {
     }
 }
 
+#[cfg(test)]
 async fn prepare_with_ports<F, Fut>(
     repository: &dyn TeletextProfileRepository,
     channel_id: EntityId,
     entry_addon_id: Option<&str>,
     context: &SuppliedTeletextGuideContext<'_>,
     budget: TeletextChannelDocumentInputBudget,
-    mut invoke: F,
+    invoke: F,
     supplied_deadline: Instant,
 ) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error>
 where
@@ -263,6 +306,34 @@ where
         Output = Result<TeletextEffectiveProfileRuntimeReceipt, TeletextProfileRuntimeError>,
     >,
 {
+    prepare_with_ports_expected(
+        repository,
+        channel_id,
+        entry_addon_id,
+        context,
+        budget,
+        invoke,
+        (supplied_deadline, None),
+    )
+    .await
+}
+
+async fn prepare_with_ports_expected<F, Fut>(
+    repository: &dyn TeletextProfileRepository,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    budget: TeletextChannelDocumentInputBudget,
+    mut invoke: F,
+    admission: (Instant, Option<&Selection>),
+) -> Result<BoundEffectiveChannelTeletextDocumentInput, Error>
+where
+    F: FnMut(Arc<Selection>, String, Vec<u8>, Instant) -> Fut,
+    Fut: Future<
+        Output = Result<TeletextEffectiveProfileRuntimeReceipt, TeletextProfileRuntimeError>,
+    >,
+{
+    let (supplied_deadline, expected) = admission;
     let started = Instant::now();
     let maximum = started
         .checked_add(PREPARATION_TIMEOUT)
@@ -290,6 +361,9 @@ where
         );
     }
     check_deadline(deadline)?;
+    if expected.is_some_and(|expected| expected != selection.as_ref()) {
+        return Err(Error::SelectionChanged);
+    }
     validate_selection(&selection, channel_id, budget.max_producers)?;
     let producers = selection
         .bindings

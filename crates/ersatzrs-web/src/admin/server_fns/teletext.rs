@@ -13,7 +13,18 @@ pub struct ChannelTeletextData {
     /// Opaque full-membership observation; never unresolved settings or secrets.
     pub authoring_selection: Option<String>,
     pub authoring_error: Option<String>,
+    pub effective_authoring: Option<TeletextEffectiveAuthoringData>,
+    pub effective_authoring_error: Option<String>,
     pub addons: Vec<TeletextAddonData>,
+}
+
+/// Redacted current Scripted scope, observed without invoking producers.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextEffectiveAuthoringData {
+    pub selection_digest: String,
+    pub producer_addon_ids: Vec<String>,
+    pub valid_until: Option<String>,
+    pub is_absent: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,6 +177,11 @@ pub async fn load_channel_teletext_for_application(
             Ok(selection) => (Some(selection), None),
             Err(code) => (None, Some(code.to_owned())),
         };
+    let (effective_authoring, effective_authoring_error) =
+        match effective_authoring_selection(application, channel_id).await {
+            Ok(selection) => (Some(selection), None),
+            Err(code) => (None, Some(code.to_owned())),
+        };
     Ok(Some(ChannelTeletextData {
         channel_id,
         channel_number: channel.form.number,
@@ -173,6 +189,8 @@ pub async fn load_channel_teletext_for_application(
         catalog_available,
         authoring_selection,
         authoring_error,
+        effective_authoring,
+        effective_authoring_error,
         addons,
     }))
 }
@@ -192,6 +210,29 @@ async fn authoring_selection(
     )
     .await
     .map_err(|error| error.code())
+}
+
+#[cfg(feature = "ssr")]
+async fn effective_authoring_selection(
+    application: &ersatzrs_app::ApplicationServices,
+    channel_id: i64,
+) -> Result<TeletextEffectiveAuthoringData, &'static str> {
+    let deadline = std::time::Instant::now()
+        .checked_add(ersatzrs_app::teletext_channel_documents::PREPARATION_TIMEOUT)
+        .ok_or("expired")?;
+    let observed = crate::host::teletext_authoring::observe_effective_teletext_authoring_selection(
+        application,
+        channel_id,
+        deadline,
+    )
+    .await
+    .map_err(|error| error.code())?;
+    Ok(TeletextEffectiveAuthoringData {
+        selection_digest: observed.selection_digest,
+        producer_addon_ids: observed.producer_addon_ids,
+        valid_until: observed.valid_until.map(|until| until.to_rfc3339()),
+        is_absent: observed.is_absent,
+    })
 }
 
 #[cfg(feature = "ssr")]

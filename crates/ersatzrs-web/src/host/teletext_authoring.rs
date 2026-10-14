@@ -6,7 +6,7 @@ use std::{
     time::Instant,
 };
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use ersatzrs_app::{
     teletext_channel_documents::ChannelTeletextDocumentError,
     teletext_generations::TeletextGenerationStoreError,
@@ -24,9 +24,10 @@ use ersatzrs_core::{
 };
 use ersatzrs_domain::{
     validate_teletext_profile_values, TeletextChannelSelectionSnapshot, TeletextColourPixelOptions,
-    TeletextFlashPhase, TeletextNavigationLink, TeletextPageAddress, TeletextProfileValue,
-    TeletextPublicationRequest, TeletextResourceIdentity, TeletextSecretReferenceKind,
-    MAX_TELETEXT_DESIGN_NAME_BYTES,
+    TeletextEffectiveChannelSelectionSnapshot, TeletextFlashPhase, TeletextNavigationLink,
+    TeletextPageAddress, TeletextProfileValue, TeletextPublicationRequest,
+    TeletextResourceIdentity, TeletextSecretReferenceKind, MAX_TELETEXT_DESIGN_NAME_BYTES,
+    TELETEXT_DESIGN_DOCUMENT_VERSION, TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
 use ersatzrs_ffmpeg::teletext::{
     TeletextAuthoredServiceEncodingFailure, TeletextCompiledDisplayPageEncodingFailure,
@@ -55,6 +56,26 @@ use super::teletext_runtime_policy::{
     NativeTeletextAuthoringPolicy, NATIVE_TELETEXT_AUTHORING_POLICY_SETTING,
 };
 use super::teletext_work::{self, TeletextWorkError};
+
+mod effective;
+mod scope;
+pub use scope::{
+    observe_effective_teletext_authoring_selection, TeletextAuthoringEffectiveObservation,
+};
+
+/// Draft preparation intent; stored revision versions independently determine
+/// every preview/publication role and cannot be relabelled by a submitted form.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TeletextAuthoringScope {
+    #[default]
+    Base,
+    Effective,
+}
+
+enum AuthoringSelection {
+    Base(TeletextChannelSelectionSnapshot),
+    Effective(TeletextEffectiveChannelSelectionSnapshot),
+}
 
 /// No source/configuration strings enter operator error formatting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +154,7 @@ fn failure(status: TeletextAuthoringStatus) -> TeletextAuthoringError {
 /// Checked at submission, then rechecked inside the existing invocation path.
 /// Deliberately no Debug: names, input bytes and observation are private data.
 pub struct TeletextAuthoringPrepare {
+    pub scope: TeletextAuthoringScope,
     pub channel_id: i64,
     pub selection_digest: String,
     pub input_json: String,
@@ -151,7 +173,7 @@ pub struct TeletextAuthoringPreviewRequest {
     pub channel_id: i64,
     pub design_id: i64,
     pub revision: i64,
-    pub owner: TeletextPageAddress,
+    pub owner: Option<TeletextPageAddress>,
 }
 
 /// The raster owns its located diagnostics; navigation is copied only after
@@ -160,9 +182,9 @@ pub struct TeletextAuthoringPreview {
     pub identity: TeletextAuthoringIdentity,
     digest: String,
     static_original: bool,
-    selection: TeletextChannelSelectionSnapshot,
+    selection: AuthoringSelection,
     publication: Option<TeletextAuthoringPublicationObservation>,
-    raster: TeletextRaster,
+    raster: Option<TeletextRaster>,
     navigation: Vec<TeletextNavigationLink>,
     pages: Vec<TeletextPageAddress>,
     hold: TeletextWorkHold,
@@ -175,8 +197,26 @@ impl TeletextAuthoringPreview {
         self.publication.as_ref()
     }
     #[must_use]
-    pub const fn raster(&self) -> &TeletextRaster {
-        &self.raster
+    pub const fn raster(&self) -> Option<&TeletextRaster> {
+        self.raster.as_ref()
+    }
+    #[must_use]
+    pub const fn is_absent(&self) -> bool {
+        self.raster.is_none()
+    }
+    #[must_use]
+    pub const fn scope(&self) -> TeletextAuthoringScope {
+        match &self.selection {
+            AuthoringSelection::Base(_) => TeletextAuthoringScope::Base,
+            AuthoringSelection::Effective(_) => TeletextAuthoringScope::Effective,
+        }
+    }
+    #[must_use]
+    pub const fn valid_until(&self) -> Option<DateTime<Utc>> {
+        match &self.selection {
+            AuthoringSelection::Base(_) => None,
+            AuthoringSelection::Effective(selection) => selection.valid_until,
+        }
     }
     #[must_use]
     pub fn navigation(&self) -> &[TeletextNavigationLink] {
@@ -210,10 +250,18 @@ impl fmt::Debug for TeletextAuthoringPreview {
         formatter
             .debug_struct("TeletextAuthoringPreview")
             .field("identity", &self.identity)
-            .field("owner", &self.raster.owner())
-            .field("width", &self.raster.width())
+            .field("owner", &self.raster.as_ref().map(TeletextRaster::owner))
+            .field("width", &self.raster.as_ref().map(TeletextRaster::width))
+            .field("scope", &self.scope())
+            .field("valid_until", &self.valid_until())
             .field("pages", &self.pages.len())
-            .field("diagnostics", &self.raster.diagnostics().len())
+            .field(
+                "diagnostics",
+                &self
+                    .raster
+                    .as_ref()
+                    .map(|raster| raster.diagnostics().len()),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -304,6 +352,11 @@ pub async fn request_static_teletext_publication(
 ) -> Result<TeletextAuthoringPending, TeletextAuthoringError> {
     target.validate()?;
     let operation = Operation::begin(application, deadline).await?;
+    if stored_scope(application, target.identity, &operation).await?
+        == TeletextAuthoringScope::Effective
+    {
+        return effective::request_publication(application, target, &operation).await;
+    }
     let identity = target.identity;
     let mutation = request_original_publication_with_hold(
         application,
@@ -333,8 +386,9 @@ pub async fn request_static_teletext_publication(
     }
 }
 
-/// Explicitly select exact pending output for new compatible streams.
-/// Existing running streams retain their generation; no warm adoption is implied.
+/// Explicitly select exact pending output for compatible consumers.
+/// Version-2 live output may adopt it at its existing safe boundary; this
+/// metadata selection does not acknowledge application by any stream.
 /// # Errors
 /// Rejects pending/accepted/head/selection races using existing atomic acceptance.
 pub async fn publish_static_teletext_generation(
@@ -349,6 +403,11 @@ pub async fn publish_static_teletext_generation(
         return Err(failure(TeletextAuthoringStatus::InvalidInput));
     }
     let operation = Operation::begin(application, deadline).await?;
+    if stored_scope(application, target.publication.identity, &operation).await?
+        == TeletextAuthoringScope::Effective
+    {
+        return effective::publish_generation(application, target, &operation).await;
+    }
     let publication = target.publication;
     let request = before(
         operation.deadline,
@@ -420,28 +479,39 @@ async fn publication_observation(
     .await?
     .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?
     .ok_or_else(|| failure(TeletextAuthoringStatus::MissingDesign))?;
-    let pending = before(
-        deadline,
-        application.teletext_publication_request(preview.identity.channel_id),
-    )
+    let pending = before(deadline, async {
+        match preview.scope() {
+            TeletextAuthoringScope::Base => {
+                application
+                    .teletext_publication_request(preview.identity.channel_id)
+                    .await
+            }
+            TeletextAuthoringScope::Effective => {
+                application
+                    .effective_teletext_publication_request(preview.identity.channel_id)
+                    .await
+            }
+        }
+    })
     .await?
     .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?;
-    let accepted = before(
-        deadline,
-        application.accepted_teletext_generation(preview.identity.channel_id),
-    )
+    let accepted = before(deadline, async {
+        match preview.scope() {
+            TeletextAuthoringScope::Base => {
+                application
+                    .accepted_teletext_generation(preview.identity.channel_id)
+                    .await
+            }
+            TeletextAuthoringScope::Effective => {
+                application
+                    .effective_teletext_accepted_generation(preview.identity.channel_id)
+                    .await
+            }
+        }
+    })
     .await?
     .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?;
-    let selection_current = match before(
-        deadline,
-        application.observe_channel_teletext_document_selection(preview.identity.channel_id),
-    )
-    .await?
-    {
-        Ok(current) => current == preview.selection,
-        Err(ChannelTeletextDocumentError::SelectionRejected(_)) => false,
-        Err(_) => return Err(failure(TeletextAuthoringStatus::StorageFailed)),
-    };
+    let selection_current = preview_selection_current(application, preview, deadline).await?;
     let pending_matches = pending
         .as_ref()
         .is_some_and(|request| matches_original(request, preview.identity, &preview.digest));
@@ -474,6 +544,40 @@ async fn publication_observation(
         can_request: eligible && !pending_matches,
         can_publish: eligible && pending_matches && !already_accepted_request,
         replaces_pending: pending.is_some() && !pending_matches,
+    })
+}
+
+async fn preview_selection_current(
+    application: &ApplicationServices,
+    preview: &TeletextAuthoringPreview,
+    deadline: Instant,
+) -> Result<bool, TeletextAuthoringError> {
+    Ok(match &preview.selection {
+        AuthoringSelection::Base(selection) => match before(
+            deadline,
+            application.observe_channel_teletext_document_selection(preview.identity.channel_id),
+        )
+        .await?
+        {
+            Ok(current) => current == *selection,
+            Err(ChannelTeletextDocumentError::SelectionRejected(_)) => false,
+            Err(_) => return Err(failure(TeletextAuthoringStatus::StorageFailed)),
+        },
+        AuthoringSelection::Effective(selection) => match before(
+            deadline,
+            application.observe_effective_channel_teletext_selection(
+                preview.identity.channel_id,
+                Utc::now(),
+            ),
+        )
+        .await?
+        {
+            Ok(ersatzrs_core::repositories::TeletextProfileMutation::Saved(current)) => {
+                current == *selection && current.valid_until.is_some_and(|until| until > Utc::now())
+            }
+            Ok(ersatzrs_core::repositories::TeletextProfileMutation::Rejected(_)) => false,
+            Err(_) => return Err(failure(TeletextAuthoringStatus::StorageFailed)),
+        },
     })
 }
 
@@ -607,6 +711,9 @@ pub async fn prepare_static_teletext_design(
         return Err(failure(TeletextAuthoringStatus::InvalidInput));
     }
     let operation = Operation::begin(application, deadline).await?;
+    if request.scope == TeletextAuthoringScope::Effective {
+        return effective::prepare_design(application, request, &operation).await;
+    }
     let input = parse_native_teletext_authoring_input(&request.input_json, &operation.policy)
         .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
     if request.channel_id <= 0 || input.channel_id() != request.channel_id {
@@ -687,7 +794,7 @@ pub async fn prepare_static_teletext_design(
             channel_id: identity.channel_id,
             design_id: identity.design_id,
             revision: identity.revision,
-            owner,
+            owner: Some(owner),
         },
         &operation,
     )
@@ -717,6 +824,21 @@ async fn preview_with_operation(
         return Err(failure(TeletextAuthoringStatus::InvalidInput));
     }
     check_deadline(operation.deadline)?;
+    if stored_scope(
+        application,
+        TeletextAuthoringIdentity {
+            channel_id: request.channel_id,
+            design_id: request.design_id,
+            revision: request.revision,
+        },
+        operation,
+    )
+    .await?
+        == TeletextAuthoringScope::Effective
+    {
+        let preview = effective::preview_design(application, request, operation).await?;
+        return finish_preview_observation(application, preview, operation.deadline).await;
+    }
     let restored = reload_original_teletext_design_revision_with_hold(
         application,
         request.design_id,
@@ -735,11 +857,19 @@ async fn preview_with_operation(
     let budget = operation.policy.preview;
     let deadline = operation.deadline;
     let hold = operation.guard.hold_work();
-    let mut preview = teletext_work::spawn_blocking(hold.clone(), move || {
+    let preview = teletext_work::spawn_blocking(hold.clone(), move || {
         render_original(&restored, request, budget, deadline, hold)
     })
     .await
     .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))??;
+    finish_preview_observation(application, preview, deadline).await
+}
+
+async fn finish_preview_observation(
+    application: &ApplicationServices,
+    mut preview: TeletextAuthoringPreview,
+    deadline: Instant,
+) -> Result<TeletextAuthoringPreview, TeletextAuthoringError> {
     // Optional metadata gets at most half the remaining original operation bound.
     // A failed read preserves the historical raster and never invents None IDs.
     let now = Instant::now();
@@ -766,9 +896,44 @@ fn render_original(
     let service = restored
         .encoded()
         .ok_or_else(|| failure(TeletextAuthoringStatus::Off))?;
+    let owner = request
+        .owner
+        .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?;
+    let (raster, navigation, pages) = render_service(service, owner, budget)?;
+    check_deadline(deadline)?;
+    Ok(TeletextAuthoringPreview {
+        identity: TeletextAuthoringIdentity {
+            channel_id: request.channel_id,
+            design_id: request.design_id,
+            revision: request.revision,
+        },
+        digest: restored.digest().to_owned(),
+        static_original: frozen_original(restored),
+        selection: AuthoringSelection::Base(restored.selection().clone()),
+        publication: None,
+        raster: Some(raster),
+        navigation,
+        pages,
+        hold,
+        deadline,
+    })
+}
+
+fn render_service(
+    service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    budget: super::teletext_preview::TeletextPreviewBudget,
+) -> Result<
+    (
+        TeletextRaster,
+        Vec<TeletextNavigationLink>,
+        Vec<TeletextPageAddress>,
+    ),
+    TeletextAuthoringError,
+> {
     let preview = project_teletext_preview(
         service,
-        request.owner,
+        owner,
         TeletextColourPixelOptions {
             reveal_concealed: false,
             flash_phase: TeletextFlashPhase::Original,
@@ -801,24 +966,30 @@ fn render_original(
         .iter()
         .map(|page| page.address)
         .collect();
-    let navigation = navigation.to_vec();
-    check_deadline(deadline)?;
-    Ok(TeletextAuthoringPreview {
-        identity: TeletextAuthoringIdentity {
-            channel_id: request.channel_id,
-            design_id: request.design_id,
-            revision: request.revision,
-        },
-        digest: restored.digest().to_owned(),
-        static_original: frozen_original(restored),
-        selection: restored.selection().clone(),
-        publication: None,
-        raster,
-        navigation,
-        pages,
-        hold,
-        deadline,
-    })
+    Ok((raster, navigation.to_vec(), pages))
+}
+
+async fn stored_scope(
+    application: &ApplicationServices,
+    identity: TeletextAuthoringIdentity,
+    operation: &Operation,
+) -> Result<TeletextAuthoringScope, TeletextAuthoringError> {
+    let revision = before(
+        operation.deadline,
+        application.teletext_design_revision(
+            identity.design_id,
+            identity.revision,
+            operation.policy.design.max_serialized_bytes,
+        ),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::StorageFailed))?
+    .ok_or_else(|| failure(TeletextAuthoringStatus::MissingDesign))?;
+    match revision.document_version {
+        TELETEXT_DESIGN_DOCUMENT_VERSION => Ok(TeletextAuthoringScope::Base),
+        TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION => Ok(TeletextAuthoringScope::Effective),
+        _ => Err(failure(TeletextAuthoringStatus::InvalidInput)),
+    }
 }
 
 async fn observed_selection(

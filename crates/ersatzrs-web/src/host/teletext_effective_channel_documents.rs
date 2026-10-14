@@ -153,19 +153,77 @@ pub(super) async fn prepare_effective_channel_teletext_document_candidate_with_h
     admission: (Instant, TeletextWorkHold),
 ) -> Result<EncodedEffectiveChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError>
 {
+    prepare_effective_checked(
+        application,
+        channel_id,
+        entry_addon_id,
+        context,
+        policy,
+        None,
+        admission,
+    )
+    .await
+}
+
+/// Bind rendered intent before producer invocation, keeping the same final
+/// joined-worker scope fence and original deadline as ordinary preparation.
+pub(super) async fn prepare_effective_channel_teletext_document_candidate_checked_with_hold(
+    application: &ApplicationServices,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    expected: &TeletextEffectiveChannelSelectionSnapshot,
+    admission: (Instant, TeletextWorkHold),
+) -> Result<EncodedEffectiveChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError>
+{
+    prepare_effective_checked(
+        application,
+        channel_id,
+        entry_addon_id,
+        context,
+        policy,
+        Some(expected),
+        admission,
+    )
+    .await
+}
+
+async fn prepare_effective_checked(
+    application: &ApplicationServices,
+    channel_id: EntityId,
+    entry_addon_id: Option<&str>,
+    context: &SuppliedTeletextGuideContext<'_>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    expected: Option<&TeletextEffectiveChannelSelectionSnapshot>,
+    admission: (Instant, TeletextWorkHold),
+) -> Result<EncodedEffectiveChannelTeletextDocumentCandidate, ChannelTeletextDocumentEncodingError>
+{
     let (deadline, hold) = admission;
     check_deadline(deadline)?;
     let mut budget = policy.input;
     budget.max_producers = maximum_producers(&policy);
-    let input = application
-        .invoke_effective_channel_teletext_documents_with_hold(
-            channel_id,
-            entry_addon_id,
-            context,
-            budget,
-            (deadline, hold.clone()),
-        )
-        .await?;
+    let input = if let Some(expected) = expected {
+        application
+            .invoke_effective_channel_teletext_documents_with_expected_hold(
+                channel_id,
+                entry_addon_id,
+                context,
+                budget,
+                (deadline, hold.clone(), expected),
+            )
+            .await?
+    } else {
+        application
+            .invoke_effective_channel_teletext_documents_with_hold(
+                channel_id,
+                entry_addon_id,
+                context,
+                budget,
+                (deadline, hold.clone()),
+            )
+            .await?
+    };
     let candidate = super::teletext_work::spawn_blocking(hold, move || {
         check_deadline(input.deadline())?;
         let prepared = input.validate(policy.validation)?;

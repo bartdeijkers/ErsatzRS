@@ -609,7 +609,8 @@ remain required. NOS reference scope stays limited to TV-guide pages 200–299.
 
 ### Synthetic operator flow: admin implementation map
 
-This is planned UI integration, not browser or engine acceptance. The operator's
+This maps implemented and remaining UI integration; verification belongs to
+P9A-04's evidence rather than implying browser or engine acceptance. The operator's
 job is to choose each channel's existing addon/profile, validate its synthetic
 pages, inspect a saved revision and explicitly publish that revision. Initial
 setup is occasional; preview/publication is repeated and must keep the inspected
@@ -649,6 +650,38 @@ changed label/status/diagnostic in all nine supported cultures. Required headed
 Chromium/Firefox evidence covers no-JS/hydrated operation, both themes, persisted
 selection/save/reload, page navigation, stale/error recovery and browser errors.
 Actual encoded suitable-client display/navigation remains a separate required gate.
+
+The active Scripted authoring scope is separate from saved base configuration.
+Observe its complete membership without invoking addons: enabled producer IDs,
+an opaque whole-scope digest and the earliest original transition deadline.
+Lua On can select an existing profile over base Off. Lua Off produces an explicit
+absence concept with no invented entry page, regional policy or preview image.
+Reject changed scope before contract preflight or producer invocation, retain
+the original worker admission/deadline through native work, and recheck after
+compilation and concept save. Preview and publication dispatch from the stored
+revision version, never a submitted role. Historical previews remain readable
+after expiry or profile removal; publication requires fresh current authority.
+Keep effective and base pending/accepted pointers independent. Selection does
+not establish per-output application. Scoped editor interchange is unfinished
+work, not a permanent permission restriction.
+
+Hydration source map for this integration:
+
+- Route/page: `/channels/:id/teletext`, existing channel teletext page.
+- SSR wrapper: existing channel page and in-order channel/preview resources.
+- Islands: existing shared shell only; no new island or client framework.
+- Data boundary: bounded redacted base/effective observations and immutable
+  preview projection; absence has no page, raster or navigation payload.
+- Server functions/API: existing channel/preview reads and native prepare,
+  request and explicit publish POST endpoints; stored revision role selects
+  the application function.
+- No-JS path: separate native forms with unique effective input IDs; existing
+  base forms and CAS observations retain their identities.
+- Shared primitives: existing button classes, fieldsets, status feedback,
+  resource wrappers and CSS modules; no shared primitive redesign.
+- Browser proof target: nine cultures, headed Chromium/Firefox, light/dark,
+  hydrated/no-JS, genuine Lua selection, absence, historical preview and fresh
+  explicit publication, followed by ordinary output/client navigation.
 
 ## Evidence from the 2026-10-07 planning review
 

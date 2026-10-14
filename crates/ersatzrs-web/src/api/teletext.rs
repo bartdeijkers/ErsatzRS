@@ -81,11 +81,10 @@ pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pai
         Ok(saved) => {
             let identity = saved.identity;
             let mut query = format!(
-                "saved=draft&design_id={}&revision={}&page={}&subcode={:04x}",
+                "saved=draft&design_id={}&revision={}{}",
                 identity.design_id,
                 identity.revision,
-                owner.page,
-                owner.subcode.get(),
+                preview_destination(owner),
             );
             if let Err(error) = &saved.preview {
                 query.push_str(&authoring_error_query(error));
@@ -124,7 +123,7 @@ enum PublicationAction {
 struct PublicationCommand {
     target: crate::host::teletext_authoring::TeletextAuthoringPublicationTarget,
     expected_generation_id: Option<i64>,
-    owner: ersatzrs_domain::TeletextPageAddress,
+    owner: Option<ersatzrs_domain::TeletextPageAddress>,
 }
 
 async fn publication_action(
@@ -165,11 +164,10 @@ async fn publication_action(
         .map(|_| "publication-selected"),
     };
     let mut query = format!(
-        "design_id={}&revision={}&page={}&subcode={:04x}",
+        "design_id={}&revision={}{}",
         identity.design_id,
         identity.revision,
-        command.owner.page,
-        command.owner.subcode.get(),
+        preview_destination(command.owner),
     );
     match result {
         Ok(code) => {
@@ -214,19 +212,25 @@ fn publication_command(
             optional_positive(&take(&mut fields, "expected_generation_id")?)?
         }
     };
-    let page = take(&mut fields, "preview_page")?
-        .parse::<u16>()
-        .map_err(|_| "invalid-input")?;
-    let subcode = take(&mut fields, "preview_subcode")?;
-    if subcode.len() != 4 || !subcode.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("invalid-input");
-    }
-    let owner = TeletextPageAddress {
-        page: TeletextPageNumber::new(page).map_err(|_| "invalid-input")?,
-        subcode: TeletextSubcode::new(
-            u16::from_str_radix(&subcode, 16).map_err(|_| "invalid-input")?,
-        )
-        .map_err(|_| "invalid-input")?,
+    let owner = match fields.remove("preview_absence").as_deref() {
+        Some("1") => None,
+        Some(_) => return Err("invalid-input"),
+        None => {
+            let page = take(&mut fields, "preview_page")?
+                .parse::<u16>()
+                .map_err(|_| "invalid-input")?;
+            let subcode = take(&mut fields, "preview_subcode")?;
+            if subcode.len() != 4 || !subcode.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err("invalid-input");
+            }
+            Some(TeletextPageAddress {
+                page: TeletextPageNumber::new(page).map_err(|_| "invalid-input")?,
+                subcode: TeletextSubcode::new(
+                    u16::from_str_radix(&subcode, 16).map_err(|_| "invalid-input")?,
+                )
+                .map_err(|_| "invalid-input")?,
+            })
+        }
     };
     if !fields.is_empty() {
         return Err("invalid-input");
@@ -247,8 +251,9 @@ fn prepare_command(
     pairs: Pairs,
 ) -> ControlResult<(
     crate::host::teletext_authoring::TeletextAuthoringPrepare,
-    ersatzrs_domain::TeletextPageAddress,
+    Option<ersatzrs_domain::TeletextPageAddress>,
 )> {
+    use crate::host::teletext_authoring::TeletextAuthoringScope;
     use ersatzrs_domain::{TeletextPageAddress, TeletextPageNumber, TeletextSubcode};
     let mut fields = fields(pairs)?;
     let channel_id = positive(&take(&mut fields, "channel_id")?)?;
@@ -261,6 +266,24 @@ fn prepare_command(
         return Err("invalid-input");
     }
     let name = take(&mut fields, "name")?;
+    let scope = match fields.remove("scope").as_deref() {
+        None | Some("base") => TeletextAuthoringScope::Base,
+        Some("effective") => TeletextAuthoringScope::Effective,
+        _ => return Err("invalid-input"),
+    };
+    if scope == TeletextAuthoringScope::Effective && fields.is_empty() {
+        return Ok((
+            crate::host::teletext_authoring::TeletextAuthoringPrepare {
+                scope,
+                channel_id,
+                selection_digest,
+                input_json: String::new(),
+                name,
+            },
+            None,
+        ));
+    }
+
     let addon = take(&mut fields, "entry_addon_id")?;
     ersatzrs_addon_contract::validate_addon_id(&addon).map_err(|_| "invalid-input")?;
     let page = take(&mut fields, "entry_page")?
@@ -296,13 +319,21 @@ fn prepare_command(
     input_json.push('}');
     Ok((
         crate::host::teletext_authoring::TeletextAuthoringPrepare {
+            scope,
             channel_id,
             selection_digest,
             input_json,
             name,
         },
-        owner,
+        Some(owner),
     ))
+}
+
+fn preview_destination(owner: Option<ersatzrs_domain::TeletextPageAddress>) -> String {
+    owner.map_or_else(
+        || "&absence=1".to_owned(),
+        |owner| format!("&page={}&subcode={:04x}", owner.page, owner.subcode.get()),
+    )
 }
 
 fn authoring_error_query(
