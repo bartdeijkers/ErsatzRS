@@ -24,8 +24,11 @@ release section when tagging a release.
   probe connects an edit within a synthetic two-page set to native import,
   preview, explicit publication, reopen and ordinary stream output. Transport,
   independent decoding and headed client navigation prove two-channel theme
-  isolation. Nonzero charset loss is explicitly rejected; full editor/admin and
-  Level 2.5 client acceptance remain open.
+  isolation. A bounded live-URL probe now verifies published/reopened originals
+  through two actual ordinary streams and headed clients with separate themes.
+  Capacity-wait timestamp resets remain a recorded playback defect. Nonzero
+  charset loss is explicitly rejected; full editor/admin and Level 2.5 client
+  acceptance remain open.
 - Export saved native teletext originals through a bounded host API to exact
   per-page TTI mappings and versioned sidecars, backed by retained server receipts.
   Preserve full resource/magazine packets, original subcodes/navigation and

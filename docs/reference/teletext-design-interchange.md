@@ -3862,6 +3862,46 @@ prove link/subpage navigation, full resources/panels, warm cache replacement,
 localized admin/browser, accepted generation or full Level 2.5 support. P9A-01
 owns the exact successful capture/client receipt and P9A-04 retains the flow gaps.
 
+### Published cold ordinary-URL client workflow
+
+The opt-in Unix integration selector
+`published_indexed_originals_serve_live_ordinary_urls` binds the actual Router
+on disposable loopback state after profile selection, validation, concept import,
+shared preview, explicit publication and reopen. Set
+`ERSATZRS_TELETEXT_LIVE_CLIENT_DIR` to a new directory and all five fixture/runtime
+FFmpeg/ffprobe overrides to the same verified FFmpeg9 candidate. Run through
+`./run.sh test -p ersatzrs-web --test teletext_profile_preparation -E
+'test(published_indexed_originals_serve_live_ordinary_urls)' --run-ignored ignored-only`.
+It retains a bounded60-second source and writes `ready.json` only after binding.
+The existing12-second capture workflow is unchanged.
+
+While the test waits, run
+`python3 scripts/e2e/teletext-live-client-trial.py "$READY_JSON" "$NEW_CLIENT_DIR"`
+on a real X11 display. The pinned Linux-x64 tooling owns two VLC windows, checks
+exact process/window and source/library identities, attaches directly to the two
+ordinary HTTP URLs at normal rate, and captures requested124->125->124 controls.
+It does not certify the rendered page or release native completion. Independently
+inspect all six images for actual page/subpage headers, red/day and blue/night
+DRCS shapes and day124-only Q. Wait for both owned clients to exit0. Only then
+atomically write the exact five-field completion identity from `ready.json` to
+`client-complete.json` before its180-second deadline. A screenshot alone or a
+late marker is not successful native verification; require `success.json` and
+nextest exit0 for retained-state and bounded owned-server cleanup.
+
+The disposable fixture configures four existing capacity slots before its
+baseline/reopen for two viewers plus two concurrent ordinary-URL transport probes.
+Run those with the unchanged `tsduck-playback-gate.sh url "$URL" 20 --keep` gate.
+The product default remains two. At default capacity, extra consumers may receive
+a wait slate; a successful four-slot normal-source probe does not establish
+wait-slate/handoff correctness. P9A-04 retains the observed PTS/PCR reset defect,
+actual-URL receipts and the canonical next-step map.
+
+This Linux-x64/X11 test helper is an intentional tooling exception, not a runtime
+platform requirement. It rewrites no transport bytes or decoder, changes no
+installed package, and proves cold MAIN display/navigation only. Full authored
+Level2.5/fallback, sparse X27, panels, warm controls, editor-resource workflow,
+Lua/restart, localized admin and six-platform acceptance remain required.
+
 ### Bounded accepted guide-source reads
 
 The additive infra `external_json::snapshot::accepted_on` borrows the caller's

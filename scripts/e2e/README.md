@@ -1237,3 +1237,18 @@ repository driver read-only and a separate owned output directory writable;
 use the same offline image with bounded CPU/memory. Retain the new driver hash,
 keep the editor binary unchanged, and record actual runtime/editor/native results.
 P9A-04 owns both successful carrier trials and their precise limits.
+
+### Published ordinary-URL teletext client trial
+
+The ignored native selector `published_indexed_originals_serve_live_ordinary_urls`
+prepares and publishes two synthetic profiles, reopens durable state and serves
+the actual ordinary HTTP routes on a test-owned loopback host. The headed
+`scripts/e2e/teletext-live-client-trial.py` uses pinned VLC/libzvbi and exact owned
+X11 windows for both themes and124->125->124 navigation. It consumes live URLs,
+not replay files. Independent image inspection and client exit0 are required
+before explicitly releasing the native completion marker; nextest success also
+checks retained state and bounded owned-host closure. Follow the
+[workflow, capacity and completion rules](../../docs/reference/teletext-design-interchange.md#published-cold-ordinary-url-client-workflow).
+P9A-04 owns receipts, negative trials and remaining criteria. These Linux-x64/X11
+helpers are test tooling; neither a representative pass nor four-slot fixture
+capacity closes full engine or capacity-wait playback acceptance.

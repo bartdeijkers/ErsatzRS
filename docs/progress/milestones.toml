@@ -2724,6 +2724,53 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 cold actual ordinary-URL checkpoint:
+Criterion: attach a suitable headed client to the actual ordinary stream after
+profile selection, native validation/shared preview, separate publication and
+reopen; prove two simultaneous profiles/themes of the same synthetic addon.
+The opt-in fixture now binds the existing Router at a disposable loopback port.
+Two owned VLC3.0.20/libzvbi0.2.42 processes consume actual
+/iptv/hls-direct/1.ts and /2.ts at normal rate, not capture replay. All six
+client-4 images are inspected: red/day and blue/night, distinct normal DRCS0/1,
+124.20->125.20->124.20 on both, Q only day124. Both clients exit0. Native final
+run18bc1117-54ef-4484-9bd5-3285c62712c2 passes1/1, retaining exact generations,
+resources/originals/receipts/package, no playout commands and clean owned-server
+closure. Existing pinned actual QTM Save As and72 localized headed admin flows
+are reused; this probe imports their supported synthetic edit through the same
+application seam, not a second external-editor or admin test.
+
+The explicit60-second source variant is bounded48MiB; existing12-second source
+argv/8MiB captures remain unchanged. Source37132068 bytes, SHA256
+9f127d636735594cf2235271840244c6d4d7a338edcc4566a785d2f1951e512c.
+The disposable fixture reserves four existing transcode slots for two viewers
+and two probes before capturing its baseline/reopen; product default2 remains.
+Trial3 actual normal HTTP captures pass42/42 unchanged TSDuck3.44-4676 checks,
+99% media/wall delivery each, zero PTS/PCR/CC errors. Final trial4 uses the exact
+same source and native code. Independent dense glyph/fallback/source-AV receipts
+from the preceding checkpoint remain valid; no full features/panels claim.
+Runef0b213f-247e-4f24-bde3-c7eccc8ca76f passes19/19 affected regular import/export
+cases; unique Rust successes20 including the final manual native selector.
+Strict preparation-test Clippy and formatting pass. No product/UI/WASM/argv/
+dependency or acceptance/status/dependency changes; preparatory checkpoint only.
+
+Negative evidence stays visible. Trials1/3 reach successful client display but
+native completion expires while root delays its visual-confirmation marker;
+neither is a passing native state/cleanup test. Trial2 native/client succeeds,
+but two extra HTTP probes overlap two viewers at default capacity2 and receive
+the wait-capacity slate: each20-second capture fails8 PTS/4 PCR leaps and19%
+delivery. Probe confirms repeated4-second H264/1920x1080 slate, not the synthetic
+MPEG2/160x90 service. Production stream.rs repeats finite slate children by raw
+byte-copy into one response, resetting clocks between children. Raising fixture
+capacity proves the normal route but does not fix or waive this playback defect.
+Next correct wait-slate repeat/handoff clocks through existing final-mux/lifecycle
+mechanisms, preserving admission, codec/topology and source captions/audio.
+Then connect accepted-generation/Off control to the same open response. Full
+sparse X27/client, resource/editor/panel/Lua/admin/platform gates remain required.
+Receipt: tmp/phase9-live-editor-flow/identity.json,
+SHA2568b161e0d96f1d7e394213bb8c7452a9bff6e6de22710db3ce7d2dc06ae393f08. Source/tools, positive/negative logs, live images and actual HTTP
+captures are bound; mutable progress prose is excluded. No milestone completed,
+production guide, push or publication.
+
 2026-10-14 indexed DRCS editor-set checkpoint:
 Criterion: preserve actual native logical S1 in QTM's attached PN-list indexing,
 including valid sparse banks without inventing broadcast resources. CarrierV4
@@ -3096,24 +3143,24 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | --- | --- | --- |
 | Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
 | Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
-| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two-channel exact route/TSDuck/AV/decoding and actual 124->125->124 client proof; localized native forms and 8-case/all-nine-culture headed flow proven | Bound live client/open-generation transitions and full panel/feature coverage |
+| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two actual ordinary HTTP clients, simultaneous themes and124->125->124; normal HTTP TSDuck plus prior exact-model/AV/decoding and72 localized headed flows | Capacity-slate clock correctness, open-generation/Off transitions and full panel/feature coverage |
 | Actual pinned QTM workflow | Actual v1.0 NOS, indexed0+1 and sparse1-only dependency load/pixels/Save As; dense native/stream decode, Legacy/V2/V3 recovery | Sparse normative X27 decoding/client, remaining charset/resource editing and full supported set/subpage edits |
 | Full engine acceptance | Earlier representative decoding/TSDuck/client/AV retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
-Concrete next action: expose the existing accepted/editor fixture through a
-test-owned loopback listener and prove cold actual ordinary live-URL client
-navigation and simultaneous themes. Keep existing12-second capture receipts and
-use an explicitly bounded longer synthetic-source variant. Existing accepted
-source preparation creates a binding without control; freshness is checked at
-startup, and application Off only mutates stored state. Open-stream replacement/
-withdrawal therefore needs a bridge to the existing engine proposal controls,
-followed by same-response transition proof. This concrete behavior gap determines
-the next integration work; do not start another general audit or metric expansion.
+Concrete next action: correct repeated capacity-wait slate clocks and source
+handoff through an existing stable final mux without bypassing admission or
+losing codec/track topology. The live-URL flow reproduced this playback defect;
+its four-slot normal-route success is not capacity-wait acceptance. Existing
+accepted source preparation also creates a binding without control; freshness
+is checked at startup, and application Off only mutates stored state. Connect
+replacement/withdrawal to existing engine proposal controls and prove transitions
+on the same open response. These concrete behavior gaps determine integration
+work; do not start another general audit or metric expansion.
 Sparse native/editor indexing is valid; the current decoder's audited normative
 X27 defects block its streamed glyph proof. Select/verify a correct independent
 candidate and actual client; never shift native packet fields or add native S1=0.
 Attached-resource editing has no QTM save action and remains required integration
-work. Full charset/resource/editor/panel, live-bound/open-client and remaining
+work. Full charset/resource/editor/panel, warm open-client and remaining
 admin/Lua flows stay required. Base-row-only import, unchanged-file refusal,
 protected enhancement/PS edits and repeated-overlay refusal remain pending
 implementation/proof; none is a permanent accepted limitation.

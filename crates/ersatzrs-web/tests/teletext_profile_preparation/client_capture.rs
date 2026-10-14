@@ -204,7 +204,20 @@ pub(super) async fn configure_source_for_channels(
 }
 
 pub(super) async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
+    generate_source_with_duration(ffmpeg, root, 12).await
+}
+
+/// Explicit finite synthetic source for capture or live headed-client trials.
+/// The existing 12-second command and bound remain unchanged. Longer trials
+/// write at most 48 MiB and never use the 8-MiB finite-capture consumer.
+pub(super) async fn generate_source_with_duration(
+    ffmpeg: &str,
+    root: &Path,
+    seconds: u8,
+) -> PathBuf {
+    assert!(matches!(seconds, 12 | 60));
     let rate = muxrate().to_string();
+    let duration = seconds.to_string();
     let args = [
         "-hide_banner",
         "-loglevel",
@@ -219,7 +232,7 @@ pub(super) async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
         "-i",
         "sine=frequency=440:sample_rate=48000",
         "-t",
-        "12",
+        &duration,
         "-map",
         "0:v:0",
         "-map",
@@ -246,7 +259,12 @@ pub(super) async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
         "mpegts",
         "pipe:1",
     ];
-    let bytes = probe(ffmpeg, &args, &[], MAX_BYTES).await;
+    let maximum = if seconds == 12 {
+        MAX_BYTES
+    } else {
+        48 * 1024 * 1024
+    };
+    let bytes = probe(ffmpeg, &args, &[], maximum).await;
     assert!(!bytes.is_empty());
     assert_eq!(bytes.len() % 188, 0);
     assert!(bytes

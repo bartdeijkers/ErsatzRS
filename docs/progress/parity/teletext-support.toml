@@ -47,7 +47,7 @@ Served themes/pending/Off, decoding/client and smoke pass; 12 headed cases pass.
 Copy fixed; finite-client restart/AV passes.
 V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
 QTM charset0 set/stream/client; admin8-case headed pass.
-PS/NOS/old receipts and indexed DRCS flow pass; sparse X27/client gates open.
+PS/NOS/DRCS/live-URL pass; slate clocks/warm controls/sparse X27 open.
 
 SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
 pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
@@ -182,4 +182,12 @@ adr         = '0123'
 description = 'Preserve supported header and enhanced charset semantics through actual pinned QTeletextMaker interchange. Its shared NOS state can alter protected X28 during load/save. Do not silently mask or restore edited packets, change the native header encoder, or accept a permanent authored/editor restriction. General lossless charset interchange remains required.'
 discovered  = '2026-10-13'
 evidence    = 'P9A-04 owns the actual exposed QTeletextMaker1.0/cac2167 export/edit/Save As trial. Native file1357 bytes retains numeric PS C0C0 while X28 primary changes1 to4; the constructor copies X28 before header controls, whose setters overwrite m_defaultNOS. Import rejects at page124/subcode32/row28/designation0 and preserves both accepted/pending outputs. A distinct charset-zero original passes the representative native flow; this does not establish general fidelity or full engine/editor acceptance.'
+resolved    = false
+
+[[debt]]
+id          = 'capacity-wait-mpegts-slate-clock-resets'
+adr         = '0123'
+description = 'Ordinary MPEG-TS capacity-wait output repeats finite slate children into one HTTP response by raw byte-copy, resetting PTS/PCR. Preserve a stable final mux clock across repeats and source handoff, existing admission/lifecycle ownership and source codec/caption/alternate-audio topology. No delivery or continuity waiver is accepted.'
+discovered  = '2026-10-14'
+evidence    = 'Two live-URL TSDuck20-second probes overlapping two headed viewers at default capacity2 each reproduce8PTS/4PCR leaps and19percent delivery. Captures identify the repeated4-second wait slate, not the synthetic MPEG2 source. Four-slot disposable-fixture normal HTTP probes pass42 unchanged checks; product limit remains2. P9A-04 owns positive/negative receipts and next-step mapping. Production correction and same-response handoff proof remain open.'
 resolved    = false
