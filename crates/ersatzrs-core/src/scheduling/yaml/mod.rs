@@ -392,11 +392,9 @@ impl YamlPlayoutEngine {
             .ok_or(SchedulingError::MissingScheduleFile)?;
         // ErsatzRS divergence: `ScheduleFile` stores raw YAML content inline
         // instead of a filesystem path (the ErsatzTV convention).
-        // Detection: Linux filesystem paths always start with `/` or `~/`;
-        // YAML mapping documents (the only valid playout definition form)
-        // always start with a key, `---`, or whitespace — never `/` or `~`.
-        // This is robust even for single-line YAML like `{}`.
-        if !content.starts_with('/') && !content.starts_with('~') {
+        // Native root detection also recognizes Windows drive and UNC paths.
+        // Inline mapping documents, including `{}`, have no filesystem root.
+        if !std::path::Path::new(content).has_root() && !content.starts_with('~') {
             let mut definition = Self::definition_from_str(content)?;
             // Imports with absolute paths still resolve correctly; relative
             // imports are not meaningful without a file-system base so we pass

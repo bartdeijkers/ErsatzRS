@@ -199,6 +199,53 @@ async function gotoHydrated(page: Page, route: string): Promise<void> {
 test.describe('P7C-03 search and See All parity', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed search rows');
 
+  for (const javascriptEnabled of [true, false]) {
+    test(`search bar and smart collection targets keep current results (${javascriptEnabled ? 'hydrated' : 'no-JS'})`, async ({ browser }, testInfo) => {
+      const seed = seedSearchResults(testInfo);
+      const name = `000 UCU10 search ${testInfo.project.name}`;
+      const id = projectBase(testInfo) + 990;
+      sqlite(`INSERT OR REPLACE INTO "SmartCollection" ("Id", "Name", "Query") VALUES (${id}, '${name}', '${seed.query}');`);
+      const context = await browser.newContext({
+        baseURL: testInfo.project.use.baseURL,
+        javaScriptEnabled: javascriptEnabled,
+      });
+      const page = await context.newPage();
+      const errors = watchRuntimeErrors(page);
+      page.on('console', (message) => {
+        if (message.type() === 'error' && /navigation failed|failed.*navigation|changing.*location/i.test(message.text())) {
+          errors.push(message.text());
+        }
+      });
+      await page.route(/\/artwork\/(?:posters|thumbnails)\/(?:jellyfin|emby)\/\d+$/, (route) =>
+        route.fulfill({ status: 200, contentType: 'image/png', body: TINY_PNG }),
+      );
+      try {
+        await page.goto('/search');
+        if (javascriptEnabled) await waitForHydration(page);
+        const search = page.locator('form[role="search"] input[name="query"]');
+        await search.fill(seed.query);
+        await search.press('Enter');
+        await expect(page).toHaveURL(new RegExp(`/search\\?query=${seed.query}$`));
+        await expect(page.getByText(`${seed.query} episode 1`, { exact: true }).first()).toBeVisible();
+        await search.fill(`ucu10-unmatched-${testInfo.project.name}`);
+        await search.press('Enter');
+        await expect(page).toHaveURL(/query=ucu10-unmatched-/);
+        await expect(page.getByText(`${seed.query} episode 1`, { exact: true })).toHaveCount(0);
+        await page.goto('/media/smart-collections');
+        if (javascriptEnabled) await waitForHydration(page);
+        const row = page.locator('tr').filter({ hasText: name });
+        await row.getByRole('link', { name: 'Search Smart Collection', exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/search\\?query=${seed.query}$`));
+        await expect(page.getByText(`${seed.query} episode 1`, { exact: true }).first()).toBeVisible();
+        if (javascriptEnabled) await waitForHydration(page);
+        expect(errors).toEqual([]);
+      } finally {
+        await context.close();
+        sqlite(`DELETE FROM "SmartCollection" WHERE "Id"=${id};`);
+      }
+    });
+  }
+
   test('preserves artwork identities, kinds, valid navigation, hydration, and mobile containment', async ({
     page,
   }, testInfo) => {

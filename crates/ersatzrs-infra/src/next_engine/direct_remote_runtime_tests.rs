@@ -295,7 +295,7 @@ async fn run_case(
         assert_text_video_and_audio(ffmpeg, &saved, !convert).await;
         if convert {
             let (body, duration) = vtt.expect("VTT capture attempted").unwrap();
-            assert_text_vtt(&body, true, duration);
+            let _ = assert_text_vtt(&body, true, duration);
         }
     }
     if case.source == CaptionSource::EmbeddedText && case.subtitles.is_none() {

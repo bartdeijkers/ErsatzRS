@@ -332,8 +332,27 @@ impl FfprobeExtractor {
         deadline: tokio::time::Instant,
         cancellation: tokio::sync::oneshot::Receiver<()>,
     ) -> Result<ersatzrs_ffmpeg::graphics::JpegXlTiming> {
-        let label = "graphics JPEG XL timing";
-        let args = [
+        self.image_timing_cancellable(path, deadline, cancellation)
+            .await
+    }
+
+    /// Decode one finite image cycle with the existing bounded/cancellable probe.
+    ///
+    /// # Errors
+    /// Returns a probe failure for cancellation, timeout or invalid frame timing.
+    pub async fn image_timing_cancellable(
+        &self,
+        path: &str,
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<ersatzrs_ffmpeg::graphics::ImageTiming> {
+        let apng = ersatzrs_ffmpeg::image_file_is_apng(std::path::Path::new(path));
+        let label = if apng {
+            "graphics APNG timing"
+        } else {
+            "graphics JPEG XL timing"
+        };
+        let mut args: Vec<String> = [
             "-v",
             "error",
             // Bound decoder parallelism; serial full-frame probing otherwise
@@ -352,6 +371,10 @@ impl FfprobeExtractor {
         .into_iter()
         .map(str::to_owned)
         .collect();
+        if apng {
+            let input = args.len() - 1;
+            args.splice(input..input, ["-ignore_loop", "1"].map(str::to_owned));
+        }
         let (status, stdout, _) = self
             .run_owned_probe_output(
                 label,
@@ -2011,6 +2034,29 @@ mod tests {
 #[cfg(test)]
 mod jpeg_xl_tests {
     use super::parse_jpeg_xl_timing;
+    #[tokio::test]
+    #[ignore = "requires verified FFmpeg9 ffprobe via FFPROBE_PATH"]
+    async fn apng_timing_probes_one_cycle_for_finite_and_infinite_containers() {
+        for name in ["animated-two-colour.png", "animated-two-colour-finite.png"] {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../ersatzrs-ffmpeg/tests/fixtures/graphics")
+                .join(name);
+            let extractor = super::FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
+            let (_cancel, cancelled) = tokio::sync::oneshot::channel();
+            let timing = extractor
+                .image_timing_cancellable(
+                    path.to_str().unwrap(),
+                    tokio::time::Instant::now() + std::time::Duration::from_secs(10),
+                    cancelled,
+                )
+                .await
+                .unwrap();
+            assert_eq!(timing.frame_count, 4);
+            assert_eq!(timing.frame_timestamps, [0.0, 0.5, 1.0, 1.5]);
+            assert!((timing.duration_seconds - 2.0).abs() < f64::EPSILON);
+            assert!((timing.last_frame_seconds - 1.5).abs() < f64::EPSILON);
+        }
+    }
     #[test]
     fn jpeg_xl_duration_uses_decoded_variable_frame_timing() {
         let timing = parse_jpeg_xl_timing(br#"{"frames":[{"pts_time":"0.0","duration_time":"0.04"},{"pts_time":"0.04","duration_time":"0.1"}]}"#).unwrap();

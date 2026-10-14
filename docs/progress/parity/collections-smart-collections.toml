@@ -14,3 +14,10 @@ description = 'The Add Smart Collection route has no `:id` segment, so `SmartCol
 discovered  = '2026-07-25'
 evidence    = 'Fixed 2026-07-25: the loader now skips the query for id 0 and starts from a blank form, matching `CollectionEditorIsland`. `ToastStore::push` is inert off-wasm so an SSR toast can no longer corrupt hydration, and `hydration-lint` rule-3 blocks new server-side toast reporting. Regression seen in CI run 30132852456: `island-hydration.spec.ts` failed on `/media/smart-collections/add` in Chromium and Firefox with a marker-node mismatch at `toast.rs:169`.'
 resolved    = true
+
+[[debt]]
+id = 'ucu10-smart-list-no-js-search-targets'
+description = 'Smart collection list remains Loading without JavaScript, preventing the saved-search target from being followed.'
+discovered = '2026-10-13'
+resolved = true
+evidence = 'UCU-10: baseline headed Chromium finds a Loading-only no-JS smart list. The existing SsrMode::InOrder route pattern resolves data before emitting the prop-bearing island. Matched headed Chromium3/3 and Firefox3/3 pass actual top-bar current/changed query, saved-search link, no-JS results and original artwork/navigation/mobile/no-error checks. Strict web/infra all-target lint and hydration-lint pass. Query, localization, save and scheduling contracts are unchanged. Full window parity closeout remains required in UCU-10.'

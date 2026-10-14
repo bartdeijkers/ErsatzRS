@@ -343,6 +343,23 @@ fn verify_cached_hls(channel: &str, root: &Path, deadline: Deadline, convert: bo
     if !master_text.contains("#EXT-X-STREAM-INF:") {
         bail!("cached Next HLS URL omitted its production master variant");
     }
+    if master_text.contains("TYPE=SUBTITLES") != convert {
+        bail!("Next master rendition must be present only in Convert mode");
+    }
+    if convert && !master_text.contains("DEFAULT=NO,AUTOSELECT=YES") {
+        bail!("Next Convert rendition must not force itself as the default track");
+    }
+    let filtered = http_get_until_body(
+        &format!("{master_path}&subtitles=false"),
+        usize::MAX,
+        deadline.remaining()?,
+    )?;
+    filtered.ensure_success_with_body("Next media-only master request")?;
+    let filtered_text = String::from_utf8(filtered.body)?;
+    if filtered_text.contains("TYPE=SUBTITLES") || filtered_text.contains("SUBTITLES=") {
+        bail!("explicit media-only request still advertises the HLS text rendition");
+    }
+    println!("smoke evidence: Next Convert-only/default-no rendition and explicit media-only request pass");
     let uri = master_text
         .lines()
         .map(str::trim)

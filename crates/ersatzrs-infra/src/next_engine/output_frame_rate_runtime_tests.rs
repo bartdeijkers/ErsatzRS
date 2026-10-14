@@ -384,7 +384,7 @@ fn assert_configuration(
 ) {
     assert_eq!(
         configuration.version.as_deref(),
-        Some("https://ersatztv.org/channel/version/0.1.1")
+        Some("https://ersatztv.org/channel/version/0.1.2")
     );
     assert_eq!(
         configuration.normalization.video.frame_rate.as_deref(),
@@ -664,7 +664,7 @@ async fn capture_programmes(
                             .await
                             .expect("selected Convert WebVTT segment");
                         std::fs::write(saved_segment.with_extension("vtt"), &vtt).unwrap();
-                        assert_converted_vtt(&vtt);
+                        assert_converted_vtt(&vtt, &saved_segment, &request.ffprobe).await;
                     }
                     saved[index] = Some(saved_segment);
                 }
@@ -678,7 +678,7 @@ async fn capture_programmes(
     captured
 }
 
-fn assert_converted_vtt(body: &str) {
+async fn assert_converted_vtt(body: &str, segment: &Path, ffprobe: &Path) {
     assert!(body.starts_with("WEBVTT\n"));
     assert!(
         body.contains("Nederlandse ondertiteling"),
@@ -688,7 +688,8 @@ fn assert_converted_vtt(body: &str) {
         .lines()
         .find_map(|line| line.strip_prefix("X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:"))
         .expect("actual WebVTT timestamp map");
-    assert!(clock.parse::<u64>().unwrap() < 8_589_934_592);
+    let clock = clock.parse::<u64>().unwrap();
+    assert!(clock < 8_589_934_592);
     let (start, finish) = body
         .lines()
         .find_map(|line| line.split_once(" --> "))
@@ -698,14 +699,21 @@ fn assert_converted_vtt(body: &str) {
         assert_eq!(parts.len(), 3);
         parts[0] * 3600.0 + parts[1] * 60.0 + parts[2]
     };
-    assert!(
-        seconds(start).abs() < f64::EPSILON,
-        "active caption begins at this segment origin"
-    );
-    assert!(
-        seconds(finish) > 1.5,
-        "caption remains active across both decoded observations"
-    );
+    let start = seconds(start);
+    let finish = seconds(finish.split_whitespace().next().unwrap());
+    assert!(finish - start > 10.0, "retain the full programme cue");
+    let report = cadence_report(ffprobe, segment, &segment.with_extension("vtt-clock.json")).await;
+    let times = presentation_times(&report);
+    let anchor = f64::from(u32::try_from(clock / 90_000).unwrap())
+        + f64::from(u32::try_from(clock % 90_000).unwrap()) / 90_000.0;
+    for observed in [times[0] + 0.5, times[0] + 1.5] {
+        assert!(
+            anchor + start <= observed && observed < anchor + finish,
+            "mapped caption must cover decoded observation {observed}: {}..{}",
+            anchor + start,
+            anchor + finish
+        );
+    }
 }
 
 async fn cadence_report(ffprobe: &Path, media: &Path, evidence: &Path) -> serde_json::Value {

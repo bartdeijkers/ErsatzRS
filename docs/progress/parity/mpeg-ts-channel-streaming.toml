@@ -28,6 +28,8 @@ hardening. Direct transcode-to-MPEG-TS output shares that muxing helper, so the
 `.ts` routes do not rely on HLS-specific stabilization. Command snapshots prove
 the wrapper and legacy concat paths stay observably different.
 
+UCU-11 owns pending remux-burst/subtitle acceptance.
+
 The MPEG-TS script hook mirrors ErsatzTV for the modern wrapper path. Packaged
 `assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}` resources seed the default
 script without overwriting user edits; custom script YAML uses the ErsatzTV

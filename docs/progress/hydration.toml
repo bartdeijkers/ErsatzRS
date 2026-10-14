@@ -246,7 +246,7 @@ notes  = '2026-06-28: list/editor initial data resolves before island emission; 
 name   = 'SmartCollectionsPage'
 status = '✅'
 routes = ['/media/smart-collections', '/media/smart-collections/add', '/media/smart-collections/:id', '/media/smart-collections/:id/edit']
-notes  = 'List/editor island and HTML save fallback route covered by `tests/e2e/collections.spec.ts`. 2026-08-30: the collection spec covers localized ALL/ANY/NONE cards, one-level-at-a-time nested focus, canonical-query review, live result count, current-model save ordering, named advanced-query save/recall/update, exact `/search` return, keyboard operation, 320px reflow, and query-preserving no-JavaScript create/save.'
+notes  = '2026-10-13 UCU-10: list route uses in-order SSR after a Loading-only no-JS reproduction; all6 matched headed Chromium/Firefox checks pass actual search-bar query changes and smart collection targets, hydrated/no-JS, plus original artwork/navigation/mobile and no-error assertions. Strict affected web/infra lint and hydration-lint pass. List/editor island and HTML save fallback route covered by `tests/e2e/collections.spec.ts`. 2026-08-30: the collection spec covers localized ALL/ANY/NONE cards, one-level-at-a-time nested focus, canonical-query review, live result count, current-model save ordering, named advanced-query save/recall/update, exact `/search` return, keyboard operation, 320px reflow, and query-preserving no-JavaScript create/save.'
 
 [[page]]
 name   = 'TrashPage'

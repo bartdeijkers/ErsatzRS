@@ -515,6 +515,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("media"), StaticSegment("smart-collections"))
                 view=SmartCollectionsPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(

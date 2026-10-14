@@ -29,6 +29,9 @@ use crate::transport::iptv::variant::{
 
 #[derive(Debug, Deserialize, Default)]
 pub struct HlsQuery {
+    /// Omit the HLS-only text rendition when the caller requests audio/video.
+    #[serde(default)]
+    pub subtitles: Option<bool>,
     #[serde(default)]
     pub mode: Option<String>,
     #[serde(default)]
@@ -787,6 +790,7 @@ pub async fn serve_channel_m3u8(
                 &access_token,
                 output_format,
                 DEFAULT_INITIAL_SEGMENT_COUNT,
+                query.subtitles.unwrap_or(true),
                 deadline,
             )
             .await
@@ -800,6 +804,7 @@ pub async fn serve_channel_m3u8(
                 &access_token,
                 OutputFormat::Hls,
                 MIN_STABLE_INITIAL_SEGMENT_COUNT,
+                query.subtitles.unwrap_or(true),
                 deadline,
             )
             .await
@@ -855,6 +860,7 @@ async fn serve_next_channel_m3u8(
         access_token,
         OutputFormat::Hls,
         MIN_STABLE_INITIAL_SEGMENT_COUNT,
+        query.subtitles.unwrap_or(true),
         deadline,
     )
     .await;
@@ -870,6 +876,7 @@ async fn serve_hls_segmenter_playlist(
     access_token: &AccessToken,
     output_format: OutputFormat,
     min_initial_segment_count: usize,
+    subtitles: bool,
     deadline: std::time::Instant,
 ) -> Response {
     // ADR 0106: retain AV1 through native fMP4, never MPEG-TS segments.
@@ -999,7 +1006,13 @@ async fn serve_hls_segmenter_playlist(
         channel.streaming_engine,
         access_token,
     );
-    hls_response(with_next_subtitles(body, channel, false, access_token))
+    hls_response(with_next_subtitles(
+        body,
+        channel,
+        false,
+        access_token,
+        subtitles,
+    ))
 }
 
 /// `GET /iptv/session/{number}/hls.m3u8` — trimmed variant playlist.
@@ -1139,18 +1152,35 @@ pub async fn get_preview_master_playlist(
         }
     }
 
+    preview_master_response(
+        &headers,
+        &channel,
+        spec.as_ref(),
+        &access_token,
+        query.subtitles.unwrap_or(true),
+    )
+}
+
+fn preview_master_response(
+    headers: &HeaderMap,
+    channel: &Channel,
+    spec: Option<&streaming_specs::ChannelStreamingSpec>,
+    access_token: &AccessToken,
+    subtitles: bool,
+) -> Response {
     hls_response(with_next_subtitles(
         build_preview_variant_playlist(
-            &request_scheme(&headers),
-            &request_host(&headers),
+            &request_scheme(headers),
+            &request_host(headers),
             &channel.number,
-            spec.as_ref(),
+            spec,
             channel.streaming_engine,
-            &access_token,
+            access_token,
         ),
-        &channel,
+        channel,
         true,
-        &access_token,
+        access_token,
+        subtitles,
     ))
 }
 
@@ -2092,6 +2122,7 @@ mod tests {
             .unwrap();
         for mode in [None, Some("mixed".into())] {
             let query = HlsQuery {
+                subtitles: None,
                 mode,
                 access_token: Some("synthetic-token".into()),
             };
@@ -2103,6 +2134,7 @@ mod tests {
             );
         }
         let explicit = HlsQuery {
+            subtitles: None,
             mode: Some("segmenter".into()),
             access_token: Some("synthetic-token".into()),
         };
@@ -2113,6 +2145,7 @@ mod tests {
             StatusCode::OK
         );
         let legacy = HlsQuery {
+            subtitles: None,
             mode: Some("ts-legacy".into()),
             ..Default::default()
         };
@@ -2183,6 +2216,7 @@ mod tests {
             "unknown",
         ] {
             let query = HlsQuery {
+                subtitles: None,
                 mode: Some(mode.into()),
                 access_token: Some("synthetic-token".into()),
             };
@@ -2298,6 +2332,34 @@ mod tests {
             .unwrap();
     }
 
+    async fn assert_requested_next_master_rendition(state: &AppState, query: &HlsQuery) {
+        let existing_worker = state.hls_sessions.try_get("1").await.unwrap();
+        for requested in [Some(false), Some(true)] {
+            let filtered = serve_channel_m3u8(
+                state,
+                "1",
+                &HeaderMap::new(),
+                &HlsQuery {
+                    subtitles: requested,
+                    mode: query.mode.clone(),
+                    access_token: query.access_token.clone(),
+                },
+            )
+            .await;
+            assert_eq!(filtered.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(filtered.into_body(), 64 * 1024)
+                .await
+                .unwrap();
+            let text = std::str::from_utf8(&body).unwrap();
+            assert_eq!(text.contains("TYPE=SUBTITLES"), requested == Some(true));
+            assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
+            assert!(Arc::ptr_eq(
+                &existing_worker,
+                &state.hls_sessions.try_get("1").await.unwrap()
+            ));
+        }
+    }
+
     #[tokio::test]
     async fn next_engine_routes_preserve_hybrid_hls_tokens_and_reject_native_playback() {
         use ersatzrs_core::repositories::FfmpegProfileRepository;
@@ -2344,6 +2406,7 @@ mod tests {
         *worker.readiness.lock().unwrap() = HlsStartupReadiness::Ready;
         state.hls_sessions.try_insert(worker.clone()).await;
         let query = HlsQuery {
+            subtitles: None,
             mode: Some("ts".into()),
             access_token: Some("synthetic-token".into()),
         };
@@ -2356,6 +2419,7 @@ mod tests {
         assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
         assert!(text.contains("/iptv/session/1/live_sub.m3u8?access_token=synthetic-token"));
         assert!(text.contains("SUBTITLES=\"subs\""));
+        assert_requested_next_master_rendition(&state, &query).await;
         let variant =
             get_session_playlist(State(state.clone()), Path("1".into()), Query(query)).await;
         assert_eq!(variant.status(), StatusCode::OK);
@@ -2370,6 +2434,7 @@ mod tests {
             "1",
             &HeaderMap::new(),
             &HlsQuery {
+                subtitles: None,
                 access_token: Some("synthetic-token".into()),
                 ..Default::default()
             },

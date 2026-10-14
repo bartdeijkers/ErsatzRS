@@ -169,7 +169,7 @@ async fn assert_native_provider_sidecar(
         .args([
             "-ss", "5", "-t", "3", "-map", "0:v:0", "-map", "0:a:1", "-vf",
         ])
-        .arg(format!("subtitles={}", input.path))
+        .arg(ersatzrs_ffmpeg::filter::subtitles_filter(&input.path, None))
         .args([
             "-c:v",
             "libx264",
@@ -304,7 +304,7 @@ async fn assert_provider_conversion(
     })
     .await
     .unwrap();
-    assert_text_vtt(&body, convert, duration);
+    let _ = assert_text_vtt(&body, convert, duration);
     assert!(!body.contains("UNSELECTED ENGLISH"));
     assert_text_video_and_audio(&request.ffmpeg, &request.output.join(segment), !convert).await;
     assert!(registry.stop_channel("1").await);

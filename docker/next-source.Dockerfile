@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/build/next-source/target \
     ETV_VERSION=$(python3 -c 'import json; print(json.load(open("ersatzrs-source.json"))["distribution_version"])') \
-    cargo build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel \
+    cargo +1.97.1 build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel \
     && python3 -c 'import hashlib,json; assert hashlib.sha256(open("Cargo.lock","rb").read()).hexdigest() == json.load(open("ersatzrs-source.json"))["cargo_lock_sha256"]' \
     && mkdir /next \
     && cp "target/$NEXT_TARGET/release/ersatztv-channel" LICENSE ersatzrs-source.json /next/ \
@@ -39,6 +39,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
          *) strip /next/ersatztv-channel ;; \
        esac \
     && python3 -c 'import re,subprocess; data=subprocess.check_output(["readelf","--version-info","/next/ersatztv-channel"],text=True); versions={tuple(map(int,v.split("."))) for v in re.findall(r"GLIBC_([0-9.]+)",data)}; assert versions and max(versions) <= (2,36), "Next exceeds GLIBC 2.36"' \
-    && rustc --version > /next/rustc-version.txt
+    && rustc +1.97.1 --version > /next/rustc-version.txt
 FROM scratch AS export
 COPY --from=build /next/ /

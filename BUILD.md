@@ -734,6 +734,24 @@ the recorded distribution version; preserve source/patch provenance, licenses
 and Windows companions. A prepared source tree alone does not prove package
 or playback acceptance.
 
+For UCU-11's v0.2.2 candidate, use
+`scripts/release/next-patches/v0.2.2/manifest.json`. The same existing source
+preparation, packaging and macOS candidate workflow apply. Candidate builds do
+not authorize a push, CI dispatch, production pin change or publication.
+
+For UCU-10's v0.2.1 successor, the reviewed source manifest is
+`scripts/release/next-patches/v0.2.1/manifest.json`. Pass it with `--manifest`
+to both source preparation and packaging. Its exact Windows companion hashes
+apply only to that reviewed source. The local application branch now pins all
+six verified packages in the canonical manifest. The separately authorized
+`next-7f75012-ersatzrs.1` dependency release is public; all20 assets pass anonymous
+download/checksum acceptance and real Linux/Windows cold acquisition. Use
+`stage-next.py --snapshot-dir` with the verified package directory for offline
+staging. Future dependency publication still requires maintainer instruction.
+The existing macOS candidate workflow can select this manifest through its
+`review_manifest` input. Dispatch, push and publication still require the
+maintainer's instruction; choosing a source manifest does not run CI.
+
 Package the built executable and license directory with
 `scripts/release/package-next-source.py`; supply the generated source provenance,
 RID and build's exact `rustc --version`. It verifies licenses, patch provenance
@@ -763,7 +781,10 @@ The same recipe accepts `x86_64-unknown-linux-gnu` and
 only the Next channel executable, keeps the upstream lockfile, uses the
 reviewed Rust/Bookworm base and checks the GLIBC 2.36 ceiling. Windows uses
 the prepared source with Rust 1.97.1 and MSVC:
-`cargo build --locked --release --all-features --target x86_64-pc-windows-msvc --bin ersatztv-channel`.
+`cargo +1.97.1 build --locked --release --all-features --target x86_64-pc-windows-msvc --bin ersatztv-channel`.
+Use the explicit compiler selection for source builds and provenance
+(`rustc +1.97.1 --version`): an upstream `rust-toolchain.toml` may select a
+different compiler whose cross-target standard libraries were not installed.
 Set `ETV_VERSION` to the prepared provenance's `distribution_version`, and
 package the resulting executable and source license with the exact verified
 `libvpl.dll` and `libvpl-LICENSE.txt` companion hashes enforced by the packager.

@@ -291,6 +291,8 @@ impl MediaRelay {
             ]),
             user_agent: None,
             timeout_us: Some(35_000_000),
+            retry_budget_ms: Some(25_000),
+            retry_backoff_ms: Some(250),
         })
     }
 
@@ -308,6 +310,8 @@ impl MediaRelay {
             ]),
             user_agent: None,
             timeout_us: Some(35_000_000),
+            retry_budget_ms: Some(25_000),
+            retry_backoff_ms: Some(250),
         })
     }
 

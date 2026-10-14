@@ -68,11 +68,34 @@ async fn seed(pool: &sqlx::SqlitePool, yaml: &str) {
 
 #[tokio::test]
 async fn yaml_ambient_state_survives_repeated_database_restarts() {
+    let (yaml, reference) = fixture();
+    restart_roundtrip(yaml, reference, 3).await;
+}
+
+#[tokio::test]
+async fn yaml_nested_filler_survives_repeated_database_restarts() {
+    let (yaml, mut reference) = fixture();
+    let yaml = yaml.replace(
+        "  - key: break\n    items:\n      - content: ident",
+        "  - key: break\n    items:\n      - sequence: nested\n        repeat: 2\n        custom_title: Up Next\n  - key: nested\n    items:\n      - content: ident",
+    );
+    reference.media_by_key.insert(
+        "ident".to_owned(),
+        [2, 3, 4]
+            .map(|id| SchedulingMediaItem::new(id, Duration::minutes(1)))
+            .to_vec(),
+    );
+    restart_roundtrip(yaml, reference, 5).await;
+}
+
+async fn restart_roundtrip(yaml: String, reference: SchedulingReferenceData, unit_length: usize) {
     let directory = tempfile::tempdir().unwrap();
     let url = format!("sqlite://{}", directory.path().join("ambient.db").display());
-    let (yaml, reference) = fixture();
     let pool = ersatzrs_infra::db::init(&url).await.unwrap();
     seed(&pool, &yaml).await;
+    for id in [3, 4] {
+        common::seed_media_item(&pool, id, 1).await;
+    }
     let repos = make_repositories(pool.clone());
     let playout = repos.playout.get_with_anchor(1).await.unwrap();
     let start = common::fixed_time()
@@ -89,7 +112,7 @@ async fn yaml_ambient_state_survives_repeated_database_restarts() {
             reference_data: reference.clone(),
         })
         .unwrap();
-    assert_eq!(oracle.added_items.len(), 9);
+    assert_eq!(oracle.added_items.len(), 3 * unit_length);
     drop(repos);
     pool.close().await;
     for build in 0..3 {
@@ -122,10 +145,20 @@ async fn yaml_ambient_state_survives_repeated_database_restarts() {
         assert_eq!(result.clear_items, build == 0);
         assert_eq!(
             result.added_items,
-            oracle.added_items[build * 3..(build + 1) * 3]
+            oracle.added_items[build * unit_length..(build + 1) * unit_length]
         );
-        assert_eq!(result.added_items[1].filler_kind, FillerKind::MidRoll);
-        assert_eq!(result.added_items[2].filler_kind, FillerKind::PostRoll);
+        let mid_end = 1 + (unit_length - 1) / 2;
+        assert!(result.added_items[1..mid_end]
+            .iter()
+            .all(|item| item.filler_kind == FillerKind::MidRoll));
+        assert!(result.added_items[mid_end..]
+            .iter()
+            .all(|item| item.filler_kind == FillerKind::PostRoll));
+        if unit_length == 5 {
+            assert!(result.added_items[1..]
+                .iter()
+                .all(|item| item.custom_title.as_deref() == Some("Up Next")));
+        }
         assert!(result.added_items[1..]
             .iter()
             .all(|item| item.disable_watermarks));
@@ -136,10 +169,10 @@ async fn yaml_ambient_state_survives_repeated_database_restarts() {
             .unwrap();
         let persisted = repos
             .playout
-            .items_in_range(1, at, at + Duration::minutes(12))
+            .items_in_range(1, at, result.anchor.as_ref().unwrap().next_start)
             .await
             .unwrap();
-        assert_eq!(persisted.len(), 3);
+        assert_eq!(persisted.len(), unit_length);
         assert_persisted_items(&persisted, &result.added_items);
         drop(repos);
         pool.close().await;

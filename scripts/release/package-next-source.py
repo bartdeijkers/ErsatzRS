@@ -23,8 +23,8 @@ TARGETS = {
     "win-x64": "x86_64-pc-windows-msvc",
 }
 LICENSE_SHA256 = "63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55"
-# Companions from the verified e88b2d7 official Windows archive. The source
-# correction does not change their interface or implementation.
+# Default companions from the accepted Windows source distribution. A reviewed
+# successor can pin its exact companion hashes in its source manifest.
 WINDOWS_COMPANIONS = {
     "libvpl.dll": "ab22b28f67f5b443d0e022b797675314d650669374247766ea91373e2c67a8e7",
     "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677",
@@ -58,7 +58,10 @@ def package(payload, source_provenance, rid, output, rustc, manifest_path=prepar
     if sha(payload / "LICENSE") != LICENSE_SHA256:
         raise ValueError("Next license checksum mismatch")
     if rid == "win-x64":
-        for name, digest in WINDOWS_COMPANIONS.items():
+        companions = manifest.get("windows_companions_sha256", WINDOWS_COMPANIONS)
+        if not isinstance(companions, dict) or companions.keys() != WINDOWS_COMPANIONS.keys():
+            raise ValueError("Next Windows companions must name exactly the reviewed DLL and license")
+        for name, digest in companions.items():
             if sha(payload / name) != digest:
                 raise ValueError(f"Next Windows companion checksum mismatch: {name}")
     name = f"ersatzrs-next-{manifest['distribution_version']}-{rid}"
@@ -100,5 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--rid", choices=TARGETS, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rustc", required=True, help="Exact rustc --version from the build")
+    parser.add_argument("--manifest", type=Path, default=prepare_next.MANIFEST,
+                        help="Reviewed source manifest; defaults to the production distribution")
     args = parser.parse_args()
-    print(json.dumps(package(args.payload, args.source_provenance, args.rid, args.output, args.rustc), indent=2))
+    print(json.dumps(package(args.payload, args.source_provenance, args.rid, args.output, args.rustc, args.manifest), indent=2))

@@ -2185,7 +2185,18 @@ async fn build_troubleshooting_archive_from(folder: &FsPath) -> ApiResult<Option
             if is_archive_member(name) {
                 let lower = name.to_ascii_lowercase();
                 has_ffmpeg_report |= lower.starts_with("ffmpeg-") || lower.contains("ffreport");
-                files.push((name.to_owned(), tokio::fs::read(entry.path()).await?));
+                // Report names can repeat across Native/Next folders. Their
+                // relative paths preserve both contents and unique ZIP entries.
+                let path = entry.path();
+                let relative = path.strip_prefix(folder)?;
+                let Some(parts) = relative
+                    .components()
+                    .map(|part| part.as_os_str().to_str())
+                    .collect::<Option<Vec<_>>>()
+                else {
+                    continue;
+                };
+                files.push((parts.join("/"), tokio::fs::read(path).await?));
             }
         }
     }
@@ -2848,6 +2859,48 @@ mod tests {
         assert!(is_archive_member("music-video-credits-template.sbntxt"));
         assert!(!is_archive_member("live.m3u8"));
         assert!(!is_archive_member("seg00001.ts"));
+    }
+
+    #[tokio::test]
+    async fn troubleshooting_archive_preserves_same_named_reports_without_duplicates() {
+        use std::io::Read as _;
+        let root = tempfile::tempdir().unwrap();
+        let next = root.path().join("next-report");
+        tokio::fs::create_dir_all(&next).await.unwrap();
+        for (path, value) in [
+            (root.path().join("media_info.json"), "native-info"),
+            (next.join("media_info.json"), "next-info"),
+            (next.join("ffreport.log"), "report"),
+        ] {
+            tokio::fs::write(path, value).await.unwrap();
+        }
+        let bytes = build_troubleshooting_archive_from(root.path())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        assert_eq!(archive.len(), 3, "preserve every report");
+        let names = archive
+            .file_names()
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            names.len(),
+            archive.len(),
+            "no duplicate archive member names"
+        );
+        for (name, expected) in [
+            ("media_info.json", "native-info"),
+            ("next-report/media_info.json", "next-info"),
+        ] {
+            let mut contents = String::new();
+            archive
+                .by_name(name)
+                .unwrap()
+                .read_to_string(&mut contents)
+                .unwrap();
+            assert_eq!(contents, expected);
+        }
     }
 
     #[tokio::test]

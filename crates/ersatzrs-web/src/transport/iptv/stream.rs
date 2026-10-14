@@ -8200,6 +8200,7 @@ mod tests {
             assert!(rendered.contains("ETV_HLS_URL"));
             assert!(rendered.contains("ETV_FFMPEG_PATH"));
             assert!(rendered.contains("-muxrate 9830400 -pcr_period 20"));
+            assert!(rendered.contains("-readrate 1.0 -readrate_initial_burst 6 -i"));
             insta::assert_snapshot!(
                 format!("mpegts_builtin_{}", name.replace('.', "_")),
                 rendered

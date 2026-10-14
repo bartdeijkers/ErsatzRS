@@ -488,7 +488,7 @@ async fn output_frame_rate_host_ordinary_and_preview_use_mirror_source_and_reque
             let wire = serde_json::to_value(config).unwrap();
             assert_eq!(
                 wire["version"],
-                "https://ersatztv.org/channel/version/0.1.1"
+                "https://ersatztv.org/channel/version/0.1.2"
             );
             if normalize {
                 assert_eq!(wire["normalization"]["video"]["frame_rate"], "25");
@@ -554,7 +554,7 @@ async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_ex
             assert!(config.normalization.video.frame_rate.is_none());
             assert_eq!(
                 config.version.as_deref(),
-                Some("https://ersatztv.org/channel/version/0.1.1")
+                Some("https://ersatztv.org/channel/version/0.1.2")
             );
             assert_output_frame_rate_host_preserves_exact_tracks(&host, &mirror, start).await;
             assert_eq!(repos.playout.items_in_range(1,start,finish).await.unwrap(),items_before,

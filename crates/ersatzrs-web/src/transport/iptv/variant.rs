@@ -84,9 +84,11 @@ pub(crate) fn with_next_subtitles(
     channel: &ersatzrs_domain::Channel,
     preview: bool,
     access_token: &AccessToken,
+    requested: bool,
 ) -> String {
     use ersatzrs_domain::{NextEngineTextSubtitleMode, StreamingEngine};
-    if channel.streaming_engine != StreamingEngine::Next
+    if !requested
+        || channel.streaming_engine != StreamingEngine::Next
         || channel.next_engine_text_subtitle_mode != NextEngineTextSubtitleMode::Convert
     {
         return playlist;
@@ -98,7 +100,7 @@ pub(crate) fn with_next_subtitles(
         access_token.query()
     );
     let media = format!(
-        "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Selected subtitles\",DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,URI=\"{url}\"\n"
+        "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Selected subtitles\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI=\"{url}\"\n"
     );
     playlist
         .replace("#EXT-X-VERSION:3\n", &format!("#EXT-X-VERSION:6\n{media}"))
@@ -226,8 +228,14 @@ mod tests {
             &token,
         );
         for (preview, scope) in [(false, "session"), (true, "preview")] {
-            let converted = with_next_subtitles(master.clone(), &channel, preview, &token);
+            let converted = with_next_subtitles(master.clone(), &channel, preview, &token, true);
             assert!(converted.contains("#EXT-X-VERSION:6\n"));
+            assert!(converted.contains("DEFAULT=NO,AUTOSELECT=YES"));
+            assert_eq!(
+                with_next_subtitles(master.clone(), &channel, preview, &token, false),
+                master,
+                "explicit rendition omission must preserve the audio/video master"
+            );
             assert!(converted.contains("TYPE=SUBTITLES,GROUP-ID=\"subs\""));
             assert!(converted.contains("#EXT-X-STREAM-INF:SUBTITLES=\"subs\","));
             assert!(converted.contains(&format!(
@@ -239,13 +247,13 @@ mod tests {
         }
         channel.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Burn;
         assert_eq!(
-            with_next_subtitles(master.clone(), &channel, false, &token),
+            with_next_subtitles(master.clone(), &channel, false, &token, true),
             master
         );
         channel.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Convert;
         channel.streaming_engine = StreamingEngine::Legacy;
         assert_eq!(
-            with_next_subtitles(master.clone(), &channel, false, &token),
+            with_next_subtitles(master.clone(), &channel, false, &token, true),
             master
         );
     }

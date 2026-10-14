@@ -1,15 +1,21 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..46118d43 (v26.11.1; fixed UCU-09 boundary)'
+etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.2)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
+adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
 summary    = """
+UCU-00–10 are locally Complete:232 accepted rows through v26.11.2.
+Native is retained; no main/application push, application CI or release occurs.
+APNG, nested filler, ZIP, search and local gates pass. Next-only publication is
+explicitly approved; all20 assets match anonymous public downloads.
+All six Next021 packages/staging and Linux/Windows bundled/cold/cache startup pass.
+Patched Next021 passes262 pipeline and63 host checks plus decoded WebP/RTSP.
+UCU-10 owns current acceptance; UCU-09 evidence is historical.
 208/208 accepted through v26.11.1; UCU-09 is Complete. Stable v1.1.0 is
 published with four verified archives, exact-source green CI and Linux/Windows
 package startup, browser and decoded playback proof. Docker is excluded by
 explicit maintainer release-scope approval (2026-10-09), not claimed verified.
-UCU-09 owns current proof; this feature remains In progress only for the
-explicit ongoing patch-retirement, accepted limitations and unverified debt.
+UCU-09 and UCU-10 own their completed windows; approved ongoing debt stays unverified.
 201 Port: Linux/Windows complete-window/live/finite/track/cleanup proof passes.
 202/203/206/208 N/A;204/205/207 Covered. UCU-09 owns exact acceptance evidence.
 200 Adapt(0095): exact bundled/downloaded Next default; UCU-09 owns proof.
@@ -413,3 +419,19 @@ discovered = '2026-10-01'
 adr = '0106'
 resolved = true
 evidence = 'UCU-09 owns passing Linux application playback across item boundaries, selected audio/subtitles, unchanged profile state, fMP4 playlists and HTTP 415 transport/Next refusal. Native Windows encoding, six AV1 regressions, four localized browser cases, strict workspace lint, test-closeout, web parity, both-engine smoke and 87 TSDuck checks pass. Row183 is Adapt; pin/reference advance to 960421e8. Hardware and ARM/macOS debt is unchanged.'
+
+[[debt]]
+id = 'ucu10-next-021-runtime-and-protocol'
+description = 'Complete local six-RID runtime integration and required v26.11.2 behavior acceptance with channel0.1.2/playout0.0.6, preserved Native and existing approved hardware/platform debt.'
+discovered = '2026-10-13'
+resolved = true
+adr = '0117'
+evidence = 'UCU-10 owns both failed unpatched regressions and passing patched behavior,262 pipeline/63 host checks, actual retry/fallback and Linux/Windows component proof. Authorized macOS source CI38520704462 is green ondd043f94; six real archives/staging pass. Explicitly approved Next-only release next-7f75012-ersatzrs.1 publishes20 verified assets, all matching anonymous downloads. The canonical021 pin passes10 manager checks on both available platforms, real bundled/cold-download/managed-restart startup, three lifecycle smokes and final matched bundle. Nine adoption rows are accepted; UCU-10 is locally Complete. No main/application push or application CI/release occurs; approved platform/hardware debt stays unverified.'
+
+[[debt]]
+id = 'ucu10-final-dependency-audit'
+description = 'Complete accepted ADR0125 parser replacement acceptance and final local build/runtime gates without suppressing the archived-backend finding or weakening compatibility requirements.'
+discovered = '2026-10-14'
+resolved = true
+adr = '0125'
+evidence = 'ADR0125 is Accepted and locally implemented. UCU-10 owns the fully passing dependency audit,370 affected Linux checks,336 native Windows checks plus corrected104 YAML checks,101 focused Linux YAML checks,6043 workspace closeout/doctests and strict workspace/affected core lint. Native file/import behavior and portable database fixtures are corrected without disabling tests. Final matched build/bundle, six headed browser cases, parity, three lifecycle HTTP smokes, Native87 and Next83 TSDuck checks and strict complete-frame capture decoding pass. Next distribution/adoption is resolved; approved hardware/platform debt remains unverified.'

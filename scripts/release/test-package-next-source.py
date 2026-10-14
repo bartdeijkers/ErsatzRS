@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Offline package provenance, retention and companion regression checks."""
 import importlib.util
+import hashlib
 import json
+import shutil
 from pathlib import Path
 import tarfile
 import tempfile
@@ -74,6 +76,36 @@ class PackageTests(unittest.TestCase):
             (self.payload / name).write_text("wrong companion")
         with self.assertRaisesRegex(ValueError, "companion checksum"):
             self.package("win-x64")
+
+    def test_candidate_windows_companions_are_scoped_and_cannot_expand_payload(self):
+        review = self.root / "review"
+        shutil.copytree(module.prepare_next.MANIFEST.parent, review)
+        path = review / "manifest.json"
+        manifest = json.loads(path.read_text())
+        (self.payload / "ersatztv-channel.exe").write_bytes(b"fixture executable")
+        companions = {}
+        for name in module.WINDOWS_COMPANIONS:
+            data = ("reviewed candidate " + name).encode()
+            (self.payload / name).write_bytes(data)
+            companions[name] = hashlib.sha256(data).hexdigest()
+        manifest["windows_companions_sha256"] = companions
+        path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "companion checksum"):
+            self.package("win-x64")  # The production pin still rejects candidate bytes.
+        output = self.root / "candidate-output"
+        for invalid in [{"libvpl.dll": companions["libvpl.dll"]},
+                        {**companions, "unexpected.dll": "0" * 64}]:
+            manifest["windows_companions_sha256"] = invalid
+            path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, "name exactly"):
+                module.package(self.payload, self.provenance, "win-x64", output,
+                               "rustc 1.97.1 (fixture)", path)
+        manifest["windows_companions_sha256"] = companions
+        path.write_text(json.dumps(manifest))
+        receipt = module.package(self.payload, self.provenance, "win-x64", output,
+                                 "rustc 1.97.1 (fixture)", path)
+        for name, digest in companions.items():
+            self.assertEqual(receipt["origin"]["payload_sha256"][name], digest)
 
 
 if __name__ == "__main__":
