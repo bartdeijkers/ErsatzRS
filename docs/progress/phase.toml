@@ -62,6 +62,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-14 UCU-10 responsive browser fixture correction: Chromium CI and a
+headed reproduction show a conditional toggle reopening navigation after its
+responsive listener closes it. Remove that race from both rejection cases;
+all four affected headed Chromium/Firefox cases pass with unchanged business,
+localization and mobile assertions. Production assets are unchanged. Preserve
+the preceding Firefox run, then push and require full green exact-head CI
+before delivering PR105 to remote main. Canonical receipts belong to ucu-10.
+
 2026-10-14 UCU-10 security/resource correction: same-day advisories require
 locked Rustls0.23.46; strict workspace lint,6312 nextest/doctests, normal cold
 managed HTTPS acquisition and matched served JS/WASM pass. Confirmed CI OOM

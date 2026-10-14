@@ -650,7 +650,7 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
       await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
       await page.setViewportSize({ width: 390, height: 844 });
       const navigation = page.getByRole('button', { name: language === 'nl' ? 'Navigatie omschakelen' : 'Toggle navigation' });
-      if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+      // Resizing closes the drawer asynchronously; a toggle can reopen it.
       await expect(navigation).toHaveAttribute('aria-expanded', 'false');
       await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(element => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
       await detail.scrollIntoViewIfNeeded();
@@ -689,7 +689,7 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
     await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     const navigation = page.getByRole('button', { name: 'Toggle navigation' });
-    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    await expect(navigation).toHaveAttribute('aria-expanded', 'false');
     await page.getByRole('heading', { name: 'Playout Detail', exact: true }).locator('..').scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('rejected-timeline-mobile.png'), fullPage: true });

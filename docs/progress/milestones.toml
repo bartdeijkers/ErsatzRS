@@ -21996,6 +21996,21 @@ remote main. Canonical remote receipts are the UCU-10 application PR and its
 CI check suite, followed by the main push run; inspect their exact SHA rather
 than inferring remote delivery from this local milestone status.
 
+Responsive browser fixture correction (2026-10-14): run38602305218 at2194f698
+passes every non-browser gate, including Test and Next engine, but Chromium
+reports one Classic rejection case failure. Its trace shows the responsive
+listener has closed navigation before the test's conditional toggle click,
+which reopens it. The existing headed wrapper reproduces that exact failure.
+Remove the racing toggle from the Classic and Scripted rejection cases and
+await the responsive closed state instead. All four affected headed cases pass
+in Chromium/Firefox (74.6s), preserving English/Dutch, no-JS, published preview,
+timeline identity, mobile bounds and error assertions. Production code and
+matched web assets remain unchanged. Receipts:
+tmp/ucu10-runtime-audit/nav-resize-{before,after}.log and
+tmp/ucu10-runtime-audit/ucu10-pr105-retry-navigation/trace.zip.
+The preceding full Firefox job is preserved; require full green CI on the
+corrected final head before remote main delivery.
+
 Security/resource CI correction (2026-10-14): run38582861679 at865407e0
 passes Chromium, but new same-day RustSec advisories reject Rustls0.23.45.
 Update only that locked package to0.23.46; keep every audit policy intact.
