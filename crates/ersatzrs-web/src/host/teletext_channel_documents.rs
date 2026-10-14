@@ -396,6 +396,33 @@ pub(super) fn encode_original_channel_documents_with_physical_overlays(
     if documents.len() != selection.bindings.len() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
+    let entry_producer = entry_addon_id.and_then(|addon| {
+        selection
+            .bindings
+            .iter()
+            .position(|binding| binding.addon_id == addon)
+    });
+    encode_original_producer_documents(
+        entry_producer,
+        documents,
+        overlays,
+        deadline,
+        region,
+        policy,
+    )
+}
+
+/// Shared content compiler. Origins and producer-to-membership associations stay
+/// with the caller; an entry ordinal conveys no selection or publication authority.
+pub(super) fn encode_original_producer_documents(
+    entry_producer: Option<usize>,
+    documents: Vec<TeletextProfileDocument>,
+    overlays: Vec<TeletextPhysicalBaseOverlay>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
     if documents.is_empty() {
         if !overlays.is_empty() {
@@ -418,7 +445,7 @@ pub(super) fn encode_original_channel_documents_with_physical_overlays(
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
     let producers = prepare_producers(documents, deadline, region, &policy)?;
-    let metadata = entry_metadata(selection, entry_addon_id, &producers, policy.entry)?;
+    let metadata = entry_metadata(entry_producer, &producers, policy.entry)?;
     check_deadline(deadline)?;
     let mut composition =
         TeletextColdProducerComposition::new(producers, metadata, policy.composition)
@@ -544,17 +571,11 @@ fn preflight_producer_storage(
 }
 
 fn entry_metadata(
-    selection: &TeletextChannelSelectionSnapshot,
-    entry_addon_id: Option<&str>,
+    entry_producer: Option<usize>,
     producers: &[TeletextProducerPresentation],
     requested: Option<TeletextPageAddress>,
 ) -> Result<TeletextProducerCompositionMetadata, ChannelTeletextDocumentEncodingError> {
-    let addon = entry_addon_id.ok_or(ChannelTeletextDocumentEncodingError::Association)?;
-    let binding = selection
-        .bindings
-        .iter()
-        .position(|binding| binding.addon_id == addon)
-        .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
+    let binding = entry_producer.ok_or(ChannelTeletextDocumentEncodingError::Association)?;
     let original = producers
         .get(binding)
         .ok_or(ChannelTeletextDocumentEncodingError::Association)?

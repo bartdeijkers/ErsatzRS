@@ -551,8 +551,15 @@ It is required Phase 9 work, with implementation and independent acceptance open
   boundary through the existing owned Lua worker. Exact cursor intervals and
   unresolved target snapshots publish in the existing schedule transaction;
   active snapshot reads are bounded before payload allocation. Base generation
-  admission refuses active intervals until complete scoped native generation
-  provenance/preparation/promotion is connected. This is partial implementation,
+  admission refuses active intervals until scoped durable generation promotion
+  and recovery are connected. Separate effective observations retain actual
+  playout/interval origins, explicit Off and unoverridden base members; native
+  invocation and whole-channel preparation validate that complete scope under
+  the original deadline and earliest scheduled transition. Overridden bases are
+  excluded before profile validation. Off has no producer and retains its fence.
+  The same contract parser and native encoder must retain those origins without
+  fabricated base revisions, then recheck after joined CPU work. Keep accepted
+  base history independently recoverable for expiry. This is partial implementation,
   not effective On or full Lua acceptance. P9A-04 owns the verification/gap map;
   the callable contract is in `docs/reference/scripted-build-context.md`.
 - Publish override intervals atomically with the schedule. An uncaught script

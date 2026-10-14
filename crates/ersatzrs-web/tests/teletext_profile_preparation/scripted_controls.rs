@@ -51,6 +51,23 @@ async fn build(
     channel_id: i64,
     inject: bool,
 ) -> Result<SchedulingResult, ersatzrs_core::scheduling::SchedulingError> {
+    build_at(
+        fixture,
+        script,
+        channel_id,
+        inject,
+        Utc.with_ymd_and_hms(2026, 10, 14, 12, 0, 0).unwrap(),
+    )
+    .await
+}
+
+pub(super) async fn build_at(
+    fixture: &Fixture,
+    script: &str,
+    channel_id: i64,
+    inject: bool,
+    start: chrono::DateTime<Utc>,
+) -> Result<SchedulingResult, ersatzrs_core::scheduling::SchedulingError> {
     let file = fixture
         .root
         .path()
@@ -71,7 +88,6 @@ async fn build(
             None,
         )
     };
-    let start = Utc.with_ymd_and_hms(2026, 10, 14, 12, 0, 0).unwrap();
     let request = SchedulingRequest {
         playout: Playout {
             id: 92 + channel_id,
@@ -245,7 +261,7 @@ async fn owned_scripted_worker_uses_shared_application_and_never_fabricates_miss
     assert_no_publication_or_invocation(&mut fixture).await;
 }
 
-async fn seed_publication_inputs(fixture: &Fixture) {
+pub(super) async fn seed_publication_inputs(fixture: &Fixture) {
     for statement in [
         r#"INSERT INTO "MediaSource" ("Id") VALUES (71)"#,
         r#"INSERT INTO "Library" ("Id","MediaSourceId","MediaKind") VALUES (71,71,0)"#,
@@ -268,7 +284,7 @@ async fn seed_publication_inputs(fixture: &Fixture) {
     }
 }
 
-async fn publish_result(fixture: &Fixture, result: &SchedulingResult) {
+pub(super) async fn publish_result(fixture: &Fixture, result: &SchedulingResult) {
     use ersatzrs_core::repositories::PlayoutRepository as _;
     let repository =
         ersatzrs_infra::repositories::SqlitePlayoutRepository(fixture.state.pool.clone());

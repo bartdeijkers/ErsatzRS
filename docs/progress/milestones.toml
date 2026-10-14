@@ -2724,6 +2724,59 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 effective Lua/native preparation checkpoint:
+Criterion: shared Lua controls, cursor/expiry fences, isolated profiles/themes,
+Off with unaffected bindings, shared validated preview/encoding and actual-worker
+ownership. Real app -> owned Lua -> atomic timeline/interval publication -> exact
+effective whole-channel observation -> installed producers -> shared cold compiler
+and preview now passes. It saves or publishes no accepted teletext generation.
+
+Two actual channels concurrently select different existing profiles of one addon,
+over disabled/tombstoned operator bases, under the existing explicitly configured
+two-worker policy. Distinct preserved M/29 palettes produce distinct complete
+services and56-column rasters equal to the canonical compiler; display-only packets
+correctly stay equal. Database reopen retains exact owning playout/interval/target
+and themes. This explicit preparation invokes producers again: it proves neither
+saved-generation recovery without producer replay nor whole-host live restart.
+Off skips an unhealthy package while an unaffected addon retains producer ordinal1;
+Off-only emits no partial native output. Profile/package/membership drift and actual
+wrong-generation output reject without base fallback or accepted/pending writes.
+Whole-scope rechecks retain Off and earliest future start/finish before resolution,
+prelaunch and after joined CPU work. Original deadlines never renew. Existing native
+and CPU ownership mechanisms retain admission through caller cancellation.
+
+149 unique successful focused tests:98 in c375b3d9-07df-41ec-99e0-be84a1c5ab40;
+35 unaffected successes retained from89b1b285-f06e-4ce5-8faf-48ebcf61b5d8;
+15 in ae9a5610-48b3-4b3e-8712-889be7826756 overlap6 and add9;
+1 final two-channel case in1a9afe00-6311-499e-9f70-cb0221ab3a63;
+6 fresh base-guard/Health cases in3f9d7d8e-5053-4028-b706-c9e82cd983f1.
+There are26 new cases; exact V1/V2/V3 parsing, metadata, scopes/bounds, real SQL,
+package invocation and all seven existing cold composition cases are covered.
+Retain the three negative fixture hypotheses: raw nanoseconds exceeded existing
+100ns storage precision; absent concurrency configuration intentionally admits one
+worker; display-only packets omit theme-bearing M/29 (e16f5a6e-5e18-49ec-9a4d-1a2b7c99b1f5).
+Corrections use existing precision/settings and complete-service assertions;
+production admission, timing and page validation are unchanged.
+Strict affected five-crate all-target Clippy, workspace formatting, architecture,
+hydration and new-allow checks pass. Independent app authority/content review is
+clean; existing compiler behavior stays in its shared implementation.
+Proof:tmp/phase9-effective-selection/identity.json;
+SHA256e9f089b207cb492942d418751f443b3897fcdb3777b5a61611b5971ef6b7d387.
+Unchanged headed Health/profile/editor and AV/TSDuck/client receipts remain valid
+within their original scope. No new carriage or suitable-client proof is inferred.
+
+Next blocker/criterion: original envelopes and accepted pointers are base-only.
+Add versioned effective originals retaining whole origins/Off/producer mapping and
+legacy bytes; then same-transaction scoped promotion/pointer CAS and bounded fresh
+recovery without producer/Lua replay. Keep accepted base separately recoverable at
+original expiry. Current guard still suppresses the complete base during intervals;
+live unaffected bindings require scoped storage/runtime connection. Then prove
+Lua On/Off/profile transitions -> same ordinary URL -> suitable-client navigation,
+pending/applied state and live expiry/restart with ordinary AV intact. All full
+Level2.5/fallback, QTM/metadata/themes/zones, localized admin, source/Next/platform
+and independent engine criteria remain open and unchanged. Production NOS200–299
+guide content remains gated; this checkpoint stays local, with no push/publication.
+
 2026-10-14 headed Scripted Health checkpoint:
 Criterion: localized changed admin with real hydrated/no-JS controls; visible
 invalid-profile state without package side effects. On the54ab5888 core checkpoint,

@@ -56,6 +56,8 @@ mod designs;
 mod documents;
 #[path = "teletext_profile_preparation/editorial_imports.rs"]
 mod editorial_imports;
+#[path = "teletext_profile_preparation/effective_channel_documents.rs"]
+mod effective_channel_documents;
 #[path = "teletext_profile_preparation/export_receipts.rs"]
 mod export_receipts;
 #[path = "teletext_profile_preparation/generations.rs"]

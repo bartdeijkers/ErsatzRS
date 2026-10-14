@@ -8,8 +8,8 @@ use ersatzrs_core::repositories::TeletextProfileMutation as M;
 use ersatzrs_core::scheduling::{truncate_to_persisted_precision, SchedulingResult};
 use ersatzrs_domain::{
     Playout, PlayoutScheduleKind, TeletextOverrideInterval, TeletextOverrideState,
-    MAX_TELETEXT_OVERRIDE_COMMANDS, MAX_TELETEXT_OVERRIDE_SNAPSHOT_BYTES,
-    MAX_TELETEXT_PAGE_RECORDS,
+    TeletextPublishedOverride, MAX_TELETEXT_OVERRIDE_COMMANDS,
+    MAX_TELETEXT_OVERRIDE_SNAPSHOT_BYTES,
 };
 use sqlx::Row as _;
 use std::collections::BTreeSet;
@@ -185,6 +185,19 @@ pub(in crate::repositories) async fn active_in_transaction(
     channel_id: EntityId,
     when: DateTime<Utc>,
 ) -> Result<Vec<TeletextOverrideInterval>> {
+    Ok(active_published_in_transaction(tx, channel_id, when)
+        .await?
+        .into_iter()
+        .map(|published| published.interval)
+        .collect())
+}
+
+/// The same active validation retains the actual owning playout identity.
+pub(in crate::repositories) async fn active_published_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    channel_id: EntityId,
+    when: DateTime<Utc>,
+) -> Result<Vec<TeletextPublishedOverride>> {
     // Admit aggregate serialized material before fetching any snapshot body.
     let budget = sqlx::query(
         r#"SELECT COUNT(*) AS "Records",
@@ -200,7 +213,7 @@ pub(in crate::repositories) async fn active_in_transaction(
     .repository()?;
     let records = budget.try_get::<i64, _>("Records").repository()?;
     let bytes = budget.try_get::<i64, _>("Bytes").repository()?;
-    if !usize::try_from(records).is_ok_and(|size| size <= MAX_TELETEXT_PAGE_RECORDS)
+    if !usize::try_from(records).is_ok_and(|size| size <= MAX_TELETEXT_OVERRIDE_COMMANDS)
         || !usize::try_from(bytes).is_ok_and(|size| size <= codec::MAX_BYTES)
     {
         return Err(rejected());
@@ -213,7 +226,7 @@ pub(in crate::repositories) async fn active_in_transaction(
             LENGTH(CAST(i."Start" AS BLOB)) <= 32 THEN i."Start" END AS "Start",
         CASE WHEN TYPEOF(i."Finish") = 'text' AND
             LENGTH(CAST(i."Finish" AS BLOB)) <= 32 THEN i."Finish" END AS "Finish",
-        i."State", i."CandidateSnapshot" FROM "PlayoutTeletextInterval" i
+        i."State", i."CandidateSnapshot", p."Id" AS "OwningPlayoutId" FROM "PlayoutTeletextInterval" i
         JOIN "Playout" p ON p."Id" = i."PlayoutId"
         WHERE p."ChannelId" = ? AND i."Start" <= ? AND i."Finish" > ?
         ORDER BY i."AddonId", i."Start" LIMIT ?"#,
@@ -221,11 +234,11 @@ pub(in crate::repositories) async fn active_in_transaction(
     .bind(channel_id)
     .bind(encode_datetime(when))
     .bind(encode_datetime(when))
-    .bind(i64::try_from(MAX_TELETEXT_PAGE_RECORDS + 1).map_err(|_| rejected())?)
+    .bind(i64::try_from(MAX_TELETEXT_OVERRIDE_COMMANDS + 1).map_err(|_| rejected())?)
     .fetch_all(&mut **tx)
     .await
     .repository()?;
-    if rows.len() > MAX_TELETEXT_PAGE_RECORDS {
+    if rows.len() > MAX_TELETEXT_OVERRIDE_COMMANDS {
         return Err(rejected());
     }
     let mut addons = BTreeSet::new();
@@ -267,10 +280,17 @@ pub(in crate::repositories) async fn active_in_transaction(
             return Err(rejected());
         }
         recheck(tx, &state).await?;
-        result.push(TeletextOverrideInterval {
-            start,
-            finish,
-            state,
+        let playout_id: EntityId = row.try_get("OwningPlayoutId").repository()?;
+        if playout_id <= 0 {
+            return Err(rejected());
+        }
+        result.push(TeletextPublishedOverride {
+            playout_id,
+            interval: TeletextOverrideInterval {
+                start,
+                finish,
+                state,
+            },
         });
     }
     Ok(result)

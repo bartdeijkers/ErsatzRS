@@ -1,6 +1,7 @@
 //! Atomic ADR 0122 configuration foundation; no package or page activation.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     ChannelTeletextBindingSave, RepositoryError, Result, TeletextProfileMutation as M,
     TeletextProfileRejection as R, TeletextProfileRepository, TeletextProfileSave,
@@ -8,11 +9,11 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     validate_teletext_profile_values, ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId,
-    TeletextChannelSelectionSnapshot, TeletextInstallationRead, TeletextInstallationSnapshot,
-    TeletextProfile, TeletextProfileAvailability as A, TeletextProfileCandidateSnapshot,
-    TeletextProfileRead, TeletextProfileSetting, TeletextProfileValue,
-    TeletextScriptedBaseSelection, TeletextSecretReferenceKind, TeletextSelectionSnapshot,
-    MAX_TELETEXT_PAGE_RECORDS,
+    TeletextChannelSelectionSnapshot, TeletextEffectiveChannelSelectionSnapshot,
+    TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile,
+    TeletextProfileAvailability as A, TeletextProfileCandidateSnapshot, TeletextProfileRead,
+    TeletextProfileSetting, TeletextProfileValue, TeletextScriptedBaseSelection,
+    TeletextSecretReferenceKind, TeletextSelectionSnapshot, MAX_TELETEXT_PAGE_RECORDS,
 };
 use sqlx::{Row as _, Transaction};
 
@@ -25,6 +26,9 @@ use crate::{
 /// Transactional named profile/base binding adapter. No runtime readiness claim.
 #[derive(Clone)]
 pub struct SqliteTeletextProfileRepository(pub DbPool);
+
+#[path = "teletext_effective_selection.rs"]
+mod effective_selection;
 
 #[async_trait]
 impl TeletextProfileRepository for SqliteTeletextProfileRepository {
@@ -151,6 +155,26 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
             M::Saved(current) if current != *expected => Ok(M::Rejected(R::Conflict)),
             current => Ok(current),
         }
+    }
+
+    async fn effective_channel_snapshot(
+        &self,
+        channel_id: EntityId,
+        when: DateTime<Utc>,
+    ) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+        // Read-only transaction: exact base and published origins share one observation.
+        let mut tx = self.0.begin().await.repository()?;
+        effective_selection::read_in_transaction(&mut tx, channel_id, when).await
+    }
+
+    async fn recheck_effective_channel_snapshot(
+        &self,
+        expected: &TeletextEffectiveChannelSelectionSnapshot,
+        when: DateTime<Utc>,
+    ) -> Result<M<TeletextEffectiveChannelSelectionSnapshot>> {
+        // Read-only transaction: never substitute a fresh target for the captured fence.
+        let mut tx = self.0.begin().await.repository()?;
+        effective_selection::recheck_in_transaction(&mut tx, expected, when).await
     }
 
     async fn save_profile(

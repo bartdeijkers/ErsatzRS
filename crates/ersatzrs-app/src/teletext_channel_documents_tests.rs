@@ -27,7 +27,7 @@ const A: &str = "org.example.a";
 const B: &str = "org.example.b";
 const C: &str = "org.example.c";
 
-fn binding(addon: &str, profile_id: i64) -> TeletextSelectionSnapshot {
+pub(crate) fn binding(addon: &str, profile_id: i64) -> TeletextSelectionSnapshot {
     TeletextSelectionSnapshot {
         contract: ersatzrs_domain::TeletextPageContract::V1,
         channel_id: 9,
@@ -150,7 +150,7 @@ impl TeletextProfileRepository for Repository {
     }
 }
 
-fn context() -> SuppliedTeletextGuideContext<'static> {
+pub(crate) fn context() -> SuppliedTeletextGuideContext<'static> {
     SuppliedTeletextGuideContext {
         generation: GENERATION,
         locale: "nl",
@@ -161,12 +161,12 @@ fn context() -> SuppliedTeletextGuideContext<'static> {
     }
 }
 
-fn page(number: u16, subcode: u16, language: &str, national_option: u8) -> Value {
+pub(crate) fn page(number: u16, subcode: u16, language: &str, national_option: u8) -> Value {
     json!({"address":{"page":number,"subcode":subcode},"kind":"full_page","language":language,"national_option":national_option,
         "rows":[],"navigation":[]})
 }
 
-fn output(language: &str, initial_page: u16, pages: &[Value]) -> Vec<u8> {
+pub(crate) fn output(language: &str, initial_page: u16, pages: &[Value]) -> Vec<u8> {
     serde_json::to_vec(&json!({"schema_version":1,"generation":GENERATION,"language":language,"initial_page":initial_page,"pages":pages})).unwrap()
 }
 
@@ -193,7 +193,7 @@ fn input_budget() -> TeletextChannelDocumentInputBudget {
     }
 }
 
-fn document_budget() -> TeletextProfileDocumentBudget {
+pub(crate) fn document_budget() -> TeletextProfileDocumentBudget {
     use ersatzrs_domain::teletext as d;
     TeletextProfileDocumentBudget {
         service: d::TeletextServiceBudget {
@@ -221,7 +221,7 @@ fn mixed_repository() -> Repository {
     Repository::new(vec![binding(A, 1), authored])
 }
 
-fn authored_output() -> Vec<u8> {
+pub(crate) fn authored_output() -> Vec<u8> {
     serde_json::to_vec(&json!({"schema_version":2,"generation":GENERATION,
         "language":"eng","initial_page":201,"pages":[page(201,16,"eng",0)],
         "page_enhancements":[{"address":{"page":201,"subcode":16},

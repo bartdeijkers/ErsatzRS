@@ -66,7 +66,7 @@ impl fmt::Debug for TeletextChannelRequestTemplates {
 }
 
 /// Trusted selected-producer and retained response budgets, independent of wire caps.
-/// At most two guide templates additionally obey the existing 4 MiB request cap.
+/// At most three guide templates additionally obey the existing 4 MiB request cap.
 /// This does not bound total process memory or parsed models; validation uses the
 /// caller's separate semantic and declaration budgets.
 #[derive(Debug, Clone, Copy)]
@@ -663,6 +663,21 @@ pub(super) fn preflight_requests(
     selection: &TeletextChannelSelectionSnapshot,
     context: &SuppliedTeletextGuideContext<'_>,
 ) -> Result<TeletextChannelRequestTemplates, ChannelTeletextDocumentError> {
+    preflight_contracts(
+        selection.bindings.iter().map(|binding| binding.contract),
+        context,
+    )
+}
+
+// Pure wire request construction, independent of base versus published origins.
+pub(super) fn preflight_contracts(
+    contracts: impl IntoIterator<Item = TeletextPageContract>,
+    context: &SuppliedTeletextGuideContext<'_>,
+) -> Result<TeletextChannelRequestTemplates, ChannelTeletextDocumentError> {
+    let wanted: BTreeSet<_> = contracts
+        .into_iter()
+        .map(TeletextPageContract::schema_version)
+        .collect();
     // Off still retains this opaque correlation value, but builds no guide.
     if context.generation.is_empty()
         || context.generation.len() > wire::MAX_TELETEXT_PAGES_GENERATION_BYTES
@@ -682,11 +697,7 @@ pub(super) fn preflight_requests(
         TeletextPageContract::V2,
         TeletextPageContract::V3,
     ] {
-        if selection
-            .bindings
-            .iter()
-            .any(|binding| binding.contract == contract)
-        {
+        if wanted.contains(&contract.schema_version()) {
             let input = build_request_for_schema(context, contract.schema_version())?;
             match contract {
                 TeletextPageContract::V1 => requests.v1 = Some(input),
@@ -726,4 +737,4 @@ fn check_deadline(now: Instant, deadline: Instant) -> Result<(), ChannelTeletext
 
 #[cfg(test)]
 #[path = "teletext_channel_documents_tests.rs"]
-mod tests;
+pub(super) mod tests;

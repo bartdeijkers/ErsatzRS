@@ -103,10 +103,17 @@ permanent authored-page limitations.
 Runtime activation remains incomplete: current base artifacts do not carry an
 interval identity and are refused during an active override. This preparatory
 guard suppresses the complete base authored generation; preserving unaffected
-bindings requires effective whole-channel selection and scoped composition.
+bindings in live output requires scoped generation storage and promotion.
+Unpublished effective preparation now observes actual owning playout/interval
+origins and unoverridden bases together, retaining explicit Off membership.
+It skips shadowed base profiles before validation, rechecks the complete scope
+before resolution/prelaunch and after joined CPU work, and uses the same exact
+contract parser, native encoder and preview model. One original deadline ends
+no later than the earliest future start/finish observed for that output channel;
+rechecking does not renew it. This preparation saves or publishes no generation.
 The existing Scripted Health check reports unavailable active selections and
 profiles whose pages are not yet ready, while valid Off is configuration-valid.
-It does not prove stream application. Complete scoped
-generation preparation/promotion, per-binding stream application, requested versus
+It does not prove stream application. Complete scoped durable
+generation storage/promotion, per-binding stream application, requested versus
 applied state and live restart/expiry proof remain required. A successful Lua
 result or persisted interval alone does not establish effective On playback.

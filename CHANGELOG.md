@@ -22,7 +22,10 @@ release section when tagging a release.
   Bound the actual worker and snapshot reads; active overrides cannot emit a
   stale base artifact. Localized Health explains unavailable selections and pages
   that are not ready, with headed proof in every culture and both themes. Scoped
-  native activation and live Lua acceptance remain open.
+  native preparation now combines exact published Lua and unoverridden base
+  profiles, retains Off membership and transition expiry, and uses the same
+  page validation, encoder and preview model. Abandoned requests retain actual
+  worker admission. Scoped publication and live Lua acceptance remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

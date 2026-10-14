@@ -1,11 +1,13 @@
 //! Narrow transactional configuration port for ADR 0122.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextChannelSelectionSnapshot,
-    TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile,
-    TeletextProfileCandidateSnapshot, TeletextProfileRead, TeletextProfileSetting,
-    TeletextScriptedBaseSelection, TeletextSelectionSnapshot,
+    TeletextEffectiveChannelSelectionSnapshot, TeletextInstallationRead,
+    TeletextInstallationSnapshot, TeletextProfile, TeletextProfileCandidateSnapshot,
+    TeletextProfileRead, TeletextProfileSetting, TeletextScriptedBaseSelection,
+    TeletextSelectionSnapshot,
 };
 
 use super::{RepositoryError, Result};
@@ -137,6 +139,39 @@ pub trait TeletextProfileRepository: Send + Sync {
         Err(RepositoryError::unavailable(
             "teletext candidate profile recheck",
             "candidate profile validation is unsupported",
+        ))
+    }
+    /// Resolve canonical whole-channel membership from base and this channel's
+    /// published Scripted intervals in one read transaction. Include Scripted Off
+    /// in the fence and validate only base profiles not overridden by intervals.
+    /// Observe the earliest future start/finish as a preparation/promotion limit.
+    ///
+    /// # Errors
+    /// Returns unsupported/storage failures without falling back to base authority.
+    async fn effective_channel_snapshot(
+        &self,
+        _channel_id: EntityId,
+        _when: DateTime<Utc>,
+    ) -> Result<TeletextProfileMutation<TeletextEffectiveChannelSelectionSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext effective channel selection",
+            "effective teletext selection is unsupported",
+        ))
+    }
+    /// Repeat the effective observation in one transaction, rechecking exact
+    /// membership, origin, candidate configuration and temporal fence. Reject
+    /// differences or a reached boundary without substituting a new selection.
+    ///
+    /// # Errors
+    /// Returns unsupported/storage failures; elapsed time alone is not drift.
+    async fn recheck_effective_channel_snapshot(
+        &self,
+        _expected: &TeletextEffectiveChannelSelectionSnapshot,
+        _when: DateTime<Utc>,
+    ) -> Result<TeletextProfileMutation<TeletextEffectiveChannelSelectionSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext effective channel selection recheck",
+            "effective teletext selection is unsupported",
         ))
     }
     /// Replace a complete override bag and invalidate only its dependents.

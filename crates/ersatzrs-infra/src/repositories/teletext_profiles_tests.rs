@@ -204,6 +204,9 @@ mod candidates;
 #[path = "playout/teletext_intervals_tests.rs"]
 mod intervals;
 
+#[path = "teletext_effective_selection_tests.rs"]
+mod effective;
+
 async fn insert_installation(pool: &DbPool, manifest: &AddonManifest) {
     manifest.validate().unwrap();
     sqlx::query(r#"INSERT INTO "AddonInstallation" ("AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256", "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt", "StateRevision")
