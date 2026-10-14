@@ -87,6 +87,13 @@ pub(super) async fn recover_optional_output(
             initial,
         )
         .ok()?;
+        tracing::debug!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            event = "ordinary_live_intent",
+            intent_id = %intent.trace_id(),
+            channel_id,
+            "ordinary response owns this live teletext intent"
+        );
         return Some(TeletextOutputAdmission::with_optional_live(
             Arc::new(intent),
             startup_deadline,

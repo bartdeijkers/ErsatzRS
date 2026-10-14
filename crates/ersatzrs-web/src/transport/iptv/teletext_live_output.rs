@@ -38,6 +38,7 @@ pub use updates::{TeletextAcceptedUpdatePolicy, TeletextAcceptedUpdatesConfigura
 /// Explicit native dependencies and initial sealed content, without a running
 /// task. Forwarding starts a fresh monitor owned by that actual response.
 pub struct TeletextLiveOutputIntent {
+    trace_id: uuid::Uuid,
     context: TeletextAcceptedUpdatesContext,
     initial: Option<Arc<SelectedTeletextOutputCandidate>>,
 }
@@ -88,6 +89,7 @@ impl TeletextLiveOutputIntent {
             return Err(TeletextPumpError::Configuration);
         }
         Ok(Self {
+            trace_id: uuid::Uuid::new_v4(),
             context: TeletextAcceptedUpdatesContext {
                 application,
                 channel_id,
@@ -98,6 +100,10 @@ impl TeletextLiveOutputIntent {
             },
             initial,
         })
+    }
+
+    pub(in crate::transport::iptv) const fn trace_id(&self) -> uuid::Uuid {
+        self.trace_id
     }
 
     /// Channel isolation is checked again by the actual route owner.
@@ -202,6 +208,14 @@ pub async fn forward_live_teletext_output(
     };
     let (control, _owner) = start_accepted_updates(intent.context.clone(), initial)
         .map_err(|_| TeletextPumpError::Configuration)?;
+    tracing::debug!(
+        target: "ersatzrs_web::transport::iptv::teletext_provenance",
+        event = "monitor_owner_link",
+        intent_id = %intent.trace_id(),
+        proposal_slot = %control.trace_id(),
+        channel_id = intent.channel_id(),
+        "teletext monitor belongs to this live output intent"
+    );
     let binding = binding.with_control(control);
     forward_optional_seeded_teletext_output(
         source,

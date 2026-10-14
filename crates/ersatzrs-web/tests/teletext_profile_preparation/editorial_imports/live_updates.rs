@@ -63,6 +63,56 @@ fn same_unit(expected: &[u8; 46], actual: &[u8; 46]) -> bool {
     expected == actual
 }
 
+fn packet_address(unit: &[u8; 46]) -> (u8, u8) {
+    let address = nibble(unit[4]) | (nibble(unit[5]) << 4);
+    (address & 7, address >> 3)
+}
+
+fn page_observed(units: &[(usize, [u8; 46])], after: usize, expected: &[[u8; 46]]) -> bool {
+    let header = expected.first().expect("encoded page has a header");
+    let (magazine, packet) = packet_address(header);
+    assert_eq!(packet, 0, "encoded page begins with its own header");
+    units
+        .iter()
+        .enumerate()
+        .rev()
+        .any(|(index, (offset, unit))| {
+            if *offset <= after || !same_unit(header, unit) {
+                return false;
+            }
+            // A repeated header starts a new acquisition interval, even for the
+            // same owner. Match one complete page's content in one such interval.
+            // Other magazines may interleave in parallel mode without supplying
+            // rows or enhancement packets belonging to this page.
+            let end = units[index + 1..]
+                .iter()
+                .position(|(_, actual)| packet_address(actual) == (magazine, 0))
+                .map_or(units.len(), |position| index + 1 + position);
+            expected.iter().all(|expected| {
+                units[index..end].iter().any(|(_, actual)| {
+                    packet_address(actual).0 == magazine && same_unit(expected, actual)
+                })
+            })
+        })
+}
+
+fn service_observed(
+    wire: &Wire,
+    after: usize,
+    pages: &[Vec<[u8; 46]>],
+    magazines: &[[u8; 46]],
+) -> bool {
+    wire.pmt == Some(true)
+        && pages
+            .iter()
+            .all(|page| page_observed(&wire.units, after, page))
+        && magazines.iter().all(|expected| {
+            wire.units
+                .iter()
+                .any(|(offset, actual)| *offset > after && same_unit(expected, actual))
+        })
+}
+
 #[derive(Default)]
 pub(in super::super) struct Wire {
     bytes: Vec<u8>,
@@ -192,22 +242,141 @@ impl Capture {
         after: usize,
         service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
     ) {
-        let expected: Vec<_> = designs::units(service)
-            .into_iter()
-            .flatten()
-            .chain(service.magazine_units().iter().copied())
-            .collect();
-        assert!(!expected.is_empty());
-        self.wait(|wire| {
-            wire.pmt == Some(true)
-                && expected.iter().all(|expected| {
-                    wire.units
-                        .iter()
-                        .any(|(offset, actual)| *offset > after && same_unit(expected, actual))
-                })
-        })
-        .await;
+        let pages = designs::units(service);
+        assert!(!pages.is_empty());
+        self.wait(|wire| service_observed(wire, after, &pages, service.magazine_units()))
+            .await;
     }
+}
+
+// Independent EN 300 706 section8.2 Hamming vectors and DVB framing. These
+// finite page200/201 rows exercise ownership and acquisition, not TS delivery.
+fn observation_fixture_unit(packet: u8, magazine: u8) -> [u8; 46] {
+    let mut unit = [b' '.reverse_bits(); 46];
+    unit[..4].copy_from_slice(&[2, 44, 0xe0, 0xe4]);
+    let address = magazine | (packet << 3);
+    unit[4] = observation_fixture_code(address & 15);
+    unit[5] = observation_fixture_code(address >> 4);
+    unit
+}
+
+fn observation_fixture_code(value: u8) -> u8 {
+    const CODEWORDS: [u8; 16] = [
+        0x15, 0x02, 0x49, 0x5e, 0x64, 0x73, 0x38, 0x2f, 0xd0, 0xc7, 0x8c, 0x9b, 0xa1, 0xb6, 0xfd,
+        0xea,
+    ];
+    CODEWORDS[usize::from(value)].reverse_bits()
+}
+
+fn observation_fixture_header(page_units: u8, erase: bool) -> [u8; 46] {
+    let mut unit = observation_fixture_unit(0, 2);
+    for (byte, value) in
+        unit[6..14]
+            .iter_mut()
+            .zip([page_units, 0, 0, if erase { 8 } else { 0 }, 0, 0, 0, 0])
+    {
+        *byte = observation_fixture_code(value);
+    }
+    unit
+}
+
+fn observation_fixture_row(packet: u8, text: &[u8]) -> [u8; 46] {
+    let mut unit = observation_fixture_unit(packet, 2);
+    for (byte, code) in unit[14..].iter_mut().zip(text) {
+        let parity = if code.count_ones().is_multiple_of(2) {
+            0x80
+        } else {
+            0
+        };
+        *byte = (code | parity).reverse_bits();
+    }
+    unit
+}
+
+fn observation_fixture_wire(units: &[[u8; 46]]) -> Wire {
+    Wire {
+        pmt: Some(true),
+        units: units
+            .iter()
+            .enumerate()
+            .map(|(index, unit)| ((index + 1) * 188, *unit))
+            .collect(),
+        ..Wire::default()
+    }
+}
+
+#[test]
+fn service_observation_never_borrows_page201_blank_rows_for_page200() {
+    use ersatzrs_ffmpeg::teletext::source_header::{
+        observe_dvb_teletext_header, TeletextHeaderObservation,
+    };
+    let header200 = observation_fixture_header(0, true);
+    let header201 = observation_fixture_header(1, true);
+    let TeletextHeaderObservation::Header(observed) =
+        observe_dvb_teletext_header(&header200).unwrap()
+    else {
+        panic!("normative fixture must identify a display page")
+    };
+    assert_eq!(observed.display_page().unwrap().get(), 200);
+    assert_eq!(observed.subcode, 0);
+    assert!(observed.controls.erase_page());
+    let az = observation_fixture_row(1, b"AZ");
+    let blank = observation_fixture_row(2, b"");
+    let q = observation_fixture_row(2, b"Q");
+    let expected = [vec![header200, az, blank], vec![header201, az, blank]];
+    let mut wire = observation_fixture_wire(&[header200, az, q, header201, az, blank]);
+    assert!(!service_observed(&wire, 0, &expected, &[]));
+    let actual200 = [observation_fixture_header(0, false), az, blank];
+    for unit in actual200 {
+        wire.units.push(((wire.units.len() + 1) * 188, unit));
+    }
+    assert!(service_observed(&wire, 0, &expected, &[]));
+}
+
+#[test]
+fn page_observation_requires_one_header_interval_strictly_after_the_fence() {
+    let first = observation_fixture_header(0, true);
+    let repeat = observation_fixture_header(0, false);
+    let blank = observation_fixture_row(2, b"");
+    let r = observation_fixture_row(3, b"R");
+    let expected = [first, blank, r];
+    let mut wire = observation_fixture_wire(&[first, blank, r]);
+    assert!(page_observed(&wire.units, 0, &expected));
+    assert!(!page_observed(&wire.units, 188, &expected));
+    for unit in [repeat, blank, repeat, r] {
+        wire.units.push(((wire.units.len() + 1) * 188, unit));
+    }
+    assert!(!page_observed(&wire.units, 3 * 188, &expected));
+    wire.units.push((8 * 188, blank));
+    assert!(page_observed(&wire.units, 3 * 188, &expected));
+}
+
+#[test]
+fn page_observation_preserves_subcode_controls_and_magazine_ownership() {
+    let header = observation_fixture_header(0, true);
+    let blank = observation_fixture_row(2, b"");
+    let expected = [header, blank];
+    let mut foreign = blank;
+    foreign[4] = observation_fixture_code(3);
+    assert!(!page_observed(
+        &observation_fixture_wire(&[header, foreign]).units,
+        0,
+        &expected
+    ));
+    for index in [8, 12] {
+        let mut other_header = observation_fixture_header(0, false);
+        other_header[index] = observation_fixture_code(1);
+        assert!(!page_observed(
+            &observation_fixture_wire(&[other_header, blank]).units,
+            0,
+            &expected
+        ));
+    }
+    assert!(page_observed(
+        &observation_fixture_wire(&[observation_fixture_header(0, false), blank]).units,
+        0,
+        &expected
+    ));
 }
 
 impl AsyncWrite for Capture {

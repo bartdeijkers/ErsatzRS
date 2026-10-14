@@ -4032,38 +4032,61 @@ command-free Continue. The scope expires at its actual last-item finish; neither
 old scope identity nor source clocks/bytes are relabeled or extended. A Q concept
 is previewed and explicitly published before expiry.
 
-The oracle waits actual UTC expiry, records exact complete-packet positions and
-requires two fresh independently accepted Base cycles plus the decoder's existing
-packet floor. It decodes from the EXACT observed expiry offset, preserving any
-old-content prefix. Earlier native trials fail that no-Q assertion; a later
-representative success observes UTC expiry late and does not qualify those failures.
-Observed byte time, first-seen Base and fragment-relative SRT timestamps do not
-prove sink acceptance or Applied; `txt_duration` is not observed display time.
-No grace, prefix trimming or acceptance follows from later Base restoration.
-P9A-04 owns receipts, the unclassified buffered-versus-late tail and required
-ordinary-output acknowledgement qualification. Actual headed clearing remains open.
+Select the Python interpreter explicitly with
+`ERSATZRS_TELETEXT_TEST_PYTHON`; it is an optional proof tool, not a server runtime
+dependency. The selector preserves the exact observed UTC fragment and decodes
+pages200/201 into `*-post-expiry-*.srt`, recording any Q prefix in
+`utc-fragment-observations.json`. Receiver UTC, first-seen Base and relative SRT
+PTS do not establish sink acknowledgement or immediate display clearing.
 
-This isolated selector enables the private DEBUG target
-`ersatzrs_web::transport::iptv::teletext_provenance`. Its monitor proposal slot
-joins generation/design/revision and original expiry to a distinct output epoch.
-Sequence zero identifies the initial candidate; later active sequences change
-only on successful gate installation. Prepared windows, their first successfully
-written packet and sink-flushed acknowledgements are separate observations.
-The first-written event includes the SHA256 of that exact TS packet, calculated
-only when its DEBUG event is enabled. It is one sample per existing window,
-not one event per packet, and carries no raw content or configuration.
+The acceptance oracle follows the agreed safe output boundary. The maintained
+[`teletext-expiry-provenance.py`](../../scripts/e2e/teletext-expiry-provenance.py)
+qualifies immutable scope and explicit original-request ownership before decoding
+an exact post-ACK suffix. A test-only request span identifies each viewer. A
+private intent ID joins the inline ordinary handler to its spawned monitor's
+proposal slot and actual pump epoch; packet hashes verify that assignment at
+unchanged zero-based offsets. They never choose between identical responses.
+An intent may have multiple attempts generally; this synthetic probe requires
+one qualifying epoch per original response.
 
-The opt-in log is bounded to 4 MiB; normal warning-only trial logs retain their
-512 KiB cap. A full or truncated log cannot establish provenance. Qualification
-must reject ambiguous epoch/capture matches, correlate multiple packet hashes at
-their exact zero-based offsets, and require matching prepared/written/flushed
-window extents. A single repeated/null packet is insufficient. Receipt end
-positions are exclusive packet counts; verify startup-prefix coordinates and
-complete PES/cycle closure against retained bytes before decoding a suffix.
-Retain the original UTC fragment beside any qualified post-ACK suffix. Neither
-first-written nor prepared alone proves successful delivery, and later Base
-appearance does not identify the exact safe transition. These diagnostics do
-not change authority, publication, deadlines or the native oracle.
+The validator distinguishes prepared, first-written and sink-flushed windows,
+checks actual installed sequences and complete Scoped cycle closure, and rejects
+newly prepared expired cycles or late Scoped installation. It supports direct
+Base replacement at the complete Scoped ACK and withdrawal followed by one or
+more physically absent, PSI-acknowledged windows before Base installation.
+Source PCR/AV and counters remain unchanged. The original expiry is never moved.
+It checks complete PES boundaries, first restored C4 erasure, repeated Base200/201
+cycles and absence of old Q/R markers beyond the qualified cut.
+
+The native selector then independently decodes `*-post-ack.ts` and pages200/201,
+requiring AZ without Q/R, beside complete-capture transport/AV checks. Night stays
+on its original Base and uses its unchanged UTC suffix; it has no fabricated
+transition ACK. The packet floor is collected from actual original-body data
+beyond the second restored page-model observation under the same trial deadline.
+Page-model observations match within each page's own header interval; they do
+not borrow another page's rows or claim whole-cycle/APPLIED acknowledgement.
+
+All raw bytes and original UTC fragments remain retained. Terminal Base prefixes
+may be captured during owned stop; the report exposes their exact length and
+partial PES/cycle state without claiming complete EOF delivery. The opt-in
+private DEBUG log remains capped at4MiB, versus512KiB for warning-only trials.
+Full/truncated logs, conflicting ownership, bad packet hashes and foreign ACKs
+reject. This proof is resource-free200/201 conformance, not a general presentation
+decoder or full engine acceptance. Actual headed clearing/navigation remains due.
+P9A-04 owns all receipts, negative trials and reused evidence.
+
+For an independently retained trial, use a new output filename:
+
+```bash
+python3 scripts/e2e/teletext-expiry-provenance.py \
+  tmp/native-expiry-trial tmp/native-expiry-trial/qualified-expiry.json
+python3 -m unittest discover -s scripts/e2e -p test_teletext_expiry_provenance.py
+```
+
+The selector writes schema2 `success.json` only after qualification, independent
+post-ACK decoding, full captured transport/AV checks and owned cleanup. It retains
+schema1 immutable `expiry.json`; older failed UTC no-Q results stay negative
+history, not retrospectively successful or silently trimmed.
 
 The separate ignored selector
 `offline_natural_expiry_raw_captures_verify_clock_transport_av_and_pages200201`

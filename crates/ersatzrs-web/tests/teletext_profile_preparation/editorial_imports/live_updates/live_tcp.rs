@@ -26,6 +26,7 @@ use std::{
 };
 use tokio::{net::TcpListener, time::timeout_at};
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument as _;
 
 const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_WARM_CLIENT_DIR";
 const MAX_MARKER: usize = 16 * 1024;
@@ -232,7 +233,17 @@ async fn tee_response(State(state): State<Tee>, request: Request, next: Next) ->
         }
         seen[index] = true;
     }
-    let response = next.run(request).await;
+    // The ordinary intent is created inline here; its private trace ID bridges
+    // the later producer task without injecting a binding or changing headers.
+    let response = next
+        .run(request)
+        .instrument(tracing::debug_span!(
+            target: "ersatzrs_web::transport::iptv::teletext_provenance",
+            "teletext_native_trial_request",
+            viewer_index = index,
+            request_trace = %uuid::Uuid::new_v4(),
+        ))
+        .await;
     if response.status() != StatusCode::OK {
         return response;
     }

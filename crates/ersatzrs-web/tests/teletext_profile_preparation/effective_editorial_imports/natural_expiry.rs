@@ -332,12 +332,14 @@ async fn expire_on_same_responses(
     base_wire(views, base_offsets, base).await;
     let next_base_offsets = views.each_ref().map(Capture::position);
     let next_base_utc = Utc::now();
-    // Preserve the exact expiry prefix and the decoder's existing packet floor.
-    // This waits for actual original-body data, under the same outer deadline.
+    // Keep the original UTC prefix, but collect the decoder's packet floor after
+    // the second restored model observation. A qualified ACK suffix starts later
+    // than the UTC tap and must still contain real complete carousel cycles.
+    // Only actual original-body data is awaited under the same outer deadline.
     while views
         .iter()
         .enumerate()
-        .any(|(index, view)| view.position() - expiry_offsets[index] < 188 * 1000)
+        .any(|(index, view)| view.position() - next_base_offsets[index] < 188 * 1000)
     {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
@@ -363,12 +365,13 @@ async fn expire_on_same_responses(
     })
 }
 
-async fn verify_after_expiry(
+async fn record_utc_expiry_fragments(
     directory: &Path,
     ffmpeg: &str,
     views: &[Capture; 3],
     expiry: &Expiry,
 ) {
+    let mut observations = Vec::new();
     for (index, view) in views.iter().enumerate() {
         let bytes = view.bytes();
         let complete = bytes.len() / 188 * 188;
@@ -389,14 +392,90 @@ async fn verify_after_expiry(
                 text.contains("AZ"),
                 "independent post-expiry decoder lost base page"
             );
-            assert!(
-                !text.contains('Q'),
-                "expired scoped Q remained in the raw post-expiry fragment"
-            );
             assert!(!text.contains('R'));
+            observations.push(json!({"viewer_index":index,"page":page,
+                "raw_offset_bytes":expiry.offsets[index],"scoped_Q_present":text.contains('Q')}));
             shared::write_new(
                 &directory.join(format!(
                     "{}-post-expiry-{page}.srt",
+                    ["day", "observer", "night"][index]
+                )),
+                text.as_bytes(),
+            )
+            .unwrap();
+        }
+    }
+    shared::write_new(&directory.join("utc-fragment-observations.json"),
+        &serde_json::to_vec_pretty(&json!({"probe_version":1,
+            "original_valid_until":expiry.scoped.finish,"observed_utc":expiry.observed_utc,
+            "scope":"Unmodified receiver UTC fragments, not sink ACK or immediate clearing acceptance",
+            "observations":observations})).unwrap()).unwrap();
+}
+
+async fn verify_after_ack(directory: &Path, ffmpeg: &str, views: &[Capture; 3], expiry: &Expiry) {
+    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-expiry-provenance.py");
+    let report_path = directory.join("qualified-expiry.json");
+    client_capture::probe(
+        &client_capture::selected("ERSATZRS_TELETEXT_TEST_PYTHON"),
+        &[
+            script.to_str().unwrap(),
+            directory.to_str().unwrap(),
+            report_path.to_str().unwrap(),
+        ],
+        &[],
+        4096,
+    )
+    .await;
+    let report: Value =
+        serde_json::from_slice(&shared::read_bounded(&report_path, 2 * 1024 * 1024).unwrap())
+            .unwrap();
+    assert_eq!(
+        report["original_valid_until"],
+        expiry.scoped.finish.to_rfc3339()
+    );
+    assert_eq!(report["viewers"].as_array().unwrap().len(), 3);
+    for (index, view) in views.iter().enumerate() {
+        let bytes = view.bytes();
+        let proof = &report["viewers"][index];
+        assert_eq!(proof["viewer_index"], index);
+        assert_eq!(proof["capture_sha256"], shared::hash(&bytes));
+        assert_eq!(
+            proof["raw_utc_fragment_offset_bytes"],
+            expiry.offsets[index]
+        );
+        let offset = if index == 2 {
+            expiry.offsets[index]
+        } else {
+            usize::try_from(proof["qualified_ack_cut_bytes"].as_u64().unwrap()).unwrap()
+        };
+        let fragment = &bytes[offset..bytes.len() / 188 * 188];
+        assert!(
+            fragment.len() >= 188 * 1000,
+            "qualified suffix needs actual decoder packets"
+        );
+        shared::write_new(
+            &directory.join(format!(
+                "{}-post-ack.ts",
+                ["day", "observer", "night"][index]
+            )),
+            fragment,
+        )
+        .unwrap();
+        for page in ["200", "201"] {
+            let text =
+                client_capture::decode_page_text_with_discovery(ffmpeg, fragment, page, true).await;
+            assert!(
+                text.contains("AZ"),
+                "independent post-ACK decoder lost accepted Base"
+            );
+            assert!(
+                !text.contains('Q') && !text.contains('R'),
+                "scoped edits survive qualified ACK"
+            );
+            shared::write_new(
+                &directory.join(format!(
+                    "{}-post-ack-{page}.srt",
                     ["day", "observer", "night"][index]
                 )),
                 text.as_bytes(),
@@ -532,7 +611,8 @@ async fn original_ordinary_responses_restore_accepted_base_after_natural_scoped_
     server_closed.unwrap();
     cleanup.unwrap();
     captures.unwrap();
-    verify_after_expiry(&directory, &ffmpeg, origin.captures(), &expiry).await;
+    record_utc_expiry_fragments(&directory, &ffmpeg, origin.captures(), &expiry).await;
+    verify_after_ack(&directory, &ffmpeg, origin.captures(), &expiry).await;
     shared::verify_native_pages(
         &directory,
         (&ffmpeg, &ffprobe, &tsanalyze),
@@ -542,5 +622,5 @@ async fn original_ordinary_responses_restore_accepted_base_after_natural_scoped_
         false,
     )
     .await;
-    shared::write_new(&directory.join("success.json"),&serde_json::to_vec_pretty(&json!({"probe_version":1,"native_natural_expiry_same_responses":true,"owned_producers_bodies_server_closed":true,"post_expiry_pages200201_AZ_without_Q":true,"headed_client_proof":false,"scope":"Representative native-only authored pages, not complete engine or platform acceptance"})).unwrap()).unwrap();
+    shared::write_new(&directory.join("success.json"),&serde_json::to_vec_pretty(&json!({"probe_version":2,"native_natural_expiry_same_responses":true,"owned_producers_bodies_server_closed":true,"post_ack_pages200201_AZ_without_Q":true,"original_utc_fragments_retained":true,"headed_client_proof":false,"scope":"Owner-qualified safe-boundary native pages; not immediate clearing, complete engine or platform acceptance"})).unwrap()).unwrap();
 }

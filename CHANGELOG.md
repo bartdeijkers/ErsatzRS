@@ -49,15 +49,15 @@ release section when tagging a release.
   isolated two-theme captured and direct live-client navigation. Representative
   cumulative replacement and genuine Lua Off now pass on the same warm streams,
   retaining channel isolation and ordinary playback; VLC requires teletext
-  reselection after PMT replacement. Natural expiry, complete editor coverage
-  and engine acceptance remain open. A new same-response natural-expiry probe
-  retains the original scope and exposes old content at the observed expiry
-  boundary; independent saved-byte transport/AV checks pass, while sink-boundary
-  qualification and actual client clearing remain required.
+  reselection after PMT replacement. Complete editor coverage, actual natural-
+  expiry client clearing and engine acceptance remain open.
   Private opt-in diagnostics now connect original scoped expiry, monitor
   proposals and actual flushed output boundaries to exact written-packet hashes
-  for retained-byte qualification, preserving the original expiry oracle and
-  playback policy.
+  for retained-byte qualification. Native expiry now qualifies original request
+  ownership, full scoped-cycle closure and independent post-ACK Base decoding,
+  retaining raw UTC diagnostics and the agreed playback policy. Page acquisition
+  no longer borrows matching rows from a different page. Actual headed expiry
+  clearing and complete engine acceptance remain required.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

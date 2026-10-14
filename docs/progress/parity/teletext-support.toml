@@ -60,7 +60,7 @@ Carousel/PSI/PCR preserve AV/EOF. ACK/cycle ends fence proposals;
 changed PMT precedes PES; withdrawal retains clock/counters;
 Rejected standalone proposals retain old output; v2 withdraws replacements.
 Epoch status is not publication. Warm resources,
-Scoped Q/QR/Off pass. Exact expiry raw Q tail remains unclassified.
+Q/QR/Off/native expiry pass; headed expiry open. Q failures retained.
 Restart/applied/retained/Next open.
 
 MPEG-TS wrapper/encoder leases, lifecycle/Health remain.
@@ -82,6 +82,18 @@ adr         = '0124'
 description = 'Prove natural scoped expiry and independent accepted-base return on original ordinary responses with correct safe-output timing. Distinguish pre-expiry sink-accepted queued bytes from new expired scoped emission; preserve source AV, complete packets, counters, immutable expiry and current-base recovery. Prove actual headed clearing/navigation after the native boundary is qualified. Do not waive criteria, invent grace or silently trim the raw expiry prefix.'
 discovered  = '2026-10-14'
 evidence    = '''
+P9A-04 now owns explicit original request/intent/slot/epoch qualification and the
+fresh native4 integrated PASS: three original responses, exact unchanged expiry,
+complete Scoped/PES closure, real sink ACK, first restored200 C4, four post-cut
+Base cycles for both same-channel viewers, unchanged second channel, independent
+post-ACK200/201 decoding, TSDuck/AV and actual cleanup. Whole-page acquisition no
+longer borrows blank rows across page identities. Ten offline negatives and39
+focused Rust successes support the precise boundary. UTC fragments and terminal
+Base tails remain retained and separately classified without grace/EOF claims.
+Next prove actual headed natural-expiry clearing/navigation and client cache
+behavior on original responses. This debt remains open; no full engine, resource
+or client acceptance follows. Previous failed trials remain historical evidence:
+
 P9A-04 also owns the subsequent ordinary-output DEBUG provenance checkpoint.
 Native1's truncated log is unusable; native2 retains its Q failure. Native3 passes
 native wire/decoder/AV/cleanup assertions, but the UTC tap is67.493084ms late.

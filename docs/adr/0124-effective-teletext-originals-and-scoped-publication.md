@@ -158,24 +158,22 @@ is required; natural original expiry/base return, automatic resource/cache
 retirement and complete suitable-client/engine acceptance remain open. The parity record and P9A-04
 own verification and the next concrete connection.
 
-The natural-expiry diagnostic now uses a genuinely new trimmed Scripted scope
-and command-free Continue on existing ordinary responses. It observes fresh base
-restoration but retains a failing exact observer-UTC no-Q oracle. Observer time
-and first-seen base are not sink acceptance or Applied. Existing original-expiry
-monitor clamping is present; prepared cycle boundaries and downstream buffers
-must be distinguished from late expired emission using actual ordinary-output
-acknowledgement provenance. No grace or authoring restriction is accepted.
-P9A-04 and the scoped-expiry debt own evidence and the next bounded observation;
-full natural expiry/client/engine acceptance stays open.
+The natural-expiry probe now uses a genuinely new trimmed Scripted scope and
+command-free Continue on original ordinary responses. Explicit private request,
+intent, proposal and pump identities qualify exact sink-flushed cuts. The native
+oracle checks no new expired Scoped cycle and no old marker beyond that safe ACK,
+with independent decoding, preserved source/AV/state and confirmed cleanup.
+Original UTC fragments and prior failed stronger no-Q assertions remain retained;
+receiver timestamps do not become sink acceptance or a new grace period.
 
-Private DEBUG provenance now connects the existing ordinary monitor's proposal
-slot and original expiry to a distinct pump epoch, successfully installed active
-sequence, prepared window and actual sink-flushed acknowledgement. One exact
-first-written TS packet hash per window permits byte-coordinate qualification;
-ambiguous or truncated evidence is rejected. Prepared and first-written windows
-are not complete delivery. This adds no durable authority, deadline extension,
-public applied-state projection or accepted limitation. P9A-04 owns results and
-the remaining exact capture/boundary and headed clearing proof.
+Qualification covers direct Base replacement and complete-cycle withdrawal
+followed by already acknowledged absent PSI before Base recovery. Prepared or
+first-written windows alone are not delivery. Terminal captured Base prefixes
+are reported without asserting complete EOF. The shared page observation also
+rejects borrowing rows from other pages or repeated-header intervals. Private
+trace IDs add no durable authority, public applied-state projection or deadline
+extension. P9A-04 owns the representative native proof and remaining headed
+clearing/navigation, cache/resource, full engine and platform acceptance.
 
 ## Alternatives Considered
 

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: correlate original requests with scoped expiry pump epochs, then qualify exact captured boundaries; full engine acceptance open'
+current_focus = 'P9A-04: prove headed natural-expiry clearing and navigation after owner-qualified native safe-boundary restoration; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,30 +62,26 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-14 ordinary expiry provenance: private DEBUG observations now join original
-monitor deadlines/proposals to actual prepared/written/flushed pump windows and
-installed/applied sequences. P9A-04 owns final source/check/trial receipts. Native1
-has a truncated log; native2 retains Q and fails. Native3 passes unchanged native
-wire/decoder/AV/cleanup assertions, but its UTC tap is67.493084ms after original
-expiry. Exact first-packet hashes match both Day and Observer, so the ownership
-validator rejects ambiguity rather than assigning favorable offsets. Neither the
-PASS nor the trace clears the earlier negative expiry evidence.
-Next connect existing original-request ownership to private proposal/pump epochs;
-then qualify complete PES/cycle closure and exact post-ACK suffix beside the raw
-UTC fragment, correct any actual late cycle and prove headed clearing/navigation.
-Do not rerun the live trial without resolving this concrete correlation gap.
-No timing/oracle/criterion relaxation or production-guide delivery is accepted.
-Local checkpoints remain authorized; remote/main waits for UCU10/UCU11 merges
-and the maintainer's explicit return of Phase9's remote turn. Preserve UCU deltas.
-
-Reuse the prior valid metadata, retained-byte transport/AV/page200/201 and legacy124
-results; P9A-04 owns all historical receipts and failures. The genuine12s Reset/
-command-free Continue fixture preserves fresh bases, accepted history, immutable
-expiry and source clocks. Prior warm Q/QR/Lua Off and all-culture/pinned editor
-proof remain valid for unchanged production/UI inputs. Complete engine/editor/
-resource/zone/restart/applied/guide/native/Next/source/platform/playback gates
-remain; ordinary continuous legacy selected-teletext hookup and default-capacity
-wait-slate timing are separate gaps. Engine-first remains unchanged.
+2026-10-15 owner-qualified scoped-expiry checkpoint: P9A-04 owns source/trial/check
+receipts. Three original ordinary responses now prove exact request/intent/slot/
+epoch ownership, complete Scoped closure, real acknowledged Base boundaries,
+post-cut independent200/201 decoding, isolated channel2, TSDuck/AV and cleanup.
+Whole-page acquisition cannot borrow page201 blank rows for page200. Raw UTC
+fragments and terminal Base tails remain intact; previous failed trials stay
+negative history. This is representative native proof, not full engine acceptance.
+Next connect actual headed suitable-client natural-expiry clearing/navigation on
+original responses; preserve client-cache/resource limitations and existing gates.
+Reuse valid pinned editor, all-culture headed admin and warm Q/QR/Lua Off evidence.
+Full authored Level2.5/fallback, QTM GUI interchange/metadata/zones, resources,
+restart/applied, native/Next/source/all-six-platform safety remain. Continuous
+legacy selected-teletext hookup and default-capacity slate clocks are separate gaps.
+Engine acceptance must precede the sole NOS200–299-inspired production guide addon.
+Local checkpoints remain authorized. The latest maintainer permission allows a
+push only after UCU11 is on origin/main and complete combined CI evidence covers
+all prior reds; a single fully green run is not required. Follow remote changes,
+preserve concurrent UCU deltas and publish nothing.
+2026-10-15 WSL maintenance removed only idle main target/debug/incremental cache;
+source, commits, all dirty files, UCU caches and canonical Phase9 evidence survive.
 
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly
