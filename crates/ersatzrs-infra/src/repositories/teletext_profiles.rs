@@ -9,9 +9,9 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{
     validate_teletext_profile_values, ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId,
     TeletextChannelSelectionSnapshot, TeletextInstallationRead, TeletextInstallationSnapshot,
-    TeletextProfile, TeletextProfileAvailability as A, TeletextProfileRead, TeletextProfileSetting,
-    TeletextProfileValue, TeletextSecretReferenceKind, TeletextSelectionSnapshot,
-    MAX_TELETEXT_PAGE_RECORDS,
+    TeletextProfile, TeletextProfileAvailability as A, TeletextProfileCandidateSnapshot,
+    TeletextProfileRead, TeletextProfileSetting, TeletextProfileValue, TeletextSecretReferenceKind,
+    TeletextSelectionSnapshot, MAX_TELETEXT_PAGE_RECORDS,
 };
 use sqlx::{Row as _, Transaction};
 
@@ -110,6 +110,36 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         // Read-only transaction: no publication or configuration writes.
         let mut tx = self.0.begin().await.repository()?;
         channel_snapshot_in_transaction(&mut tx, channel_id).await
+    }
+
+    async fn candidate_snapshot(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+        profile_id: EntityId,
+    ) -> Result<M<TeletextProfileCandidateSnapshot>> {
+        // Read-only transaction: candidate eligibility is independent of the base choice.
+        let mut tx = self.0.begin().await.repository()?;
+        candidate_in_transaction(&mut tx, channel_id, addon_id, profile_id).await
+    }
+
+    async fn recheck_candidate_snapshot(
+        &self,
+        expected: &TeletextProfileCandidateSnapshot,
+    ) -> Result<M<TeletextProfileCandidateSnapshot>> {
+        // Read-only transaction: no selection, installation or publication writes.
+        let mut tx = self.0.begin().await.repository()?;
+        match candidate_in_transaction(
+            &mut tx,
+            expected.channel_id,
+            &expected.addon_id,
+            expected.profile_id,
+        )
+        .await?
+        {
+            M::Saved(current) if current != *expected => Ok(M::Rejected(R::Conflict)),
+            current => Ok(current),
+        }
     }
 
     async fn save_profile(
@@ -377,10 +407,74 @@ async fn selection_for_binding(
     if !binding.enabled {
         return Ok(M::Rejected(R::DisabledBinding));
     }
-    let Some(profile) = load_profile(tx, binding.profile_id).await? else {
+    let validated = match validated_profile(tx, &binding.addon_id, binding.profile_id).await? {
+        M::Saved(validated) => validated,
+        M::Rejected(reason) => return Ok(M::Rejected(reason)),
+    };
+    Ok(M::Saved(TeletextSelectionSnapshot {
+        channel_id: binding.channel_id,
+        addon_id: binding.addon_id.clone(),
+        binding_revision: binding.revision,
+        profile_id: validated.profile.id,
+        profile_revision: validated.profile.revision,
+        installation: validated.profile.validated_installation,
+        effective_settings: validated.effective_settings,
+        contract: validated.contract,
+    }))
+}
+
+async fn candidate_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    channel_id: EntityId,
+    addon_id: &str,
+    profile_id: EntityId,
+) -> Result<M<TeletextProfileCandidateSnapshot>> {
+    if !channel_exists(tx, channel_id).await? {
+        return Ok(M::Rejected(R::MissingChannel));
+    }
+    let bound: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "ChannelTeletextBinding" WHERE "ChannelId" = ? AND "AddonId" = ?)"#,
+    )
+    .bind(channel_id)
+    .bind(addon_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if !bound {
+        return Ok(M::Rejected(R::MissingBinding));
+    }
+    let validated = match validated_profile(tx, addon_id, profile_id).await? {
+        M::Saved(validated) => validated,
+        M::Rejected(reason) => return Ok(M::Rejected(reason)),
+    };
+    Ok(M::Saved(TeletextProfileCandidateSnapshot {
+        channel_id,
+        addon_id: addon_id.to_owned(),
+        profile_id: validated.profile.id,
+        profile_revision: validated.profile.revision,
+        installation: validated.profile.validated_installation,
+        effective_settings: validated.effective_settings,
+        contract: validated.contract,
+    }))
+}
+
+struct ValidatedProfile {
+    profile: TeletextProfile,
+    effective_settings: Vec<TeletextProfileSetting>,
+    contract: ersatzrs_domain::TeletextPageContract,
+}
+
+// Both base and candidate reads reuse package/schema/value admission, without
+// granting an eligible candidate any enabled-binding or publication authority.
+async fn validated_profile(
+    tx: &mut Transaction<'_, Db>,
+    addon_id: &str,
+    profile_id: EntityId,
+) -> Result<M<ValidatedProfile>> {
+    let Some(profile) = load_profile(tx, profile_id).await? else {
         return Ok(M::Rejected(R::MissingProfile));
     };
-    if profile.addon_id != binding.addon_id {
+    if profile.addon_id != addon_id {
         return Ok(M::Rejected(R::WrongAddon));
     }
     if profile.deleted {
@@ -389,8 +483,7 @@ async fn selection_for_binding(
     if validate_teletext_profile_values(&profile.name, &profile.settings).is_err() {
         return Ok(M::Rejected(R::InvalidSettings));
     }
-    let configuration =
-        configuration_with_settings(tx, &binding.addon_id, Some(&profile.settings)).await?;
+    let configuration = configuration_with_settings(tx, addon_id, Some(&profile.settings)).await?;
     match configuration.installation.availability {
         A::Configured => {}
         A::InvalidSettings => return Ok(M::Rejected(R::InvalidSettings)),
@@ -405,13 +498,8 @@ async fn selection_for_binding(
     let contract = configuration
         .contract
         .ok_or_else(|| decode_error("teletext contract missing"))?;
-    Ok(M::Saved(TeletextSelectionSnapshot {
-        channel_id: binding.channel_id,
-        addon_id: binding.addon_id.clone(),
-        binding_revision: binding.revision,
-        profile_id: profile.id,
-        profile_revision: profile.revision,
-        installation: profile.validated_installation,
+    Ok(M::Saved(ValidatedProfile {
+        profile,
         effective_settings,
         contract,
     }))

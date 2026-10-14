@@ -12,7 +12,8 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     teletext::TeletextPageSetDraft, ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId,
-    TeletextInstallationRead, TeletextProfileRead, TeletextSelectionSnapshot,
+    TeletextInstallationRead, TeletextProfileCandidateSnapshot, TeletextProfileRead,
+    TeletextSelectionSnapshot,
 };
 
 use crate::{
@@ -128,6 +129,32 @@ impl ApplicationServices {
         self.ports()
             .teletext_profiles()
             .channel_bindings(channel_id)
+            .await
+    }
+    /// Validate an existing candidate profile for an already-bound channel/add-on,
+    /// independent of the admin base selection. This read neither enables nor
+    /// invokes a package and grants no producer or published-interval authority.
+    /// Off controls must use their separate membership-only validation policy.
+    pub async fn teletext_profile_candidate_snapshot(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+        profile_id: EntityId,
+    ) -> RepositoryResult<Mutation<TeletextProfileCandidateSnapshot>> {
+        self.ports()
+            .teletext_profiles()
+            .candidate_snapshot(channel_id, addon_id, profile_id)
+            .await
+    }
+    /// Recheck exact candidate configuration without coupling it to mutable
+    /// admin base revisions or promoting it to an enabled base selection.
+    pub async fn recheck_teletext_profile_candidate_snapshot(
+        &self,
+        candidate: &TeletextProfileCandidateSnapshot,
+    ) -> RepositoryResult<Mutation<TeletextProfileCandidateSnapshot>> {
+        self.ports()
+            .teletext_profiles()
+            .recheck_candidate_snapshot(candidate)
             .await
     }
     /// Replace overrides under the repository's transaction and CAS policy.

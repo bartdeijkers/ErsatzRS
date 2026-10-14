@@ -26,6 +26,34 @@ fn profile_debug_never_contains_literal_or_reference_content() {
 }
 
 #[test]
+fn candidate_debug_redacts_package_identity_addon_and_effective_settings() {
+    let candidate = TeletextProfileCandidateSnapshot {
+        contract: TeletextPageContract::V3,
+        channel_id: 2,
+        addon_id: "private fixture addon".to_owned(),
+        profile_id: 17,
+        profile_revision: 9,
+        installation: TeletextInstallationSnapshot {
+            addon_id: "private fixture addon".to_owned(),
+            state_revision: "private fixture state".to_owned(),
+            version: "private fixture version".to_owned(),
+            package_sha256: "private fixture package".to_owned(),
+            content_sha256: "private fixture content".to_owned(),
+            manifest_sha256: "private fixture manifest".to_owned(),
+        },
+        effective_settings: vec![literal(
+            "private fixture key",
+            "private fixture value".to_owned(),
+        )],
+    };
+    let debug = format!("{candidate:?}");
+    assert!(!debug.contains("private fixture"));
+    assert!(debug.contains("channel_id: 2"));
+    assert!(debug.contains("profile_id: 17"));
+    assert!(debug.contains("settings_count: 1"));
+}
+
+#[test]
 fn settings_bounds_count_utf8_bytes_and_reject_duplicate_keys() {
     let maximum = vec![literal(
         "KEY",

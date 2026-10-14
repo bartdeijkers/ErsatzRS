@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Validate an existing teletext profile candidate independently of its channel's
+  admin base selection, including when base teletext is Off. Shared application
+  reads retain the base and recheck exact profile/package/settings ownership.
+  Lua commands, published override intervals and live activation remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

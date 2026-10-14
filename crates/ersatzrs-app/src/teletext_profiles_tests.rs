@@ -169,6 +169,39 @@ fn receipt(selection: TeletextSelectionSnapshot) -> TeletextProfileRuntimeReceip
 }
 
 #[tokio::test]
+async fn unsupported_candidate_port_never_falls_back_to_base_authority() {
+    use ersatzrs_core::repositories::RepositoryError;
+
+    // This adapter implements the existing base controls, not candidate reads.
+    // New defaults must fail honestly rather than substituting the base profile.
+    let repo = Repository::new();
+    let before = repo.selections.lock().unwrap().clone();
+    let base = selection(1);
+    let candidate = TeletextProfileCandidateSnapshot {
+        contract: base.contract,
+        channel_id: base.channel_id,
+        addon_id: base.addon_id,
+        profile_id: 99,
+        profile_revision: base.profile_revision,
+        installation: base.installation,
+        effective_settings: base.effective_settings,
+    };
+    let resolve = repo.candidate_snapshot(1, ADDON, 99).await;
+    let recheck = repo.recheck_candidate_snapshot(&candidate).await;
+    for (result, expected_operation) in [
+        (resolve, "teletext candidate profile validation"),
+        (recheck, "teletext candidate profile recheck"),
+    ] {
+        assert!(matches!(result,
+            Err(RepositoryError::Unavailable { operation, message })
+                if operation == expected_operation
+                    && message == "candidate profile validation is unsupported"));
+    }
+    assert_eq!(repo.reads.load(Ordering::SeqCst), 0);
+    assert_eq!(*repo.selections.lock().unwrap(), before);
+}
+
+#[tokio::test]
 async fn invalid_guide_never_reads_selection_or_invokes_runtime() {
     let repo = Repository::new();
     let mut context = context(&[]);

@@ -3,11 +3,12 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{
     ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextChannelSelectionSnapshot,
-    TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile, TeletextProfileRead,
-    TeletextProfileSetting, TeletextSelectionSnapshot,
+    TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile,
+    TeletextProfileCandidateSnapshot, TeletextProfileRead, TeletextProfileSetting,
+    TeletextSelectionSnapshot,
 };
 
-use super::Result;
+use super::{RepositoryError, Result};
 
 /// Complete override replacement; `existing=None` creates a new named profile.
 /// Expected identities never relabel validation performed for another revision.
@@ -80,8 +81,8 @@ pub trait TeletextProfileRepository: Send + Sync {
     ) -> Result<Vec<ChannelTeletextBindingRead>>;
     /// Capture an exact enabled base selection and its bounded effective values
     /// in one read transaction. Rejection writes nothing and implies no fallback.
-    /// Future Lua candidate validation must reuse this policy; candidate/base
-    /// transitions and their publication intervals are not represented here.
+    /// Candidate/base transitions and their publication intervals are not
+    /// represented here; a candidate snapshot cannot authorize this invocation.
     async fn invocation_snapshot(
         &self,
         channel_id: EntityId,
@@ -96,6 +97,35 @@ pub trait TeletextProfileRepository: Send + Sync {
         &self,
         channel_id: EntityId,
     ) -> Result<TeletextProfileMutation<TeletextChannelSelectionSnapshot>>;
+    /// Validate an existing profile for an already-bound channel/add-on in one
+    /// read transaction, including a disabled base or a different base profile.
+    /// Reuse the enabled-selection installation/settings checks without granting
+    /// producer authority, writing a selection or activating a package. This is
+    /// profile-selection/On validation; Off does not require a healthy profile.
+    async fn candidate_snapshot(
+        &self,
+        _channel_id: EntityId,
+        _addon_id: &str,
+        _profile_id: EntityId,
+    ) -> Result<TeletextProfileMutation<TeletextProfileCandidateSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext candidate profile validation",
+            "candidate profile validation is unsupported",
+        ))
+    }
+    /// Revalidate channel/binding presence and the candidate's exact profile,
+    /// installation, contract and effective settings in one read transaction.
+    /// Changes only to the admin base enabled/profile/revision are independent.
+    /// Reject a changed candidate rather than granting its replacement authority.
+    async fn recheck_candidate_snapshot(
+        &self,
+        _candidate: &TeletextProfileCandidateSnapshot,
+    ) -> Result<TeletextProfileMutation<TeletextProfileCandidateSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext candidate profile recheck",
+            "candidate profile validation is unsupported",
+        ))
+    }
     /// Replace a complete override bag and invalidate only its dependents.
     async fn save_profile(
         &self,

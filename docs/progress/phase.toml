@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: representative warm client flow proven; next Scripted/Lua intervals; full engine acceptance open'
+current_focus = 'P9A-04: warm flow and candidate-profile reads proven; next Lua cursor intervals; full acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1344,6 +1344,13 @@ automatic selection and full client/engine acceptance remain unproven. P9A-04
 owns canonical successes, retained negatives and the criterion/gap map.
 Next connect ADR0122 Scripted/Lua cursor-bound intervals through the existing
 application/scheduling seams, with base precedence/rollback/restart/isolation.
+Read-only candidate profile validation now admits an existing alternative on an
+Off/different base without writes, using the same package/settings guards. Exact
+rechecks ignore base edits but reject target drift; distinct tokens grant no
+producer/interval authority.61 focused regressions pass, including two-channel
+values, no-write/invalid-owner/mutation matrices and configuration reopen.
+Next wire bounded candidate Lua cursor events and atomic interval publication;
+Continue, Refresh/Reset, mirror, expiry/restart and live effect remain open.
 Full resource/cache transitions and UI applied state still require proof.
 Retained/Next, whole-host open-client drain and full Lua timing stay open.
 Stable wait-slate muxing separately needs compatible codec/caption/audio topology;

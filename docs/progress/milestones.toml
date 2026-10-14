@@ -2724,6 +2724,54 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 candidate-profile validation prerequisite:
+Criterion: Lua must select an existing bound-channel profile or turn an Off base
+On without mutating the admin base or auto-enabling packages. Existing enabled-base
+invocation_snapshot cannot validate those targets. Add a distinct read-only
+TeletextProfileCandidateSnapshot and shared application resolve/recheck controls.
+A single SQLite read transaction requires current channel/addon membership, then
+reuses exactly the base producer's profile/installed-package/schema/effective-value
+policy. Disabled or differently selected base bindings do not substitute their
+profile. Fresh rechecks compare complete target identity/values and ignore only
+mutable base enabled/profile/revision fields. Missing/wrong/deleted/unavailable
+or changed targets reject. The distinct type has no base binding revision or
+producer/publication authority; no native invocation, configuration write or
+package activation is added. Off will require membership-only validation, preserving
+the existing admin path that can disable unavailable profiles. Unsupported adapters
+fail explicitly, never fall back to enabled-base reads or fabricated success.
+
+Run46f54dda-f982-4466-bdc4-665f8b2b2881 passes61/61 targeted domain/core/app/infra
+profile/document tests, including8 new cases. Six real-SQLite groups prove two
+channels/one addon with different target themes and Off/alternative base, no
+writes by connection total_changes(), intervening base selection/disable/tombstone
+edits, eight selected-profile/package/inherited-setting drift variants, wrong or
+missing owners, five deletion/tombstone/membership variants and file-backed reopen.
+The legacy enabled-base controls, unavailable Off, settings bounds, secret-reference
+handling, producer receipt/freshness and no-retry guards all pass. Candidate Debug
+redacts addon/install/settings contents; optional-port defaults are honestly
+unavailable with zero producer reads. Database reopen proves configuration reads,
+not published Lua interval restart behavior. Existing warm TCP/client proof is
+reused; no UI/WASM/dependency/migration/production FFmpeg-argv changes.
+
+Next connect these application reads through the existing scheduler/application
+injection to candidate-only Lua cursor events. Bound channel identity, command
+count and lookup lifetime; preserve handled rejection and whole-script rollback.
+Finalize half-open intervals at the actual last accepted item finish and persist/
+revalidate them in the existing scheduling transaction. Continue/base precedence,
+Refresh/Reset seam, mirror isolation, expiry/restart, native promotion/effective
+selection and actual open-stream Lua effects remain unimplemented/unproven.
+No full engine/milestone acceptance, completed dependency or production content
+is inferred. All previous acceptance clauses stay unchanged. Strict domain/core/
+app/infra all-target Clippy, formatting, architecture/new-allowance and structured
+progress checks pass. Architecture lint requires explicit read-only transaction
+comments; adding those comments changes no behavior and reuses61-test/lint proof.
+The test build grows the configured cache above60GiB; after all tests complete,
+required Cargo-only cleanup removes69.5GiB before remaining checks. Source/proof
+files and every unrelated worktree delta remain preserved. Receipt:
+`tmp/phase9-lua-candidates/identity.json`,
+SHA25687af7a6e3538b8e3d5cdefe0de7f064d51b870a19cb5ed643214b695b107cc1e.
+Preparatory checkpoint is local; no push/publication or full-closeout/CI claim.
+
 2026-10-14 warm same-URL client checkpoint (representative, not engine acceptance):
 Criterion: profile/validated preview/separate publication -> ordinary TCP routes ->
 same-client display/navigation, multiple viewers and channel/theme isolation.
@@ -3330,6 +3378,7 @@ Current criterion-to-next-step map (reuse detailed earlier receipts below):
 | Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
 | Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two actual ordinary HTTP clients, simultaneous themes and124->125->124; normal HTTP TSDuck plus prior exact-model/AV/decoding and72 localized headed flows | Direct Router and actual warm TCP Off/On/replacement/Off/re-enable pass with manual client reselection; capacity-slate clocks, full resources/panels/features and applied-state admin proof remain open |
 | Actual pinned QTM workflow | Actual v1.0 NOS, indexed0+1 and sparse1-only dependency load/pixels/Save As; dense native/stream decode, Legacy/V2/V3 recovery | Sparse normative X27 decoding/client, remaining charset/resource editing and full supported set/subpage edits |
+| Lua profile/On target validation | Distinct read-only app/repository snapshot; exact target recheck, no writes, two-channel settings and database reopen proven | Cursor commands/interval transaction/effective resolver, promotion/expiry/restart and actual open-stream Lua proof |
 | Full engine acceptance | Initially-absent native epoch/AV/PSI/decode/TSDuck, startup fences and earlier representative client receipts retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
 
 Concrete next action: connect Scripted/Lua teletext selections to the accepted

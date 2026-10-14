@@ -11,6 +11,12 @@ to Phase 9. This supplements ADRs 0120/0121 without changing their delivery orde
 Partially implemented: neutral profile/binding types and an additive SQLite
 repository provide isolated, revision-fenced configuration. Shared application
 controls prepare profile-scoped and complete channel-wide unpublished candidates.
+Separate read-only candidate controls validate another existing profile for an
+already-bound channel/add-on, including when its admin base is Off. They reuse
+the same installation/settings policy and expose a distinct candidate snapshot
+without base-binding or publication authority. Fresh rechecks preserve the
+target across base edits while rejecting target/profile/package/settings drift.
+Candidate validation alone does not implement Lua commands or published intervals.
 The native host encodes exact retained authored originals through the shared
 compiler. A dedicated in-order SSR channel route connects named manifest-driven
 profiles and base binding controls to these application functions, independently
@@ -24,7 +30,12 @@ explicitly select its exact immutable original for new compatible streams;
 observed head/pending/accepted fences are checked by the existing transactions.
 Historical pages remain previewable when their saved selection becomes stale,
 with unavailable publication controls and retained pointer observations.
-Running streams retain their captured generation.
+Version1 streams retain their startup generation. Explicit version2 direct
+responses own bounded accepted-state reconciliation, permitting initial Off,
+replacement, withdrawal and fresh acceptance on their original source clock.
+The representative two-client warm display/navigation and isolated themes pass
+with native client reselection; full resource/cache and retained/Next controls
+remain open.
 A finite-client whole-host restart trial retains two selected themes and a newer
 pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
 the exact proof and negative shutdown receipt. Fresh guide/editor interchange,
