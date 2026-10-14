@@ -46,7 +46,7 @@ release section when tagging a release.
   one immutable original, including edits across separate export subsets. Each
   import remains unpublished and rechecks protected boundaries. Representative
   repeated edits now pass localized headed admin, ordinary-stream validation and
-  isolated two-theme captured-client navigation. Direct live-client transitions,
+  isolated two-theme captured and direct live-client navigation. Warm transitions,
   complete editor coverage and engine acceptance remain open.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require

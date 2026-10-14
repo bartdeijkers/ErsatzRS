@@ -44,7 +44,7 @@ mod drcs_companion;
 #[path = "editorial_http.rs"]
 mod http_routes;
 #[path = "editorial_imports/live_client.rs"]
-mod live_client;
+pub(super) mod live_client;
 #[path = "editorial_imports/live_updates.rs"]
 mod live_updates;
 #[path = "editorial_imports/qtm_carrier.rs"]

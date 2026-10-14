@@ -3951,6 +3951,22 @@ atomically write the exact five-field completion identity from `ready.json` to
 late marker is not successful native verification; require `success.json` and
 nextest exit0 for retained-state and bounded owned-server cleanup.
 
+The separate `cumulative_scoped_originals_serve_live_ordinary_urls` selector uses
+`ERSATZRS_TELETEXT_SCOPED_LIVE_CLIENT_DIR` instead. It publishes installed synthetic
+V3/Lua originals, imports free-content Q, re-exports that concept and imports zone
+R, previews and explicitly publishes the cumulative concept. Readiness version2
+binds the actual channels, scoped design/revision/digest, authenticated original,
+saved expiry and200->201->200 navigation at subcode0. Use the same headed helper
+without `--captured-replay`; it validates the closed version2 identity before
+opening clients and derives page controls from that validated manifest. Inspect
+all six rendered headers, red/day AZ with white Q/R only on200 and blue/night AZ
+without Q/R. The helper never releases completion automatically. Require both
+client exits0, root inspection, the exact readiness completion marker, native
+success and bounded cleanup as above. Actual four60-second scheduled items define
+the Lua interval before original capture; each cold response serves its current
+clip to genuine EOF. Retained expiry and source timestamps are never extended or
+rewritten. Reopening application state is not whole-host restart acceptance.
+
 The disposable fixture configures four existing capacity slots before its
 baseline/reopen for two viewers plus two concurrent ordinary-URL transport probes.
 Run those with the unchanged `tsduck-playback-gate.sh url "$URL" 20 --keep` gate.

@@ -29,8 +29,10 @@ new edit's authority. Native correction tests and representative repeated-editor
 headed Chromium/Firefox flows now pass, with independent cumulative Q/R decoding
 and visibly navigable isolated client replay. Actual pinned-editor GUI/capture
 evidence is composed with complete supplementary browser cases; the interrupted
-long GUI/capture case is not a complete pass. Complete editor coverage, direct live
-application-client attachment, warm transitions and whole-host restart remain open.
+long GUI/capture case is not a complete pass. A new role2 cold real-Router fixture
+now connects cumulative concepts to actual ordinary-URL client attachment and
+inspected two-theme navigation, preserving original expiry and reopened state.
+Complete editor coverage, warm transitions and whole-host restart remain open.
 P9A-04 owns verification and remaining userflow gaps. This does not establish
 same-URL suitable-client transitions or full engine acceptance.
 

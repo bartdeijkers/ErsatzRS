@@ -13,6 +13,7 @@ and proves neither live updates nor source provenance on its own.
 """
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -31,6 +32,7 @@ MAX_READY = 64 * 1024
 MAX_IMAGE = 16 * 1024 * 1024
 MAX_LOG = 8 * 1024 * 1024
 MAX_CAPTURE = 8 * 1024 * 1024
+MAX_LIVE_SOURCE = 48 * 1024 * 1024
 TRIAL_SECONDS = 120
 RECEIPTED = {
     GUI: "2ae2f7d95241027194f1355341a1fe51cde6860bce6a248c5b181194ba3eaf15",
@@ -97,7 +99,7 @@ def replay_ready(ready, directory):
     if (set(ready) != {"probe_version", "mode", "expected_pages", "subcode", "viewers"}
             or type(ready["probe_version"]) is not int or ready["probe_version"] != 1
             or ready["mode"] != "captured-ordinary-replay"
-            or ready["expected_pages"] != [200, 201]
+            or not exact_integer_list(ready["expected_pages"], [200, 201])
             or type(ready["subcode"]) is not int or ready["subcode"] != 0
             or not isinstance(ready["viewers"], list) or len(ready["viewers"]) != 2):
         raise RuntimeError("Expected closed captured-ordinary replay manifest for pages 200/201")
@@ -132,6 +134,162 @@ def replay_ready(ready, directory):
     return by_theme
 
 
+def exact_integer_list(value, expected):
+    return isinstance(value, list) and value == expected and all(type(item) is int for item in value)
+
+
+def exact_cell(value, row):
+    return (isinstance(value, dict) and set(value) == {"row", "column"}
+            and type(value["row"]) is int and value["row"] == row
+            and type(value["column"]) is int and value["column"] == 8)
+
+
+def positive_identity(value):
+    return type(value) is int and 0 < value <= 9223372036854775807
+
+
+def utc_expiry(value):
+    if not isinstance(value, str) or not re.fullmatch(
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?(?:Z|\+00:00)", value):
+        raise RuntimeError("Expected the original UTC scope expiry")
+    try:
+        instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise RuntimeError("Invalid original UTC scope expiry") from None
+    if instant <= datetime.now(timezone.utc):
+        raise RuntimeError("The original effective scope has expired")
+    return instant
+
+
+def ordinary_url(value, channel_id):
+    if not isinstance(value, str):
+        raise RuntimeError("Expected a literal owned ordinary URL")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        raise RuntimeError("Invalid owned ordinary URL") from None
+    if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
+            or parsed.username is not None or parsed.password is not None
+            or not port or parsed.netloc != f"127.0.0.1:{port}"
+            or parsed.path != f"/iptv/hls-direct/{channel_id}.ts" or parsed.query or parsed.fragment):
+        raise RuntimeError("Native trial requires exact loopback ordinary URLs")
+    return port
+
+
+def legacy_ready(ready):
+    channels = ready.get("channels")
+    if not isinstance(channels, list) or len(channels) != 2 or not all(isinstance(v, dict) for v in channels):
+        raise RuntimeError("Expected two native ready channels")
+    by_theme, ports = {}, set()
+    for expected_id, theme in [(1, "day"), (2, "night")]:
+        channel = next((v for v in channels if type(v.get("channel_id")) is int and v["channel_id"] == expected_id), None)
+        if not channel or channel.get("theme") != theme:
+            raise RuntimeError("Native readiness channel/theme mismatch")
+        if (not exact_integer_list(channel.get("expected_pages"), [124, 125]) or type(channel.get("subcode")) is not int
+                or channel["subcode"] != 32 or not exact_integer_list(channel.get("expected_navigation"), [124, 125, 124])):
+            raise RuntimeError("Legacy native trial requires pages124/125, subcode32 and exact navigation")
+        ports.add(ordinary_url(channel.get("url"), expected_id))
+        by_theme[theme] = channel
+    if len(ports) != 1:
+        raise RuntimeError("Expected one owned native host port")
+    return by_theme
+
+
+def effective_ready(ready, directory):
+    keys = {"probe_version", "scope", "source", "channels", "active_transcode_limit", "completion_file",
+            "completion_timeout_seconds", "expected_completion", "client_actions", "limitations"}
+    if set(ready) != keys or type(ready["probe_version"]) is not int or ready["probe_version"] != 2:
+        raise RuntimeError("Expected closed cumulative effective live readiness")
+    if any(not isinstance(ready[key], str) or not ready[key] or len(ready[key]) > 2048
+           for key in ["scope", "client_actions", "limitations"]):
+        raise RuntimeError("Expected bounded live trial descriptions")
+    if (type(ready["active_transcode_limit"]) is not int or ready["active_transcode_limit"] != 4
+            or ready["completion_file"] != "client-complete.json"
+            or type(ready["completion_timeout_seconds"]) is not int or ready["completion_timeout_seconds"] != 180
+            or not isinstance(ready["expected_completion"], dict)
+            or type(ready["expected_completion"].get("probe_version")) is not int
+            or ready["expected_completion"] != {"probe_version": 2, "client_name": "VLC", "client_version": "3.0.20",
+                "decoder_version": "0.2.42", "proof_suffix": "cumulative-effective-live-ordinary"}):
+        raise RuntimeError("Unsupported cumulative effective client completion identity")
+    source = ready["source"]
+    if (not isinstance(source, dict) or set(source) != {"file", "sha256", "bytes", "duration_seconds"}
+            or source["file"] != "source.ts" or type(source["bytes"]) is not int
+            or not 0 < source["bytes"] <= MAX_LIVE_SOURCE or type(source["duration_seconds"]) is not int
+            or source["duration_seconds"] != 60 or not isinstance(source["sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", source["sha256"])):
+        raise RuntimeError("Expected bounded sixty-second native source provenance")
+    body = bounded_bytes(directory / source["file"], MAX_LIVE_SOURCE)
+    if (len(body) != source["bytes"] or digest(body) != source["sha256"] or len(body) % 188
+            or any(body[offset] != 0x47 or body[offset + 1] & 0x80 for offset in range(0, len(body), 188))):
+        raise RuntimeError("Native source differs from its bounded framing/hash provenance")
+    if any(((body[offset + 1] & 0x1f) << 8 | body[offset + 2]) == 512 for offset in range(0, len(body), 188)):
+        raise RuntimeError("Native ordinary source already contains the authored PID")
+    channel_keys = {"channel_id", "theme", "url", "addon_id", "profile_id", "profile_revision", "theme_rgb4",
+        "generation_id", "request_id", "design_id", "design_revision", "scoped_role", "original_design_id",
+        "original_revision", "original_digest", "root_receipt_id", "root_receipt_digest", "original_valid_until",
+        "expected_pages", "subcode", "expected_navigation", "edited_q_page", "edited_r_page", "edited_q_cell", "edited_r_cell"}
+    channels = ready["channels"]
+    if not isinstance(channels, list) or len(channels) != 2:
+        raise RuntimeError("Expected two actual scoped ordinary channels")
+    by_theme, ports = {}, set()
+    for item in channels:
+        if not isinstance(item, dict) or set(item) != channel_keys or item["theme"] not in ["day", "night"]:
+            raise RuntimeError("Expected closed scoped channel identities")
+        if item["theme"] in by_theme:
+            raise RuntimeError("Duplicate scoped theme")
+        for key in ["channel_id", "profile_id", "profile_revision", "generation_id", "request_id", "design_id",
+                    "design_revision", "original_design_id", "original_revision", "root_receipt_id"]:
+            if not positive_identity(item[key]):
+                raise RuntimeError("Invalid scoped original/current identity")
+        if (type(item["scoped_role"]) is not int or item["scoped_role"] != 2
+                or item["original_design_id"] != item["design_id"] or item["original_revision"] != 1
+                or item["design_revision"] != (3 if item["theme"] == "day" else 1)):
+            raise RuntimeError("Expected cumulative day revision3 and untouched night revision1 rooted in originals")
+        if (not isinstance(item["addon_id"], str) or len(item["addon_id"]) > 255
+                or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*){2,}", item["addon_id"])):
+            raise RuntimeError("Invalid selected addon identity")
+        if any(not isinstance(item[key], str) or not re.fullmatch(r"[0-9a-f]{64}", item[key])
+               for key in ["original_digest", "root_receipt_digest"]):
+            raise RuntimeError("Invalid immutable original/receipt digest")
+        if (not exact_integer_list(item["expected_pages"], [200, 201]) or type(item["subcode"]) is not int or item["subcode"] != 0
+                or not exact_integer_list(item["expected_navigation"], [200, 201, 200])
+                or not exact_integer_list(item["theme_rgb4"], [15, 0, 0] if item["theme"] == "day" else [0, 0, 15])
+                or any((type(item[key]) is not int or item[key] != 200) if item["theme"] == "day" else item[key] is not None
+                       for key in ["edited_q_page", "edited_r_page"])
+                or not exact_cell(item["edited_q_cell"], 2) or not exact_cell(item["edited_r_cell"], 3)):
+            raise RuntimeError("Unsupported scoped pages, navigation, theme or Q/R edit ownership")
+        utc_expiry(item["original_valid_until"])
+        ports.add(ordinary_url(item["url"], item["channel_id"]))
+        by_theme[item["theme"]] = item
+    if set(by_theme) != {"day", "night"} or len(ports) != 1 or by_theme["day"]["addon_id"] != by_theme["night"]["addon_id"]:
+        raise RuntimeError("Expected two themes of one addon on one actual native host")
+    for key in ["channel_id", "profile_id", "generation_id", "request_id", "design_id", "root_receipt_id"]:
+        if by_theme["day"][key] == by_theme["night"][key]:
+            raise RuntimeError("Scoped channel/profile/publication identities are not isolated")
+    return by_theme
+
+
+def validate_readiness(raw, directory, captured_replay=False):
+    def unique_pairs(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise RuntimeError("Duplicate native readiness field")
+            value[key] = item
+        return value
+    ready = json.loads(raw, object_pairs_hook=unique_pairs)
+    if not isinstance(ready, dict) or type(ready.get("probe_version")) is not int:
+        raise RuntimeError("Expected native readiness object/version")
+    if captured_replay:
+        return ready, replay_ready(ready, directory), "200", "201", 0
+    if ready["probe_version"] == 1:
+        return ready, legacy_ready(ready), "124", "125", 32
+    if ready["probe_version"] == 2:
+        return ready, effective_ready(ready, directory), "200", "201", 0
+    raise RuntimeError("Unsupported native readiness version")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("native_ready_file", type=Path)
@@ -154,46 +312,22 @@ def main():
     sources["client-trial.py"] = digest(bounded_bytes(Path(__file__), MAX_LOG))
     ready_path = args.native_ready_file.absolute()
     raw_ready = bounded_bytes(ready_path, MAX_READY)
-    def unique_pairs(pairs):
-        value = {}
-        for key, item in pairs:
-            if key in value:
-                raise RuntimeError("Duplicate native readiness field")
-            value[key] = item
-        return value
-    ready = json.loads(raw_ready, object_pairs_hook=unique_pairs)
-    if not isinstance(ready, dict):
-        raise RuntimeError("Expected native readiness object")
-    if ready.get("probe_version") != 1:
-        raise RuntimeError("Unsupported native readiness version")
+    ready, by_theme, first_page, next_page, subcode = validate_readiness(raw_ready, ready_path.parent, args.captured_replay)
     channels = ready.get("channels")
-    if args.captured_replay:
-        by_theme = replay_ready(ready, ready_path.parent)
-    else:
-        if (not isinstance(channels, list) or len(channels) != 2
-                or not all(isinstance(v, dict) for v in channels)):
-            raise RuntimeError("Expected two native ready channels")
-        by_theme, ports = {}, set()
-        for expected_id, theme in [(1, "day"), (2, "night")]:
-            channel = next((v for v in channels if v.get("channel_id") == expected_id), None)
-            if not channel or channel.get("theme") != theme:
-                raise RuntimeError("Native readiness channel/theme mismatch")
-            parsed = urlsplit(channel.get("url", ""))
-            if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
-                    or parsed.username is not None or parsed.password is not None
-                    or not parsed.port or parsed.path != f"/iptv/hls-direct/{expected_id}.ts"
-                    or parsed.query or parsed.fragment):
-                raise RuntimeError("Native trial requires exact loopback ordinary URLs")
-            ports.add(parsed.port)
-            by_theme[theme] = channel
-        if len(ports) != 1:
-            raise RuntimeError("Expected one owned native host port")
-    first_page, next_page = ("200", "201") if args.captured_replay else ("124", "125")
+    effective = not args.captured_replay and ready["probe_version"] == 2
+    original_started = time.monotonic()
+    deadline = original_started + TRIAL_SECONDS
+    if effective:
+        # Conservatively clamp the one original trial clock to both immutable
+        # UTC expiries; observations and page actions never renew either scope.
+        remaining_scope = min((utc_expiry(item["original_valid_until"]) - datetime.now(timezone.utc)).total_seconds()
+                              for item in channels)
+        deadline = min(deadline, original_started + remaining_scope)
+
     destination = args.new_output_directory.absolute()
     destination.mkdir()  # Existing directories/files/symlinks are never overwritten.
     record = (destination / "trial.ndjson").open("x", encoding="utf-8")
     clients = []
-    deadline = time.monotonic() + TRIAL_SECONDS
 
     def emit(value):
         encoded = json.dumps(value, sort_keys=True)
@@ -208,13 +342,15 @@ def main():
                   "expected_replay_pacing_rate": 0.25, "client_playback_rate": 0.25,
                   "source_provenance_proven": False}
                  if args.captured_replay else {"native_ready_sha256": digest(raw_ready),
-                                              "channels": channels, "source": ready.get("source")}),
+                                              "channels": channels, "source": ready.get("source"), "live_application_url_attachment_expected": True,
+                                              "effective_cumulative_role": effective}),
               "client": "VLC 3.0.20-3build6", "decoder": "libzvbi 0.2.42-2",
               "scope": "Finite captured-ordinary MAIN palette/AZ and requested page navigation inspection"
                        if args.captured_replay else "MAIN glyph/palette and requested page navigation inspection",
               "panel_display_proven": False, "rendered_navigation_proven": False,
+              "expected_navigation": [first_page, next_page, first_page], "expected_subcode": subcode,
               "limitations": "Interactive numeric entry remains unproven; WSLg keyboard input can cross owned windows. Installed formatter has 41 columns; 56-column side panels remain unproven."
-                             if args.captured_replay else "Installed formatter has 41 columns; 56-column side panels remain unproven."})
+                             if args.captured_replay else "Interactive numeric entry, side panels, complete Level2.5, warm changes and whole-host restart remain unproven."})
         for index, theme in enumerate(["day", "night"]):
             before = windows(deadline)
             owned = {"theme": theme}
@@ -305,7 +441,7 @@ def main():
                 image_hash = digest(bounded_bytes(image, MAX_IMAGE))
                 emit({"event": "captured", "theme": owned["theme"], "requested_page": page,
                       "stage": stage, "image": image.name, "sha256": image_hash,
-                      "rendered_page_verified": False, "expected_header": f"{page}.00" if args.captured_replay else f"{page}.20"})
+                      "rendered_page_verified": False, "expected_header": f"{page}.{subcode:02X}"})
         for owned in clients:
             client_exit = owned["client"].wait(timeout=remaining(deadline, 80))
             emit({"event": "finished", "theme": owned["theme"], "client_exit": client_exit,
@@ -326,7 +462,9 @@ def main():
                   "limitations": "Interactive numeric entry remains unproven; this trial requests pages through the owned Qt spin arrows.",
                   "next": "Inspect actual 200/201 headers, AZ and distinct palettes; link original admin capture provenance separately."}
                  if args.captured_replay else {"ordinary_live_url_attachment_and_client_exit_proven": True,
-                                               "next": "Inspect actual headers, day-only Q and red/blue indexed DRCS/Z in six captured windows."}),
+                                               "next": ("Inspect actual200/201 headers, AZ, day200-only cumulative Q/R and isolated red/blue themes in six captured windows."
+                                                        if effective else "Inspect actual headers, day-only Q and red/blue indexed DRCS/Z in six captured windows."),
+                                               "effective_cumulative_role": effective, "interactive_numeric_entry_verified": False}),
               "native_completion_released": False,
               "rendered_navigation_proven": False, "theme_isolation_proven": False,
               "panel_display_proven": False})

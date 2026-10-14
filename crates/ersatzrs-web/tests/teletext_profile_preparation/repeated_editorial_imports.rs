@@ -45,7 +45,7 @@ fn page_name(exported: &ExportedOriginalTeletextDesign, owner: TeletextPageAddre
         .name
 }
 
-fn request(
+pub(super) fn request(
     exported: &ExportedOriginalTeletextDesign,
     head: i64,
     edits: &[(TeletextPageAddress, u8, u8)],

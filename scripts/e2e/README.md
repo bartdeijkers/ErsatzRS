@@ -1385,3 +1385,12 @@ checks retained state and bounded owned-host closure. Follow the
 P9A-04 owns receipts, negative trials and remaining criteria. These Linux-x64/X11
 helpers are test tooling; neither a representative pass nor four-slot fixture
 capacity closes full engine or capacity-wait playback acceptance.
+
+The separate `cumulative_scoped_originals_serve_live_ordinary_urls` selector and
+`ERSATZRS_TELETEXT_SCOPED_LIVE_CLIENT_DIR` exercise repeated effective-role editor
+concepts over actual Lua origins. Its closed version2 readiness selects200/201
+navigation and original expiry; the same headed helper validates that manifest
+before opening the actual ordinary URLs. Inspect cumulative free Q/zone R only on
+day200 and the isolated night theme. The linked workflow retains the same explicit
+root completion, genuine EOF and cleanup requirements. Cold direct attachment
+does not establish warm changes/expiry, whole-host restart or full engine acceptance.

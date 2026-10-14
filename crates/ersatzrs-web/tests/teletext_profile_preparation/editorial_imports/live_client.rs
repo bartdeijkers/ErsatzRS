@@ -54,7 +54,7 @@ impl ClientComplete {
     }
 }
 
-fn hash(bytes: &[u8]) -> String {
+pub(in super::super) fn hash(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut value = String::with_capacity(64);
     for byte in sha2::Sha256::digest(bytes) {
@@ -63,7 +63,7 @@ fn hash(bytes: &[u8]) -> String {
     value
 }
 
-fn read_bounded(path: &Path, maximum: usize) -> io::Result<Vec<u8>> {
+pub(in super::super) fn read_bounded(path: &Path, maximum: usize) -> io::Result<Vec<u8>> {
     use std::io::Read as _;
     let metadata = std::fs::symlink_metadata(path)?;
     if !metadata.file_type().is_file() || metadata.len() > u64::try_from(maximum).unwrap() {
@@ -131,14 +131,14 @@ async fn cancel_responses(
     )
 }
 
-struct LiveOrigin {
+pub(in super::super) struct LiveOrigin {
     base: String,
     stop: CancellationToken,
     task: JoinHandle<io::Result<()>>,
 }
 
 impl LiveOrigin {
-    async fn start(fixture: &Fixture) -> io::Result<Self> {
+    pub(in super::super) async fn start(fixture: &Fixture) -> io::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
         let stop = CancellationToken::new();
@@ -161,7 +161,7 @@ impl LiveOrigin {
         })
     }
 
-    async fn close(&mut self) -> io::Result<()> {
+    pub(in super::super) async fn close(&mut self) -> io::Result<()> {
         self.stop.cancel();
         match tokio::time::timeout(Duration::from_secs(5), &mut self.task).await {
             Ok(Ok(result)) => result,
@@ -174,6 +174,10 @@ impl LiveOrigin {
                 ))
             }
         }
+    }
+
+    pub(in super::super) fn url(&self, channel: i64) -> String {
+        format!("{}/iptv/hls-direct/{channel}.ts", self.base)
     }
 }
 

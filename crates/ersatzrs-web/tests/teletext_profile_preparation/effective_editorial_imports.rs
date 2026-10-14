@@ -33,6 +33,9 @@ use ersatzrs_web::host::{
 };
 use serde_json::{json, Value};
 
+#[path = "effective_editorial_imports/live_client.rs"]
+mod live_client;
+
 async fn v3_fixture() -> AuthoringFixture {
     let mut fixture = AuthoringFixture::new().await;
     let path = fixture.fixture.root.path().join("package/fixture.sh");
