@@ -2724,6 +2724,33 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 headed Scripted Health checkpoint:
+Criterion: localized changed admin with real hydrated/no-JS controls; visible
+invalid-profile state without package side effects. On the54ab5888 core checkpoint,
+a matched SSR/WASM/CSS build passes8 headed cases sequentially: Chromium151.0.7922.34
+4/4 (44.01s), Firefox153.0 4/4 (80.68s), no skips/flaky/unexpected results. Every
+culture, both themes and JS on/off see the two new messages through real Health
+refresh buttons:72 primary rendered combinations, plus EN/NL malformed/Off/expiry
+states. Native profile/binding forms provide genuine installation/profile pins.
+Private codec rows are fixture-only setup; actual app->Lua->SQL publication/reopen
+remains the separate175-case foundation proof, not fabricated by this browser test.
+Raw persisted health.results match the actual backend reasons/Pass. Active missing
+membership/malformed state fails; valid On reports pages not ready; expired invalid
+state and valid Off with disabled package/tombstoned profile pass. Configuration,
+interval rows and package bytes stay intact; no producer or automatic activation.
+64 screenshots retained; root inspected representative English light/Dutch dark
+Chromium and Firefox readiness/expiry screens. No hydration/console/page errors.
+The wrapper uses isolated databases/runtime snapshots and cleans up after each
+terminal successful run. Existing Rust/architecture/playback evidence is reused;
+only the new browser spec and progress/changelog documentation change.
+Proof:tmp/phase9-lua-health-headed/identity.json;
+SHA256016e82e0bee2827644b9465961c59ed8b725c92297c9dfa1252aeb77bc634d7f.
+This closes the new Health-message headed gap only. Scoped native Lua generation,
+requested/applied state, live same-URL expiry/restart, untouched bindings, full
+Level2.5/QTM/client/platform acceptance and independent engine completion remain
+open. Next implement the effective whole-channel authority seam below. No milestone
+advances or push/publication.
+
 2026-10-14 Scripted cursor publication checkpoint (partial runtime):
 Criterion: shared admin/Lua profile validation, cursor timing, isolated themes,
 atomic schedule rollback, half-open expiry and restart observations. Strict

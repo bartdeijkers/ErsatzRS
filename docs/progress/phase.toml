@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: Lua cursor publication connected; next effective native selection and Health UI proof; full acceptance open'
+current_focus = 'P9A-04: Lua cursor persistence and headed Health proven; next effective native generations; full acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -1351,7 +1351,8 @@ Base generation admission refuses active overrides in the same read transaction;
 this preparatory guard suppresses the complete base authored generation, rather
 than preserving unaffected bindings yet. Existing Scripted Health reports stale
 selections and not-ready pages through nine localized catalogs. P9A-04 owns the
-focused successes, corrections and pending exact headed Health-message proof.
+focused successes/corrections and new8-case headed Health proof:all nine cultures,
+both themes, JS on/off and real refresh in Chromium/Firefox;64 captures retained.
 Next implement a distinct whole-channel effective selection with base versus
 published-interval origins, actual owning playout/bounds and Off membership.
 Exclude overridden base profiles before validating remaining members. Reuse it
@@ -1359,7 +1360,8 @@ at native resolve/prelaunch and explicit scoped promotion/recovery; retain the
 accepted base separately and enforce original expiry. Then prove real Lua
 On/Off/profile changes, untouched bindings and same-URL expiry/restart with
 ordinary AV plus suitable-client navigation. Candidate persistence is not live
-Lua or independent engine acceptance. New Health UI proof remains required.
+Lua or independent engine acceptance. New Health-message headed proof passes;
+complete Lua requested/applied-state management and live proof remain required.
 Full resource/cache transitions and UI applied state still require proof.
 Retained/Next, whole-host open-client drain and full Lua timing stay open.
 Stable wait-slate muxing separately needs compatible codec/caption/audio topology;
