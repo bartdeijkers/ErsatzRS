@@ -47,6 +47,8 @@ pub enum TeletextOutputRole {
 /// publication generation. The forwarding gate verifies the actual stream.
 #[derive(Clone)]
 pub enum TeletextOutputContent {
+    /// No authored output; a later trusted update may activate the same gate.
+    Absent,
     Base(EncodedTeletextPageSet),
     Authored(Arc<EncodedTeletextAuthoredService>),
 }
@@ -58,6 +60,8 @@ impl TeletextOutputContent {
         retained: bool,
     ) -> Result<TeletextOutputGate, TeletextOutputError> {
         match (self, retained) {
+            (Self::Absent, false) => TeletextOutputGate::new_absent(config),
+            (Self::Absent, true) => TeletextOutputGate::new_absent_retained(config),
             (Self::Base(pages), false) => TeletextOutputGate::new(config, pages),
             (Self::Base(pages), true) => TeletextOutputGate::new_retained(config, pages),
             (Self::Authored(service), false) => {
@@ -87,6 +91,18 @@ pub(super) struct TeletextSourceDiscovery {
 }
 
 impl TeletextOutputBinding {
+    /// Bind ordinary output with authored content initially absent.
+    /// Actual source PSI, clock and reserved PID remain subject to gate admission.
+    /// A later control update uses that same source and output epoch.
+    /// # Errors
+    /// Invalid gate bounds or unrepresentable/zero timing fail before admission.
+    pub fn new_absent(
+        config: TeletextOutputConfig,
+        first_byte_timeout: Duration,
+    ) -> Result<Self, TeletextPumpError> {
+        Self::new_inner(config, TeletextOutputContent::Absent, first_byte_timeout)
+    }
+
     /// Validate the encoded page set's gate and asynchronous policy together.
     /// # Errors
     /// Invalid gate bounds or unrepresentable/zero timing fail before admission.
@@ -227,11 +243,14 @@ impl TeletextOutputBinding {
         self.source_discovery
     }
 
-    pub(super) fn service_descriptor(&self) -> TeletextServiceDescriptor {
+    pub(super) fn optional_service_descriptor(&self) -> Option<TeletextServiceDescriptor> {
         match &self.content {
-            TeletextOutputContent::Base(pages) => TeletextServiceDescriptor::from_page_set(pages),
+            TeletextOutputContent::Absent => None,
+            TeletextOutputContent::Base(pages) => {
+                Some(TeletextServiceDescriptor::from_page_set(pages))
+            }
             TeletextOutputContent::Authored(service) => {
-                TeletextServiceDescriptor::from_authored_service(service)
+                Some(TeletextServiceDescriptor::from_authored_service(service))
             }
         }
     }
@@ -260,21 +279,21 @@ impl TeletextOutputBinding {
         self.config
     }
 
-    /// Base-only encoded pages; complete authored bindings return `None`.
+    /// Base-only encoded pages; absent and complete authored bindings return `None`.
     #[must_use]
     pub fn pages(&self) -> Option<&EncodedTeletextPageSet> {
         match &self.content {
             TeletextOutputContent::Base(pages) => Some(pages),
-            TeletextOutputContent::Authored(_) => None,
+            TeletextOutputContent::Absent | TeletextOutputContent::Authored(_) => None,
         }
     }
 
-    /// Complete authored service; base-only bindings return no authored service.
+    /// Complete authored service; absent and base-only bindings return `None`.
     #[must_use]
     pub fn authored_service(&self) -> Option<&EncodedTeletextAuthoredService> {
         match &self.content {
             TeletextOutputContent::Authored(service) => Some(service),
-            TeletextOutputContent::Base(_) => None,
+            TeletextOutputContent::Absent | TeletextOutputContent::Base(_) => None,
         }
     }
 

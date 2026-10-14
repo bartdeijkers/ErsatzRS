@@ -56,7 +56,7 @@ pub(super) fn selected(name: &str) -> String {
         .expect("set the explicit native teletext capture environment")
 }
 
-fn muxrate() -> i64 {
+pub(super) fn muxrate() -> i64 {
     MpegTsMuxingOptions::from_bitrates(Some(VIDEO_KBPS), Some(AUDIO_KBPS)).muxrate_bps
 }
 
@@ -204,7 +204,20 @@ pub(super) async fn configure_source_for_channels(
 }
 
 pub(super) async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
+    generate_source_with_duration(ffmpeg, root, 12).await
+}
+
+/// Explicit finite synthetic source for capture or live headed-client trials.
+/// The existing 12-second command and bound remain unchanged. Longer trials
+/// write at most 48 MiB and never use the 8-MiB finite-capture consumer.
+pub(super) async fn generate_source_with_duration(
+    ffmpeg: &str,
+    root: &Path,
+    seconds: u8,
+) -> PathBuf {
+    assert!(matches!(seconds, 12 | 60));
     let rate = muxrate().to_string();
+    let duration = seconds.to_string();
     let args = [
         "-hide_banner",
         "-loglevel",
@@ -219,7 +232,7 @@ pub(super) async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
         "-i",
         "sine=frequency=440:sample_rate=48000",
         "-t",
-        "12",
+        &duration,
         "-map",
         "0:v:0",
         "-map",
@@ -246,7 +259,12 @@ pub(super) async fn generate_source(ffmpeg: &str, root: &Path) -> PathBuf {
         "mpegts",
         "pipe:1",
     ];
-    let bytes = probe(ffmpeg, &args, &[], MAX_BYTES).await;
+    let maximum = if seconds == 12 {
+        MAX_BYTES
+    } else {
+        48 * 1024 * 1024
+    };
+    let bytes = probe(ffmpeg, &args, &[], maximum).await;
     assert!(!bytes.is_empty());
     assert_eq!(bytes.len() % 188, 0);
     assert!(bytes
@@ -596,8 +614,32 @@ async fn accepted_direct_route_rejects_wrong_channel_and_other_container_before_
 }
 
 pub(super) async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8]) {
-    let report: Value =
-        serde_json::from_slice(&probe(tsanalyze, &["--json"], bytes, 262_144).await).unwrap();
+    verify_transport_with_qualified_authored_pts_gaps(tsanalyze, ffprobe, bytes, 0, None, false)
+        .await;
+}
+
+/// Permit exactly the independently qualified PMT-Off clock gaps on authored
+/// PID 512. This helper does not classify a gap or relax any other transport gate.
+/// Retain original analyzer stdout before validation when an output is supplied.
+pub(super) async fn verify_transport_with_qualified_authored_pts_gaps(
+    tsanalyze: &str,
+    ffprobe: &str,
+    bytes: &[u8],
+    qualified_authored_pts_gaps: usize,
+    report_destination: Option<&Path>,
+    full_warm_capture: bool,
+) -> Vec<u8> {
+    let original_report = probe(tsanalyze, &["--json"], bytes, 262_144).await;
+    if let Some(path) = report_destination {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .expect("TSDuck report destination must not already exist");
+        file.write_all(&original_report).unwrap();
+    }
+    let report: Value = serde_json::from_slice(&original_report).unwrap();
     assert!(
         report["ts"]["pcr-bitrate"]
             .as_u64()
@@ -633,23 +675,40 @@ pub(super) async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8
     }
     for pid in pids {
         for field in ["discontinuities", "pts-leap", "pcr-leap"] {
-            assert_eq!(pid["packets"][field], 0);
+            if pid["id"] == 512 && field == "pts-leap" {
+                assert_eq!(
+                    pid["packets"][field],
+                    u64::try_from(qualified_authored_pts_gaps).unwrap(),
+                    "every analyzer-sized authored PTS gap must have independently qualified PMT-Off clock provenance"
+                );
+            } else {
+                assert_eq!(pid["packets"][field], 0);
+            }
         }
+    }
+    let mut stream_probe = vec![
+        "-v",
+        "error",
+        "-show_streams",
+        "-show_programs",
+        "-of",
+        "json",
+        "-f",
+        "mpegts",
+        "pipe:0",
+    ];
+    if full_warm_capture {
+        // The synthetic60s flow starts Off. Default ffprobe discovery can stop
+        // before the later PMT announces teletext; inspect its bounded full epoch.
+        stream_probe.splice(
+            2..2,
+            ["-analyzeduration", "60000000", "-probesize", "50331648"],
+        );
     }
     let streams: Value = serde_json::from_slice(
         &probe_with_input(
             ffprobe,
-            &[
-                "-v",
-                "error",
-                "-show_streams",
-                "-show_programs",
-                "-of",
-                "json",
-                "-f",
-                "mpegts",
-                "pipe:0",
-            ],
+            &stream_probe,
             bytes,
             262_144,
             ToolInput::ProbePrefix,
@@ -667,42 +726,59 @@ pub(super) async fn verify_transport(tsanalyze: &str, ffprobe: &str, bytes: &[u8
     assert!(streams
         .iter()
         .any(|stream| stream["codec_name"] == "dvb_teletext" && stream["id"] == "0x200"));
+    original_report
+}
+
+pub(super) async fn decode_page_text(ffmpeg: &str, bytes: &[u8], page: &str) -> String {
+    decode_page_text_with_discovery(ffmpeg, bytes, page, false).await
+}
+
+/// A warm Off-start capture needs bounded discovery through its later PMT.
+pub(super) async fn decode_page_text_with_discovery(
+    ffmpeg: &str,
+    bytes: &[u8],
+    page: &str,
+    full_warm_capture: bool,
+) -> String {
+    let mut args = vec![
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-txt_page",
+        page,
+        "-txt_format",
+        "text",
+        "-txt_chop_top",
+        "0",
+        "-txt_duration",
+        "1000",
+        "-f",
+        "mpegts",
+        "-i",
+        "pipe:0",
+        "-map",
+        "0:s:0",
+        "-c:s",
+        "srt",
+        "-f",
+        "srt",
+        "pipe:1",
+    ];
+    if full_warm_capture {
+        args.splice(
+            14..14,
+            ["-analyzeduration", "60000000", "-probesize", "50331648"],
+        );
+    }
+    let output = probe(ffmpeg, &args, bytes, 262_144).await;
+    String::from_utf8(output).unwrap()
 }
 
 pub(super) async fn decode_page(ffmpeg: &str, bytes: &[u8], page: &str) {
-    let output = probe(
-        ffmpeg,
-        &[
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-nostdin",
-            "-txt_page",
-            page,
-            "-txt_format",
-            "text",
-            "-txt_chop_top",
-            "0",
-            "-txt_duration",
-            "1000",
-            "-f",
-            "mpegts",
-            "-i",
-            "pipe:0",
-            "-map",
-            "0:s:0",
-            "-c:s",
-            "srt",
-            "-f",
-            "srt",
-            "pipe:1",
-        ],
-        bytes,
-        262_144,
-    )
-    .await;
+    let output = decode_page_text(ffmpeg, bytes, page).await;
     assert!(
-        String::from_utf8(output).unwrap().contains("AZ"),
+        output.contains("AZ"),
         "actual page must contain the original enhanced A and unchanged neighbouring Z"
     );
 }
@@ -739,6 +815,17 @@ async fn video_hashes(ffmpeg: &str, bytes: &[u8]) -> Vec<String> {
 }
 
 pub(super) async fn verify_av(ffmpeg: &str, source: &[u8], delivered: &[u8]) {
+    verify_av_with_audio_bound(ffmpeg, source, delivered, 2 * 1024 * 1024).await;
+}
+
+/// Longer synthetic live captures retain the same source AV oracle under an
+/// explicit PCM byte cap; the original finite-capture bound stays unchanged.
+pub(super) async fn verify_av_with_audio_bound(
+    ffmpeg: &str,
+    source: &[u8],
+    delivered: &[u8],
+    maximum_audio_bytes: usize,
+) {
     let hashes: BTreeSet<_> = video_hashes(ffmpeg, source).await.into_iter().collect();
     let actual = video_hashes(ffmpeg, delivered).await;
     assert!(actual.len() >= 20);
@@ -768,7 +855,7 @@ pub(super) async fn verify_av(ffmpeg: &str, source: &[u8], delivered: &[u8]) {
             "pipe:1",
         ],
         delivered,
-        2 * 1024 * 1024,
+        maximum_audio_bytes,
     )
     .await;
     let samples: Vec<_> = audio

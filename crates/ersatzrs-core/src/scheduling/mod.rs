@@ -37,7 +37,7 @@ pub use classic::{
 };
 pub use scripted::{
     validate_scripted_checkpoint, validate_scripted_timeline, ScriptedContentResolver,
-    ScriptedScheduleCommand, ScriptedSchedulingEngine,
+    ScriptedScheduleCommand, ScriptedSchedulingEngine, ScriptedTeletextControl,
 };
 pub use smart_shuffle::{
     block_item_smart_shuffle_config_key, legacy_playout_cooldown_config_key,
@@ -857,6 +857,9 @@ pub struct SchedulingResult {
     pub yaml_checkpoints: Vec<ersatzrs_domain::PlayoutYamlCheckpoint>,
     /// Runtime-resolved SQL sources, published atomically with their timeline.
     pub scripted_sources: Vec<ScriptedSourceDependency>,
+    /// Candidate Lua overrides, published atomically with this timeline and
+    /// bounded by its actual accepted finish. Other engines leave this empty.
+    pub teletext_intervals: Vec<ersatzrs_domain::TeletextOverrideInterval>,
     /// Fill-group enumerator state produced by Classic scheduling.
     pub fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub warnings: Vec<String>,

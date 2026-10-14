@@ -55,3 +55,65 @@ the new set. A changed durable refresh-intent revision invalidates a candidate
 before publication.
 Automatic source dependency admission, explicit rebuild controls and running-
 producer handover acceptance remain open under `v111-findings-06`.
+
+## Teletext candidate controls
+
+These functions address an existing add-on binding on the script's own output
+channel. They share application profile validation with admin controls and never
+install, activate or invoke packages, or rewrite the admin base selection.
+
+| Function | Arguments | Effect |
+|---|---|---|
+| `teletext_profile(addon_id, profile_id)` | Add-on string and positive Lua integer | Select a validated existing profile; preserve enabled state |
+| `teletext_enabled(addon_id, enabled)` | Add-on string and Lua boolean | Turn the candidate binding On or Off |
+
+Each returns `{ok=true}` or `{ok=false, code="..."}`. Arguments are strict:
+strings/floats are not coerced into profile IDs, and non-booleans are rejected.
+Profile selection validates even while Off. On revalidates the last successfully
+selected profile, or the observed admin base profile when none was selected.
+Off requires only current channel/add-on membership, so an unavailable profile
+or package cannot prevent disabling teletext.
+
+Handled rejections preserve the preceding candidate state. Static codes include
+`invalid_argument`, `invalid_cursor`, `unsupported`, `unavailable`,
+`invalid_response`, `command_limit`, `snapshot_limit`, and profile-specific codes
+such as `missing_binding`, `missing_profile`, `wrong_addon`, `deleted_profile`,
+`installation_unavailable`, `invalid_settings` and `conflict`. An uncaught Lua
+error rejects the complete scheduling result.
+
+Successful commands create half-open intervals from `current_time()` until the
+next successful command for that add-on or the actual last accepted item finish.
+At an equal cursor the last successful command wins. Commands at/after the
+actual finish and builds with no accepted items publish no override. A new
+Continue evaluation starts from the admin base. Refresh/Reset retain or replace
+intervals at the same programme seam as items and checkpoints.
+
+Intervals and exact unresolved profile/package/settings snapshots are stored
+atomically with the schedule. Reopening reads the published intervals without
+replaying Lua; expiry returns no override. Missing, stale or malformed active
+snapshots remain unavailable until their original expiry. Mirrors read their
+own output channel's intervals rather than inheriting source presentation.
+
+The worker uses one original 30-second teletext lookup deadline per build and
+existing cancellation checks. Provisional work bounds are 1,024 command attempts
+and 4 MiB of retained candidate material; database framing also bounds reads
+before allocating snapshot payloads. These are host admission bounds, not
+permanent authored-page limitations.
+
+Runtime activation remains incomplete: current base artifacts do not carry an
+interval identity and are refused during an active override. This preparatory
+guard suppresses the complete base authored generation; preserving unaffected
+bindings in live output requires scoped generation storage and promotion.
+Unpublished effective preparation now observes actual owning playout/interval
+origins and unoverridden bases together, retaining explicit Off membership.
+It skips shadowed base profiles before validation, rechecks the complete scope
+before resolution/prelaunch and after joined CPU work, and uses the same exact
+contract parser, native encoder and preview model. One original deadline ends
+no later than the earliest future start/finish observed for that output channel;
+rechecking does not renew it. This preparation saves or publishes no generation.
+The existing Scripted Health check reports unavailable active selections and
+profiles whose pages are not yet ready, while valid Off is configuration-valid.
+It does not prove stream application. Complete scoped durable
+generation storage/promotion, per-binding stream application, requested versus
+applied state and live restart/expiry proof remain required. A successful Lua
+result or persisted interval alone does not establish effective On playback.

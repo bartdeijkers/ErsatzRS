@@ -11,6 +11,26 @@ to Phase 9. This supplements ADRs 0120/0121 without changing their delivery orde
 Partially implemented: neutral profile/binding types and an additive SQLite
 repository provide isolated, revision-fenced configuration. Shared application
 controls prepare profile-scoped and complete channel-wide unpublished candidates.
+Separate read-only candidate controls validate another existing profile for an
+already-bound channel/add-on, including when its admin base is Off. They reuse
+the same installation/settings policy and expose a distinct candidate snapshot
+without base-binding or publication authority. Fresh rechecks preserve the
+target across base edits while rejecting target/profile/package/settings drift.
+Scripted now uses these controls through the existing application injection and
+owned scheduling worker. Strict channel-bound Lua commands create bounded cursor
+intervals; the existing playout transaction persists exact unresolved snapshots
+with timeline/checkpoints, rechecks target identity, and retains/replaces intervals
+at the programme seam. Read-only interval lookup distinguishes active unavailable
+state from absence/expiry and restores published observations without Lua replay.
+Base generation admission refuses any active interval in the same read transaction;
+retained base history is unchanged. A separate effective-channel observation now
+combines published interval origins with unoverridden base profiles in one read
+transaction, retaining explicit Off members and the owning playout. Native
+invocation and unpublished channel preparation use this complete observation;
+they do not fabricate a base binding revision for an interval. Scoped durable
+generation promotion/recovery and per-binding live application remain open.
+The exact callable API and provisional worker bounds are documented in
+[Scripted build context](../reference/scripted-build-context.md#teletext-candidate-controls).
 The native host encodes exact retained authored originals through the shared
 compiler. A dedicated in-order SSR channel route connects named manifest-driven
 profiles and base binding controls to these application functions, independently
@@ -24,7 +44,12 @@ explicitly select its exact immutable original for new compatible streams;
 observed head/pending/accepted fences are checked by the existing transactions.
 Historical pages remain previewable when their saved selection becomes stale,
 with unavailable publication controls and retained pointer observations.
-Running streams retain their captured generation.
+Version1 streams retain their startup generation. Explicit version2 direct
+responses own bounded accepted-state reconciliation, permitting initial Off,
+replacement, withdrawal and fresh acceptance on their original source clock.
+The representative two-client warm display/navigation and isolated themes pass
+with native client reselection; full resource/cache and retained/Next controls
+remain open.
 A finite-client whole-host restart trial retains two selected themes and a newer
 pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
 the exact proof and negative shutdown receipt. Fresh guide/editor interchange,
@@ -214,6 +239,31 @@ Disable withdraws that channel's authored binding at the defined safe output
 boundary, without interrupting ordinary audio/video playback. Report requested
 and applied state so preparation delay is visible. ADR 0121's validity and
 stale-expiry rules remain in force; expired intervals cannot publish late output.
+
+Effective preparation validates active published interval targets before loading
+unoverridden enabled base profiles. A healthy explicit On or Off therefore does
+not require its shadowed admin profile to be usable. Off remains a member of the
+whole-channel fence but has no native producer. Actual output channel and owning
+playout identity, exact interval bounds, installation/profile/settings and all
+unaffected bindings are rechecked before filesystem resolution, immediately
+before launch and after complete preparation. Unavailable active intervals fail
+without substituting the base. Origin types stay distinct through validation and
+encoding; a candidate snapshot is not base binding or publication authority.
+
+The observation records the earliest future start or finish of any published
+interval belonging to that output channel. One original preparation deadline is
+clamped to that boundary; waiting or rechecking never renews it. Reaching the
+captured boundary rejects the observation even if an entire intervening interval
+has already expired and the current base would compare equal again. Scripted Off
+does not consume a producer slot: active and base readers each retain their
+existing 1,024-row bounds, while enabled producers obey the existing aggregate
+1,024-page admission ceiling. These are host bounds, not new authoring limits.
+
+Scoped runtime promotion must keep the independently accepted base recoverable,
+and recheck the complete effective origin at promotion and restart. An expired
+scoped generation cannot replace or erase that base. Until this storage/runtime
+connection is proven, the existing base guard remains; unpublished preparation
+does not establish effective Lua delivery or full engine acceptance.
 
 Lua receives a typed rejection for missing/invalid selections and can handle it.
 An uncaught compilation/runtime error rejects the whole candidate transaction;

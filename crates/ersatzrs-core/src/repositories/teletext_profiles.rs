@@ -1,13 +1,16 @@
 //! Narrow transactional configuration port for ADR 0122.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     ChannelTeletextBinding, ChannelTeletextBindingRead, EntityId, TeletextChannelSelectionSnapshot,
-    TeletextInstallationRead, TeletextInstallationSnapshot, TeletextProfile, TeletextProfileRead,
-    TeletextProfileSetting, TeletextSelectionSnapshot,
+    TeletextEffectiveChannelSelectionSnapshot, TeletextInstallationRead,
+    TeletextInstallationSnapshot, TeletextProfile, TeletextProfileCandidateSnapshot,
+    TeletextProfileRead, TeletextProfileSetting, TeletextScriptedBaseSelection,
+    TeletextSelectionSnapshot,
 };
 
-use super::Result;
+use super::{RepositoryError, Result};
 
 /// Complete override replacement; `existing=None` creates a new named profile.
 /// Expected identities never relabel validation performed for another revision.
@@ -80,8 +83,8 @@ pub trait TeletextProfileRepository: Send + Sync {
     ) -> Result<Vec<ChannelTeletextBindingRead>>;
     /// Capture an exact enabled base selection and its bounded effective values
     /// in one read transaction. Rejection writes nothing and implies no fallback.
-    /// Future Lua candidate validation must reuse this policy; candidate/base
-    /// transitions and their publication intervals are not represented here.
+    /// Candidate/base transitions and their publication intervals are not
+    /// represented here; a candidate snapshot cannot authorize this invocation.
     async fn invocation_snapshot(
         &self,
         channel_id: EntityId,
@@ -96,6 +99,81 @@ pub trait TeletextProfileRepository: Send + Sync {
         &self,
         channel_id: EntityId,
     ) -> Result<TeletextProfileMutation<TeletextChannelSelectionSnapshot>>;
+    /// Validate an existing profile for an already-bound channel/add-on in one
+    /// read transaction, including a disabled base or a different base profile.
+    /// Reuse the enabled-selection installation/settings checks without granting
+    /// producer authority, writing a selection or activating a package. This is
+    /// profile-selection/On validation; Off does not require a healthy profile.
+    async fn candidate_snapshot(
+        &self,
+        _channel_id: EntityId,
+        _addon_id: &str,
+        _profile_id: EntityId,
+    ) -> Result<TeletextProfileMutation<TeletextProfileCandidateSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext candidate profile validation",
+            "candidate profile validation is unsupported",
+        ))
+    }
+    /// Observe existing channel/add-on membership and its operator base state
+    /// without requiring a healthy profile or package. Used by candidate Lua
+    /// controls, including Off, without changing any configuration or revisions.
+    async fn scripted_base_selection(
+        &self,
+        _channel_id: EntityId,
+        _addon_id: &str,
+    ) -> Result<TeletextProfileMutation<TeletextScriptedBaseSelection>> {
+        Err(RepositoryError::unavailable(
+            "teletext scripted base selection",
+            "scripted teletext base validation is unsupported",
+        ))
+    }
+    /// Revalidate channel/binding presence and the candidate's exact profile,
+    /// installation, contract and effective settings in one read transaction.
+    /// Changes only to the admin base enabled/profile/revision are independent.
+    /// Reject a changed candidate rather than granting its replacement authority.
+    async fn recheck_candidate_snapshot(
+        &self,
+        _candidate: &TeletextProfileCandidateSnapshot,
+    ) -> Result<TeletextProfileMutation<TeletextProfileCandidateSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext candidate profile recheck",
+            "candidate profile validation is unsupported",
+        ))
+    }
+    /// Resolve canonical whole-channel membership from base and this channel's
+    /// published Scripted intervals in one read transaction. Include Scripted Off
+    /// in the fence and validate only base profiles not overridden by intervals.
+    /// Observe the earliest future start/finish as a preparation/promotion limit.
+    ///
+    /// # Errors
+    /// Returns unsupported/storage failures without falling back to base authority.
+    async fn effective_channel_snapshot(
+        &self,
+        _channel_id: EntityId,
+        _when: DateTime<Utc>,
+    ) -> Result<TeletextProfileMutation<TeletextEffectiveChannelSelectionSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext effective channel selection",
+            "effective teletext selection is unsupported",
+        ))
+    }
+    /// Repeat the effective observation in one transaction, rechecking exact
+    /// membership, origin, candidate configuration and temporal fence. Reject
+    /// differences or a reached boundary without substituting a new selection.
+    ///
+    /// # Errors
+    /// Returns unsupported/storage failures; elapsed time alone is not drift.
+    async fn recheck_effective_channel_snapshot(
+        &self,
+        _expected: &TeletextEffectiveChannelSelectionSnapshot,
+        _when: DateTime<Utc>,
+    ) -> Result<TeletextProfileMutation<TeletextEffectiveChannelSelectionSnapshot>> {
+        Err(RepositoryError::unavailable(
+            "teletext effective channel selection recheck",
+            "effective teletext selection is unsupported",
+        ))
+    }
     /// Replace a complete override bag and invalidate only its dependents.
     async fn save_profile(
         &self,

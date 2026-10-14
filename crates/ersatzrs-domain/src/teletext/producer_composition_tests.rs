@@ -718,6 +718,229 @@ fn default_producer() -> TeletextProducerPresentation {
     producer(input, vec![bank])
 }
 
+fn physical_overlay(owner: TeletextPageAddress, marker: u8) -> TeletextPhysicalBaseOverlay {
+    TeletextPhysicalBaseOverlay::new(
+        owner,
+        vec![TeletextPhysicalBaseRow::new(1, [marker; 40]).unwrap()],
+    )
+    .unwrap()
+}
+
+fn producer_with_physical_overlay(
+    original: &TeletextProducerPresentation,
+    owner: TeletextPageAddress,
+    marker: u8,
+) -> TeletextProducerPresentation {
+    let declared = original
+        .original()
+        .clone()
+        .with_physical_base_overlays(vec![physical_overlay(owner, marker)], service_budget())
+        .unwrap();
+    TeletextProducerPresentation::new(
+        declared,
+        TeletextProducerPresentationBudget { max_pages: 128 },
+    )
+    .unwrap()
+}
+
+#[test]
+fn physical_overlays_survive_cold_composition_with_exact_producer_resources_and_contexts() {
+    let left = producer_with_physical_overlay(
+        &with_shared_resources(address(200, 0)),
+        address(200, 0),
+        b'A',
+    );
+    let right = producer_with_physical_overlay(
+        &with_shared_resources(address(201, 0)),
+        address(201, 0),
+        b'B',
+    );
+    let originals = [left.original().clone(), right.original().clone()];
+    let contexts = [left.pages().to_vec(), right.pages().to_vec()];
+    // The producers share the same compatible MOT resource, POP bank and object.
+    let result = compose(vec![left, right], address(200, 0)).unwrap();
+    for index in 0..2 {
+        assert_eq!(result.producers()[index].original(), &originals[index]);
+        assert_eq!(result.producers()[index].pages(), contexts[index]);
+    }
+    let composed = result.composed();
+    assert_eq!(composed.mots(), originals[0].mots());
+    for resolution in originals[0].resolutions() {
+        assert!(composed.resolutions().contains(resolution));
+    }
+    assert_eq!(composed.defaults(), originals[0].defaults());
+    assert_eq!(composed.semantic().physical_base_overlays().len(), 2);
+    for (owner, marker) in [(address(200, 0), b'A'), (address(201, 0), b'B')] {
+        assert_eq!(
+            composed
+                .semantic()
+                .physical_base_overlay(owner)
+                .unwrap()
+                .rows()[0]
+                .cells()[0],
+            marker
+        );
+    }
+    let inventory = composed.resource_inventory().to_vec();
+    let mots = composed.mots().to_vec();
+    let resolutions = composed.resolutions().to_vec();
+    let objects = composed.semantic().objects().clone();
+    let drcs = composed.semantic().drcs().clone();
+    let enhanced = composed.semantic().page_enhancements().clone();
+    let replaced = result
+        .with_physical_base_overlays(vec![physical_overlay(address(200, 0), b'C')], budget())
+        .unwrap();
+    assert_eq!(replaced.composed().resource_inventory(), inventory);
+    assert_eq!(replaced.composed().mots(), mots);
+    assert_eq!(replaced.composed().resolutions(), resolutions);
+    assert_eq!(replaced.composed().semantic().objects(), &objects);
+    assert_eq!(replaced.composed().semantic().drcs(), &drcs);
+    assert_eq!(
+        replaced.composed().semantic().page_enhancements(),
+        &enhanced
+    );
+    assert_eq!(
+        replaced
+            .composed()
+            .semantic()
+            .physical_base_overlays()
+            .len(),
+        1
+    );
+    for index in 0..2 {
+        assert_eq!(replaced.producers()[index].original(), &originals[index]);
+        assert_eq!(replaced.producers()[index].pages(), contexts[index]);
+    }
+}
+
+#[test]
+fn physical_overlay_input_uses_existing_cold_content_items_storage_and_work_fences() {
+    let plain = producer(draft(vec![page(200, 0)]), vec![]);
+    let changed = producer_with_physical_overlay(
+        &producer(draft(vec![page(200, 0)]), vec![]),
+        address(200, 0),
+        b'X',
+    );
+    let metadata = TeletextProducerCompositionMetadata {
+        language: language("eng"),
+        entry: address(200, 0),
+    };
+    let policy = budget();
+    let mut before = super::Preflight::new(&policy);
+    super::preflight(&[plain], &metadata, &mut before).unwrap();
+    let mut after = super::Preflight::new(&policy);
+    super::preflight(std::slice::from_ref(&changed), &metadata, &mut after).unwrap();
+    assert_eq!(after.content, before.content + 40);
+    assert_eq!(after.items, before.items + 2);
+    assert!(after.storage > before.storage + 40);
+    assert!(after.work > before.work + 40);
+    for category in ["input content byte", "input item", "clone storage", "work"] {
+        let mut limited = policy;
+        match category {
+            "input content byte" => limited.max_input_content_bytes = after.content - 1,
+            "input item" => limited.max_input_items = after.items - 1,
+            "clone storage" => limited.max_storage_bytes = after.storage - 1,
+            _ => limited.max_work = after.work - 1,
+        }
+        let duplicate = TeletextProducerPresentation::new(
+            changed.original().clone(),
+            TeletextProducerPresentationBudget { max_pages: 128 },
+        )
+        .unwrap();
+        let error =
+            TeletextColdProducerComposition::new(vec![duplicate], metadata.clone(), limited)
+                .unwrap_err();
+        assert!(
+            matches!(error.reason, TeletextProducerCompositionFailure::Budget { category: actual, .. } if actual == category)
+        );
+        assert_eq!(error.producer, Some(0));
+    }
+    let result = compose(vec![changed], address(200, 0)).unwrap();
+    assert_eq!(
+        result.composed().semantic().physical_base_overlays().len(),
+        1
+    );
+}
+
+#[test]
+fn physical_overlay_composed_attachment_cannot_bypass_retained_original_cold_budgets() {
+    let metadata = TeletextProducerCompositionMetadata {
+        language: language("eng"),
+        entry: address(200, 0),
+    };
+    let policy = budget();
+    let original = producer_with_physical_overlay(
+        &with_shared_resources(address(200, 0)),
+        address(200, 0),
+        b'A',
+    );
+    let preserved = original.original().clone();
+    let contexts = original.pages().to_vec();
+    let replacement = physical_overlay(address(200, 0), b'B');
+    let mut baseline = super::Preflight::new(&policy);
+    super::preflight(std::slice::from_ref(&original), &metadata, &mut baseline).unwrap();
+    let original_content = baseline.content;
+    let original_storage = baseline.storage;
+    super::preflight_overlays(std::iter::once(&replacement), 1, &mut baseline).unwrap();
+    assert_eq!(baseline.content, original_content + 40);
+    assert!(baseline.storage > original_storage + 40);
+    for category in ["input content byte", "input item", "clone storage", "work"] {
+        let mut limited = policy;
+        match category {
+            "input content byte" => limited.max_input_content_bytes = baseline.content - 1,
+            "input item" => limited.max_input_items = baseline.items - 1,
+            "clone storage" => limited.max_storage_bytes = baseline.storage - 1,
+            _ => limited.max_work = baseline.work - 1,
+        }
+        // Semantic budgets permit this row; rejection must come from the cold fence.
+        assert!(limited.service.max_base_content_bytes > 40);
+        let supplied = TeletextProducerPresentation::new(
+            preserved.clone(),
+            TeletextProducerPresentationBudget { max_pages: 128 },
+        )
+        .unwrap();
+        let original_composition = compose(vec![supplied], address(200, 0)).unwrap();
+        let error = original_composition
+            .with_physical_base_overlays(vec![replacement.clone()], limited)
+            .unwrap_err();
+        assert!(
+            matches!(error.reason, TeletextProducerCompositionFailure::Budget { category: actual, .. } if actual == category)
+        );
+    }
+    let original_composition = compose(vec![original], address(200, 0)).unwrap();
+    let accepted = original_composition
+        .with_physical_base_overlays(vec![replacement], policy)
+        .unwrap();
+    assert_eq!(accepted.producers()[0].original(), &preserved);
+    assert_eq!(accepted.producers()[0].pages(), contexts);
+    assert_eq!(accepted.composed().mots(), preserved.mots());
+    assert_eq!(
+        accepted.composed().resource_inventory(),
+        preserved.resource_inventory()
+    );
+    assert_eq!(accepted.composed().resolutions(), preserved.resolutions());
+    assert_eq!(
+        accepted.producers()[0]
+            .original()
+            .semantic()
+            .physical_base_overlay(address(200, 0))
+            .unwrap()
+            .rows()[0]
+            .cells()[0],
+        b'A'
+    );
+    assert_eq!(
+        accepted
+            .composed()
+            .semantic()
+            .physical_base_overlay(address(200, 0))
+            .unwrap()
+            .rows()[0]
+            .cells()[0],
+        b'B'
+    );
+}
+
 #[test]
 fn sparse_default_ownership_survives_absent_and_present_empty_local_activation() {
     let first = default_producer();
@@ -749,6 +972,28 @@ fn sparse_default_ownership_survives_absent_and_present_empty_local_activation()
     assert!(program.commands().is_empty());
     assert_eq!(result.composed().defaults(), before.defaults());
     assert_eq!(result.producers()[0].original(), &before);
+}
+
+#[test]
+fn physical_overlay_keeps_sparse_mot_defaults_and_present_empty_local_suppression() {
+    let supplied = producer_with_physical_overlay(&default_producer(), address(200, 16), b'A');
+    let original = supplied.original().clone();
+    let result = compose(vec![supplied], address(200, 0)).unwrap();
+    assert_eq!(result.composed().defaults(), original.defaults());
+    assert_eq!(result.composed().resolutions(), original.resolutions());
+    assert_eq!(
+        result.composed().semantic().page_enhancements(),
+        original.semantic().page_enhancements()
+    );
+    assert_eq!(
+        result.composed().semantic().collected(address(200, 0)),
+        original.semantic().collected(address(200, 0))
+    );
+    assert_eq!(
+        result.composed().semantic().collected(address(200, 16)),
+        original.semantic().collected(address(200, 16))
+    );
+    assert_eq!(result.producers()[0].original(), &original);
 }
 
 #[test]

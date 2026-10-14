@@ -308,8 +308,14 @@ fn prepare_command(
 fn authoring_error_query(
     error: &crate::host::teletext_authoring::TeletextAuthoringError,
 ) -> String {
+    format!("&error={}{}", error.code(), authoring_error_location(error))
+}
+
+pub(super) fn authoring_error_location(
+    error: &crate::host::teletext_authoring::TeletextAuthoringError,
+) -> String {
     use std::fmt::Write as _;
-    let mut query = format!("&error={}", error.code());
+    let mut query = String::new();
     if let Some(location) = &error.location {
         if let Some(resource) = location.resource {
             if let Ok(raw) = serde_json::to_string(&resource) {

@@ -43,7 +43,7 @@ fn descriptor_uses_only_original_displays_languages_and_subtitle_roles() {
     assert_eq!(service.magazine_units().len(), 1);
     // MOT/DRCS/POP/empty POP cannot create additional descriptor entries.
     let gate = TeletextOutputGate::new_authored(config(), service).unwrap();
-    assert_eq!(gate.service, descriptor);
+    assert_eq!(gate.service.as_ref(), Some(&descriptor));
 }
 
 #[test]

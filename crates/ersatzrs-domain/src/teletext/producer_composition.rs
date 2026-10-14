@@ -34,7 +34,8 @@ pub struct TeletextProducerCompositionBudget {
     pub max_producers: usize,
     /// All nested input records, shared banks and fixed MOT links/slots included.
     pub max_input_items: usize,
-    /// Original text, mosaic cells and language bytes, without truncation.
+    /// Original text, mosaic cells, language bytes and physical overlay cells,
+    /// without truncation.
     pub max_input_content_bytes: usize,
     /// Local/object commands and supplied/actual populated default slots.
     pub max_input_commands: usize,
@@ -144,6 +145,7 @@ impl TeletextColdProducerComposition {
             companions,
             mots,
             selections,
+            overlays,
         } = compose_inputs(&producers, &metadata, &indexes, &magazines, &mut work)?;
         let semantic = TeletextSemanticService::new_with_object_companions(
             draft,
@@ -151,6 +153,9 @@ impl TeletextColdProducerComposition {
             budget.service,
         )
         .map_err(|reason| semantic_error(reason, &indexes))?;
+        let semantic = semantic
+            .with_physical_base_overlays(overlays, budget.service)
+            .map_err(|reason| semantic_error(reason, &indexes))?;
         let composed = TeletextDeclaredService::new(
             semantic,
             mots,
@@ -182,6 +187,43 @@ impl TeletextColdProducerComposition {
     #[must_use]
     pub const fn composed(&self) -> &TeletextDeclaredService {
         &self.composed
+    }
+    /// Replace only the composed service's physical rows. Original producer
+    /// contributions and their presentation contexts remain immutable. Existing
+    /// input, storage and work fences cover retained originals and new buffers
+    /// before any replacement index is allocated.
+    /// # Errors
+    /// Rejects invalid overlay owners or cold/combined service budget overflow.
+    pub fn with_physical_base_overlays(
+        mut self,
+        overlays: Vec<super::TeletextPhysicalBaseOverlay>,
+        budget: TeletextProducerCompositionBudget,
+    ) -> Result<Self, TeletextProducerCompositionError> {
+        let mut work = Preflight::new(&budget);
+        preflight(&self.producers, &self.metadata, &mut work)?;
+        preflight_overlays(overlays.iter(), overlays.len(), &mut work)?;
+        self.composed = self
+            .composed
+            .with_physical_base_overlays(overlays, budget.service)
+            .map_err(|reason| {
+                let display = match &reason {
+                    TeletextServiceError::PhysicalBaseOverlayOwner { address, .. } => {
+                        Some(*address)
+                    }
+                    _ => None,
+                };
+                let owner = display
+                    .and_then(|address| self.pages.iter().find(|page| page.address == address));
+                TeletextProducerCompositionError {
+                    producer: owner.map(TeletextComposedProducerPage::producer_ordinal),
+                    page: owner.map(TeletextComposedProducerPage::page_ordinal),
+                    display,
+                    ..failure(TeletextProducerCompositionFailure::Semantic(Box::new(
+                        reason,
+                    )))
+                }
+            })?;
+        Ok(self)
     }
     #[must_use]
     pub const fn metadata(&self) -> &TeletextProducerCompositionMetadata {
@@ -288,7 +330,8 @@ fn semantic_error(
             | TeletextStructureError::MissingTarget { address, .. },
         )
         | TeletextServiceError::DuplicatePage { address }
-        | TeletextServiceError::MissingPage { address } => Some(*address),
+        | TeletextServiceError::MissingPage { address }
+        | TeletextServiceError::PhysicalBaseOverlayOwner { address, .. } => Some(*address),
         TeletextServiceError::MissingLocalOwner { identity }
         | TeletextServiceError::LocalPresence { identity } => identity.owner(),
         TeletextServiceError::ObjectLink { display, .. }
@@ -462,6 +505,11 @@ fn preflight_producer(
     for page in pages {
         preflight_page(page, work)?;
     }
+    preflight_overlays(
+        service.physical_base_overlays().values(),
+        service.physical_base_overlays().len(),
+        work,
+    )?;
     work.records::<TeletextMagazinePresentationDraft>(service.magazine_presentations().len())?;
     for metadata in service.page_enhancements().values() {
         if let Some(program) = &metadata.local_program {
@@ -484,6 +532,20 @@ fn preflight_producer(
     work.records::<TeletextDisplayMotSelection>(original.selections().len())?;
     work.records::<TeletextDeclaredDefaultReservation>(original.defaults().len())?;
     preflight_mots(original.mots(), work)
+}
+fn preflight_overlays<'a>(
+    overlays: impl Iterator<Item = &'a super::TeletextPhysicalBaseOverlay>,
+    count: usize,
+    work: &mut Preflight<'_>,
+) -> Result<(), TeletextProducerCompositionError> {
+    work.records::<super::TeletextPhysicalBaseOverlay>(count)?;
+    for overlay in overlays {
+        work.records::<super::TeletextPhysicalBaseRow>(overlay.rows().len())?;
+        for _ in overlay.rows() {
+            work.content(40)?;
+        }
+    }
+    Ok(())
 }
 fn preflight_page(
     page: &TeletextPageDraft,
@@ -768,6 +830,7 @@ struct ComposedInputs {
     companions: Vec<TeletextResourceIdentity>,
     mots: Vec<TeletextMotLevel25Declaration>,
     selections: Vec<TeletextDisplayMotSelection>,
+    overlays: Vec<super::TeletextPhysicalBaseOverlay>,
 }
 #[derive(Default)]
 struct InputCounts {
@@ -776,6 +839,7 @@ struct InputCounts {
     drcs: usize,
     companions: usize,
     mots: usize,
+    overlays: usize,
 }
 fn capacities(
     producers: &[TeletextProducerPresentation],
@@ -797,6 +861,10 @@ fn capacities(
             ),
             (&mut counts.companions, service.empty_object_pages().len()),
             (&mut counts.mots, service.mots().len()),
+            (
+                &mut counts.overlays,
+                service.semantic().physical_base_overlays().len(),
+            ),
         ] {
             *total = total
                 .checked_add(amount)
@@ -829,11 +897,22 @@ fn compose_inputs(
         companions: Vec::with_capacity(counts.companions),
         mots: Vec::with_capacity(counts.mots),
         selections: Vec::with_capacity(counts.pages),
+        overlays: Vec::with_capacity(counts.overlays),
     };
     for (ordinal, producer) in producers.iter().enumerate() {
         work.producer = Some(ordinal);
         copy_pages(producer, ordinal, magazines, indexes, &mut output, work)?;
         copy_resources(producer, ordinal, indexes, &mut output, work)?;
+        for overlay in producer
+            .original()
+            .semantic()
+            .physical_base_overlays()
+            .values()
+        {
+            work.visit(1)?;
+            work.visit(overlay.rows().len())?;
+            output.overlays.push(overlay.clone());
+        }
     }
     for (index, value) in magazines.iter().enumerate() {
         if let Some(presentation) = value {

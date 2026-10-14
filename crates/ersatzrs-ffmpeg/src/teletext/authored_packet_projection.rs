@@ -1,20 +1,26 @@
-//! Lossless logical records from one immutable authored display page.
+//! Lossless logical records from immutable authored display and DRCS pages.
 //!
 //! This is a strict inverse of the host's packet encoder, not a forgiving
 //! receiver decoder. Correctable errors are rejected rather than concealed in
-//! editor exports. Resource pages, transport, edit permissions and publication
-//! remain outside this projection.
+//! editor exports. Only the explicit DRCS inverse supports resource pages;
+//! transport, edit permissions and publication remain outside these projections.
 
 use std::fmt;
 
-use ersatzrs_domain::{TeletextLanguage, TeletextPageAddress, TeletextPageKind};
+use ersatzrs_domain::{
+    TeletextLanguage, TeletextPageAddress, TeletextPageKind, TeletextResourceHeaderMetadata,
+    TeletextResourceKind,
+};
 
 use super::packets::{hamming_24_18, hamming_8_4};
 use super::source_header::{
     observe_dvb_teletext_header, SuppliedTeletextHeader, SuppliedTeletextPacketAddress,
     TeletextDataUnitKind, TeletextHeaderObservation,
 };
-use super::EncodedTeletextPage;
+use super::{
+    encode_teletext_resource_header, EncodedTeletextAuthoredPage, EncodedTeletextPage,
+    EncodedTeletextResourcePage, TeletextResourceTransmissionMode,
+};
 
 /// An exact logical packet body in native transmission order.
 ///
@@ -340,6 +346,204 @@ const fn error(
         column,
     }
 }
+
+/// Exact immutable DRCS resource context and logical packet bodies.
+///
+/// This retains native physical/lifecycle identity separately from any editor
+/// list index. It grants no resource editing or publication authority.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextEncodedDrcsProjection {
+    /// Native logical resource identity, physical subcode, counter and lifecycle.
+    pub resource_header: TeletextResourceHeaderMetadata,
+    /// Native serial/parallel delivery mode, without deriving it from editor PS.
+    pub transmission_mode: TeletextResourceTransmissionMode,
+    /// Exact clean observed wire header, including raw resource control bits.
+    pub header: SuppliedTeletextHeader,
+    /// Native order: blank header text, X28/3, then ascending present PTU rows.
+    pub records: Vec<TeletextEncodedDisplayRecord>,
+}
+impl fmt::Debug for TeletextEncodedDrcsProjection {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TeletextEncodedDrcsProjection")
+            .field("resource_header", &self.resource_header)
+            .field("transmission_mode", &self.transmission_mode)
+            .field("record_count", &self.records.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Project only a complete native DRCS/GDRCS resource without correction.
+///
+/// The positive unit budget precedes allocation. Full header metadata, exact
+/// odd-parity PTU/SPACE data and every X28/3 mode word remain unchanged. This
+/// checks native packet coding and order, not an editor's resource rendering,
+/// permission to edit resources or complete Level 2.5 acceptance.
+///
+/// # Errors
+/// Returns a located existing projection diagnostic for invalid bounds,
+/// non-DRCS pages, mismatched native identity/header, dirty protection/parity,
+/// unsupported packets or noncanonical native packet order.
+pub fn project_encoded_teletext_drcs(
+    page: &EncodedTeletextAuthoredPage,
+    max_units: usize,
+) -> Result<TeletextEncodedDrcsProjection, TeletextEncodedDisplayProjectionError> {
+    let EncodedTeletextAuthoredPage::Resource(resource) = page else {
+        return Err(error(
+            TeletextEncodedDisplayProjectionFailure::Identity,
+            None,
+            None,
+            None,
+        ));
+    };
+    project_drcs_units(resource, resource.data_units(), max_units)
+}
+
+fn project_drcs_units(
+    page: &EncodedTeletextResourcePage,
+    units: &[[u8; 46]],
+    max_units: usize,
+) -> Result<TeletextEncodedDrcsProjection, TeletextEncodedDisplayProjectionError> {
+    use TeletextEncodedDisplayProjectionFailure as Failure;
+    if max_units == 0 || units.len() < 3 || units.len() > max_units {
+        return Err(error(Failure::Budget, None, None, None));
+    }
+    if !matches!(
+        page.header().identity().kind(),
+        TeletextResourceKind::Drcs | TeletextResourceKind::Gdrcs
+    ) {
+        return Err(error(Failure::Identity, None, None, None));
+    }
+    let header = drcs_header(page, &units[0])?;
+    let mut records = Vec::new();
+    records
+        .try_reserve_exact(units.len())
+        .map_err(|_| error(Failure::Budget, None, None, None))?;
+    records.push(TeletextEncodedDisplayRecord::HeaderText([b' '; 32]));
+    let mut last_row = 0;
+    for (unit_index, unit) in units.iter().enumerate().skip(1) {
+        let observation = observe_dvb_teletext_header(unit)
+            .map_err(|_| error(Failure::Envelope, Some(unit_index), None, None))?;
+        let packet = match observation {
+            TeletextHeaderObservation::NotHeader(packet) => packet,
+            TeletextHeaderObservation::Header(_) | TeletextHeaderObservation::Terminator(_) => {
+                return Err(error(Failure::HeaderOrder, Some(unit_index), Some(0), None));
+            }
+            TeletextHeaderObservation::NotTeletext { .. } => {
+                return Err(error(Failure::Envelope, Some(unit_index), None, None));
+            }
+        };
+        check_drcs_packet(page, unit, packet, unit_index)?;
+        let row = packet.packet_number;
+        if (unit_index == 1 && row != 28)
+            || (unit_index > 1 && (!(1..=24).contains(&row) || row <= last_row))
+        {
+            return Err(error(
+                Failure::UnsupportedPacket,
+                Some(unit_index),
+                Some(row),
+                None,
+            ));
+        }
+        let body = std::array::from_fn(|column| unit[column + 6].reverse_bits());
+        let record = project_body(row, &body, unit_index)?;
+        if unit_index == 1 {
+            check_drcs_modes(page, &record, unit_index)?;
+        } else {
+            last_row = row;
+        }
+        records.push(record);
+    }
+    if last_row != page.header().last_packet().get() {
+        return Err(error(Failure::Identity, None, Some(last_row), None));
+    }
+    Ok(TeletextEncodedDrcsProjection {
+        resource_header: page.header(),
+        transmission_mode: page.transmission_mode(),
+        header,
+        records,
+    })
+}
+
+fn check_drcs_modes(
+    page: &EncodedTeletextResourcePage,
+    record: &TeletextEncodedDisplayRecord,
+    unit: usize,
+) -> Result<(), TeletextEncodedDisplayProjectionError> {
+    use TeletextEncodedDisplayProjectionFailure as Failure;
+    let TeletextEncodedDisplayRecord::Triplets {
+        designation, words, ..
+    } = record
+    else {
+        return Err(error(
+            Failure::UnsupportedPacket,
+            Some(unit),
+            Some(28),
+            None,
+        ));
+    };
+    if *designation != 3 {
+        return Err(error(
+            Failure::UnsupportedPacket,
+            Some(unit),
+            Some(28),
+            Some(0),
+        ));
+    }
+    if words[0] != u32::from(page.header().identity().kind().function_code()) {
+        return Err(error(Failure::Identity, Some(unit), Some(28), Some(1)));
+    }
+    Ok(())
+}
+
+fn drcs_header(
+    page: &EncodedTeletextResourcePage,
+    unit: &[u8; 46],
+) -> Result<SuppliedTeletextHeader, TeletextEncodedDisplayProjectionError> {
+    use TeletextEncodedDisplayProjectionFailure as Failure;
+    let observation = observe_dvb_teletext_header(unit)
+        .map_err(|_| error(Failure::Envelope, Some(0), None, None))?;
+    let TeletextHeaderObservation::Header(header) = observation else {
+        return Err(error(Failure::HeaderOrder, Some(0), None, None));
+    };
+    check_drcs_packet(page, unit, header.packet_address, 0)?;
+    if header.corrected_header_bytes != 0 {
+        return Err(error(Failure::Protection, Some(0), Some(0), None));
+    }
+    for column in 8_u8..40 {
+        base_cell(unit[6 + usize::from(column)].reverse_bits(), 0, 0, column)?;
+    }
+    if *unit != encode_teletext_resource_header(page.header(), page.transmission_mode()) {
+        return Err(error(Failure::Identity, Some(0), Some(0), None));
+    }
+    Ok(header)
+}
+
+fn check_drcs_packet(
+    page: &EncodedTeletextResourcePage,
+    bytes: &[u8; 46],
+    packet: SuppliedTeletextPacketAddress,
+    unit: usize,
+) -> Result<(), TeletextEncodedDisplayProjectionError> {
+    use TeletextEncodedDisplayProjectionFailure as Failure;
+    let row = Some(packet.packet_number);
+    if packet.corrected_address_bytes != 0 {
+        return Err(error(Failure::Protection, Some(unit), row, None));
+    }
+    if packet.data_unit_kind != TeletextDataUnitKind::NonSubtitle
+        || packet.wire_magazine != page.header().identity().page().wire_magazine()
+    {
+        return Err(error(Failure::Identity, Some(unit), row, None));
+    }
+    if bytes[..4] != [2, 44, 0xe0, 0xe4] {
+        return Err(error(Failure::Envelope, Some(unit), row, None));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "authored_packet_projection/resource_tests.rs"]
+mod resource_tests;
 
 #[cfg(test)]
 mod tests;

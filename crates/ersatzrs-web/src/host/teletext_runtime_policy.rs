@@ -27,6 +27,7 @@ use ersatzrs_ffmpeg::teletext::{
 use serde::Deserialize;
 
 use super::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy;
+use crate::transport::iptv::teletext_live_output::TeletextAcceptedUpdatePolicy;
 use crate::transport::iptv::teletext_source_policy::{
     TeletextSourcePolicy, TeletextSourcePolicyLimits,
 };
@@ -41,6 +42,7 @@ pub(crate) struct NativeTeletextRuntimePolicy {
     pub(crate) encoding: TeletextChannelDocumentEncodingPolicy,
     pub(crate) source: TeletextSourcePolicy,
     pub(crate) recovery_timeout: Duration,
+    pub(crate) live_updates: Option<TeletextAcceptedUpdatePolicy>,
 }
 
 /// Static errors deliberately exclude raw configuration or Serde payloads.
@@ -54,6 +56,8 @@ pub(crate) enum TeletextRuntimePolicyError {
     UnsupportedVersion,
     #[error("teletext output recovery timeout must be positive and representable")]
     InvalidRecoveryTimeout,
+    #[error("teletext live update timings must be positive and representable")]
+    InvalidLiveUpdateTiming,
     #[error("teletext output source policy is invalid")]
     InvalidSourcePolicy,
 }
@@ -68,9 +72,19 @@ pub(crate) fn parse_native_teletext_runtime_policy(
     }
     let dto: RuntimePolicy =
         serde_json::from_str(raw).map_err(|_| TeletextRuntimePolicyError::InvalidJson)?;
-    if dto.version != 1 {
-        return Err(TeletextRuntimePolicyError::UnsupportedVersion);
-    }
+    let live_updates = match (dto.version, dto.live_updates.0) {
+        (1, None) => None,
+        // Version 1 retains its closed schema and startup-only behavior.
+        (1, Some(_)) | (2, None) => return Err(TeletextRuntimePolicyError::InvalidJson),
+        (2, Some(limits)) => Some(
+            TeletextAcceptedUpdatePolicy::new(
+                Duration::from_millis(limits.poll_interval_ms),
+                Duration::from_millis(limits.recovery_timeout_ms),
+            )
+            .map_err(|_| TeletextRuntimePolicyError::InvalidLiveUpdateTiming)?,
+        ),
+        _ => return Err(TeletextRuntimePolicyError::UnsupportedVersion),
+    };
     let recovery_timeout = Duration::from_millis(dto.recovery_timeout_ms);
     if recovery_timeout.is_zero() || Instant::now().checked_add(recovery_timeout).is_none() {
         return Err(TeletextRuntimePolicyError::InvalidRecoveryTimeout);
@@ -95,6 +109,7 @@ pub(crate) fn parse_native_teletext_runtime_policy(
         },
         source,
         recovery_timeout,
+        live_updates,
     })
 }
 
@@ -358,7 +373,8 @@ struct LifecycleInput {
 
 // usize deserialization rejects values not representable on the current target,
 // including supported 32-bit native targets. No casts or architecture guesses.
-// All DTO fields are mandatory; null, missing, duplicate and unknown fields fail.
+// Existing DTO fields are mandatory; null/missing/duplicate/unknown fields fail.
+// live_updates is absent in version 1 and required in version 2, never null.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RuntimePolicy {
@@ -370,6 +386,40 @@ struct RuntimePolicy {
     composition: ProducerCompositionLimits,
     encoding: EncodingLimits,
     source: SourceLimits,
+    #[serde(default)]
+    live_updates: OptionalLiveUpdates,
+}
+
+#[derive(Default)]
+struct OptionalLiveUpdates(Option<LiveUpdates>);
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LiveUpdates {
+    poll_interval_ms: u64,
+    recovery_timeout_ms: u64,
+}
+
+impl<'de> Deserialize<'de> for OptionalLiveUpdates {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Object;
+        impl<'de> serde::de::Visitor<'de> for Object {
+            type Value = OptionalLiveUpdates;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a required live update policy object")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                map: A,
+            ) -> Result<Self::Value, A::Error> {
+                LiveUpdates::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+                    .map(|limits| OptionalLiveUpdates(Some(limits)))
+            }
+        }
+        deserializer.deserialize_map(Object)
+    }
 }
 
 #[derive(Deserialize)]
@@ -1098,6 +1148,7 @@ mod tests {
     #[test]
     fn explicit_fixture_maps_complete_bounds_without_content_inference() {
         let value = parse(&fixture());
+        assert!(value.live_updates.is_none());
         assert_eq!(value.recovery_timeout, Duration::from_secs(5));
         assert_storage_and_model_limits(&value);
         assert_normalization_limits(&value);
@@ -1209,8 +1260,89 @@ mod tests {
     }
 
     #[test]
+    fn live_version_two_uses_exact_explicit_timings_and_preserves_existing_limits() {
+        let mut value = fixture();
+        value["version"] = json!(2);
+        value["live_updates"] = json!({"poll_interval_ms":1234,"recovery_timeout_ms":6789});
+        let policy = parse(&value);
+        assert_eq!(
+            policy.live_updates,
+            Some(
+                TeletextAcceptedUpdatePolicy::new(
+                    Duration::from_millis(1234),
+                    Duration::from_millis(6789)
+                )
+                .unwrap()
+            )
+        );
+        assert_eq!(policy.recovery_timeout, Duration::from_secs(5));
+        assert_storage_and_model_limits(&policy);
+        assert_normalization_limits(&policy);
+        assert_eq!(credits(&policy), credits(&parse(&fixture())));
+        assert_eq!(policy.source.limits(), parse(&fixture()).source.limits());
+        value["version"] = json!(1);
+        assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+    }
+
+    #[test]
+    fn live_version_two_requires_a_closed_nonnull_object_without_timing_defaults() {
+        let mut baseline = fixture();
+        baseline["version"] = json!(2);
+        assert_error(&baseline, TeletextRuntimePolicyError::InvalidJson);
+        for invalid in [
+            Value::Null,
+            json!([]),
+            json!([1000, 2000]),
+            json!("policy"),
+            json!({}),
+            json!({"poll_interval_ms":1000}),
+            json!({"recovery_timeout_ms":2000}),
+            json!({"poll_interval_ms":null,"recovery_timeout_ms":2000}),
+            json!({"poll_interval_ms":1000,"recovery_timeout_ms":null}),
+            json!({"poll_interval_ms":1000,"recovery_timeout_ms":2000,"unknown":true}),
+            json!({"poll_interval_ms":-1,"recovery_timeout_ms":2000}),
+            json!({"poll_interval_ms":1000,"recovery_timeout_ms":1.5}),
+        ] {
+            let mut value = baseline.clone();
+            value["live_updates"] = invalid;
+            assert_error(&value, TeletextRuntimePolicyError::InvalidJson);
+        }
+        for (poll, recovery) in [(0, 2000), (1000, 0), (0, 0)] {
+            let mut value = baseline.clone();
+            value["live_updates"] = json!({"poll_interval_ms":poll,"recovery_timeout_ms":recovery});
+            assert_error(&value, TeletextRuntimePolicyError::InvalidLiveUpdateTiming);
+        }
+        baseline["live_updates"] = json!({"poll_interval_ms":1000,"recovery_timeout_ms":2000});
+        let raw = baseline.to_string();
+        for key in ["live_updates", "poll_interval_ms", "recovery_timeout_ms"] {
+            let replacement = match key {
+                "live_updates" => format!(
+                    "\"live_updates\":{},\"live_updates\":",
+                    baseline["live_updates"]
+                ),
+                "poll_interval_ms" => "\"poll_interval_ms\":1000,\"poll_interval_ms\":".to_owned(),
+                _ => "\"recovery_timeout_ms\":2000,\"recovery_timeout_ms\":".to_owned(),
+            };
+            let duplicate = raw.replace(&format!("\"{key}\":"), &replacement);
+            assert!(matches!(
+                parse_native_teletext_runtime_policy(&duplicate),
+                Err(TeletextRuntimePolicyError::InvalidJson)
+            ));
+        }
+        let overflow = (u128::from(u64::MAX) + 1).to_string();
+        let invalid = raw.replace(
+            "\"poll_interval_ms\":1000",
+            &format!("\"poll_interval_ms\":{overflow}"),
+        );
+        assert!(matches!(
+            parse_native_teletext_runtime_policy(&invalid),
+            Err(TeletextRuntimePolicyError::InvalidJson)
+        ));
+    }
+
+    #[test]
     fn version_schema_and_duplicates_are_rejected_without_defaults() {
-        for version in [0, 2, u32::MAX] {
+        for version in [0, 3, u32::MAX] {
             let mut value = fixture();
             value["version"] = json!(version);
             assert_error(&value, TeletextRuntimePolicyError::UnsupportedVersion);

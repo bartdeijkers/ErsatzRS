@@ -891,3 +891,158 @@ async fn retained_unqualified_command_or_policy_reaches_source_without_waiting_f
     assert_eq!(designs::config(&fixture).await, config);
     fixture.state.pool.close().await;
 }
+
+/// Deterministically release source PSI only after the shared control mutation
+/// commits. The accepted-output function has already performed its initial read
+/// when its first `AsyncRead` poll signals this latch.
+struct SelectionChangesDuringProbe {
+    bytes: Cursor<Vec<u8>>,
+    entered: Option<tokio::sync::oneshot::Sender<()>>,
+    release: tokio::sync::oneshot::Receiver<()>,
+    released: bool,
+}
+
+impl SelectionChangesDuringProbe {
+    fn new(
+        bytes: Vec<u8>,
+    ) -> (
+        Self,
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let (entered, started) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        (
+            Self {
+                bytes: Cursor::new(bytes),
+                entered: Some(entered),
+                release: released,
+                released: false,
+            },
+            started,
+            release,
+        )
+    }
+}
+
+impl AsyncRead for SelectionChangesDuringProbe {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        output: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        use std::future::Future as _;
+        let reader = self.get_mut();
+        if let Some(entered) = reader.entered.take() {
+            entered.send(()).unwrap();
+        }
+        if !reader.released {
+            match Pin::new(&mut reader.release).poll(context) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Ok(())) => reader.released = true,
+                Poll::Ready(Err(_)) => {
+                    return Poll::Ready(Err(io::Error::other("probe mutation latch closed")));
+                }
+            }
+        }
+        Pin::new(&mut reader.bytes).poll_read(context, output)
+    }
+}
+
+#[tokio::test]
+async fn selection_committed_during_source_probe_preserves_direct_and_retained_playback() {
+    for retained in [false, true] {
+        for off in [false, true] {
+            let (mut fixture, saved, pending) = prepared().await;
+            let candidate = Arc::new(accepted(accept(&fixture, &pending, 1, None).await));
+            let selected = if retained {
+                retained_intent(Arc::clone(&candidate))
+            } else {
+                intent(Arc::clone(&candidate))
+            };
+            let bytes = source();
+            let (mut reader, started, release) = SelectionChangesDuringProbe::new(bytes.clone());
+            let mut output = Vec::new();
+            let generated = command();
+            let terminal = AtomicU8::new(1);
+            let cancel = Notify::new();
+            let forwarding = async {
+                if retained {
+                    let epoch = AcceptedRetainedTeletextEpoch::new(
+                        5_000_000,
+                        Some(Duration::from_millis(3200)),
+                        &terminal,
+                        Instant::now() + Duration::from_secs(10),
+                        &cancel,
+                    )
+                    .unwrap();
+                    let result = forward_accepted_retained_teletext_output(
+                        &mut reader,
+                        &mut output,
+                        &generated,
+                        &selected,
+                        &fixture.state.application,
+                        epoch,
+                    )
+                    .await
+                    .unwrap();
+                    assert!(result.rejection.is_some());
+                    result.bytes
+                } else {
+                    let result = forward_accepted_teletext_output(
+                        &mut reader,
+                        &mut output,
+                        &generated,
+                        &selected,
+                        &fixture.state.application,
+                        Instant::now() + Duration::from_secs(10),
+                    )
+                    .await
+                    .unwrap();
+                    assert!(result.rejection.is_some());
+                    result.bytes
+                }
+            };
+            let changing = async {
+                started.await.unwrap();
+                if off {
+                    let original = &saved.candidate().selection().bindings[0];
+                    let changed = fixture
+                        .state
+                        .application
+                        .disable_channel_teletext_binding(
+                            1,
+                            &original.addon_id,
+                            original.binding_revision,
+                        )
+                        .await
+                        .unwrap();
+                    assert!(matches!(changed, TeletextProfileMutation::Saved(_)));
+                } else {
+                    let next = channel_documents::candidate(&fixture, channel_documents::policy())
+                        .await
+                        .unwrap();
+                    let next = designs::save(&fixture, next, Some((saved.head().id, 1))).await;
+                    let pending = request(&fixture, &next, Some(pending.id)).await;
+                    let changed = accepted(
+                        accept(&fixture, &pending, 2, Some(candidate.generation().id)).await,
+                    );
+                    assert_ne!(changed.generation().id, candidate.generation().id);
+                }
+                let invoked = calls(&fixture);
+                release.send(()).unwrap();
+                invoked
+            };
+            let (forwarded, invoked) = tokio::join!(forwarding, changing);
+            assert_eq!(
+                output, bytes,
+                "stale authored delivery after probe (retained={retained}, off={off})"
+            );
+            assert_eq!(forwarded, u64::try_from(bytes.len()).unwrap());
+            assert_eq!(reader.bytes.position(), forwarded);
+            assert_eq!(calls(&fixture), invoked, "rejection invoked an addon");
+            assert!(fixture.playout.try_recv().is_err());
+            fixture.state.pool.close().await;
+        }
+    }
+}

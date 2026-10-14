@@ -28,8 +28,14 @@ use std::{collections::BTreeSet, fmt, io, marker::PhantomData, mem::size_of};
 #[path = "teletext_design_documents/guide_inputs.rs"]
 mod guide_inputs;
 pub use guide_inputs::TeletextSavedGuideInputs;
+#[path = "teletext_design_documents/editorial_overlay.rs"]
+mod editorial_overlay;
 #[path = "teletext_design_documents/source_fence.rs"]
 mod source_fence;
+pub use editorial_overlay::{
+    append_teletext_design_editorial_overlay, TeletextSavedEditorialOverlay,
+    TeletextSavedEditorialProvenance,
+};
 
 const MAX_BINDINGS: usize = 1024;
 const MAX_DEPTH: usize = 32;
@@ -198,8 +204,16 @@ pub struct TeletextRestoredDesignDocumentParts {
     pub edit_policy: TeletextSavedEditPolicy,
     pub guide_inputs: Option<TeletextSavedGuideInputs>,
     pub guide_source: Option<TeletextGuideSourceFence>,
+    pub editorial_overlay: Option<TeletextSavedEditorialOverlay>,
 }
 impl RestoredTeletextDesignDocuments {
+    /// Structurally checked concept rows, never authenticated import/save or
+    /// publication authority. Native restoration must apply or reject them.
+    #[must_use]
+    pub fn editorial_overlay(&self) -> Option<&TeletextSavedEditorialOverlay> {
+        self.parts.editorial_overlay.as_ref()
+    }
+
     /// Historical source metadata associated with exact stored guide inputs.
     /// This descriptive data establishes no current source or output authority.
     #[must_use]
@@ -262,6 +276,7 @@ impl fmt::Debug for TeletextRestoredDesignDocumentParts {
             .field("resources", &self.resource_transmissions.len())
             .field("guide_inputs", &self.guide_inputs)
             .field("guide_source", &self.guide_source)
+            .field("editorial_overlay", &self.editorial_overlay)
             .finish_non_exhaustive()
     }
 }
@@ -281,6 +296,8 @@ pub struct TeletextDesignDocumentError {
 /// No raw parser messages or producer text escape this boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextDesignDocumentFailure {
+    #[error("invalid editorial overlay or original-page association")]
+    EditorialOverlay,
     #[error("invalid closed storage JSON")]
     Json,
     #[error("unknown saved document version")]
@@ -401,7 +418,8 @@ stored_map!(Envelope { format_version: u16, selection: Selection, generation: St
     entry_addon_id: Required<String>, entry: Required<Entry>, v1_region: Required<TeletextSavedV1Region>,
     edit_policy: EditPolicy, resource_transmissions: Vec<Transmission>, documents: Vec<Document>,
     #[serde(default)] guide_inputs: guide_inputs::OptionalGuideInputs,
-    #[serde(default)] guide_source: source_fence::OptionalGuideSource });
+    #[serde(default)] guide_source: source_fence::OptionalGuideSource,
+    #[serde(default)] editorial_overlay: editorial_overlay::OptionalEditorialOverlay });
 stored_map!(Selection { channel_id: EntityId, bindings: Vec<Member> });
 stored_map!(Member { contract: u32, channel_id: EntityId, addon_id: String, binding_revision: i64,
     profile_id: EntityId, profile_revision: i64, installation: Installation, effective_settings: Vec<Setting> });
@@ -801,6 +819,11 @@ pub fn decode_teletext_design_documents(
         envelope.v1_region.0,
         &parsed.documents,
     )?;
+    let editorial_overlay = envelope
+        .editorial_overlay
+        .0
+        .map(|overlay| overlay.restore(&parsed.documents, budget))
+        .transpose()?;
     let transmissions = envelope
         .resource_transmissions
         .into_iter()
@@ -812,19 +835,7 @@ pub fn decode_teletext_design_documents(
         })
         .collect::<Vec<_>>();
     validate_transmissions(&transmissions, budget)?;
-    let sources = envelope
-        .documents
-        .into_iter()
-        .zip(parsed.authoring)
-        .map(|(v, authoring)| {
-            Ok(TeletextSavedDocumentSource {
-                contract: contract(v.contract)?,
-                generation: v.generation,
-                bytes: v.response.into_bytes(),
-                authoring,
-            })
-        })
-        .collect::<Result<_, TeletextDesignDocumentError>>()?;
+    let sources = restore_original_sources(envelope.documents, parsed.authoring)?;
     Ok(RestoredTeletextDesignDocuments {
         parts: TeletextRestoredDesignDocumentParts {
             selection,
@@ -838,8 +849,29 @@ pub fn decode_teletext_design_documents(
             edit_policy: TeletextSavedEditPolicy::OriginalOnly,
             guide_inputs,
             guide_source,
+            editorial_overlay,
         },
     })
+}
+
+// Parent preflight bounds document count and exact response bytes before either
+// source vector is allocated; preserve each source string without reserialization.
+fn restore_original_sources(
+    documents: Vec<Document>,
+    authoring: Vec<Option<ersatzrs_addon_contract::TeletextAuthoringMetadataWire>>,
+) -> Result<Vec<TeletextSavedDocumentSource>, TeletextDesignDocumentError> {
+    documents
+        .into_iter()
+        .zip(authoring)
+        .map(|(v, authoring)| {
+            Ok(TeletextSavedDocumentSource {
+                contract: contract(v.contract)?,
+                generation: v.generation,
+                bytes: v.response.into_bytes(),
+                authoring,
+            })
+        })
+        .collect()
 }
 struct ParsedSources {
     documents: Vec<TeletextProfileDocument>,
@@ -1149,11 +1181,19 @@ enum Path {
     GuideSource,
     GuideChannels,
     GuideDigest,
+    EditorialOverlay,
+    EditorialPages,
+    EditorialPage,
+    EditorialRows,
+    EditorialRow,
+    EditorialCells,
 }
 struct Scan {
     budget: TeletextDesignDocumentBudget,
     responses: usize,
     context: usize,
+    editorial_items: usize,
+    editorial_bytes: usize,
     error: Option<TeletextDesignDocumentError>,
 }
 struct ScanSeed<'a> {
@@ -1173,10 +1213,42 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
         self.inner
             .scan
             .check(limit(self.count, self.maximum, self.dimension))?;
+        if matches!(self.inner.path, Path::EditorialPage) {
+            self.inner
+                .scan
+                .check(storage::<editorial_overlay::StoredPage>(self.count))?;
+        }
+        self.inner.scan.editorial(self.inner.path)?;
         self.inner.deserialize(deserializer)
     }
 }
 impl Scan {
+    fn editorial<E: serde::de::Error>(&mut self, path: Path) -> Result<(), E> {
+        if !matches!(path, Path::EditorialPage | Path::EditorialRow) {
+            return Ok(());
+        }
+        self.editorial_items = self
+            .editorial_items
+            .checked_add(1)
+            .ok_or_else(|| E::custom("saved overlay storage overflow"))?;
+        self.check(limit(
+            self.editorial_items,
+            self.budget.validation.service.max_structure_items,
+            "editorial structure items",
+        ))?;
+        if matches!(path, Path::EditorialRow) {
+            self.editorial_bytes = self
+                .editorial_bytes
+                .checked_add(40)
+                .ok_or_else(|| E::custom("saved overlay storage overflow"))?;
+            self.check(limit(
+                self.editorial_bytes,
+                self.budget.validation.service.max_base_content_bytes,
+                "editorial content bytes",
+            ))?;
+        }
+        Ok(())
+    }
     fn check<E: serde::de::Error>(
         &mut self,
         result: Result<(), TeletextDesignDocumentError>,
@@ -1271,6 +1343,10 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Root, "guide_inputs") => Path::GuideInputs,
                 (Path::GuideInputs, "v1" | "v2" | "v3") => Path::GuideRequest,
                 (Path::Root, "guide_source") => Path::GuideSource,
+                (Path::Root, "editorial_overlay") => Path::EditorialOverlay,
+                (Path::EditorialOverlay, "pages") => Path::EditorialPages,
+                (Path::EditorialPage, "rows") => Path::EditorialRows,
+                (Path::EditorialRow, "cells") => Path::EditorialCells,
                 (Path::GuideSource, "channel_ids") => Path::GuideChannels,
                 (Path::GuideSource, "context_digest") => Path::GuideDigest,
                 (Path::Selection, "bindings") => Path::Bindings,
@@ -1310,6 +1386,13 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 "guide channels",
             ),
             Path::GuideDigest => (32, Path::Other, "guide digest"),
+            Path::EditorialPages => (
+                self.scan.budget.validation.service.max_records,
+                Path::EditorialPage,
+                "editorial pages",
+            ),
+            Path::EditorialRows => (25, Path::EditorialRow, "editorial rows"),
+            Path::EditorialCells => (40, Path::Other, "editorial cells"),
             _ => (MAX_BINDINGS, Path::Other, "sequence"),
         };
         let mut count = 0_usize;
@@ -1349,6 +1432,8 @@ fn preflight_json(
         budget,
         responses: 0,
         context: 0,
+        editorial_items: 0,
+        editorial_bytes: 0,
         error: None,
     };
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);

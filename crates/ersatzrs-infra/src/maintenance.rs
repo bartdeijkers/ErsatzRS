@@ -184,6 +184,7 @@ pub type PlayoutBuildCancellation = Arc<dyn Fn() -> bool + Send + Sync>;
 /// Shared playback owners and cancellation for one scheduling operation.
 #[derive(Clone, Copy, Default)]
 pub struct PlayoutExecution<'a> {
+    pub scripted_teletext: Option<&'a Arc<dyn ersatzrs_core::scheduling::ScriptedTeletextControl>>,
     pub hls_sessions: Option<&'a dyn HlsSessionRegistry>,
     pub next: Option<&'a Arc<crate::next_engine::host::NextHost>>,
     pub cancelled: Option<&'a PlayoutBuildCancellation>,
@@ -225,6 +226,7 @@ pub async fn run_maintenance_once(
 /// Shared services and cancellation for one maintenance pass.
 #[derive(Default)]
 pub struct MaintenanceExecution<'a> {
+    pub scripted_teletext: Option<&'a Arc<dyn ersatzrs_core::scheduling::ScriptedTeletextControl>>,
     pub next: Option<&'a Arc<crate::next_engine::host::NextHost>>,
     pub cancelled: Option<&'a PlayoutBuildCancellation>,
     pub health: Option<&'a crate::health::HealthCheckCoordinator>,
@@ -245,6 +247,7 @@ pub async fn run_maintenance_once_cancellable(
     execution: MaintenanceExecution<'_>,
 ) -> Result<MaintenancePassReport> {
     let MaintenanceExecution {
+        scripted_teletext,
         next,
         cancelled,
         health,
@@ -265,6 +268,7 @@ pub async fn run_maintenance_once_cancellable(
                     locker,
                     now,
                     PlayoutExecution {
+                        scripted_teletext,
                         hls_sessions: hls_sessions.as_deref(),
                         next,
                         cancelled,
@@ -551,6 +555,7 @@ pub async fn run_requested_playout_build_cancellable(
             hls_sessions,
             cancelled,
             next: None,
+            scripted_teletext: None,
         },
     )
     .await
@@ -896,12 +901,14 @@ async fn generate_playout(
     pool: &Pool<Db>,
     request: SchedulingRequest,
     cancelled: Option<&PlayoutBuildCancellation>,
+    scripted_teletext: Option<&Arc<dyn ersatzrs_core::scheduling::ScriptedTeletextControl>>,
 ) -> Result<SchedulingResult> {
     let worker_cancelled = cancelled.cloned();
-    let builder = crate::scripted_scheduling::playout_builder(
+    let builder = crate::scripted_scheduling::playout_builder_with_teletext(
         pool.clone(),
         tokio::runtime::Handle::current(),
         worker_cancelled.clone(),
+        scripted_teletext.cloned(),
     );
     // Keep CPU-bound scheduling off the async executor so shutdown can set
     // the cancellation signal even on a single-thread runtime. Await ownership
@@ -1046,7 +1053,8 @@ async fn build_playout(
         mode: build_request.mode,
         reference_data,
     };
-    let mut result = generate_playout(pool, request, cancelled).await?;
+    let mut result =
+        generate_playout(pool, request, cancelled, execution.scripted_teletext).await?;
     result.publication_guard = Some(publication_guard);
     let publication_clock = match handover {
         Some(window) => window.publication_clock(&result, now)?,

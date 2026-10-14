@@ -2724,6 +2724,961 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 effective Lua/native preparation checkpoint:
+Criterion: shared Lua controls, cursor/expiry fences, isolated profiles/themes,
+Off with unaffected bindings, shared validated preview/encoding and actual-worker
+ownership. Real app -> owned Lua -> atomic timeline/interval publication -> exact
+effective whole-channel observation -> installed producers -> shared cold compiler
+and preview now passes. It saves or publishes no accepted teletext generation.
+
+Two actual channels concurrently select different existing profiles of one addon,
+over disabled/tombstoned operator bases, under the existing explicitly configured
+two-worker policy. Distinct preserved M/29 palettes produce distinct complete
+services and56-column rasters equal to the canonical compiler; display-only packets
+correctly stay equal. Database reopen retains exact owning playout/interval/target
+and themes. This explicit preparation invokes producers again: it proves neither
+saved-generation recovery without producer replay nor whole-host live restart.
+Off skips an unhealthy package while an unaffected addon retains producer ordinal1;
+Off-only emits no partial native output. Profile/package/membership drift and actual
+wrong-generation output reject without base fallback or accepted/pending writes.
+Whole-scope rechecks retain Off and earliest future start/finish before resolution,
+prelaunch and after joined CPU work. Original deadlines never renew. Existing native
+and CPU ownership mechanisms retain admission through caller cancellation.
+
+149 unique successful focused tests:98 in c375b3d9-07df-41ec-99e0-be84a1c5ab40;
+35 unaffected successes retained from89b1b285-f06e-4ce5-8faf-48ebcf61b5d8;
+15 in ae9a5610-48b3-4b3e-8712-889be7826756 overlap6 and add9;
+1 final two-channel case in1a9afe00-6311-499e-9f70-cb0221ab3a63;
+6 fresh base-guard/Health cases in3f9d7d8e-5053-4028-b706-c9e82cd983f1.
+There are26 new cases; exact V1/V2/V3 parsing, metadata, scopes/bounds, real SQL,
+package invocation and all seven existing cold composition cases are covered.
+Retain the three negative fixture hypotheses: raw nanoseconds exceeded existing
+100ns storage precision; absent concurrency configuration intentionally admits one
+worker; display-only packets omit theme-bearing M/29 (e16f5a6e-5e18-49ec-9a4d-1a2b7c99b1f5).
+Corrections use existing precision/settings and complete-service assertions;
+production admission, timing and page validation are unchanged.
+Strict affected five-crate all-target Clippy, workspace formatting, architecture,
+hydration and new-allow checks pass. Independent app authority/content review is
+clean; existing compiler behavior stays in its shared implementation.
+Proof:tmp/phase9-effective-selection/identity.json;
+SHA256e9f089b207cb492942d418751f443b3897fcdb3777b5a61611b5971ef6b7d387.
+Unchanged headed Health/profile/editor and AV/TSDuck/client receipts remain valid
+within their original scope. No new carriage or suitable-client proof is inferred.
+
+Next blocker/criterion: original envelopes and accepted pointers are base-only.
+Add versioned effective originals retaining whole origins/Off/producer mapping and
+legacy bytes; then same-transaction scoped promotion/pointer CAS and bounded fresh
+recovery without producer/Lua replay. Keep accepted base separately recoverable at
+original expiry. Current guard still suppresses the complete base during intervals;
+live unaffected bindings require scoped storage/runtime connection. Then prove
+Lua On/Off/profile transitions -> same ordinary URL -> suitable-client navigation,
+pending/applied state and live expiry/restart with ordinary AV intact. All full
+Level2.5/fallback, QTM/metadata/themes/zones, localized admin, source/Next/platform
+and independent engine criteria remain open and unchanged. Production NOS200–299
+guide content remains gated; this checkpoint stays local, with no push/publication.
+
+2026-10-14 headed Scripted Health checkpoint:
+Criterion: localized changed admin with real hydrated/no-JS controls; visible
+invalid-profile state without package side effects. On the54ab5888 core checkpoint,
+a matched SSR/WASM/CSS build passes8 headed cases sequentially: Chromium151.0.7922.34
+4/4 (44.01s), Firefox153.0 4/4 (80.68s), no skips/flaky/unexpected results. Every
+culture, both themes and JS on/off see the two new messages through real Health
+refresh buttons:72 primary rendered combinations, plus EN/NL malformed/Off/expiry
+states. Native profile/binding forms provide genuine installation/profile pins.
+Private codec rows are fixture-only setup; actual app->Lua->SQL publication/reopen
+remains the separate175-case foundation proof, not fabricated by this browser test.
+Raw persisted health.results match the actual backend reasons/Pass. Active missing
+membership/malformed state fails; valid On reports pages not ready; expired invalid
+state and valid Off with disabled package/tombstoned profile pass. Configuration,
+interval rows and package bytes stay intact; no producer or automatic activation.
+64 screenshots retained; root inspected representative English light/Dutch dark
+Chromium and Firefox readiness/expiry screens. No hydration/console/page errors.
+The wrapper uses isolated databases/runtime snapshots and cleans up after each
+terminal successful run. Existing Rust/architecture/playback evidence is reused;
+only the new browser spec and progress/changelog documentation change.
+Proof:tmp/phase9-lua-health-headed/identity.json;
+SHA256016e82e0bee2827644b9465961c59ed8b725c92297c9dfa1252aeb77bc634d7f.
+This closes the new Health-message headed gap only. Scoped native Lua generation,
+requested/applied state, live same-URL expiry/restart, untouched bindings, full
+Level2.5/QTM/client/platform acceptance and independent engine completion remain
+open. Next implement the effective whole-channel authority seam below. No milestone
+advances or push/publication.
+
+2026-10-14 Scripted cursor publication checkpoint (partial runtime):
+Criterion: shared admin/Lua profile validation, cursor timing, isolated themes,
+atomic schedule rollback, half-open expiry and restart observations. Strict
+teletext_profile(addon_id, profile_id) / teletext_enabled(addon_id, boolean)
+use the existing ApplicationServices injection and owned Lua worker. Existing
+bindings only; no base/global-setting writes, package activation or invocation.
+Off validates membership without requiring a healthy package/profile. Profile
+selection preserves enabled state; On revalidates the last selected profile.
+Typed static rejection tables preserve prior state; uncaught errors discard the
+whole candidate. Same-cursor commands coalesce. Intervals end at the actual last
+accepted item finish, not the requested horizon; no-item builds publish none.
+Continue starts from base; Refresh/Reset use the existing programme seam.
+
+The existing BEGIN IMMEDIATE playout transaction rechecks exact target identity
+and persists timeline/checkpoints/intervals together. Retention, clipping and
+expiry use set-based SQL; indexed overlap checks reject conflicting intervals.
+A distinct version1 database codec retains unresolved references. Read admission
+bounds aggregate serialized bytes before fetching payloads, then bounds decoded
+material; invalid/stale active state errors until original expiry rather than
+falling back to base. Actual output channel determines lookup, not mirror sources.
+One original30-second teletext lookup deadline covers the build; existing worker
+cancellation and ownership remain. Provisional1024-command/4MiB material limits
+are host admission bounds, not permanent authored-page restrictions.
+
+Real app -> owned Lua -> prepare/explicit SQL commit -> file-backed reopen now
+passes with one package on two channels and opposing profile themes, Enabled->Off,
+exact item/checkpoint clocks, handled missing profiles and uncaught rollback.
+No native producer or teletext accepted-generation publication occurs in that
+proof. Fresh profile/package/settings drift rejects while base edits alone do
+not alter captured targets. Reopen is interval/configuration proof, not actual
+running-client/whole-host Lua restart acceptance.
+
+Base confirm_current refuses active intervals in the same read transaction,
+without deleting accepted base history. This preparatory guard suppresses the
+complete base authored generation; preserving unaffected bindings and producing
+Lua-selected pages remain required. Existing Scripted Health reports unavailable
+active state or not-ready pages with static content-free reasons; valid Off is
+configuration-valid, not stream-application proof. New strings are localized in
+all nine catalogs; exact changed-message headed Health proof is still pending.
+
+Verification:175 unique successful focused cases, reusing167 from Nextest
+5762c188-dfdb-413e-9b5b-7dce112a273d and35 final-source passes from
+cc95ea95-61a0-4c6c-b00a-aa1b57e98f59. These include14 core controls,6 interval
+SQLite groups,3 owned-worker bridge cases,4 real application/Lua cases,2 generation
+admission cases,4 Health groups,2 all-culture/unknown-message tests and relevant
+legacy Scripted/profile/generation/migration guards. Initial build rejected a
+formatted test SQL string under SQLx0.9; literal statements fix that helper.
+The initial169-case run had167 passes and2 failures because new fixtures omitted
+mandatory Playout.Seed. Corrected fixtures pass without changing production
+validation. No failure is hidden by retries. Strict six-crate all-target Clippy, formatting,
+architecture/hydration and structured progress checks pass. Tests/Clippy are reused
+after only read-only-transaction comments required by architecture lint. Existing
+warm native/client and worker-lifetime receipts remain valid: no transport, FFmpeg
+argv, source clock, cleanup policy or producer implementation changed. Ordinary real-host playback smoke passes against the same FFmpeg9 candidate:
+legacy/hybrid MPEG-TS each serve8192bytes, segmenter/direct HLS playlists return
+200 and public internal callbacks return404. This is ordinary unbound playback
+regression proof, not actual Lua teletext or complete transport/client acceptance.
+
+Next authority seam: transaction-owned effective whole-channel selection with
+Base versus published-interval origins, owning PlayoutId/addon/bounds and Off
+membership. Exclude overridden base profiles before validating remaining base
+members. The present interval DTO omits owning PlayoutId, and app preparation,
+native prelaunch, publication/promotion/recovery still require base-only tokens.
+Do not invent binding revisions or cast candidate observations into authority.
+Reuse shared compiler/provenance and safe-boundary proposals after scoped native
+preparation; preserve separately recoverable accepted base and original expiry.
+Then prove real Lua On/Off/profile/expiry/restart and unchanged other bindings
+through ordinary AV, independent decoding/transport and suitable-client navigation.
+New headed Health proof, requested/applied state, retained/Next, warm resources,
+full authored Level2.5/fallback, complete pinned QTM/metadata/zones workflow,
+localized admin and source/playback/platform criteria all remain unchanged.
+This checkpoint is not independent engine acceptance or a completed milestone;
+production NOS200-299-only TV-guide content still waits. No push/publication.
+Proof:tmp/phase9-lua-intervals/identity.json; SHA25646a57ba617d547acbe5d162591d46ab52a670f0aa17c185e9d72598fc15b9047.
+
+2026-10-14 candidate-profile validation prerequisite:
+Criterion: Lua must select an existing bound-channel profile or turn an Off base
+On without mutating the admin base or auto-enabling packages. Existing enabled-base
+invocation_snapshot cannot validate those targets. Add a distinct read-only
+TeletextProfileCandidateSnapshot and shared application resolve/recheck controls.
+A single SQLite read transaction requires current channel/addon membership, then
+reuses exactly the base producer's profile/installed-package/schema/effective-value
+policy. Disabled or differently selected base bindings do not substitute their
+profile. Fresh rechecks compare complete target identity/values and ignore only
+mutable base enabled/profile/revision fields. Missing/wrong/deleted/unavailable
+or changed targets reject. The distinct type has no base binding revision or
+producer/publication authority; no native invocation, configuration write or
+package activation is added. Off will require membership-only validation, preserving
+the existing admin path that can disable unavailable profiles. Unsupported adapters
+fail explicitly, never fall back to enabled-base reads or fabricated success.
+
+Run46f54dda-f982-4466-bdc4-665f8b2b2881 passes61/61 targeted domain/core/app/infra
+profile/document tests, including8 new cases. Six real-SQLite groups prove two
+channels/one addon with different target themes and Off/alternative base, no
+writes by connection total_changes(), intervening base selection/disable/tombstone
+edits, eight selected-profile/package/inherited-setting drift variants, wrong or
+missing owners, five deletion/tombstone/membership variants and file-backed reopen.
+The legacy enabled-base controls, unavailable Off, settings bounds, secret-reference
+handling, producer receipt/freshness and no-retry guards all pass. Candidate Debug
+redacts addon/install/settings contents; optional-port defaults are honestly
+unavailable with zero producer reads. Database reopen proves configuration reads,
+not published Lua interval restart behavior. Existing warm TCP/client proof is
+reused; no UI/WASM/dependency/migration/production FFmpeg-argv changes.
+
+Next connect these application reads through the existing scheduler/application
+injection to candidate-only Lua cursor events. Bound channel identity, command
+count and lookup lifetime; preserve handled rejection and whole-script rollback.
+Finalize half-open intervals at the actual last accepted item finish and persist/
+revalidate them in the existing scheduling transaction. Continue/base precedence,
+Refresh/Reset seam, mirror isolation, expiry/restart, native promotion/effective
+selection and actual open-stream Lua effects remain unimplemented/unproven.
+No full engine/milestone acceptance, completed dependency or production content
+is inferred. All previous acceptance clauses stay unchanged. Strict domain/core/
+app/infra all-target Clippy, formatting, architecture/new-allowance and structured
+progress checks pass. Architecture lint requires explicit read-only transaction
+comments; adding those comments changes no behavior and reuses61-test/lint proof.
+The test build grows the configured cache above60GiB; after all tests complete,
+required Cargo-only cleanup removes69.5GiB before remaining checks. Source/proof
+files and every unrelated worktree delta remain preserved. Receipt:
+`tmp/phase9-lua-candidates/identity.json`,
+SHA25687af7a6e3538b8e3d5cdefe0de7f064d51b870a19cb5ed643214b695b107cc1e.
+Preparatory checkpoint is local; no push/publication or full-closeout/CI claim.
+
+2026-10-14 warm same-URL client checkpoint (representative, not engine acceptance):
+Criterion: profile/validated preview/separate publication -> ordinary TCP routes ->
+same-client display/navigation, multiple viewers and channel/theme isolation.
+Final native runa82d9bb4-54e9-41d1-addf-b91f23cb9da2 passes1/1. Two original
+VLC3.0.20-3build6/libzvbi0.2.42-2 processes/URLs and one independent observer
+survive five states: initialOff -> fresh acceptance -> receipt-bound conceptQ/
+explicit replacement -> Off -> fresh acceptance. Both headed clients exit0.
+Root inspects all14 actual screenshots, including simultaneous red/blue124.20 ->
+125.20 ->124.20, whiteQ only on channel1, ordinary source video whileOff, and
+fresh acceptance withoutQ. Stage markers explicitly do not certify rendering;
+only the separate root visual record releases final completion. Each viewer makes
+one request. Actual owned observer/server/producer cleanup and retained originals,
+export receipts, package/config, other-channel generation and playout silence pass.
+
+Full unmodified captures retain every packet. TSDuck3.44-4676 checks sync/TEI,
+referenced PIDs, language/PES, counters, source AV/PCR and exact total packets.
+Its original authored512 PTS-leap counts are1/1/0 (day/observer/night), not zero.
+A separate raw-byte oracle qualifies each large PTS gap against complete CRC-valid
+PAT/PMT ownership, withdrawal/next-version reannouncement, absence of authored
+packets whileOff, uninterrupted counters, every authored20ms PTS frame and exact
+original PCR/packet time. The3.86s deliberateOff interval preserves the clock;
+no analyzer threshold, stream reset/split, dropped packet or DI spoof is used.
+ffprobe9 confirms source video/audio and DVB teletext; independent FFmpeg/libzvbi
+text seesAZ and channel1-onlyQ. Every decoded video hash belongs to the source
+and the literal440Hz audio survives. The observer continues beyond the client
+screens; source/transport timing limits remain unchanged.
+
+Five focused clock mutation groups pass. Offline retained-native3 verification
+also passes unchanged raw captures/AV/text, explicitly excluding that earlier
+trial's HTTP/body cleanup or client acceptance. Final focused/native union7:
+offline+mutation runfe512d7d-9074-4428-b639-b0572c78a448 and final native above;
+final-source mutation run907d2abe-85b3-422d-8a54-35d24244195f passes5/5.
+Cold probe/decode bounds stay
+unchanged. Warm-only bounded60s/48MiB discovery sees later PMT activation, and
+60s PCM decoding has an explicit6MiB cap. Earlier attempts exposed a test oracle
+rejecting FFmpeg's first startupDI and cold discovery stopping beforeOn; both
+are corrected without permitting later discontinuity or dropping assertions.
+
+Retain failures honestly: native1 lacked prompt client attachment; native2 showed
+replacement without client reselection. Native3/4/5 hit a real delivery-deadline
+error in the current-thread test runtime. Native5 failure-only diagnosis identifies
+packet_sleep_completed119ms behind due (unchanged100ms allowance). The fixture
+performed four synchronous raster comparisons immediately after the final stage,
+starving the paced responses. Move those exact comparisons after owned producers
+stop, preserving all assertions; native6 then passes. Temporary failure diagnosis
+is removed from product code after preserving its source/logs. No product timing,
+capacity, clock or error-handling changes. An unrelated production capacity-wait
+slate clock reset remains open; no shared-cancellation/HTTP-timeout cause is inferred.
+
+VLC requires explicit teletext reselection after some withdrawal/readdition events,
+including replacement. This is a recorded candidate limitation, not automatic
+warm selection or full suitable-client/Level2.5 acceptance. Resource-free pages
+prove this representative connection; full M29/MOT/DRCS retirement, charset/panel,
+QTM supported-set editing, retained/Next, Lua/timing/error/restart, per-response
+admin state, source/track/playback and all-six-platform gates remain open. Existing
+pinned QTM/cold client and72 localized headed admin receipts are reused; no UI,
+WASM, dependency or production FFmpeg-argv change. No milestone/status/dependency
+or acceptance clause changes; production NOS200–299 content remains gated.
+Strict preparation-test Clippy, workspace formatting, Python compile/help,
+architecture/new-allowance and structured progress checks pass. Native6 behavioral
+proof is reused after removal of its failure-only diagnostic and non-behavioral
+lint/name/format corrections; no full-closeout/exact-SHA CI claim. Receipt:
+`tmp/phase9-warm-live-client/identity.json`,
+SHA256289553934d30fb37ecc1a3b56aa5a570cf03f059e258f4c8eb1896ecbbe889a5.
+Preparatory checkpoint stays local; no milestone achieved or push/publication.
+
+2026-10-14 same-response direct control checkpoint:
+Criterion: connect profile selection/validated preview/separate publication to
+existing ordinary output, including initially Off, multiple viewers and channel
+isolation. Explicit closed runtime policy v2 adds positive poll/recovery timings;
+v1 remains startup-only. Each actual final direct response owns a bounded monitor
+of durable accepted state, its own safe-boundary control and current native source
+clock. Missing/invalid selection, read/timeout failure or rejected replacement
+withdraws authored output without package invocation or ordinary AV damage.
+Permanent withdrawal invariant failures terminate the epoch. No hint is required
+and no pending draft becomes output. Worker-owned native admission is reused;
+dropping the response aborts its monitor, not the actual admitted blocking worker.
+The interchange reference owns exact cadence, deadline and restart semantics.
+
+Run161303f5-6301-4549-8d42-f1585d4f8161 passes8 monitor cases. Affected run
+187c8254-3272-48a7-a09e-edf886ec7858 passes68/69: all monitor/policy/binding/
+probe/optional-pump/control cases pass, but the three-viewer fixture's operator
+correctly receives Work(Saturated) under default native limit1. The fixture now
+explicitly declares4 native owners before its configuration baseline:3 monitors
+plus operator. Product defaults/admission are unchanged; no retry or oracle
+relaxation is added. Real-source capacity is3 for the three response owners.
+Final run93ec754d-d0aa-4cb6-8011-1719ecf17b11 passes2/2, literal and actual native
+ordinary responses. Union of successful Rust identities70. Nine new absent-binding/
+probe/optional regressions and two withdrawal-classifier regressions are included.
+
+Three already-open /iptv/hls-direct/{channel}.ts Router bodies use actual pinned
+FFmpeg9n9.0-20261006. Two channel1 viewers and isolated channel2 observe initially
+Off -> fresh acceptance -> receipt-bound Free-rowQ concept/explicit replacement ->
+Off -> fresh acceptance -> rejected MissingProfile/no change -> selected-profile
+tombstone/withdrawal. Channel2 retains its frozen blue service; both channel1
+viewers follow the same red profile and concept. No successor request restarts a
+viewer. Independent PMT/PES/counter/unit observations retain complete immutable
+page/theme/navigation units, allowing only documented repeat-header C4 clearing.
+TSDuck3.44-4676 checks every complete captured packet, rate, sync/TEI, referenced
+PIDs, language/PES and zero counter/PTS/PCR errors. ffprobe9 confirms ordinary
+video/audio and DVB teletext. Independent FFmpeg/libzvbi0.2.42 text decoding sees
+AZ and channel1-only Q; decoded source video hashes and literal440Hz audio survive.
+Closing all original bodies releases all3 actual producer capacity holds within5s.
+The separate literal8-second source proves exact source PCR/elementary packet bytes
+and total consumed/written EOF counts. Package/config/originals/export receipts,
+other-channel generation and playout silence remain unchanged in both flows.
+
+This is actual native Router/FFmpeg transport proof, not a TCP/headed client,
+whole-host open-client shutdown, complete warm cache/resource or platform gate.
+Next use the existing owned loopback/headed client scaffold to demonstrate warm
+rendering/navigation on the same live URL, recording actual applied boundaries.
+Retained/hybrid/Next connection, per-response admin applied-state projection,
+full resource/M29/MOT retirement, Lua interval/error/restart, six platforms and
+full authored Level2.5/editor/source acceptance remain open. Existing pinned QTM,
+cold actual-URL client/navigation and72 localized headed admin proofs are reused;
+there is no UI/WASM/dependency/production FFmpeg-argv change. Capacity-slate clock
+resets remain a separate demonstrated defect requiring compatible codec and
+caption/alternate-audio topology before stable final-mux handoff. No engine or
+milestone acceptance is inferred; production NOS200–299 content remains gated.
+Strict web library/preparation-test and FFmpeg all-target Clippy, formatting,
+progress/architecture/new-allow checks and actual disposable-host legacy/hybrid
+MPEG-TS/HLS smoke pass. Documentation-only lint corrections reuse behavioral
+proof; no suppressions or full-closeout/CI claim. All acceptance/status/dependency
+fields remain exact. Receipt: tmp/phase9-live-updates/identity.json,
+SHA256ccea5e4e7c1193bb52d80f90abbab2969c85f60aeb44f7628783f78f81ba43d8. Checkpoint remains local; no push/publication.
+
+2026-10-14 initially absent epoch and startup-freshness checkpoint:
+Criterion: support later activation without a new source clock or placeholder
+pages, and preserve ordinary playback when selection changes during discovery.
+Generic new_absent/new_absent_retained epochs have no authored descriptor or
+carousel. Initial source AV/PSI/startup flags and PMT version remain byte-exact;
+existing source-clock/PID/topology/retention/deadline bounds still apply. The
+same sink-acknowledged epoch later admits the full authored service, using its
+source-derived PMT counter and existing batch timeline. Changed PMT announcement
+must be acknowledged before any authored PES. No source/session rebase occurs.
+
+Runb877bd77-5183-416b-8955-64a800fbf03a passes146/146 affected gate/PSI/PMT/signalling
+cases, including7 new absent-epoch regressions. The first146-case run passes145;
+one synthetic startup-flag fixture misinterprets its existing adaptation field
+as payload and correctly fails Psi(Framing). Setting the flag in that original
+valid field fixes the fixture; production framing validation is unchanged.
+Initial compilation also finds3 old private carousel-field reads; explicit Some
+assertions preserve their predicates. Native run613e869c-7428-4b65-a51e-43db4685b7c1
+passes1/1 against exact FFmpeg9n9.0-20261006/libzvbi0.2.42/TSDuck3.44-4676:
+initial bytes and PMTversion0 are exact, activation announces version1 beforePES,
+independent decoding sees ALPHA, all source AV/other elementary packets and
+physical PCR clock remain exact, decoded AV frame/timestamp digests match and
+transport errors are zero. This is a real-source engine probe with simulated
+sink times, not HTTP/warm-client, full Level2.5 or platform acceptance.
+
+The accepted-output host now rechecks the exact stored selection after actual
+source discovery, before its first authored write. A late Off or accepted
+replacement replays every consumed prefix and keeps direct or retained ordinary
+playback; retained cancellation/deadline ownership is unchanged. Deterministic
+oneshot latches commit each mutation while discovery is suspended. Final race
+run0fb49db5-94b4-4dd3-a538-4792d31b38e9 passes1/1 across all four Off/replacement x
+direct/retained branches, with exact source bytes/counts and no reinvocation.
+Earlier runcb6c5d01-8c62-4f8d-afad-39ed63033695 passes41/41, including13 affected
+accepted-source cases. Union of successful test identities179. Lint-only helper
+extractions/borrow/doc formatting preserve earlier evidence; native and final
+race probes run after their relevant final changes. Strict FFmpeg all-target
+and web library/preparation-test Clippy pass without new suppressions.
+Actual disposable-host cargo xtask smoke passes legacy/hybrid MPEG-TS and HLS
+playback with the same exact FFmpeg9; no full pipeline/platform/CI claim.
+
+The actual open-response connection remains incomplete: accepted bindings have
+no control, while initially-Off normal routes raw-copy and cannot later activate.
+A response-owned reread/control monitor prototype exists in the worktree but is
+not wired, compiled or verified, and is excluded from this checkpoint. Next
+connect the new absent binding and bounded accepted-state recovery to the same
+ordinary response, then prove replacement/Off/re-enable, multiple viewers,
+channel isolation, recovery races and cancellation without losing committed
+changes. A notification alone is insufficient after requester cancellation.
+Capacity-wait correction remains separately blocked on compatible source/slate
+codec and track topology: H264 slate vs demonstrated MPEG2 source, with source
+caption/alternate-audio preservation required before stable final-mux handoff.
+The recorded slate clock defect is not waived. Reuse pinned editor/cold actual
+URL/72 localized headed admin receipts; no UI/WASM/argv/dependency change.
+Full Level2.5/fallback/resource/editor/panel/Lua/restart/source/Next/admin/platform
+and warm cache/retirement requirements stay open; production NOS200–299 guide
+still waits for independent generic engine acceptance.
+Receipt: tmp/phase9-initial-off/identity.json, SHA25687d4fc289f0c4cd1c0b66630a75889eaabfefcdb988905b4cb5b079a29b52178.
+No milestone/acceptance/status/dependency change, full engine claim, push or
+publication. Pending monitor source is retained separately, not certified.
+
+2026-10-14 cold actual ordinary-URL checkpoint:
+Criterion: attach a suitable headed client to the actual ordinary stream after
+profile selection, native validation/shared preview, separate publication and
+reopen; prove two simultaneous profiles/themes of the same synthetic addon.
+The opt-in fixture now binds the existing Router at a disposable loopback port.
+Two owned VLC3.0.20/libzvbi0.2.42 processes consume actual
+/iptv/hls-direct/1.ts and /2.ts at normal rate, not capture replay. All six
+client-4 images are inspected: red/day and blue/night, distinct normal DRCS0/1,
+124.20->125.20->124.20 on both, Q only day124. Both clients exit0. Native final
+run18bc1117-54ef-4484-9bd5-3285c62712c2 passes1/1, retaining exact generations,
+resources/originals/receipts/package, no playout commands and clean owned-server
+closure. Existing pinned actual QTM Save As and72 localized headed admin flows
+are reused; this probe imports their supported synthetic edit through the same
+application seam, not a second external-editor or admin test.
+
+The explicit60-second source variant is bounded48MiB; existing12-second source
+argv/8MiB captures remain unchanged. Source37132068 bytes, SHA256
+9f127d636735594cf2235271840244c6d4d7a338edcc4566a785d2f1951e512c.
+The disposable fixture reserves four existing transcode slots for two viewers
+and two probes before capturing its baseline/reopen; product default2 remains.
+Trial3 actual normal HTTP captures pass42/42 unchanged TSDuck3.44-4676 checks,
+99% media/wall delivery each, zero PTS/PCR/CC errors. Final trial4 uses the exact
+same source and native code. Independent dense glyph/fallback/source-AV receipts
+from the preceding checkpoint remain valid; no full features/panels claim.
+Runef0b213f-247e-4f24-bde3-c7eccc8ca76f passes19/19 affected regular import/export
+cases; unique Rust successes20 including the final manual native selector.
+Strict preparation-test Clippy and formatting pass. No product/UI/WASM/argv/
+dependency or acceptance/status/dependency changes; preparatory checkpoint only.
+
+Negative evidence stays visible. Trials1/3 reach successful client display but
+native completion expires while root delays its visual-confirmation marker;
+neither is a passing native state/cleanup test. Trial2 native/client succeeds,
+but two extra HTTP probes overlap two viewers at default capacity2 and receive
+the wait-capacity slate: each20-second capture fails8 PTS/4 PCR leaps and19%
+delivery. Probe confirms repeated4-second H264/1920x1080 slate, not the synthetic
+MPEG2/160x90 service. Production stream.rs repeats finite slate children by raw
+byte-copy into one response, resetting clocks between children. Raising fixture
+capacity proves the normal route but does not fix or waive this playback defect.
+Next correct wait-slate repeat/handoff clocks through existing final-mux/lifecycle
+mechanisms, preserving admission, codec/topology and source captions/audio.
+Then connect accepted-generation/Off control to the same open response. Full
+sparse X27/client, resource/editor/panel/Lua/admin/platform gates remain required.
+Receipt: tmp/phase9-live-editor-flow/identity.json,
+SHA2568b161e0d96f1d7e394213bb8c7452a9bff6e6de22710db3ce7d2dc06ae393f08. Source/tools, positive/negative logs, live images and actual HTTP
+captures are bound; mutable progress prose is excluded. No milestone completed,
+production guide, push or publication.
+
+2026-10-14 indexed DRCS editor-set checkpoint:
+Criterion: preserve actual native logical S1 in QTM's attached PN-list indexing,
+including valid sparse banks without inventing broadcast resources. CarrierV4
+adds one protected set per normal/global raw bank and a bounded16-entry nullable
+resource-name mapping. Real groups retain exact projected PTU/modes/flags; null
+editor-only groups have all-F X28/3 and no PTU. Native assets/counts/model remain
+unchanged. Complete bank coverage, duplicate S1/counters, hidden/other-bank
+references, wrong PN/SC and padding mutations reject. Legacy/V2/V3 factories,
+resource names, retained concepts and receipt bytes remain exact.
+
+Runbd65c56d-0d4d-452d-8efd-dadca964ec3e passes57/57 affected app/host/export/import
+cases, including8 new codec/dense/sparse/V3-history regressions. Both themes,
+120 literal pixels at each of two glyph cells per page, sparse native absence,
+protected set rejection, explicit publication and two reopens are checked.
+Actual pinned QTM1.0/cac2167/Qt6.10.2 loads both pages of a dense0+1 set and a
+sparse1-only set with unavailable index0, checking120 actual glyph pixels per page.
+Each uses two real Save As results, Q only day124. Twelve captures per flow are
+retained; the two dense saved views are inspected. Dense native roundtrip passes
+run335d0463-84c5-4f9d-b5f4-e46fd52abb6a,1/1, for58 unique Rust successes.
+Concurrent ordinary Router streams retain exact emitted models, TSDuck3.44-4676
+and source audio/video using FFmpeg9n9.0-20261006. Independent libzvbi0.2.42
+fetches normal bank16/F400 on124 and17/F440 on125; all120 bitmap/PAL8 pixels per
+page and both red/blue palettes pass on ordered actual captures.
+
+Retained negative evidence is explicit. Dense editor trial1 fails second-window
+exposure; bounded actual Qt exposure replaces startup-only timing. Trial2 reaches
+bank1 but fails actual Save As selection; a separate identical125 trial passes.
+Actual filename focus/click/commit and bounded exact Save-button selection correct
+the stale directory-selection path; dense trial3 passes. No false completion
+marker releases either failed native waiter. Sparse actual QTM succeeds on both
+pages, but its complete native stream test fails the installed FFmpeg/zvbi SRT
+oracle (glyphs absent); independent ordered-unit decoding likewise fails. Exact
+pinned upstream sources match the earlier canonical audit: normative X27 fields
+are extracted with wrong shifts, and normal DRCS reads POP slot25 instead of27.
+Keep the correct native mask2/1C0 and real bank1-only inventory. A suitable correct
+X27 decoder/client is required; no sparse-address waiver or native packet spoof.
+
+Actual headed VLC3.0.20/libzvbi0.2.42 renders both distinct bitmaps/palettes and
+124.20->125.20->124.20 on both channels; Q stays only day124. All six client-3
+images are inspected, with byte-identical finite served-capture replay and owned
+process/replay exits0. Clients1/2 leave night Return on125; fresh coordinates and
+longer focus settling do not solve that failure. Owned-window X11 button events
+then drive the actual Qt controls successfully. No client/decoder/source-packet
+rewrite occurs. This proves MAIN glyphs/navigation, not bound live attachment,
+open-generation transitions or full56-column panel rendering.
+Strict app all-target and web library/preparation-test Clippy, formatting and
+architecture checks pass. Existing57/57 and dense runtime results are reused
+after only explicit imports, redundant-closure replacement and terminating
+semicolons for lint; semantics/inputs remain unchanged. No admin/WASM/dependency
+change; prior72 localized headed file flows and unchanged prerequisites remain
+valid. Sparse source decoding failure remains a blocker, not a passed test.
+Receipt: tmp/phase9-drcs-indexed/identity.json,
+SHA2566eea3ac7357709afd3feb44e23c3abc19edeef287ae2b540c51544b496c8368d. Final source/tool/artifact identities bind all positive/negative trials;
+mutable progress prose is excluded. Progress validation passes; all milestone
+acceptance/status/dependencies compare unchanged.
+No acceptance/status/dependency changes, full engine/editor/platform/CI claim,
+production guide, push or publication.
+
+2026-10-14 protected DRCS editor dependency checkpoint:
+Criterion: connect an existing authored resource to the actual pinned editor,
+then the same native concept/preview/publication and ordinary two-channel flow.
+Fresh carrierV3 adds a linked, protected resource TTI; unchanged DVB identity,
+physical header/lifecycle, PTU/SPACE rows and all X28/3 words remain exact.
+Strict inverse validation rejects correctable damage instead of repairing it.
+Companions are counted before file allocation and charged to existing byte/record
+bounds, without double-charging transmitted units. Legacy/V2 factories and DVB
+filenames stay unchanged; stored receipt profile alone chooses reconstruction.
+
+Run6817d4ad-ed5a-44b4-a062-a961ff36e6e1 passes67/67 affected project/projection,
+HTTP/export/concept cases, including15 new regressions. Literal asymmetric DRCS,
+high-slot/sparse modes, header/parity/protection/order/identity and closed metadata
+are checked. Changed/missing companions retain old accepted output; a retained V2
+resource receipt without a companion still imports/previews/publishes/reopens.
+The first compile's two missing fixture imports are corrected before this run.
+
+Actual unchanged QTM1.0/cac2167, Qt6.10.2 in the pinned6064a1cf image, loads normal
+1C0/S1=0/slot0 through its actual owned Open dialog. All120 actual widget pixels
+match the fixed bitmap/red palette, so an attachment label alone cannot pass.
+Six inspected editor captures retain before/load/edit/Save As. Exact saved display
+TTI imports as Free-row2 Q, shares native preview, explicitly publishes and reopens
+twice; protected glyph/resource bytes, page125, second channel and package stay
+unchanged. Rund100e627-6001-4065-a4bb-7ee846cc5e52 passes1/1, for68 unique Rust
+successes. Concurrent ordinary Router captures preserve exact emitted models,
+TSDuck3.44-4676 transport and FFmpeg9n9.0-20261006 source audio/video. SRT decodes
+F400/Z on all four pages, Q only day124. The reused hash-pinned libzvbi0.2.42 ABI
+independently decodes all120 bitmap and PAL8 pixels on each page124/125:0020 and
+both red/blue palettes from ordered actual captured units.
+
+Actual headed VLC3.0.20/libzvbi0.2.42 shows the DRCS/Z with simultaneous themes,
+Q only day124, and124.20->125.20->124.20 on both channels. Six client-3 images are
+inspected; complete finite replay and owned client exits pass. The first trial
+mistakenly uses an older nonactivating driver and shows video/EOF; it is negative
+only. The authenticated prior successful driver activates zvbi, but client-2's
+day Next screenshot remains124. Direct native Qt spin arrows replace global
+keyboard entry; client-3 then proves both rendered sequences. All trials remain.
+This is byte-identical finite served-capture replay, not live bound-server attachment,
+open-generation changes or full56-column client display.
+
+Strict app/FFmpeg all-target and web-library/preparation-test Clippy pass. The
+successful runtime results remain valid after only a terminating semicolon and
+import relocation for lint; behavior/inputs are unchanged. Formatting, architecture,
+new-allowance and progress checks pass. No UI/WASM/dependency change; prior72
+localized headed file flows and unchanged prerequisite receipts are reused.
+Receipt: tmp/phase9-drcs-companion/identity.json, SHA2565d29c936478f5d200f980c99e6cf798c2e6c747b93e1ed60c444957309574fba.
+Full higher-S1/set mapping, attached-resource/enhancement editing, charsets/panels,
+Lua/timing/restart, remaining localized management, source/Next and six-platform
+acceptance remain required. No permanent restriction, milestone completion,
+acceptance/dependency change, production guide, push or full CI claim.
+
+2026-10-14 versioned editor carrier checkpoint:
+Criterion: correct the demonstrated pinned-editor nonzero NOS loss while retaining
+independent native fallback/enhanced primary and old receipt/concept recovery.
+New exports use qteletextmaker-1.0-carrier-v2. Trusted effective presentation
+supplies PS low3 and existing RE upper bits; native controls remain original.
+Legacy reconstruction dispatches from the stored receipt profile before exact
+body equality. PS/RE/enhancement comparison stays exact: no packet masks, repair
+or uploaded authority. Schemas1 and stored legacy bytes remain unchanged.
+
+Run602def65-3eea-4f03-9545-bdffa22ef699 passes57/57 affected app/export/TTI,
+HTTP/concept and native export checks. It includes literal NOS0..7 and nonnational
+flag vectors, separate RE regional bits, protected PS/X28/RE refusals, and a
+repository-seeded old qteletextmaker-1.0 receipt with literal PS,C0C0. That old
+concept imports/previews/explicitly publishes/reopens while receipt bytes/digest
+stay exact; fresh exports independently assert literal C240. The first compile's
+wrong test-only source_header import is corrected, not counted as a success.
+
+Actual unchanged QTeletextMaker1.0/cac2167 in the pinned image, Qt6.10.2, passes
+two real widget/Save As -> native import/shared preview/request/Publish/reopen
+flows. Equal header/enhanced NOS1 uses PS,C240; independent header NOS1/enhanced
+NOS0 uses PS,C040. Both retain native raw controls0481. Exact original enhancements,
+magazine bytes and link targets stay unchanged; X27's content CRC regenerates only
+for the edited page. Both ordinary Router captures retain two themes together,
+exact emitted models, source audio/video and TSDuck checks. FFmpeg9/libzvbi
+decodes AZ on all pages, Q only day/page124; night/page125 remain untouched. Actual
+edited/save-dialog images are inspected. Runs66c446e3-2142-4100-8a94-d57a65e0a156
+and d7dfd62d-5fbf-495b-b4ef-4b6e359fcaac pass1/1 each:59 unique successes total.
+
+Negative trials remain: the first equal fixture chooses FFmpeg8.1 and fails before
+editor launch; all fixture/route/decoder paths are corrected to the existing9
+candidate. An independent trial's old driver selects a visible Open dialog during
+Save As; it exits139, and the native waiter is interrupted without a false marker.
+The test-only driver now requires the exact main-window owner, AcceptSave and
+Save As title. It compiles against the existing image's Qt6.10.2 headers/libraries,
+without installing dependencies or changing the editor. The repeated independent
+flow succeeds with driver83d95a7d; the valid equal flow uses unchanged d18d0d9c.
+Initial SDK/pkg-config guesses fail before build; direct existing Qt6 module
+headers/defines produce the retained final tool. Runtime image/editor identities
+remain pinned. No failed/interrupted trial supplies positive evidence.
+
+Strict app-library and web-library/preparation-test Clippy, formatting, architecture
+and new-allowance checks pass. The57 results remain valid after an ignored-probe
+oracle refinement that distinguishes regenerated CRC from immutable link targets;
+the two actual cases execute the final oracle. Receipt: tmp/phase9-qtm-carrier/identity.json,
+SHA256b94175326e23730639a8d6bf7cfb7a6c3931dd70f952c8cae5c91b1f065bdb1f. Prior localized headed/finite-client
+receipts remain valid; no admin UI or runtime dependency changes. QTM's one NOS
+cannot preview separate fallback/enhanced values simultaneously; trusted metadata
+preserves both for native compilation. Full charset/resource/page-set, editable
+enhancements, panel/live-client, Lua/restart/source/Next and six-platform criteria
+remain required. No permanent restriction or full editor/engine/CI acceptance,
+milestone/criteria/dependency change, production guide or push.
+
+2026-10-14 localized editor transfer checkpoint:
+Criterion: connect retained native export/import to channel admin forms without
+implicit publication, and prove shared preview/explicit publication through
+localized headed light/dark and hydrated/no-JS Chromium/Firefox.
+
+Native adapters download a standard ZIP of exact TTI/assets/sidecar and accept a
+bounded complete multipart set as a concept. Stored receipt/original ownership
+precedes writes; uploaded claims cannot change it. Closed fields, duplicate,
+traversal, incomplete files and protected edits reject. Deadlines and actual-worker
+admission survive cancellation; packaging/preflight do not nest native admission.
+The existing zip8 Stored writer is reused without new package versions. The first
+native oversized trial rejects safely but loses the channel redirect before field
+parsing; the correction adds closed query context checked against body ownership.
+
+Run9d556ecb-2a89-4cf5-b98e-3c14522be69d passes41/41 HTTP/native-concept/i18n/API
+checks. New v3-only discovery run6ceaf343-b1b8-4c89-bb18-5a91ddffb969 passes1/1,
+for42 unique successes. Its first compile lacks fixture mutability; its first SSR
+run uses a single-thread runtime and fails an existing blocking-helper requirement.
+Only the test runtime/binding changes; final real SSR retains the v3-only form.
+The first headed probe exposes the production discovery defect: the v1/v2 filter
+omits v3-only producers. The one-condition correction includes v3. These retained
+negative trials are not successful evidence.
+
+Hydration source map: /channels/{id}/teletext uses ChannelTeletextPage blocking SSR
+and plain TeletextDraftPreview, no route islands. Exact preview/publication
+observations feed native export/import forms, shared raster and separate actions.
+Existing hidden fields, preview_form/fields CSS and Primary buttons provide no-JS
+behavior. Eighteen new labels/errors are present in all nine culture modules.
+Headed tests/e2e/teletext-editor-flow.spec.ts passes8/8, with no skip/retry/flaky:
+Chromium151.0.7922.34 and Firefox153.0, each light/dark and JS/no-JS, all nine
+cultures in each case (72 culture flows). Each proves profile selection/validation,
+complete/selected ZIP download, protected generated-row rejection, exact file
+upload, free-row concept save, same preview and separate request/Publish. Same
+addon/two channels retain red day/blue night together; Q appears only day/page200,
+page201/night stay unchanged. Oversized/rejected imports preserve heads/pointers;
+installed package and captured channel/profile configuration stay unchanged;
+producers are not
+reinvoked for preview/publication. Actual native file controls work at320 pixels,
+keyboard focus and200% zoom. Targeted inspected screenshots show new localized
+controls and red AZ/white Q. Initial harness failures (collapsed details, ambiguous
+file-input button role, intrinsic SVG size) are corrected separately. A first
+semantic pass has clipped full-page screenshots; final viewport captures replace
+that visual claim, while its semantic result remains valid.
+
+Final strict focused Clippy/progress, formatting, architecture, hydration and
+new-allowance checks pass. Narrow ownership/bounds/cancellation/
+publication review finds no concrete defect. Dependency bans/licenses/sources
+pass; the whole advisory gate fails on unchanged ammonia RUSTSEC-2021-0157/0158
+and unsafe-libyaml RUSTSEC-2024-0449. No dependency version changes or suppression.
+Receipt: tmp/phase9-editorial-http/identity.json,
+SHA256d41867425eb0ab00d5f745b09347f23c8892fa503412abffa1f3374bad9d6173. It binds
+source, matched SSR/WASM/site, native/browser logs, versions and artifacts; mutable
+progress prose is excluded. The prior actual QTM/ordinary-route/TSDuck/independent
+decoding/finite-client receipt remains valid; this browser suite edits one TTI
+cell directly and does not repeat the external-editor/client trial. Full Level2.5,
+charset/resources/page-set, sidepanel/live-client, Lua/restart/source/Next and six
+platform requirements remain open. No milestone/criteria/dependency change,
+production addon, push or full CI claim.
+
+2026-10-13 edited ordinary-stream/client checkpoint:
+Criterion: carry the actual pinned-editor concept through explicit publication,
+ordinary MPEG-TS and an independently inspected suitable-client navigation flow,
+with one installed addon on two channels and different profiles/themes together.
+
+The positive fixture now retains pages124/125, raw subcode32 and reciprocal
+navigation. Actual unchanged QTeletextMaker1.0 edits only day/page124 row2/column8
+through exposed widgets and Save As. Native import qualifies the complete retained
+export/sidecar/permissions; two reopens retain the same preview, separate explicit
+request/acceptance, exact untouched page125 and night original. Source and existing
+output policy are prepared before original config/receipt capture; no freshness
+or ownership fence is relaxed and no packages/templates are modified.
+
+Concurrent ordinary Router /iptv/hls-direct/{channel}.ts responses retain exact
+models, all fixture page/M29 units and source audio/video hashes/timestamps.
+TSDuck/FFprobe pass both captures. Independent FFmpeg9/libzvbi decodes all four
+channel/page combinations with AZ and Q only on day/page124. Original exports,
+receipts/configuration and accepted night pointers remain unchanged.
+Native runc05a689e-9de0-4841-a59b-495001377856 passes5/5 affected identities,
+including existing tampering/protected-effect refusals. Earlier component/native
+receipts remain valid; repeated identities are not additional coverage. Strict
+web test-target Clippy, formatting and new-allowance checks pass after boxing the
+two extracted setup futures; no new exemptions, runtime changes or dependencies.
+
+Actual headed VLC3.0.20-3build6/libzvbi0.2.42-2 windows concurrently replay the
+exact ordinary-route bytes. Client8 exits zero after complete finite deliveries;
+six inspected captures show124.20->125.20->124.20 on each channel, red/day and
+blue/night AZ, and white Q only on day/page124. Native Qt teletext activation is
+confirmed by actual zvbi decoder logs before navigation. CLI track preferences
+and a hotkey trial did not activate it; client6/7 text-focus trials left day125
+at124. These negative artifacts remain retained. Native spinbox arrows solve
+that driver input-delivery gap without altering client/codec/capture bytes.
+This is representative main-plane glyph/palette/numeric navigation, not full
+Level2.5 client conformance. The installed formatter's41 columns still do not
+prove the authored56-column side panels. Finite Router-byte replay is not a
+client attached to a bound live server or an open-client generation transition.
+
+Receipt: tmp/phase9-edited-stream/identity.json and receipt-sha256.txt,
+SHA256de0a9ff2fcaa965eb86128f6ae9d33d6ab5cd38bbcd11b8a00b34737060ef1d5.
+It binds frozen test/driver/replay source, tool versions/hashes, exact exports,
+saved TTI, all source/route/SRT/model proof, actual editor/client captures and
+positive/negative logs, excluding mutable progress. Native/prerequisite evidence
+is reused; the reference/README own workflow/replay details. Localized admin
+file delivery/import and its headed evidence are the next concrete connection;
+full charset/resource/editor-set/panel, Lua/warm/restart/source/Next/platform
+requirements remain. No accepted restriction, criterion/status/dependency change,
+full engine/milestone completion, push or production addon publication.
+
+2026-10-13 actual pinned external-editor/native-flow checkpoint:
+Criterion: use a real exported synthetic TTI in an unchanged pinned external
+editor, preserve exact saved bytes through native import/preview/publication and
+reopen, and expose concrete integration failures without broadening acceptance.
+
+QTeletextMaker1.0/cac2167bac933a6160cca45a45d5d4ee95355898 was rebuilt offline
+in local Qt image6064a1cfba3673ce1530dd5ea4c98249a5540666e3feea3160f43c122fd81c01.
+All124 archived source Git blobs match the retained pinned tree; all nine audited
+excerpts match. Actual editor binary SHA256af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a.
+Test-only Qt input drives exposed xcb widgets and actual Save As; it does not edit
+external source or fabricate saved TTI. Input alias bytes equal the native export.
+
+The first geometry guard incorrectly assumed480x250; it fails before editing.
+The original actually has effective left4/right12 panels and width672. A subsequent
+Save As writes Q four columns left and changes protected X28. The final driver
+uses the original compiler-owned geometry and targets main row2/column8 exactly;
+parsed saved bytes independently prove that position before publication.
+
+Native run7f3b61db-af8f-455c-9f99-e7ecbe9c1bda fails the first actual editor trial.
+Its1357-byte saved file keeps numeric PS C0C0, but X28/0 primary changes1 to4;
+import rejects page124/subcode32/row28/designation0 and proves both old outputs,
+originals, receipts and configuration intact. Pinned document/LevelOnePage loading
+copies X28 first, then control bits overwrite shared m_defaultNOS. No packet mask,
+file repair, native-header change or permanent acceptance limitation is adopted.
+The original failure, hashes, actual files/screens and located diagnostic remain.
+
+A DISTINCT synthetic original uses unambiguous header/enhanced charset0. It keeps
+same-addon profiles/day/night themes, panels, template/zones/generated metadata
+and explicit native export/receipt. The actual saved1357-byte TTI SHA256 is
+8ab99707315d05536059aa55e980e1c37b58d7a9d3e1a78a258c0f01c2c3c302. Changes
+are the intended row2/column8 Q plus numeric-case/record-order normalization;
+all protected packet words, sidecars and resource assets remain exact.
+Import saves revision2/digest1a28002ab970e811d0903f76bc9e3c2ca0c897e5670f026ad1e3dd05c920d8ce
+without changing accepted pointers. Same672x250 raster has zero diagnostics and
+hash592d1c135fbf842507156cc4609517ea27d8dee8b4535a553196c2942a912a42;
+preview survives reopen. Separate request/acceptance selects generation3, whose
+recovered output matches after another reopen; the other channel stays unchanged.
+
+Final native run766d597a-b7ee-4d60-9aac-bf09264da871 passes5/5: the new actual
+editor flow plus four affected native guards/zone/tampering/isolation regressions.
+The prior27-identity component receipt remains valid; successful union is28 unique
+Rust identities, counting repeats once. Initial type/lint failures are retained
+and corrected without new exemptions/dependencies. Focused strict web test-target
+Clippy, formatting, progress and new-allowance checks pass. CPP compiles and the
+current driver performs the actual editor interaction. Four positive window/dialog
+captures were visually inspected. Receipt: tmp/phase9-qtm-native-flow/identity.json and receipt-sha256.txt,
+SHA256f64a9e51f228c918757b2cbbc9709da10c4a9c9016cc327a90c75477c21bcb29; binds final sources/logs, tool identities, actual exported/edited files,
+positive/negative artifacts and all inspected captures, excluding mutable progress.
+
+This representative SINGLE-PAGE charset-zero native flow is not full editor or
+engine acceptance. Protected nonzero charset loss stays visible in parity debt.
+Page-set/subpage/resource editing/loading, ordinary edited streams, independent
+decoding/TSDuck/suitable-client navigation, localized headed admin, all Lua/source/
+warm/restart/platform gates remain. No production TV-guide addon starts. The
+criterion/next-step map below is canonical; accepted clauses/status/dependencies
+are unchanged. Next connect reciprocal synthetic page navigation through the
+existing ordinary route and decoder/client probes. No push or publication.
+
+2026-10-13 receipt-bound native concept checkpoint:
+Criterion: connect actual exported TTI files to authenticated immutable concepts,
+the same qualified preview and separate explicit publication/restart, while
+preserving channel isolation and existing accepted output after import rejection.
+This replaces the preparatory f2e918e7 unconditional-overlay guard only for fully
+authenticated concepts; absent/forged receipt associations still fail closed.
+
+The host reads the retained server receipt and exact original, rebuilds the complete
+native file/resource projection and compares every retained body/mapping. Uploaded
+sidecars cannot broaden captured V3 permissions. Complete bounded file sets retain
+resource/M29 assets and exact identities/presentation/navigation/enhancements. The
+actual TTI parser derives physical rows; full native qualification checks captured
+free/zone/generated boundaries plus indirect spacing, size, footprint, enhanced
+geometry and glyph/latent effects. Existing worker ownership, original deadline,
+source/guide/settings metadata and revision/head CAS remain. No package execution,
+package/template mutation or broadcast pointer change follows from import.
+
+Native integration proves a same-addon two-channel day/night setup: actual export
+and receipt, changed Free/Zone row import, immutable same-design revision, same
+raster/packet/navigation preview, unchanged original bytes, no reinvocation,
+separate pending request and explicit acceptance, reopen and accepted recovery.
+An immutable original receipt also supports a new edit with a fresh current head.
+Twelve tampering/protected-effect cases preserve existing nonempty pending/accepted
+pointers, configuration and original storage. The missing-receipt guard remains.
+This is native fixture evidence, not actual QTM/admin/ordinary-stream/client proof.
+
+Initial component run passes all12 TTI identities but nine effects checks fail;
+first integration run passes2/4, with valid positive edits rejected as changed
+ProtectedStructure. Actual X27/0 navigation CRC is derived from page rows. The
+small correction protects all38 control/link nibbles and permits only the two CRC
+bytes recalculated by the trusted encoder; no uploaded packet authority is added.
+Final effects run b6e1bbab-5bc5-41b3-8eb4-50e9747660e1 passes11/11; native run
+722ccffe-82a0-47de-b8a5-f793ca4a9278 passes4/4 including the full negative matrix.
+Unique successful identities total27; unchanged12 TTI successes are reused, and
+initial failures remain recorded. Lint-only borrow/semicolon/checked-time changes
+preserve these test results. Strict FFmpeg/web all-target Clippy, workspace formatting, architecture-lint,
+new-allowance check and progress validation pass. No dependencies, migration,
+argv, transport or admin changes. Receipt: tmp/phase9-editorial-import/identity.json
+and receipt-sha256.txt, SHA256b2e3ec1e5a5691a09eab216b3376a42090fa2014ea004c6ed0c878ae5b8cb73d. It binds final source/logs and
+excludes mutable progress prose; unchanged prerequisite receipts remain valid.
+
+Current criterion-to-next-step map (reuse detailed earlier receipts below):
+| Criterion | Implemented/proven | Missing evidence or concrete next blocker |
+| --- | --- | --- |
+| Original addon templates/themes/zones | V3 capture/reload, exact sidecar authority and native protected-effect checks | Full enhancement/resource/side-panel editing and addon-version workflow proof |
+| Authoritative export baseline | Complete projection/receipt/rebuild, owner-checked ZIP/multipart, v3 discovery and all-nine-culture headed file flow | Full resource/editor-set compatibility |
+| Edited concept -> same preview -> explicit Publish -> ordinary route -> client | Native row import/CAS/preview/acceptance/reopen; two actual ordinary HTTP clients, simultaneous themes and124->125->124; normal HTTP TSDuck plus prior exact-model/AV/decoding and72 localized headed flows | Direct Router and actual warm TCP Off/On/replacement/Off/re-enable pass with manual client reselection; capacity-slate clocks, full resources/panels/features and applied-state admin proof remain open |
+| Actual pinned QTM workflow | Actual v1.0 NOS, indexed0+1 and sparse1-only dependency load/pixels/Save As; dense native/stream decode, Legacy/V2/V3 recovery | Sparse normative X27 decoding/client, remaining charset/resource editing and full supported set/subpage edits |
+| Lua profile/On target validation | Distinct read-only app/repository snapshot; exact target recheck, no writes, two-channel settings and database reopen proven | Cursor commands/interval transaction/effective resolver, promotion/expiry/restart and actual open-stream Lua proof |
+| Full engine acceptance | Initially-absent native epoch/AV/PSI/decode/TSDuck, startup fences and earlier representative client receipts retained | Complete Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, remaining admin/Lua flows and all six platforms |
+
+Concrete next action: connect Scripted/Lua teletext selections to the accepted
+ADR0122 cursor-bound interval/application contract, preserving admin base state,
+scheduling transaction ownership, rollback/error/restart and channel isolation.
+The representative direct/warm TCP flow is now proven above; do not repeat a
+general engine audit after this checkpoint. Full M29/MOT/DRCS warm transitions,
+per-response admin applied state and retained/Next connection remain required.
+No representative success grants full engine acceptance.
+The capacity-wait defect is independently visible: repeated finite slates reset
+clocks, while a stable copy mux cannot safely combine its current H264/one-audio
+slate with MPEG2/caption/alternate-audio source topology. Resolve compatible
+admission/final-mux handoff without bypassing capacity or dropping tracks.
+Four-slot normal-route success does not establish wait-slate acceptance. These
+concrete behavior gaps determine integration work; no general audit expansion.
+Sparse native/editor indexing is valid; the current decoder's audited normative
+X27 defects block its streamed glyph proof. Select/verify a correct independent
+candidate and actual client; never shift native packet fields or add native S1=0.
+Attached-resource editing has no QTM save action and remains required integration
+work. Full charset/resource/editor/panel, warm open-client and remaining
+admin/Lua flows stay required. Base-row-only import, unchanged-file refusal,
+protected enhancement/PS edits and repeated-overlay refusal remain pending
+implementation/proof; none is a permanent accepted limitation.
+No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing
+remains; production guide waits for independent generic acceptance. No remote push,
+production installation or publication occurs; no full editor/engine/platform/CI claim.
+
+2026-10-13 private concept codec and durable rejection checkpoint:
+Criterion: preserve editable row data alongside exact captured originals through
+restart-safe storage, without allowing unqualified concepts into preview/output.
+This connects thef58e2556 typed row seam to an independently versioned private
+subdocument. Actual authenticated import and complete engine acceptance stay open.
+
+Original capture serialization remains byte-identical and omits editorial_overlay.
+A present subdocument is closed/map-only/non-null with schema_version1. Positive
+original/export IDs, exact revision and lowercase digest references remain untrusted
+structural claims. Fixed40-cell rows retain seven-bit/header and exact-owner rules.
+Streaming preflight charges owner/row counts and content before owned allocation;
+append preserves original JSON prefix/tail and exact producer/guide/context strings,
+resource lifecycle and addon metadata. Existing OriginalOnly capture grants no new
+permissions. Repeated overlays, ambiguous producers and malformed bounds reject.
+
+Native reload now refuses any present overlay until the authoritative immutable
+receipt/original pair and complete edit effects are authenticated. Publication
+request uses that same reload. It never ignores rows and recovers original output
+under an edited digest. A fixture-only trusted application witness intentionally
+saves structurally valid concept bytes to prove this guard; it is not native save
+eligibility or editor permission. Before and after reopen, edited revision2 rejects
+reload/publication while old revision1 packets/M29/source bytes remain exact.
+Existing nonempty pending/accepted pointers, recovered raster/navigation,
+configuration/bindings and producer/playout counts stay unchanged.
+
+Verification: initial module lookup was corrected with an explicit test path.
+Application run3c75be86-631a-4cc8-89ec-2cfa286631a5 passes24 existing identities
+and fails8 new fixtures. The common fixture incorrectly put domain logical_subpage
+into closed producer-wire resource data; it now uses the actual wire DTO/subpage.
+Affected run10c708bd-f328-4d53-a76e-1f51c62cbf36 passes7/8; its remaining guide fixture incorrectly
+used the legacy request parser on V3 input. The final explicit schema3 parser keeps
+complete requests/source-fence tests and run
+c662c17a-6eff-4208-9b16-bac6150c4700 passes1/1. Both negative receipts remain;
+no wholly green32-test application run is claimed. Valid baseline and unchanged
+seven-test successes are reused, with unique identities counted once.
+
+The first native build exposed a test state field using the binding entity instead
+of the actual binding read model; after correction native run
+84131470-3139-44b1-93b9-868f2d543126 passes6/6: one new durable guard and five
+existing immutable-original/lifecycle/bounds/uninstall/reopen regressions. The
+successful union is38 unique Rust identities. Strict app/web all-target Clippy,
+formatting and architecture-lint pass; growing restore code was split without new
+lint exemptions. No dependencies/migrations/transport/argv/admin are added.
+Unchanged prior headed/decoder/TSDuck/client/AV proof is retained; no new live
+editor/client, six-platform, full-CI, authenticated import or engine acceptance is
+claimed. Receipt: tmp/phase9-saved-editorial/identity.json and receipt-sha256.txt,
+SHA2562e91e26b6a2956aa28e6302090a042ac0257f62c7577e3c4eacdaca699f522b8.
+The receipt binds final source/logs and excludes mutable progress prose.
+
+Concrete next action: parse actual edited TTI against the authoritative retained
+baseline, derive raw rows and authenticate free/zone/generated plus indirect
+attribute/footprint effects. Only then replace native rejection with qualified
+same-design revision/head CAS, reload/preview and explicit publication. Uploaded
+sidecars never broaden addon permissions. The existing shared compiler, work lease,
+original guide/source fences, pending/accepted CAS and ordinary route remain the
+connection points; no general audit or measurement expansion follows.
+
+2026-10-13 physical base-row compiler checkpoint:
+Criterion: connect lossless TTI base cells to the same validated semantic service,
+native encoders and preview raster without rewriting original addon responses.
+This resolves the specific missing shared layout seam from18290023; it does not
+save, authenticate, import or publish edited concepts.
+
+Typed immutable rows retain40 seven-bit cells, reserved header fields and exact
+page/subcode ownership. Complete overlay replacement checks absent/duplicate owners
+and original-plus-overlay budgets before allocation. The cold constructor preserves
+producer overlays; later attachment reuses its full input/content/storage/work
+preflight, not merely the semantic-service budget. Original producer documents,
+resource/MOT declarations, metadata, associations and logical ownership stay exact.
+
+All three native paths consume the same merged layout. Overridden rows resolve
+coded G0/G1 intent through existing spacing trace/glyph/raster logic; no guessed
+Unicode inverse is introduced. Original generated X26 remains intact where fallback
+cells match. Unsupported C0 semantics or changed derived-X26 fallback cells reject
+with exact locations, never silently emit divergent preview/transport content.
+These current gaps remain required full-engine work, not permanent accepted limits.
+
+Targeted review found raw overlays could bypass the existing authored double-height
+last-row/lower-row rule in native-default encoding. The shared final merged-matrix
+check now rejects that concrete path before every consumer. Valid blank lower rows
+and explicitly cleared lower rows work independently of supplied overlay order.
+The host seam applies overlays before full native qualification under the existing
+deadline and retains legacy producer overlays when no new set is supplied.
+
+Verification: domain runcbc6a919-898b-40d9-893f-19bd68d0adc7 passes62/62;
+separate existing cold-composition run68e520c3-5b1f-4f2b-888c-c276819a3dbe
+passes11/11. The latter was selected separately because the initial filename filter
+was not the actual cold-test namespace. FFmpeg run
+3d80a512-c9cd-4ebf-9af8-4294f8ccda8c passes57/57, including13 new overlay
+cases and44 existing layout/base/compiled/native/cold regressions. Edited Z raster
+pixels match an ordinary authored Z reference; literal raw national positions and
+spacing mode changes retain coded intent. Header/caption and merged double-height
+failures reject in every consumer, while unchanged generated X26 stays exact.
+
+Final host run0e26fc9d-9938-4d57-b9f5-a0f16c470c20 passes6/6 after the final
+native correction. Synthetic same-addon two-channel selections retain distinct
+profiles and red/blue pixels simultaneously, exact original/provenance/lifecycle,
+unchanged second-page output and navigation, and matching compiled-service preview.
+Unsupported controls, protected fallback edits, full cold byte limits and expired
+deadlines return no candidate. This is compiler evidence, not installation, durable
+configuration, receipt/edit-rights, live playback or suitable-client proof.
+
+A test helper's needless by-value argument caused the initial strict domain lint
+failure; it now borrows the producer. Final affected domain run
+7b38a2a4-b12a-4fc5-99c9-af25db2c2cdb passes9/9; the successful union is136
+unique Rust identities, with repeats counted once. Strict all-target Clippy passes
+domain/ffmpeg/web, workspace formatting and architecture-lint pass (four ratchets
+zero). No new dependencies/migrations, UI, transport or FFmpeg argv are introduced.
+Previous unchanged headed/decoder/TSDuck/client/ordinary-AV receipts are retained;
+no new live import/client, six-platform, full-CI or engine/editor acceptance is
+claimed. Proof: tmp/phase9-editorial-base/identity.json and receipt-sha256.txt,
+SHA256fcb3c6ce0144dd17c51d08ee82c2ed424d9d6b1e8663d50dafd7e57e00bf9a0f.
+The immutable receipt binds final source/logs and excludes mutable progress prose.
+The concrete next step and unchanged acceptance gaps are mapped below. A separately
+versioned private concept codec is being prepared as an unapplied ignored patch;
+its native reload must fail closed until authoritative receipt/edit-effect
+validation applies the overlay. It grants no imported concept acceptance.
+
 2026-10-13 native original export checkpoint:
 Criterion: connect captured addon metadata and complete frozen native originals to
 selected TTI files, external metadata and authoritative retained export baselines.
@@ -2796,37 +3751,8 @@ receipt-sha256.txt, SHA256cb19a17b7b1d2336e93a09a4dbd6a664621935e267dd0e0ad88662
 logs and excludes mutable progress prose.
 
 
-Current criterion-to-next-step map (reuse detailed earlier receipts below):
-| Criterion | Implemented/proven | Missing evidence or concrete next blocker |
-| --- | --- | --- |
-| Original addon templates/themes/zones | V3 capture and exact durable reload; sanitized export metadata | Imported free/zone/generated and indirect-effect validation |
-| Authoritative export baseline | Complete native file/resource mapping, private body confirmation and retained receipt CAS | Admin/agent operational file delivery and import actions |
-| Edited concept -> same preview -> explicit Publish | Original-only preview/publication/ordinary stream is already proven | Checked physical-base-row overlay propagated through existing semantic composition and saved concepts; original responses stay exact |
-| Actual pinned QTM workflow | Prior calibration reused; native per-page export is present | Real host export/open/edit/save/import/preview/publish; X28 national-option/PS normalization and resource dependency loading |
-| Full engine acceptance | Prior representative independent decoding/TSDuck/client/AV evidence retained | Remaining full Level2.5/fallback, source/Next, Lua/timing/error/restart, warm transitions/open-client drain, localized headed admin and six-platform gates |
-
-Concrete next action: implement a separately versioned private concept overlay
-from a trusted receipt, using the existing physical layout/base trace and the same
-semantic service, compiler/raster/preview. There is no lossless Unicode draft
-inverse for arbitrary TTI C0 rows. A checked physical-base-row input avoids guessed
-national glyph restoration; changed raw cells retain coded rather than invented
-Unicode intent. Existing compiled-display/native-default/main-composition layouts
-must consume the same overlay. Keep generated X26/resource definitions protected
-until their editing is independently validated. Trace/geometry comparisons must
-also reject in-zone control changes that affect protected cells to the right or
-through double-height footprints, not merely compare edited byte coordinates.
-Existing incomplete raw-control coverage remains full-engine debt, never silently
-normalized or accepted as a permanent subset. Reuse saved-document head CAS and
-explicit publication fences; original addon bytes/OriginalOnly remain intact.
-
-Protected .dvb assets prove complete preservation but are not QTeletextMaker-
-loadable POP/MOT/DRCS dependency files. Faithful external dependency loading,
-resource-dependent editor preview and validated resource editing remain required.
-Pinned editor source also shows X28 loading can normalize national-option status
-bits; actual baseline reconciliation remains open. These are explicit current
-integration gaps, not accepted engine/editor limitations or waived criteria.
-No milestone status, dependency or acceptance text changes. Engine-first and
-NOS200–299-only production guide sequencing remain; no push or publication.
+The current criterion-to-next-step map is maintained in the receipt-bound native
+concept checkpoint above; earlier export gaps and receipts remain historical evidence.
 
 2026-10-13 negotiated authoring-metadata checkpoint:
 Criterion: preserve addon-owned templates/themes/zones/dynamic-field declarations
@@ -2893,7 +3819,7 @@ Proof: tmp/phase9-authoring-metadata/identity.json and immutable
 receipt-sha256.txt, SHA256087ef11d6c1a9a0426a8aef2a03b6a8f53854dd2383f7705fdea2351009c68ab.
 The receipt binds source/native logs and excludes mutable progress prose.
 
-The current criterion/next-step map is maintained in the native export checkpoint
+The current criterion/next-step map is maintained in the native concept checkpoint
 above. This historical capture checkpoint leaves all milestone authority and
 complete engine/editor requirements unchanged.
 
@@ -20891,6 +21817,11 @@ Dependency-publication amendment (2026-10-14): the maintainer explicitly
 authorizes only the verified20-asset Next release next-7f75012-ersatzrs.1 and
 anonymous download/cold-start acceptance. No application/main push, application
 CI or application/add-on/FFmpeg release is authorized by this exception.
+Application-delivery amendment (2026-10-14): the maintainer subsequently
+authorizes completing UCU-10 first by pushing its application branch, requiring
+green full CI, merging into remote main and requiring green full CI on that
+resulting main commit. Preserve newer main work and the separate UCU-11
+candidate. This amendment authorizes no release publication.
 Record each row's justified disposition and source map; implement demonstrated
 behavior gaps and maintain health, persistence, provider, scheduling and browser
 contracts. Review compatibility and retire temporary runtime patches individually
@@ -20906,6 +21837,59 @@ acceptance assertions and update changelog/documentation. Advance the baseline
 only with accepted ordered row dispositions; keep existing UCU-00–09 evidence.
 """
 evidence = """
+Application-delivery amendment (2026-10-14): the maintainer explicitly requests
+UCU-10 first, including push, merge and green CI with remote main. The accepted
+local checkpoint92a736fc is integrated separately with verified remote main
+fc22dac8; preserve all newer teletext work and the future pending UCU-11 rows.
+Resolve the five merge conflicts by retaining both changelog/session histories,
+YAML/Ammonia security changes, new ZIP support and accepted rows1–232 alongside
+pending233–236. This amendment authorizes the UCU-10 application branch push,
+required exact-source CI and merge only after acceptance, followed by green CI
+on the resulting remote/main commit. It authorizes no new release or UCU-11
+publication. The existing main checkout's unrelated work remains untouched.
+Integrated local acceptance passes below. Remote delivery requires terminal
+full CI on the final commit before merge and green CI for that exact commit on
+remote main. Canonical remote receipts are the UCU-10 application PR and its
+CI check suite, followed by the main push run; inspect their exact SHA rather
+than inferring remote delivery from this local milestone status.
+
+Final integrated local acceptance (2026-10-14): all 6,250 nextest cases pass
+(one slow, 285 skipped), followed by every workspace doctest stage; run
+4dafff07-79b2-4b62-88f7-7987e0411d77. Strict workspace Clippy, dependency audit,
+parity/progress/architecture/hydration, formatting and lint-exemption policy
+pass. Native, bundled Next Copy and Next Convert real-host lifecycle gates
+pass with verified FFmpeg206 and published Next021, without ETV_NEXT_FOLDER.
+Next proves decoded Dutch audio, burned subtitles or selected Dutch WebVTT,
+cached TS/HLS reconnects, preview, private callbacks and idle cleanup.
+Native TSDuck passes 87 checks; Next Copy passes 83, both with zero failures.
+The initial Next Copy seed races a startup SQLite writer; add the existing
+bounded 30s wait, bail on errors and transact both engine/profile updates.
+The corrected gate passes without changing any transport assertion. Retain
+the failed log as history and reuse unchanged Native/HTTP results explicitly.
+The final matched Leptos build and actual JS/WASM bundle gate pass. All six
+headed Chromium/Firefox search cases pass (31.2s), covering hydration/no-JS,
+current smart collections, artwork identities, navigation and mobile bounds.
+Logs under tmp/ucu10-runtime-audit/ use prefix ucu10-main-integration- and
+suffixes test-closeout-corrected,clippy-corrected,deny-verified,parity,
+native-http-smoke,next-http-smoke,next-convert-http-smoke,native-tsduck,
+next-copy-tsduck-corrected,matched-build,matched-bundle,search-browser.log.
+Approved hardware/platform debt remains
+explicitly unverified. No application or runtime publication is authorized.
+
+Integrated test checkpoint (2026-10-14): workspace Clippy, dependency audit,
+architecture/hydration lint, formatting, progress validation and lint-exemption
+policy pass. The first complete nextest run selects 6,250 tests: 6,249 pass and one
+Next publisher test races its cancelled blocking worker's private-file cleanup.
+Synchronize that assertion by reacquiring the existing publisher admission;
+retain the 200ms deadline and no-publication assertions. This changes only the
+test, not production behavior. All four focused publisher tests pass, followed
+by the complete corrected closeout and integrated acceptance recorded above.
+Logs: tmp/ucu10-runtime-audit/ucu10-main-integration-{clippy,deny-verified,
+test-closeout,publication-fix}.log. After all running owned tests finish,
+package-scoped web cleanup removes 18.6GiB above the 60GiB threshold, preserving
+dependencies, source, runtime packages and evidence; the target returns to 50GiB.
+Log: ucu10-main-integration-threshold-cleanup.log.
+
 Final closure consistency (2026-10-14): the two focused embedded release-note
 checks pass after the published dependency notes are updated. A final matched
 Leptos build succeeds (native build 2m08s), followed by the actual server/site

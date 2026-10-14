@@ -105,6 +105,18 @@ impl TeletextGenerationRepository for SqliteTeletextGenerationRepository {
         {
             return Ok(M::Rejected(R::GenerationConflict));
         }
+        // Base artifacts do not yet carry a published Scripted interval's
+        // identity. Never admit them as that interval's effective output.
+        if !super::playout::teletext_intervals::active_in_transaction(
+            &mut transaction,
+            generation.request.channel_id,
+            chrono::Utc::now(),
+        )
+        .await?
+        .is_empty()
+        {
+            return Ok(M::Rejected(R::Publication(P::SelectionChanged)));
+        }
         if let Err(reason) = check_selection(&mut transaction, selection).await? {
             return Ok(M::Rejected(reason));
         }

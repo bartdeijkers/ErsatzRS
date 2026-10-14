@@ -10,6 +10,8 @@ mod command;
 pub use command::ScriptedScheduleCommand;
 mod resolver;
 pub use resolver::ScriptedContentResolver;
+mod teletext_control;
+pub use teletext_control::ScriptedTeletextControl;
 
 use super::{
     history, history_details_for_media_item, history_key_for_content,
@@ -36,6 +38,8 @@ pub use checkpoints::validate_scripted_checkpoint;
 mod continuation_tests;
 #[cfg(test)]
 mod refresh_tests;
+#[cfg(test)]
+mod teletext_tests;
 mod timeline;
 pub use timeline::validate_scripted_timeline;
 
@@ -121,6 +125,7 @@ impl ScriptedSchedulingEngine {
             smart_shuffle_state,
         )));
         state.borrow_mut().resolver = resolver;
+        state.borrow_mut().channel_id = request.playout.channel_id;
         state.borrow_mut().seed = request.playout.seed;
         if let Some(context) = checkpoint {
             state.borrow_mut().guide_group = context.guide_group;
@@ -507,6 +512,7 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
     api::watermark::register_named(lua, state)?;
     api::graphics::register_paths(lua, state)?;
     api::sources::register(lua, state)?;
+    api::teletext::register(lua, state)?;
     Ok(())
 }
 
@@ -518,6 +524,8 @@ struct ScriptState {
     resolver: Option<Arc<dyn ScriptedContentResolver>>,
     warnings: Vec<String>,
     playout_id: EntityId,
+    channel_id: EntityId,
+    teletext: api::teletext::CandidateCommands,
     start: DateTime<Utc>,
     current_time: DateTime<Utc>,
     finish: DateTime<Utc>,
@@ -579,6 +587,11 @@ impl ScriptState {
         let remove_before = (self.reference_data.channel_playout_mode
             != ChannelPlayoutMode::OnDemand)
             .then_some(request_start - Duration::hours(4));
+        let teletext_intervals = if self.added_items.is_empty() {
+            Vec::new()
+        } else {
+            self.teletext.intervals(anchor_time)
+        };
         Ok(SchedulingResult {
             clear_items: matches!(
                 self.mode,
@@ -602,6 +615,7 @@ impl ScriptState {
             added_history: std::mem::take(&mut self.added_history),
             history_to_remove: std::mem::take(&mut self.history_to_remove),
             warnings: std::mem::take(&mut self.warnings),
+            teletext_intervals,
             ..SchedulingResult::default()
         })
     }
@@ -622,6 +636,8 @@ impl ScriptState {
             resolver: None,
             warnings: Vec::new(),
             playout_id,
+            channel_id: 0,
+            teletext: api::teletext::CandidateCommands::default(),
             start,
             current_time: start,
             finish,

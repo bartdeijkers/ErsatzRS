@@ -150,3 +150,52 @@ fn invalid_async_timing_cannot_be_wrapped_in_a_valid_transport_policy() {
         Err(TeletextPumpError::Configuration)
     ));
 }
+
+#[test]
+fn initially_absent_binding_has_no_invented_service_and_retains_discovered_policy() {
+    let (_, control, _) = teletext_output_control_channel();
+    let binding = TeletextOutputBinding::new_absent(policy(), Duration::from_millis(40))
+        .unwrap()
+        .with_control(control)
+        .with_source_discovery(8 * 188, Duration::from_millis(250))
+        .unwrap();
+    assert!(matches!(binding.content(), TeletextOutputContent::Absent));
+    assert!(binding.pages().is_none());
+    assert!(binding.authored_service().is_none());
+    assert!(binding.optional_service_descriptor().is_none());
+    for retained in [false, true] {
+        let gate = binding.new_gate(retained).unwrap();
+        assert!(!gate.authored_payload_selected());
+        assert!(!gate.signalling_transition_pending());
+    }
+    let discovered = binding.with_discovered_source(37, 901).unwrap();
+    assert!(matches!(
+        discovered.content(),
+        TeletextOutputContent::Absent
+    ));
+    assert!(discovered.optional_service_descriptor().is_none());
+    assert_eq!(discovered.config().program, 37);
+    assert_eq!(discovered.config().clock.pcr_pid, 901);
+    assert_eq!(discovered.config().elementary_pid, policy().elementary_pid);
+    assert_eq!(discovered.config().max_hold, policy().max_hold);
+    assert_eq!(discovered.first_byte_timeout(), Duration::from_millis(40));
+    assert_eq!(discovered.optional_startup_bytes(), Some(8 * 188));
+    assert!(discovered.cloned_control().is_some());
+    assert!(discovered.source_discovery().is_none());
+}
+
+#[test]
+fn initially_absent_binding_still_validates_gate_and_async_bounds() {
+    let mut config = policy();
+    config.clock.muxrate_bps = 0;
+    assert!(matches!(
+        TeletextOutputBinding::new_absent(config, Duration::from_millis(40)),
+        Err(TeletextPumpError::Gate(_))
+    ));
+    for timeout in [Duration::ZERO, Duration::MAX] {
+        assert!(matches!(
+            TeletextOutputBinding::new_absent(policy(), timeout),
+            Err(TeletextPumpError::Configuration)
+        ));
+    }
+}

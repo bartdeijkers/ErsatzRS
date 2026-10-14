@@ -93,6 +93,10 @@ impl Fixture {
             .connect("sqlite::memory:")
             .await
             .unwrap();
+        Self::from_pool(pool).await
+    }
+
+    async fn from_pool(pool: DbPool) -> Self {
         sqlx::query("PRAGMA foreign_keys = ON")
             .execute(&pool)
             .await
@@ -193,6 +197,15 @@ impl Fixture {
             .unwrap();
     }
 }
+
+#[path = "teletext_profile_candidates_tests.rs"]
+mod candidates;
+
+#[path = "playout/teletext_intervals_tests.rs"]
+mod intervals;
+
+#[path = "teletext_effective_selection_tests.rs"]
+mod effective;
 
 async fn insert_installation(pool: &DbPool, manifest: &AddonManifest) {
     manifest.validate().unwrap();

@@ -408,25 +408,42 @@ fn mask_effects(
     Ok((separated, underlined))
 }
 
+/// Read-only glyph semantics from the existing comparison path. A mask and
+/// latent effects are not editing, encoding or publication authority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct ComparisonGlyph {
+pub struct TeletextComparisonGlyph {
+    /// Assigned glyph bitmap, or no glyph for a background-only fragment.
     pub mask: Option<TeletextGlyphMask>,
-    pub effects: ComparisonGlyphEffects,
+    /// Separation/underline interpretation retained independently of pixels.
+    pub effects: TeletextComparisonGlyphEffects,
 }
 
+/// Original-family effect interpretation, including otherwise undefined flags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ComparisonGlyphEffects {
+pub enum TeletextComparisonGlyphEffects {
+    /// No selected glyph contributes foreground coverage.
     BackgroundOnly,
+    /// Mosaic separation remains meaningful even for an empty mask.
     Mosaic { separated: bool },
+    /// Alphanumeric underline remains meaningful independently of its mask.
     Alphanumeric { underlined: bool },
-    // Table 29 leaves these effects undefined: comparison retains both flags.
+    /// Table 29 leaves these effects undefined: comparison retains both flags.
     Undefined { d5: bool, spacing_separated: bool },
 }
 
-pub(super) fn comparison_original_glyph(
+pub(super) use project_teletext_comparison_glyph as comparison_original_glyph;
+pub(super) use TeletextComparisonGlyph as ComparisonGlyph;
+pub(super) use TeletextComparisonGlyphEffects as ComparisonGlyphEffects;
+
+/// Project the existing semantic comparison for a cell borrowed from this
+/// exact composition's display resolution. The caller must preserve that
+/// association; this read-only diagnostic grants no generation authority.
+/// # Errors
+/// Rejects pending display/glyph/attribute evidence or an unavailable mask.
+pub fn project_teletext_comparison_glyph(
     original: &TeletextMainComposition,
     cell: ersatzrs_domain::TeletextDisplayCell<'_>,
-) -> Result<ComparisonGlyph, TeletextRasterCellFailure> {
+) -> Result<TeletextComparisonGlyph, TeletextRasterCellFailure> {
     comparison_glyph(
         RasterInputs {
             owner: original.owner(),

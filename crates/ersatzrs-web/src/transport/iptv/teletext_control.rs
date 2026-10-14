@@ -295,6 +295,9 @@ impl PumpControl {
                 | TeletextOutputError::Psi(TeletextPsiError::Incomplete)
                 | TeletextOutputError::Pmt(TeletextPmtInstallError::Incomplete),
             ) => self.desired = Some(update),
+            // A failed withdrawal must stop this epoch rather than continue
+            // emitting content whose removal the caller already requested.
+            Err(error) if matches!(update.action, Action::Withdraw) => return Err(error),
             Err(error) => {
                 let reason = match error {
                     TeletextOutputError::Transport(TeletextTransportError::ResourceUpdate {

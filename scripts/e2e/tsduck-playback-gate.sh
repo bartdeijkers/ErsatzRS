@@ -386,10 +386,13 @@ COMMIT;
 SQL
   } | sqlite3 "$db" || die "seeding failed"
   if [ "$NEXT_COPY" = 1 ]; then
-    sqlite3 "$db" <<SQL || die "Next copy seed failed"
+    sqlite3 -bail "$db" <<SQL || die "Next copy seed failed"
+.timeout 30000
+BEGIN IMMEDIATE;
 UPDATE "Channel" SET "StreamingEngine"=1, "SubtitleMode"=0 WHERE "Id"=$chid;
 UPDATE "FFmpegProfile" SET "VideoFormat"=99, "AudioFormat"=99, "HardwareAcceleration"=0
 WHERE "Id"=(SELECT "FFmpegProfileId" FROM "Channel" WHERE "Id"=$chid);
+COMMIT;
 SQL
     info "Next engine selected with independent video/audio copy modes"
   fi

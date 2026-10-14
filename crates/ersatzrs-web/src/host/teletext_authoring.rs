@@ -990,7 +990,7 @@ fn preparation_error(error: &ChannelTeletextDocumentError) -> TeletextAuthoringE
         _ => TeletextAuthoringStatus::InvalidInput,
     })
 }
-fn design_error(error: NativeTeletextDesignError) -> TeletextAuthoringError {
+pub(crate) fn design_error(error: NativeTeletextDesignError) -> TeletextAuthoringError {
     match error {
         NativeTeletextDesignError::Work(error) => work_error(&error),
         NativeTeletextDesignError::Encoding(error) => channel_error(*error),
@@ -1107,4 +1107,83 @@ fn layout_location(error: &TeletextEncodingError, location: &mut TeletextAuthori
         }
         _ => (),
     }
+}
+
+/// Resolve existing operator-owned authoring bounds for an HTTP editor transfer.
+/// No admission is retained: export/import have their own existing work owners.
+/// Transfer caps constrain storage/TTI bounds without inventing engine defaults.
+/// # Errors
+/// Rejects unavailable/invalid policy, zero bounds or the original deadline.
+pub(crate) async fn editorial_teletext_policy(
+    application: &ApplicationServices,
+    deadline: Instant,
+    max_transfer_bytes: usize,
+) -> Result<
+    (
+        super::teletext_design_exports::NativeTeletextExportPolicy,
+        Instant,
+    ),
+    TeletextAuthoringError,
+> {
+    let started = Instant::now();
+    check_deadline(deadline)?;
+    if max_transfer_bytes == 0 {
+        return Err(failure(TeletextAuthoringStatus::InvalidInput));
+    }
+    let raw = before(
+        deadline,
+        application.get_optional_setting(NATIVE_TELETEXT_AUTHORING_POLICY_SETTING),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::Unavailable))?
+    .ok_or_else(|| failure(TeletextAuthoringStatus::MissingPolicy))?;
+    let policy = parse_native_teletext_authoring_policy(&raw)
+        .map_err(|_| failure(TeletextAuthoringStatus::InvalidPolicy))?;
+    let deadline = deadline.min(
+        started
+            .checked_add(policy.operation_timeout)
+            .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidPolicy))?,
+    );
+    check_deadline(deadline)?;
+    let encoding = policy.reload_encoding_policy();
+    let mut document = policy.design;
+    document.max_serialized_bytes = document.max_serialized_bytes.min(max_transfer_bytes);
+    let project = ersatzrs_app::teletext_export_project::TeletextExportProjectBudget {
+        max_bytes: document.max_serialized_bytes,
+        max_files: encoding.encoding.max_units,
+        max_producers: document.max_documents,
+        max_file_bytes: document.max_serialized_bytes,
+        max_units: encoding.encoding.max_units,
+    };
+    let tti = ersatzrs_app::teletext_tti::TeletextTtiBudget {
+        max_bytes: document.max_serialized_bytes,
+        max_records: encoding.encoding.max_units,
+    };
+    Ok((
+        super::teletext_design_exports::NativeTeletextExportPolicy {
+            document,
+            encoding,
+            project,
+            tti,
+        },
+        deadline,
+    ))
+}
+
+/// Join bounded editor transfer work using its caller's real admission hold.
+/// The hold stays with the actual worker after cancellation; no native export or
+/// import admission is nested here. Callbacks perform no durable mutations.
+pub(crate) async fn editorial_transfer_work<T: Send + 'static>(
+    hold: TeletextWorkHold,
+    deadline: Instant,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, TeletextAuthoringError> {
+    teletext_work::spawn_blocking(hold, move || {
+        check_deadline(deadline)?;
+        let result = work();
+        check_deadline(deadline)?;
+        Ok(result)
+    })
+    .await
+    .map_err(|_| failure(TeletextAuthoringStatus::WorkerFailed))?
 }

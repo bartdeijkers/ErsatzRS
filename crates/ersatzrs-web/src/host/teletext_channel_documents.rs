@@ -17,10 +17,11 @@ use ersatzrs_app::{
 use ersatzrs_core::repositories::TeletextGuideSourceFence;
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextColdProducerComposition,
-    TeletextComposedProducerPage, TeletextPageAddress, TeletextProducerCompositionBudget,
-    TeletextProducerCompositionError, TeletextProducerCompositionFailure,
-    TeletextProducerCompositionMetadata, TeletextProducerPresentation,
-    TeletextProducerPresentationBudget, TeletextProducerPresentationError,
+    TeletextComposedProducerPage, TeletextPageAddress, TeletextPhysicalBaseOverlay,
+    TeletextProducerCompositionBudget, TeletextProducerCompositionError,
+    TeletextProducerCompositionFailure, TeletextProducerCompositionMetadata,
+    TeletextProducerPresentation, TeletextProducerPresentationBudget,
+    TeletextProducerPresentationError,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service_before, EncodedTeletextAuthoredService,
@@ -31,8 +32,12 @@ use ersatzrs_ffmpeg::teletext::{
 
 use super::teletext_documents::{lift_base, TeletextDocumentEncodingError};
 
+#[cfg(test)]
+mod physical_overlay_tests;
+
 /// Trusted input/model/encoding limits and explicit resource lifecycle records.
 /// Entry language always comes from the selected original producer, never policy.
+#[derive(Clone)]
 pub struct TeletextChannelDocumentEncodingPolicy {
     pub input: TeletextChannelDocumentInputBudget,
     pub validation: TeletextProfileDocumentBudget,
@@ -363,12 +368,66 @@ pub(super) fn encode_original_channel_documents(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    encode_original_channel_documents_with_physical_overlays(
+        selection,
+        entry_addon_id,
+        documents,
+        Vec::new(),
+        deadline,
+        region,
+        policy,
+    )
+}
+
+/// Compile trusted physical-row inputs through the same cold service and encoder.
+/// This internal seam neither authenticates imported editing permissions nor
+/// constructs an invocation, saved concept or publication authority. Its caller
+/// must validate the authoritative receipt and complete protected effects first.
+pub(super) fn encode_original_channel_documents_with_physical_overlays(
+    selection: &TeletextChannelSelectionSnapshot,
+    entry_addon_id: Option<&str>,
+    documents: Vec<TeletextProfileDocument>,
+    overlays: Vec<TeletextPhysicalBaseOverlay>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
     check_deadline(deadline)?;
     if documents.len() != selection.bindings.len() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
+    let entry_producer = entry_addon_id.and_then(|addon| {
+        selection
+            .bindings
+            .iter()
+            .position(|binding| binding.addon_id == addon)
+    });
+    encode_original_producer_documents(
+        entry_producer,
+        documents,
+        overlays,
+        deadline,
+        region,
+        policy,
+    )
+}
+
+/// Shared content compiler. Origins and producer-to-membership associations stay
+/// with the caller; an entry ordinal conveys no selection or publication authority.
+pub(super) fn encode_original_producer_documents(
+    entry_producer: Option<usize>,
+    documents: Vec<TeletextProfileDocument>,
+    overlays: Vec<TeletextPhysicalBaseOverlay>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
     if documents.is_empty() {
+        if !overlays.is_empty() {
+            return Err(ChannelTeletextDocumentEncodingError::Association);
+        }
         return Ok(EncodedChannelTeletextOriginals {
             v1_region: None,
             producers: Vec::new(),
@@ -386,12 +445,17 @@ pub(super) fn encode_original_channel_documents(
         return Err(ChannelTeletextDocumentEncodingError::Association);
     }
     let producers = prepare_producers(documents, deadline, region, &policy)?;
-    let metadata = entry_metadata(selection, entry_addon_id, &producers, policy.entry)?;
+    let metadata = entry_metadata(entry_producer, &producers, policy.entry)?;
     check_deadline(deadline)?;
-    let (producers, provenance, metadata, declared) =
+    let mut composition =
         TeletextColdProducerComposition::new(producers, metadata, policy.composition)
-            .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?
-            .into_parts();
+            .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
+    if !overlays.is_empty() {
+        composition = composition
+            .with_physical_base_overlays(overlays, policy.composition)
+            .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
+    }
+    let (producers, provenance, metadata, declared) = composition.into_parts();
     check_deadline(deadline)?;
     let encoded = encode_teletext_authored_service_before(
         declared,
@@ -507,17 +571,11 @@ fn preflight_producer_storage(
 }
 
 fn entry_metadata(
-    selection: &TeletextChannelSelectionSnapshot,
-    entry_addon_id: Option<&str>,
+    entry_producer: Option<usize>,
     producers: &[TeletextProducerPresentation],
     requested: Option<TeletextPageAddress>,
 ) -> Result<TeletextProducerCompositionMetadata, ChannelTeletextDocumentEncodingError> {
-    let addon = entry_addon_id.ok_or(ChannelTeletextDocumentEncodingError::Association)?;
-    let binding = selection
-        .bindings
-        .iter()
-        .position(|binding| binding.addon_id == addon)
-        .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
+    let binding = entry_producer.ok_or(ChannelTeletextDocumentEncodingError::Association)?;
     let original = producers
         .get(binding)
         .ok_or(ChannelTeletextDocumentEncodingError::Association)?

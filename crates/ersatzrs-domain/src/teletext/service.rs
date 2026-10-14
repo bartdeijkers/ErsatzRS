@@ -85,9 +85,11 @@ pub struct TeletextServiceBudget {
     /// Base page/subpages plus unique object resources and DRCS subtables.
     pub max_records: usize,
     pub max_objects: usize,
-    /// Aggregate rows, runs, navigation links, metadata records and glyphs.
+    /// Aggregate rows, runs, navigation links, metadata records, glyphs and
+    /// physical-overlay owner/row records.
     pub max_structure_items: usize,
-    /// UTF-8 text bytes and one byte per six-bit mosaic cell, without truncation.
+    /// UTF-8 text bytes, one byte per six-bit mosaic cell and physical overlay
+    /// cells, without truncation. Overlay storage shares the original budget.
     pub max_base_content_bytes: usize,
     /// Authored local/object commands and populated default slots, even suppressed.
     pub max_commands: usize,
@@ -180,6 +182,11 @@ pub enum TeletextEffectiveProgramSource {
 /// Located semantic failure. No programme text or partial candidate is returned.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextServiceError {
+    #[error("teletext physical base overlay owner {address:?} is absent or repeated (duplicate={duplicate})")]
+    PhysicalBaseOverlayOwner {
+        address: TeletextPageAddress,
+        duplicate: bool,
+    },
     #[error("teletext service exceeds caller {dimension} budget {maximum}")]
     Budget {
         dimension: &'static str,
@@ -280,6 +287,9 @@ pub struct TeletextSemanticService {
     objects: TeletextEnhancementObjectCatalog,
     object_companions: Vec<super::TeletextResourceIdentity>,
     drcs: TeletextDrcsCatalog,
+    physical_base_overlays: BTreeMap<TeletextPageAddress, super::TeletextPhysicalBaseOverlay>,
+    original_structure_items: usize,
+    original_base_content_bytes: usize,
     collected: BTreeMap<
         TeletextPageAddress,
         (
@@ -315,7 +325,8 @@ impl TeletextSemanticService {
         companions: Vec<super::TeletextResourceIdentity>,
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextServiceError> {
-        check_input_budgets(&draft, &companions, budget)?;
+        let (original_structure_items, original_base_content_bytes) =
+            check_input_budgets(&draft, &companions, budget)?;
         validate_companion_kinds(&companions)?;
         draft.base.validate_structure()?;
         let addresses: BTreeSet<_> = draft.base.pages.iter().map(|page| page.address).collect();
@@ -356,6 +367,9 @@ impl TeletextSemanticService {
             objects,
             object_companions: companions,
             drcs,
+            physical_base_overlays: BTreeMap::new(),
+            original_structure_items,
+            original_base_content_bytes,
             collected: BTreeMap::new(),
         };
         // Declared defaults are validated even when local X26 suppresses them.
@@ -417,6 +431,92 @@ impl TeletextSemanticService {
     #[must_use]
     pub const fn base(&self) -> &TeletextPageSetDraft {
         &self.base
+    }
+    /// Replace the complete physical-row overlay set without modifying semantic
+    /// metadata, logical resource owners or previously resolved dependencies.
+    /// Raw counts and exact owners are checked before allocating the new index.
+    /// # Errors
+    /// Rejects absent/repeated owners and the combined original-plus-overlay
+    /// structural/content footprint. Empty input removes every overlay.
+    pub fn with_physical_base_overlays(
+        mut self,
+        overlays: Vec<super::TeletextPhysicalBaseOverlay>,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextServiceError> {
+        let mut items = budget.max_structure_items;
+        let mut bytes = budget.max_base_content_bytes;
+        charge(
+            &mut items,
+            self.original_structure_items,
+            "structure item",
+            budget.max_structure_items,
+        )?;
+        charge(
+            &mut bytes,
+            self.original_base_content_bytes,
+            "base content byte",
+            budget.max_base_content_bytes,
+        )?;
+        charge(
+            &mut items,
+            overlays.len(),
+            "structure item",
+            budget.max_structure_items,
+        )?;
+        for (ordinal, overlay) in overlays.iter().enumerate() {
+            charge(
+                &mut items,
+                overlay.rows().len(),
+                "structure item",
+                budget.max_structure_items,
+            )?;
+            for _ in overlay.rows() {
+                charge(
+                    &mut bytes,
+                    40,
+                    "base content byte",
+                    budget.max_base_content_bytes,
+                )?;
+            }
+            if !self
+                .base
+                .pages
+                .iter()
+                .any(|page| page.address == overlay.owner())
+            {
+                return Err(TeletextServiceError::PhysicalBaseOverlayOwner {
+                    address: overlay.owner(),
+                    duplicate: false,
+                });
+            }
+            if overlays[..ordinal]
+                .iter()
+                .any(|previous| previous.owner() == overlay.owner())
+            {
+                return Err(TeletextServiceError::PhysicalBaseOverlayOwner {
+                    address: overlay.owner(),
+                    duplicate: true,
+                });
+            }
+        }
+        self.physical_base_overlays = overlays
+            .into_iter()
+            .map(|overlay| (overlay.owner(), overlay))
+            .collect();
+        Ok(self)
+    }
+    #[must_use]
+    pub fn physical_base_overlay(
+        &self,
+        owner: TeletextPageAddress,
+    ) -> Option<&super::TeletextPhysicalBaseOverlay> {
+        self.physical_base_overlays.get(&owner)
+    }
+    #[must_use]
+    pub const fn physical_base_overlays(
+        &self,
+    ) -> &BTreeMap<TeletextPageAddress, super::TeletextPhysicalBaseOverlay> {
+        &self.physical_base_overlays
     }
     #[must_use]
     pub fn page_enhancements(
@@ -884,7 +984,7 @@ fn check_input_budgets(
     draft: &TeletextResolvedServiceDraft,
     companions: &[super::TeletextResourceIdentity],
     budget: TeletextServiceBudget,
-) -> Result<(), TeletextServiceError> {
+) -> Result<(usize, usize), TeletextServiceError> {
     let mut record_count = budget.max_records;
     charge(
         &mut record_count,
@@ -977,7 +1077,10 @@ fn check_input_budgets(
             budget.max_structure_items,
         )?;
     }
-    Ok(())
+    Ok((
+        budget.max_structure_items - items,
+        budget.max_base_content_bytes - bytes,
+    ))
 }
 
 fn charge_base_structure_and_content(

@@ -115,6 +115,12 @@ fn channel_page(
             | "preview"
             | "encoding"
             | "publication-conflict"
+            | "editorial-mismatch"
+            | "editorial-protected"
+            | "editorial-no-changes"
+            | "editorial-syntax"
+            | "editorial-missing-receipt"
+            | "editorial-limit"
     );
     let (code, message, role) = if !error.is_empty() {
         if draft_code {

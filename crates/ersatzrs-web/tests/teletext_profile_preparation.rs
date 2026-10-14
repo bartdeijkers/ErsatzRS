@@ -54,6 +54,10 @@ mod client_capture;
 mod designs;
 #[path = "teletext_profile_preparation/documents.rs"]
 mod documents;
+#[path = "teletext_profile_preparation/editorial_imports.rs"]
+mod editorial_imports;
+#[path = "teletext_profile_preparation/effective_channel_documents.rs"]
+mod effective_channel_documents;
 #[path = "teletext_profile_preparation/export_receipts.rs"]
 mod export_receipts;
 #[path = "teletext_profile_preparation/generations.rs"]
@@ -74,6 +78,8 @@ mod preview;
 mod producer_admission;
 #[path = "teletext_profile_preparation/publications.rs"]
 mod publications;
+#[path = "teletext_profile_preparation/scripted_controls.rs"]
+mod scripted_controls;
 #[path = "teletext_profile_preparation/work_admission.rs"]
 mod work_admission;
 const SCRIPT: &str = r#"case "$1" in

@@ -3862,6 +3862,115 @@ prove link/subpage navigation, full resources/panels, warm cache replacement,
 localized admin/browser, accepted generation or full Level 2.5 support. P9A-01
 owns the exact successful capture/client receipt and P9A-04 retains the flow gaps.
 
+### Published cold ordinary-URL client workflow
+
+The opt-in Unix integration selector
+`published_indexed_originals_serve_live_ordinary_urls` binds the actual Router
+on disposable loopback state after profile selection, validation, concept import,
+shared preview, explicit publication and reopen. Set
+`ERSATZRS_TELETEXT_LIVE_CLIENT_DIR` to a new directory and all five fixture/runtime
+FFmpeg/ffprobe overrides to the same verified FFmpeg9 candidate. Run through
+`./run.sh test -p ersatzrs-web --test teletext_profile_preparation -E
+'test(published_indexed_originals_serve_live_ordinary_urls)' --run-ignored ignored-only`.
+It retains a bounded60-second source and writes `ready.json` only after binding.
+The existing12-second capture workflow is unchanged.
+
+While the test waits, run
+`python3 scripts/e2e/teletext-live-client-trial.py "$READY_JSON" "$NEW_CLIENT_DIR"`
+on a real X11 display. The pinned Linux-x64 tooling owns two VLC windows, checks
+exact process/window and source/library identities, attaches directly to the two
+ordinary HTTP URLs at normal rate, and captures requested124->125->124 controls.
+It does not certify the rendered page or release native completion. Independently
+inspect all six images for actual page/subpage headers, red/day and blue/night
+DRCS shapes and day124-only Q. Wait for both owned clients to exit0. Only then
+atomically write the exact five-field completion identity from `ready.json` to
+`client-complete.json` before its180-second deadline. A screenshot alone or a
+late marker is not successful native verification; require `success.json` and
+nextest exit0 for retained-state and bounded owned-server cleanup.
+
+The disposable fixture configures four existing capacity slots before its
+baseline/reopen for two viewers plus two concurrent ordinary-URL transport probes.
+Run those with the unchanged `tsduck-playback-gate.sh url "$URL" 20 --keep` gate.
+The product default remains two. At default capacity, extra consumers may receive
+a wait slate; a successful four-slot normal-source probe does not establish
+wait-slate/handoff correctness. P9A-04 retains the observed PTS/PCR reset defect,
+actual-URL receipts and the canonical next-step map.
+
+This Linux-x64/X11 test helper is an intentional tooling exception, not a runtime
+platform requirement. It rewrites no transport bytes or decoder, changes no
+installed package, and proves cold MAIN display/navigation only. Full authored
+Level2.5/fallback, sparse X27, panels, warm controls, editor-resource workflow,
+Lua/restart, localized admin and six-platform acceptance remain required.
+
+### Warm ordinary-URL client workflow
+
+The ignored selector `warm_ordinary_tcp_views_wait_for_headed` uses three original
+ordinary TCP responses: two owned headed clients and one independent observer.
+Set `ERSATZRS_TELETEXT_WARM_CLIENT_DIR` to a new destination and use the same exact
+FFmpeg/ffprobe overrides and `ERSATZRS_TELETEXT_TEST_TSANALYZE` as the cold workflow.
+Run the selector through the preparation integration binary with
+`--run-ignored ignored-only`. Promptly after its closed `ready.json` appears, run
+`python3 scripts/e2e/teletext-live-update-client-trial.py "$READY_JSON"` on the real
+X11 display. The fixture declares three producer slots and four native-work slots
+before its configuration baseline; product defaults are unchanged.
+
+The same URLs/processes survive initial Off, fresh acceptance, concept replacement,
+Off and fresh acceptance. The helper uses actual native teletext controls,
+including decoder reselection where this client loses its selected track after
+withdrawal/readdition. It writes five closed capture markers and fourteen owned
+window images. These markers synchronize the actor; they never certify rendering.
+Independently inspect actual `124.20 ->125.20 ->124.20`, simultaneous red/day and
+blue/night, channel1-only whiteQ after replacement, ordinary video whileOff and
+fresh acceptance withoutQ. Wait for both owned clients to finish. Only then publish
+the exact five-field completion identity from `ready.json`, atomically without
+replacement, to `client-complete.json` before the single180-second native deadline.
+Require nextest exit0 and `success.json`; screenshots alone do not prove transport,
+retained state or cleanup. Synchronous raster comparisons run after producers
+stop so the current-thread test actor cannot starve their delivery timers.
+
+The verifier keeps complete raw captures and original full TSDuck JSON. Each
+authored-PID PTS leap must equal an independently qualified raw PMT-Off interval:
+complete CRC-valid ownership, next-version reannouncement, continuous counters,
+no authored packet whileOff and every PTS frame on the unchanged source PCR/packet
+clock. All other transport assertions stay strict. Discovery through the bounded
+60-second/48-MiB synthetic epoch sees late PMT activation; warm audio decoding has
+a6-MiB PCM cap. Cold discovery/capture limits remain unchanged. No analyzer threshold,
+clock reset, packet rewriting or added discontinuity is used.
+
+To reuse retained synthetic captures separately, set
+`ERSATZRS_TELETEXT_WARM_OFFLINE_DIR` and run ignored `offline_warm_raw_captures`.
+Its create-new `offline-native-proof` output preserves input hashes and explicitly
+excludes the original trial's HTTP cleanup, headed rendering and engine acceptance.
+This pinned Linux-x64/X11 tooling is an intentional test exception. Candidate
+decoder reselection, resource-free representative pages and successful transport
+do not establish full authored Level2.5, resources/panels, retained/Next, Lua,
+editor, localized admin or six-platform acceptance. P9A-04 owns canonical receipts
+and the criterion/gap map.
+
+### Initially absent transport epochs and startup freshness
+
+`TeletextOutputGate::new_absent` and `new_absent_retained` reserve and validate
+source ownership, PID, clocks and existing window/holding limits without any
+authored descriptor or carousel. Ordinary AV/PSI bytes and the initial PMT version
+remain unchanged. At a sink-acknowledged boundary, the existing replacement API
+accepts a complete compiled service on that same clock/batch timeline. It retains
+the source-derived PMT counter and requires changed-table acknowledgement before
+PES. No blank page or fabricated descriptor is broadcast to bootstrap this state.
+The real-source ignored probe `real_runtime_initial_absence` uses the same pinned
+FFmpeg9/TSDuck procedure as the existing transition probe; simulated sink times
+are separate from actual HTTP/client evidence. It compares source packets and
+physical clocks, decoded AV/timestamps, complete PMT versions and independent
+ALPHA text decoding. P9A-04 owns the receipt and current integration gap map.
+
+Accepted host output now confirms its stored selection both before discovery and
+after waiting for actual source PSI. Off/replacement committed during that await
+returns the exact consumed prefix to ordinary direct/retained playback before an
+authored write. This startup fence is not ongoing freshness or immediate-disable
+acceptance. Current Off-at-start ordinary responses still lack a controlled gate;
+a bounded response-owned monitor prototype is unverified and not yet connected.
+Same-response activation/replacement/withdrawal, durable changes after request
+cancellation and real client/transport proof remain necessary next work.
+
 ### Bounded accepted guide-source reads
 
 The additive infra `external_json::snapshot::accepted_on` borrows the caller's
@@ -4582,6 +4691,38 @@ The existing localized Health page reads policy afresh over its cached baseline;
 in-order SSR completes that asynchronous snapshot without JavaScript. Valid
 configuration is not evidence of delivery, full Level 2.5 or memory bounds.
 
+Policy version 2 retains all version-1 required bounds and additionally requires
+`live_updates: {"poll_interval_ms": ..., "recovery_timeout_ms": ...}`. Both
+timings must be positive and representable; missing/null/unknown/duplicate fields
+reject. Version 1 rejects this additional field and retains startup-only behavior.
+No implicit live-monitor cadence or production preset is introduced.
+
+With version 2, each compatible ordinary final direct response owns a separate
+bounded accepted-state monitor and its safe-boundary control. Initially Off uses
+an absent gate: original PSI and AV continue, and later explicitly accepted native
+output can use the same source clock. Pending drafts remain unpublished. A stale
+initial candidate is rechecked after source discovery and starts absent. Unsupported
+source qualification or precommit admission still forwards the original prefix.
+Hybrid/retained/Next and separate-clock capacity slates remain outside this route
+connection; their accepted delivery obligations remain open.
+
+The monitor reconciles immediately, then waits the configured poll interval after
+each bounded reconciliation. Each read/recovery shares one fresh configured
+deadline. Changes become output only at the pump's existing safe acknowledged
+boundary; they are not instantaneous at the admin commit. A different accepted
+generation first proposes withdrawal before native recovery. Read errors, timeout,
+missing/invalid selection and rejected replacement retire the previous authored
+service while ordinary AV continues. Unchanged rejected identities are not retried
+until a different accepted identity exists. Non-transient withdrawal invariant
+faults terminate the output epoch rather than retaining unauthorized page data.
+Actual per-epoch acknowledgements remain distinct from publication acceptance.
+
+Dropping a response aborts its monitor; admitted blocking native work retains its
+worker-owned hold until the actual worker ends. A reopened response recovers durable
+current accepted selection afresh. This adds no package invocation, script replay,
+publication action or durable monitoring task. Full warm resource/cache retirement,
+Lua interval semantics and suitable-client proof remain separate P9A-04 gates.
+
 The opt-in `ordinary_stream_flow::` native tests connect one installed synthetic
 addon's separate profiles on two channels to exact validation/native previews,
 saved originals, explicit acceptance, reopened services and concurrent ordinary
@@ -4712,3 +4853,259 @@ it. The ordinary route currently resolves accepted state at new-stream startup
 and retains its immutable generation thereafter. Running-stream adoption and
 receiver-cache transitions remain required, separate acceptance work. A selected
 durable pointer alone does not prove that any running client applied it.
+
+
+### Physical base-row concept compilation seam
+
+`TeletextPhysicalBaseRow` retains exactly forty seven-bit cells at row0..24;
+row0 identity columns0..7 remain reserved. `TeletextPhysicalBaseOverlay` binds
+one nonempty, duplicate-free row set to an exact page/subcode. Attachment is a
+consuming replacement of the overlay set, with exact-owner checks and the existing
+semantic and cold-composition content/item/storage/work budgets. Original addon
+responses, page drafts, resource definitions, declarations, producer association
+and captured metadata remain unchanged. No Unicode inverse or inferred national
+glyph is introduced.
+
+Composition, compiled-display and native-default encoding apply the same merged
+layout. Overridden rows resolve coded G0/G1 intent through the existing attribute
+trace, glyph and raster pipeline; unchanged generated X26 glyphs retain their
+original enhancement program. The private host compiler applies overlays before
+complete native qualification, under the existing operation deadline. It creates
+neither a successful addon invocation nor a saved/published concept.
+
+Unsupported C0 semantics and changes to generated X26 fallback positions reject
+with page/subcode/row/column diagnostics. Header/caption and double-height safety
+remain shared across all consumers. These are explicit current correctness gaps
+for later full authored acceptance, not approved permanent limitations. The
+required complete Level2.5 and fallback scope remains unchanged.
+
+The native connection now authenticates a retained export receipt and complete
+free/zone/generated effects before attachment. Byte positions alone do not fence
+spacing changes to protected cells to the right or double-height cells below.
+A separately versioned private overlay now retains exact original bytes; reload
+uses this same compiler and existing revision/head CAS. Publication stays a later
+explicit action. Native import leaves current broadcast state untouched.
+P9A-04 owns the verification receipt and the remaining editor/client flow.
+
+
+### Private concept-row subdocument
+
+The optional `editorial_overlay` has its own `schema_version:1` and remains absent
+from all original capture encodings. Present null, unknown fields/versions and
+invalid shape reject. Structural provenance stores positive export-receipt and
+original-design/revision IDs and lowercase SHA256 references, not trusted grants.
+Exact replacement page/subcodes carry nonempty distinct rows with40 seven-bit
+cells; receiver header positions remain reserved. Streaming preflight charges
+owner/row counts and fixed row content before allocating owned arrays/vectors,
+using existing document/service limits. Native composition still owns full
+original-plus-overlay cold limits.
+
+`append_teletext_design_editorial_overlay` validates the existing stored original
+and exact unambiguous owner membership, then preserves its JSON prefix and tail
+byte-for-byte while inserting this closed subdocument. Original producer strings,
+guide requests/source fences, installation/settings context, resource lifecycle,
+entry/region, metadata and `original_only` capture policy remain exact. Appending
+is read-only syntax work: no package invocation, revision save or publication.
+
+Native reload and publication now authenticate a present subdocument using the
+retained server receipt and exact immutable original. A missing receipt still
+returns `EditorialValidationUnavailable`; forged associations and unsafe effects
+reject. Rows are never ignored to recover original output under an edited digest.
+No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
+positive/negative codec, native import and durable qualification evidence.
+
+### Versioned QTeletextMaker status carrier
+
+Schema1 `project.editor_profile` distinguishes the retained
+`qteletextmaker-1.0` carrier from V2 `qteletextmaker-1.0-carrier-v2` exports
+retained V3 `qteletextmaker-1.0-carrier-v3` receipts and fresh V4
+`qteletextmaker-1.0-carrier-v4` exports.
+It versions the adapter for the same pinned QTeletextMaker1.0 editor, not the
+editor itself or the authored document/receipt schemas. Unknown names reject.
+Stored receipts select reconstruction; uploaded metadata cannot select another
+carrier for an existing receipt. Old receipt bytes/digests and qualified concepts
+are retained exactly.
+
+The pinned constructor loads X28, then applies PS control booleans. Its C12 is
+numeric NOS bit0; native compact C12 occupies bit8 and represents NOS bit2.
+The legacy copy therefore sends native controls0481 as PS,C0C0: the editor
+reconstructs primary4 rather than1. V2 sends PS,C240 when the validated effective
+primary is1. Existing exact-owner presentation resolves X28/M29/header provenance;
+no new raw packet parser or source correction is used.
+
+QTeletextMaker has one shared default NOS. V2 therefore carries the effective
+primary low3 in PS and its upper regional bits in RE, while the original native
+fallback header remains in immutable originals and authenticated mappings. For
+native header NOS1/enhanced NOS0, PS is C040 and original raw controls0481 stay
+unchanged. QTM's own fallback preview cannot represent both NOS values at once;
+this explicit adapter preserves them for native compilation. PS, RE, X28/M29,
+identities and navigation stay protected by exact comparison; importing never
+masks or repairs edited records. Changing protected presentation and full editor
+resource/charset coverage remain required future implementation/proof, not
+accepted permanent restrictions. P9A-04 owns literal/native and actual equal/independent NOS editor proof,
+including ordinary transport and unchanged legacy concept recovery. Full charset
+and resource/page-set proof remains open in its complete acceptance map.
+
+### Protected DRCS editor dependencies
+
+Fresh exports use `qteletextmaker-1.0-carrier-v4`, retaining the V2 display/NOS
+mapping. Stored Legacy/V2/V3 receipts select their original exact factory;
+companions do not renumber or replace original DVB assets. Schemas remain1.
+
+A V4 `drcs_tti_set` asset holds `resource_names`, an ordered array of one through
+16 nullable DVB filenames for one normal/global raw-page bank. Its array index
+is both the native logical S1 and the QTM attached page-list index. Every real
+resource in that bank appears exactly once at its actual S1; the last member is
+real. Other banks, duplicate native S1 identities, omitted resources and wrong
+indices reject. File limits bound real assets; the intrinsic16-entry bound also
+applies before metadata allocation, independently of file count.
+
+A null explicitly marks an editor-only unavailable list position where the
+retained native bank has no resource. Its group contains PN/SC for that index
+and canonical all-F X28/3, with **no PTU/base rows**. QTM ignores modes when
+looking up Level2.5 glyphs, so a SPACE row would incorrectly make glyphs available.
+Padding adds no native page, physical header, DVB asset or broadcast authority.
+An original containing only S1=1 therefore maps as `[null, "resource-name.dvb"]`;
+publication and preview still use that original inventory. The host reconstructs
+this exact mapping from the retained original; uploaded nulls cannot hide a bank.
+
+Real groups carry raw hexadecimal PN with ordinal and SC equal to S1, exact
+seven-bit PTU/SPACE rows, original resource PS flags and all X28/3 words from the
+strict existing packet inverse. Their unchanged DVB mappings own normal/global
+kind, native S1, physical subcode and update/lifecycle controls. The companion
+unit count is0: these are derived file bytes, not additional transmitted packets.
+Existing total/file-byte and TTI-record bounds cover every group including nulls.
+The complete set, including padding, and all DVB bytes stay protected on import.
+Editing those files never grants resource editing, display overlay, package
+installation or publication authority.
+
+Retained V3 `drcs_tti` assets keep their original singleton S1=0 recipe, filename,
+resource reference and ordinal0. No V4 migration rewrites old receipts/concepts.
+Pinned QTM1.0/cac2167 loads attached sets through View -> DRCS pages -> Normal
+or Global DRCS -> Load file. Ordinary File/Open treats a resource as a display;
+do not use it for this dependency. The attached loader indexes PN groups by
+list order, ignoring SC and PN suffixes, and renders monochrome mode0.
+QTM has no attached-resource edit/save action. That integration gap and complete
+resource/enhancement editing remain required work, with no permanent restriction
+accepted. P9A-04 owns actual editor, native stream and independent decoding proof;
+the structured agent workflow uses these same versioned files, immutable receipt,
+validation, preview and separate publication actions.
+
+### Receipt-bound native concept import
+
+`host::teletext_editorial_designs::import_teletext_editorial_design` accepts a
+`NativeTeletextEditorialImportRequest`: concept name, receipt ID/digest, current
+observed design head, exact versioned sidecar and the complete named file set.
+Use the existing `NativeTeletextExportPolicy` with explicit trusted document,
+project, TTI, service and encoding bounds. Import/reload share the existing work
+admission; blocking workers retain ownership through completion after caller
+cancellation. No new defaults, schema, dependency or background queue is added.
+
+The host reads the authoritative retained receipt and original, rebuilds their
+complete native export and checks every retained byte/mapping. Uploaded metadata
+must equal the captured project; it cannot broaden addon-owned permissions.
+Missing, duplicated or renamed files, modified resources/M29 assets and changed
+page/subpage/navigation/presentation/enhancement records reject. Actual TTI parser
+records supply seven-bit physical rows without Unicode inversion. Omitted empty
+rows follow the audited editor's clear-packet behavior. Identity and protected
+record failures retain page/subpage/row/column/designation diagnostics.
+
+Captured main-area Free/Zone rectangles authorize cell edits; Generated and
+omitted regions stay protected. Complete native compilation then compares byte
+roles, spacing attributes, suppression/size footprints, enhanced geometry,
+selected glyph masks and latent effects in protected cells. Identical screen
+colour alone cannot authorize a spacing-code escape. Protected resource and
+magazine output remain exact. X27/0's38 control/link nibbles stay exact; its two
+page-data CRC bytes may change only through the trusted encoder's recalculation.
+
+The qualified private overlay is appended alongside byte-exact original producer,
+request/source/settings and template/theme/zone metadata. Existing same-design
+revision/head CAS persists it; stale/deleted/missing heads reject. Reload rebuilds
+and qualifies it again without invoking packages. Import changes neither bindings
+nor pending/accepted broadcast pointers. Separate request and explicit acceptance
+use the same qualified model; prior accepted output remains until that action.
+The immutable original receipt can be reused with a newly observed current head.
+
+The channel preview now exposes native editor transfer adapters. Export posts the
+exact channel/design/revision/digest and observed current head to
+`/admin-api/teletext/design/export`. Without page fields it downloads the supported
+set; `export_page` plus four-digit hexadecimal `export_subcode` selects a display.
+The standard ZIP contains exact TTI/DVB files and `project.ersatzrs.json`; no
+package runs and accepted output is unchanged. ZIP uses the workspace's existing
+zip8 dependency with stored entries, without a new archive implementation.
+
+Import posts multipart to `/admin-api/teletext/design/import?channel_id=<id>`:
+text `channel_id`, `name`, `expected_design_head`, one `sidecar` file and repeated
+`files` parts with their original flat names. Include every file from the same
+export. The optional query context preserves channel-local error feedback when
+the body limit rejects before parsing a field; it must agree with the body.
+Stored receipt/original ownership is authoritative before export or save. Closed
+fields, duplicate names, malformed sets and oversized uploads reject. The total
+HTTP upload cap is 8 MiB; configured existing design/encoding/TTI bounds can be
+smaller. Every worker retains actual admission after requester cancellation,
+and all phases share the original bounded operation deadline.
+
+Successful import redirects to the exact saved revision/page for the same native
+preview. It neither requests nor selects output. Protected/syntax/association/
+missing-receipt/no-change/limit errors have localized labels; native numeric page,
+subcode and position remain in the redirect. Resource locations reuse the existing
+authoring formatter. The no-JS forms reuse existing publication controls and all
+nine culture modules. Generic-engine acceptance and full editor/feature coverage
+remain separate; P9A-04 owns the current test/browser proof and remaining gaps.
+
+For agent file workflows: obtain a retained native export, keep its sidecar and
+protected assets, edit permitted TTI rows, submit the complete set with the current
+head, inspect located validation errors, reload the saved immutable revision for
+preview, and request publication explicitly only after review. Installed packages
+are never edited by import; template changes require the addon-version workflow.
+
+Current gaps are explicit: this connection accepts changed base rows, refuses
+unchanged imports, repeated overlays and protected enhancement/header/navigation
+edits, and keeps PS exact against its authenticated versioned carrier. Preserved DVB resource
+assets do not yet prove QTeletextMaker dependency loading. Enhanced resources,
+objects, DRCS, side-panel editing and the complete pinned editor roundtrip remain
+required. These are pending implementation/evidence, not accepted permanent
+restrictions. A separate pinned QTeletextMaker1.0 trial now opens a real native export with an
+exposed X11 window, edits main row2/column8 through actual widgets and saves through
+Save As. Compiler-owned four-left/twelve-right geometry supplies the editor input
+offset; independently parsed saved cells verify the target before publication.
+The exact saved bytes enter the production native importer; same preview, explicit
+request/acceptance, two reopens and untouched second-channel theme pass. The
+positive fixture explicitly uses zero for original header and enhanced charset.
+
+The retained nonzero trial is a counterexample: header/PS remains numerically
+unchanged, but X28 primary changes1 to4. Pinned `LevelOnePage(PageBase const&)`
+copies X28 before control bits, and `setControlBit` overwrites the shared
+`m_defaultNOS`; saving reconstructs X28 with that changed value. The importer
+rejects at page124/subcode32/row28/designation0 and proves old output remains.
+This retained legacy counterexample is never masked or repaired. The v2 carrier
+now passes separate actual equal/independent NOS trials while retaining native
+header controls and old concepts. Other charset/resource/editor-set requirements
+remain open; no header-encoding change or reduced authored target is accepted.
+
+[Replay instructions](../../scripts/e2e/README.md#replay-the-pinned-editor-against-a-native-export)
+provide the structured file/validation/preview workflow for maintainers and agents.
+Its readiness/completion markers alone grant no authority: final native results,
+actual window/dialog captures and source/binary/image identities are required.
+P9A-04 owns successful and negative receipts and the criterion/next-step map.
+The positive probe now retains pages 124/125, raw subcode 32 and reciprocal
+navigation on both channels. It edits only the first page; page 125, protected
+assets, sidecars and originals remain exact. Source/policy setup precedes original
+configuration/receipt capture, so ordinary delivery does not relax freshness.
+After explicit publication and reopen, simultaneous ordinary Router captures
+pass complete emitted-model, TSDuck/FFprobe and source audio/video checks.
+Independent FFmpeg9/libzvbi decodes both pages: `Q` occurs only on day/page124.
+Separate headed VLC3.0.20-3build6/libzvbi0.2.42-2 windows replay the exact served
+bytes and display `124.20 -> 125.20 -> 124.20`, red/day versus blue/night `AZ`,
+and the same isolated `Q`. Actual Qt teletext activation starts the decoder;
+native spinbox arrows deliver navigation without the unreliable X11 text-focus
+path. CLI track preferences alone are not activation. Negative activation and
+focus trials remain retained. This is finite byte-identical replay of ordinary
+Router output, not a client attached to a bound running server or open-client
+generation transition. The installed formatter's 41 columns do not prove the
+56-column side-panel presentation. No permanent limitation is accepted.
+
+Retain `stream-proof.json`, exact source/captures and page-specific decoder files
+alongside native results and the independently inspected headed captures. Headed
+localized admin, full page-set/resource/charset editing and all remaining engine,
+Lua, warm/restart and playback/platform acceptance remain required.

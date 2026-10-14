@@ -218,7 +218,7 @@ async fn later_owner_timeout_discards_earlier_preparation_without_publishing() {
     let outcome = host
         .prepare_active_build(
             &mut pending,
-            window,
+            window.clone(),
             Instant::now() + std::time::Duration::from_millis(200),
         )
         .await;
@@ -228,9 +228,25 @@ async fn later_owner_timeout_discards_earlier_preparation_without_publishing() {
             crate::next_engine::publication::PublicationError::Expired
         ))
     ));
-    assert_eq!(std::fs::read_dir(root.path().join("1")).unwrap().count(), 0);
     assert!(!root.path().join("1").join(PLAYOUT_FILENAME).exists());
     assert!(!root.path().join("2").join(PLAYOUT_FILENAME).exists());
+    // A timed-out blocking flush retains admission until its private file is
+    // discarded. Reacquire that admission before asserting cleanup, rather
+    // than racing the still-owned worker on a loaded machine.
+    let drained = host
+        .prepare_build(
+            &mut pending,
+            1,
+            window,
+            &[],
+            Instant::now() + std::time::Duration::from_secs(5),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    drop(drained);
+    assert_eq!(std::fs::read_dir(root.path().join("1")).unwrap().count(), 0);
+    assert!(!root.path().join("1").join(PLAYOUT_FILENAME).exists());
     drop(held);
     drop(pending);
     crate::db::begin_write(&host.pool)

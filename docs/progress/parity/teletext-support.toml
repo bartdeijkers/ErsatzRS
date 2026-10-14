@@ -4,26 +4,25 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123']
 summary    = '''
-p9a-04 precedes one ErsatzRS-Addons guide (NOS200–299), p9b-01.
+P9A-04 precedes NOS200–299 guide addon, P9B-01.
 ADR0123: authored Level2.5/fallback, pinned QTeletextMaker TTI/sidecar,
-TSDuck/independent decoding and actual client display/navigation; Kodi optional.
+TSDuck/independent decoding, actual client display/navigation; Kodi optional.
 
-v1 bytes, resource geometry/lifecycle/pointers/metadata/fresh state and
-local X26 forward references survive.
+v1 retains bytes/resources/pointers/metadata/fresh state/local X26.
 Replay/raster keep fallback; encoding keeps lineage, IDs and call ancestry.
 AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
-X27 decoding passes; client open.
+X27 pass; client open.
 X26/metadata dual decoding pass.
-C2 uses final words per instance. Charset aliases keep raw pending; differing pairs stay pending.
+C2 keeps per-instance final words; differing charset aliases remain pending.
 G1 mode/fallback and Latin decoder gaps survive.
 165 national recipes; 4 pending. Hebrew private-charset decoder gap remains.
 Glyph/DRCS keep original resources and loser/blank lineage; lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
 Intervals reject sixteen simultaneous opens; unknown survive.
-Collector caps each type at 127 per display, including defaults.
+Collector:127/type/display, with defaults.
 MIT masks/C1 rasterize fragments/DRCS; Unicode keeps Base priority.
-Header/flash/bottom origins remain; eight DRCS rectangles match native RGBA.
+Header/flash/bottom origins;8 DRCS rectangles match native RGBA.
 Composites/BBS retain masks/writers; D5 cancels spacing with original scope.
 Enhanced G1 uses D5 only; native later-spacing discrepancy stays open.
 Same-service Unicode/Active wire normalization passes;
@@ -33,35 +32,40 @@ Headers fence physical/logical owners; declarations check roles/defaults/extents
 empty owners and one MOT/magazine.
 Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
-TSDuck/shifted slots/EOF/root/corrected nested pass.
-QTM edit/save/reopen proves renumber/loss; host roundtrip open.
+TSDuck/shifted slots/EOF/root/nested pass.
+QTM proves edit/save/reopen renumber/loss; host roundtrip open.
 
 v2 stays pinned; Base refuses v2. Encoding retains
 defaults, secondary uncertainty and channel/model/deadline fences.
 Cold composition isolates M29/resources and rechecks MOT effects.
 Originals/pending persist; raw v2/historical v1.
-Producer caps;13 quotas;100-number rich flow;workers survive cancellation.
+Producer caps;13 quotas;100-number flow;workers survive cancellation.
 Direct/reopen AV,200→201 pass; RSS/bounds open.
-Two-channel ordinary themes/client and nine-culture Health pass.
-Profiles/drafts/preview/admin publication connect.
-Served themes/pending/Off, decoding/client and smoke pass; 12 headed cases pass.
-Copy fixed; finite-client restart/AV passes.
-Native exports retain v3 metadata/resources/M29; concepts/QTM/drain open.
+Two-channel client themes; nine-culture Health pass.
+Profiles/preview/publication; candidate reads pass.
+Lua/native originals pass; scoped promotion/live open.
+Health:nine-culture headed proof passes.
+Themes/pending/Off/decode/client/smoke pass;12 headed passes.
+Copy fixed; finite restart/AV pass.
+V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
+QTM charset0 set/stream/client;admin8 headed passes.
+PS/NOS/DRCS/live URLs and direct v2 controls pass. Warm TCP/client/AV passes
+with reselection and exact clock-gap proof. Slate/X27 and full acceptance remain.
 
 SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
 pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
-JSON caps do not bound child RSS. Acquisition/selection stay open; auxiliary
+JSON caps do not bound child RSS; acquisition/selection remain open. Auxiliary
 failure preserves metadata, uncertain cleanup is fatal. P9A-03 owns proof.
 
-Carousel/PSI/PCR/retention preserve AV and finite EOF. Actual ACK/cycle ends fence
-shared proposals; changed PMT precedes PES. Withdrawal retains clock/counters;
-invalid resources/unreconciled M29/MOT omissions retain old output. One-epoch watch
-status grants no activation. P9A-04 owns proof; durable promotion, immediate Off
-and full warm reconciliation remain open.
+Carousel/PSI/PCR preserve AV/EOF. ACK/cycle ends fence proposals;
+changed PMT precedes PES; withdrawal retains clock/counters;
+Rejected standalone proposals retain old output; v2 withdraws replacements.
+Epoch status is not publication. Warm resources,
+Scoped Lua/expiry/applied state/retained/Next open.
 
-Final MPEG-TS owners retain separate wrapper/encoder leases, lifecycle and
-Health capacity/cleanup. Linux x64/Windows-interop/QEMU ARM64/ARMv7 prove admission, tokens, reaping,
-video, selected audio, Dutch page 200 and TSDuck. Native Windows/ARM hosts and
+MPEG-TS wrapper/encoder leases, lifecycle/Health remain.
+Linux x64/Windows-interop/QEMU ARM64/ARMv7:admission/tokens/reaping,
+video/selected audio/Dutch200/TSDuck. Native Windows/ARM hosts and
 routed source captions/alternate audio remain open.
 
 P9A-02: decoder Health/six-RID licenses.
@@ -71,6 +75,15 @@ gates. Slate handover, activation/publication/refresh/restart, localized managem
 full source/client/browser/smoke/TSDuck stay open. UCU waives no gates.
 Content waits for p9a-04; Phase10 for p9b-02.
 '''
+
+[[debt]]
+id          = 'teletext-warm-direct-delivery-deadline'
+adr         = '0123'
+description = 'The warm ordinary TCP test observer fails around29s when four synchronous preview raster comparisons starve its current-thread runtime after the final client stage. Preserve all comparisons and original delivery/error bounds while preventing the test actor from blocking paced producers. Client reselection remains a separate recorded limitation, not an accepted authoring restriction.'
+discovered  = '2026-10-14'
+evidence    = 'P9A-04 retains failed native3/4/5 evidence and exact packet_sleep_completed deadline diagnosis. This is a test scheduling defect; no production deadline, clock or cancellation weakness is inferred. Earlier70-test direct Router proof remains valid.'
+resolved    = true
+resolution  = 'Move the same synchronous raster comparisons after owned producer shutdown. Native runa82d9bb4-54e9-41d1-addf-b91f23cb9da2 passes complete five-stage TCP/client/transport/AV/decode/cleanup flow with unchanged100ms allowance, one request per viewer and two original client identities. Five clock mutation groups and independent reuse of retained native3 captures pass. P9A-04 owns complete scope/receipts and negatives. Product diagnostic instrumentation is removed; client reselection, resource/cache and full engine gates remain open.'
 
 [[debt]]
 id          = 'teletext-side-panel-plane-colour-admission'
@@ -92,7 +105,7 @@ resolved    = false
 [[debt]]
 id          = 'teletext-generated-unicode-base-priority-is-not-preserved-on-wire'
 adr         = '0123'
-description = 'The ordinary composed compiler generates Local X26 fallback that outranks an original Active glyph. The explicit normalized engine candidate now passes the unchanged representative dual-level oracle, but broad integration and remaining standards coverage are unproven. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
+description = 'The ordinary composed compiler generates Local X26 fallback that outranks an original Active glyph. The normalized engine candidate now passes the unchanged representative dual-level oracle, but broad integration and remaining standards coverage are unproven. Preserve Level 1.5 fallback and final Level 2.5 fragment ownership through bounded physical realization, all glyph/charset/attribute/resource context and actual generated invocation/open/word/resource limits. Carriers need exact display-origin lineage, identity-preserving Base national-subset conversion, unchanged anchors and temporal flash proof; explicit backgrounds must retain original colour dependency validation. No permanent authoring restriction is accepted.'
 discovered  = '2026-10-11'
 evidence    = 'P9A-01 records the actual production-wire pound/Active-A regression with pinned teletextimager 0.2.0: Level 1.5 passes, Level 2.5 reports pound instead of A. Nextest 4a620ac7-13ef-469e-ae09-ee707435676c fails against the unchanged positive oracle. The interchange reference owns request/helper hashes and replay instructions. The new explicit same-service normalization entry passes the unchanged positive oracle with pinned teletextimager (af44fcf5-1934-4899-8d06-59172060d9f1), after both bounded comparisons and original C2 settlement. P9A-01 and the interchange reference retain the original failure and new request hash. Complete normalized display packets also pass the pinned dual-level Active override case (08c43d55-d7ac-4e43-8f5b-ef5def5aa3ce), preserving actual metadata and fallback. This does not change ordinary compiler paths or grant publication readiness. Foreign default ownership, row-zero/national conversion, broad integration and full dual-receiver/service/client proof remain open.'
 resolved    = false
@@ -156,7 +169,7 @@ id          = 'teletext-channel-profiles-themes-and-lua-control-is-unimplemented
 adr         = '0122'
 description = 'Implement per-channel/add-on enabled bindings and named profile-scoped settings without mutating global AddonSetting or auto-enabling packages. Reuse shared application controls from admin and a core Lua port; persist bounded cursor overrides atomically with schedules, with explicit base precedence, expiry, Continue, Refresh/Reset, error rollback and restart behavior. The sole production TV-guide add-on owns named themes, permitted overrides and defined custom zones after independent engine acceptance. Browser/stream consume identical validated generations; aggregate limits and page collision checks remain bounded.'
 discovered  = '2026-10-10'
-evidence    = 'The maintainer explicitly authorized this scope extension. ADR 0122 records accepted behavior with preparatory profile persistence and shared application controls; at that planning checkpoint Lua/admin and publication remained unimplemented. P9A-04 receives synthetic channel/profile/mirror isolation, multiple bindings, Lua transition/expiry/rollback/restart and missing/invalid profile safety criteria; P9B-01 receives themes/overrides/zones; P9B-02 repeats integrated exact-package proof and localized admin/browser gates. Existing criteria, milestone statuses, dependencies, engine-first sequence and NOS TV-guide-only 200-299 reference remain. P9A-04 records 20 new profile tests and 43 existing settings/migration checks, including post-write rollback, file-backed reopen, unavailable Off and real uninstall retention. P9A-04 also records shared application controls and native profile-scoped preparation with 74 unique passing tests, including simultaneous two-channel text/colour drafts, stale selection/receipt/output rejection and real scoped executable leases. The single initially failing fixture was isolated from the default user-state directory without changing production code; the other 60 initial passes remain valid. Scoped storage and shared application preparation remain preparatory. Profile invocation now uses exact channel/profile settings without global writes. Complete channel-wide snapshot composition and native encoding retain the same immutable logical pages and a full Off candidate. P9A-04 records 78 focused passes, including eighteen new membership, deadline, aggregate, collision and simultaneous native encoding regressions. Explicit entry metadata, the final whole-membership fence and one original preparation deadline are enforced. Service admission, persisted entry policy, source completeness, localized admin, Lua controls, trusted generation ownership and post-encoding publication remained open at that checkpoint. Current per-channel profile administration is connected through native revision-fenced application forms; P9A-04 owns focused and headed proof. Static native preparation, new immutable originals and exact historical preview now connect to the localized admin; P9A-04 owns native/headed proof. Explicit static admin publication is connected; P9A-04 owns its proof. Effective Lua/applied state and full engine acceptance stay open.'
+evidence    = 'The maintainer explicitly authorized this scope extension. ADR 0122 records accepted behavior with preparatory profile persistence and shared application controls; at that planning checkpoint Lua/admin and publication remained unimplemented. P9A-04 receives synthetic channel/profile/mirror isolation, multiple bindings, Lua transition/expiry/rollback/restart and missing/invalid profile safety criteria; P9B-01 receives themes/overrides/zones; P9B-02 repeats integrated exact-package proof and localized admin/browser gates. Existing criteria, milestone statuses, dependencies, engine-first sequence and NOS TV-guide-only 200-299 reference remain. P9A-04 records 20 new profile tests and 43 existing settings/migration checks, including post-write rollback, file-backed reopen, unavailable Off and real uninstall retention. P9A-04 also records shared application controls and native profile-scoped preparation with 74 unique passing tests, including simultaneous two-channel text/colour drafts, stale selection/receipt/output rejection and real scoped executable leases. The single initially failing fixture was isolated from the default user-state directory without changing production code; the other 60 initial passes remain valid. Scoped storage and shared application preparation remain preparatory. Profile invocation now uses exact channel/profile settings without global writes. Complete channel-wide snapshot composition and native encoding retain the same immutable logical pages and a full Off candidate. P9A-04 records 78 focused passes, including eighteen new membership, deadline, aggregate, collision and simultaneous native encoding regressions. Explicit entry metadata, the final whole-membership fence and one original preparation deadline are enforced. Service admission, persisted entry policy, source completeness, localized admin, Lua controls, trusted generation ownership and post-encoding publication remained open at that checkpoint. Current per-channel profile administration is connected through native revision-fenced application forms; P9A-04 owns focused and headed proof. Static native preparation, new immutable originals and exact historical preview now connect to the localized admin; P9A-04 owns native/headed proof. Explicit static admin publication is connected; P9A-04 owns its proof. Read-only candidate-profile snapshots now admit Off/alternative bases without writes, reusing exact package/settings policy. Fresh target rechecks survive base edits and reject profile/install/settings drift;61 domain/core/app/infra regressions pass. Candidate tokens grant no producer/interval authority. Strict Lua commands, original worker deadline and atomic cursor-interval persistence now connect through the existing application/scheduler. Same-transaction active guards protect base output; Scripted Health reports unavailable state in nine cultures. Effective whole-channel/native preparation, scoped promotion/recovery, live expiry/restart/applied state remain open. New Health-message proof passes8 headed Chromium/Firefox cases across nine cultures, themes and JS modes; P9A-04 owns verification and the next authority seam. Full engine acceptance stays open.'
 resolved    = false
 
 [[debt]]
@@ -173,4 +186,20 @@ adr         = '0123'
 description = 'Retain real host restart and playback safety acceptance. A finite-client restart trial cannot establish graceful shutdown while admin clients remain open; diagnose the observed listener drain stall without accepting forced termination as clean shutdown.'
 discovered  = '2026-10-13'
 evidence    = 'P9A-04 owns the actual headed restart receipts. Initial NL/no-JS shutdown receives SIGTERM and stops scanner/scheduler, but lacks shutdown-complete within30s and needs SIGKILL. Available Playwright network trace identifies no unanswered admin request at the signal; Node stream captures are outside that trace. Closing the owned UI context before stop and reopening persisted views is a distinct finite-client trial, not a correction or waiver of open-client shutdown behavior.'
+resolved    = false
+
+[[debt]]
+id          = 'teletext-qtm-national-option-fidelity-is-unproven'
+adr         = '0123'
+description = 'Preserve supported header and enhanced charset semantics through actual pinned QTeletextMaker interchange. Its shared NOS state can alter protected X28 during load/save. Do not silently mask or restore edited packets, change the native header encoder, or accept a permanent authored/editor restriction. General lossless charset interchange remains required.'
+discovered  = '2026-10-13'
+evidence    = 'P9A-04 owns the actual exposed QTeletextMaker1.0/cac2167 export/edit/Save As trial. Native file1357 bytes retains numeric PS C0C0 while X28 primary changes1 to4; the constructor copies X28 before header controls, whose setters overwrite m_defaultNOS. Import rejects at page124/subcode32/row28/designation0 and preserves both accepted/pending outputs. A distinct charset-zero original passes the representative native flow; this does not establish general fidelity or full engine/editor acceptance.'
+resolved    = false
+
+[[debt]]
+id          = 'capacity-wait-mpegts-slate-clock-resets'
+adr         = '0123'
+description = 'Ordinary MPEG-TS capacity-wait output repeats finite slate children into one HTTP response by raw byte-copy, resetting PTS/PCR. Preserve a stable final mux clock across repeats and source handoff, existing admission/lifecycle ownership and source codec/caption/alternate-audio topology. No delivery or continuity waiver is accepted.'
+discovered  = '2026-10-14'
+evidence    = 'Two live-URL TSDuck20-second probes overlapping two headed viewers at default capacity2 each reproduce8PTS/4PCR leaps and19percent delivery. Captures identify the repeated4-second wait slate, not the synthetic MPEG2 source. Four-slot disposable-fixture normal HTTP probes pass42 unchanged checks; product limit remains2. P9A-04 owns positive/negative receipts and next-step mapping. Production correction and same-response handoff proof remain open.'
 resolved    = false

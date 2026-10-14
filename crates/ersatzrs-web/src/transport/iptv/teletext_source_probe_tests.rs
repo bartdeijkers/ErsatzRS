@@ -128,6 +128,75 @@ async fn non_one_program_and_actual_pcr_are_discovered_after_whole_chunk() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn initially_absent_probe_retains_exact_pmt_version_and_source_bytes() {
+    let packets = actual();
+    let bytes = flatten(&packets);
+    let mut source = Source::new(bytes.clone(), usize::MAX, Tail::Error(io::ErrorKind::Other));
+    let admitted = probe_teletext_source_optional(&mut source, None, 512, policy(8 * 188))
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            admitted.plan.program_number(),
+            admitted.plan.pmt_pid(),
+            admitted.plan.pcr_pid()
+        ),
+        (37, 3337, 901)
+    );
+    assert_eq!(admitted.plan.elementary_pid(), 512);
+    assert_eq!(admitted.plan.section(), &packets[1][5..26]);
+    assert_eq!(admitted.plan.section(), admitted.plan.source_section());
+    assert_eq!(admitted.plan.section()[5], 0xc1);
+    assert_eq!(admitted.prefix.bytes(), bytes);
+    assert_eq!(source.polls, 1);
+    assert_eq!(source.position, bytes.len());
+}
+
+#[tokio::test(start_paused = true)]
+async fn initially_absent_probe_rejects_late_pid_collision_and_preserves_partial_tail() {
+    let mut packets = actual().to_vec();
+    let mut collision = packets[2];
+    collision[1] = 2;
+    collision[2] = 0;
+    packets.push(collision);
+    let mut bytes = flatten(&packets);
+    bytes.extend_from_slice(b"partial");
+    let mut source = Source::new(bytes.clone(), usize::MAX, Tail::Eof);
+    let failure = probe_teletext_source_optional(&mut source, None, 512, policy(8 * 188))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        failure.reason,
+        TeletextSourceProbeError::Psi(TeletextPsiError::Multiplex(
+            TeletextMultiplexError::PidCollision { pid: 512 }
+        ))
+    );
+    assert_eq!(failure.raw_prefix, bytes);
+    assert_eq!(source.position, bytes.len());
+    assert_eq!(source.polls, 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn initially_absent_probe_still_requires_complete_bounded_topology() {
+    let bytes = flatten(&actual());
+    let mut source = Source::new(bytes.clone(), usize::MAX, Tail::Eof);
+    let failure = probe_teletext_source_optional(&mut source, None, 512, policy(191))
+        .await
+        .unwrap_err();
+    assert_eq!(failure.reason, TeletextSourceProbeError::Capacity);
+    assert_eq!(failure.raw_prefix, &bytes[..191]);
+    assert_eq!(source.position, 191);
+    assert_eq!(source.polls, 1);
+    let mut source = Source::new(bytes, usize::MAX, Tail::Eof);
+    let failure = probe_teletext_source_optional(&mut source, None, 512, policy(0))
+        .await
+        .unwrap_err();
+    assert_eq!(failure.reason, TeletextSourceProbeError::Configuration);
+    assert!(failure.raw_prefix.is_empty());
+    assert_eq!(source.polls, 0);
+}
+
+#[tokio::test(start_paused = true)]
 async fn late_collision_in_same_ready_chunk_rejects_without_losing_tail_or_hidden_reads() {
     let mut packets = actual().to_vec();
     let mut collision = packets[2];

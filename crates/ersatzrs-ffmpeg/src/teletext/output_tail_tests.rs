@@ -56,7 +56,7 @@ fn a_cycle_acknowledged_inside_a_larger_window_allows_later_repetition_to_end_mi
         let last_due = gate.pending_schedule().unwrap().last_due();
         let output = expose_and_ack(&mut gate);
         assert_source_preserved(&raw, &output);
-        assert!(!gate.carousel.is_cycle_boundary());
+        assert!(!gate.carousel.as_ref().unwrap().is_cycle_boundary());
         assert_eq!(gate.finish(last_due), Ok(()));
     }
 }

@@ -238,6 +238,10 @@ impl SqlitePlayoutRepository {
             replace_playout_item_graphics_elements(&mut tx, inserted_id, item).await?;
         }
 
+        // Capture exact target/profile fences and override bounds against the
+        // final physical item finish under this same BEGIN IMMEDIATE owner.
+        teletext_intervals::publish(&mut tx, playout, result, max_playout_offset).await?;
+
         // Publish gaps from the final retained/appended item set in the same
         // transaction. Scheduler hints may precede fallback filling or omit
         // gaps entirely, and cannot be used as the persisted UI projection.

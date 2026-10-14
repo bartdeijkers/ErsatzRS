@@ -46,9 +46,9 @@ fn shared_authored_gates_have_independent_epochs_clocks_and_carousel_cursors() {
     let mut second =
         TeletextOutputGate::new_authored_shared(config(), Arc::clone(&service)).unwrap();
     assert!(!Arc::ptr_eq(&first.epoch, &second.epoch));
-    let first_batch = first.carousel.next_batch().unwrap();
-    first.carousel.next_batch().unwrap();
-    let second_batch = second.carousel.next_batch().unwrap();
+    let first_batch = first.carousel.as_mut().unwrap().next_batch().unwrap();
+    first.carousel.as_mut().unwrap().next_batch().unwrap();
+    let second_batch = second.carousel.as_mut().unwrap().next_batch().unwrap();
     assert_eq!(
         first_batch.presentation_ticks(),
         second_batch.presentation_ticks()
@@ -57,8 +57,20 @@ fn shared_authored_gates_have_independent_epochs_clocks_and_carousel_cursors() {
     assert_eq!(first.batch_ticks, second.batch_ticks);
     // Moving one physical cursor does not move the other output's clock.
     assert_ne!(
-        first.carousel.next_batch().unwrap().presentation_ticks(),
-        second.carousel.next_batch().unwrap().presentation_ticks()
+        first
+            .carousel
+            .as_mut()
+            .unwrap()
+            .next_batch()
+            .unwrap()
+            .presentation_ticks(),
+        second
+            .carousel
+            .as_mut()
+            .unwrap()
+            .next_batch()
+            .unwrap()
+            .presentation_ticks()
     );
     assert_eq!(service.pages()[0].data_units(), original);
 }
@@ -322,7 +334,7 @@ fn prepared_windows_preserve_non_null_non_pmt_packets_and_complete_two_cycles() 
         }
     }
     assert_eq!(gate.clock.report().unwrap(), original_clock);
-    assert!(gate.carousel.is_cycle_boundary());
+    assert!(gate.carousel.as_ref().unwrap().is_cycle_boundary());
     let finish_at = Duration::from_millis(250);
     gate.finish(finish_at).unwrap();
     gate.finish(finish_at).unwrap();

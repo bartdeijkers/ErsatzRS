@@ -20,17 +20,60 @@ release section when tagging a release.
 
 ### Added
 
+- Let Scripted Lua validate existing channel-bound teletext profiles and On/Off
+  choices through shared application controls without changing the admin base
+  or activating packages. Publish cursor intervals atomically with the schedule,
+  preserving target revisions, rollback, expiry and restart observations.
+  Bound the actual worker and snapshot reads; active overrides cannot emit a
+  stale base artifact. Localized Health explains unavailable selections and pages
+  that are not ready, with headed proof in every culture and both themes. Scoped
+  native preparation now combines exact published Lua and unoverridden base
+  profiles, retains Off membership and transition expiry, and uses the same
+  page validation, encoder and preview model. Abandoned requests retain actual
+  worker admission. Scoped publication and live Lua acceptance remain open.
+- Let generic teletext transport epochs begin without authored content, preserving
+  original audio/video and PSI until later activation on the same clock. Require
+  acknowledged PMT announcement before page data. An explicit version-2 policy
+  connects bounded accepted-state recovery to existing direct stream responses,
+  including initially Off, without restarting the source. Invalid selection or
+  rejected replacement withdraws authored output while ordinary playback continues;
+  non-transient withdrawal faults terminate the epoch. Warm two-channel client
+  screens, navigation, controls, transport and source playback pass with explicit
+  client reselection. Full client/resource and retained/Next acceptance remain open.
+- Preserve exact physical teletext editor rows through the shared native compiler
+  and preview raster, with per-page/subpage isolation and existing bounded work.
+  A separate versioned private concept codec retains original addon/request bytes,
+  resources and metadata. A bounded native import now authenticates retained exports,
+  protects free/zone/generated effects and saves immutable concepts for the same
+  preview and separate explicit publication. An opt-in headed QTeletextMaker 1.0
+  probe connects an edit within a synthetic two-page set to native import,
+  preview, explicit publication, reopen and ordinary stream output. Transport,
+  independent decoding and headed client navigation prove two-channel theme
+  isolation. A bounded live-URL probe now verifies published/reopened originals
+  through two actual ordinary streams and headed clients with separate themes.
+  Capacity-wait timestamp resets remain a recorded playback defect. Nonzero
+  charset loss is explicitly rejected; full editor/admin and Level 2.5 client
+  acceptance remain open.
 - Export saved native teletext originals through a bounded host API to exact
   per-page TTI mappings and versioned sidecars, backed by retained server receipts.
   Preserve full resource/magazine packets, original subcodes/navigation and
   addon-owned metadata without changing broadcast state. Editor-only palette
-  context is explicit; edited concepts and complete QTeletextMaker dependency
-  loading/roundtrip remain open.
+  context is explicit. A versioned protected DRCS TTI companion now lets the
+  external editor load indexed monochrome resource sets while retaining exact
+  native identities and bytes. Explicit unavailable editor slots preserve sparse
+  native subtable indices without adding broadcast resources. Modified/missing
+  dependencies reject without publication; Legacy/V2/V3 receipts remain
+  recoverable. Full resource editing/interchange remains open.
+  Channel previews now offer localized
+  ZIP export and bounded complete-set import as an unpublished draft, with stored
+  channel ownership and protected-edit validation before save. Preview and
+  publication retain their separate native actions.
 - Capture addon-owned teletext template revisions, named themes, typed overrides,
   free areas, custom zones and generated-field bindings through negotiated v3.
   Validate exact page coverage and actual side-panel bounds; preserve metadata
   with immutable original designs without granting import or publication authority.
-  Existing v1/v2 contributions remain compatible; editable TTI concepts remain open.
+  Existing v1/v2 contributions remain compatible; full editor/admin acceptance
+  remains open.
 - Add preparatory immutable teletext export-receipt storage with exact revision,
   digest and current-head fences, required application confirmation and retained
   history after deletion or uninstall. Add a bounded TTI record codec that preserves
@@ -481,6 +524,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Prevent Next Copy playback verification from failing on startup database
+  writers; seed its isolated engine/profile settings with a bounded wait and
+  one transaction.
 - Recognize native Windows YAML schedule-file paths and resolve their imports
   instead of decoding the path itself as an inline schedule.
 
@@ -502,6 +548,13 @@ release section when tagging a release.
   prevents FFmpeg startup failures. Reuse bounded image timing and file reopening
   for finite and infinite APNG canvas animation, preserving still PNG and JPEG XL
   behavior without rebuilding the FFmpeg runtime.
+- Recheck accepted teletext selection after source discovery before its first
+  authored write. Late disable or generation replacement preserves exact ordinary
+  playback in both direct and retained output.
+- Preserve native fallback header controls while adapting new teletext exports to
+  QTeletextMaker's effective primary charset. Explicitly version the editor
+  carrier and retain legacy receipts and qualified concepts without rewriting
+  their bytes. Reject protected status/enhancement changes as before.
 
 - Keep video-copy streams free of encoder-only profile, preset, tune and hardware
   options left in a saved transcoding profile. A retained H.264 `high` profile

@@ -9,6 +9,125 @@ fn binding(config: ersatzrs_ffmpeg::teletext::TeletextOutputConfig) -> TeletextO
     TeletextOutputBinding::new(config, authored_set(), Duration::from_millis(40)).unwrap()
 }
 
+fn absent_binding(
+    config: ersatzrs_ffmpeg::teletext::TeletextOutputConfig,
+) -> TeletextOutputBinding {
+    TeletextOutputBinding::new_absent(config, Duration::from_millis(40)).unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn initially_absent_optional_output_preserves_every_source_byte_including_pmt_reset() {
+    let mut packets = fixture(30);
+    // Retain the actual startup reset flag and payload, including PMT CRC/version.
+    // An active PMT installer would replace these bytes rather than forwarding them.
+    packets[1].copy_within(4..186, 6);
+    packets[1][3] = 0x30;
+    packets[1][4] = 1;
+    packets[1][5] = 0x80;
+    let original = flatten(&packets);
+    let selected = absent_binding(policy());
+    let mut source = std::io::Cursor::new(original.clone());
+    let mut output = Vec::new();
+    let result = forward_optional_teletext_output(&mut source, &mut output, &selected, 1024 * 188)
+        .await
+        .unwrap();
+    assert!(result.rejection.is_none());
+    assert_eq!(result.bytes, u64::try_from(original.len()).unwrap());
+    assert_eq!(output, original);
+    assert_eq!(source.position(), u64::try_from(original.len()).unwrap());
+    assert!(output
+        .chunks_exact(188)
+        .all(|packet| { u16::from_be_bytes([packet[1] & 0x1f, packet[2]]) != 512 }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn initially_absent_optional_admission_failures_preserve_ordinary_playback() {
+    let original = flatten(&fixture(30));
+    for mode in 0..3 {
+        let mut config = policy();
+        match mode {
+            0 => config.program = 999,
+            1 => config.elementary_pid = 300,
+            _ => config.clock.pcr_pid = 301,
+        }
+        let mut source = std::io::Cursor::new(original.clone());
+        let mut output = Vec::new();
+        let result = forward_optional_teletext_output(
+            &mut source,
+            &mut output,
+            &absent_binding(config),
+            1024 * 188,
+        )
+        .await
+        .unwrap();
+        assert!(result.rejection.is_some());
+        assert_eq!(output, original);
+        assert_eq!(result.bytes, u64::try_from(original.len()).unwrap());
+        assert_eq!(source.position(), result.bytes);
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn existing_bound_control_activates_initially_absent_output_after_original_pmt() {
+    use super::super::teletext_binding::{
+        authored_tests::{actual_units, authored_service_with_counter},
+        teletext_output_control_channel, TeletextOutputTransitionPhase, TeletextOutputUpdate,
+    };
+    let original = fixture(50);
+    let service = Arc::new(authored_service_with_counter(4));
+    let (sender, control, status) = teletext_output_control_channel();
+    sender.send_replace(Some(
+        TeletextOutputUpdate::replace(1, Arc::clone(&service)).unwrap(),
+    ));
+    let selected = absent_binding(policy())
+        .with_control(control)
+        .with_optional_startup(1024 * 188)
+        .unwrap();
+    let mut source = std::io::Cursor::new(flatten(&original));
+    let mut output = Vec::new();
+    let count = forward_bound_teletext_output(&mut source, &mut output, &selected)
+        .await
+        .unwrap();
+    assert_eq!(count, u64::try_from(original.len() * 188).unwrap());
+    assert_eq!(output.len(), original.len() * 188);
+    assert_eq!(status.borrow().sequence(), Some(1));
+    assert_eq!(
+        status.borrow().phase(),
+        TeletextOutputTransitionPhase::Applied
+    );
+    assert_eq!(&output[..2 * 188], flatten(&original[..2]));
+    let packet_pid = |packet: &[u8]| u16::from_be_bytes([packet[1] & 0x1f, packet[2]]);
+    let first_pes = output
+        .chunks_exact(188)
+        .position(|packet| packet_pid(packet) == 512)
+        .unwrap();
+    let (announcement_index, announcement) = output
+        .chunks_exact(188)
+        .enumerate()
+        .find(|(_, packet)| packet_pid(packet) == 3337 && packet[10] != 0xc1)
+        .unwrap();
+    assert!(announcement_index < first_pes);
+    assert_eq!(announcement[3] & 15, 1);
+    assert_eq!(announcement[10], 0xc3);
+    assert!(announcement
+        .windows(5)
+        .any(|bytes| bytes == [6, 0xe2, 0, 0xf0, 7]));
+    for (before, after) in original.iter().zip(output.chunks_exact(188)) {
+        if !matches!(packet_pid(before), 3337 | 8191) {
+            assert_eq!(before.as_slice(), after);
+        }
+    }
+    let units = actual_units(&output);
+    for page in service.pages() {
+        for unit in page.data_units() {
+            assert!(
+                units.contains(unit),
+                "missing complete authored page/resource unit"
+            );
+        }
+    }
+}
+
 #[tokio::test(start_paused = true)]
 async fn final_output_dispatch_keeps_strict_default_and_requires_explicit_optional_policy() {
     let original = flatten(&fixture(30));
@@ -238,6 +357,31 @@ async fn first_write_pending_partial_failure_and_flush_failure_never_replay_raw_
         }
         assert!(sink.calls > 0);
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn initially_absent_first_write_failure_stays_terminal_without_raw_replay() {
+    let original = flatten(&fixture(30));
+    let mut source = std::io::Cursor::new(original.clone());
+    let mut sink = Sink {
+        mode: 1,
+        calls: 0,
+        bytes: Vec::new(),
+    };
+    let error = forward_optional_teletext_output(
+        &mut source,
+        &mut sink,
+        &absent_binding(policy()),
+        1024 * 188,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        TeletextPumpError::Write(io::ErrorKind::BrokenPipe)
+    ));
+    assert_eq!(sink.calls, 2);
+    assert_eq!(sink.bytes, original[..1]);
 }
 
 struct FaultSource {

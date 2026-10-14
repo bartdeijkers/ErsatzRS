@@ -203,6 +203,23 @@ pub enum TeletextEncodingError {
     /// Header double height has no portable display interpretation.
     #[error("teletext page {address:?} has unsupported double-height header content")]
     HeaderHeight { address: TeletextPageAddress },
+    /// A physical editor row contains a spacing control not yet supported by
+    /// both the native encoder and the shared base preview.
+    #[error("teletext page {address:?} row {row} column {column} has unsupported physical spacing code {code:02X}")]
+    PhysicalBaseControl {
+        address: TeletextPageAddress,
+        row: u8,
+        column: u8,
+        code: u8,
+    },
+    /// Changing this fallback would leave its generated original X26 glyph
+    /// unchanged; an independently validated enhancement edit is required.
+    #[error("teletext page {address:?} row {row} column {column} changes a protected generated glyph fallback")]
+    PhysicalBaseGeneratedGlyph {
+        address: TeletextPageAddress,
+        row: u8,
+        column: u8,
+    },
     /// EN 300 706 bounds the per-page X/26 packets to sixteen.
     #[error("teletext page {address:?} exceeds sixteen character enhancement packets")]
     Enhancements { address: TeletextPageAddress },
@@ -248,6 +265,8 @@ mod main_composition_runtime_tests;
 mod main_composition_tests;
 #[cfg(test)]
 mod origin_carrier_runtime_tests;
+#[cfg(test)]
+mod physical_base_overlay_tests;
 // Portable opt-in imager calibration; the libzvbi diagnostic guards its own ABI.
 #[cfg(test)]
 mod compiled_display_page_tests;

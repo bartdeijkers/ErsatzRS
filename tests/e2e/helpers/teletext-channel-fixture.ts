@@ -57,6 +57,31 @@ function themedPages(theme: 'day' | 'night'): unknown {
   };
 }
 
+function editorPages(theme: 'day' | 'night'): unknown {
+  const service = themedPages(theme) as {
+    pages: { address: { page: number; subcode: number }; national_option: number }[];
+    magazines: { presentation: { primary: number } }[];
+  };
+  for (const page of service.pages) page.national_option = 0;
+  service.magazines[0].presentation.primary = 0;
+  return {
+    schema_version: 3, service,
+    authoring: {
+      schema_version: 1, template: { id: 'synthetic-editor', revision: 'r1' },
+      theme: { id: theme, overrides: [] },
+      pages: service.pages.map(page => ({
+        page: page.address,
+        regions: [
+          { id: 'free-title', kind: 'free', area: 'main', row: 2, column: 1, width: 20, height: 1 },
+          { id: 'custom-zone', kind: 'zone', area: 'main', row: 3, column: 1, width: 20, height: 1 },
+          { id: 'guide-content', kind: 'generated', area: 'main', row: 4, column: 1, width: 20, height: 1 },
+        ],
+        dynamic_fields: [{ id: 'guide-title', region: 'guide-content', binding: 'guide.title' }],
+      })),
+    },
+  };
+}
+
 function contentHash(files: Map<string, Buffer>): string {
   const length = (value: number) => {
     const bytes = Buffer.alloc(8);
@@ -86,8 +111,9 @@ export class TeletextChannelFixture {
   private readonly authoredPages: boolean;
   private readonly playback: boolean;
 
-  constructor(databasePath: string, options: { authoredPages?: boolean; playback?: { ffmpeg: string } } = {}) {
+  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; playback?: { ffmpeg: string } } = {}) {
     this.authoredPages = options.authoredPages === true;
+    if (options.editorPages && !this.authoredPages) throw new Error('Synthetic editor requires the authored producer.');
     this.playback = options.playback !== undefined;
     if (this.playback && !this.authoredPages) throw new Error('Synthetic playback requires the authored producer.');
     // Retained immutable histories/files belong to the wrapper DB's temporary
@@ -117,10 +143,11 @@ export class TeletextChannelFixture {
       ) VALUES (?, ?, ?, ?, ?, 'E2E teletext', ?, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)`)
         .run(id, randomUUID(), String(id), id, `Synthetic teletext ${index + 1}`, profile.Id);
     }
-    this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? authoredScript : scriptBody));
+    const producerScript = options.editorPages ? authoredScript.replace('teletext.pages.v2', 'teletext.pages.v3') : authoredScript;
+    this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? producerScript : scriptBody));
     if (this.authoredPages) {
       for (const theme of ['day', 'night'] as const) {
-        this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(themedPages(theme))));
+        this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(options.editorPages ? editorPages(theme) : themedPages(theme))));
       }
     }
     for (const [name, body] of this.packageFiles) writeFileSync(join(this.packagePath, name), body, { mode: 0o644 });
@@ -130,7 +157,7 @@ export class TeletextChannelFixture {
       name: { 'en-US': 'Synthetic teletext themes' },
       summary: { 'en-US': this.authoredPages ? 'Synthetic original-page producer' : 'Configuration-only synthetic fixture' },
       license: 'MIT', source_url: 'https://example.test/teletext',
-      capabilities: [{ id: 'addon.check.v1' }, { id: 'teletext.pages.v2' }],
+      capabilities: [{ id: 'addon.check.v1' }, { id: options.editorPages ? 'teletext.pages.v3' : 'teletext.pages.v2' }],
       entrypoints: { any: { path: 'fixture.sh', kind: 'posix_shell' } },
       dependencies: [], panels: [],
       permissions: { network_hosts: [], media_read: false, managed_ffmpeg: false, external_commands: [], tool_update: [] },

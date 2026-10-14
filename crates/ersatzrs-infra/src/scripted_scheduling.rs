@@ -3,9 +3,10 @@ use std::{
     collections::BTreeMap,
     future::Future,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
+use ersatzrs_core::repositories::TeletextProfileMutation;
 use ersatzrs_core::{
     playout_builder::PlayoutBuilder,
     repositories::{RepositoryError, Result},
@@ -14,10 +15,10 @@ use ersatzrs_core::{
         PlayoutSchedulingEngine, SchedulingContentSource, SchedulingError, SchedulingMediaItem,
         SchedulingPlaylistItem, SchedulingRequest, SchedulingResult, ScriptedContentResolver,
         ScriptedSchedulingEngine, ScriptedSourceDependency, ScriptedSourceResolution,
-        YamlPlayoutEngine,
+        ScriptedTeletextControl, YamlPlayoutEngine,
     },
 };
-use ersatzrs_domain::EntityId;
+use ersatzrs_domain::{EntityId, TeletextProfileCandidateSnapshot, TeletextScriptedBaseSelection};
 use sqlx::SqlitePool;
 
 use crate::{
@@ -29,6 +30,8 @@ struct SqlSources {
     runtime: tokio::runtime::Handle,
     cancelled: Option<PlayoutBuildCancellation>,
     dependencies: Mutex<BTreeMap<String, ScriptedSourceDependency>>,
+    teletext: Option<Arc<dyn ScriptedTeletextControl>>,
+    teletext_deadline: Instant,
 }
 
 impl std::fmt::Debug for SqlSources {
@@ -62,6 +65,27 @@ impl SqlSources {
         }
         dependencies.insert(key, dependency);
         Ok(resolved)
+    }
+
+    // Retain the existing bounded/cancel-checked worker bridge, while preserving
+    // application errors and typed no-write rejections for teletext controls.
+    fn lookup_control<T>(&self, future: impl Future<Output = Result<T>>) -> Result<T> {
+        let cancelled = || self.cancelled.as_ref().is_some_and(|check| check());
+        let unavailable = || {
+            RepositoryError::unavailable("scripted teletext control", "lookup failed or cancelled")
+        };
+        if cancelled() || Instant::now() >= self.teletext_deadline {
+            return Err(unavailable());
+        }
+        let deadline = tokio::time::Instant::from_std(self.teletext_deadline);
+        let result = self
+            .runtime
+            .block_on(async { tokio::time::timeout_at(deadline, future).await })
+            .map_err(|_| unavailable())?;
+        if cancelled() || Instant::now() >= self.teletext_deadline {
+            return Err(unavailable());
+        }
+        result
     }
 
     fn lookup<T>(&self, future: impl Future<Output = Result<T>>) -> Result<T> {
@@ -112,9 +136,39 @@ impl ScriptedContentResolver for SqlSources {
     fn graphics_id(&self, path: &str) -> Result<Option<EntityId>> {
         self.lookup(self.repository.graphics_element_id_by_path(path))
     }
+
+    fn teletext_base(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+    ) -> Result<TeletextProfileMutation<TeletextScriptedBaseSelection>> {
+        let controls = self.teletext.as_ref().ok_or_else(|| {
+            RepositoryError::unavailable(
+                "scripted teletext control",
+                "application controls are unavailable",
+            )
+        })?;
+        self.lookup_control(controls.teletext_base(channel_id, addon_id))
+    }
+
+    fn teletext_candidate(
+        &self,
+        channel_id: EntityId,
+        addon_id: &str,
+        profile_id: EntityId,
+    ) -> Result<TeletextProfileMutation<TeletextProfileCandidateSnapshot>> {
+        let controls = self.teletext.as_ref().ok_or_else(|| {
+            RepositoryError::unavailable(
+                "scripted teletext control",
+                "application controls are unavailable",
+            )
+        })?;
+        self.lookup_control(controls.teletext_candidate(channel_id, addon_id, profile_id))
+    }
 }
 
 struct SqlScriptedEngine {
+    teletext: Option<Arc<dyn ScriptedTeletextControl>>,
     pool: SqlitePool,
     runtime: tokio::runtime::Handle,
     cancelled: Option<PlayoutBuildCancellation>,
@@ -130,6 +184,8 @@ impl PlayoutSchedulingEngine for SqlScriptedEngine {
             runtime: self.runtime.clone(),
             cancelled: self.cancelled.clone(),
             dependencies: Mutex::default(),
+            teletext: self.teletext.clone(),
+            teletext_deadline: Instant::now() + Duration::from_secs(30),
         });
         let mut result =
             ScriptedSchedulingEngine.schedule_with_resolver(request, Some(sources.clone()))?;
@@ -151,11 +207,24 @@ pub fn playout_builder(
     runtime: tokio::runtime::Handle,
     cancelled: Option<PlayoutBuildCancellation>,
 ) -> PlayoutBuilder {
+    playout_builder_with_teletext(pool, runtime, cancelled, None)
+}
+
+/// Inject shared application controls into the owned synchronous scheduling worker.
+/// Legacy callers retain explicit unsupported teletext controls through `None`.
+#[must_use]
+pub fn playout_builder_with_teletext(
+    pool: SqlitePool,
+    runtime: tokio::runtime::Handle,
+    cancelled: Option<PlayoutBuildCancellation>,
+    teletext: Option<Arc<dyn ScriptedTeletextControl>>,
+) -> PlayoutBuilder {
     PlayoutBuilder::new(
         Box::new(ClassicSchedulingEngine),
         Box::new(BlockSchedulingEngine),
         Box::new(YamlPlayoutEngine),
         Box::new(SqlScriptedEngine {
+            teletext,
             pool,
             runtime,
             cancelled,
@@ -163,3 +232,7 @@ pub fn playout_builder(
         Box::new(ExternalJsonSchedulingEngine),
     )
 }
+
+#[cfg(test)]
+#[path = "scripted_scheduling_tests.rs"]
+mod tests;

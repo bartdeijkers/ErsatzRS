@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 synthetic editor flow: verify native original export, then validated editorial concepts and actual editor/preview/publication; full engine acceptance remains open'
+current_focus = 'P9A-04: effective Lua native preparation; next scoped publication/recovery; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -65,9 +65,13 @@ next_steps = '''
 2026-10-14 maintainer sequencing: prepare UCU-10 as a separate application
 integration on remote mainfc22dac8 before landing UCU-11. Keep its accepted
 v26.11.2 boundary/Next021 pin and evidence; retain newer main teletext work.
-The independent UCU-11 branch/evidence and authorized macOS candidate CI remain
-preserved. Integration acceptance and application push/CI/merge instruction
-are still required; no application delivery or new release is claimed.
+The independent UCU-11 branch/evidence and its green authorized macOS source CI
+remain preserved. The maintainer explicitly authorizes UCU-10 push/full exact-
+source CI/merge, with green CI on the resulting remote main before UCU-11 resumes.
+Integrated local gates pass:6250 tests/doctests, strict lint/audit, all three
+HTTP lifecycle modes, Native87/Next Copy83 TSDuck checks and six headed browser
+cases with a matched bundle. Finish full exact-SHA CI and remote main integration
+before UCU-11; the application PR/check suite own remote receipts. No release.
 
 2026-10-14 UCU-10 is locally Complete through v26.11.2/row232; all232 rows have
 accepted dispositions. Native remains supported. ADR0125, dependency audit,
@@ -1315,13 +1319,87 @@ free/zone/generated rectangles and dynamic-field bindings. Exact display coverag
 receiver-header protection and actual Level2.5 sidepanel bounds are validated;
 metadata survives immutable original reload without producer invocation. V1/V2
 remain closed. P9A-04 owns the exact verification and gap map.
-Next connect this original metadata to server-owned TTI file/resource/edit
-baselines and native export confirmation. Add a private validated concept overlay
-through the existing compiler, immutable revision/head CAS and explicit publisher.
-Current saved original_only policy remains uneditable; uploaded metadata cannot
-broaden permissions or impersonate a successful addon invocation.
-Prove a synthetic editable zone while protecting presentation, navigation and
-resources, stale-export rejection and unchanged broadcast until explicit Publish.
+Native export now retains server-owned TTI file/resource/edit baselines.
+A typed physical-row overlay and private codec connect the same native compiler.
+Receipt-bound import now rebuilds the retained original export, authenticates
+free/zone/generated and indirect effects, and saves with immutable revision/head
+CAS. Same-model reload/preview and separate explicit publication retain original
+bytes; uploaded metadata cannot broaden addon permissions. A separate actual pinned
+QTeletextMaker charset-zero edit within a two-page set now reaches native import,
+shared preview, explicit publication/reopen and concurrent ordinary streams.
+Exact model/TSDuck/source-AV checks, independent decoding and headed client
+124->125->124 prove the edited page's isolation with day/night themes together.
+The client replays exact finite Router captures; live attachment/open transitions
+and 56-column panel display remain unproven. A nonzero editor trial changes
+protected X28 and correctly rejects; full charset/resource fidelity is required.
+Localized native ZIP delivery and bounded receipt-owned multipart concept import
+now connect the same functions to channel admin, including v3-only discovery.
+P9A-04 owns the headed matrix and canonical criterion/gap map. Versioned editor
+carriers now prove nonzero equal/independent NOS through actual pinned QTM Save As,
+native preview/publication/reopen and ordinary streams, preserving native controls.
+Stored legacy receipts/concepts recover byte-identically. QTM's single NOS cannot
+preview independent fallback/enhanced values at once; metadata preserves both.
+Protected carrierV4 now preserves exact normal/global bank S1/list indices,
+including explicit unavailable editor positions without adding native resources.
+Dense0+1 and genuinely sparse1-only originals pass native preview/publication,
+reopen/isolation and protected-edit rejection; Legacy/V2/V3 receipts stay exact.
+Actual pinned QTM loads/renders/saves both higher-S1 and sparse sets. Dense ordinary
+streams pass exact-model/TSDuck/AV and independent bitmap/palette decoding.
+The sparse stream's installed decoder still fails normative X27; retain that
+negative evidence and the correct native bytes. P9A-04 owns the current proof map.
+Actual loopback ordinary URLs now prove cold two-client themes/navigation,
+explicit publication/reopen and retained generation/resources/package. Four
+fixture slots cover viewers plus probes; unchanged TSDuck passes42 checks.
+Default-capacity overlap instead reproduces repeated4-second wait-slate PTS/PCR
+resets; this is a production playback defect, not a waived transport criterion.
+Generic initially-absent epochs now preserve exact source bytes/PMT and later
+activate on the same acknowledged clock, with real AV/decode/TSDuck proof.
+Post-discovery selection fences also preserve direct/retained playback across
+late Off/replacement. Explicit v2 now connects bounded response-owned accepted
+state to initially-Off direct routes. Three actual ordinary responses prove
+On/concept replacement/Off/re-enable and missing profiles without new requests;
+TSDuck, independent text decoding, source AV and owned cleanup pass. Two channel1
+viewers stay aligned while channel2 retains its own theme. Monitor races/errors
+and receiver-close cancellation pass; actual blocking-worker ownership reuses
+the prior verified admission. The complete same-URL warm headed trial now proves
+both themes,124->125->124, channel1-only publishedQ, Off/fresh acceptance,
+independent decoding/AV, exact PMT/source-clock gap provenance and owned cleanup.
+Move synchronous fixture raster comparisons after producer shutdown to avoid
+starving its current-thread runtime; product timing/error handling is unchanged.
+VLC requires explicit teletext reselection after some withdrawal/readdition;
+automatic selection and full client/engine acceptance remain unproven. P9A-04
+owns canonical successes, retained negatives and the criterion/gap map.
+Shared application controls now connect strict channel-bound Lua profile/On/Off
+commands to the owned worker and existing atomic playout publication. Intervals
+retain actual cursor/final item bounds, captured target identities, rollback,
+programme seams and half-open reads after reopen. Active unavailable snapshots
+remain failures until original expiry; unrelated base changes preserve targets.
+Base generation admission refuses active overrides in the same read transaction;
+this preparatory guard suppresses the complete base authored generation, rather
+than preserving unaffected bindings yet. Existing Scripted Health reports stale
+selections and not-ready pages through nine localized catalogs. P9A-04 owns the
+focused successes/corrections and new8-case headed Health proof:all nine cultures,
+both themes, JS on/off and real refresh in Chromium/Firefox;64 captures retained.
+Distinct whole-channel effective observations and unpublished native preparation
+now preserve base versus published-interval origins, actual owning playout/bounds,
+Off membership and the earliest scheduled transition. Overridden bases are excluded
+before validation. Exact scope rechecks surround native resolution/prelaunch and
+joined CPU work; the same parser, cold compiler and preview model are reused.
+P9A-04 owns verification and any fixture corrections. Next add a versioned scoped
+original envelope retaining complete origins and producer associations; preserve
+legacy originals and independently accepted base history. Then connect same-TX
+scoped publication/pointer CAS and fresh bounded recovery, enforcing original
+expiry without producer/Lua replay or erasing the base. Prove real Lua
+On/Off/profile changes, untouched bindings and same-URL expiry/restart with
+ordinary AV plus suitable-client navigation. Candidate persistence is not live
+Lua or independent engine acceptance. New Health-message headed proof passes;
+complete Lua requested/applied-state management and live proof remain required.
+Full resource/cache transitions and UI applied state still require proof.
+Retained/Next, whole-host open-client drain and full Lua timing stay open.
+Stable wait-slate muxing separately needs compatible codec/caption/audio topology;
+H264 slate and MPEG2 source cannot be blindly combined. Keep that defect open.
+Full resource
+editing, sparse X27 decoding/client and charset/panel coverage remain required.
 This representative success does not establish full engine acceptance.
 The shared geometry gate now rejects
 illegal panel screen/row-colour selectors; complete panel decoding/client proof

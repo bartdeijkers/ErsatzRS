@@ -1,9 +1,10 @@
 //! Preparatory installed-package teletext invocation, without service activation.
 //!
-//! This adapter supports global settings or an explicitly supplied, revision-fenced
-//! base channel/profile selection. It owns resolution through native filesystem settlement, then owns
-//! command cancellation through cleanup. The receipt is a revision observation,
-//! not immutable package bytes, a validated page set or publication authority.
+//! This adapter supports global settings, revision-fenced base profiles and
+//! whole-channel effective base/published Scripted selections. It owns resolution
+//! through native filesystem settlement, then command cancellation through cleanup.
+//! Receipts retain observations, not immutable package bytes, validated pages or
+//! publication authority.
 
 use std::{
     sync::{
@@ -16,7 +17,11 @@ use std::{
 use ersatzrs_addon_contract::{TeletextPagesRequest, MAX_TELETEXT_PAGES_INPUT_BYTES};
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_core::repositories::{TeletextProfileMutation, TeletextProfileRepository as _};
-use ersatzrs_domain::{TeletextPageContract, TeletextSelectionSnapshot};
+use ersatzrs_domain::{
+    TeletextEffectiveBindingSnapshot, TeletextEffectiveChannelSelectionSnapshot,
+    TeletextInstallationSnapshot, TeletextOverrideState, TeletextPageContract,
+    TeletextProfileSetting, TeletextSelectionSnapshot,
+};
 use sqlx::Row;
 use tokio::{sync::oneshot, time::Instant};
 
@@ -54,6 +59,83 @@ impl std::fmt::Debug for TeletextProfileInvocationReceipt {
             .field("generation", &"[redacted]")
             .finish()
     }
+}
+
+/// Unpublished output retaining the complete observed channel authority.
+/// A Scripted origin retains its actual playout and interval; it is never a base binding.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextEffectiveProfileInvocationReceipt {
+    pub stdout: Vec<u8>,
+    pub selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
+    pub addon_id: String,
+    pub generation: String,
+}
+
+impl std::fmt::Debug for TeletextEffectiveProfileInvocationReceipt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TeletextEffectiveProfileInvocationReceipt")
+            .field("stdout_bytes", &self.stdout.len())
+            .field("selection", &self.selection)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Invoke one enabled member of an exact effective channel selection.
+/// The owned worker rechecks the whole set before resolution and prelaunch.
+/// Its deadline cannot extend past a captured scheduled transition, or the
+/// caller's original deadline. Abandonment retains the existing cleanup owner.
+/// # Errors
+/// Returns static admission, request, deadline or native cleanup failures.
+pub async fn invoke_effective_profile_with_deadline_and_hold(
+    pool: DbPool,
+    selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
+    addon_id: String,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    deadline: std::time::Instant,
+    hold: TeletextWorkHold,
+) -> Result<TeletextEffectiveProfileInvocationReceipt, TeletextInvocationError> {
+    let fence = effective_fence(&selection, deadline)?;
+    let receipt = invoke_with_fence(
+        Invocation {
+            pool,
+            addon_id: addon_id.clone(),
+            runtime,
+            input,
+            cancellation: None,
+            selection: None,
+            effective_selection: Some(Arc::clone(&selection)),
+            hold: Some(hold),
+        },
+        fence,
+        RESOLUTION_SETTLEMENT_TIMEOUT,
+    )
+    .await?;
+    Ok(TeletextEffectiveProfileInvocationReceipt {
+        stdout: receipt.stdout,
+        selection,
+        addon_id,
+        generation: receipt.generation,
+    })
+}
+
+fn effective_fence(
+    selection: &TeletextEffectiveChannelSelectionSnapshot,
+    deadline: std::time::Instant,
+) -> Result<ResolutionFence, TeletextInvocationError> {
+    // Capture the monotonic clock first so conversion cannot renew the UTC horizon.
+    let now = Instant::now();
+    let mut deadline = Instant::from_std(deadline).min(now + EXECUTION_TIMEOUT);
+    if let Some(boundary) = selection.valid_until {
+        let remaining = (boundary - chrono::Utc::now())
+            .to_std()
+            .map_err(|_| TeletextInvocationError::TimedOut)?;
+        deadline = deadline.min(now + remaining.min(EXECUTION_TIMEOUT));
+    }
+    if deadline <= Instant::now() {
+        return Err(TeletextInvocationError::TimedOut);
+    }
+    Ok(ResolutionFence::new(deadline))
 }
 
 #[derive(PartialEq, Eq)]
@@ -127,6 +209,7 @@ pub async fn invoke(
             input,
             cancellation,
             selection: None,
+            effective_selection: None,
             hold: None,
         },
         fence,
@@ -237,6 +320,7 @@ async fn invoke_profile_before_owned(
             input,
             cancellation,
             selection: Some(selection),
+            effective_selection: None,
             hold,
         },
         fence,
@@ -259,6 +343,7 @@ struct Invocation {
     input: Vec<u8>,
     cancellation: Option<oneshot::Receiver<()>>,
     selection: Option<TeletextSelectionSnapshot>,
+    effective_selection: Option<Arc<TeletextEffectiveChannelSelectionSnapshot>>,
     hold: Option<TeletextWorkHold>,
 }
 
@@ -272,10 +357,15 @@ async fn invoke_with_fence(
     if invocation.input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES {
         return Err(TeletextInvocationError::InvalidRequest);
     }
-    let contract = invocation
-        .selection
-        .as_ref()
-        .map_or(TeletextPageContract::V1, |selection| selection.contract);
+    let contract = match (&invocation.selection, &invocation.effective_selection) {
+        (Some(_), Some(_)) => return Err(TeletextInvocationError::AdmissionRejected),
+        (_, Some(selection)) => effective_binding(selection, &invocation.addon_id)
+            .and_then(binding_contract)
+            .map_err(|_| TeletextInvocationError::AdmissionRejected)?,
+        (selection, None) => selection
+            .as_ref()
+            .map_or(TeletextPageContract::V1, |s| s.contract),
+    };
     let generation =
         TeletextPagesRequest::from_json_for_schema(&invocation.input, contract.schema_version())
             .map_err(|_| TeletextInvocationError::InvalidRequest)?
@@ -399,6 +489,7 @@ async fn invoke_owned(
         &invocation.addon_id,
         &invocation.runtime,
         invocation.selection.as_ref(),
+        invocation.effective_selection.as_deref(),
         &fence,
     );
     tokio::pin!(resolution);
@@ -492,9 +583,21 @@ async fn resolve_invocation_for_launch(
     addon_id: &str,
     runtime: &AddonRuntimeContext,
     selection: Option<&TeletextSelectionSnapshot>,
+    effective: Option<&TeletextEffectiveChannelSelectionSnapshot>,
     fence: &ResolutionFence,
 ) -> Result<ResolvedAddonCommand, AddonError> {
-    if let Some(selection) = selection {
+    if let Some(selection) = effective {
+        resolve_selected_for_launch(
+            pool,
+            ProfileAuthority::Effective {
+                selection,
+                addon_id,
+            },
+            runtime,
+            fence,
+        )
+        .await
+    } else if let Some(selection) = selection {
         resolve_profile_for_launch(pool, selection, runtime, fence).await
     } else {
         resolve_for_launch(pool, addon_id, runtime, fence).await
@@ -524,23 +627,156 @@ async fn check_selection(
     Ok(())
 }
 
+fn effective_binding<'a>(
+    selection: &'a TeletextEffectiveChannelSelectionSnapshot,
+    addon_id: &str,
+) -> Result<&'a TeletextEffectiveBindingSnapshot, AddonError> {
+    if selection.channel_id <= 0
+        || selection
+            .bindings
+            .iter()
+            .any(|b| b.channel_id() != selection.channel_id)
+    {
+        return Err(AddonError::Validation(
+            "effective channel scope changed".to_owned(),
+        ));
+    }
+    let mut matching = selection
+        .bindings
+        .iter()
+        .filter(|b| b.addon_id() == addon_id);
+    let binding = matching
+        .next()
+        .filter(|b| b.enabled())
+        .ok_or_else(|| AddonError::Validation("effective profile unavailable".to_owned()))?;
+    if matching.next().is_some() {
+        return Err(AddonError::Validation(
+            "effective membership changed".to_owned(),
+        ));
+    }
+    Ok(binding)
+}
+
+fn binding_contract(
+    binding: &TeletextEffectiveBindingSnapshot,
+) -> Result<TeletextPageContract, AddonError> {
+    match binding {
+        TeletextEffectiveBindingSnapshot::Base(base) => Ok(base.contract),
+        TeletextEffectiveBindingSnapshot::Scripted(published) => match &published.interval.state {
+            TeletextOverrideState::Enabled(candidate) => Ok(candidate.contract),
+            TeletextOverrideState::Off { .. } => Err(AddonError::Validation(
+                "effective profile is off".to_owned(),
+            )),
+        },
+    }
+}
+
+enum ProfileAuthority<'a> {
+    Base(&'a TeletextSelectionSnapshot),
+    Effective {
+        selection: &'a TeletextEffectiveChannelSelectionSnapshot,
+        addon_id: &'a str,
+    },
+}
+
+struct ProfileData<'a> {
+    addon_id: &'a str,
+    contract: TeletextPageContract,
+    installation: &'a TeletextInstallationSnapshot,
+    settings: &'a [TeletextProfileSetting],
+}
+
+impl ProfileAuthority<'_> {
+    async fn check(&self, pool: &DbPool, fence: &ResolutionFence) -> Result<(), AddonError> {
+        match self {
+            Self::Base(selection) => check_selection(pool, selection, fence).await,
+            Self::Effective {
+                selection,
+                addon_id,
+            } => {
+                fence.check()?;
+                effective_binding(selection, addon_id)?;
+                let current = crate::repositories::SqliteTeletextProfileRepository(pool.clone())
+                    .recheck_effective_channel_snapshot(selection, chrono::Utc::now())
+                    .await
+                    .map_err(|_| {
+                        AddonError::Database("effective profile unavailable".to_owned())
+                    })?;
+                fence.check()?;
+                if !matches!(current, TeletextProfileMutation::Saved(current) if current == **selection)
+                {
+                    return Err(AddonError::Validation(
+                        "effective selection changed".to_owned(),
+                    ));
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn data(&self) -> Result<ProfileData<'_>, AddonError> {
+        match self {
+            Self::Base(base) => Ok(ProfileData {
+                addon_id: &base.addon_id,
+                contract: base.contract,
+                installation: &base.installation,
+                settings: &base.effective_settings,
+            }),
+            Self::Effective {
+                selection,
+                addon_id,
+            } => match effective_binding(selection, addon_id)? {
+                TeletextEffectiveBindingSnapshot::Base(base) => Ok(ProfileData {
+                    addon_id: &base.addon_id,
+                    contract: base.contract,
+                    installation: &base.installation,
+                    settings: &base.effective_settings,
+                }),
+                TeletextEffectiveBindingSnapshot::Scripted(published) => {
+                    match &published.interval.state {
+                        TeletextOverrideState::Enabled(candidate) => Ok(ProfileData {
+                            addon_id: &candidate.addon_id,
+                            contract: candidate.contract,
+                            installation: &candidate.installation,
+                            settings: &candidate.effective_settings,
+                        }),
+                        TeletextOverrideState::Off { .. } => Err(AddonError::Validation(
+                            "effective profile is off".to_owned(),
+                        )),
+                    }
+                }
+            },
+        }
+    }
+}
+
 async fn resolve_profile_for_launch(
     pool: &DbPool,
     selection: &TeletextSelectionSnapshot,
     runtime: &AddonRuntimeContext,
     fence: &ResolutionFence,
 ) -> Result<ResolvedAddonCommand, AddonError> {
-    check_selection(pool, selection, fence).await?;
+    resolve_selected_for_launch(pool, ProfileAuthority::Base(selection), runtime, fence).await
+}
+
+async fn resolve_selected_for_launch(
+    pool: &DbPool,
+    authority: ProfileAuthority<'_>,
+    runtime: &AddonRuntimeContext,
+    fence: &ResolutionFence,
+) -> Result<ResolvedAddonCommand, AddonError> {
+    authority.check(pool, fence).await?;
+    let selection = authority.data()?;
     // Read-only transaction: bind the loaded manifest to its exact installation identity.
     let mut tx = pool.begin().await.map_err(super::database_error)?;
-    let installation = super::load_installed_addon_in_transaction(&mut tx, &selection.addon_id)
+    let installation = super::load_installed_addon_in_transaction(&mut tx, selection.addon_id)
         .await?
         .ok_or_else(|| AddonError::Validation("profile installation unavailable".to_owned()))?;
     let identity = super::teletext_profile_settings::installation_identity(&mut tx, &installation)
         .await
         .map_err(|_| AddonError::Database("profile installation unavailable".to_owned()))?;
     if !installation.enabled
-        || identity != selection.installation
+        || identity != *selection.installation
         || super::teletext_profile_settings::preferred_contract(&installation.manifest)
             != Some(selection.contract)
     {
@@ -553,7 +789,7 @@ async fn resolve_profile_for_launch(
     drop(tx);
     fence.check()?;
     let settings = selection
-        .effective_settings
+        .settings
         .iter()
         .map(super::teletext_profile_settings::to_addon_setting)
         .collect::<Vec<_>>();
@@ -569,7 +805,7 @@ async fn resolve_profile_for_launch(
         Some(fence),
     )
     .await?;
-    check_selection(pool, selection, fence).await?;
+    authority.check(pool, fence).await?;
     Ok(command)
 }
 

@@ -220,6 +220,28 @@ impl TeletextPmtPlan {
             && ((self.section[5] >> 1) & 31) == (((previous.section[5] >> 1) + 1) & 31)
     }
 
+    /// Admit an exact source PMT while reserving a future authored PID.
+    /// No stream, descriptor or version change is emitted by this plan.
+    /// # Errors
+    /// Applies the same source framing, CRC, topology, clock and PID fences.
+    pub(super) fn new_absent(
+        source: &[u8],
+        pmt_pid: u16,
+        pid: u16,
+    ) -> Result<Self, TeletextMultiplexError> {
+        validate_pid(pmt_pid)?;
+        validate_pid(pid)?;
+        let (program, _, pcr_pid) = validate_pmt(source, pmt_pid, pid)?;
+        Ok(Self {
+            source: source.to_vec(),
+            section: source.to_vec(),
+            program,
+            pmt_pid,
+            pid,
+            pcr_pid,
+        })
+    }
+
     /// Check the complete source section and append host-owned service signalling.
     /// # Errors
     /// Rejects invalid CRC/framing/records, unusable PCR, PID conflicts and an
@@ -267,7 +289,8 @@ impl TeletextPmtPlan {
         &self.source
     }
 
-    /// Complete rewritten section with incremented version and valid MPEG CRC.
+    /// Exact planned section and CRC: unchanged for initial absence, with an
+    /// incremented output version after authored signalling changes.
     #[must_use]
     pub fn section(&self) -> &[u8] {
         &self.section

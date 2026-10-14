@@ -122,47 +122,13 @@ impl BoundTeletextDocumentInput {
         self,
         budget: TeletextProfileDocumentBudget,
     ) -> Result<PreparedBoundTeletextDocument, BoundTeletextDocumentError> {
-        check_deadline(Instant::now(), self.deadline)?;
-        let mut authoring = None;
-        let document = match self.receipt.selection.contract {
-            TeletextPageContract::V1 => {
-                let base = parse_page_set(&self.receipt.stdout, &self.receipt.generation)?;
-                budget
-                    .service
-                    .validate_base_with_page_metadata(&base)
-                    .map_err(|error| BoundTeletextDocumentError::ServiceBudget(Box::new(error)))?;
-                TeletextProfileDocument::Base(base)
-            }
-            TeletextPageContract::V2 => TeletextProfileDocument::Authored(Box::new(
-                parse_declared_service(
-                    &self.receipt.stdout,
-                    &self.receipt.generation,
-                    budget.service,
-                    budget.declarations,
-                )
-                .map_err(|error| BoundTeletextDocumentError::AuthoredResponse(Box::new(error)))?,
-            )),
-            TeletextPageContract::V3 => {
-                let (service, metadata) = parse_authored_service_with_metadata(
-                    &self.receipt.stdout,
-                    &self.receipt.generation,
-                    budget.service,
-                    budget.declarations,
-                )
-                .map_err(|error| {
-                    BoundTeletextDocumentError::AuthoredMetadataResponse(Box::new(error))
-                })?;
-                authoring = Some(metadata);
-                TeletextProfileDocument::Authored(Box::new(service))
-            }
-        };
-        check_deadline(Instant::now(), self.deadline)?;
-        let source = TeletextValidatedDocumentSource {
-            contract: self.receipt.selection.contract,
-            generation: self.receipt.generation.clone(),
-            bytes: self.receipt.stdout,
-            authoring,
-        };
+        let (document, source) = validate_document_response(
+            self.receipt.selection.contract,
+            &self.receipt.generation,
+            self.receipt.stdout,
+            budget,
+            self.deadline,
+        )?;
         Ok(PreparedBoundTeletextDocument {
             selection: self.receipt.selection,
             generation: self.receipt.generation,
@@ -171,6 +137,55 @@ impl BoundTeletextDocumentInput {
             deadline: self.deadline,
         })
     }
+}
+
+// Shared content validation only: callers authenticate their distinct base or
+// published-interval receipt first. This function grants no producer authority.
+pub(super) fn validate_document_response(
+    contract: TeletextPageContract,
+    generation: &str,
+    stdout: Vec<u8>,
+    budget: TeletextProfileDocumentBudget,
+    deadline: Instant,
+) -> Result<(TeletextProfileDocument, TeletextValidatedDocumentSource), BoundTeletextDocumentError>
+{
+    check_deadline(Instant::now(), deadline)?;
+    let mut authoring = None;
+    let document = match contract {
+        TeletextPageContract::V1 => {
+            let base = parse_page_set(&stdout, generation)?;
+            budget
+                .service
+                .validate_base_with_page_metadata(&base)
+                .map_err(|error| BoundTeletextDocumentError::ServiceBudget(Box::new(error)))?;
+            TeletextProfileDocument::Base(base)
+        }
+        TeletextPageContract::V2 => TeletextProfileDocument::Authored(Box::new(
+            parse_declared_service(&stdout, generation, budget.service, budget.declarations)
+                .map_err(|error| BoundTeletextDocumentError::AuthoredResponse(Box::new(error)))?,
+        )),
+        TeletextPageContract::V3 => {
+            let (service, metadata) = parse_authored_service_with_metadata(
+                &stdout,
+                generation,
+                budget.service,
+                budget.declarations,
+            )
+            .map_err(|error| {
+                BoundTeletextDocumentError::AuthoredMetadataResponse(Box::new(error))
+            })?;
+            authoring = Some(metadata);
+            TeletextProfileDocument::Authored(Box::new(service))
+        }
+    };
+    check_deadline(Instant::now(), deadline)?;
+    let source = TeletextValidatedDocumentSource {
+        contract,
+        generation: generation.to_owned(),
+        bytes: stdout,
+        authoring,
+    };
+    Ok((document, source))
 }
 
 impl fmt::Debug for BoundTeletextDocumentInput {
@@ -463,7 +478,7 @@ where
     {
         Mutation::Saved(selection) => selection,
         Mutation::Rejected(reason) => {
-            return Err(BoundTeletextPagesError::SelectionRejected(reason).into())
+            return Err(BoundTeletextPagesError::SelectionRejected(reason).into());
         }
     };
     check_deadline(now(), deadline)?;

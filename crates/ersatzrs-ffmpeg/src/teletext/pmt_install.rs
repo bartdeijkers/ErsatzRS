@@ -134,6 +134,35 @@ impl TeletextPmtInstaller {
         Ok(())
     }
 
+    /// Keep initially absent output byte-exact while recording its PMT cursor.
+    /// The normal preflight retains fragment/continuity/startup fences; only a
+    /// later acknowledged transition may change this unmodified source plan.
+    pub(super) fn forward_unchanged(
+        &mut self,
+        window: &[[u8; 188]],
+    ) -> Result<TeletextPmtInstallReport, TeletextPmtInstallError> {
+        if window.len() > MAX_WINDOW_PACKETS {
+            return Err(TeletextMultiplexError::Window.into());
+        }
+        if self.pending_announcement || self.plan.section() != self.plan.source_section() {
+            return Err(TeletextPmtInstallError::Reconfiguration);
+        }
+        let mut input = self.input.clone();
+        let mut first_source_epoch_packet = self.first_source_epoch_packet;
+        self.preflight(window, &mut input, &mut first_source_epoch_packet)?;
+        let mut next_cc = self.next_output_cc;
+        for raw in window {
+            let packet = Packet::new(raw);
+            if u16::from(packet.pid()) == self.plan.pmt_pid() && packet.payload().is_some() {
+                next_cc = Some((packet.continuity_counter().count() + 1) & 15);
+            }
+        }
+        self.input = input;
+        self.first_source_epoch_packet = first_source_epoch_packet;
+        self.next_output_cc = next_cc;
+        Ok(TeletextPmtInstallReport::default())
+    }
+
     /// Atomically replace owned PMT slots and the required null slots.
     /// # Errors
     /// Rejects incomplete/changed sections, malformed or discontinuous input,

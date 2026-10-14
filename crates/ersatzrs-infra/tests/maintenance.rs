@@ -140,6 +140,7 @@ async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
             health: Some(&health),
             artwork: None,
             next: None,
+            scripted_teletext: None,
         },
     )
     .await
@@ -172,6 +173,7 @@ async fn maintenance_reuses_host_health_cache_and_observes_explicit_refresh() {
             health: Some(&health),
             artwork: None,
             next: None,
+            scripted_teletext: None,
         },
     )
     .await

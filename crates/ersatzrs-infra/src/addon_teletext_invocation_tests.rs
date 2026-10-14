@@ -166,6 +166,7 @@ async fn request_preflight_precedes_even_an_unavailable_database_or_filesystem()
             input,
             cancellation: None,
             selection: None,
+            effective_selection: None,
             hold: None,
         };
         assert_eq!(
@@ -289,6 +290,7 @@ mod unix {
                 input: request_bytes(),
                 cancellation,
                 selection: None,
+                effective_selection: None,
                 hold: None,
             }
         }
@@ -449,6 +451,284 @@ mod unix {
         let mut fence = ResolutionFence::new(deadline);
         fence.hook = Some(blocker.hook());
         fence
+    }
+
+    // Exact private-v1 interval framing is fixture-only. Production timeline
+    // publication and codec correctness have separate repository/Lua coverage.
+    fn effective_candidate_json(
+        candidate: &ersatzrs_domain::TeletextProfileCandidateSnapshot,
+    ) -> String {
+        let token = &candidate.installation;
+        let settings = candidate
+            .effective_settings
+            .iter()
+            .map(|setting| {
+                let TeletextProfileValue::Literal(value) = &setting.value else {
+                    panic!("literal fixture")
+                };
+                serde_json::json!({"key":setting.key,"kind":0,"value":value})
+            })
+            .collect::<Vec<_>>();
+        serde_json::json!({"version":1,"channel":candidate.channel_id,"addon":candidate.addon_id,
+            "profile":candidate.profile_id,"revision":candidate.profile_revision,
+            "contract":candidate.contract.schema_version(),"settings":settings,
+            "installation":{"addon":token.addon_id,"revision":token.state_revision,
+                "version":token.version,"package":token.package_sha256,
+                "content":token.content_sha256,"manifest":token.manifest_sha256}})
+        .to_string()
+    }
+
+    async fn install_effective_interval(
+        fixture: &Fixture,
+        channel_id: i64,
+        candidate: Option<&ersatzrs_domain::TeletextProfileCandidateSnapshot>,
+    ) {
+        sqlx::query(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (?, ?, 30, 1)"#)
+            .bind(channel_id).bind(channel_id).execute(&fixture.pool).await.unwrap();
+        let now = chrono::Utc::now();
+        sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State", "CandidateSnapshot") VALUES (?, ?, ?, ?, ?, ?)"#)
+            .bind(channel_id).bind(&fixture.manifest.id)
+            .bind(crate::repositories::common::encode_datetime(now - chrono::Duration::minutes(1)))
+            .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::minutes(10)))
+            .bind(i32::from(candidate.is_some())).bind(candidate.map(effective_candidate_json))
+            .execute(&fixture.pool).await.unwrap();
+    }
+
+    async fn effective_snapshot(
+        fixture: &Fixture,
+        channel: i64,
+    ) -> Arc<TeletextEffectiveChannelSelectionSnapshot> {
+        Arc::new(saved(
+            crate::repositories::SqliteTeletextProfileRepository(fixture.pool.clone())
+                .effective_channel_snapshot(channel, chrono::Utc::now())
+                .await
+                .unwrap(),
+        ))
+    }
+
+    async fn invoke_effective_fixture(
+        fixture: &Fixture,
+        selection: Arc<TeletextEffectiveChannelSelectionSnapshot>,
+    ) -> Result<TeletextEffectiveProfileInvocationReceipt, TeletextInvocationError> {
+        let binding = effective_binding(&selection, &fixture.manifest.id).unwrap();
+        let contract = binding_contract(binding).unwrap();
+        let locker = ersatzrs_core::locking::EntityLocker::new();
+        let guard = ersatzrs_core::locking::TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        invoke_effective_profile_with_deadline_and_hold(
+            fixture.pool.clone(),
+            selection,
+            fixture.manifest.id.clone(),
+            AddonRuntimeContext::default(),
+            request_for_contract(contract),
+            std::time::Instant::now() + Duration::from_secs(10),
+            guard.hold_work(),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn effective_scripted_on_invokes_nonbase_profiles_with_exact_whole_channel_receipts() {
+        let fixture = Fixture::with_contracts(
+            "cat >/dev/null; printf '%s:%s' \"$ERSATZRS_ADDON_SETTING_VALUE\" \"$ERSATZRS_ADDON_SETTING_OTHER\"",
+            &["teletext.pages.v2"],
+        )
+        .await;
+        let bases = fixture.profile_selections(false).await;
+        let repo = crate::repositories::SqliteTeletextProfileRepository(fixture.pool.clone());
+        for (index, base) in bases.iter().enumerate() {
+            let candidate = saved(
+                repo.candidate_snapshot(
+                    base.channel_id,
+                    &base.addon_id,
+                    bases[1 - index].profile_id,
+                )
+                .await
+                .unwrap(),
+            );
+            install_effective_interval(&fixture, base.channel_id, Some(&candidate)).await;
+            sqlx::query(r#"UPDATE "ChannelTeletextBinding" SET "Enabled" = 0, "Revision" = "Revision" + 1 WHERE "ChannelId" = ?"#)
+                .bind(base.channel_id).execute(&fixture.pool).await.unwrap();
+        }
+        for (channel, expected) in [
+            (1, b"right:inherited".as_slice()),
+            (2, b"left:inherited".as_slice()),
+        ] {
+            let selection = effective_snapshot(&fixture, channel).await;
+            let receipt = invoke_effective_fixture(&fixture, Arc::clone(&selection))
+                .await
+                .unwrap();
+            assert_eq!(receipt.stdout, expected);
+            assert!(Arc::ptr_eq(&receipt.selection, &selection));
+            assert_eq!(receipt.addon_id, fixture.manifest.id);
+            assert_eq!(receipt.generation, "fixture");
+            let TeletextEffectiveBindingSnapshot::Scripted(published) =
+                &receipt.selection.bindings[0]
+            else {
+                panic!("base substituted")
+            };
+            assert_eq!(published.playout_id, channel);
+            assert_eq!(published.interval.state.channel_id(), channel);
+            let debug = format!("{receipt:?}");
+            assert!(!debug.contains("right:inherited"));
+            assert!(!debug.contains(&fixture.manifest.id));
+            std::fs::remove_file(&fixture.marker).unwrap();
+        }
+        // Changes to the shadowed operator binding do not invalidate active On.
+        let before = effective_snapshot(&fixture, 1).await;
+        sqlx::query(r#"UPDATE "ChannelTeletextBinding" SET "ProfileId" = ?, "Enabled" = 1, "Revision" = "Revision" + 1 WHERE "ChannelId" = 1"#)
+            .bind(bases[0].profile_id).execute(&fixture.pool).await.unwrap();
+        invoke_effective_fixture(&fixture, before).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn effective_off_unknown_and_forged_scope_reject_before_native_resolution() {
+        let fixture = Fixture::new("exec cat").await;
+        let _ = fixture.profile_selections(false).await;
+        install_effective_interval(&fixture, 1, None).await;
+        let selection = effective_snapshot(&fixture, 1).await;
+        let enabled = effective_snapshot(&fixture, 2).await;
+        let blocker = Blocker::new("canonicalize", 1);
+        let _release = ReleaseOnDrop(Arc::clone(&blocker));
+        for mode in 0..4 {
+            let mut captured = if mode == 0 {
+                (*selection).clone()
+            } else {
+                (*enabled).clone()
+            };
+            let mut invocation = fixture.invocation(None);
+            if mode == 1 {
+                invocation.addon_id = "org.example.unknown".to_owned();
+            }
+            if mode == 2 {
+                captured.channel_id = 1;
+            }
+            if mode == 3 {
+                captured.bindings.extend(enabled.bindings.clone());
+            }
+            invocation.effective_selection = Some(Arc::new(captured));
+            let mut fence = ResolutionFence::new(Instant::now() + Duration::from_secs(3));
+            fence.hook = Some(blocker.hook());
+            assert_eq!(
+                invoke_with_fence(invocation, fence, Duration::from_millis(10)).await,
+                Err(TeletextInvocationError::AdmissionRejected)
+            );
+        }
+        assert!(blocker.stages.lock().unwrap().is_empty());
+        assert!(!fixture.marker.exists());
+    }
+
+    #[tokio::test]
+    async fn effective_prelaunch_rechecks_future_boundary_and_captured_profile_without_spawn() {
+        for change in ["profile", "boundary", "whole-member"] {
+            let fixture = Fixture::new("exec cat").await;
+            let [base, _] = fixture.profile_selections(false).await;
+            let repo = crate::repositories::SqliteTeletextProfileRepository(fixture.pool.clone());
+            let candidate = saved(
+                repo.candidate_snapshot(1, &fixture.manifest.id, base.profile_id)
+                    .await
+                    .unwrap(),
+            );
+            if change != "boundary" {
+                install_effective_interval(&fixture, 1, Some(&candidate)).await;
+            }
+            if change == "whole-member" {
+                install_off_member(&fixture).await;
+            }
+            let selection = effective_snapshot(&fixture, 1).await;
+            let blocker = Blocker::new("canonicalize", 1);
+            let _release = ReleaseOnDrop(Arc::clone(&blocker));
+            let mut invocation = fixture.invocation(None);
+            invocation.effective_selection = Some(selection);
+            let mut fence = ResolutionFence::new(Instant::now() + Duration::from_secs(5));
+            fence.hook = Some(blocker.hook());
+            let task = tokio::spawn(invoke_with_fence(invocation, fence, Duration::from_secs(1)));
+            blocker.wait_entered().await;
+            match change {
+                "profile" => {
+                    sqlx::query(r#"UPDATE "TeletextProfileSetting" SET "Value" = 'changed' WHERE "ProfileId" = ? AND "Key" = 'VALUE'"#)
+                    .bind(candidate.profile_id).execute(&fixture.pool).await.unwrap();
+                }
+                "whole-member" => {
+                    sqlx::query(r#"DELETE FROM "PlayoutTeletextInterval" WHERE "AddonId" = 'org.example.other-off'"#)
+                    .execute(&fixture.pool).await.unwrap();
+                }
+                _ => {
+                    install_effective_interval(&fixture, 1, None).await;
+                    sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Start" = ?"#)
+                        .bind(crate::repositories::common::encode_datetime(
+                            chrono::Utc::now() + chrono::Duration::minutes(1),
+                        ))
+                        .execute(&fixture.pool)
+                        .await
+                        .unwrap();
+                }
+            }
+            blocker.release();
+            assert_eq!(
+                task.await.unwrap(),
+                Err(TeletextInvocationError::AdmissionRejected)
+            );
+            assert!(!fixture.marker.exists());
+        }
+    }
+
+    async fn install_off_member(fixture: &Fixture) {
+        let profile = sqlx::query(r#"INSERT INTO "TeletextProfile" ("AddonId", "Name", "InstallationStateRevision", "InstallationVersion", "InstallationPackageSha256", "InstallationContentSha256", "InstallationManifestSha256") VALUES ('org.example.other-off', 'Off', 'unused', 'unused', 'unused', 'unused', 'unused')"#)
+            .execute(&fixture.pool).await.unwrap().last_insert_rowid();
+        sqlx::query(r#"INSERT INTO "ChannelTeletextBinding" ("ChannelId", "AddonId", "ProfileId", "Enabled", "Revision") VALUES (1, 'org.example.other-off', ?, 0, 1)"#)
+            .bind(profile).execute(&fixture.pool).await.unwrap();
+        let now = chrono::Utc::now();
+        sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State") VALUES (1, 'org.example.other-off', ?, ?, 0)"#)
+            .bind(crate::repositories::common::encode_datetime(now - chrono::Duration::minutes(1)))
+            .bind(crate::repositories::common::encode_datetime(now + chrono::Duration::minutes(20)))
+            .execute(&fixture.pool).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn effective_deadline_and_abandoned_request_retain_actual_worker_admission() {
+        let fixture = Fixture::new("exec cat").await;
+        let _ = fixture.profile_selections(false).await;
+        let selection = effective_snapshot(&fixture, 1).await;
+        let mut expired = (*selection).clone();
+        expired.valid_until = Some(chrono::Utc::now());
+        assert!(matches!(
+            effective_fence(
+                &expired,
+                std::time::Instant::now() + Duration::from_secs(30)
+            ),
+            Err(TeletextInvocationError::TimedOut)
+        ));
+        let mut short = (*selection).clone();
+        short.valid_until = Some(chrono::Utc::now() + chrono::Duration::milliseconds(100));
+        let original = std::time::Instant::now() + Duration::from_millis(20);
+        assert!(effective_fence(&short, original).unwrap().deadline <= Instant::from_std(original));
+        let horizon =
+            effective_fence(&short, std::time::Instant::now() + Duration::from_secs(30)).unwrap();
+        assert!(horizon.deadline <= Instant::now() + Duration::from_millis(100));
+        let blocker = Blocker::new("canonicalize", 1);
+        let _release = ReleaseOnDrop(Arc::clone(&blocker));
+        let locker = ersatzrs_core::locking::EntityLocker::new();
+        let guard = ersatzrs_core::locking::TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+        let mut invocation = fixture.invocation(None);
+        invocation.effective_selection = Some(selection);
+        invocation.hold = Some(guard.hold_work());
+        drop(guard);
+        let mut fence = ResolutionFence::new(Instant::now() + Duration::from_secs(5));
+        fence.hook = Some(blocker.hook());
+        let completed = Arc::clone(&fence.worker_completed);
+        let task = tokio::spawn(invoke_with_fence(
+            invocation,
+            fence,
+            Duration::from_millis(5),
+        ));
+        blocker.wait_entered().await;
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(locker.active_teletext_work(), 1);
+        blocker.release();
+        wait_true(&completed).await;
+        assert_eq!(locker.active_teletext_work(), 0);
+        assert!(!fixture.marker.exists());
     }
 
     #[tokio::test]

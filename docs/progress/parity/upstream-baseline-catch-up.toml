@@ -5,7 +5,9 @@ status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
 summary    = """
 UCU-00–10 are locally Complete:232 accepted rows through v26.11.2.
-Native is retained; no main/application push, application CI or release occurs.
+Native is retained. The 2026-10-14 amendment authorizes UCU-10 push/merge and
+full green CI on remote main. Integrated local gates pass; the application PR
+and exact-SHA CI check suite own remote delivery receipts. No release is authorized.
 APNG, nested filler, ZIP, search and local gates pass. Next-only publication is
 explicitly approved; all20 assets match anonymous public downloads.
 All six Next021 packages/staging and Linux/Windows bundled/cold/cache startup pass.
@@ -16,11 +18,8 @@ published with four verified archives, exact-source green CI and Linux/Windows
 package startup, browser and decoded playback proof. Docker is excluded by
 explicit maintainer release-scope approval (2026-10-09), not claimed verified.
 UCU-09 and UCU-10 own their completed windows; approved ongoing debt stays unverified.
-201 Port: Linux/Windows complete-window/live/finite/track/cleanup proof passes.
-202/203/206/208 N/A;204/205/207 Covered. UCU-09 owns exact acceptance evidence.
-200 Adapt(0095): exact bundled/downloaded Next default; UCU-09 owns proof.
-199 Port: rate/copy/mirror/Dutch tracks; UCU-09 owns Linux/Windows proof.
-198 Port: cached TS/HLS; UCU-09 owns runtime/routing/artwork proof.
+198–208: UCU-09 owns exact per-row acceptance, bundled Next default and
+Linux/Windows runtime/window/track/cleanup proof;202/203/206/208 are N/A.
 196-197: packaging/custom text; UCU-09 owns source/staging/selection proof.
 195 Port: deep scan/artwork; UCU-09 owns runtime/browser/restart proof.
 194 Adapt (0117): content duration/native-Next handoff and generated silence

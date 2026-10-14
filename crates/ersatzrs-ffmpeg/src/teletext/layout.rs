@@ -7,7 +7,8 @@
 use ersatzrs_domain::{
     TeletextColour, TeletextColumnOperation, TeletextDiacriticIndex, TeletextEnhancementPosition,
     TeletextGlyphCode, TeletextHeight, TeletextPageDraft, TeletextPageKind, TeletextRunContent,
-    TeletextStyle, TELETEXT_COLUMNS, TELETEXT_ROWS,
+    TeletextSemanticService, TeletextStructureError, TeletextStyle, TELETEXT_COLUMNS,
+    TELETEXT_ROWS,
 };
 
 use super::{charset, TeletextEncodingError};
@@ -15,6 +16,7 @@ use super::{charset, TeletextEncodingError};
 pub(super) struct Layout {
     pub rows: [[u8; TELETEXT_COLUMNS]; TELETEXT_ROWS],
     base_glyphs: Vec<PositionedBaseGlyph>,
+    physical_rows: [bool; TELETEXT_ROWS],
 }
 
 /// One exact Western Latin replacement for a fallback cell, before composition.
@@ -74,6 +76,11 @@ impl From<&PositionedBaseGlyph> for TeletextColumnOperation {
 }
 
 impl Layout {
+    /// Coded editor rows have no inferred original Unicode or mosaic intent.
+    pub(super) fn is_physical_row(&self, row: u8) -> bool {
+        self.physical_rows[usize::from(row)]
+    }
+
     /// Sorted exact row/column replacements; unchanged fallback cells remain in rows.
     pub(super) fn base_glyphs(&self) -> &[PositionedBaseGlyph] {
         &self.base_glyphs
@@ -140,6 +147,7 @@ pub(super) fn compile_for_composition(
     let mut layout = Layout {
         rows: [[b' '; TELETEXT_COLUMNS]; TELETEXT_ROWS],
         base_glyphs: Vec::new(),
+        physical_rows: [false; TELETEXT_ROWS],
     };
     let mut rows: Vec<_> = page.rows.iter().collect();
     rows.sort_by_key(|row| row.row);
@@ -222,6 +230,78 @@ pub(super) fn compile_for_composition(
         }
     }
     Ok(layout)
+}
+
+/// Apply exact owner-scoped physical rows to the same checked base used by
+/// preview, enhanced composition and native packet assembly. Generated X26
+/// replacements remain protected until their editor changes are independently
+/// validated; identical fallback cells retain their original replacement.
+pub(super) fn compile_for_service_composition(
+    service: &TeletextSemanticService,
+    page: &TeletextPageDraft,
+) -> Result<Layout, TeletextEncodingError> {
+    let mut layout = compile_for_composition(page)?;
+    let Some(overlay) = service.physical_base_overlay(page.address) else {
+        return Ok(layout);
+    };
+    for row in overlay.rows() {
+        for glyph in layout.base_glyphs() {
+            let position = glyph.position();
+            if position.row() == row.row()
+                && row.cells()[usize::from(position.column())]
+                    != layout.rows[usize::from(row.row())][usize::from(position.column())]
+            {
+                return Err(TeletextEncodingError::PhysicalBaseGeneratedGlyph {
+                    address: page.address,
+                    row: row.row(),
+                    column: position.column(),
+                });
+            }
+        }
+        super::base_display::validate_physical_base_row(page, row.row(), row.cells())?;
+        layout.rows[usize::from(row.row())] = *row.cells();
+        layout.physical_rows[usize::from(row.row())] = true;
+    }
+    validate_merged_height(page, &layout)?;
+    Ok(layout)
+}
+
+/// Keep the logical no-hidden-row invariant after every physical row has been
+/// applied. Unchanged authored rows retain their content identity, including
+/// explicit blank glyphs; a physical all-space row explicitly clears content.
+fn validate_merged_height(
+    page: &TeletextPageDraft,
+    layout: &Layout,
+) -> Result<(), TeletextEncodingError> {
+    let content: [bool; TELETEXT_ROWS] = std::array::from_fn(|row| {
+        if layout.physical_rows[row] {
+            layout.rows[row].iter().any(|&code| code != b' ')
+        } else {
+            page.rows
+                .iter()
+                .any(|original| usize::from(original.row) == row && !original.runs.is_empty())
+        }
+    });
+    for row in 0_u8..25 {
+        if !layout.rows[usize::from(row)].contains(&0x0d) {
+            continue;
+        }
+        let invalid_row = if row >= 23 {
+            Some(row)
+        } else if content[usize::from(row) + 1] {
+            Some(row + 1)
+        } else {
+            None
+        };
+        if let Some(row) = invalid_row {
+            return Err(TeletextStructureError::DoubleHeight {
+                address: page.address,
+                row,
+            }
+            .into());
+        }
+    }
+    Ok(())
 }
 
 pub(super) const fn triplet(address: u8, mode: u8, data: u8) -> u32 {

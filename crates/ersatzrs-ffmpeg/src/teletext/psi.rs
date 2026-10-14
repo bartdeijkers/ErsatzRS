@@ -181,6 +181,22 @@ impl TeletextPsiDiscovery {
         &self,
         service: &TeletextServiceDescriptor,
     ) -> Result<TeletextPmtPlan, TeletextPsiError> {
+        self.plan_optional(Some(service))
+    }
+
+    /// Reserve authored output ownership while keeping the source PMT unchanged.
+    /// This applies the same complete PSI, program and PID collision checks as
+    /// active planning. It provides no PCR rate or publication authority.
+    /// # Errors
+    /// Incomplete discovery is retryable; source ownership failures prevent admission.
+    pub fn plan_without_authored(&self) -> Result<TeletextPmtPlan, TeletextPsiError> {
+        self.plan_optional(None)
+    }
+
+    pub(super) fn plan_optional(
+        &self,
+        service: Option<&TeletextServiceDescriptor>,
+    ) -> Result<TeletextPmtPlan, TeletextPsiError> {
         if let Some(error) = &self.failure {
             return Err(error.clone());
         }
@@ -220,12 +236,10 @@ impl TeletextPsiDiscovery {
         for cat in self.cat.sections.values() {
             validate_descriptor_bytes(&cat[8..cat.len() - 4], *selected.0)?;
         }
-        Ok(TeletextPmtPlan::new(
-            section,
-            *selected.0,
-            self.pid,
-            service,
-        )?)
+        Ok(match service {
+            Some(service) => TeletextPmtPlan::new(section, *selected.0, self.pid, service)?,
+            None => TeletextPmtPlan::new_absent(section, *selected.0, self.pid)?,
+        })
     }
 
     /// Seal complete current ownership evidence into a continuing source monitor.
@@ -239,7 +253,14 @@ impl TeletextPsiDiscovery {
         self,
         service: &TeletextServiceDescriptor,
     ) -> Result<TeletextPsiMonitor, TeletextPsiError> {
-        let plan = self.plan(service)?;
+        self.into_monitor_optional(Some(service))
+    }
+
+    pub(super) fn into_monitor_optional(
+        self,
+        service: Option<&TeletextServiceDescriptor>,
+    ) -> Result<TeletextPsiMonitor, TeletextPsiError> {
+        let plan = self.plan_optional(service)?;
         let mut tables = BTreeMap::new();
         tables.insert(
             0,

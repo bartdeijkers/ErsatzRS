@@ -20,17 +20,62 @@ encoding/raster failures. Separate bounded native actions now request pending
 intent and explicitly select that exact static original for new compatible
 streams using existing immutable qualification and atomic publication fences.
 Selection changes disable publication controls without erasing historical
-preview or pointer observations. Existing streams retain their captured output.
+preview or pointer observations. Version-1 streams retain their captured output.
 This connection grants no TTI/editor/zone or full authored Level 2.5 acceptance.
 A finite-client whole-host restart trial retains two selected themes and a newer
 pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
 the exact proof and negative shutdown receipt.
 P9A-04 owns current independent proof and all remaining obligations.
+The generic transport gate now admits an initially absent authored epoch with
+unchanged source PSI/version and no placeholder page model. First activation
+uses that same source clock/counter and acknowledges changed PMT before PES.
+The host also fences selection changes committed during source discovery before
+its first authored write. An explicit version-2 host policy now connects a
+response-owned bounded accepted-state monitor to compatible final direct routes,
+including initially Off. Each response uses its own actual safe-boundary control;
+pending drafts never activate output. Poll/recovery bounds, error withdrawal,
+worker cancellation ownership and version-1 compatibility are specified in the
+interchange reference. P9A-04 owns the concrete connection/cancellation/recovery
+proof and the separate capacity-slate codec, track-topology and clock defect.
+Retained/Next routes and complete warm resource/cache retirement remain open.
+No acceptance obligation is narrowed.
+
 Preparatory immutable export receipts now use the existing design repository,
 exact head/original-digest checks and bounded read-only snapshot verification.
 The application requires a trusted native export confirmation port; its production
 file/resource mapping adapter is now implemented for saved native originals.
-Editable concepts and indirect edit-policy enforcement remain unimplemented.
+A typed physical-base-row overlay now preserves exact seven-bit editor cells
+through the existing semantic service, compiled/native encoders and shared raster.
+It is separate from unchanged original addon responses, resources and metadata;
+existing service and full cold-composition limits also charge replacement rows.
+This compiler seam grants no editing rights. A separately versioned private
+concept subdocument now retains original/export references and exact replacement
+rows without changing original capture serialization. Structural restoration
+confers no import permission. Native import and reload now authenticate the retained
+server receipt against its exact immutable original and rebuilt complete export.
+They qualify physical row edits against captured free/zone/generated boundaries,
+including spacing attributes, glyph semantics and double-height footprints. The
+existing head CAS saves a private immutable concept; the same native model serves
+preview and separate explicit publication, including restart recovery. Unqualified
+concepts still reject. A representative charset-zero two-page-set export/open/
+edit/Save As/import/preview/explicit publication/reopen trial now passes with
+pinned QTeletextMaker1.0. Concurrent ordinary-route captures preserve both themes,
+exact encoded models and source audio/video; independent decoding and headed
+VLC main-page navigation observe the edit only on its channel/page. The editor
+couples X28 NOS to header controls on load; a separately retained nonzero trial
+changes protected X28 and rejects without publication. Bounded native ZIP export
+and receipt-owned multipart import now connect these functions to localized
+channel-admin forms. Import saves an unpublished concept; preview, request and
+publication stay separate. V3-only addon discovery is included. P9A-04 owns the
+headed nine-culture/both-theme/JS/no-JS browser proof and remaining gaps. Versioned
+QTM carriers now use the trusted effective primary in editor PS while retaining
+native fallback controls and separate RE regional bits. The stored receipt profile
+selects byte-identical legacy reconstruction. Actual equal/independent NOS trials
+now pass native preview/publication/reopen and ordinary transport; the legacy
+counterexample remains recorded. QTM has one shared NOS, so its own preview cannot
+show both independent values together; the native model retains both. General
+charset/resource fidelity and full client coverage remain open; this base-row
+slice grants no full editor/engine acceptance.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.
@@ -39,7 +84,7 @@ with exact producer bytes. It shares the complete v2 service validation and chec
 actual effective Level 2.5 panel widths. Durable reload reconstructs the same
 metadata without package invocation; unchanged `original_only` policy grants no
 editing. Native file mapping/export confirmation now retains exact per-page TTI and
-protected resource/M29 assets in server-owned receipts. Edited concepts remain open;
+protected resource/M29 assets in server-owned receipts. Enhanced editor concepts remain open;
 protected assets do not yet establish editor dependency loading or resource editing.
 
 
@@ -986,3 +1031,14 @@ support label or accepted by substituting decoder availability.
 - [Interchange and audit reference](../reference/teletext-design-interchange.md)
 - [Phase 9 plan](../../plans/teletext-support.md)
 - [Authoritative milestone acceptance](../progress/milestones.toml)
+
+The V4 external-editor carrier represents a complete normal/global DRCS bank as
+an ordered protected TTI set. Explicit null slots preserve missing native S1
+indices for QTM's attached PN-list indexing. They contain all-F modes and no PTU;
+they never become native pages, assets or publication authority. Exact retained
+original reconstruction verifies all real references and absent slots. Preserve
+Legacy/V2/V3 recipes, receipt/document schemas and native addon ownership.
+Pinned QTM offers no attached-resource editing/saving. The interchange reference
+owns the file contract; P9A-04 owns actual editor/stream proof and all remaining
+resource-editing and full authored Level2.5 acceptance. No permanent limitation
+is accepted by this implementation checkpoint.

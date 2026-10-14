@@ -5,9 +5,9 @@ use mpeg2ts_reader::packet::Packet;
 use super::{
     EncodedTeletextAuthoredService, EncodedTeletextPageSet, TeletextBufferError, TeletextCarousel,
     TeletextClockConfig, TeletextClockError, TeletextClockValidator, TeletextMultiplexError,
-    TeletextPacketBuffer, TeletextPacketizer, TeletextPmtInstallError, TeletextPmtInstaller,
-    TeletextPsiDiscovery, TeletextPsiError, TeletextPsiMonitor, TeletextServiceDescriptor,
-    TeletextTimestamp, TeletextTransportError,
+    TeletextPacketBuffer, TeletextPacketizer, TeletextPmtInstallError, TeletextPmtInstallReport,
+    TeletextPmtInstaller, TeletextPsiDiscovery, TeletextPsiError, TeletextPsiMonitor,
+    TeletextServiceDescriptor, TeletextTimestamp, TeletextTransportError,
 };
 
 const STEP_TICKS: u64 = 1_800;
@@ -28,6 +28,10 @@ mod retained_tests;
 #[cfg(test)]
 #[path = "authored_service_output_tests.rs"]
 mod authored_service_tests;
+
+#[cfg(test)]
+#[path = "output_absent_tests.rs"]
+mod absent_tests;
 
 #[path = "output_transitions.rs"]
 mod transitions;
@@ -260,14 +264,14 @@ struct PendingOutput {
 /// runs a task nor consumes/reopens media. Page refresh/publication is separate.
 pub struct TeletextOutputGate {
     config: TeletextOutputConfig,
-    service: TeletextServiceDescriptor,
+    service: Option<TeletextServiceDescriptor>,
     buffer: Option<TeletextPacketBuffer>,
     discovery: Option<TeletextPsiDiscovery>,
     monitor: Option<TeletextPsiMonitor>,
     clock: TeletextClockValidator,
     installer: Option<TeletextPmtInstaller>,
     packetizer: TeletextPacketizer,
-    carousel: TeletextCarousel,
+    carousel: Option<TeletextCarousel>,
     anchor: Option<(u64, TeletextTimestamp)>,
     origin: Option<Duration>,
     delivery_start: DeliveryStart,
@@ -296,8 +300,8 @@ impl TeletextOutputGate {
         let descriptor = TeletextServiceDescriptor::from_page_set(&set);
         Self::new_inner(
             config,
-            TeletextCarousel::new(set),
-            descriptor,
+            Some(TeletextCarousel::new(set)),
+            Some(descriptor),
             DeliveryStart::OnArrival,
         )
     }
@@ -316,8 +320,8 @@ impl TeletextOutputGate {
         let descriptor = TeletextServiceDescriptor::from_page_set(&set);
         Self::new_inner(
             config,
-            TeletextCarousel::new(set),
-            descriptor,
+            Some(TeletextCarousel::new(set)),
+            Some(descriptor),
             DeliveryStart::Deferred,
         )
     }
@@ -353,7 +357,12 @@ impl TeletextOutputGate {
     ) -> Result<Self, TeletextOutputError> {
         let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
         let carousel = TeletextCarousel::new_authored_shared(service)?;
-        Self::new_inner(config, carousel, descriptor, DeliveryStart::OnArrival)
+        Self::new_inner(
+            config,
+            Some(carousel),
+            Some(descriptor),
+            DeliveryStart::OnArrival,
+        )
     }
 
     /// Fresh retained epoch sharing content while preserving separate holding age.
@@ -365,7 +374,30 @@ impl TeletextOutputGate {
     ) -> Result<Self, TeletextOutputError> {
         let descriptor = TeletextServiceDescriptor::from_authored_service(&service);
         let carousel = TeletextCarousel::new_authored_shared(service)?;
-        Self::new_inner(config, carousel, descriptor, DeliveryStart::Deferred)
+        Self::new_inner(
+            config,
+            Some(carousel),
+            Some(descriptor),
+            DeliveryStart::Deferred,
+        )
+    }
+
+    /// Start a bounded source epoch with no authored content or signalling.
+    /// Source AV/PSI bytes remain exact; an acknowledged boundary may later
+    /// accept a complete authored service through the existing replacement API.
+    /// This reserves/checks the configured PID without inventing empty pages.
+    /// # Errors
+    /// Enforces the same explicit source, clock, PID and retention policy.
+    pub fn new_absent(config: TeletextOutputConfig) -> Result<Self, TeletextOutputError> {
+        Self::new_inner(config, None, None, DeliveryStart::OnArrival)
+    }
+
+    /// Retain an initially absent source until its owner starts delivery.
+    /// Holding age is preserved and ordinary source packets are not rewritten.
+    /// # Errors
+    /// Enforces the same output-policy bounds as `new_absent`.
+    pub fn new_absent_retained(config: TeletextOutputConfig) -> Result<Self, TeletextOutputError> {
+        Self::new_inner(config, None, None, DeliveryStart::Deferred)
     }
 
     /// Establish the one final packet schedule after reserve readiness.
@@ -383,8 +415,8 @@ impl TeletextOutputGate {
 
     fn new_inner(
         config: TeletextOutputConfig,
-        carousel: TeletextCarousel,
-        descriptor: TeletextServiceDescriptor,
+        carousel: Option<TeletextCarousel>,
+        descriptor: Option<TeletextServiceDescriptor>,
         delivery_start: DeliveryStart,
     ) -> Result<Self, TeletextOutputError> {
         let interval_packets = u128::from(config.clock.muxrate_bps) / (50 * PACKET_BITS);
@@ -411,6 +443,7 @@ impl TeletextOutputGate {
         {
             return Err(TeletextOutputError::Configuration);
         }
+        let active = carousel.is_some();
         Ok(Self {
             config,
             service: descriptor,
@@ -440,7 +473,7 @@ impl TeletextOutputGate {
             source_state: SourceState::Open,
             completed_cycle: false,
             payload: PayloadSelection {
-                active: true,
+                active,
                 signalling_ready: true,
             },
             last_ack: None,
@@ -665,7 +698,7 @@ impl TeletextOutputGate {
         self.fence(result)
     }
 
-    /// Close only after all source bytes and a complete authored cycle were delivered.
+    /// Close after all source bytes and, when selected, a complete authored cycle.
     ///
     /// This does not invent tail packets or silently discard a partial interval.
     /// The owner drains any fractional interval with `prepare_final_window`.
@@ -719,7 +752,7 @@ impl TeletextOutputGate {
             }
             if let Some(discovery) = self.discovery.as_mut() {
                 discovery.push(&raw)?;
-                match discovery.plan(&self.service) {
+                match discovery.plan_optional(self.service.as_ref()) {
                     Ok(plan) => {
                         if plan.pcr_pid() != self.config.clock.pcr_pid {
                             return Err(TeletextMultiplexError::Clock.into());
@@ -729,7 +762,7 @@ impl TeletextOutputGate {
                             self.discovery
                                 .take()
                                 .ok_or(TeletextOutputError::Configuration)?
-                                .into_monitor(&self.service)?,
+                                .into_monitor_optional(self.service.as_ref())?,
                         );
                         self.psi_ready = true;
                     }
@@ -820,6 +853,21 @@ impl TeletextOutputGate {
         self.prepare_packets(count, end, end_ticks, true, now)
     }
 
+    fn install_source_window(
+        &mut self,
+        packets: &mut [[u8; 188]],
+    ) -> Result<TeletextPmtInstallReport, TeletextOutputError> {
+        let installer = self
+            .installer
+            .as_mut()
+            .ok_or(TeletextOutputError::Configuration)?;
+        Ok(if self.carousel.is_none() {
+            installer.forward_unchanged(packets)
+        } else {
+            installer.install(packets)
+        }?)
+    }
+
     fn prepare_packets(
         &mut self,
         count: usize,
@@ -841,18 +889,13 @@ impl TeletextOutputGate {
             .first_arrival()?
             .ok_or(TeletextOutputError::Boundary)?;
         let mut packets = self.buffer_ref()?.window()?[..count].to_vec();
-        let installation = match self
-            .installer
-            .as_mut()
-            .ok_or(TeletextOutputError::Configuration)?
-            .install(&mut packets)
-        {
+        let installation = match self.install_source_window(&mut packets) {
             Ok(report) => report,
-            Err(
+            Err(TeletextOutputError::Pmt(
                 TeletextPmtInstallError::Incomplete
                 | TeletextPmtInstallError::Multiplex(TeletextMultiplexError::Capacity { .. }),
-            ) if !final_window => return Ok(false),
-            Err(error) => return Err(error.into()),
+            )) if !final_window => return Ok(false),
+            Err(error) => return Err(error),
         };
         let mut completes_cycle = false;
         while self.batch_ticks < end_ticks {
@@ -874,11 +917,17 @@ impl TeletextOutputGate {
                 )
                 .map_err(|_| TeletextOutputError::Arithmetic)?;
             let batch = if self.payload.active && self.payload.signalling_ready {
-                let batch = self.carousel.next_batch()?;
+                let batch = self
+                    .carousel
+                    .as_mut()
+                    .ok_or(TeletextOutputError::Configuration)?
+                    .next_batch()?;
                 completes_cycle |= batch.kind() == super::TeletextCarouselBatchKind::Terminator;
                 Some(batch)
             } else {
-                self.carousel.advance_empty_at_boundary(STEP_TICKS)?;
+                if let Some(carousel) = self.carousel.as_mut() {
+                    carousel.advance_empty_at_boundary(STEP_TICKS)?;
+                }
                 None
             };
             let next = self
@@ -904,6 +953,12 @@ impl TeletextOutputGate {
         }
         self.buffer_mut()?.release(count, now)?;
         self.observed -= count;
+        let completed_authored = self
+            .carousel
+            .as_ref()
+            .filter(|_| completes_cycle)
+            .and_then(TeletextCarousel::authored_service_shared)
+            .cloned();
         self.pending = Some(PendingOutput {
             packets,
             first_packet: self.source_start,
@@ -911,14 +966,13 @@ impl TeletextOutputGate {
             exposed: false,
             cycle: PendingCycleEvidence {
                 completes_cycle,
-                cycle_boundary: self.carousel.is_cycle_boundary(),
+                cycle_boundary: self
+                    .carousel
+                    .as_ref()
+                    .is_none_or(TeletextCarousel::is_cycle_boundary),
                 signalling_announced: installation.announced,
             },
-            completed_authored: if completes_cycle {
-                self.carousel.authored_service_shared().map(Arc::clone)
-            } else {
-                None
-            },
+            completed_authored,
         });
         self.source_start = end;
         Ok(true)

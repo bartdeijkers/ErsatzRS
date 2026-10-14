@@ -187,6 +187,35 @@ pub struct TeletextSelectionSnapshot {
     pub effective_settings: Vec<TeletextProfileSetting>,
 }
 
+/// Read-only validation of an existing profile for an already-bound output
+/// channel and add-on. The base binding may be disabled or select another profile.
+/// This observation carries no invocation, interval, publication or output authority
+/// and cannot substitute for an enabled base selection. Recheck before consuming
+/// a candidate; base enabled/profile/revision changes alone do not invalidate it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TeletextProfileCandidateSnapshot {
+    pub contract: TeletextPageContract,
+    pub channel_id: EntityId,
+    pub addon_id: String,
+    pub profile_id: EntityId,
+    pub profile_revision: i64,
+    pub installation: TeletextInstallationSnapshot,
+    pub effective_settings: Vec<TeletextProfileSetting>,
+}
+
+impl fmt::Debug for TeletextProfileCandidateSnapshot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TeletextProfileCandidateSnapshot")
+            .field("contract", &self.contract)
+            .field("channel_id", &self.channel_id)
+            .field("profile_id", &self.profile_id)
+            .field("profile_revision", &self.profile_revision)
+            .field("settings_count", &self.effective_settings.len())
+            .finish_non_exhaustive()
+    }
+}
+
 /// Complete enabled base membership observed in one channel read transaction.
 /// Bindings are ordered by add-on identity, exclude disabled selections, and
 /// carry no page/publication authority. An empty vector proves no enabled base

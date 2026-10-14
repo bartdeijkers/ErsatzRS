@@ -754,6 +754,23 @@ impl SourceAddonRouting {
 /// Local source, package, configuration, and process lifecycle operations.
 #[async_trait]
 pub trait AddonRuntime: Send + Sync {
+    /// Invoke one enabled member of a whole effective channel observation.
+    /// Capable native adapters retain the exact authority and work hold through
+    /// resolution, prelaunch recheck and actual cleanup. No base fallback exists.
+    async fn invoke_effective_teletext_profile_before_with_hold(
+        &self,
+        _selection: std::sync::Arc<ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+        _addon_id: String,
+        _input: Vec<u8>,
+        _deadline: std::time::Instant,
+        _hold: ersatzrs_core::locking::TeletextWorkHold,
+    ) -> Result<
+        crate::teletext_effective_profiles::TeletextEffectiveProfileRuntimeReceipt,
+        crate::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        Err(crate::teletext_profiles::TeletextProfileRuntimeError::Unsupported)
+    }
+
     /// Invoke one exact profile selection without publication authority.
     /// Native adapters retain process cleanup after caller abandonment.
     async fn invoke_teletext_profile(

@@ -77,6 +77,30 @@ async fn latest_tool_maintenance(
 
 #[async_trait]
 impl AddonRuntime for NativeAddonRuntime {
+    async fn invoke_effective_teletext_profile_before_with_hold(
+        &self,
+        selection: std::sync::Arc<ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+        addon_id: String,
+        input: Vec<u8>,
+        deadline: std::time::Instant,
+        hold: ersatzrs_core::locking::TeletextWorkHold,
+    ) -> Result<
+        ersatzrs_app::teletext_effective_profiles::TeletextEffectiveProfileRuntimeReceipt,
+        ersatzrs_app::teletext_profiles::TeletextProfileRuntimeError,
+    > {
+        let receipt = ersatzrs_infra::addons::teletext_invocation::invoke_effective_profile_with_deadline_and_hold(
+            self.pool.clone(), selection, addon_id, runtime_context(), input, deadline, hold,
+        ).await.map_err(teletext_runtime_error)?;
+        Ok(
+            ersatzrs_app::teletext_effective_profiles::TeletextEffectiveProfileRuntimeReceipt {
+                stdout: receipt.stdout,
+                selection: receipt.selection,
+                addon_id: receipt.addon_id,
+                generation: receipt.generation,
+            },
+        )
+    }
+
     async fn invoke_teletext_profile_before(
         &self,
         selection: ersatzrs_domain::TeletextSelectionSnapshot,
