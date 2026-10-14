@@ -2,11 +2,13 @@
 
 ## Accepted release boundary
 
-UCU-10 is complete through v26.11.2/row232 on 2026-10-14 and delivered through
-PR105 on remote main32c12793. All232 ledger rows have accepted dispositions.
-The current pin is authoritative in `docs/automation/parity-baseline.md`; the
-shared upstream checkout is unchanged. UCU-11 rows233–236 remain pending through
-fixed v26.11.3/f75abe53. Approved hardware/platform debt remains explicitly unverified.
+UCU-11 is locally accepted through v26.11.3/row236 on 2026-10-15. All236
+ledger rows have justified dispositions; the required local gates pass.
+UCU-10 was delivered through PR105 on remote main32c12793. UCU-11 remote push
+and associated CI follow local acceptance under explicit maintainer approval;
+application release remains separate. The current pin is authoritative in
+`docs/automation/parity-baseline.md`. The shared upstream checkout and unrelated
+teletext work remain untouched. Approved hardware/platform debt stays unverified.
 
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
@@ -23,8 +25,10 @@ correcting the initial v26.11.13 reference. Its verified terminal source is
 `f75abe5322f2a05099579df9e95acb675949c780`. UCU-11 owns acceptance/evidence in
 `docs/progress/milestones.toml`. Later upstream changes are outside this window.
 The separate branch combines verified remote main with accepted UCU-10 work;
-main's ongoing teletext work stays intact. Main push, CI and publication remain
-withheld. The approved hardware/platform debt remains explicitly unverified.
+main's ongoing teletext work stays intact. Local acceptance passes; the maintainer
+authorizes remote push and associated CI after acceptance, retrying only failed
+specific jobs. Application release remains separate. Approved hardware/platform
+debt stays explicitly unverified.
 
 ## UCU-10 completed window
 
@@ -724,7 +728,7 @@ remain. See `post-publication-cleanup.json`.
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-10-14): `f75abe5322f2a05099579df9e95acb675949c780`
   — prep for release v26.11.3.
-- Ledger: **236 commits**, **232 accepted**, **4 UCU-11 pending**. UCU-09 and UCU-10 have **0 pending**.
+- Ledger: **236 commits**, **236 accepted**, **0 pending** through the fixed v26.11.3 boundary.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
@@ -5961,7 +5965,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 230 | `f5b5e9aa` | fix: nested filler sequences (#3088) | Port | Bounded YAML filler expansion and persisted scheduler continuity | `fix(core): expand nested filler definitions once per build` | ucu-10; production baseline fails repeat/title and continuity. Existing bounded expansion now resolves filler definitions after unchanged main expansion. All87 affected YAML checks, six SQLite reopen/preservation checks and shuffled-state continuation pass; native Windows counterpart passes. Cycles still fail before playback and refresh/state formats stay unchanged. UCU-10 owns evidence. |
 | 231 | `3b7d5f29` | chore: update to next v0.2.1 (#3089) | Adapt (ADR 0117) | upstream-baseline-catch-up | `build(next): adopt reviewed v0.2.1 packages` | ucu-10; Adopt released v0.2.1/source7f75012f as next-7f75012-ersatzrs.1, with independent patch retirement criteria and exact six-RID source/archive/payload pins. Authorized macOS CI is green ondd043f94;20 published assets match anonymous downloads. Linux/Windows no-bundle cold installation, managed restart, real bundled startup, decoded lifecycle and paired SSR/WASM gates pass. Native remains supported; UCU-10 owns local acceptance, not application push/CI/publication. |
 | 232 | `e6bb6c67` | prep for release v26.11.2 | N/A | Upstream CHANGELOG release heading/date/compare links | `docs(parity): record v26.11.2 reconciliation boundary` | ucu-10; full diff changes only upstream CHANGELOG.md. e6bb6c67 is the fixed release boundary; later commits are excluded. Baseline is not advanced while nine Next integration rows and final gates remain pending; no ErsatzRS release authorized. |
-| 233 | `7b623769` | fix: next hls subtitle rendition (#3090) | | | | ucu-11; provisional: Covered for the first half, Port for the second. Upstream stops advertising the HLS subtitle rendition unless the channel's text subtitle mode is Convert, because a Burn channel offered an empty track that froze VLC 3; ErsatzRS already gates that rendition on Convert (`crates/ersatzrs-web/src/transport/iptv/variant.rs:90`). The second half is the one to audit: upstream's MPEG-TS streams were requesting the HLS subtitle track they cannot use and started about ten seconds slower, so the audit has to confirm our MPEG-TS path never asks the Next session for that rendition and measure the start delay. Claude 2026-10-13 triage. |
-| 234 | `388ab6a0` | chore: update next (#3091) | | | | ucu-11; provisional: Adapt, folded into the row 214/231 pin decision. Upstream leaves the released v0.2.1 again for `v0.2.2-3b93b660-develop` one day later, which is worth noting for the rebase choice: their pin follows develop between releases, so ours should track a release tag rather than chase each snapshot. Claude 2026-10-13 triage. |
-| 235 | `8c3636c1` | fix: mpegts initial burst (#3092) | | | | ucu-11; provisional: Covered in the pipeline, Port in the shipped scripts. Upstream adds `-readrate_initial_burst 6` after `-readrate 1.0` so clients like Plex fill their buffer and start sooner, in both the generated command and its embedded MPEG-TS script. ErsatzRS already emits the flag from the pipeline with a burst of 8 (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:3427`), but neither shipped script carries it (`assets/Scripts/MpegTs/run.sh:3`, `assets/Scripts/MpegTs/run.bat:3`), so a channel using the script path starts without the burst. The audit should align the scripts and decide whether 8 or upstream's 6 is the value we keep. Claude 2026-10-13 triage. |
-| 236 | `f75abe53` | prep for release v26.11.3 | | | | ucu-11; provisional: N/A (upstream CHANGELOG heading, date and compare links for v26.11.3, plus the pin moving from the `v0.2.2` develop snapshot to the released `v0.2.2` tag), like rows 203, 208 and 232. Two things are worth carrying forward: upstream released v26.11.1, v26.11.2 and v26.11.3 within a day, and it pins a develop snapshot between releases and the release tag at each one — which is the pattern the row 214/231 pin decision should follow rather than chasing snapshots. Claude 2026-10-13 triage. |
+| 233 | `7b623769` | fix: next hls subtitle rendition (#3090) | Port / Covered | Convert-only optional HLS text and authenticated media-only TS wrapper | `fix(web): isolate HLS text from MPEG-TS requests` | ucu-11; existing Convert-only guard retained; subtitles=false suppresses only text on normal/preview masters. TS reads authenticated AV media directly. Integrated Linux/Windows decoded Burn/Convert/Off and selected Dutch tracks, cached URL/state/reconnect, four headed Chromium/Firefox cases pass. Actual Next Convert TS starts2s without requesting text. UCU-11 owns exact source/runtime and required local gate evidence. |
+| 234 | `388ab6a0` | chore: update next (#3091) | Adapt (ADR 0117) | Released Next022 immutable public six-RID acquisition and packaging | `build(next): adopt verified released v0.2.2 packages` | ucu-11; replace intermediate develop with released source4a0b59a, next-4a0b59a-ersatzrs.1. All20 public assets and19 listed checksums match; six published packages stage, Linux/Windows Downloaded/Managed/Bundled startup and decoded runtime pass. Both unchanged unpatched retirement cases fail, retaining only RTSP/image patches. No FFmpeg amendment/build needed; approved unavailable hardware/ARM/macOS application debt stays explicitly unverified. |
+| 235 | `8c3636c1` | fix: mpegts initial burst (#3092) | Port | Generated Hybrid remux and bundled Windows/Unix scripts | `fix(streaming): bound MPEG-TS startup burst to six seconds` | ucu-11; add readrate_initial_burst6 after readrate1.0 to the final wrapper and both scripts; retain separate8s producer policy, AV copy/maps and mux/PCR settings. Exact snapshots pass. Native/Next full TSDuck87/83 pass; twenty-second Hybrid captures yield25.980/25.998s media, startup4/2s, five rolling samples each and zero low intervals. Existing VBR jitter stays informational. UCU-11 owns decoded/state/transport evidence. |
+| 236 | `f75abe53` | prep for release v26.11.3 | N/A / Covered | Upstream release metadata and released Next022 pin | `docs: record accepted v26.11.3 catch-up boundary` | ucu-11; exact CHANGELOG and pin diff reviewed; released022 adoption is covered by row234. All236 ordered SHA/subject pairs match fixed v26.11.3. Required local gates pass; advance the authoritative baseline table with accepted dispositions. Later upstream releases and application publication remain excluded; authorized remote delivery/CI follows acceptance. |

@@ -288,6 +288,12 @@ release section when tagging a release.
 - Pin the supported Rust compiler explicitly in reviewed Next source builds,
   and verify the updated upstream Windows dispatcher checksum for Next v0.2.1.
 
+- Adopt the published, checksum-pinned six-platform Next v0.2.2 dependency,
+  preserving converted-caption cue intervals, timestamp maps and WebVTT settings
+  across HLS segments. Retain the demonstrated RTSP/image corrections and source
+  provenance. Linux/Windows startup and decoded playback pass; approved
+  hardware/ARM/macOS application acceptance remains explicitly unverified.
+
 - Rebase the reviewed Next runtime to v0.2.1 across all six platforms, retaining
   the demonstrated RTSP and scheduled-image corrections and exact package pins.
   Verified public packages support automatic acquisition, bundled startup and

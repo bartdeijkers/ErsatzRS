@@ -28,7 +28,9 @@ hardening. Direct transcode-to-MPEG-TS output shares that muxing helper, so the
 `.ts` routes do not rely on HLS-specific stabilization. Command snapshots prove
 the wrapper and legacy concat paths stay observably different.
 
-UCU-11 owns pending remux-burst/subtitle acceptance.
+UCU-11 owns accepted Convert-only text/media-only TS, six-second wrapper/script
+burst and realtime pacing, plus exact decoded/TSDuck evidence. The separate
+eight-second producer policy remains.
 
 The MPEG-TS script hook mirrors ErsatzTV for the modern wrapper path. Packaged
 `assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}` resources seed the default
@@ -47,11 +49,9 @@ Mirror channels resolve active media from their generated source at
 timeline. FFmpeg profile, branding, selectors, watermarks, and language choices
 continue to come from the requested target channel.
 
-Runtime proof: The 2026-06-29 TSDuck gate passed all 86 checks across direct,
-legacy, HLS-direct and hybrid paths after mux timing was unified, with zero
-continuity-counter/PTS/DTS/PCR-leap faults. Legacy, hybrid and HLS-direct
-`pcrverify` checks reported zero jitter faults. HLS Segmenter stitched jitter
-remains informational because of real discontinuity markers.
+Runtime proof: the 2026-06-29 TSDuck gate passed86 checks across all four
+pipelines with no transport/leap faults. Current Native/Next acceptance belongs
+to UCU-11; VBR stitched PCR jitter remains informational.
 
 Live add-on proof: On 2026-08-17, the transport-mode resolver was corrected so
 channels configured for Transport Stream Hybrid and explicit `mode=ts`

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0` |
-| **Commit subject** | `prep for release v26.11.2` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0 |
+| **Pinned commit** | `f75abe5322f2a05099579df9e95acb675949c780` |
+| **Commit subject** | `prep for release v26.11.3` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f75abe5322f2a05099579df9e95acb675949c780 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -66,14 +66,15 @@ UCU-09 has **208 accepted and 0 pending in-scope rows**. This supersedes the
 retain later commits as post-v26.11.1 work without extending or reopening UCU-09.
 Fetching refs never advances the parity pin.
 
-The explicitly authorized UCU-10 window adds rows209–232 through v26.11.2.
-Its local acceptance is complete on 2026-10-14: **232 accepted and 0 pending**
-across UCU-00–10, with the existing approved hardware/platform debt unverified.
-The Pin table above advances only in the isolated UCU-10 application worktree.
-Main and the shared upstream checkout remain untouched; substantive source
-review uses the exact fixed commit through `git show`, not a mismatched tree.
-Only the separately authorized source-candidate branch/CI and Next dependency
-publication occurred. Application push, CI and release remain separate gates.
+UCU-10 accepted rows209–232 through v26.11.2 and was delivered through PR105.
+UCU-11 accepts rows233–236 through fixed v26.11.3 on2026-10-15: **236 accepted,
+0 pending** across UCU-00–11. The Pin table advances with their reviewed ordered
+dispositions after required local acceptance. Approved hardware/platform debt
+remains explicitly unverified. Substantive source review uses exact git show
+revisions; the shared upstream checkout is preserved to avoid disrupting other
+work. Ordinary gap discovery still requires the checkout identity check above.
+Remote application push and associated CI are authorized after local acceptance;
+retry only failed specific CI jobs. Application release remains separate.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not
@@ -89,7 +90,7 @@ pin/subject/URL together only with maintainer commit authorization, then move
 the clean upstream checkout to that SHA. Bootstrap leaves the pin intact. Milestone acceptance and evidence live in
 `docs/progress/milestones.toml`; ADR 0095 accepts the conditional new-channel and
 standalone-preview Next default with bundled or verified automatic acquisition.
-Final integrated acceptance remains open.
+The owning milestone records completed local acceptance and separate delivery status.
 
 The active catch-up procedure uses direct substantive Codex review under the
 maintainer's 2026-09-20 decision; Claude review is not a current gate. AMM-N-03

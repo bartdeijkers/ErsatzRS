@@ -1,11 +1,11 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.2)'
+etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.3)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
 summary    = """
-UCU-00–10 are Complete: 232 accepted rows through v26.11.2, ending at
-e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0. Native, stored engine/profile choices
+UCU-00–11 are locally Complete: all236 rows through v26.11.3 are accepted.
+The authoritative current baseline is docs/automation/parity-baseline.md. Native, stored engine/profile choices
 and international audio/subtitle behavior remain supported. UCU-10 is delivered
 through PR105 on remote main 32c12793. Run 38623973857 passes every non-browser
 gate and Chromium; Firefox has 345 passes, 30 skips and only fixture-collision
@@ -14,13 +14,19 @@ case 329 failed. The maintainer requires only that corrected headed case rerun:
 passed checks are reused, not claimed as a new full green exact-commit run.
 UCU-10 owns the complete receipts and superseding verification amendment.
 
-UCU-11 remains In progress: four pending rows 233–236 through fixed v26.11.3,
-f75abe5322f2a05099579df9e95acb675949c780. Component/source-candidate proof is not
-final integrated acceptance. Its main push, application CI and publication are
-unauthorized. Production Next is 021; 022 is an unpublished candidate. No new
-release is authorized. Approved hardware/platform debt stays explicitly
-unverified; ARM/macOS application proof is maintainer-approved debt (2026-10-01),
-not inferred from packages or another GPU. Linux/Windows proof is not waived.
+UCU-11 accepts rows233–236: Convert-only optional HLS text, media-only TS
+wrappers, reviewed released Next022 and the six-second remux burst. All20
+anonymous asset downloads and six-RID staging pass. Linux/native Windows
+cold/cache/bundle startup, matched bundles, six decoded lifecycle smokes,
+four focused headed browser cases, full workspace lint/test-closeout and
+required local parity gates pass. TSDuck passes87 Native/83 Next copy checks;
+focused pacing/startup captures pass22 each with five periodic samples and no
+low-delivery intervals. The owning milestone records exact identities, results
+and retained evidence. Remote push/associated CI follows local acceptance under
+the2026-10-15 amendment; only failed specific jobs are retried. Application
+release remains separate. Approved hardware/platform debt stays explicitly
+unverified; ARM/macOS application proof is maintainer-approved debt, never
+inferred from packages or another GPU. Linux/Windows proof is not waived.
 
 UCU-10 owns APNG, nested filler, ZIP, search, YAML/dependency compatibility and
 local final-gate proof. All six published Next021 packages/staging and actual

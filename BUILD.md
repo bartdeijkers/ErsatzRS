@@ -668,13 +668,15 @@ See the disk-space note in
 
 ## Optional Next engine artifacts
 
-Release archive staging requires Python 3.12 and access to the pinned
-[Next dependency snapshot](https://github.com/bartdeijkers/ErsatzRS/releases/tag/next-e88b2d7-ersatzrs.1).
-The snapshot contains six verified source builds with the temporary live RTSP
-correction accepted in ADR 0116. Every archive records source, lockfile, patch
-and payload hashes. While this repository is private, host staging
-uses the existing GitHub CLI login or the CI job token. Credentials never enter
-Docker build arguments, layers or containers.
+Release archive staging requires Python 3.12 and access to the exact public
+Next distribution selected by the canonical shared manifest,
+`scripts/release/next-patches/manifest.json`. The local UCU-11 integration now
+pins [Next v0.2.2](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-4a0b59a-ersatzrs.1)
+in `bartdeijkers/ErsatzRS-next`; integrated Linux/Windows adoption and required
+local acceptance pass. The six verified source builds retain both temporary corrections
+under ADR 0117. Each archive records source, lockfile, patch and payload hashes.
+The dependency assets are publicly downloadable without credentials. Package
+staging verifies the pinned checksums and provenance; it never rebuilds Next.
 `scripts/release/stage-next.py --rid <rid> --output <stage>/next` stages the
 `ersatztv-channel` executable, its MIT license and `origin.json`. Archive
 packaging then moves the executable (with `.exe` on Windows) to the package
@@ -684,12 +686,13 @@ same verified Next archive beside `ersatztv-channel.exe` at the package root.
 Missing or invalid companions fail staging before the destination is published.
 It checks archive and license SHA-256 values pinned in source and records
 the selected asset, full pinned source revision and license hash. Staging rejects
-an artifact whose revision differs from `PINNED_REVISION` in the script, even
-when upstream replaces the mutable develop release. Review upstream changes,
-validate the selected runtime, update the pin and obtain green exact-SHA CI
-before releasing a new pin. Missing artifacts, invalid checksums or missing
+an artifact whose revision differs from the canonical manifest's
+`upstream_revision`, even when upstream replaces the mutable develop release.
+Review upstream changes, validate the selected runtime and update the pin.
+Application releases still require their own acceptance and green exact-SHA CI;
+dependency publication needs its explicit maintainer authorization. Missing artifacts, invalid checksums or missing
 licenses fail packaging. A new accepted snapshot requires new pinned hashes.
-All six supported RIDs use the same reviewed source and patch. Source and
+All six supported RIDs use the same reviewed source and two patches. Source and
 lockfile hashes are pinned alongside the archive hashes; altered provenance
 fails staging. Reproduction instructions are below. The former unmodified
 ARMv7 source helper remains available for future patch retirement, but refuses
@@ -704,7 +707,13 @@ executable into `/usr/local/bin`, retaining license/provenance under
 `/usr/local/bin/next`; Python is not added to the runtime image. Bake
 passes `VERSION` as `NEXT_RELEASE_REFRESH` for explicit cache refreshes;
 archive hashes remain fixed. Before a Docker build, stage the snapshot on the
-host with `gh release download next-e88b2d7-ersatzrs.1 --repo bartdeijkers/ErsatzRS --dir .next-snapshot`.
+host using the exact current tag (not a mutable upstream release):
+
+```sh
+gh release download next-4a0b59a-ersatzrs.1 \
+  --repo bartdeijkers/ErsatzRS-next --dir .next-snapshot
+```
+
 The gitignored directory is copied only into the staging layer; runtime
 images receive the selected executable, license and provenance. For repeated manual builds of the same
 version, use `--no-cache-filter next-official` with buildx, or change
@@ -716,11 +725,12 @@ Current playback acceptance and approved platform debt are recorded in the
 [structured progress records](docs/progress/README.md); a successful artifact
 staging test does not prove playback acceptance.
 
-### Temporary Next source correction (ADR 0116)
+### Temporary Next source corrections (ADRs 0116 and 0117)
 
-The accepted dependency snapshot uses a narrowly scoped live RTSP buffering
-patch. Application milestone and release gates remain separate. Prepare its
-exact reviewed source with:
+The reviewed dependency retains the live RTSP buffering and scheduled-image
+lifetime corrections. Each patch has independent upstream retirement criteria;
+application milestone and release gates remain separate. Prepare its exact
+reviewed source with:
 
 ```sh
 python3 scripts/release/prepare-next-source.py \
@@ -737,18 +747,26 @@ the recorded distribution version; preserve source/patch provenance, licenses
 and Windows companions. A prepared source tree alone does not prove package
 or playback acceptance.
 
-For UCU-11's v0.2.2 candidate, use
-`scripts/release/next-patches/v0.2.2/manifest.json`. The same existing source
-preparation, packaging and macOS candidate workflow apply. Candidate builds do
-not authorize a push, CI dispatch, production pin change or publication.
+For UCU-11's v0.2.2 source, the versioned review manifest is
+`scripts/release/next-patches/v0.2.2/manifest.json`. The existing preparation,
+packaging and macOS source workflow apply. Both explicitly authorized macOS
+jobs pass in source-candidate run 38542065540. The maintainer separately approved
+publication of the exact six-RID `next-4a0b59a-ersatzrs.1` dependency release;
+all 20 assets pass anonymous download/checksum checks. The canonical shared
+manifest selects these published packages. Integrated Linux/Windows acquisition,
+managed restart, bundled startup, decoded playback and required local UCU-11
+gates pass. Remote push and associated CI follow acceptance, with failed specific
+CI jobs retried individually. Application release remains separate;
+approved hardware/ARM/macOS application debt remains explicitly unverified.
 
 For UCU-10's v0.2.1 successor, the reviewed source manifest is
 `scripts/release/next-patches/v0.2.1/manifest.json`. Pass it with `--manifest`
 to both source preparation and packaging. Its exact Windows companion hashes
-apply only to that reviewed source. The local application branch now pins all
-six verified packages in the canonical manifest. The separately authorized
-`next-7f75012-ersatzrs.1` dependency release is public; all20 assets pass anonymous
-download/checksum acceptance and real Linux/Windows cold acquisition. Use
+apply only to that reviewed source. UCU-10 adopted all six verified packages;
+that delivered main integration remains distinct from local UCU-11 development.
+The separately authorized `next-7f75012-ersatzrs.1` dependency release remains
+public; all20 assets pass anonymous download/checksum acceptance and real
+Linux/Windows cold acquisition. Use
 `stage-next.py --snapshot-dir` with the verified package directory for offline
 staging. Future dependency publication still requires maintainer instruction.
 The existing macOS candidate workflow can select this manifest through its

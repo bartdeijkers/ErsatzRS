@@ -81,10 +81,13 @@ Its packages are publicly available, and the application changes are integrated
 on main; a new application release is not published. Approved hardware/platform
 acceptance debt remains explicitly unverified.
 
-The next local catch-up window is **v26.11.3**. Its Next v0.2.2 candidates
-correct converted-caption timing across HLS segments; package and integrated
-application acceptance are still in progress. This is not a published application
-release. The Native engine remains supported.
+The **v26.11.3** catch-up is locally accepted, including reviewed Next v0.2.2
+caption timing and the six-second MPEG-TS startup burst. Its exact six-platform
+[dependency packages](https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-4a0b59a-ersatzrs.1)
+are published and checksum-pinned. Linux and Windows startup, decoded playback
+and the required local gates pass. Application remote delivery and CI follow
+local acceptance; a new application release remains separate. The Native engine
+remains supported, and approved hardware/platform debt stays explicitly unverified.
 
 Teletext (Phase 9) and the "The Box" video-jukebox extension (Phase 10) are
 planned work. They are not advertised as features of this release.

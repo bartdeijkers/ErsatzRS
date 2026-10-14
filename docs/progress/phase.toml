@@ -62,16 +62,23 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-14 UCU-11 remains In progress through the fixed released v26.11.3
-f75abe5322f2a05099579df9e95acb675949c780, ordered rows233–236. The separate
-feat/ucu-11 checkpoint integrates delivered remote main32c12793, preserving
-all accepted UCU-10 and newer teletext work. Strict affected infra/web/FFmpeg
-lint, formatting and progress pass; both affected actual Next022 subtitle cases
-also pass. Finish integrated actual-host adoption/acceptance,
-then complete required local final gates. Component and source-candidate proof
-is retained in ucu-11; production Next stays021, candidate022 is not published.
-Native, stored choices, international tracks and approved explicitly unverified
-debt remain. UCU-11 main push, application CI and publication are not authorized.
+2026-10-15 UCU-11 local acceptance is Complete through fixed v26.11.3,
+ordered rows233–236. The feat/ucu-11 candidate integrates delivered remote
+main32c12793 and preserves unrelated ongoing teletext work. The milestone owns
+exact identities and all required local gates: full workspace strict lint,
+6312 nextest passes plus doctests, matched Leptos/bundles, dependency audit,
+web parity checks, six Linux/Windows decoded mode smokes, published022
+cold/cache/bundle adoption, affected headed browsers and Native/Next TSDuck.
+Focused startup/pacing captures pass with five periodic samples and no low
+intervals; Native starts4s and Next Convert2s. All236 ledger rows are accepted;
+the baseline table advances with them. Native, stored choices, international
+tracks and approved explicitly unverified hardware/platform debt remain.
+Next push the accepted exact candidate and run its authorized application CI;
+retry only failed specific jobs. Application release remains separate.
+Maintainer-authorized UCU-10 cleanup removed both completed worktrees/local
+branches and unused Linux/Windows caches; evidence remains under
+local tmp/evidence/ucu10-32c12793/. Keep active UCU-11 caches until delivery
+finishes, then retain its evidence and perform the same scoped cleanup.
 
 UCU-10 is delivered through PR105 on remote main32c12793, with232 accepted rows
 through v26.11.2. Run38623973857 has every non-browser gate and Chromium green;

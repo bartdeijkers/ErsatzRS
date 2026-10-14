@@ -23,7 +23,7 @@
       "evidence": "docs/adr/0117-temporary-next-compatibility-corrections.md"
     }
   ],
-  "publication": "Not authorized; local reviewed candidate only",
+  "publication": "Published with explicit maintainer approval as bartdeijkers/ErsatzRS-next@next-4a0b59a-ersatzrs.1; application adoption and delivery gates remain separate",
   "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/4a0b59a66bef93b908e5eb2086847418492e2555",
   "windows_companions_sha256": {
     "libvpl.dll": "3c439318d55285631aaea66b1d3701d4dba19e6c679561bebb71ace9ed521a08",
