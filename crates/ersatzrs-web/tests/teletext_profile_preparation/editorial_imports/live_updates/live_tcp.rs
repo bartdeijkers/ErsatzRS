@@ -301,6 +301,9 @@ impl Origin {
     pub(in super::super::super) fn captures(&self) -> &[Capture; 3] {
         &self.state.captures
     }
+    pub(in super::super::super) fn single_requests(&self) -> bool {
+        *self.state.seen.lock().unwrap() == [true; 3]
+    }
 }
 
 impl Drop for Origin {
@@ -317,9 +320,12 @@ pub(in super::super::super) struct Observer {
 
 impl Observer {
     pub(in super::super::super) fn start(origin: &Origin) -> Self {
+        Self::start_for(origin, 1, "observer")
+    }
+    pub(in super::super::super) fn start_for(origin: &Origin, channel: u8, viewer: &str) -> Self {
         let stop = CancellationToken::new();
         let cancel = stop.clone();
-        let url = origin.url(1, "observer");
+        let url = origin.url(channel, viewer);
         let directory = origin.state.directory.clone();
         let started = origin.state.started;
         let task = tokio::spawn(async move {
@@ -864,6 +870,25 @@ async fn offline_warm_raw_captures_verify_clock_transport_av_and_authored_text()
     let ffprobe = client_capture::selected("FFPROBE_PATH");
     let tsanalyze = client_capture::selected("ERSATZRS_TELETEXT_TEST_TSANALYZE");
     client_capture::check_tools(&ffmpeg, &ffprobe).await;
+    verify_saved_native_pages(
+        &directory,
+        &directory.join("offline-native-proof"),
+        (&ffmpeg, &ffprobe, &tsanalyze),
+        &["124"],
+        false,
+    )
+    .await;
+}
+
+/// Recheck retained raw synthetic captures without constructing new responses.
+/// This deliberately grants no success to the original live trial or actors.
+pub(in super::super::super) async fn verify_saved_native_pages(
+    directory: &Path,
+    output: &Path,
+    tools: (&str, &str, &str),
+    pages: &[&str],
+    zone_edit: bool,
+) {
     let source = read_bounded(&directory.join("source.ts"), MAX_CAPTURE).unwrap();
     assert!(!source.is_empty() && source.len().is_multiple_of(188));
     let names = ["day", "observer", "night"];
@@ -881,9 +906,8 @@ async fn offline_warm_raw_captures_verify_clock_transport_av_and_authored_text()
         capture.wire.lock().unwrap().bytes.clone_from(&raw[index]);
         capture
     });
-    let output = directory.join("offline-native-proof");
-    std::fs::create_dir(&output).expect("offline proof destination must not already exist");
-    verify_native(&output, (&ffmpeg, &ffprobe, &tsanalyze), &source, &views).await;
+    std::fs::create_dir(output).expect("offline proof destination must not already exist");
+    verify_native_pages(output, tools, &source, &views, pages, zone_edit).await;
     assert_eq!(
         read_bounded(&directory.join("source.ts"), MAX_CAPTURE).unwrap(),
         source
@@ -895,7 +919,8 @@ async fn offline_warm_raw_captures_verify_clock_transport_av_and_authored_text()
         );
     }
     write_new(&output.join("offline-verification.json"), &serde_json::to_vec_pretty(&json!({
-        "probe_version":1,"scope":"offline independent clock, exact TSDuck counts, source AV and decoded page124 text for retained raw synthetic captures",
+        "probe_version":1,"scope":"offline independent clock, exact TSDuck counts, source AV and decoded page text for retained raw synthetic captures",
+        "pages":pages,"zone_edit_checked":zone_edit,
         "source_sha256":hash(&source),"inputs":names.iter().enumerate().map(|(index,name)|json!({
             "file":format!("{name}-ordinary.ts"),"bytes":raw[index].len(),"sha256":hash(&raw[index])
         })).collect::<Vec<_>>(),"original_inputs_unchanged":true,

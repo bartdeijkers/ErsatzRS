@@ -37,6 +37,8 @@ use serde_json::{json, Value};
 mod live_client;
 #[path = "effective_editorial_imports/live_updates.rs"]
 mod live_updates;
+#[path = "effective_editorial_imports/natural_expiry.rs"]
+mod natural_expiry;
 
 async fn v3_fixture() -> AuthoringFixture {
     let mut fixture = AuthoringFixture::new().await;

@@ -2724,6 +2724,83 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-14 natural-expiry diagnostic checkpoint (acceptance incomplete):
+Criterion: natural original Lua expiry -> independent accepted-base restoration
+on the SAME ordinary responses, followed by suitable-client clearing/navigation.
+Canonical tmp/phase9-natural-expiry/identity.json SHA256
+70d50242059483f1ac59db7e84c97f0e23ef420244a1104f7b26bb9fadb0e207
+binds base3c75c20249575a5ef2e93ae17c5be31331ef087e plus four final test
+inputs, preserved seven foreign deltas, exact scope/source/capture/decoder results
+and retained failed trials. No production/UI/schema/package/FFmpeg argv changes.
+
+The new fixture explicitly enables existing bases, prepares/previews/publishes fresh
+base-role200/201 originals and publishes command-free four60s Scripted items.
+Three ordinary direct responses attach first. Actual Reset then uses genuine60s
+media with add_duration('clip','00:00:12',{trim=true,stop_before_end=true});
+command-free Continue starts at that exact item/interval finish without extending
+On. A NEW scoped original/Q concept is prepared, previewed and explicitly published
+before its own genuine expiry. Old originals/expiry and all source clocks remain
+unchanged; no interval edits, fake media duration, source loops or reconnects.
+Normal run19c0ad87-d129-4d9b-91ed-9f4cee3b6912 passes one case;177 filtered
+cases are not coverage. Initial d521886a-ce4d-44e0-88e9-67317b0c1f5b wrongly
+reloaded base as current during active On. The existing guard correctly returns
+None; the corrected test checks retained accepted history during On and fully
+reloads after expiry. No production guard is weakened. Later changes affect only
+ignored/offline cases and mechanical field/duration spelling; this result is reused.
+
+Both live trials remain FAIL, never expiry acceptance. Run4bb5c7f7-c760-4f81-
+bc8f-e8c73f216b81 observes real expiry and two base cycles but fails the existing
+188000-byte post-fragment decoder floor. A bounded wait for actually received
+complete packets preserves the same180s deadline and EXACT UTC-expiry offset.
+Runa16642c7-facb-4991-8267-c866bd7e8a2d then reaches unchanged-state and
+bounded owned actor/source cleanup, but its strict post-expiry no-Q oracle fails.
+Stored original expiry20:04:05.009795400Z, observed20:04:05.010802608Z;
+first complete base models observed20:04:05.203109607Z, then another cycle at
+20:04:05.323010073Z. These are observer times, NOT Applied/sink acknowledgement.
+The unchanged raw Day expiry fragment independently decodes Q at fragment-relative
+SRT PTS40ms, followed by edit-free base at160/280ms. These are not absolute UTC or
+observed display durations; txt_duration1000ms is a decoder option. Exact expiry
+positions, old Q and the unmodified no-Q oracle remain retained. No grace period,
+late marker, raw prefix removal or accepted permanent limitation is introduced.
+
+Production source confirms an existing original-expiry timer: monitor recovery and
+sleep clamp to next_transition, clear cached authority and withdraw before fresh
+reads. An already-prepared immutable window completes at a sink-flushed cycle
+boundary; ordinary output has a256KiB downstream buffer. Current UTC byte taps do
+NOT prove whether Q was sink-accepted before expiry or newly emitted afterward.
+Successful Applied epoch/sequence/window-end/time is private in the ordinary path;
+existing traces report rejection/ownership faults. Missing ownership provenance,
+rather than a demonstrated missing timer, determines the next correction.
+
+Reuse retained bytes for independent checks instead of another live retry.
+Offline run4edabe3f-fdf3-4257-b36f-4e15fe42aff3 passes one case: three raw
+clock/TSDuck/FFprobe/AV checks and six page200/201 decodes, including Day200-only
+Q somewhere in the complete pre/post capture. All raw captures have zero qualified
+PTS gaps/partial tails; source/capture hashes stay exact. This does NOT repair the
+failed strict expiry trial or prove clearing/client navigation. Changed helper's
+legacy124 path passes0df3ae64-2ebb-44eb-9a12-dde4df68a09a on byte-identical
+retained successful native6 captures: three transport/AV checks and three decodes,
+not new live work. Offline receipts explicitly deny original live/client/engine
+acceptance. Strict web all-target Clippy and final format pass; initial field-name/
+duration lint failures remain retained and no exceptions are added.
+
+Next concrete action: observe existing ordinary-output proposal generation/original
+transition deadline alongside sink-acknowledged output epoch, sequence, window-end
+packet and acceptance time at ForwardProgress::forward_ready/PumpControl::acknowledge.
+Use bounded existing observation/tracing, preserve actual source/counters/ownership
+and classify the exact Q tail. Correct any actual late expired cycle; do not infer
+Applied from first-seen base or replace the ordinary path with an injected binding.
+Then rerun this original expiry oracle and prove headed clearing/navigation.
+The60s-versus4min fixture gap is solved by a genuinely NEW short scope, not by
+relabeling prior scopes; complete natural-expiry acceptance remains open.
+Whole-host restart, automatic scoped readiness/applied acknowledgement, current
+guide qualification, full authored Level2.5/fallback/editor/resources/zones and
+source/Next/native/platform/playback requirements remain. Ordinary continuous
+legacy-wrapper automatic selected-teletext hookup is a separate matrix gap;
+explicit injected wrapper tests do not prove that ordinary path. Default-capacity
+wait-slate timing stays open. Engine-first and every milestone criterion/status/
+dependency remain unchanged. No push before UCU10/UCU11 merge and maintainer turn.
+
 2026-10-14 scoped cumulative updates and real Lua Off on warm ordinary URLs:
 Criterion: profile -> validated Q concept -> preview/explicit publication -> same
 ordinary responses -> cumulative QR preview/publication -> genuine Scripted Lua

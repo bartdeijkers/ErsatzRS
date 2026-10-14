@@ -1407,3 +1407,10 @@ Required existing-decoder reselection is explicit; controlled client closure,
 root image inspection and native exit0/success are separate checks. A successful
 representative warm flow does not prove natural expiry, whole-host restart,
 resource retirement or full engine acceptance.
+
+
+The native-only natural-expiry selectors and their retained-byte verifier use
+actual Reset trimming, command-free Continue and exact observer-UTC boundaries.
+Follow the [natural-expiry diagnostic and offline inputs](../../docs/reference/teletext-design-interchange.md#natural-expiry-same-response-diagnostic).
+The current strict expiry gate is failing and remains an acceptance blocker;
+correct later Base output or green offline checks do not certify client clearing.

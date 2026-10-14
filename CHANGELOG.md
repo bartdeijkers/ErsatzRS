@@ -50,7 +50,10 @@ release section when tagging a release.
   cumulative replacement and genuine Lua Off now pass on the same warm streams,
   retaining channel isolation and ordinary playback; VLC requires teletext
   reselection after PMT replacement. Natural expiry, complete editor coverage
-  and engine acceptance remain open.
+  and engine acceptance remain open. A new same-response natural-expiry probe
+  retains the original scope and exposes old content at the observed expiry
+  boundary; independent saved-byte transport/AV checks pass, while sink-boundary
+  qualification and actual client clearing remain required.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

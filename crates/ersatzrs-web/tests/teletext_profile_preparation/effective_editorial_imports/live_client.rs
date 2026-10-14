@@ -162,7 +162,7 @@ async fn publish_lua_state(fixture: &AuthoringFixture, channel: i64, index: Opti
     scripted_controls::publish_result(&fixture.fixture, &result).await;
 }
 
-async fn prepare(fixture: &AuthoringFixture, channel: i64) -> TeletextAuthoringIdentity {
+pub(super) async fn prepare(fixture: &AuthoringFixture, channel: i64) -> TeletextAuthoringIdentity {
     let observed = observe_effective_teletext_authoring_selection(
         &fixture.fixture.state.application,
         channel,

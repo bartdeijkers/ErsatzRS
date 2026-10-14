@@ -158,6 +158,16 @@ is required; natural original expiry/base return, automatic resource/cache
 retirement and complete suitable-client/engine acceptance remain open. The parity record and P9A-04
 own verification and the next concrete connection.
 
+The natural-expiry diagnostic now uses a genuinely new trimmed Scripted scope
+and command-free Continue on existing ordinary responses. It observes fresh base
+restoration but retains a failing exact observer-UTC no-Q oracle. Observer time
+and first-seen base are not sink acceptance or Applied. Existing original-expiry
+monitor clamping is present; prepared cycle boundaries and downstream buffers
+must be distinguished from late expired emission using actual ordinary-output
+acknowledgement provenance. No grace or authoring restriction is accepted.
+P9A-04 and the scoped-expiry debt own evidence and the next bounded observation;
+full natural expiry/client/engine acceptance stays open.
+
 ## Alternatives Considered
 
 - Store an interval as a base snapshot: loses authority and original expiry.

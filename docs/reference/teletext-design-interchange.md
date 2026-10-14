@@ -4020,6 +4020,39 @@ scope; do not extend captured authority or replay bytes after EOF. Whole-host
 restart, automatic scoped readiness/applied acknowledgement, full authored
 Level2.5/fallback/editor/resources/panels and platform/playback acceptance remain.
 
+### Natural-expiry same-response diagnostic
+
+The ignored selector
+`original_ordinary_responses_restore_accepted_base_after_natural_scoped_expiry`
+uses `ERSATZRS_TELETEXT_NATURAL_EXPIRY_DIR` with the same pinned native overrides.
+It publishes fresh Base originals and command-free genuine60s Scripted items,
+attaches three original ordinary responses, then creates a NEW short On scope
+through `add_duration('clip','00:00:12',{trim=true,stop_before_end=true})` and
+command-free Continue. The scope expires at its actual last-item finish; neither
+old scope identity nor source clocks/bytes are relabeled or extended. A Q concept
+is previewed and explicitly published before expiry.
+
+The oracle waits actual UTC expiry, records exact complete-packet positions and
+requires two fresh independently accepted Base cycles plus the decoder's existing
+packet floor. It decodes from the EXACT observed expiry offset, preserving any
+old-content prefix. Current native trials remain failed on that no-Q assertion.
+Observed byte time, first-seen Base and fragment-relative SRT timestamps do not
+prove sink acceptance or Applied; `txt_duration` is not observed display time.
+No grace, prefix trimming or acceptance follows from later Base restoration.
+P9A-04 owns receipts, the unclassified buffered-versus-late tail and required
+ordinary-output acknowledgement provenance. Actual headed clearing remains open.
+
+The separate ignored selector
+`offline_natural_expiry_raw_captures_verify_clock_transport_av_and_pages200201`
+uses `ERSATZRS_TELETEXT_NATURAL_EXPIRY_OFFLINE_INPUT_DIR` for those exact saved
+`source.ts`/three `*-ordinary.ts` files and
+`ERSATZRS_TELETEXT_NATURAL_EXPIRY_OFFLINE_OUTPUT_DIR` for a NEW output directory.
+It reuses existing independent clock/TSDuck/FFprobe/AV and page200/201 decoding,
+checks source/capture bytes remain exact and writes `offline-verification.json`.
+This checks complete captures, including Q before expiry; success cannot repair a
+failed exact-expiry, HTTP cleanup, client or engine acceptance. The legacy offline
+124 selector retains its own page/ownership checks through the same helper.
+
 ### Warm ordinary-URL client workflow
 
 The ignored selector `warm_ordinary_tcp_views_wait_for_headed` uses three original
