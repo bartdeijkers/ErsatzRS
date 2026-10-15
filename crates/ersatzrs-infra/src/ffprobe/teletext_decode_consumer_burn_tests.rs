@@ -6,17 +6,33 @@ use ersatzrs_ffmpeg::{FfmpegCommand, FrameSize};
 const FRAME_BYTES: usize = 492 * 250;
 const SAMPLE_STRIDE: usize = 5;
 
+#[path = "teletext_decode_consumer_clock_tests.rs"]
+mod clock;
+
+#[path = "teletext_decode_consumer_repeat_tests.rs"]
+mod repeat;
+
 fn burn_command(
     ffmpeg: &str,
     source: &PreparedLocalTeletextSource,
     caption: Option<&DecodedLocalTeletextPage>,
     seek: Option<Duration>,
 ) -> FfmpegCommand {
+    burn_command_with_video_buffer(ffmpeg, source, caption, seek, Some(800))
+}
+
+fn burn_command_with_video_buffer(
+    ffmpeg: &str,
+    source: &PreparedLocalTeletextSource,
+    caption: Option<&DecodedLocalTeletextPage>,
+    seek: Option<Duration>,
+    video_buffer_size: Option<u32>,
+) -> FfmpegCommand {
     let mut desired = DesiredVideoState::h264_1080p();
     desired.frame_size = FrameSize::new(492, 250);
     desired.scaled_size = desired.frame_size;
     desired.video_bitrate = Some(400);
-    desired.video_buffer_size = Some(800);
+    desired.video_buffer_size = video_buffer_size;
     let mut request =
         PipelineRequest::new(InputFile::video(source.resolved.to_str().unwrap()), desired)
             .with_source_video_stream(

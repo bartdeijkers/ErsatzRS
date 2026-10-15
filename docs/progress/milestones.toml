@@ -2968,6 +2968,75 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 isolated native clock diagnostics checkpoint (partial):
+Criterion: obtain actual bitmap/video/source-clock evidence without transferring
+an uncalibrated logging run's state to ordinary playback. The existing retained
+worker now offers test-only complete UTF-8 stderr bounded to8MiB; overflow/loss
+rejects rather than truncates. Production retains the same16KiB stderr tail,
+arguments, absolute deadlines, actual process/reader cancellation, source guard,
+work hold and confirmed cleanup/quarantine. No new runner or process pool exists.
+
+The unlogged-control hypothesis is resolved: three identical original bounded
+commands on one held eight-second source vary in decoded video at no seek,
+while all video clocks and audio match. The0.5s sought controls match completely.
+Initial strict-equality control c5cb41ea-6329-4621-bc06-212b21ef670b is retained as
+RED evidence, not retried to find green. Full saved decoded-framehash comparisons
+use native1/90000 timebases. Spatial inspection finds luma-only differences around
+lettering (x22..353/y6..32), maximum absolute sample delta62; chroma and measured
+glyph placement match. This does not introduce a caption tolerance or prove
+preencoder identity. Actual x264 SEI reports8 encoder threads, CBR400/VBV800.
+Request.thread_count is input-scoped and was not misrepresented as encoder control.
+
+A falsifiable control uses the EXISTING typed request with ONLY
+video_buffer_size=None. Generated command comparison proves exactly the omission
+of -bufsize:v800k, preserving bitrate, source/page/seek/graph/audio/muxrate and clock
+options. Actual encoded SEI confirms ABR without VBV; bounded controls retain
+CBR/VBV800. Twelve actual unlogged outputs cover both policies at no seek and0.5s,
+three each. All video clocks/audio match within each case; original bounded
+no-seek pixels vary again, while the no-buffer controls repeat exactly. No sample
+is sorted or interpolated. This supports a buffer/ratecontrol confound; it does
+not qualify bounded-production timing or prove all native inputs deterministic.
+
+The separate no-buffer clock test requires complete transport SHA equality between
+each generated sealed baseline and TWO explicitly unsealed derivatives: filter
+taps versus packet/pre-CFR logging. All six outputs calibrate in this policy.
+Contiguous native ordinals, actual NOPTS, transparent initialization and heartbeats
+are retained. Integer assertions join first nonblank888 to source event0 without
+seek (residual1us), and event3 at0.5s (residual0us). Video raw landing reconstructs
+397920/90000 and441120/90000. A later-PTS heartbeat precedes each older bitmap in
+delivery order; positive pre-CFR PTS becomes encodedPTS0 by CFR. These are
+calibrated observations for this distinct generated policy, not generic cue,
+source/seek or original bounded-profile acceptance.
+
+Both native tests pass, Nextest b2aabcd1-3812-4c28-80d7-2ffe3681d6a0. Reuse19
+unchanged process/reader/cancellation/diagnostic regressions from
+12a9a69c-1368-4589-8223-b77a8503af0c; exact local-source hashes match. The default
+fixture still generates the same bounded command, independently checked in the
+new native controls. Reuse234 unchanged argv snapshots and1a19d5bf's16 focused
+checks plus both actual ordinary routes. Final strict affected three-crate/
+all-target Clippy, formatting, architecture and progress checks pass. The compact
+feature summary points to this canonical evidence without repeating history.
+Evidence: tmp/phase9-unlogged-caption-repeat (red/green
+logs, sourceSHA c58a94db4893823a979044e6ab5131e6104081acb44309b367677885f5f7b18c,
+sealed commands/TS, full ordered framehashes, native SEI, spatial analysis and
+frozen source hashes). Prior calibration reds remain in the checkpoint below.
+
+Next compare the shared-owner0.5s cue with a separately opened subtitle-only
+owner using measured enabled-stream origins. Pinned demux_send sends heartbeats
+only within its InputFile; discarded AV streams cannot advance a subtitle-only
+owner, but subtitle-packet heartbeats still precede decoding. For the audited
+plain policy, video zero Kv=max(F+S,Eav), caption zero Kc=max(F,Ecaption), requiring
+caption offset Kc-Kv, not blindly -S. Existing input_instance/input_options support
+a test-only control; no production fence is loosened, opaque timing qualified or
+second independent source guard created. Verify exact output cue/onset and AV
+preservation before integrating decoder initialization and requested-window
+qualification in the existing selector. Whole-source EOF remains insufficient.
+General seek/charset/resource/large-window behavior and full authored Level2.5,
+QTM interchange, themes/zones, Lua/restart, localized headed admin, independent
+client/decoder/TSDuck and six-platform safety remain open. All129 agreed milestone
+contracts stay unchanged. No full engine acceptance, production guide, push or
+publication is claimed.
+
 2026-10-15 comparable consumer interval checkpoint (partial):
 Criterion: bind the actual source-caption consumer to the retained playback
 request before open/retry, preserving ordinary playback on rejection. A fresh

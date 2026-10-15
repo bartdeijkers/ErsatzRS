@@ -27,6 +27,15 @@ use crate::managed_process::ManagedProcess;
 
 const MAX_LOCAL_STDOUT_BYTES: usize = super::MAX_REMOTE_FFPROBE_OUTPUT_BYTES;
 const MAX_LOCAL_STDERR_TAIL_BYTES: usize = 16 * 1024;
+#[cfg(test)]
+const MAX_DIAGNOSTIC_STDERR_BYTES: usize = MAX_LOCAL_STDOUT_BYTES;
+
+#[derive(Clone, Copy)]
+enum StderrCapture {
+    Tail,
+    #[cfg(test)]
+    Complete,
+}
 // The managed group/job confirmation already has a five-second inner budget.
 const PROCESS_CLEANUP_TIMEOUT: Duration = Duration::from_secs(6);
 const READER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
@@ -37,6 +46,14 @@ struct LocalProbeOutput {
     status: ExitStatus,
     stdout: Vec<u8>,
     stderr: String,
+}
+
+/// Successful complete native-test diagnostics; no partial trace is returned.
+#[cfg(test)]
+#[derive(Debug)]
+pub(super) struct LocalProbeDiagnostics {
+    pub(super) stdout: Vec<u8>,
+    pub(super) stderr: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -148,6 +165,38 @@ pub(super) async fn capture_retained(
     deadline: Option<Instant>,
     retention: Option<ProbeRetention>,
 ) -> super::Result<Vec<u8>> {
+    capture_retained_output(command, path, deadline, retention, StderrCapture::Tail)
+        .await
+        .map(|output| output.stdout)
+}
+
+/// Capture successful native-test stdout and complete UTF-8 diagnostics under
+/// the same actual worker, source retention and operation scope as probes.
+/// Stderr is bounded to eight MiB; overflow or invalid UTF-8 fails the whole
+/// operation instead of silently trimming or replacing diagnostic events.
+#[cfg(test)]
+pub(super) async fn capture_retained_diagnostics(
+    command: FfprobeCommand,
+    path: PathBuf,
+    deadline: Option<Instant>,
+    retention: Option<ProbeRetention>,
+) -> super::Result<LocalProbeDiagnostics> {
+    let output =
+        capture_retained_output(command, path, deadline, retention, StderrCapture::Complete)
+            .await?;
+    Ok(LocalProbeDiagnostics {
+        stdout: output.stdout,
+        stderr: output.stderr,
+    })
+}
+
+async fn capture_retained_output(
+    command: FfprobeCommand,
+    path: PathBuf,
+    deadline: Option<Instant>,
+    retention: Option<ProbeRetention>,
+    stderr_capture: StderrCapture,
+) -> super::Result<LocalProbeOutput> {
     let label = path.display().to_string();
     let owner = local_cleanup_scope::register_current().map_err(|problem| match problem {
         AdmissionError::Closed => FfprobeError::Cancelled {
@@ -176,6 +225,7 @@ pub(super) async fn capture_retained(
             &mut response,
             owner.as_ref(),
             deadline,
+            stderr_capture,
         )
         .await;
         let confirmed = !matches!(result, Err(FfprobeError::CleanupUnconfirmed { .. }));
@@ -205,7 +255,7 @@ pub(super) async fn capture_retained(
             stderr: output.stderr,
         });
     }
-    Ok(output.stdout)
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -214,7 +264,7 @@ async fn run_owned(
     label: &str,
     response: &mut Response,
 ) -> super::Result<LocalProbeOutput> {
-    run_owned_scoped(command, label, response, None, None).await
+    run_owned_scoped(command, label, response, None, None, StderrCapture::Tail).await
 }
 
 async fn run_owned_scoped(
@@ -223,6 +273,7 @@ async fn run_owned_scoped(
     response: &mut Response,
     owner: Option<&OwnerGuard>,
     deadline: Option<Instant>,
+    stderr_capture: StderrCapture,
 ) -> super::Result<LocalProbeOutput> {
     // Channel closure is level triggered, including caller loss before the
     // task's first poll; no cancellation notification registration gap exists.
@@ -254,7 +305,7 @@ async fn run_owned_scoped(
     };
     run_process(
         child,
-        ProbeReaders::spawn(stdout, stderr),
+        ProbeReaders::spawn(stdout, stderr, stderr_capture),
         response,
         owner,
         deadline,
@@ -344,10 +395,11 @@ impl ProbeReaders {
     fn spawn(
         stdout: impl AsyncRead + Unpin + Send + 'static,
         stderr: impl AsyncRead + Unpin + Send + 'static,
+        stderr_capture: StderrCapture,
     ) -> Self {
         Self {
             stdout_task: Some(tokio::spawn(read_stdout(stdout))),
-            stderr_task: Some(tokio::spawn(read_stderr(stderr))),
+            stderr_task: Some(tokio::spawn(read_stderr(stderr, stderr_capture))),
             stdout: None,
             stderr: None,
         }
@@ -441,7 +493,39 @@ async fn read_stdout(mut stdout: impl AsyncRead + Unpin) -> Result<Vec<u8>, Loca
     }
 }
 
-async fn read_stderr(mut stderr: impl AsyncRead + Unpin) -> Result<String, LocalProbeProblem> {
+async fn read_stderr(
+    stderr: impl AsyncRead + Unpin,
+    capture: StderrCapture,
+) -> Result<String, LocalProbeProblem> {
+    match capture {
+        StderrCapture::Tail => read_stderr_tail(stderr).await,
+        #[cfg(test)]
+        StderrCapture::Complete => read_complete_stderr(stderr).await,
+    }
+}
+
+#[cfg(test)]
+async fn read_complete_stderr(
+    mut stderr: impl AsyncRead + Unpin,
+) -> Result<String, LocalProbeProblem> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0; 8192];
+    loop {
+        let length = stderr
+            .read(&mut chunk)
+            .await
+            .map_err(|_| LocalProbeProblem::StderrRead)?;
+        if length == 0 {
+            return String::from_utf8(bytes).map_err(|_| LocalProbeProblem::StderrRead);
+        }
+        if bytes.len() + length > MAX_DIAGNOSTIC_STDERR_BYTES {
+            return Err(LocalProbeProblem::OutputTooLarge);
+        }
+        bytes.extend_from_slice(&chunk[..length]);
+    }
+}
+
+async fn read_stderr_tail(mut stderr: impl AsyncRead + Unpin) -> Result<String, LocalProbeProblem> {
     let mut bytes = VecDeque::<u8>::with_capacity(MAX_LOCAL_STDERR_TAIL_BYTES);
     let mut chunk = [0; 4096];
     loop {

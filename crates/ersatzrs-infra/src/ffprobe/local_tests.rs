@@ -83,9 +83,34 @@ async fn stdout_overflow_is_detected_without_waiting_for_eof() {
 async fn stderr_continuously_drains_and_retains_only_the_bounded_tail() {
     let mut bytes = vec![b'a'; MAX_LOCAL_STDERR_TAIL_BYTES * 8];
     bytes.extend_from_slice(b"last diagnostic");
-    let result = read_stderr(bytes.as_slice()).await.unwrap();
+    let result = read_stderr(bytes.as_slice(), StderrCapture::Tail)
+        .await
+        .unwrap();
     assert_eq!(result.len(), MAX_LOCAL_STDERR_TAIL_BYTES);
     assert!(result.ends_with("last diagnostic"));
+}
+
+#[tokio::test]
+async fn complete_diagnostic_stderr_accepts_exact_bound_and_rejects_lossy_or_partial_traces() {
+    let bytes = vec![b'x'; MAX_DIAGNOSTIC_STDERR_BYTES + 1];
+    assert_eq!(
+        read_stderr(
+            &bytes[..MAX_DIAGNOSTIC_STDERR_BYTES],
+            StderrCapture::Complete
+        )
+        .await
+        .unwrap()
+        .len(),
+        MAX_DIAGNOSTIC_STDERR_BYTES
+    );
+    assert_eq!(
+        read_stderr(bytes.as_slice(), StderrCapture::Complete).await,
+        Err(LocalProbeProblem::OutputTooLarge)
+    );
+    assert_eq!(
+        read_stderr(&[0xff][..], StderrCapture::Complete).await,
+        Err(LocalProbeProblem::StderrRead)
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -93,7 +118,7 @@ async fn a_completed_reader_is_not_polled_twice_when_its_sibling_times_out() {
     let (stdout, stdout_writer, stdout_dropped) = tracked_pair();
     let (stderr, stderr_writer, stderr_dropped) = tracked_pair();
     drop(stdout_writer);
-    let mut readers = ProbeReaders::spawn(stdout, stderr);
+    let mut readers = ProbeReaders::spawn(stdout, stderr, StderrCapture::Tail);
     assert_eq!(
         readers.collect().await,
         Err(LocalProbeProblem::ReaderShutdown)
@@ -109,7 +134,7 @@ async fn a_completed_reader_is_not_polled_twice_when_its_sibling_times_out() {
 async fn reader_shutdown_aborts_and_joins_both_pending_owners() {
     let (stdout, stdout_writer, stdout_dropped) = tracked_pair();
     let (stderr, stderr_writer, stderr_dropped) = tracked_pair();
-    let mut readers = ProbeReaders::spawn(stdout, stderr);
+    let mut readers = ProbeReaders::spawn(stdout, stderr, StderrCapture::Tail);
     assert_eq!(
         readers.collect().await,
         Err(LocalProbeProblem::ReaderShutdown)
@@ -126,7 +151,7 @@ async fn a_failed_reader_does_not_detach_its_pending_sibling() {
     let (stdout, stdout_writer, stdout_dropped) = tracked_pair();
     let (stderr, stderr_writer, stderr_dropped) = tracked_pair();
     drop(stdout_writer);
-    let mut readers = ProbeReaders::spawn(stdout, stderr);
+    let mut readers = ProbeReaders::spawn(stdout, stderr, StderrCapture::Tail);
     let result = await_reader(&mut readers.stdout_task).await;
     readers.accept_stdout(result).unwrap();
     readers.stdout = Some(Err(LocalProbeProblem::StdoutRead));
@@ -206,6 +231,63 @@ mod unix {
             .expect("overflow must cancel the active process");
         assert!(matches!(result, Err(FfprobeError::OutputTooLarge { .. })));
         let pid = wait_for_pid_file(&marker).await;
+        assert_eq!(
+            nix::sys::signal::kill(pid, None),
+            Err(nix::errno::Errno::ESRCH)
+        );
+    }
+
+    #[tokio::test]
+    async fn successful_diagnostics_retain_complete_stderr_and_stdout_in_the_same_scope() {
+        let scope = LocalProbeCleanupScope::new();
+        let operation = scope.scope(capture_retained_diagnostics(
+            command(
+                "printf first-diagnostic >&2; head -c 32768 /dev/zero | tr '\\000' x >&2; printf last-diagnostic >&2; printf stdout-diagnostic",
+                &[],
+            ),
+            PathBuf::from("synthetic diagnostic capture"),
+            Some(Instant::now() + Duration::from_secs(5)),
+            None,
+        ));
+        let output = tokio::time::timeout(Duration::from_secs(8), operation)
+            .await
+            .expect("complete concurrent diagnostics must not deadlock")
+            .unwrap();
+        assert_eq!(output.stdout.as_slice(), b"stdout-diagnostic");
+        assert!(output.stderr.starts_with("first-diagnostic"));
+        assert!(output.stderr.ends_with("last-diagnostic"));
+        assert_eq!(
+            output.stderr.len(),
+            32768 + "first-diagnostic".len() + "last-diagnostic".len()
+        );
+        assert!(output.stderr.len() > MAX_LOCAL_STDERR_TAIL_BYTES);
+        assert_eq!(scope.cleanup_status(), Ok(true));
+        scope.close();
+        assert_eq!(scope.wait_cleanup().await, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn complete_diagnostic_stderr_overflow_kills_and_reaps_the_owned_process() {
+        let directory = tempfile::tempdir().unwrap();
+        let marker = directory.path().join("pid");
+        let scope = LocalProbeCleanupScope::new();
+        let operation = scope.scope(capture_retained_diagnostics(
+            command(
+                "printf '%s' \"$$\" >\"$1\"; printf stdout-diagnostic; head -c 8388609 /dev/zero >&2; exec sleep 30",
+                std::slice::from_ref(&marker),
+            ),
+            PathBuf::from("synthetic diagnostic overflow"),
+            Some(Instant::now() + Duration::from_secs(5)),
+            None,
+        ));
+        let result = tokio::time::timeout(Duration::from_secs(8), operation)
+            .await
+            .expect("stderr overflow must terminate the active process");
+        assert!(matches!(result, Err(FfprobeError::OutputTooLarge { .. })));
+        let pid = wait_for_pid_file(&marker).await;
+        assert_eq!(scope.cleanup_status(), Ok(true));
+        scope.close();
+        assert_eq!(scope.wait_cleanup().await, Ok(()));
         assert_eq!(
             nix::sys::signal::kill(pid, None),
             Err(nix::errno::Errno::ESRCH)

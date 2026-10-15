@@ -51,36 +51,24 @@ QTM charset0 set/stream/client;admin8 headed passes.
 PS/NOS/DRCS/direct v2 and warm TCP/client/AV pass; reselection required.
 Clock-gap proof passes; slate/X27/full acceptance open.
 
-SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
-pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
-P9A-03: Local descriptors/headers/rescans/reopen pass; selection/remotes open.
-Owned reads retain capacity through completion; aux failure keeps tracks.
+P9A-03 owns source descriptors, Local rescans and worker/lease
+ownership. Missing bytes stay NotAcquired; descriptors/PTS do not grant readiness.
+Carousel PSI/PCR preserves AV/EOF; accepted ACK/cycle boundaries fence updates,
+withdrawal and expiry. Cold/warm resources, restart and Next remain open.
 
-Carousel/PSI/PCR preserve AV/EOF. ACK/cycle ends fence proposals;
-changed PMT precedes PES; withdrawal retains clock/counters;
-Rejected standalone proposals retain old output; v2 withdraws replacements.
-Epoch status is not publication. Warm resources,
-Q/QR/Off/expiry pass; headed clear/nav, Base reselect. Reds retained.
-Restart/applied/retained/Next open.
-
-MPEG-TS wrapper/encoder leases, lifecycle/Health remain.
-Linux x64/Windows-interop/QEMU ARM64/ARMv7:admission/tokens/reaping,
-video/selected audio/Dutch200/TSDuck. Finite Local888 scan/Burn works through
-legacy/Hybrid with two audio choices, Off/stale fallback, AV/authored200 and
-default2 cleanup. P9A-04 owns generated input/command fences and same-held native
-selection/PID checks for web/HLS, typed physical/output clocks and native times.
-Comparable seek/duration mismatches reject before open/retry. Diagnostic traces
-change actual pixels, so transferring their clock observations to sealed output
-is blocked; P9A-04 owns the red and next unlogged scheduling test. Native cue
-eligibility, general seeks,
-provider/Next and native Windows/ARM acceptance remain open.
-
-P9A-02: decoder Health/six-RID licenses.
-P9A-03/04 retain persistence/rescans, page/language/forced/default
-selection, native/Next Burn/Convert/copy, carriage and HLS/browser
-gates. Slate handover, activation/publication/refresh/restart, localized management,
-full source/client/browser/smoke/TSDuck stay open. UCU waives no gates.
-Content waits for p9a-04; Phase10 for p9b-02.
+Finite Local888 scan/Burn passes legacy/Hybrid with both audio choices,
+Off/stale fallback, AV/authored200 and default2 cleanup. P9A-04 owns generated
+command/physical-owner fences, same-held native stream/PID checks and known
+seek/duration mismatch refusal before open/retry. Unlogged bounded output varies
+in pixels; a distinct generated no-buffer control and calibrated native traces
+join actual bitmap/video/CFR clocks. This grants no original-profile cue authority.
+Next test independent captions with measured owner clocks.
+Linux x64/Windows interop/QEMU ARM proof is partial; native Windows/ARM, provider/
+Next and general source/seek/charset/resource behavior remain open.
+P9A-02 retains decoder Health/six-RID licensing. P9A-03/04 retain persistence,
+selection, Burn/Convert/copy, carriage, HLS/browser and playback gates; full slate,
+activation/publication/refresh/restart, management/client and platform acceptance
+remain open. UCU waives no gates. Content waits for p9a-04; Phase10 for p9b-02.
 '''
 
 [[debt]]

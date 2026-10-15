@@ -62,21 +62,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-P9A-04 now binds known generated seek/duration to the retained playback request
-before open/retry, including fresh valid seals. Comparison is limited to shared
-physical input0 with comparable native policy; independent/opaque/retained/output
-seek policies stay unknown. Both actual ordinary routes and16 focused checks pass.
-P9A-04 owns exact receipts and the separate diagnostic RED: logging derivatives
-change actual pixels despite identical clocks/audio, so their traces cannot
-qualify the sealed baseline. Preserve the four uncommitted diagnostic source
-edits and all evidence. Next compare identical UNLOGGED sealed commands on the
-same held source to distinguish native scheduling variation from instrumentation
-perturbation; never sort callbacks or invent NOPTS. Then qualify the retained
-nonzero page888 cue/decoder initialization in the existing selector. Whole-source
-EOF remains insufficient. General initializers, wrap/charset ambiguity and large/
-multiwindow sources remain open. All authored Level2.5/editor/profiles/themes/
-Lua/restart/localized admin/client/platform criteria and engine-first delivery
-are unchanged; no full milestone completion, production addon or push.
+P9A-04's calibrated no-buffer diagnostic now joins actual bitmap, first kept
+video and CFR clocks to original source events. Original bounded unlogged runs
+also vary in pixels with equal clocks/audio; omitting only the generated video
+buffer stabilizes the strict control. P9A-04 owns both red and green evidence.
+This distinct policy is not a product restriction or original-profile cue proof.
+Known consumer seek/duration fencing and ordinary playback recovery remain.
+Next compare the shared-owner0.5s cue against an independent subtitle-only input
+using measured Kv/Kc origins and offsetKc-Kv. Reuse the exact held source and
+existing generator; prove expected onset and AV before integrating a production
+initialization policy/qualifier. Subtitle heartbeats, unknown timestamps and
+large/window/charset/resource cases still require proof. Full authored Level2.5,
+editor/metadata/themes/zones, Lua/restart, localized admin, actual suitable client
+and six-platform criteria remain unchanged; generic engine acceptance precedes
+the one production guide addon. No milestone completion, push or publication.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.
