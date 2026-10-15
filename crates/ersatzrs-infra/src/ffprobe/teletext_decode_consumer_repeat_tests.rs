@@ -40,7 +40,7 @@ async fn encoder_configuration(
     text[start..].split('\0').next().unwrap().to_owned()
 }
 
-async fn decoded_frame_hashes(
+pub(super) async fn decoded_frame_hashes(
     scope: &LocalProbeCleanupScope,
     ffmpeg: &str,
     source: &PreparedLocalTeletextSource,

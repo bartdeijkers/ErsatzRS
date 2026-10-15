@@ -62,20 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-P9A-04's calibrated no-buffer diagnostic now joins actual bitmap, first kept
-video and CFR clocks to original source events. Original bounded unlogged runs
-also vary in pixels with equal clocks/audio; omitting only the generated video
-buffer stabilizes the strict control. P9A-04 owns both red and green evidence.
-This distinct policy is not a product restriction or original-profile cue proof.
-Known consumer seek/duration fencing and ordinary playback recovery remain.
-Next compare the shared-owner0.5s cue against an independent subtitle-only input
-using measured Kv/Kc origins and offsetKc-Kv. Reuse the exact held source and
-existing generator; prove expected onset and AV before integrating a production
-initialization policy/qualifier. Subtitle heartbeats, unknown timestamps and
-large/window/charset/resource cases still require proof. Full authored Level2.5,
-editor/metadata/themes/zones, Lua/restart, localized admin, actual suitable client
-and six-platform criteria remain unchanged; generic engine acceptance precedes
-the one production guide addon. No milestone completion, push or publication.
+P9A-04 now has an actual independent-caption generator control: at seek0.5s,
+all24 sampled888 glyph masks match the reference from first output, and complete
+decoded audio content/absolute clocks equal soughtOff. The shared-owner negative
+starts blank AND alters audio. Measured enabled-owner origins determine the
+fixture offset; per-input flags, sealed plan and same-source cleanup are proven.
+No runtime instance fence is relaxed and opaque timing gains no authority.
+Next integrate a trusted source-bound initialization policy with the existing
+selector/final builder/consumer, preserving actual AV selection, requested cue,
+source/admission lifetime, fresh retry and ordinary fallback. Prove both audio
+preferences, bounded-rate profiles and actual routes before production admission.
+General source-window/charset/resource/wrap and large sources remain open.
+P9A-04 retains the prior bounded-encoder-variation and no-buffer clock evidence.
+All authored Level2.5/fallback, editor/metadata/templates/themes/zones, Lua/restart,
+localized admin, actual suitable client and platform requirements are unchanged.
+Engine-first delivery, no milestone completion, no production addon or push.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.

@@ -2968,6 +2968,68 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 independent caption initialization control (partial):
+Criterion: show the requested source page at a nonzero seek while preserving
+ordinary selected AV, before choosing a trusted production initialization policy.
+This is a native GENERATOR control, not new runtime admission. Four actual
+no-buffer streams reuse one held source and decoded888 receipt: unseeked888
+reference,0.5s Off,0.5s shared888 and0.5s independently opened888. Native measured
+enabled sets [video0,audio1] and [caption2] give Kv1400000us exact and
+Kc[860944,860945]us. The explicit fixture offset-539056us chooses the lower bound;
+residual[-1,0]us remains recorded, not a new general timing tolerance.
+
+The independent input repeats existing standard native format flags (per-input,
+not implicitly inherited from input0), uses the same path with input_instance1,
+selects only stream2 and has no input1 seek. Its fresh generated plan seals the
+complete command and verifies actual caption owner1, AV owner0 and enabled
+caption-input set[2]. Custom offset timing stays OPAQUE. The receipt's production
+instance/command fence is unchanged; the test cannot activate this path in streams.
+All captures use existing retained process/source/work ownership, absolute child
+bounds and source bookends. Output artifacts precede final semantic assertions,
+which follow source-byte confirmation and confirmed cleanup/zero active work.
+
+The final native case passes: e4c80d91-7d05-4b94-af50-aba13906cdaf. Each output
+retains its own complete video PTS trace; every fifth decoded frame is sampled
+without making a new clock. All24 independent glyph masks match the exact650-pixel
+reference mask from first outputPTS0 through sampled345345/90000. Off stays blank;
+shared888 starts blank and only its final sample contains that reference.
+Masks use the established monochrome fixture's luma100 foreground measurement;
+this proves neither exact color nor unobserved frames nor Level2.5 rendering.
+
+Complete decoded audio SHA256 framehash rows prove the independent path equals
+soughtOff in content, counts, durations, sizes AND absolute PTS/DTS:62frames,
+first241920/90000, last359040/90000. This is not merely relative-clock similarity.
+The shared-owner negative changes audio as well as onset:60frames, first245436,
+last358716. The initial dd160a8f-dde2-488d-b7b5-98d019810fd2 run is retained red:
+its new test wrongly required the known-negative shared audio to equalOff. All
+four saved streams already showed the independent positive. Corrected assertions
+explicitly require shared divergence and independent full absolute equality;
+no fixture input, waveform, stream or production behavior was changed to pass.
+
+Evidence: tmp/phase9-independent-caption-init, including both native logs,
+original source, exact commands/TS, origins/flags, all frame/audio traces,
+sampled gray/masks and comparison JSON. Live FFmpeg/FFprobe binary hashes match
+the pinned n9.0-20260805 artifacts recorded below. The common fixture request is
+only extracted, and the audio hash helper only gains sibling test visibility;
+earlier diagnostics/default-request/argv/ordinary-route proof is reused. Final
+strict affected three-crate/all-target Clippy, formatting, architecture and
+progress checks pass. Lint-only binary mask summation and literal separators
+follow the native pass without changing its semantic assertions, inputs or
+outputs; exact normalized source equality is recorded in test-reuse.json.
+
+Next integrate a trusted, source-bound consumer initialization policy through
+the existing selector/final builder and actual consumer. Preserve requested
+interval and actual AV owner/stream identity, source/work lifetime, sealed
+command/fresh retry fences and ordinary fallback. Prove both audio preferences,
+bounded-rate profiles and actual ordinary routes before qualifying this recipe
+for production; the fixture's fixed offset cannot become a generic assumption.
+General seek-window context/charset/resource/wrap and large sources remain open.
+All129 milestone contracts, full authored Level2.5/fallback, QTM/editor metadata,
+themes/zones/profiles, Lua/restart, localized headed admin, suitable-client/
+independent-decoder/TSDuck and platform safety criteria remain unchanged. Generic
+engine acceptance still precedes the NOS200–299-inspired production guide addon.
+No milestone completion, push or publication.
+
 2026-10-15 isolated native clock diagnostics checkpoint (partial):
 Criterion: obtain actual bitmap/video/source-clock evidence without transferring
 an uncalibrated logging run's state to ordinary playback. The existing retained

@@ -12,6 +12,9 @@ mod clock;
 #[path = "teletext_decode_consumer_repeat_tests.rs"]
 mod repeat;
 
+#[path = "teletext_decode_consumer_independent_tests.rs"]
+mod independent;
+
 fn burn_command(
     ffmpeg: &str,
     source: &PreparedLocalTeletextSource,
@@ -28,26 +31,7 @@ fn burn_command_with_video_buffer(
     seek: Option<Duration>,
     video_buffer_size: Option<u32>,
 ) -> FfmpegCommand {
-    let mut desired = DesiredVideoState::h264_1080p();
-    desired.frame_size = FrameSize::new(492, 250);
-    desired.scaled_size = desired.frame_size;
-    desired.video_bitrate = Some(400);
-    desired.video_buffer_size = video_buffer_size;
-    let mut request =
-        PipelineRequest::new(InputFile::video(source.resolved.to_str().unwrap()), desired)
-            .with_source_video_stream(
-                SourceVideoStream::new(SourceVideoCodec::Mpeg2Video).with_index(0),
-            )
-            .with_source_audio_streams(vec![
-                SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1)
-            ]);
-    request.state.start = seek;
-    request.state.duration = Some(Duration::from_secs(4));
-    request.state.report_progress = false;
-    request.ffmpeg_executable = Some(ffmpeg.into());
-    if let Some(caption) = caption {
-        request.inputs.push(caption.native_burn_input());
-    }
+    let request = burn_request(ffmpeg, source, caption, seek, video_buffer_size);
     let (command, plan) = build_pipeline_command_with_source_teletext_plan(
         ersatzrs_domain::HardwareAccelerationKind::None,
         request,
@@ -75,6 +59,36 @@ fn burn_command_with_video_buffer(
         assert!(plan.is_none());
     }
     command
+}
+
+fn burn_request(
+    ffmpeg: &str,
+    source: &PreparedLocalTeletextSource,
+    caption: Option<&DecodedLocalTeletextPage>,
+    seek: Option<Duration>,
+    video_buffer_size: Option<u32>,
+) -> PipelineRequest {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.frame_size = FrameSize::new(492, 250);
+    desired.scaled_size = desired.frame_size;
+    desired.video_bitrate = Some(400);
+    desired.video_buffer_size = video_buffer_size;
+    let mut request =
+        PipelineRequest::new(InputFile::video(source.resolved.to_str().unwrap()), desired)
+            .with_source_video_stream(
+                SourceVideoStream::new(SourceVideoCodec::Mpeg2Video).with_index(0),
+            )
+            .with_source_audio_streams(vec![
+                SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1)
+            ]);
+    request.state.start = seek;
+    request.state.duration = Some(Duration::from_secs(4));
+    request.state.report_progress = false;
+    request.ffmpeg_executable = Some(ffmpeg.into());
+    if let Some(caption) = caption {
+        request.inputs.push(caption.native_burn_input());
+    }
+    request
 }
 
 async fn capture_owned(
