@@ -25,6 +25,9 @@ release section when tagging a release.
 
 ### Added
 
+- Add checked local teletext colour/attribute edit intents and versioned concept
+  storage, preserving original documents and fallback packets. Native editor
+  import/replay integration remains open; unapplied edits are explicitly rejected.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source

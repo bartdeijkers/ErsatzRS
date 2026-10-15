@@ -182,6 +182,14 @@ pub enum TeletextEffectiveProgramSource {
 /// Located semantic failure. No programme text or partial candidate is returned.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextServiceError {
+    #[error("teletext local operand changes must not be empty")]
+    EmptyLocalProgramOperandOverlays,
+    #[error("teletext local operand {address:?}, command {command}: {reason}")]
+    LocalProgramOperandOverlay {
+        address: TeletextPageAddress,
+        command: usize,
+        reason: super::TeletextLocalProgramOperandFailure,
+    },
     #[error("teletext physical base overlay owner {address:?} is absent or repeated (duplicate={duplicate})")]
     PhysicalBaseOverlayOwner {
         address: TeletextPageAddress,
@@ -325,6 +333,17 @@ impl TeletextSemanticService {
         companions: Vec<super::TeletextResourceIdentity>,
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextServiceError> {
+        Self::new_with_resolved_mot_fallbacks(draft, companions, BTreeMap::new(), budget)
+    }
+
+    // Only an already checked service can supply resolved MOT presentation here.
+    // Keep it installed before collecting effective primary-repertoire references.
+    fn new_with_resolved_mot_fallbacks(
+        draft: TeletextResolvedServiceDraft,
+        companions: Vec<super::TeletextResourceIdentity>,
+        mot_fallbacks: BTreeMap<TeletextPageAddress, TeletextLevel25PresentationDefaults>,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextServiceError> {
         let (original_structure_items, original_base_content_bytes) =
             check_input_budgets(&draft, &companions, budget)?;
         validate_companion_kinds(&companions)?;
@@ -363,7 +382,7 @@ impl TeletextSemanticService {
             base: draft.base,
             pages,
             magazines,
-            mot_fallbacks: BTreeMap::new(),
+            mot_fallbacks,
             objects,
             object_companions: companions,
             drcs,
@@ -428,6 +447,174 @@ impl TeletextSemanticService {
         Ok(service)
     }
 
+    /// Apply exact-original operand changes only to existing local programs.
+    ///
+    /// Commands retain their ordinals, columns, families and every other operand.
+    /// Resources, presentations, resolved MOT fallbacks and physical base rows are
+    /// preserved. The complete service and transitive collector are revalidated
+    /// under the supplied budget; no arbitrary mutable program is exposed.
+    ///
+    /// This transforms the semantic candidate itself, rather than storing another
+    /// overlay layer. Empty input is rejected; removal requires reconstructing the
+    /// original candidate. Hosts must recompile, check protected cell effects and
+    /// require explicit publication. This method grants none of those permissions.
+    /// # Errors
+    /// Rejects raw budgets before cloning, caps indexes before insertion and rejects
+    /// empty/repeated changes,
+    /// absent local owners, stale/mismatched original commands and service errors.
+    pub fn with_local_program_operand_overlays(
+        self,
+        overlays: &[super::TeletextLocalProgramOperandOverlay],
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextServiceError> {
+        self.check_local_operand_overlay_budgets(overlays.len(), budget)?;
+        if overlays.is_empty() {
+            return Err(TeletextServiceError::EmptyLocalProgramOperandOverlays);
+        }
+        let indexed = self.validate_local_operand_overlays(overlays)?;
+        let mut pages: Vec<_> = self.pages.into_values().collect();
+        for page in &mut pages {
+            let mut changes = indexed
+                .range((page.address, 0)..=(page.address, usize::MAX))
+                .peekable();
+            if changes.peek().is_none() {
+                continue;
+            }
+            if let Some(program) = &page.local_program {
+                let mut commands = program.commands().to_vec();
+                for (_, overlay) in changes {
+                    commands[overlay.command()] = TeletextEnhancementCommand::AtColumn {
+                        column: overlay.column(),
+                        operation: overlay.replacement(),
+                    };
+                }
+                page.local_program = Some(TeletextEnhancementProgram::new(commands)?);
+            }
+        }
+        let draft = TeletextResolvedServiceDraft {
+            base: self.base,
+            pages,
+            magazines: self
+                .magazines
+                .into_iter()
+                .map(
+                    |(magazine, presentation)| TeletextMagazinePresentationDraft {
+                        magazine,
+                        presentation,
+                    },
+                )
+                .collect(),
+            objects: self.objects.definitions().to_vec(),
+            drcs: self.drcs.subtables().to_vec(),
+        };
+        Self::new_with_resolved_mot_fallbacks(
+            draft,
+            self.object_companions,
+            self.mot_fallbacks,
+            budget,
+        )?
+        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)
+    }
+
+    fn validate_local_operand_overlays<'a>(
+        &self,
+        overlays: &'a [super::TeletextLocalProgramOperandOverlay],
+    ) -> Result<
+        BTreeMap<(TeletextPageAddress, usize), &'a super::TeletextLocalProgramOperandOverlay>,
+        TeletextServiceError,
+    > {
+        let mut indexed = BTreeMap::new();
+        for overlay in overlays {
+            let failure = |reason| TeletextServiceError::LocalProgramOperandOverlay {
+                address: overlay.owner(),
+                command: overlay.command(),
+                reason,
+            };
+            if indexed
+                .insert((overlay.owner(), overlay.command()), overlay)
+                .is_some()
+            {
+                return Err(failure(
+                    super::TeletextLocalProgramOperandFailure::Duplicate,
+                ));
+            }
+            let program = self
+                .pages
+                .get(&overlay.owner())
+                .and_then(|page| page.local_program.as_ref())
+                .ok_or_else(|| {
+                    failure(super::TeletextLocalProgramOperandFailure::MissingLocalProgram)
+                })?;
+            if program.commands().get(overlay.command())
+                != Some(&TeletextEnhancementCommand::AtColumn {
+                    column: overlay.column(),
+                    operation: overlay.expected(),
+                })
+            {
+                return Err(failure(
+                    super::TeletextLocalProgramOperandFailure::CommandMismatch,
+                ));
+            }
+        }
+        Ok(indexed)
+    }
+
+    fn check_local_operand_overlay_budgets(
+        &self,
+        overlay_count: usize,
+        budget: TeletextServiceBudget,
+    ) -> Result<(), TeletextServiceError> {
+        // Raw replacement input cannot exceed the same authored-command budget.
+        let mut changes = budget.max_commands;
+        charge(
+            &mut changes,
+            overlay_count,
+            "authored command",
+            budget.max_commands,
+        )?;
+        check_borrowed_input_budgets(
+            &self.base,
+            self.pages.values(),
+            self.magazines.len(),
+            self.objects.definitions(),
+            self.drcs.subtables(),
+            &self.object_companions,
+            budget,
+        )?;
+        check_physical_overlay_budgets(
+            self.original_structure_items,
+            self.original_base_content_bytes,
+            self.physical_base_overlays.values(),
+            budget,
+        )?;
+        // Reuse the ordinary collision/count checker: it charges each unique
+        // resource before allocating an entry, even under a reduced record cap.
+        check_resource_records(
+            &self.base,
+            self.objects.definitions(),
+            self.drcs.subtables(),
+            &self.object_companions,
+            budget.max_records,
+        )?;
+        let mut commands = budget.max_collected_commands;
+        let mut references = budget.max_collected_drcs_references;
+        for (_, collected) in self.collected.values() {
+            charge(
+                &mut commands,
+                collected.command_count(),
+                "collected command",
+                budget.max_collected_commands,
+            )?;
+            charge(
+                &mut references,
+                collected.references().len(),
+                "collected DRCS reference",
+                budget.max_collected_drcs_references,
+            )?;
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub const fn base(&self) -> &TeletextPageSetDraft {
         &self.base
@@ -443,41 +630,13 @@ impl TeletextSemanticService {
         overlays: Vec<super::TeletextPhysicalBaseOverlay>,
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextServiceError> {
-        let mut items = budget.max_structure_items;
-        let mut bytes = budget.max_base_content_bytes;
-        charge(
-            &mut items,
+        check_physical_overlay_budgets(
             self.original_structure_items,
-            "structure item",
-            budget.max_structure_items,
-        )?;
-        charge(
-            &mut bytes,
             self.original_base_content_bytes,
-            "base content byte",
-            budget.max_base_content_bytes,
-        )?;
-        charge(
-            &mut items,
-            overlays.len(),
-            "structure item",
-            budget.max_structure_items,
+            overlays.iter(),
+            budget,
         )?;
         for (ordinal, overlay) in overlays.iter().enumerate() {
-            charge(
-                &mut items,
-                overlay.rows().len(),
-                "structure item",
-                budget.max_structure_items,
-            )?;
-            for _ in overlay.rows() {
-                charge(
-                    &mut bytes,
-                    40,
-                    "base content byte",
-                    budget.max_base_content_bytes,
-                )?;
-            }
             if !self
                 .base
                 .pages
@@ -985,19 +1144,34 @@ fn check_input_budgets(
     companions: &[super::TeletextResourceIdentity],
     budget: TeletextServiceBudget,
 ) -> Result<(usize, usize), TeletextServiceError> {
+    check_borrowed_input_budgets(
+        &draft.base,
+        draft.pages.iter(),
+        draft.magazines.len(),
+        &draft.objects,
+        &draft.drcs,
+        companions,
+        budget,
+    )
+}
+
+fn check_borrowed_input_budgets<'a>(
+    base: &TeletextPageSetDraft,
+    pages: impl ExactSizeIterator<Item = &'a TeletextResolvedPageEnhancementDraft>,
+    magazine_count: usize,
+    objects: &[TeletextEnhancementObjectDefinition],
+    drcs: &[TeletextDrcsSubtable],
+    companions: &[super::TeletextResourceIdentity],
+    budget: TeletextServiceBudget,
+) -> Result<(usize, usize), TeletextServiceError> {
     let mut record_count = budget.max_records;
     charge(
         &mut record_count,
-        draft.base.pages.len(),
+        base.pages.len(),
         "record",
         budget.max_records,
     )?;
-    charge(
-        &mut record_count,
-        draft.drcs.len(),
-        "record",
-        budget.max_records,
-    )?;
+    charge(&mut record_count, drcs.len(), "record", budget.max_records)?;
     charge(
         &mut record_count,
         companions.len(),
@@ -1007,7 +1181,7 @@ fn check_input_budgets(
     let mut object_count = budget.max_objects;
     charge(
         &mut object_count,
-        draft.objects.len(),
+        objects.len(),
         "object",
         budget.max_objects,
     )?;
@@ -1016,25 +1190,25 @@ fn check_input_budgets(
     let mut commands = budget.max_commands;
     charge(
         &mut items,
-        draft.base.pages.len(),
+        base.pages.len(),
         "structure item",
         budget.max_structure_items,
     )?;
     charge(
         &mut items,
-        draft.pages.len(),
+        pages.len(),
         "structure item",
         budget.max_structure_items,
     )?;
     charge(
         &mut items,
-        draft.magazines.len(),
+        magazine_count,
         "structure item",
         budget.max_structure_items,
     )?;
     charge(
         &mut items,
-        draft.drcs.len(),
+        drcs.len(),
         "structure item",
         budget.max_structure_items,
     )?;
@@ -1044,8 +1218,8 @@ fn check_input_budgets(
         "structure item",
         budget.max_structure_items,
     )?;
-    charge_base_structure_and_content(&draft.base, &mut items, &mut bytes, budget)?;
-    for page in &draft.pages {
+    charge_base_structure_and_content(base, &mut items, &mut bytes, budget)?;
+    for page in pages {
         if let Some(program) = &page.local_program {
             charge(
                 &mut commands,
@@ -1061,7 +1235,7 @@ fn check_input_budgets(
             budget.max_commands,
         )?;
     }
-    for object in &draft.objects {
+    for object in objects {
         charge(
             &mut commands,
             object.program.commands().len(),
@@ -1069,7 +1243,7 @@ fn check_input_budgets(
             budget.max_commands,
         )?;
     }
-    for subtable in &draft.drcs {
+    for subtable in drcs {
         charge(
             &mut items,
             subtable.glyphs().len(),
@@ -1163,4 +1337,49 @@ fn check_resource_records(
         index.insert(key, identity.kind());
     }
     Ok(index)
+}
+
+fn check_physical_overlay_budgets<'a>(
+    original_structure_items: usize,
+    original_base_content_bytes: usize,
+    overlays: impl ExactSizeIterator<Item = &'a super::TeletextPhysicalBaseOverlay>,
+    budget: TeletextServiceBudget,
+) -> Result<(), TeletextServiceError> {
+    let mut items = budget.max_structure_items;
+    let mut bytes = budget.max_base_content_bytes;
+    charge(
+        &mut items,
+        original_structure_items,
+        "structure item",
+        budget.max_structure_items,
+    )?;
+    charge(
+        &mut bytes,
+        original_base_content_bytes,
+        "base content byte",
+        budget.max_base_content_bytes,
+    )?;
+    charge(
+        &mut items,
+        overlays.len(),
+        "structure item",
+        budget.max_structure_items,
+    )?;
+    for overlay in overlays {
+        charge(
+            &mut items,
+            overlay.rows().len(),
+            "structure item",
+            budget.max_structure_items,
+        )?;
+        for _ in overlay.rows() {
+            charge(
+                &mut bytes,
+                40,
+                "base content byte",
+                budget.max_base_content_bytes,
+            )?;
+        }
+    }
+    Ok(())
 }

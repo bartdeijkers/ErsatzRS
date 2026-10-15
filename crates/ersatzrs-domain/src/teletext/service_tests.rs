@@ -1354,3 +1354,6 @@ fn effective_program_rejects_unknown_exact_page_and_subcode_instead_of_empty_fal
 
 #[path = "object_companion_service_tests.rs"]
 mod object_companion_service_tests;
+
+#[path = "local_program_operand_overlay_tests.rs"]
+mod local_program_operand_overlay_tests;

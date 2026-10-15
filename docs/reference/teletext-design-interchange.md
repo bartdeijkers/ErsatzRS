@@ -5225,9 +5225,9 @@ explicit action. Native import leaves current broadcast state untouched.
 P9A-04 owns the verification receipt and the remaining editor/client flow.
 
 
-### Private concept-row subdocument
+### Private concept edit subdocument
 
-The optional `editorial_overlay` has its own `schema_version:1` and remains absent
+The optional `editorial_overlay` has its own schema version and remains absent
 from all original capture encodings. Present null, unknown fields/versions and
 invalid shape reject. Structural provenance stores positive export-receipt and
 original-design/revision IDs and lowercase SHA256 references, not trusted grants.
@@ -5236,6 +5236,29 @@ cells; receiver header positions remain reserved. Streaming preflight charges
 owner/row counts and fixed row content before allocating owned arrays/vectors,
 using existing document/service limits. Native composition still owns full
 original-plus-overlay cold limits.
+
+Version1 stores physical rows and omits `local_program_operands` completely;
+its existing encoding remains byte-identical. Version2 requires a nonempty
+`local_program_operands` array and permits an empty `pages` array for operand-only
+intentions. Version1 with this field, version2 without it, present null, empty
+operand input and unknown versions reject. Each closed operand record contains:
+
+| Field | Meaning |
+| --- | --- |
+| `owner` | Exact decimal page and raw subcode, with one unique original authored producer |
+| `command` | Zero-based original local-program ordinal, independent of expanded or packed positions |
+| `column` | Unchanged original main-grid column, 0–39 |
+| `expected` | Exact original tagged foreground, background or attributes operation |
+| `replacement` | Different operation in the same family; attribute sizing remains unchanged |
+
+Colour operations carry the checked `colour` index. Attributes retain all six
+boolean operands (`double_height`, `double_width`, `boxed`, `conceal`, `invert`,
+`underline_or_separated_mosaics`). Glyph/charset, command family, position,
+invocation and resource edits are not represented by this narrow value.
+Duplicate, stale, foreign or ambiguous command targets reject. Shared structural,
+command-count, serialized-byte and allocation limits apply before owned decode;
+the complete service is revalidated before compiling a changed candidate.
+Neither storage nor a checked operand grants captured free/zone permissions.
 
 `append_teletext_design_editorial_overlay` and its effective-role counterpart
 `append_teletext_effective_design_editorial_overlay` validate the stored original
@@ -5249,6 +5272,12 @@ Native reload and publication now authenticate a present subdocument using the
 retained server receipt and exact immutable original. A missing receipt still
 returns `EditorialValidationUnavailable`; forged associations and unsafe effects
 reject. Rows are never ignored to recover original output under an edited digest.
+The current row-only native replay explicitly rejects nonempty operand intentions
+with `EditorialValidationUnavailable` for both static and effective designs.
+Such intentions cannot silently become an unchanged preview or publication.
+Native TTI reconciliation, complete protected-effect checks and authenticated
+operand replay are remaining implementation work, rather than a permanent
+editor restriction. P9A-04 owns the next step and missing actual-editor proof.
 No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
 positive/negative codec, native import and durable qualification evidence.
 

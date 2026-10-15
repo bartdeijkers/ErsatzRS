@@ -76,6 +76,17 @@ counterexample remains recorded. QTM has one shared NOS, so its own preview cann
 show both independent values together; the native model retains both. General
 charset/resource fidelity and full client coverage remain open; this base-row
 slice grants no full editor/engine acceptance.
+Preparatory exact-original local X26 operand edits now reuse the checked semantic
+service and complete authored compiler. A private concept version2 stores those
+intents beside existing physical rows; version1 bytes and immutable original
+responses remain unchanged. Same-family colour/attribute changes retain command
+identities, character sizing and resource declarations. This narrow primitive
+grants no edit permission. Until native TTI reconciliation and protected-effect
+qualification are connected, both static and effective native replay explicitly
+reject nonempty operand intentions instead of ignoring them. Full enhancement,
+resource, geometry, panel and editor coverage remains required; this preparatory
+slice introduces no accepted product restriction. P9A-04 owns verification and
+the concrete next integration step.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.

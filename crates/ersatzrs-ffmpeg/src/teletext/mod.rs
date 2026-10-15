@@ -258,6 +258,8 @@ mod display_resolution_runtime_tests;
 #[cfg(test)]
 mod drcs_tests;
 #[cfg(test)]
+mod editorial_operand_tests;
+#[cfg(test)]
 mod enhancement_program_tests;
 #[cfg(test)]
 mod layout_tests;

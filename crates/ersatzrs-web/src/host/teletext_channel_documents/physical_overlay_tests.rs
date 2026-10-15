@@ -3,6 +3,11 @@
 
 use std::time::{Duration, Instant};
 
+use ersatzrs_app::teletext_design_documents::{
+    append_teletext_design_editorial_overlay, append_teletext_effective_design_editorial_overlay,
+    decode_teletext_design_documents, decode_teletext_effective_design_documents,
+    TeletextDesignDocumentBudget, TeletextSavedEditorialOverlay, TeletextSavedEditorialProvenance,
+};
 use ersatzrs_domain::*;
 use ersatzrs_ffmpeg::teletext::{
     project_encoded_teletext_display, EncodedTeletextAuthoredPage, EncodedTeletextPage,
@@ -16,6 +21,8 @@ use super::{
     TeletextChannelDocumentEncodingPolicy, TeletextProfileDocument,
 };
 use crate::host::{
+    teletext_designs::{compile_restored_parts, NativeTeletextDesignError},
+    teletext_effective_designs::compile_effective_restored_parts,
     teletext_preview::{project_teletext_preview, TeletextPreviewBudget},
     teletext_runtime_policy::{
         parse_native_teletext_authoring_input, parse_native_teletext_authoring_policy,
@@ -409,4 +416,165 @@ fn expired_original_deadline_returns_no_compiled_candidate() {
         ),
         Err(ChannelTeletextDocumentEncodingError::TimedOut)
     ));
+}
+
+fn storage_budget() -> TeletextDesignDocumentBudget {
+    TeletextDesignDocumentBudget {
+        max_serialized_bytes: 128 * 1024,
+        max_documents: 8,
+        max_response_bytes: 64 * 1024,
+        max_context_bytes: 32 * 1024,
+        max_context_field_bytes: 2048,
+        max_resource_transmissions: 8,
+        validation: bounds(1).0.validation,
+    }
+}
+
+fn stored_original(effective: bool) -> Vec<u8> {
+    let mut response = serde_json::to_value(draft(TeletextColour::Red, "ASCII")).unwrap();
+    response["schema_version"] = json!(2);
+    response["generation"] = json!("saved-operand-replay");
+    response["page_enhancements"] = json!([{
+        "address":address(123),"presentation":null,"compositional_links":null,
+        "local_program":{"commands":[
+            {"kind":"set_position","position":{"row":1,"column":0}},
+            {"kind":"at_column","column":8,"operation":{"kind":"foreground","colour":1}},
+            {"kind":"at_column","column":8,"operation":{"kind":"g0","code":65}}
+        ]},
+        "resources":{"objects":{"public":null,"global":null},
+            "drcs":{"normal":null,"global":null},"defaults":[null,null,null,null]}
+    }]);
+    for key in ["magazines", "objects", "drcs", "mots", "empty_object_pages"] {
+        response[key] = json!([]);
+    }
+    response["mot_selections"] = json!([
+        {"display":address(123),"mot":null},{"display":address(124),"mot":null}
+    ]);
+    let member = json!({"contract":2,"channel_id":1,"addon_id":ADDON,"binding_revision":1,
+        "profile_id":1,"profile_revision":1,"effective_settings":[],
+        "installation":{"addon_id":ADDON,"state_revision":"synthetic-installation-revision",
+            "version":"1.0.0","package_sha256":"a".repeat(64),
+            "content_sha256":"b".repeat(64),"manifest_sha256":"c".repeat(64)}});
+    let mut value = json!({"format_version":1,"selection":{"channel_id":1,"bindings":[member.clone()]},
+        "generation":"saved-operand-replay","entry_addon_id":ADDON,"entry":address(123),
+        "v1_region":null,"edit_policy":{"policy_version":1,"kind":"original_only"},
+        "resource_transmissions":[],"documents":[{"contract":2,"generation":"saved-operand-replay",
+            "response":response.to_string()}]});
+    if effective {
+        let request = ersatzrs_app::teletext_guide::build_request_for_schema(
+            &ersatzrs_app::teletext_guide::SuppliedTeletextGuideContext {
+                generation: "saved-operand-replay",
+                locale: "en",
+                supported_locales: &["en"],
+                timezone: "UTC",
+                captured_at: "2026-10-15T12:00:00Z".parse().unwrap(),
+                channels: &[],
+            },
+            2,
+        )
+        .unwrap();
+        value.as_object_mut().unwrap().remove("selection");
+        value["format_version"] = json!(2);
+        value["effective_selection"] = json!({"channel_id":1,"valid_until":null,
+            "bindings":[{"origin":"base","base":member,"scripted":null}]});
+        value["producer_bindings"] = json!([0]);
+        value["guide_inputs"] = json!({"input_version":1,"v1":null,
+            "v2":std::str::from_utf8(&request).unwrap()});
+    }
+    serde_json::to_vec(&value).unwrap()
+}
+
+fn saved_overlay(
+    operands: bool,
+    rows: Vec<TeletextPhysicalBaseOverlay>,
+) -> TeletextSavedEditorialOverlay {
+    let provenance = TeletextSavedEditorialProvenance {
+        export_receipt_id: 3,
+        export_receipt_digest: "d".repeat(64),
+        original_design_id: 7,
+        original_revision: 2,
+        original_digest: "e".repeat(64),
+    };
+    if operands {
+        TeletextSavedEditorialOverlay::new_with_local_program_operands(
+            provenance,
+            rows,
+            vec![TeletextLocalProgramOperandOverlay::new(
+                address(123),
+                1,
+                8,
+                TeletextColumnOperation::Foreground {
+                    colour: TeletextColourReference::new(1).unwrap(),
+                },
+                TeletextColumnOperation::Foreground {
+                    colour: TeletextColourReference::new(2).unwrap(),
+                },
+            )
+            .unwrap()],
+        )
+        .unwrap()
+    } else {
+        TeletextSavedEditorialOverlay::new(provenance, rows).unwrap()
+    }
+}
+
+#[test]
+fn restored_compilers_reject_saved_operands_without_losing_row_only_replay() {
+    // Genuine public decoding for both envelope roles; Base origin here does
+    // not establish scripted selection, import permission or publication proof.
+    for effective in [false, true] {
+        for operands in [false, true] {
+            let rows = vec![overlay(row(&original(
+                &snapshot(1, 1),
+                draft(TeletextColour::Red, "ASCII"),
+            )))];
+            let saved = saved_overlay(operands, rows.clone());
+            assert_eq!(saved.schema_version(), if operands { 2 } else { 1 });
+            let original = stored_original(effective);
+            let document = if effective {
+                append_teletext_effective_design_editorial_overlay(
+                    &original,
+                    &saved,
+                    storage_budget(),
+                )
+                .unwrap()
+                .into_bytes()
+            } else {
+                append_teletext_design_editorial_overlay(&original, &saved, storage_budget())
+                    .unwrap()
+                    .into_bytes()
+            };
+            let stored = TeletextDesignRevision {
+                design_id: 7,
+                revision: 3,
+                document_version: if effective { 2 } else { 1 },
+                digest: "f".repeat(64),
+                document,
+            };
+            // Nonempty rows ensure the effective failure specifically detects
+            // operands, rather than its existing missing-row validation guard.
+            assert!(!rows.is_empty());
+            let result = if effective {
+                let parts =
+                    decode_teletext_effective_design_documents(&stored.document, storage_budget())
+                        .unwrap()
+                        .into_parts();
+                compile_effective_restored_parts(stored, parts, bounds(1).0, deadline(), rows)
+                    .map(|_| ())
+            } else {
+                let parts = decode_teletext_design_documents(&stored.document, storage_budget())
+                    .unwrap()
+                    .into_parts();
+                compile_restored_parts(stored, parts, bounds(1).0, deadline(), rows).map(|_| ())
+            };
+            if operands {
+                assert!(matches!(
+                    result,
+                    Err(NativeTeletextDesignError::EditorialValidationUnavailable)
+                ));
+            } else {
+                result.unwrap();
+            }
+        }
+    }
 }

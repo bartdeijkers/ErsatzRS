@@ -531,3 +531,464 @@ fn editorial_append_rejects_second_overlay_policy_change_and_serialized_overflow
         TeletextDesignDocumentFailure::EditPolicy
     );
 }
+
+mod local_operands {
+    use super::*;
+    use ersatzrs_domain::TeletextColourReference;
+
+    fn foreground(colour: u8) -> TeletextColumnOperation {
+        TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::new(colour).unwrap(),
+        }
+    }
+
+    fn attributes(invert: bool) -> TeletextColumnOperation {
+        TeletextColumnOperation::Attributes {
+            double_height: false,
+            double_width: false,
+            boxed: false,
+            conceal: false,
+            invert,
+            underline_or_separated_mosaics: false,
+        }
+    }
+
+    fn operands() -> Vec<TeletextLocalProgramOperandOverlay> {
+        [
+            (1, foreground(1), foreground(31)),
+            (
+                2,
+                TeletextColumnOperation::Background {
+                    colour: TeletextColourReference::new(0).unwrap(),
+                },
+                TeletextColumnOperation::Background {
+                    colour: TeletextColourReference::new(16).unwrap(),
+                },
+            ),
+            (3, attributes(false), attributes(true)),
+        ]
+        .into_iter()
+        .map(|(command, expected, replacement)| {
+            TeletextLocalProgramOperandOverlay::new(address(16), command, 3, expected, replacement)
+                .unwrap()
+        })
+        .collect()
+    }
+
+    fn original() -> Vec<u8> {
+        let mut value: Value = serde_json::from_slice(&original_with_context()).unwrap();
+        let mut response: Value =
+            serde_json::from_str(value["documents"][0]["response"].as_str().unwrap()).unwrap();
+        response["service"]["page_enhancements"] = json!([{
+            "address":{"page":200,"subcode":16},"presentation":null,"compositional_links":null,
+            "local_program":{"commands":[
+                {"kind":"set_position","position":{"row":1,"column":0}},
+                {"kind":"at_column","column":3,"operation":{"kind":"foreground","colour":1}},
+                {"kind":"at_column","column":3,"operation":{"kind":"background","colour":0}},
+                {"kind":"at_column","column":3,"operation":attributes(false)},
+                {"kind":"at_column","column":3,"operation":{"kind":"g0","code":65}}
+            ]},
+            "resources":{"objects":{"public":null,"global":null},
+                "drcs":{"normal":null,"global":null},"defaults":[null,null,null,null]}
+        }]);
+        value["documents"][0]["response"] = json!(format!(
+            "{}\n \t",
+            serde_json::to_string_pretty(&response).unwrap()
+        ));
+        bytes(&value)
+    }
+
+    fn overlay_with_rows(rows: bool) -> TeletextSavedEditorialOverlay {
+        TeletextSavedEditorialOverlay::new_with_local_program_operands(
+            provenance(),
+            if rows {
+                overlay().pages().to_vec()
+            } else {
+                vec![]
+            },
+            operands(),
+        )
+        .unwrap()
+    }
+
+    fn concept() -> Value {
+        serde_json::from_slice(
+            append_teletext_design_editorial_overlay(
+                &original(),
+                &overlay_with_rows(false),
+                budget(),
+            )
+            .unwrap()
+            .bytes(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn v1_saved_output_remains_byte_identical_without_new_fields() {
+        let original = bytes(&original_value(true));
+        let encoded =
+            append_teletext_design_editorial_overlay(&original, &overlay(), budget()).unwrap();
+        let end = original
+            .iter()
+            .rposition(|byte| !byte.is_ascii_whitespace())
+            .unwrap();
+        let cells = |letter| {
+            let mut cells = vec![32; 40];
+            cells[0] = 1;
+            cells[1] = letter;
+            serde_json::to_string(&cells).unwrap()
+        };
+        let expected_overlay = format!(
+            concat!(
+                "{{\"schema_version\":1,\"export_receipt_id\":3,\"export_receipt_digest\":\"{}\",",
+                "\"original_design_id\":7,\"original_revision\":2,\"original_digest\":\"{}\",",
+                "\"pages\":[{{\"owner\":{{\"page\":200,\"subcode\":16}},\"rows\":[{{\"row\":1,\"cells\":{}}}]}},",
+                "{{\"owner\":{{\"page\":200,\"subcode\":17}},\"rows\":[{{\"row\":1,\"cells\":{}}}]}}]}}"
+            ),
+            "d".repeat(64), "e".repeat(64), cells(u32::from(b'A')), cells(u32::from(b'B'))
+        );
+        let mut expected = original[..end].to_vec();
+        expected.extend_from_slice(b",\"editorial_overlay\":");
+        expected.extend_from_slice(expected_overlay.as_bytes());
+        expected.extend_from_slice(&original[end..]);
+        assert_eq!(encoded.bytes(), expected);
+        let restored = decode_teletext_design_documents(&expected, budget()).unwrap();
+        assert_eq!(restored.editorial_overlay().unwrap().schema_version(), 1);
+        assert!(restored
+            .editorial_overlay()
+            .unwrap()
+            .local_program_operands()
+            .is_empty());
+    }
+
+    #[test]
+    fn v2_operand_only_and_mixed_concepts_preserve_exact_original_context() {
+        let original = original();
+        let before = decode_teletext_design_documents(&original, budget()).unwrap();
+        for rows in [false, true] {
+            let overlay = overlay_with_rows(rows);
+            let encoded =
+                append_teletext_design_editorial_overlay(&original, &overlay, budget()).unwrap();
+            let after = decode_teletext_design_documents(encoded.bytes(), budget()).unwrap();
+            let saved = after.editorial_overlay().unwrap();
+            assert_eq!(saved.schema_version(), 2);
+            assert_eq!(saved, &overlay);
+            assert_eq!(saved.local_program_operands(), operands());
+            assert_eq!(after.selection(), before.selection());
+            assert_eq!(after.sources()[0].bytes(), before.sources()[0].bytes());
+            assert_eq!(
+                after.sources()[0].authoring(),
+                before.sources()[0].authoring()
+            );
+            assert_eq!(after.guide_source(), before.guide_source());
+            assert_eq!(
+                after
+                    .guide_inputs()
+                    .unwrap()
+                    .request(TeletextPageContract::V3),
+                before
+                    .guide_inputs()
+                    .unwrap()
+                    .request(TeletextPageContract::V3)
+            );
+            assert_eq!(
+                after.resource_transmissions(),
+                before.resource_transmissions()
+            );
+            assert_eq!(after.edit_policy(), TeletextSavedEditPolicy::OriginalOnly);
+            assert_eq!(after.documents().len(), before.documents().len());
+            let (
+                TeletextProfileDocument::Authored(after_document),
+                TeletextProfileDocument::Authored(before_document),
+            ) = (&after.documents()[0], &before.documents()[0])
+            else {
+                panic!("authored original");
+            };
+            assert_eq!(after_document.semantic(), before_document.semantic());
+            let end = original
+                .iter()
+                .rposition(|byte| !byte.is_ascii_whitespace())
+                .unwrap();
+            assert_eq!(&encoded.bytes()[..end], &original[..end]);
+            assert!(encoded.bytes().ends_with(&original[end..]));
+            let value: Value = serde_json::from_slice(encoded.bytes()).unwrap();
+            assert_eq!(
+                value["editorial_overlay"]["local_program_operands"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                3
+            );
+            assert_eq!(saved.pages().is_empty(), !rows);
+        }
+    }
+
+    #[test]
+    fn operand_version_boundary_requires_explicit_nonempty_v2_and_omitted_v1_field() {
+        let baseline = concept();
+        for field in [Value::Null, json!([])] {
+            let mut changed = baseline.clone();
+            changed["editorial_overlay"]["local_program_operands"] = field;
+            assert!(decode(&changed).is_err());
+        }
+        let mut absent = baseline.clone();
+        absent["editorial_overlay"]
+            .as_object_mut()
+            .unwrap()
+            .remove("local_program_operands");
+        assert_eq!(
+            decode(&absent).unwrap_err().reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+        let mut downgrade = baseline.clone();
+        downgrade["editorial_overlay"]["schema_version"] = json!(1);
+        assert_eq!(
+            decode(&downgrade).unwrap_err().reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+        let mut contaminated = concept_value();
+        contaminated["editorial_overlay"]["local_program_operands"] = json!([]);
+        assert_eq!(
+            decode(&contaminated).unwrap_err().reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+        assert!(
+            TeletextSavedEditorialOverlay::new_with_local_program_operands(
+                provenance(),
+                vec![],
+                vec![]
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn operand_dtos_are_closed_map_only_and_reject_duplicate_keys() {
+        let baseline = concept();
+        for field in ["operand", "owner", "expected", "replacement"] {
+            for invalid in [Value::Null, json!([]), json!("operand")] {
+                let mut changed = baseline.clone();
+                let operand = &mut changed["editorial_overlay"]["local_program_operands"][0];
+                let target = if field == "operand" {
+                    operand
+                } else {
+                    &mut operand[field]
+                };
+                *target = invalid;
+                assert_eq!(
+                    decode(&changed).unwrap_err().reason,
+                    TeletextDesignDocumentFailure::Json,
+                    "{field}"
+                );
+            }
+            let mut changed = baseline.clone();
+            let operand = &mut changed["editorial_overlay"]["local_program_operands"][0];
+            let target = if field == "operand" {
+                operand
+            } else {
+                &mut operand[field]
+            };
+            target["permission"] = json!(true);
+            assert_eq!(
+                decode(&changed).unwrap_err().reason,
+                TeletextDesignDocumentFailure::Json,
+                "{field}"
+            );
+        }
+        let serialized = serde_json::to_string(&baseline).unwrap();
+        let duplicate = serialized.replacen("\"command\":1", "\"command\":1,\"command\":2", 1);
+        assert_ne!(serialized, duplicate);
+        assert_eq!(
+            decode_teletext_design_documents(duplicate.as_bytes(), budget())
+                .unwrap_err()
+                .reason,
+            TeletextDesignDocumentFailure::Json
+        );
+    }
+
+    #[test]
+    fn wrong_family_noop_unsupported_and_geometry_operands_cannot_restore() {
+        let baseline = concept();
+        for replacement in [
+            json!({"kind":"foreground","colour":1}),
+            json!({"kind":"background","colour":2}),
+            json!({"kind":"g0","code":65}),
+            json!({"kind":"designate_charset","designation":0}),
+        ] {
+            let mut changed = baseline.clone();
+            changed["editorial_overlay"]["local_program_operands"][0]["replacement"] = replacement;
+            assert_eq!(
+                decode(&changed).unwrap_err().reason,
+                TeletextDesignDocumentFailure::EditorialOverlay
+            );
+        }
+        let mut glyph = baseline.clone();
+        glyph["editorial_overlay"]["local_program_operands"][0]["command"] = json!(4);
+        glyph["editorial_overlay"]["local_program_operands"][0]["expected"] =
+            json!({"kind":"g0","code":65});
+        glyph["editorial_overlay"]["local_program_operands"][0]["replacement"] =
+            json!({"kind":"g0","code":66});
+        assert_eq!(
+            decode(&glyph).unwrap_err().reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+        for field in ["double_height", "double_width"] {
+            let mut changed = baseline.clone();
+            changed["editorial_overlay"]["local_program_operands"][2]["replacement"][field] =
+                json!(true);
+            assert_eq!(
+                decode(&changed).unwrap_err().reason,
+                TeletextDesignDocumentFailure::EditorialOverlay
+            );
+        }
+        let mut invalid_colour = baseline;
+        invalid_colour["editorial_overlay"]["local_program_operands"][0]["replacement"]["colour"] =
+            json!(32);
+        assert!(decode(&invalid_colour).is_err());
+    }
+
+    #[test]
+    fn exact_unique_authored_original_and_original_command_match_are_required() {
+        let baseline = concept();
+        for (field, invalid) in [
+            ("command", json!(0)),
+            ("command", json!(999)),
+            ("column", json!(4)),
+            ("column", json!(40)),
+        ] {
+            let mut changed = baseline.clone();
+            changed["editorial_overlay"]["local_program_operands"][0][field] = invalid;
+            assert_eq!(
+                decode(&changed).unwrap_err().reason,
+                TeletextDesignDocumentFailure::EditorialOverlay
+            );
+        }
+        for subcode in [17, 18] {
+            let mut changed = baseline.clone();
+            changed["editorial_overlay"]["local_program_operands"][0]["owner"]["subcode"] =
+                json!(subcode);
+            assert_eq!(
+                decode(&changed).unwrap_err().reason,
+                TeletextDesignDocumentFailure::EditorialOverlay
+            );
+        }
+        let mut stale = baseline.clone();
+        stale["editorial_overlay"]["local_program_operands"][0]["expected"]["colour"] = json!(2);
+        assert_eq!(
+            decode(&stale).unwrap_err().reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+        let mut duplicate = baseline.clone();
+        let operand = duplicate["editorial_overlay"]["local_program_operands"][0].clone();
+        duplicate["editorial_overlay"]["local_program_operands"]
+            .as_array_mut()
+            .unwrap()
+            .push(operand);
+        assert_eq!(
+            decode(&duplicate).unwrap_err().reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+        let mut ambiguous = baseline;
+        let mut binding = ambiguous["selection"]["bindings"][0].clone();
+        binding["addon_id"] = json!("org.zz.synthetic");
+        binding["installation"]["addon_id"] = json!("org.zz.synthetic");
+        binding["profile_id"] = json!(12);
+        ambiguous["selection"]["bindings"]
+            .as_array_mut()
+            .unwrap()
+            .push(binding);
+        let document = ambiguous["documents"][0].clone();
+        ambiguous["documents"]
+            .as_array_mut()
+            .unwrap()
+            .push(document);
+        assert_eq!(
+            decode(&ambiguous).unwrap_err().reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+        let overlay = overlay_with_rows(false);
+        assert_eq!(
+            append_teletext_design_editorial_overlay(
+                &bytes(&original_value(false)),
+                &overlay,
+                budget()
+            )
+            .unwrap_err()
+            .reason,
+            TeletextDesignDocumentFailure::EditorialOverlay
+        );
+    }
+
+    #[test]
+    fn operand_count_shared_structure_and_serialized_limits_remain_bounded() {
+        let baseline = concept();
+        let mut repeated = baseline.clone();
+        repeated["editorial_overlay"]["local_program_operands"] = json!(vec![
+                baseline["editorial_overlay"]["local_program_operands"]
+                    [0]
+                .clone();
+                6
+            ]);
+        let mut command_limit = budget();
+        command_limit.validation.service.max_commands = 5;
+        let error = decode_teletext_design_documents(&bytes(&repeated), command_limit).unwrap_err();
+        assert!(matches!(
+            error.reason,
+            TeletextDesignDocumentFailure::Budget {
+                dimension: "editorial operands",
+                ..
+            }
+        ));
+        let original = original();
+        let mixed = overlay_with_rows(true);
+        let mut structure_limit = budget();
+        structure_limit.validation.service.max_structure_items = 6;
+        let error = append_teletext_design_editorial_overlay(&original, &mixed, structure_limit)
+            .unwrap_err();
+        assert!(matches!(
+            error.reason,
+            TeletextDesignDocumentFailure::Budget {
+                dimension: "editorial structure items",
+                ..
+            }
+        ));
+        let encoded = append_teletext_design_editorial_overlay(
+            &original,
+            &overlay_with_rows(false),
+            budget(),
+        )
+        .unwrap();
+        let mut serialized_limit = budget();
+        serialized_limit.max_serialized_bytes = encoded.bytes().len() - 1;
+        assert!(matches!(
+            append_teletext_design_editorial_overlay(
+                &original,
+                &overlay_with_rows(false),
+                serialized_limit
+            )
+            .unwrap_err()
+            .reason,
+            TeletextDesignDocumentFailure::Budget {
+                dimension: "serialized",
+                ..
+            }
+        ));
+        let mut no_row_content = budget();
+        no_row_content.validation.service.max_base_content_bytes = 0;
+        assert!(append_teletext_design_editorial_overlay(
+            &original,
+            &overlay_with_rows(false),
+            no_row_content
+        )
+        .is_ok());
+        assert!(
+            TeletextSavedEditorialOverlay::new_with_local_program_operands(
+                provenance(),
+                vec![],
+                vec![operands()[0]; 2]
+            )
+            .is_err()
+        );
+    }
+}

@@ -214,6 +214,21 @@ impl TeletextDeclaredService {
     pub const fn semantic(&self) -> &TeletextSemanticService {
         &self.semantic
     }
+    /// Replace checked existing local colour/attribute operands, preserving the
+    /// authenticated declarations and resource selections. Hosts must still
+    /// enforce captured edit permissions, recompile and publish explicitly.
+    /// # Errors
+    /// Rejects stale, duplicate or invalid local changes and service budget overflow.
+    pub fn with_local_program_operand_overlays(
+        mut self,
+        overlays: &[super::TeletextLocalProgramOperandOverlay],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self
+            .semantic
+            .with_local_program_operand_overlays(overlays, budget)?;
+        Ok(self)
+    }
     /// Attach trusted physical rows while preserving the authenticated logical
     /// declarations, resource inventory, MOT selections and exact resolutions.
     /// # Errors

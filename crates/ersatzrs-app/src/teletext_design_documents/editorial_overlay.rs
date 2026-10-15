@@ -11,16 +11,19 @@ use super::{
 };
 use crate::teletext_profile_documents::TeletextProfileDocument;
 use ersatzrs_domain::{
-    EntityId, TeletextPageAddress, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
+    EntityId, TeletextColumnOperation, TeletextEnhancementCommand,
+    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPhysicalBaseOverlay,
+    TeletextPhysicalBaseRow,
 };
 use serde::{
     de::{SeqAccess, Visitor},
     ser::SerializeSeq,
     Deserialize, Deserializer, Serialize, Serializer,
 };
-use std::{fmt, io::Write};
+use std::{collections::BTreeSet, fmt, io::Write};
 
 const OVERLAY_VERSION: u16 = 1;
+const OPERAND_OVERLAY_VERSION: u16 = 2;
 
 /// Structural association claims. Only the native host and repository can
 /// authenticate these references against exact immutable stored bytes.
@@ -42,12 +45,13 @@ impl fmt::Debug for TeletextSavedEditorialProvenance {
     }
 }
 
-/// Immutable physical rows belonging to a captured original, not a checked
-/// native rendering or authenticated editor/import capability.
+/// Immutable physical rows and local operands belonging to a captured original.
+/// This is not a checked native rendering or authenticated editor capability.
 #[derive(Clone, PartialEq, Eq)]
 pub struct TeletextSavedEditorialOverlay {
     provenance: TeletextSavedEditorialProvenance,
     pages: Vec<TeletextPhysicalBaseOverlay>,
+    local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
 }
 impl TeletextSavedEditorialOverlay {
     /// Check reference shape and distinct exact owners. Original-page membership
@@ -58,10 +62,36 @@ impl TeletextSavedEditorialOverlay {
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        validate_provenance(&provenance)?;
         if pages.is_empty() {
             return Err(invalid());
         }
+        Self::new_parts(provenance, pages, Vec::new())
+    }
+
+    /// Capture version 2 intent, including operand-only concepts with no rows.
+    ///
+    /// Every operand must match a unique original authored document when this is
+    /// attached or restored. Character sizing and command structure are immutable;
+    /// all affected protected display effects still require host validation.
+    /// # Errors
+    /// Rejects invalid references, empty operand input and repeated exact targets.
+    pub fn new_with_local_program_operands(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if local_program_operands.is_empty() {
+            return Err(invalid());
+        }
+        Self::new_parts(provenance, pages, local_program_operands)
+    }
+
+    fn new_parts(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        validate_provenance(&provenance)?;
         for (ordinal, page) in pages.iter().enumerate() {
             if pages[..ordinal]
                 .iter()
@@ -70,11 +100,25 @@ impl TeletextSavedEditorialOverlay {
                 return Err(invalid());
             }
         }
-        Ok(Self { provenance, pages })
+        let mut targets = BTreeSet::new();
+        for operand in &local_program_operands {
+            if !targets.insert((operand.owner(), operand.command())) {
+                return Err(invalid());
+            }
+        }
+        Ok(Self {
+            provenance,
+            pages,
+            local_program_operands,
+        })
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        OVERLAY_VERSION
+        if self.local_program_operands.is_empty() {
+            OVERLAY_VERSION
+        } else {
+            OPERAND_OVERLAY_VERSION
+        }
     }
     #[must_use]
     pub const fn provenance(&self) -> &TeletextSavedEditorialProvenance {
@@ -84,13 +128,19 @@ impl TeletextSavedEditorialOverlay {
     pub fn pages(&self) -> &[TeletextPhysicalBaseOverlay] {
         &self.pages
     }
+    /// Exact-original local command changes; no decoded effective-program rewrite.
+    #[must_use]
+    pub fn local_program_operands(&self) -> &[TeletextLocalProgramOperandOverlay] {
+        &self.local_program_operands
+    }
 }
 impl fmt::Debug for TeletextSavedEditorialOverlay {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TeletextSavedEditorialOverlay")
-            .field("schema_version", &OVERLAY_VERSION)
+            .field("schema_version", &self.schema_version())
             .field("provenance", &self.provenance)
             .field("pages", &self.pages.len())
+            .field("local_program_operands", &self.local_program_operands.len())
             .finish_non_exhaustive()
     }
 }
@@ -132,13 +182,13 @@ impl Serialize for OptionalEditorialOverlay {
 }
 
 macro_rules! closed_map {
-    ($name:ident { $($field:ident: $ty:ty),* $(,)? }) => {
+    ($name:ident { $($(#[$attribute:meta])* $field:ident: $ty:ty),* $(,)? }) => {
         #[derive(Serialize)]
-        pub(super) struct $name { $($field: $ty),* }
+        pub(super) struct $name { $($(#[$attribute])* $field: $ty),* }
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
                 #[derive(Deserialize)] #[serde(deny_unknown_fields)]
-                struct Fields { $($field: $ty),* }
+                struct Fields { $($(#[$attribute])* $field: $ty),* }
                 let fields: Fields = map_only(d)?;
                 Ok(Self { $($field: fields.$field),* })
             }
@@ -153,12 +203,43 @@ closed_map!(StoredOverlay {
     original_revision: i64,
     original_digest: String,
     pages: Vec<StoredPage>,
+    #[serde(default, skip_serializing_if = "OptionalStoredOperands::is_absent")]
+    local_program_operands: OptionalStoredOperands,
 });
 closed_map!(StoredPage { owner: super::Entry, rows: Vec<StoredRow> });
 closed_map!(StoredRow {
     row: u8,
     cells: Cells
 });
+closed_map!(StoredOperand {
+    owner: super::Entry,
+    command: usize,
+    column: u8,
+    expected: StoredOperation,
+    replacement: StoredOperation,
+});
+
+#[derive(Default, Serialize)]
+struct OptionalStoredOperands(Option<Vec<StoredOperand>>);
+impl OptionalStoredOperands {
+    fn is_absent(&self) -> bool {
+        self.0.is_none()
+    }
+}
+impl<'de> Deserialize<'de> for OptionalStoredOperands {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        // Omission alone selects absence; present null is never accepted.
+        Vec::<StoredOperand>::deserialize(d).map(|value| Self(Some(value)))
+    }
+}
+
+#[derive(Serialize)]
+struct StoredOperation(TeletextColumnOperation);
+impl<'de> Deserialize<'de> for StoredOperation {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        map_only(d).map(Self)
+    }
+}
 
 struct Cells([u8; 40]);
 impl Serialize for Cells {
@@ -204,9 +285,11 @@ impl StoredOverlay {
         documents: &[TeletextProfileDocument],
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
-        if self.schema_version != OVERLAY_VERSION {
-            return Err(invalid());
-        }
+        let operands = match (self.schema_version, self.local_program_operands.0) {
+            (OVERLAY_VERSION, None) => None,
+            (OPERAND_OVERLAY_VERSION, Some(operands)) if !operands.is_empty() => Some(operands),
+            _ => return Err(invalid()),
+        };
         let provenance = TeletextSavedEditorialProvenance {
             export_receipt_id: self.export_receipt_id,
             export_receipt_digest: self.export_receipt_digest,
@@ -215,7 +298,7 @@ impl StoredOverlay {
             original_digest: self.original_digest,
         };
         validate_provenance(&provenance)?;
-        // Parent streaming preflight already bounded owner/row vectors.
+        // Parent streaming preflight already bounded owner/row/operand vectors.
         let pages = self
             .pages
             .into_iter()
@@ -237,7 +320,29 @@ impl StoredOverlay {
                 .map_err(|_| invalid())
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let value = TeletextSavedEditorialOverlay::new(provenance, pages)?;
+        let value = if let Some(operands) = operands {
+            let operands = operands
+                .into_iter()
+                .map(|operand| {
+                    TeletextLocalProgramOperandOverlay::new(
+                        TeletextPageAddress {
+                            page: operand.owner.page,
+                            subcode: operand.owner.subcode,
+                        },
+                        operand.command,
+                        operand.column,
+                        operand.expected.0,
+                        operand.replacement.0,
+                    )
+                    .map_err(|_| invalid())
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            TeletextSavedEditorialOverlay::new_with_local_program_operands(
+                provenance, pages, operands,
+            )?
+        } else {
+            TeletextSavedEditorialOverlay::new(provenance, pages)?
+        };
         validate_association(&value, documents, budget)?;
         Ok(value)
     }
@@ -277,21 +382,62 @@ pub(super) fn validate_association(
             budget.validation.service.max_base_content_bytes,
             "editorial content bytes",
         )?;
-        let mut owners = documents
-            .iter()
-            .flat_map(|document| match document {
-                TeletextProfileDocument::Base(base) => base.pages.iter(),
-                TeletextProfileDocument::Authored(service) => {
-                    service.semantic().base().pages.iter()
-                }
+        unique_original_owner(page.owner(), documents)?;
+    }
+    limit(
+        overlay.local_program_operands.len(),
+        budget.validation.service.max_commands,
+        "editorial operands",
+    )?;
+    items = items
+        .checked_add(overlay.local_program_operands.len())
+        .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
+    limit(
+        items,
+        budget.validation.service.max_structure_items,
+        "editorial structure items",
+    )?;
+    for operand in &overlay.local_program_operands {
+        let TeletextProfileDocument::Authored(service) =
+            unique_original_owner(operand.owner(), documents)?
+        else {
+            return Err(invalid());
+        };
+        let program = service
+            .semantic()
+            .page_enhancements()
+            .get(&operand.owner())
+            .and_then(|page| page.local_program.as_ref())
+            .ok_or_else(invalid)?;
+        if program.commands().get(operand.command())
+            != Some(&TeletextEnhancementCommand::AtColumn {
+                column: operand.column(),
+                operation: operand.expected(),
             })
-            .filter(|candidate| candidate.address == page.owner());
-        // Ambiguous ownership is rejected, not rebound to the first producer.
-        if owners.next().is_none() || owners.next().is_some() {
+        {
             return Err(invalid());
         }
     }
     Ok(())
+}
+
+fn unique_original_owner(
+    owner: TeletextPageAddress,
+    documents: &[TeletextProfileDocument],
+) -> Result<&TeletextProfileDocument, TeletextDesignDocumentError> {
+    let mut owners = documents.iter().filter(|document| {
+        let base = match document {
+            TeletextProfileDocument::Base(base) => base,
+            TeletextProfileDocument::Authored(service) => service.semantic().base(),
+        };
+        base.pages.iter().any(|page| page.address == owner)
+    });
+    let document = owners.next().ok_or_else(invalid)?;
+    // Ambiguous ownership is rejected, including a competing base-only producer.
+    if owners.next().is_some() {
+        return Err(invalid());
+    }
+    Ok(document)
 }
 
 #[derive(Serialize)]
@@ -303,6 +449,35 @@ struct BorrowedOverlay<'a> {
     original_revision: i64,
     original_digest: &'a str,
     pages: BorrowedPages<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_program_operands: Option<BorrowedOperands<'a>>,
+}
+struct BorrowedOperands<'a>(&'a [TeletextLocalProgramOperandOverlay]);
+impl Serialize for BorrowedOperands<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct BorrowedOperand {
+            owner: super::Entry,
+            command: usize,
+            column: u8,
+            expected: TeletextColumnOperation,
+            replacement: TeletextColumnOperation,
+        }
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for operand in self.0 {
+            sequence.serialize_element(&BorrowedOperand {
+                owner: super::Entry {
+                    page: operand.owner().page,
+                    subcode: operand.owner().subcode,
+                },
+                command: operand.command(),
+                column: operand.column(),
+                expected: operand.expected(),
+                replacement: operand.replacement(),
+            })?;
+        }
+        sequence.end()
+    }
 }
 struct BorrowedPages<'a>(&'a [TeletextPhysicalBaseOverlay]);
 impl Serialize for BorrowedPages<'_> {
@@ -357,10 +532,10 @@ impl Serialize for BorrowedCells<'_> {
     }
 }
 
-/// Append concept rows to the exact immutable original storage blob. Existing
-/// strings/JSON prefix and `OriginalOnly` policy remain intact. This checks only
-/// syntax, bounds and original owner membership; authenticate receipt provenance,
-/// enforce edit regions and native preview before any repository save/publication.
+/// Append concept rows/local operands to the exact immutable original storage blob.
+/// Existing strings/JSON prefix and `OriginalOnly` policy remain intact. This checks
+/// syntax, bounds and exact original owner/command association; authenticate receipt
+/// provenance, enforce edit regions and native preview before any save/publication.
 /// # Errors
 /// Rejects invalid originals, existing overlays, missing/ambiguous owners and
 /// limits. No stored revision or running broadcast is modified.
@@ -427,13 +602,15 @@ fn write_appended(
     serde_json::to_writer(
         &mut *writer,
         &BorrowedOverlay {
-            schema_version: OVERLAY_VERSION,
+            schema_version: overlay.schema_version(),
             export_receipt_id: value.export_receipt_id,
             export_receipt_digest: &value.export_receipt_digest,
             original_design_id: value.original_design_id,
             original_revision: value.original_revision,
             original_digest: &value.original_digest,
             pages: BorrowedPages(&overlay.pages),
+            local_program_operands: (!overlay.local_program_operands.is_empty())
+                .then_some(BorrowedOperands(&overlay.local_program_operands)),
         },
     )?;
     writer

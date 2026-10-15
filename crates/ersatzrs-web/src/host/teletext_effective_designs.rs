@@ -541,7 +541,11 @@ pub(super) fn compile_effective_restored_parts(
     overlays: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
 ) -> Result<RestoredEffectiveOriginalDesign, NativeTeletextDesignError> {
     check_deadline(deadline)?;
-    if parts.editorial_overlay.is_some() && overlays.is_empty() {
+    if parts
+        .editorial_overlay
+        .as_ref()
+        .is_some_and(|overlay| overlays.is_empty() || !overlay.local_program_operands().is_empty())
+    {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
     policy.entry = parts.entry;

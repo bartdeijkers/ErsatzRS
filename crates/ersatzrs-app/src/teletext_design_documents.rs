@@ -1271,6 +1271,8 @@ enum Path {
     EditorialRows,
     EditorialRow,
     EditorialCells,
+    EditorialOperands,
+    EditorialOperand,
 }
 struct Scan {
     budget: TeletextDesignDocumentBudget,
@@ -1303,13 +1305,21 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 .scan
                 .check(storage::<editorial_overlay::StoredPage>(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialOperand) {
+            self.inner
+                .scan
+                .check(storage::<editorial_overlay::StoredOperand>(self.count))?;
+        }
         self.inner.scan.editorial(self.inner.path)?;
         self.inner.deserialize(deserializer)
     }
 }
 impl Scan {
     fn editorial<E: serde::de::Error>(&mut self, path: Path) -> Result<(), E> {
-        if !matches!(path, Path::EditorialPage | Path::EditorialRow) {
+        if !matches!(
+            path,
+            Path::EditorialPage | Path::EditorialRow | Path::EditorialOperand
+        ) {
             return Ok(());
         }
         self.editorial_items = self
@@ -1440,6 +1450,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Root, "guide_source") => Path::GuideSource,
                 (Path::Root, "editorial_overlay") => Path::EditorialOverlay,
                 (Path::EditorialOverlay, "pages") => Path::EditorialPages,
+                (Path::EditorialOverlay, "local_program_operands") => Path::EditorialOperands,
                 (Path::EditorialPage, "rows") => Path::EditorialRows,
                 (Path::EditorialRow, "cells") => Path::EditorialCells,
                 (Path::GuideSource, "channel_ids") => Path::GuideChannels,
@@ -1495,6 +1506,11 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 self.scan.budget.validation.service.max_records,
                 Path::EditorialPage,
                 "editorial pages",
+            ),
+            Path::EditorialOperands => (
+                self.scan.budget.validation.service.max_commands,
+                Path::EditorialOperand,
+                "editorial operands",
             ),
             Path::EditorialRows => (25, Path::EditorialRow, "editorial rows"),
             Path::EditorialCells => (40, Path::Other, "editorial cells"),

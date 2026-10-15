@@ -438,6 +438,15 @@ pub(super) fn compile_restored_parts(
     overlays: Vec<TeletextPhysicalBaseOverlay>,
 ) -> Result<RestoredOriginalTeletextDesign, NativeTeletextDesignError> {
     check_deadline(deadline)?;
+    // Operand storage is preparatory; this row-only replay must never silently
+    // drop an enhanced edit while producing a preview/publication candidate.
+    if parts
+        .editorial_overlay
+        .as_ref()
+        .is_some_and(|overlay| !overlay.local_program_operands().is_empty())
+    {
+        return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
+    }
     policy.entry = parts.entry;
     policy.transmissions = parts
         .resource_transmissions

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: authored Level2.5/editor userflow after source-caption closeout; full engine acceptance open'
+current_focus = 'P9A-04: connect checked local-X26 editor concepts to native TTI/effect validation; full acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -83,9 +83,14 @@ ordinary stream -> suitable-client flow already has a retained QTM/admin/TCP/
 decoder/TSDuck/VLC-replay receipt. Separate actual live-URL trials keep their
 own scope. The single criterion map in P9A-04 now identifies current proof,
 missing evidence, concrete blockers and next actions without replaying old gates.
-Next extend authenticated editor concepts to existing local X26 colour/attribute
-operands through the full model/compiler and protected-effect checks. Resource/
-panel/set editing and full authored Level2.5/fallback remain open; no base-row-only
+Checked local-X26 colour/attribute intentions, full semantic/compiler replay and
+version2 private storage now have focused proof while preserving version1 bytes.
+Native static/effective row-only replay explicitly rejects unapplied intentions;
+TTI enhancement import remains unconnected. The normalized compiler currently
+discards its final augmented-emitter -> original-command join. Next retain that
+bounded join (physical ordinals differ), connect exact packet-to-intent association,
+full protected effects and trusted re-encoding, then actual QTM/editor replay. Resource/panel/set/geometry
+editing and full authored Level2.5/fallback remain open; no base-row-only or size
 restriction is accepted. Sought HTTP source-caption proof remains open.
 General source-window/charset/resource/wrap, unknown policies and large sources
 remain concrete acceptance gaps; no product restriction is accepted.
