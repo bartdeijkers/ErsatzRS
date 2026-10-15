@@ -11,6 +11,7 @@ import { captureTeletextChannelTs } from './helpers/teletext-stream-capture';
 // Actual served-host Reset -> Lua -> application publication creates every
 // scoped interval. This spec never seeds interval/checkpoint/publication rows.
 const databasePath = process.env.E2E_DB_PATH;
+const operandEditor = process.env.ERSATZRS_TELETEXT_EFFECTIVE_EDITOR_OPERAND === '1';
 const specUrl = pathToFileURL(__filename);
 const cultures = [
   ['en-us', 'en_us'], ['nl', 'nl'], ['pl', 'pl'], ['es-es', 'es_es'],
@@ -130,18 +131,22 @@ async function assertPreview(page: Page, theme: 'day' | 'night', address = '200'
   const image = model.locator('img');
   await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).complete
     && (element as HTMLImageElement).naturalWidth > 0)).toBe(true);
-  const colours = await image.evaluate(element => {
+  const colours = await image.evaluate((element, operand) => {
     const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 250;
     const context = canvas.getContext('2d')!; context.imageSmoothingEnabled = false;
     context.drawImage(element as HTMLImageElement, 0, 0, canvas.width, canvas.height);
     const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
     let red = 0; let blue = 0;
-    for (let index = 0; index < data.length; index += 4) {
+    // The operand fixture deliberately adds blue AB to the day concept's row2.
+    // The unchanged row1 remains the independent selected-theme assertion.
+    const first = operand ? canvas.width * 10 * 4 : 0;
+    const last = operand ? canvas.width * 20 * 4 : data.length;
+    for (let index = first; index < last; index += 4) {
       if (data[index] === 255 && data[index + 1] === 0 && data[index + 2] === 0) red++;
       if (data[index] === 0 && data[index + 1] === 0 && data[index + 2] === 255) blue++;
     }
     return { red, blue };
-  });
+  }, operandEditor);
   expect(colours[theme === 'day' ? 'red' : 'blue']).toBeGreaterThan(0);
   expect(colours[theme === 'day' ? 'blue' : 'red']).toBe(0);
 }
@@ -209,6 +214,69 @@ async function captureOrdinary(fixture: TeletextChannelFixture, baseURL: string,
 }
 
 type EditorFile = { name: string; mimeType: string; buffer: Buffer };
+type OperandEdit = {
+  kind: 'local_foreground_operand'; page: 200; subcode: 0; row: 2; column: 8;
+  original_command: 4; physical_word_index: number; designation: number; slot: number;
+  expected_word: number; replacement_word: number;
+  expected: { address: 8; mode: 0; data: 18 }; replacement: { address: 8; mode: 0; data: 4 };
+  selection: 'fresh-tti-unique-qualified-row-sequence';
+};
+
+function qualifiedOperand(input: EditorFile, metadata: Record<string, any>): OperandEdit {
+  expect(input.name).toBe('page-200-0000.tti');
+  const association = metadata.project.pages.filter((page: { name: string }) => page.name === input.name);
+  expect(association).toHaveLength(1);
+  expect(association[0]).toMatchObject({ page: { page: 200, subcode: 0 },
+    editor_page: 0x200, editor_ordinal: 0, tti_bytes: input.buffer.length, tti_sha256: sha256(input.buffer) });
+  const records = input.buffer.toString('latin1').split(/\r?\n/);
+  expect(records.filter(line => line.startsWith('PN,'))).toEqual(['PN,20000']);
+  expect(records.filter(line => line.startsWith('SC,'))).toEqual(['SC,0000']);
+  const packets = records.filter(line => line.startsWith('OL,26,')).map(line => {
+    const payload = Buffer.from(line.slice(6), 'latin1');
+    expect(payload.length).toBe(40);
+    expect([...payload].every(byte => byte >= 0x40 && byte <= 0x7f)).toBe(true);
+    const designation = payload[0] - 0x40; expect(designation).toBeLessThan(16);
+    const words = Array.from({ length: 13 }, (_, slot) => ({ designation, slot,
+      index: designation * 13 + slot,
+      word: (payload[1 + slot * 3] - 0x40) | ((payload[2 + slot * 3] - 0x40) << 6)
+        | ((payload[3 + slot * 3] - 0x40) << 12),
+    }));
+    return { designation, words };
+  }).sort((left, right) => left.designation - right.designation);
+  expect(packets.map(packet => packet.designation)).toEqual(packets.map((_, index) => index));
+  const words = packets.flatMap(packet => packet.words);
+  const literal = (address: number, mode: number, data: number) => address | (mode << 6) | (data << 11);
+  const expected = [literal(41, 4, 8), literal(8, 0, 18), literal(8, 9, 65),
+    literal(42, 4, 8), literal(8, 0, 18), literal(8, 9, 65), literal(9, 9, 66),
+    literal(44, 4, 8), literal(8, 0, 18), literal(8, 9, 67)];
+  // Fixture qualification only: no compiler command-position API is exposed to
+  // this browser harness. Reject any unexpected lowering instead of guessing
+  // that an authored ordinal equals a physical word or choosing the first FG.
+  expect(words.filter(value => value.word !== literal(63, 31, 7)).map(value => value.word)).toEqual(expected);
+  const matches = words.filter((_, index) => expected.slice(3, 7)
+    .every((word, offset) => words[index + offset]?.word === word));
+  expect(matches).toHaveLength(1);
+  const selected = words.find(value => value.index === matches[0].index + 1)!;
+  expect(selected.word).toBe(literal(8, 0, 18));
+  return { kind: 'local_foreground_operand', page: 200, subcode: 0, row: 2, column: 8,
+    original_command: 4, physical_word_index: selected.index, designation: selected.designation, slot: selected.slot,
+    expected_word: selected.word, replacement_word: literal(8, 0, 4),
+    expected: { address: 8, mode: 0, data: 18 }, replacement: { address: 8, mode: 0, data: 4 },
+    selection: 'fresh-tti-unique-qualified-row-sequence' };
+}
+
+function assertOnlyOperandChanged(original: Buffer, edited: Buffer, edit: OperandEdit): void {
+  const expected = original.toString('latin1').split(/\r?\n/).filter(Boolean).map(line => {
+    if (!line.startsWith('OL,26,') || line.charCodeAt(6) - 0x40 !== edit.designation) return line;
+    const offset = 7 + edit.slot * 3;
+    const encoded = String.fromCharCode(...[0, 6, 12].map(shift => 0x40 + ((edit.replacement_word >> shift) & 0x3f)));
+    return line.slice(0, offset) + encoded + line.slice(offset + 3);
+  });
+  // QTM canonicalizes hexadecimal case and relocates FL records. These are
+  // explicit spelling/order differences, never permission to change packets.
+  const canonical = (lines: string[]) => lines.map(line => /^(PS|FL),/.test(line) ? line.toLowerCase() : line).sort();
+  expect(canonical(edited.toString('latin1').split(/\r?\n/).filter(Boolean))).toEqual(canonical(expected));
+}
 function editorFiles(archive: string): EditorFile[] {
   // Standard bounded ZIP extraction of this synthetic download. This exercises
   // browser/backend interchange, not opening or saving in QTeletextMaker.
@@ -257,6 +325,78 @@ function storedDocument(fixture: TeletextChannelFixture, channel: number): {
   const { Document, ...identity } = value;
   return { ...identity, document: JSON.parse(Buffer.from(Document).toString('utf8')) };
 }
+function assertOperandOriginal(original: ReturnType<typeof storedDocument>, theme: 'day' | 'night'): void {
+  const sources = original.document.documents as { contract: number; response: string }[];
+  expect(sources).toHaveLength(1); expect(sources[0].contract).toBe(3);
+  const response = JSON.parse(sources[0].response);
+  expect(response.schema_version).toBe(3); expect(response.service.schema_version).toBe(2);
+  expect(response.authoring.theme).toEqual({ id: theme, overrides: [] });
+  const initial = [
+    { kind: 'set_position', position: { row: 1, column: 8 } },
+    { kind: 'at_column', column: 8, operation: { kind: 'foreground', colour: 18 } },
+    { kind: 'at_column', column: 8, operation: { kind: 'g0', code: 65 } },
+  ];
+  expect(response.service.page_enhancements.map((page: any) => page.address)).toEqual([
+    { page: 200, subcode: 0 }, { page: 201, subcode: 0 },
+  ]);
+  expect(response.service.page_enhancements[0].local_program.commands).toEqual([...initial,
+    { kind: 'set_position', position: { row: 2, column: 8 } },
+    { kind: 'at_column', column: 8, operation: { kind: 'foreground', colour: 18 } },
+    { kind: 'at_column', column: 8, operation: { kind: 'g0', code: 65 } },
+    { kind: 'at_column', column: 9, operation: { kind: 'g0', code: 66 } },
+    { kind: 'set_position', position: { row: 4, column: 8 } },
+    { kind: 'at_column', column: 8, operation: { kind: 'foreground', colour: 18 } },
+    { kind: 'at_column', column: 8, operation: { kind: 'g0', code: 67 } },
+  ]);
+  expect(response.service.page_enhancements[1].local_program.commands).toEqual(initial);
+  expect(response.authoring.pages[0].regions[0]).toEqual({ id: 'free-title', kind: 'free',
+    area: 'main', row: 2, column: 1, width: 39, height: 1 });
+  expect(response.authoring.pages[1].regions[0].width).toBe(20);
+  expect(response.service.magazines[0].presentation.panels).toEqual({
+    left: false, right: false, status: 'level25_and35', width: 0,
+  });
+}
+async function assertOperandPreview(page: Page, theme: 'day' | 'night', edited: boolean): Promise<void> {
+  await assertPreview(page, theme);
+  const samples = await page.getByTestId('teletext-preview-model').locator('img').evaluate(element => {
+    const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 250;
+    const context = canvas.getContext('2d')!; context.imageSmoothingEnabled = false;
+    context.drawImage(element as HTMLImageElement, 0, 0, 480, 250);
+    return [[2, 8], [2, 9], [4, 8]].map(([row, column]) => {
+      const pixels = context.getImageData(column * 12, row * 10, 12, 10).data;
+      let red = 0; let blue = 0;
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        if (pixels[offset] === 255 && pixels[offset + 1] === 0 && pixels[offset + 2] === 0) red++;
+        if (pixels[offset] === 0 && pixels[offset + 1] === 0 && pixels[offset + 2] === 255) blue++;
+      }
+      return { red, blue };
+    });
+  });
+  for (const [index, sample] of samples.entries()) {
+    const colour = theme === 'night' || (edited && index < 2) ? 'blue' : 'red';
+    expect(sample[colour]).toBeGreaterThan(0);
+    expect(sample[colour === 'blue' ? 'red' : 'blue']).toBe(0);
+  }
+}
+async function localizedOperand(page: Page, url: string, state: 'unrequested' | 'selected', js: boolean,
+  testInfo: { outputPath(name: string): string }): Promise<void> {
+  const dark = await page.locator('[data-theme]').first().getAttribute('data-theme') === 'dark';
+  for (const [culture, module] of [['en-us', 'en_us'], ['nl', 'nl']]) {
+    await language(page, culture, dark); await page.goto(url); await ready(page, js);
+    const text = translations(module);
+    await expect(page.getByRole('heading', { name: text('TeletextPreviewTitle'), exact: true })).toBeVisible();
+    await expect(page.getByTestId('teletext-editor-import-form').locator('button[type="submit"]')).toHaveText(text('TeletextEditorImport'));
+    await expect(page.getByTestId('teletext-publication-request-form').locator('button[type="submit"]')).toHaveText(text('TeletextPublicationRequest'));
+    await expect(page.getByTestId('teletext-publication-publish-form').locator('button[type="submit"]')).toHaveText(text('TeletextPublicationPublish'));
+    await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', state);
+    await expect(page.getByTestId('teletext-publication-status')).toHaveText(text(
+      state === 'selected' ? 'TeletextPublicationSelected' : 'TeletextPublicationUnrequested'));
+    await assertOperandPreview(page, 'day', true);
+    await page.getByTestId('teletext-preview-model').locator('img').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`${culture}-operand-${state}.png`), fullPage: false });
+  }
+  await language(page, 'en-us', dark); await page.goto(url); await ready(page, js);
+}
 async function editPixels(page: Page, row: number): Promise<number> {
   const image = page.getByTestId('teletext-preview-model').locator('img');
   await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).complete
@@ -296,6 +436,7 @@ async function replayEditor(directory: string, exported: EditorFile[], metadata:
   const sourceCommit = 'cac2167bac933a6160cca45a45d5d4ee95355898';
   const input = exported.find(file => file.name === 'page-200-0000.tti')!;
   const sidecar = exported.find(file => file.name === 'project.ersatzrs.json')!;
+  const operand = operandEditor ? qualifiedOperand(input, metadata) : undefined;
   expect(input.buffer.length).toBeLessThanOrEqual(65_536);
   expect(sidecar.buffer.length).toBeLessThanOrEqual(65_536);
   // New directory only; no stale completion or edited file may satisfy the gate.
@@ -310,9 +451,10 @@ async function replayEditor(directory: string, exported: EditorFile[], metadata:
     editor_input: 'native-input.tti', input_sha256: sha256(input.buffer),
     sidecar: 'project.ersatzrs.json', sidecar_sha256: sha256(sidecar.buffer),
     editor_geometry: { left_panel_columns: 0, right_panel_columns: 0 },
-    edit: { row: 2, column: 8, code: 81 }, save_as: 'edited.tti', completion: 'editor-saved.json',
+    edit: operand ?? { row: 2, column: 8, code: 81 }, save_as: 'edited.tti', completion: 'editor-saved.json',
     editor: { name: 'QTeletextMaker', version: '1.0', source_commit: sourceCommit,
-      binary_sha256: binaryHash, driver_sha256: driverHash, driver_mode: 'single-page-zone-q' },
+      binary_sha256: binaryHash, driver_sha256: driverHash,
+      driver_mode: operand ? 'single-page-foreground' : 'single-page-zone-q' },
     publication: 'Only after native import, preview, explicit request and acceptance.',
   }, null, 2));
   expect(ready.length).toBeLessThanOrEqual(16_384);
@@ -330,6 +472,7 @@ async function replayEditor(directory: string, exported: EditorFile[], metadata:
   expect(marker.saved_sha256).toBe(sha256(edited)); expect(marker.saved_bytes).toBe(edited.length);
   expect(boundedEditorFile(join(directory, 'native-input.tti'), 65_536).equals(input.buffer)).toBe(true);
   expect(boundedEditorFile(join(directory, 'project.ersatzrs.json'), 65_536).equals(sidecar.buffer)).toBe(true);
+  if (operand) assertOnlyOperandChanged(input.buffer, edited, operand);
   // The marker is an evidence handshake, not editor or publication authority.
   // Root independently observes the GUI and exact tool identities. Native
   // import still authenticates the unchanged sidecar against its stored receipt.
@@ -423,10 +566,18 @@ async function repeatEditorConcept(pages: Page[], fixture: TeletextChannelFixtur
 async function editorConcept(pages: Page[], fixture: TeletextChannelFixture, urls: string[], js: boolean,
   testInfo: { outputPath(name: string): string }, qtmDirectory?: string): Promise<void> {
   const repeat = process.env.ERSATZRS_TELETEXT_EFFECTIVE_REPEAT_EDITOR === '1';
+  if (operandEditor) {
+    expect(repeat, 'Operand GUI proof and cumulative Q/R mode are distinct fixtures.').toBe(false);
+    expect(qtmDirectory, 'The positive operand proof requires an actual QTeletextMaker save.').toBeTruthy();
+  }
   const page = pages[0];
   await page.goto(urls[0]); await ready(page, js);
   const original = storedDocument(fixture, fixture.channels[0]);
   const night = storedDocument(fixture, fixture.channels[1]);
+  if (operandEditor) {
+    assertOperandOriginal(original, 'day'); assertOperandOriginal(night, 'night');
+    await assertOperandPreview(page, 'day', false);
+  }
   const beforePointers = publication(fixture);
   const beforeSafety = safety(fixture);
   const downloadReady = page.waitForEvent('download');
@@ -447,6 +598,11 @@ async function editorConcept(pages: Page[], fixture: TeletextChannelFixture, url
   expect(metadata.project.channel_id).toBe(fixture.channels[0]);
   expect(metadata.project.original.document_version).toBe(2);
   expect(metadata.project.original.digest).toBe(original.Digest);
+  if (operandEditor) {
+    expect(metadata.project.original).toEqual({ design_id: original.DesignId, revision: original.Revision,
+      digest: original.Digest, expected_head: original.Revision, document_version: 2 });
+    expect(metadata.receipt_id).toBeGreaterThan(0); expect(metadata.receipt_digest).toMatch(/^[a-f0-9]{64}$/);
+  }
   expect(metadata.project.effective_scope.binding_count).toBe(1);
   const scope = original.document.effective_selection as { valid_until: string };
   // Chrono's public RFC3339 projection uses +00:00 while stored UTC JSON may
@@ -470,7 +626,8 @@ async function editorConcept(pages: Page[], fixture: TeletextChannelFixture, url
   for (const file of edited) writeFileSync(testInfo.outputPath(file.name), file.buffer, { flag: 'wx' });
   const form = page.getByTestId('teletext-editor-import-form');
   await expect(form).toHaveAttribute('enctype', 'multipart/form-data');
-  await form.locator('[name="name"]').fill(repeat ? 'Synthetic scoped first free edit' : 'Synthetic scoped free and custom-zone edit');
+  await form.locator('[name="name"]').fill(operandEditor ? 'Synthetic scoped actual QTM foreground operand'
+    : repeat ? 'Synthetic scoped first free edit' : 'Synthetic scoped free and custom-zone edit');
   await form.locator('[name="sidecar"]').setInputFiles(edited.filter(file => file.name === 'project.ersatzrs.json'));
   await form.locator('[name="files"]').setInputFiles(edited.filter(file => file.name !== 'project.ersatzrs.json'));
   await submit(page, form, 'TeletextEditorImport', js);
@@ -481,18 +638,31 @@ async function editorConcept(pages: Page[], fixture: TeletextChannelFixture, url
   expect(concept.DocumentVersion).toBe(2); expect(concept.Digest).not.toBe(original.Digest);
   const { editorial_overlay, ...immutable } = concept.document;
   expect(editorial_overlay).toBeDefined(); expect(immutable).toEqual(original.document);
+  if (operandEditor) {
+    expect(editorial_overlay).toEqual({ schema_version: 2,
+      export_receipt_id: metadata.receipt_id, export_receipt_digest: metadata.receipt_digest,
+      original_design_id: original.DesignId, original_revision: original.Revision, original_digest: original.Digest,
+      pages: [], local_program_operands: [{ owner: { page: 200, subcode: 0 }, command: 4, column: 8,
+        expected: { kind: 'foreground', colour: 18 }, replacement: { kind: 'foreground', colour: 4 } }],
+    });
+  }
   expect(storedDocument(fixture, fixture.channels[1])).toEqual(night);
   expect(publication(fixture)).toEqual(beforePointers); expect(safety(fixture)).toEqual(beforeSafety);
   expect(fixture.calls()).toEqual(['day', 'night']); expect(fixture.unchangedPackage()).toBe(true);
   await assertPreview(page, 'day');
-  expect(await editPixels(page, 2)).toBeGreaterThan(0);
-  if (qtmDirectory || repeat) expect(await editPixels(page, 3)).toBe(0);
-  else expect(await editPixels(page, 3)).toBeGreaterThan(0);
+  if (operandEditor) await assertOperandPreview(page, 'day', true);
+  else {
+    expect(await editPixels(page, 2)).toBeGreaterThan(0);
+    if (qtmDirectory || repeat) expect(await editPixels(page, 3)).toBe(0);
+    else expect(await editPixels(page, 3)).toBeGreaterThan(0);
+  }
   await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'unrequested');
   await pages[1].goto(urls[1]); await ready(pages[1], js); await assertPreview(pages[1], 'night');
-  expect(await editPixels(pages[1], 2)).toBe(0); expect(await editPixels(pages[1], 3)).toBe(0);
+  if (operandEditor) await assertOperandPreview(pages[1], 'night', false);
+  else { expect(await editPixels(pages[1], 2)).toBe(0); expect(await editPixels(pages[1], 3)).toBe(0); }
   await page.getByTestId('teletext-preview-model').locator('img').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('effective-edited-concept.png'), fullPage: false });
+  if (operandEditor) await localizedOperand(page, urls[0], 'unrequested', js, testInfo);
   await submit(page, page.getByTestId('teletext-publication-request-form'), 'TeletextPublicationRequest', js);
   expect(publication(fixture).map(rows => rows.length)).toEqual([3, 2, 2, 2]);
   await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'pending');
@@ -500,6 +670,7 @@ async function editorConcept(pages: Page[], fixture: TeletextChannelFixture, url
   expect(publication(fixture).map(rows => rows.length)).toEqual([3, 2, 3, 2]);
   await expect(page.getByTestId('teletext-publication')).toHaveAttribute('data-state', 'selected');
   expect(safety(fixture)).toEqual(beforeSafety); expect(fixture.calls()).toEqual(['day', 'night']);
+  if (operandEditor) await localizedOperand(page, page.url(), 'selected', js, testInfo);
   if (repeat) await repeatEditorConcept(pages, fixture, urls, js, testInfo, original, night);
 }
 
@@ -577,12 +748,19 @@ for (const js of [true, false]) for (const dark of [false, true]) {
     test.setTimeout(480_000);
     testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
     const repeatEditor = process.env.ERSATZRS_TELETEXT_EFFECTIVE_REPEAT_EDITOR === '1';
+    if (operandEditor && repeatEditor) throw new Error('The operand GUI proof cannot use cumulative Q/R editor mode.');
+    test.skip(operandEditor && !(js && !dark && testInfo.project.name === 'chromium'),
+      'Explicit operand GUI opt-in is scoped to headed Chromium with JavaScript and the light theme.');
     if (repeatEditor) testInfo.annotations.push({ type: 'repeat-editor', description: 'Two explicit export/import/publication rounds preserve one immutable Scripted original and cumulative Q/R edits.' });
     const qtmDirectory = js && !dark && testInfo.project.name === 'chromium'
       ? process.env.ERSATZRS_TELETEXT_EFFECTIVE_QTM_REPLAY_DIR : undefined;
+    if (operandEditor && !qtmDirectory) throw new Error('The operand GUI proof requires a fresh actual QTeletextMaker replay directory.');
+    if (operandEditor) testInfo.annotations.push({ type: 'operand-editor', description:
+      'Fresh authenticated page200/0000 export; fixture-qualified physical X26 selection, actual GUI FG18-to4 save, native command4 overlay, English/Dutch concept and publication preview.' });
     if (qtmDirectory) testInfo.annotations.push({ type: 'editor-workflow', description: 'Actual separately observed pinned QTeletextMaker save is required before native import; the marker alone is not acceptance.' });
     testInfo.annotations.push({ type: 'scripted-setup', description: 'The existing hydrated Playouts Reset action prepares Lua scopes; the authoring pages retain their configured JavaScript/no-JS mode.' });
-    const fixture = new TeletextChannelFixture(databasePath!, { authoredPages: true, editorPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+    const fixture = new TeletextChannelFixture(databasePath!, { authoredPages: true, editorPages: true,
+      editorOperand: operandEditor, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
     // The real Playouts search matches Channel.Name, not Channel.Number.
     // Unique initial owned names avoid ten-row pagination collisions with
     // retained fixtures; all later authoring/publication must preserve them.

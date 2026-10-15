@@ -57,13 +57,26 @@ function themedPages(theme: 'day' | 'night'): unknown {
   };
 }
 
-function editorPages(theme: 'day' | 'night'): unknown {
+function editorPages(theme: 'day' | 'night', operand = false): unknown {
   const service = themedPages(theme) as {
     pages: { address: { page: number; subcode: number }; national_option: number }[];
     magazines: { presentation: { primary: number } }[];
+    page_enhancements: { address: { page: number }; local_program: { commands: unknown[] } }[];
   };
   for (const page of service.pages) page.national_option = 0;
   service.magazines[0].presentation.primary = 0;
+  if (operand) {
+    const enhanced = service.page_enhancements.find(page => page.address.page === 200)!;
+    enhanced.local_program.commands.push(
+      { kind: 'set_position', position: { row: 2, column: 8 } },
+      { kind: 'at_column', column: 8, operation: { kind: 'foreground', colour: 18 } },
+      { kind: 'at_column', column: 8, operation: { kind: 'g0', code: 65 } },
+      { kind: 'at_column', column: 9, operation: { kind: 'g0', code: 66 } },
+      { kind: 'set_position', position: { row: 4, column: 8 } },
+      { kind: 'at_column', column: 8, operation: { kind: 'foreground', colour: 18 } },
+      { kind: 'at_column', column: 8, operation: { kind: 'g0', code: 67 } },
+    );
+  }
   return {
     schema_version: 3, service,
     authoring: {
@@ -72,7 +85,7 @@ function editorPages(theme: 'day' | 'night'): unknown {
       pages: service.pages.map(page => ({
         page: page.address,
         regions: [
-          { id: 'free-title', kind: 'free', area: 'main', row: 2, column: 1, width: 20, height: 1 },
+          { id: 'free-title', kind: 'free', area: 'main', row: 2, column: 1, width: operand && page.address.page === 200 ? 39 : 20, height: 1 },
           { id: 'custom-zone', kind: 'zone', area: 'main', row: 3, column: 1, width: 20, height: 1 },
           { id: 'guide-content', kind: 'generated', area: 'main', row: 4, column: 1, width: 20, height: 1 },
         ],
@@ -112,9 +125,10 @@ export class TeletextChannelFixture {
   private readonly playback: boolean;
   private scripted = false;
 
-  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; playback?: { ffmpeg: string } } = {}) {
+  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; playback?: { ffmpeg: string } } = {}) {
     this.authoredPages = options.authoredPages === true;
     if (options.editorPages && !this.authoredPages) throw new Error('Synthetic editor requires the authored producer.');
+    if (options.editorOperand && !options.editorPages) throw new Error('Synthetic operand editor requires editor pages.');
     this.playback = options.playback !== undefined;
     if (this.playback && !this.authoredPages) throw new Error('Synthetic playback requires the authored producer.');
     // Retained immutable histories/files belong to the wrapper DB's temporary
@@ -168,7 +182,7 @@ export class TeletextChannelFixture {
     this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? producerScript : scriptBody));
     if (this.authoredPages) {
       for (const theme of ['day', 'night'] as const) {
-        this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(options.editorPages ? editorPages(theme) : themedPages(theme))));
+        this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(options.editorPages ? editorPages(theme, options.editorOperand) : themedPages(theme))));
       }
     }
     for (const [name, body] of this.packageFiles) writeFileSync(join(this.packagePath, name), body, { mode: 0o644 });

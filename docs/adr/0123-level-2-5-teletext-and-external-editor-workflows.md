@@ -92,7 +92,11 @@ An actual pinned QTM foreground-popup edit now reaches native concept validation
 the shared preview, explicit publication and ordinary two-channel MPEG-TS output.
 Independent Level1.5/2.5 cell decoding and inspected VLC MAIN-plane replay retain
 fallback, separate themes and 124/125/124 navigation. This is a representative
-local-colour workflow, not new localized-admin, live-URL or full-editor proof.
+local-colour workflow. A fresh effective-role admin export now also passes actual
+QTM edit/save/import, English/Dutch concept and selected-state views, explicit
+publication and two-theme ordinary TCP/client replay. It adds no production DOM
+or language keys; wider operand browser coverage, live-URL and full-editor proof
+remain required.
 Full enhancement, resource, geometry, panel and actual editor coverage remains
 required; this slice introduces no accepted product restriction. P9A-04 owns
 verification and the concrete next integration step.

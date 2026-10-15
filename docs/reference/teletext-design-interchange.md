@@ -5290,7 +5290,9 @@ rows saves a new concept revision containing the authenticated root bytes, witho
 an empty or no-op overlay. Import, re-export, preview and revert never implicitly
 publish. Actual pinned QTM foreground-popup editing now has a representative
 native import/preview/publication and ordinary-stream/client replay proof.
-Full resource/geometry/panel/set editing and the expanded localized-admin trial
+Fresh effective-role admin export/import now also has headed Chromium/light
+proof with English actions and English/Dutch concept and selected-state views.
+Full resource/geometry/panel/set editing and wider operand browser coverage
 remain open; P9A-04 owns the evidence and next step.
 No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
 positive/negative codec, native import and durable qualification evidence.

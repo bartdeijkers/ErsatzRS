@@ -312,9 +312,42 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
                     || dialog->windowTitle() != "Save As") continue;
                 auto name = dialog->findChild<QLineEdit *>("fileNameEdit");
                 if (!name) qFatal("Actual filename input absent");
-                QTest::mouseClick(name, Qt::LeftButton);
-                if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000))
+                const auto focusFailure = [dialog, main, name, context](const char *stage) {
+                    auto active = QApplication::activeWindow();
+                    auto focus = QApplication::focusWidget();
+                    auto nativeFocus = QGuiApplication::focusWindow();
+                    std::fprintf(stderr,
+                        "QTM Save As focus failure stage=%s dialog_title=%s dialog_active=%d dialog_visible=%d input_enabled=%d input_visible=%d input_focus=%d focus_class=%s active_class=%s active_title=%s native_focus_title=%s\n",
+                        stage, dialog->windowTitle().toUtf8().constData(), dialog->isActiveWindow(),
+                        dialog->isVisible(), name->isEnabled(), name->isVisible(), name->hasFocus(),
+                        focus ? focus->metaObject()->className() : "none",
+                        active ? active->metaObject()->className() : "none",
+                        active ? active->windowTitle().toUtf8().constData() : "none",
+                        nativeFocus ? nativeFocus->title().toUtf8().constData() : "none");
+                    const bool dialogCaptured = dialog->isVisible()
+                        && dialog->grab().save(QString("/work/") + context.captureName("save-focus-failed-dialog"));
+                    const bool mainCaptured = main->isVisible()
+                        && main->grab().save(QString("/work/") + context.captureName("save-focus-failed-main"));
+                    std::fprintf(stderr, "QTM Save As focus failure captures: dialog=%d main=%d\n",
+                        dialogCaptured, mainCaptured);
+                    std::fflush(stderr);
+                };
+                // The exposed floating Tools dock or another headed application
+                // may still own X11 activation when the modal Save As opens.
+                // Arrange the actual dialog, then require OS-observed activation
+                // before the real filename click; do not assign input focus.
+                dialog->raise();
+                dialog->activateWindow();
+                if (auto handle = dialog->windowHandle()) handle->requestActivate();
+                if (!QTest::qWaitForWindowActive(dialog, 5000)) {
+                    focusFailure("dialog-activation");
+                    qFatal("Actual Save As dialog did not become active");
+                }
+                QTest::mouseClick(name, Qt::LeftButton, Qt::NoModifier, name->rect().center());
+                if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000)) {
+                    focusFailure("filename-click");
                     qFatal("Actual Save As filename input did not receive focus");
+                }
                 name->selectAll();
                 QTest::keyClicks(name, context.outputPath, Qt::NoModifier, 5);
                 // Commit the actual filename field before selecting Save. A

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect proven QTM colour edits to localized admin; full authored/editor acceptance open'
+current_focus = 'P9A-04: qualify actual DRCS editor changes; full authored Level2.5 and editor acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -94,10 +94,14 @@ concept. An actual pinned QTM foreground edit now passes native import, preview,
 explicit publication, reopen and ordinary two-channel transport/AV checks.
 Independent imager0.2.0 proves literal Level1.5/2.5 cells; inspected VLC3.0.20/
 libzvbi0.2.42 replay preserves two simultaneous themes and124/125/124 navigation.
-P9A-04 owns the exact receipt and retained failed trials. Next connect this actual
-enhanced edit to the existing localized headed admin workflow; do not describe
-the prior base-row browser receipt as a new operand/admin proof. Then extend the
-concrete missing resource/panel editor step and authored conformance clauses.
+P9A-04 also records a fresh actual QTM200/0000 colour edit through headed
+Chromium/JavaScript/light admin, English/Dutch concept/selected views, explicit
+Lua-scoped publication, ordinary TCP, independent decoding/TSDuck and inspected
+two-theme200/201/200 client replay. Failed focus/selector trials are retained.
+Next exercise the pinned editor's actual DRCS resource edit/save path and connect
+the missing qualified resource import; protected dependency loading is not editing.
+Keep the resource/panel/set/geometry, wider operand browser and remaining authored
+conformance requirements open; this representative flow grants no full acceptance.
 Resource/panel/set/geometry editing and full authored Level2.5/fallback remain
 open; no base-row-only or size restriction is accepted. Sought HTTP source-caption
 proof remains open.

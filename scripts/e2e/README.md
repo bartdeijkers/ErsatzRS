@@ -446,6 +446,22 @@ ERSATZRS_TELETEXT_EFFECTIVE_QTM_REPLAY_DIR="$qtm_probe_root" \
 
 Use a free test port and distinct result/output directories for each run. Reuse
 a matched build only after verifying its server and hydration bundle identities.
+For the actual local-colour variant, add
+`ERSATZRS_TELETEXT_EFFECTIVE_EDITOR_OPERAND=1` with the fresh QTM directory and
+tool hashes above. This opt-in targets Chromium/JavaScript/light and requires the
+actual editor handshake; other matrix cases are explicitly skipped in this mode.
+Default base-row coverage is unchanged. It cannot be combined with repeat mode.
+The fresh `ready.json` supplies `single-page-foreground` and an `edit` containing
+`physical_word_index`, `column`, `expected.data` and `replacement.data`. These map
+to the four foreground driver variables documented above. Selection is derived
+from the exact receipt-authenticated TTI and a uniquely qualified fixture command
+sequence; it is not a public compiler-position API or native edit authority.
+The native importer independently resolves original command4 and validates all
+effects. The trial checks operand-only storage, immutable originals, English and
+Dutch concept/selected previews and control labels, explicit publication, ordinary
+TCP captures and opposite-channel safety. Full resource/panel/set/geometry,
+operand-specific wider browser coverage and complete engine acceptance remain open.
+
 Set `ERSATZRS_TELETEXT_EFFECTIVE_REPEAT_EDITOR=1` to exercise two separate
 export/import/publication rounds. The first imports free-row `Q`; the second
 exports that actual concept, edits custom-zone row `R`, imports cumulative `Q+R`

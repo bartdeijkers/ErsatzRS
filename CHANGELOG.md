@@ -28,9 +28,10 @@ release section when tagging a release.
 - Import existing local teletext colour/attribute edits into versioned concepts,
   with exact command correspondence, complete native validation and protected-zone
   checks. Repeated edits, previews and reload preserve original documents and
-  fallback packets. A pinned QTeletextMaker colour-edit trial now proves explicit
-  publication, ordinary-stream delivery and two-theme client navigation; full
-  external-editor and Level 2.5 acceptance remains open.
+  fallback packets. A pinned QTeletextMaker colour-edit trial now connects
+  localized concept previews, explicit publication, ordinary-stream delivery and
+  two-theme client navigation; full external-editor and Level 2.5 acceptance
+  remains open.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source
