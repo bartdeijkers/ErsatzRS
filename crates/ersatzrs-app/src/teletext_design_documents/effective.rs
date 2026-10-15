@@ -53,6 +53,18 @@ pub struct EncodedEffectiveTeletextDesignDocuments {
     bytes: Vec<u8>,
 }
 impl EncodedEffectiveTeletextDesignDocuments {
+    /// Restore exact saved spelling under the existing structural decoder limits.
+    /// Native confirmation, revision CAS and explicit publication remain separate.
+    /// # Errors
+    /// Rejects invalid effective envelopes, associations, versions and bounds.
+    pub fn from_saved_bytes(
+        bytes: Vec<u8>,
+        budget: TeletextDesignDocumentBudget,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        decode_teletext_effective_design_documents(&bytes, budget)?;
+        Ok(Self { bytes })
+    }
+
     #[must_use]
     pub const fn version(&self) -> u16 {
         TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION

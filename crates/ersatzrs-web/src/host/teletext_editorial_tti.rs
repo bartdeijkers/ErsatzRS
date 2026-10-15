@@ -12,10 +12,20 @@ use ersatzrs_app::{
     },
 };
 use ersatzrs_domain::{
-    TeletextPageAddress, TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
-    TeletextSubcode,
+    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPageNumber,
+    TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextSubcode,
 };
+use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
+
+mod operands;
+
+/// Reconciled intents, without region permission or publication authority.
+#[derive(Default)]
+pub(super) struct TeletextEditorialChanges {
+    pub rows: Vec<TeletextPhysicalBaseOverlay>,
+    pub operands: Vec<TeletextLocalProgramOperandOverlay>,
+}
 
 /// Static rejection without any authored text, file name or receipt digest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,6 +174,7 @@ impl<'a> Page<'a> {
     }
 }
 
+#[cfg(test)]
 fn status(controls: u16) -> u16 {
     0x8000
         | ((controls & 1) << 14)
@@ -191,6 +202,7 @@ fn protected(
     edited: &Page<'_>,
     location: Location,
     deadline: Instant,
+    local_operands: bool,
 ) -> Result<()> {
     for (same, failure) in [
         (
@@ -224,8 +236,10 @@ fn protected(
     for row in 26_u8..=29 {
         for designation in 0_u8..16 {
             location.check_deadline(deadline)?;
-            if baseline.packets[usize::from(row - 26)][usize::from(designation)]
-                != edited.packets[usize::from(row - 26)][usize::from(designation)]
+            let before = baseline.packets[usize::from(row - 26)][usize::from(designation)];
+            let after = edited.packets[usize::from(row - 26)][usize::from(designation)];
+            if before != after
+                && !(local_operands && row == 26 && before.is_some() && after.is_some())
             {
                 return Err(NativeTeletextEditorialTtiError {
                     row: Some(row),
@@ -252,6 +266,7 @@ fn protected(
 /// Rejects bounds/deadline, identity/header writes, changed/dropped protected
 /// records and unsupported syntax. Description/CT changes are explicitly refused
 /// because this base-row overlay cannot retain their edited values losslessly.
+#[cfg(test)]
 pub fn reconcile_teletext_editorial_tti(
     mapping: &TeletextExportPageMapping,
     baseline_bytes: &[u8],
@@ -276,6 +291,7 @@ pub fn reconcile_teletext_editorial_tti(
 /// # Errors
 /// Rejects the same protected changes as legacy reconciliation, including any
 /// baseline status differing from the trusted value or any edited PS change.
+#[cfg(test)]
 pub(super) fn reconcile_teletext_editorial_tti_with_status(
     mapping: &TeletextExportPageMapping,
     baseline_bytes: &[u8],
@@ -284,6 +300,48 @@ pub(super) fn reconcile_teletext_editorial_tti_with_status(
     deadline: Instant,
     expected_status: u16,
 ) -> Result<Option<TeletextPhysicalBaseOverlay>> {
+    Ok(reconcile_changes(
+        mapping,
+        baseline_bytes,
+        edited_bytes,
+        budget,
+        deadline,
+        (expected_status, None),
+    )?
+    .rows
+    .pop())
+}
+
+/// Recognize changes only to final words bound by the native compiler to an
+/// existing local operand. Full native reconstruction and protected-effect
+/// validation remain mandatory before saving the concept.
+pub(super) fn reconcile_teletext_editorial_tti_with_operands(
+    mapping: &TeletextExportPageMapping,
+    baseline_bytes: &[u8],
+    edited_bytes: &[u8],
+    budget: TeletextTtiBudget,
+    deadline: Instant,
+    expected_status: u16,
+    service: &EncodedTeletextAuthoredService,
+) -> Result<TeletextEditorialChanges> {
+    reconcile_changes(
+        mapping,
+        baseline_bytes,
+        edited_bytes,
+        budget,
+        deadline,
+        (expected_status, Some(service)),
+    )
+}
+
+fn reconcile_changes(
+    mapping: &TeletextExportPageMapping,
+    baseline_bytes: &[u8],
+    edited_bytes: &[u8],
+    budget: TeletextTtiBudget,
+    deadline: Instant,
+    native: (u16, Option<&EncodedTeletextAuthoredService>),
+) -> Result<TeletextEditorialChanges> {
     let location = Location {
         page: mapping.page.page,
         subcode: mapping.page.subcode,
@@ -294,12 +352,18 @@ pub(super) fn reconcile_teletext_editorial_tti_with_status(
     let edited_document = location.parse(edited_bytes, budget, deadline)?;
     let baseline = Page::index(&baseline_document, mapping, location, deadline)?;
     let edited = Page::index(&edited_document, mapping, location, deadline)?;
-    if baseline.status != Some(expected_status) {
+    if baseline.status != Some(native.0) {
         return Err(location.error(NativeTeletextEditorialTtiFailure::Mapping));
     }
     baseline.validate_header(location)?;
     edited.validate_header(location)?;
-    protected(&baseline, &edited, location, deadline)?;
+    protected(&baseline, &edited, location, deadline, native.1.is_some())?;
+    let operands = match native.1 {
+        Some(service) => {
+            operands::reconcile(service, owner, &baseline, &edited, location, deadline)?
+        }
+        None => Vec::new(),
+    };
     let mut rows = Vec::new();
     // QTeletextMaker 1.0 LevelOnePage::setCharacter clears all-space packets;
     // SaveFormat::writeX1to25Packets and header output write only packetExists.
@@ -321,12 +385,33 @@ pub(super) fn reconcile_teletext_editorial_tti_with_status(
         }
     }
     location.check_deadline(deadline)?;
-    if rows.is_empty() {
-        return Ok(None);
-    }
-    TeletextPhysicalBaseOverlay::new(owner, rows)
-        .map(Some)
-        .map_err(|_| location.error(NativeTeletextEditorialTtiFailure::Structure))
+    let rows = if rows.is_empty() {
+        Vec::new()
+    } else {
+        vec![TeletextPhysicalBaseOverlay::new(owner, rows)
+            .map_err(|_| location.error(NativeTeletextEditorialTtiFailure::Structure))?]
+    };
+    Ok(TeletextEditorialChanges { rows, operands })
+}
+
+/// Require the complete final native X26 emission to match the edited file.
+/// Typed reconstruction may reject a normalization change; import never repairs
+/// or silently discards a packet difference supplied by an external editor.
+pub(super) fn validate_teletext_editorial_tti_encoding(
+    mapping: &TeletextExportPageMapping,
+    edited_bytes: &[u8],
+    budget: TeletextTtiBudget,
+    deadline: Instant,
+    service: &EncodedTeletextAuthoredService,
+) -> Result<()> {
+    let location = Location {
+        page: mapping.page.page,
+        subcode: mapping.page.subcode,
+    };
+    let owner = owner(mapping, location)?;
+    let document = location.parse(edited_bytes, budget, deadline)?;
+    let page = Page::index(&document, mapping, location, deadline)?;
+    operands::check_packets(service, owner, &page, location, deadline)
 }
 
 #[cfg(test)]

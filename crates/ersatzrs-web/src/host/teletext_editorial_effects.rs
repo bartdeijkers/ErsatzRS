@@ -5,13 +5,17 @@
 //! sidecars never establish permissions. This stage neither compiles an extra
 //! service nor authorizes concept storage or publication.
 
-use std::time::Instant;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Instant,
+};
 
 use ersatzrs_addon_contract::{TeletextAuthoringRegionAreaWire, TeletextAuthoringRegionKindWire};
 use ersatzrs_app::teletext_export_project::TeletextExportProject;
 use ersatzrs_domain::{
     TeletextBaseDisplayCellKind, TeletextDisplayAttribute, TeletextDisplayCell,
-    TeletextDisplayFragment, TeletextPageAddress, TeletextPhysicalBaseOverlay,
+    TeletextDisplayFragment, TeletextEnhancementCommand, TeletextLocalProgramOperandOverlay,
+    TeletextPageAddress, TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
 };
 use ersatzrs_ffmpeg::teletext::{
     project_encoded_teletext_display, project_teletext_comparison_glyph,
@@ -80,6 +84,7 @@ fn check_deadline(deadline: Instant) -> Result<()> {
 /// exactly the supplied overlay rows, using captured original permissions.
 /// Existing encoder page/unit/cell bounds and the original deadline stay in
 /// force. No screenshot-only, Unicode inversion or package mutation is used.
+#[cfg(test)]
 pub(super) fn validate_teletext_editorial_effects(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
@@ -93,8 +98,30 @@ pub(super) fn validate_teletext_editorial_effects(
     )
 }
 
+/// Checked semantic changes and physical rows share the original receipt's
+/// permissions. These borrowed intents never grant edit authority themselves.
+#[derive(Clone, Copy)]
+pub(super) struct TeletextEditorialEdits<'a> {
+    pub rows: &'a [TeletextPhysicalBaseOverlay],
+    pub operands: &'a [TeletextLocalProgramOperandOverlay],
+}
+
+pub(super) fn validate_teletext_editorial_effects_with_operands(
+    original: &EncodedTeletextAuthoredService,
+    edited: &EncodedTeletextAuthoredService,
+    project: &TeletextExportProject,
+    edits: TeletextEditorialEdits<'_>,
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+) -> Result<()> {
+    validate_teletext_editorial_transition_with_operands(
+        original, edited, project, edits, edits, budget, deadline,
+    )
+}
+
 /// Latest-export permissions apply only to incoming owners; the final service
 /// must independently contain exactly the complete cumulative replacement set.
+#[cfg(test)]
 pub(super) fn validate_teletext_editorial_transition(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
@@ -104,8 +131,39 @@ pub(super) fn validate_teletext_editorial_transition(
     budget: &TeletextAuthoredServiceEncodingBudget,
     deadline: Instant,
 ) -> Result<()> {
+    validate_teletext_editorial_transition_with_operands(
+        original,
+        edited,
+        project,
+        TeletextEditorialEdits {
+            rows: incoming,
+            operands: &[],
+        },
+        TeletextEditorialEdits {
+            rows: cumulative,
+            operands: &[],
+        },
+        budget,
+        deadline,
+    )
+}
+
+/// `original` is the actual incoming export baseline: the immutable root on
+/// first import and the qualified latest concept on a repeated import. Thus
+/// incoming operand expectations are matched to that baseline, while cumulative
+/// rows and final operand replacements are checked against the completed result.
+/// Root-to-final qualification separately authenticates cumulative provenance.
+pub(super) fn validate_teletext_editorial_transition_with_operands(
+    original: &EncodedTeletextAuthoredService,
+    edited: &EncodedTeletextAuthoredService,
+    project: &TeletextExportProject,
+    incoming: TeletextEditorialEdits<'_>,
+    cumulative: TeletextEditorialEdits<'_>,
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
+) -> Result<()> {
     check_deadline(deadline)?;
-    check_service(original, edited, cumulative, budget)?;
+    check_service(original, edited, incoming, cumulative, budget, deadline)?;
     for (before, after) in original.pages().iter().zip(edited.pages()) {
         check_deadline(deadline)?;
         let (Some((old_page, old)), Some((new_page, new))) = (display(before), display(after))
@@ -122,7 +180,9 @@ pub(super) fn validate_teletext_editorial_transition(
             continue;
         };
         let owner = old.owner();
-        let Some(overlay) = incoming.iter().find(|value| value.owner() == owner) else {
+        let overlay = incoming.rows.iter().find(|value| value.owner() == owner);
+        let operand_change = incoming.operands.iter().any(|value| value.owner() == owner);
+        if overlay.is_none() && !operand_change {
             if before.data_units() != after.data_units() {
                 return Err(error(
                     Some(owner),
@@ -131,11 +191,21 @@ pub(super) fn validate_teletext_editorial_transition(
                 ));
             }
             continue;
-        };
+        }
         let allowed = permission_mask(project, owner, budget.max_pages)?;
-        check_packets(old_page, new_page, &allowed, budget.max_units)?;
-        check_overlay(old, new, overlay)?;
+        check_packets(
+            old_page,
+            new_page,
+            &allowed,
+            operand_change,
+            budget.max_units,
+        )?;
+        if let Some(overlay) = overlay {
+            check_overlay(old, new, overlay)?;
+        }
         check_resolved(new, budget, deadline)?;
+        // Inspect every main and panel cell, including attributes extending to
+        // the right and lower-row footprints. The command column is no permit.
         compare_protected(old, new, &allowed, budget, deadline)?;
     }
     check_deadline(deadline)
@@ -158,9 +228,12 @@ fn display(
 fn check_service(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
-    overlays: &[TeletextPhysicalBaseOverlay],
+    incoming: TeletextEditorialEdits<'_>,
+    cumulative: TeletextEditorialEdits<'_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
+    deadline: Instant,
 ) -> Result<()> {
+    let overlays = cumulative.rows;
     if budget.max_pages == 0
         || budget.max_units == 0
         || original.pages().len() > budget.max_pages
@@ -168,6 +241,8 @@ fn check_service(
         || original.unit_count() > budget.max_units
         || edited.unit_count() > budget.max_units
         || overlays.len() > budget.max_pages
+        || incoming.operands.len() > budget.max_commands
+        || cumulative.operands.len() > budget.max_commands
     {
         return Err(error(None, None, TeletextEditorialEffectsFailure::Budget));
     }
@@ -178,7 +253,6 @@ fn check_service(
     if original.inventory() != edited.inventory()
         || original.magazine_units() != edited.magazine_units()
         || before.base() != after.base()
-        || before.page_enhancements() != after.page_enhancements()
         || before.magazine_presentations() != after.magazine_presentations()
         || before.objects() != after.objects()
         || before.object_companions() != after.object_companions()
@@ -197,6 +271,13 @@ fn check_service(
             TeletextEditorialEffectsFailure::ProtectedStructure,
         ));
     }
+    check_enhancements(
+        before.page_enhancements(),
+        after.page_enhancements(),
+        incoming.operands,
+        cumulative.operands,
+        deadline,
+    )?;
     if after.physical_base_overlays().len() != overlays.len() {
         return Err(error(
             None,
@@ -218,6 +299,111 @@ fn check_service(
         }
     }
     Ok(())
+}
+
+/// Match the exact typed transformation without allocating another service or
+/// inventing a second domain validation budget. All untouched enhancement fields
+/// and every unselected command must remain byte-for-byte semantic equals.
+fn check_enhancements(
+    before: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
+    after: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
+    incoming: &[TeletextLocalProgramOperandOverlay],
+    cumulative: &[TeletextLocalProgramOperandOverlay],
+    deadline: Instant,
+) -> Result<()> {
+    let mut changes = BTreeMap::new();
+    for change in incoming {
+        check_deadline(deadline)?;
+        if changes
+            .insert((change.owner(), change.command()), change)
+            .is_some()
+            || local_command(before, change)
+                != Some(TeletextEnhancementCommand::AtColumn {
+                    column: change.column(),
+                    operation: change.expected(),
+                })
+        {
+            return Err(error(
+                Some(change.owner()),
+                None,
+                TeletextEditorialEffectsFailure::Association,
+            ));
+        }
+    }
+    let mut final_changes = BTreeSet::new();
+    for change in cumulative {
+        check_deadline(deadline)?;
+        if !final_changes.insert((change.owner(), change.command()))
+            || local_command(after, change)
+                != Some(TeletextEnhancementCommand::AtColumn {
+                    column: change.column(),
+                    operation: change.replacement(),
+                })
+        {
+            return Err(error(
+                Some(change.owner()),
+                None,
+                TeletextEditorialEffectsFailure::Association,
+            ));
+        }
+    }
+    if before.len() != after.len() {
+        return Err(error(
+            None,
+            None,
+            TeletextEditorialEffectsFailure::ProtectedStructure,
+        ));
+    }
+    for (owner, old) in before {
+        check_deadline(deadline)?;
+        let failure = || {
+            error(
+                Some(*owner),
+                None,
+                TeletextEditorialEffectsFailure::ProtectedStructure,
+            )
+        };
+        let new = after.get(owner).ok_or_else(failure)?;
+        if old.address != new.address
+            || old.presentation != new.presentation
+            || old.compositional_links != new.compositional_links
+            || old.resources != new.resources
+        {
+            return Err(failure());
+        }
+        match (&old.local_program, &new.local_program) {
+            (None, None) => {}
+            (Some(old), Some(new)) if old.commands().len() == new.commands().len() => {
+                for (ordinal, (old, new)) in old.commands().iter().zip(new.commands()).enumerate() {
+                    check_deadline(deadline)?;
+                    let expected = changes.get(&(*owner, ordinal)).map_or(*old, |change| {
+                        TeletextEnhancementCommand::AtColumn {
+                            column: change.column(),
+                            operation: change.replacement(),
+                        }
+                    });
+                    if *new != expected {
+                        return Err(failure());
+                    }
+                }
+            }
+            _ => return Err(failure()),
+        }
+    }
+    Ok(())
+}
+
+fn local_command(
+    pages: &BTreeMap<TeletextPageAddress, TeletextResolvedPageEnhancementDraft>,
+    change: &TeletextLocalProgramOperandOverlay,
+) -> Option<TeletextEnhancementCommand> {
+    pages
+        .get(&change.owner())?
+        .local_program
+        .as_ref()?
+        .commands()
+        .get(change.command())
+        .copied()
 }
 
 type PermissionMask = [[bool; 40]; 25];
@@ -284,6 +470,7 @@ fn check_packets(
     old: &EncodedTeletextPage,
     new: &EncodedTeletextPage,
     allowed: &PermissionMask,
+    operand_change: bool,
     max_units: usize,
 ) -> Result<()> {
     let owner = old.address();
@@ -352,6 +539,18 @@ fn check_packets(
                     crc: new_crc,
                 },
             ) if old == new && (old_crc == new_crc || changed_cells) => {}
+            (
+                TeletextEncodedDisplayRecord::Triplets {
+                    row: 26,
+                    designation: old,
+                    ..
+                },
+                TeletextEncodedDisplayRecord::Triplets {
+                    row: 26,
+                    designation: new,
+                    ..
+                },
+            ) if operand_change && old == new => {}
             _ if before == after => {}
             _ => {
                 return Err(error(

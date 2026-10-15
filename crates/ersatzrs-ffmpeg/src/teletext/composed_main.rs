@@ -299,6 +299,13 @@ pub struct EncodedTeletextPhysicalDisplayProgram {
 }
 
 impl EncodedTeletextPhysicalDisplayProgram {
+    pub(super) fn bind_original_local_commands(
+        &mut self,
+        original: impl FnMut(TeletextEnhancementSource) -> Option<usize>,
+    ) {
+        self.encoded.bind_original_local_commands(original);
+    }
+
     #[must_use]
     pub const fn replay(&self) -> &TeletextPhysicalDisplayReplay {
         &self.replay

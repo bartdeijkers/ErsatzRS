@@ -548,3 +548,6 @@ async fn repeated_latest_receipt_rejects_root_relabel_protected_resource_and_sta
         assert_eq!(flow.fixture.calls(), calls);
     }
 }
+
+#[path = "repeated_editorial_imports/operands.rs"]
+mod operands;

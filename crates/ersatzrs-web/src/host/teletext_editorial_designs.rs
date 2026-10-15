@@ -34,9 +34,12 @@ use super::{
     teletext_designs::{
         native_design_confirmation, NativeTeletextDesignError, RestoredOriginalTeletextDesign,
     },
-    teletext_editorial_effects::validate_teletext_editorial_effects,
+    teletext_editorial_effects::{
+        validate_teletext_editorial_effects_with_operands, TeletextEditorialEdits,
+    },
     teletext_editorial_tti::{
-        reconcile_teletext_editorial_tti, reconcile_teletext_editorial_tti_with_status,
+        reconcile_teletext_editorial_tti_with_operands, validate_teletext_editorial_tti_encoding,
+        TeletextEditorialChanges,
     },
     teletext_effective_designs::{native_effective_confirmation, RestoredEffectiveOriginalDesign},
     teletext_export_project::{
@@ -106,7 +109,7 @@ pub enum NativeTeletextEditorialImportError {
     MissingReceipt,
     #[error("teletext editorial data does not match the retained original export")]
     Association,
-    #[error("teletext editor input contains no changed display rows")]
+    #[error("teletext editor input contains no changed display content")]
     NoChanges,
     #[error(transparent)]
     Storage(#[from] TeletextDesignStoreError),
@@ -317,16 +320,16 @@ fn qualify_rows(
     policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> Result<RestoredStoredTeletextDesign> {
-    let overlays = parts
+    let overlay = parts
         .overlay()
-        .ok_or(NativeTeletextEditorialImportError::Association)?
-        .pages()
-        .to_vec();
+        .ok_or(NativeTeletextEditorialImportError::Association)?;
+    let overlays = overlay.pages().to_vec();
+    let operands = overlay.local_program_operands().to_vec();
     let encoding = policy.encoding;
     let edited = parts
         .compile(stored, policy, deadline, overlays.clone())
         .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?;
-    validate_teletext_editorial_effects(
+    validate_teletext_editorial_effects_with_operands(
         baseline
             .original
             .view()
@@ -337,7 +340,10 @@ fn qualify_rows(
             .encoded()
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
-        &overlays,
+        TeletextEditorialEdits {
+            rows: &overlays,
+            operands: &operands,
+        },
         &encoding,
         deadline,
     )
@@ -454,12 +460,20 @@ fn reconcile_files(
     files: &[TeletextExportFile],
     tti: TeletextTtiBudget,
     deadline: Instant,
-) -> Result<Vec<TeletextPhysicalBaseOverlay>> {
+) -> Result<TeletextEditorialChanges> {
     let body = &baseline.body;
     if files.len() != body.files.len() {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let mut overlays = Vec::new();
+    let mut changes = TeletextEditorialChanges {
+        rows: Vec::new(),
+        operands: Vec::new(),
+    };
+    let encoded = baseline
+        .original
+        .view()
+        .encoded()
+        .ok_or(NativeTeletextEditorialImportError::Association)?;
     for original in &body.files {
         check_deadline(deadline)?;
         let edited = files
@@ -481,36 +495,43 @@ fn reconcile_files(
             let primary = editor_primary_for_page(baseline.original.view(), address)
                 .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
             let expected_status = baseline.carrier.status(mapping.header_controls, primary);
-            let overlay = match baseline.carrier {
-                TeletextEditorCarrier::Legacy => reconcile_teletext_editorial_tti(
-                    mapping,
-                    &original.bytes,
-                    &edited.bytes,
-                    tti,
-                    deadline,
-                ),
-                TeletextEditorCarrier::V2
-                | TeletextEditorCarrier::V3
-                | TeletextEditorCarrier::V4 => reconcile_teletext_editorial_tti_with_status(
-                    mapping,
-                    &original.bytes,
-                    &edited.bytes,
-                    tti,
-                    deadline,
-                    expected_status,
-                ),
-            }?;
-            if let Some(overlay) = overlay {
-                overlays.push(overlay);
-            }
+            let incoming = reconcile_teletext_editorial_tti_with_operands(
+                mapping,
+                &original.bytes,
+                &edited.bytes,
+                tti,
+                deadline,
+                expected_status,
+                encoded,
+            )?;
+            changes.rows.extend(incoming.rows);
+            changes.operands.extend(incoming.operands);
         } else if original.bytes != edited.bytes {
             return Err(NativeTeletextEditorialImportError::Association);
         }
     }
-    if overlays.is_empty() {
+    if changes.rows.is_empty() && changes.operands.is_empty() {
         return Err(NativeTeletextEditorialImportError::NoChanges);
     }
-    Ok(overlays)
+    Ok(changes)
+}
+
+fn validate_reconciled_files(
+    baseline: &QualifiedBaseline,
+    files: &[TeletextExportFile],
+    tti: TeletextTtiBudget,
+    deadline: Instant,
+    encoded: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+) -> Result<()> {
+    for mapping in &baseline.body.project.pages {
+        check_deadline(deadline)?;
+        let edited = files
+            .iter()
+            .find(|file| file.name == mapping.name)
+            .ok_or(NativeTeletextEditorialImportError::Association)?;
+        validate_teletext_editorial_tti_encoding(mapping, &edited.bytes, tti, deadline, encoded)?;
+    }
+    Ok(())
 }
 
 enum EncodedStoredDesign {

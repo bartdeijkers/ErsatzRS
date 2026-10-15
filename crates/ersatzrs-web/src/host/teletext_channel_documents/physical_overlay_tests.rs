@@ -518,63 +518,215 @@ fn saved_overlay(
     }
 }
 
+fn stored_revision(effective: bool, document: Vec<u8>) -> TeletextDesignRevision {
+    TeletextDesignRevision {
+        design_id: 7,
+        revision: 3,
+        document_version: if effective { 2 } else { 1 },
+        digest: "f".repeat(64),
+        document,
+    }
+}
+
+fn append_saved(
+    effective: bool,
+    original: &[u8],
+    saved: &TeletextSavedEditorialOverlay,
+) -> Vec<u8> {
+    if effective {
+        append_teletext_effective_design_editorial_overlay(original, saved, storage_budget())
+            .unwrap()
+            .into_bytes()
+    } else {
+        append_teletext_design_editorial_overlay(original, saved, storage_budget())
+            .unwrap()
+            .into_bytes()
+    }
+}
+
+fn check_restored_operand(
+    producers: &[TeletextProducerPresentation],
+    encoded: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    expected_colour: u8,
+) -> Vec<Vec<[u8; 46]>> {
+    let local = |service: &TeletextDeclaredService| {
+        service
+            .semantic()
+            .page_enhancements()
+            .get(&address(123))
+            .unwrap()
+            .local_program
+            .as_ref()
+            .unwrap()
+            .commands()[1]
+    };
+    let foreground = |value| TeletextEnhancementCommand::AtColumn {
+        column: 8,
+        operation: TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::new(value).unwrap(),
+        },
+    };
+    assert_eq!(local(producers[0].original()), foreground(1));
+    assert_eq!(local(encoded.declared()), foreground(expected_colour));
+    assert_eq!(
+        encoded.declared().semantic().base(),
+        producers[0].original().semantic().base()
+    );
+    let EncodedTeletextAuthoredPage::CompiledDisplay(page) = &encoded.pages()[0] else {
+        panic!("saved local program must use complete native compilation");
+    };
+    let expected_word = 8 | (u32::from(expected_colour) << 11);
+    let records = project_encoded_teletext_display(page.page(), 128)
+        .unwrap()
+        .records;
+    assert!(records.iter().any(|record| matches!(record,
+        TeletextEncodedDisplayRecord::Triplets { row: 26, words, .. } if words.contains(&expected_word))));
+    let preview = project_teletext_preview(
+        encoded,
+        address(123),
+        TeletextColourPixelOptions {
+            reveal_concealed: false,
+            flash_phase: TeletextFlashPhase::Original,
+        },
+        bounds(1).1,
+    )
+    .unwrap();
+    assert_eq!(
+        preview.navigation(),
+        producers[0].original().semantic().base().pages[0].navigation
+    );
+    assert!(preview.raster().diagnostics().is_empty());
+    assert!(preview.raster().pixels().iter().any(|pixel| matches!(pixel,
+        TeletextRasterPixel::Colour(TeletextColourPixel::Rgb(rgb))
+        if rgb.get() == if expected_colour == 2 { [0, 15, 0] } else { [15, 0, 0] })));
+    encoded
+        .pages()
+        .iter()
+        .map(|page| page.data_units().to_vec())
+        .collect()
+}
+
+fn replay_saved(
+    effective: bool,
+    document: &[u8],
+    rows: Vec<TeletextPhysicalBaseOverlay>,
+    expected_colour: u8,
+) -> Result<Vec<Vec<[u8; 46]>>, NativeTeletextDesignError> {
+    let stored = stored_revision(effective, document.to_vec());
+    if effective {
+        let parts = decode_teletext_effective_design_documents(document, storage_budget())
+            .unwrap()
+            .into_parts();
+        let restored =
+            compile_effective_restored_parts(stored, parts, bounds(1).0, deadline(), rows)?;
+        Ok(check_restored_operand(
+            restored.producers(),
+            restored.encoded().unwrap(),
+            expected_colour,
+        ))
+    } else {
+        let parts = decode_teletext_design_documents(document, storage_budget())
+            .unwrap()
+            .into_parts();
+        let restored = compile_restored_parts(stored, parts, bounds(1).0, deadline(), rows)?;
+        Ok(check_restored_operand(
+            restored.producers(),
+            restored.encoded().unwrap(),
+            expected_colour,
+        ))
+    }
+}
+
 #[test]
-fn restored_compilers_reject_saved_operands_without_losing_row_only_replay() {
-    // Genuine public decoding for both envelope roles; Base origin here does
-    // not establish scripted selection, import permission or publication proof.
+fn restored_compilers_apply_saved_operands_and_replay_v1_rows_exactly() {
+    // Real decoding for both envelope roles, without import permission,
+    // scripted selection, durable storage or publication claims.
     for effective in [false, true] {
-        for operands in [false, true] {
-            let rows = vec![overlay(row(&original(
-                &snapshot(1, 1),
-                draft(TeletextColour::Red, "ASCII"),
-            )))];
+        for (operands, include_rows) in [(false, true), (true, true), (true, false)] {
+            let rows = if include_rows {
+                vec![overlay(row(&original(
+                    &snapshot(1, 1),
+                    draft(TeletextColour::Red, "ASCII"),
+                )))]
+            } else {
+                vec![]
+            };
             let saved = saved_overlay(operands, rows.clone());
             assert_eq!(saved.schema_version(), if operands { 2 } else { 1 });
             let original = stored_original(effective);
-            let document = if effective {
-                append_teletext_effective_design_editorial_overlay(
-                    &original,
-                    &saved,
-                    storage_budget(),
-                )
-                .unwrap()
-                .into_bytes()
-            } else {
-                append_teletext_design_editorial_overlay(&original, &saved, storage_budget())
-                    .unwrap()
-                    .into_bytes()
-            };
-            let stored = TeletextDesignRevision {
-                design_id: 7,
-                revision: 3,
-                document_version: if effective { 2 } else { 1 },
-                digest: "f".repeat(64),
-                document,
-            };
-            // Nonempty rows ensure the effective failure specifically detects
-            // operands, rather than its existing missing-row validation guard.
-            assert!(!rows.is_empty());
-            let result = if effective {
-                let parts =
-                    decode_teletext_effective_design_documents(&stored.document, storage_budget())
-                        .unwrap()
-                        .into_parts();
-                compile_effective_restored_parts(stored, parts, bounds(1).0, deadline(), rows)
-                    .map(|_| ())
-            } else {
-                let parts = decode_teletext_design_documents(&stored.document, storage_budget())
-                    .unwrap()
-                    .into_parts();
-                compile_restored_parts(stored, parts, bounds(1).0, deadline(), rows).map(|_| ())
-            };
-            if operands {
-                assert!(matches!(
-                    result,
-                    Err(NativeTeletextDesignError::EditorialValidationUnavailable)
-                ));
-            } else {
-                result.unwrap();
-            }
+            let document = append_saved(effective, &original, &saved);
+            let unchanged = document.clone();
+            let expected_colour = if operands { 2 } else { 1 };
+            let first = replay_saved(effective, &document, rows.clone(), expected_colour).unwrap();
+            let reloaded = replay_saved(effective, &document, rows, expected_colour).unwrap();
+            assert_eq!(first, reloaded);
+            assert_eq!(document, unchanged);
         }
+    }
+}
+
+#[test]
+fn stale_saved_operand_returns_no_candidate_in_both_envelope_roles() {
+    for effective in [false, true] {
+        let mut original: serde_json::Value =
+            serde_json::from_slice(&stored_original(effective)).unwrap();
+        let mut response: serde_json::Value =
+            serde_json::from_str(original["documents"][0]["response"].as_str().unwrap()).unwrap();
+        response["page_enhancements"][0]["local_program"]["commands"][1]["operation"]["colour"] =
+            json!(3);
+        original["documents"][0]["response"] = json!(response.to_string());
+        let original = serde_json::to_vec(&original).unwrap();
+        let saved = saved_overlay(true, vec![]);
+        let rejected = if effective {
+            append_teletext_effective_design_editorial_overlay(&original, &saved, storage_budget())
+                .map(|_| ())
+        } else {
+            append_teletext_design_editorial_overlay(&original, &saved, storage_budget())
+                .map(|_| ())
+        };
+        assert!(matches!(rejected.unwrap_err().reason,
+            ersatzrs_app::teletext_design_documents::TeletextDesignDocumentFailure::EditorialOverlay));
+        // The structural codec rejects first. The shared native compiler must
+        // independently retain the exact-operand precondition for typed callers.
+        let documents = if effective {
+            decode_teletext_effective_design_documents(&original, storage_budget())
+                .unwrap()
+                .into_parts()
+                .documents
+        } else {
+            decode_teletext_design_documents(&original, storage_budget())
+                .unwrap()
+                .into_parts()
+                .documents
+        };
+        let Err(ChannelTeletextDocumentEncodingError::Composition(error)) =
+            super::encode_original_producer_documents_with_operands(
+                Some(0),
+                documents,
+                vec![],
+                deadline(),
+                None,
+                bounds(1).0,
+                saved.local_program_operands(),
+            )
+        else {
+            panic!("stale exact-original operand must not escape into a native candidate");
+        };
+        assert!(matches!(error.reason,
+            TeletextProducerCompositionFailure::Semantic(reason) if matches!(*reason,
+                TeletextServiceError::LocalProgramOperandOverlay {
+                    reason: TeletextLocalProgramOperandFailure::CommandMismatch, .. })));
+    }
+}
+
+#[test]
+fn stored_physical_rows_still_require_authenticated_reconstruction() {
+    for effective in [false, true] {
+        let saved = saved_overlay(true, vec![overlay([b' '; 40])]);
+        let document = append_saved(effective, &stored_original(effective), &saved);
+        assert!(matches!(
+            replay_saved(effective, &document, vec![], 2),
+            Err(NativeTeletextDesignError::EditorialValidationUnavailable)
+        ));
     }
 }

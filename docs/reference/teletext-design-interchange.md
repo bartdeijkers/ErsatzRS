@@ -5272,12 +5272,24 @@ Native reload and publication now authenticate a present subdocument using the
 retained server receipt and exact immutable original. A missing receipt still
 returns `EditorialValidationUnavailable`; forged associations and unsafe effects
 reject. Rows are never ignored to recover original output under an edited digest.
-The current row-only native replay explicitly rejects nonempty operand intentions
-with `EditorialValidationUnavailable` for both static and effective designs.
-Such intentions cannot silently become an unchanged preview or publication.
-Native TTI reconciliation, complete protected-effect checks and authenticated
-operand replay are remaining implementation work, rather than a permanent
-editor restriction. P9A-04 owns the next step and missing actual-editor proof.
+Native TTI reconciliation uses the final compiler's immutable
+`original_local_command()` correspondence and `semantic_word()` position; physical
+command ordinals and optional selector-prefix positions are not original intent.
+Only same-family existing operands become checked intentions. Generated carriers,
+object/default commands, packet presence, selectors and all other protected words
+remain exact. Complete native reconstruction must reproduce every uploaded X26
+word, then all protected visual effects are compared across the entire page,
+including rightward attribute scope and side panels. A command inside a custom
+zone does not authorize its effects outside that zone.
+
+Static and effective replay apply these intentions to the composed declared
+service before full encoding; original producer documents remain exact. Repeat
+imports compare against the latest qualified concept while persisted expectations
+retain the immutable root operation. Reverting all operand edits with no physical
+rows saves a new concept revision containing the authenticated root bytes, without
+an empty or no-op overlay. Import, re-export, preview and revert never implicitly
+publish. Full resource/geometry/panel editor coverage and actual QTM operand-edit
+proof remain open; P9A-04 owns the evidence and next step.
 No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
 positive/negative codec, native import and durable qualification evidence.
 

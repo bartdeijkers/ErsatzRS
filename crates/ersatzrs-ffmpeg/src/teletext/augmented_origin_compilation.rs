@@ -200,7 +200,7 @@ pub(super) fn compile_augmented_with_context_and_usage<'a>(
             augmented.carriers().len(),
             ancestry_budget.max_carriers,
         )?;
-        let physical = compile_physical_with_context(
+        let mut physical = compile_physical_with_context(
             service,
             composition,
             augmented.program(),
@@ -255,6 +255,13 @@ pub(super) fn compile_augmented_with_context_and_usage<'a>(
             ));
         }
         let maps = state.map_all(original, actual)?;
+        physical.bind_original_local_commands(|source| match augmented.emitter_source(source) {
+            Some(TeletextAugmentedOriginSource::RetainedMain {
+                provenance: TeletextMainCompositionSource::OriginalPage { command },
+                ..
+            }) => Some(command),
+            _ => None,
+        });
         Ok(EncodedTeletextAugmentedOriginProgram {
             augmented,
             physical,

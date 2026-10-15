@@ -1,31 +1,36 @@
 //! Bounded cumulative edits over one authenticated overlay-free original.
 
+use super::super::teletext_editorial_effects::TeletextEditorialEdits;
+use super::super::teletext_editorial_tti::TeletextEditorialChanges;
 use super::{
     append_overlay, baseline_body, build_native_teletext_export_project, check_deadline,
     check_request, digest, import_limits, parse_teletext_export_sidecar, qualify_baseline,
     qualify_rows, read_editorial_baseline, reconcile_files, save_editorial_concept,
-    ApplicationServices, EditorialBaseline, EncodedStoredDesign, Instant,
-    NativeTeletextEditorialImportError, NativeTeletextEditorialImportRequest,
+    validate_reconciled_files, ApplicationServices, EditorialBaseline, EncodedStoredDesign,
+    Instant, NativeTeletextEditorialImportError, NativeTeletextEditorialImportRequest,
     NativeTeletextExportPolicy, QualifiedBaseline, Result, SavedEditorialTeletextDesign,
     StoredDesignParts, TeletextDesignHead, TeletextDesignMutation, TeletextDesignRevision,
-    TeletextEditorCarrier, TeletextExportReceiptBody, TeletextPageAddress, TeletextPageNumber,
-    TeletextPhysicalBaseOverlay, TeletextSavedEditorialOverlay, TeletextSavedEditorialProvenance,
-    TeletextSubcode,
+    TeletextEditorCarrier, TeletextExportFile, TeletextExportReceiptBody, TeletextPageAddress,
+    TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextSavedEditorialOverlay,
+    TeletextSavedEditorialProvenance, TeletextSubcode,
 };
 use ersatzrs_core::locking::TeletextWorkHold;
-use ersatzrs_domain::TeletextPhysicalBaseRow;
-use std::collections::BTreeSet;
+use ersatzrs_domain::{
+    TeletextLocalProgramOperandOverlay, TeletextPhysicalBaseRow, TeletextServiceBudget,
+};
+use std::collections::{BTreeMap, BTreeSet};
 
 struct PreparedImport {
     root: QualifiedBaseline,
     latest: Option<QualifiedBaseline>,
-    incoming: Vec<TeletextPhysicalBaseOverlay>,
-    cumulative: Vec<TeletextPhysicalBaseOverlay>,
+    incoming: TeletextEditorialChanges,
+    cumulative: TeletextEditorialChanges,
     provenance: TeletextSavedEditorialProvenance,
     root_export: Option<TeletextExportReceiptBody>,
     qualified: Option<(EncodedStoredDesign, String)>,
     next_revision: i64,
     policy: NativeTeletextExportPolicy,
+    files: Vec<TeletextExportFile>,
 }
 
 fn provenance(baseline: &EditorialBaseline) -> TeletextSavedEditorialProvenance {
@@ -95,7 +100,7 @@ fn qualify_latest(
     root: &QualifiedBaseline,
     policy: &NativeTeletextExportPolicy,
     deadline: Instant,
-) -> Result<(QualifiedBaseline, Vec<TeletextPhysicalBaseOverlay>)> {
+) -> Result<(QualifiedBaseline, TeletextEditorialChanges)> {
     let (project, tti) = import_limits(policy);
     let body = baseline_body(&latest, project)?;
     let carrier = TeletextEditorCarrier::from_profile(&body.project.editor_profile)
@@ -113,7 +118,10 @@ fn qualify_latest(
     if expected.bytes() != latest.original.document {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let previous = overlay.pages().to_vec();
+    let previous = TeletextEditorialChanges {
+        rows: overlay.pages().to_vec(),
+        operands: overlay.local_program_operands().to_vec(),
+    };
     let original_document = latest.original.document.clone();
     let original = qualify_rows(
         latest.original,
@@ -212,15 +220,114 @@ fn merge_rows(
     Ok(result)
 }
 
+fn merge_operands(
+    previous: &[TeletextLocalProgramOperandOverlay],
+    incoming: &[TeletextLocalProgramOperandOverlay],
+    service: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<Vec<TeletextLocalProgramOperandOverlay>> {
+    let maximum = service.max_commands.min(service.max_structure_items);
+    if previous.len() > maximum || incoming.len() > maximum {
+        return Err(NativeTeletextEditorialImportError::Budget);
+    }
+    let mut merged = BTreeMap::new();
+    for operand in previous {
+        check_deadline(deadline)?;
+        if merged
+            .insert((operand.owner(), operand.command()), *operand)
+            .is_some()
+        {
+            return Err(NativeTeletextEditorialImportError::Association);
+        }
+    }
+    let mut seen = BTreeSet::new();
+    for operand in incoming {
+        check_deadline(deadline)?;
+        let key = (operand.owner(), operand.command());
+        if !seen.insert(key) {
+            return Err(NativeTeletextEditorialImportError::Association);
+        }
+        if let Some(previous) = merged.get(&key).copied() {
+            if previous.column() != operand.column() || previous.replacement() != operand.expected()
+            {
+                return Err(NativeTeletextEditorialImportError::Association);
+            }
+            if operand.replacement() == previous.expected() {
+                // Revert removes root-relative intent. The incoming transition
+                // remains separately checked against latest-export permissions.
+                merged.remove(&key);
+            } else {
+                let cumulative = TeletextLocalProgramOperandOverlay::new(
+                    operand.owner(),
+                    operand.command(),
+                    operand.column(),
+                    previous.expected(),
+                    operand.replacement(),
+                )
+                .map_err(|_| NativeTeletextEditorialImportError::Association)?;
+                merged.insert(key, cumulative);
+            }
+        } else {
+            if merged.len() >= maximum {
+                return Err(NativeTeletextEditorialImportError::Budget);
+            }
+            // Reconciliation authenticated this against the latest service;
+            // attachment independently matches it to the immutable root.
+            merged.insert(key, *operand);
+        }
+    }
+    Ok(merged.into_values().collect())
+}
+
+fn extend_root_export(
+    root: &mut QualifiedBaseline,
+    cumulative: &TeletextEditorialChanges,
+    expected_head: i64,
+    policy: &NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<Option<TeletextExportReceiptBody>> {
+    let (project, tti) = import_limits(policy);
+    let owners: Vec<_> = cumulative
+        .rows
+        .iter()
+        .map(TeletextPhysicalBaseOverlay::owner)
+        .chain(cumulative.operands.iter().map(|operand| operand.owner()))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let covered = owners.iter().all(|owner| {
+        root.body.project.pages.iter().any(|mapping| {
+            mapping.page.page == owner.page.get() && mapping.page.subcode == owner.subcode.get()
+        })
+    });
+    let exported = if covered {
+        None
+    } else {
+        let body = build_native_teletext_export_project(
+            root.original.view(),
+            expected_head,
+            Some(&owners),
+            project,
+            tti,
+            deadline,
+            TeletextEditorCarrier::V4,
+        )
+        .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
+        root.body = body.clone();
+        Some(body)
+    };
+    Ok(exported)
+}
+
 fn prepare(
-    request: &NativeTeletextEditorialImportRequest,
+    request: NativeTeletextEditorialImportRequest,
     latest: EditorialBaseline,
     root: Option<EditorialBaseline>,
     policy: NativeTeletextExportPolicy,
     deadline: Instant,
 ) -> Result<Box<PreparedImport>> {
     let (project, tti) = import_limits(&policy);
-    check_request(request, project)?;
+    check_request(&request, project)?;
     let sidecar = parse_teletext_export_sidecar(&request.sidecar, project)?;
     if sidecar.receipt_id != request.receipt_id || sidecar.receipt_digest != request.receipt_digest
     {
@@ -239,7 +346,10 @@ fn prepare(
                     deadline,
                 )?,
                 None,
-                Vec::new(),
+                TeletextEditorialChanges {
+                    rows: Vec::new(),
+                    operands: Vec::new(),
+                },
                 provenance,
             )
         }
@@ -263,32 +373,22 @@ fn prepare(
     }
     // NoChanges compares latest files, before cumulative merge/root effects.
     let incoming = reconcile_files(baseline, &request.files, tti, deadline)?;
-    let cumulative = merge_rows(&previous, &incoming, &policy, deadline)?;
-    let owners: Vec<_> = cumulative
-        .iter()
-        .map(TeletextPhysicalBaseOverlay::owner)
-        .collect();
-    let covered = owners.iter().all(|owner| {
-        root.body.project.pages.iter().any(|mapping| {
-            mapping.page.page == owner.page.get() && mapping.page.subcode == owner.subcode.get()
-        })
-    });
-    let root_export = if covered {
-        None
-    } else {
-        let body = build_native_teletext_export_project(
-            root.original.view(),
-            request.expected_design_head,
-            Some(&owners),
-            project,
-            tti,
+    let cumulative = TeletextEditorialChanges {
+        rows: merge_rows(&previous.rows, &incoming.rows, &policy, deadline)?,
+        operands: merge_operands(
+            &previous.operands,
+            &incoming.operands,
+            policy.document.validation.service,
             deadline,
-            TeletextEditorCarrier::V4,
-        )
-        .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
-        root.body = body.clone();
-        Some(body)
+        )?,
     };
+    let root_export = extend_root_export(
+        &mut root,
+        &cumulative,
+        request.expected_design_head,
+        &policy,
+        deadline,
+    )?;
     let mut prepared = Box::new(PreparedImport {
         root,
         latest,
@@ -302,10 +402,58 @@ fn prepare(
             .checked_add(1)
             .ok_or(NativeTeletextEditorialImportError::Budget)?,
         policy,
+        files: request.files,
     });
     // Fully qualify content before a possible durable union-owner root receipt.
     prepared.qualified = Some(make_document(&prepared, deadline)?);
     Ok(prepared)
+}
+
+fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
+    let document = if prepared.cumulative.rows.is_empty() && prepared.cumulative.operands.is_empty()
+    {
+        // An explicit edit back to the immutable root is still a new concept
+        // revision. Preserve the authenticated original bytes without inventing
+        // a no-op operand or an empty overlay schema.
+        let bytes = prepared.root.original_document.clone();
+        match prepared.root.original.view().document_version() {
+            ersatzrs_domain::TELETEXT_DESIGN_DOCUMENT_VERSION => {
+                EncodedStoredDesign::Base(super::EncodedTeletextDesignDocuments::from_saved_bytes(
+                    bytes,
+                    prepared.policy.document,
+                )?)
+            }
+            ersatzrs_domain::TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION => {
+                EncodedStoredDesign::Effective(
+                    super::EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(
+                        bytes,
+                        prepared.policy.document,
+                    )?,
+                )
+            }
+            _ => return Err(NativeTeletextEditorialImportError::Association),
+        }
+    } else {
+        let overlay = if prepared.cumulative.operands.is_empty() {
+            TeletextSavedEditorialOverlay::new(
+                prepared.provenance.clone(),
+                prepared.cumulative.rows.clone(),
+            )?
+        } else {
+            TeletextSavedEditorialOverlay::new_with_local_program_operands(
+                prepared.provenance.clone(),
+                prepared.cumulative.rows.clone(),
+                prepared.cumulative.operands.clone(),
+            )?
+        };
+        append_overlay(
+            prepared.root.original.view().document_version(),
+            &prepared.root.original_document,
+            &overlay,
+            prepared.policy.document,
+        )?
+    };
+    Ok(document)
 }
 
 fn make_document(
@@ -313,16 +461,7 @@ fn make_document(
     deadline: Instant,
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
-    let overlay = TeletextSavedEditorialOverlay::new(
-        prepared.provenance.clone(),
-        prepared.cumulative.clone(),
-    )?;
-    let document = append_overlay(
-        prepared.root.original.view().document_version(),
-        &prepared.root.original_document,
-        &overlay,
-        prepared.policy.document,
-    )?;
+    let document = encode_cumulative_concept(prepared)?;
     let document_digest = digest(document.bytes());
     let stored = TeletextDesignRevision {
         design_id: prepared.root.original.view().design_id(),
@@ -332,15 +471,26 @@ fn make_document(
         document: document.bytes().to_vec(),
     };
     let parts = StoredDesignParts::decode(&stored, prepared.policy.document)?;
-    let edited = qualify_rows(
-        stored,
-        parts,
-        &prepared.root,
-        prepared.policy.encoding.clone(),
-        deadline,
-    )?;
+    let edited = if parts.overlay().is_some() {
+        qualify_rows(
+            stored,
+            parts,
+            &prepared.root,
+            prepared.policy.encoding.clone(),
+            deadline,
+        )?
+    } else {
+        parts
+            .compile(
+                stored,
+                prepared.policy.encoding.clone(),
+                deadline,
+                Vec::new(),
+            )
+            .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?
+    };
     let baseline = prepared.latest.as_ref().unwrap_or(&prepared.root);
-    super::super::teletext_editorial_effects::validate_teletext_editorial_transition(
+    super::super::teletext_editorial_effects::validate_teletext_editorial_transition_with_operands(
         baseline
             .original
             .view()
@@ -351,12 +501,28 @@ fn make_document(
             .encoded()
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
-        &prepared.incoming,
-        &prepared.cumulative,
+        TeletextEditorialEdits {
+            rows: &prepared.incoming.rows,
+            operands: &prepared.incoming.operands,
+        },
+        TeletextEditorialEdits {
+            rows: &prepared.cumulative.rows,
+            operands: &prepared.cumulative.operands,
+        },
         &prepared.policy.encoding.encoding,
         deadline,
     )
     .map_err(|error| NativeTeletextEditorialImportError::Effects(Box::new(error)))?;
+    validate_reconciled_files(
+        baseline,
+        &prepared.files,
+        import_limits(&prepared.policy).1,
+        deadline,
+        edited
+            .view()
+            .encoded()
+            .ok_or(NativeTeletextEditorialImportError::Association)?,
+    )?;
     check_deadline(deadline)?;
     Ok((document, document_digest))
 }
@@ -387,7 +553,7 @@ pub(super) async fn import_and_save(
     let name = request.name.clone();
     let root = read_root(application, &baseline, &policy, (deadline, hold.clone())).await?;
     let mut prepared = super::super::teletext_work::spawn_blocking(hold.clone(), move || {
-        prepare(&request, baseline, root, policy, deadline)
+        prepare(request, baseline, root, policy, deadline)
     })
     .await
     .map_err(|_| NativeTeletextEditorialImportError::WorkerFailed)??;
@@ -405,7 +571,7 @@ pub(super) async fn import_and_save(
         let metadata = match mutation {
             TeletextDesignMutation::Saved(metadata) => metadata,
             TeletextDesignMutation::Rejected(reason) => {
-                return Ok(TeletextDesignMutation::Rejected(reason))
+                return Ok(TeletextDesignMutation::Rejected(reason));
             }
         };
         prepared.provenance.export_receipt_id = metadata.id;
@@ -432,3 +598,7 @@ pub(super) async fn import_and_save(
     )
     .await
 }
+
+#[cfg(test)]
+#[path = "repeat_tests.rs"]
+mod tests;

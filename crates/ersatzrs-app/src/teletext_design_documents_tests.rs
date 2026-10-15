@@ -212,6 +212,23 @@ impl Fixture {
 }
 
 #[test]
+fn saved_original_bytes_retain_noncanonical_spelling_and_decoder_limits() {
+    let value = Fixture::with_authoring().value();
+    let mut bytes = serde_json::to_vec_pretty(&value).unwrap();
+    bytes.extend_from_slice(b"\n\n");
+    let restored =
+        EncodedTeletextDesignDocuments::from_saved_bytes(bytes.clone(), budget()).unwrap();
+    assert_eq!(restored.bytes(), bytes);
+    let tight = TeletextDesignDocumentBudget {
+        max_serialized_bytes: bytes.len() - 1,
+        ..budget()
+    };
+    assert!(EncodedTeletextDesignDocuments::from_saved_bytes(bytes.clone(), tight).is_err());
+    bytes.extend_from_slice(b"{}");
+    assert!(EncodedTeletextDesignDocuments::from_saved_bytes(bytes, budget()).is_err());
+}
+
+#[test]
 fn original_v3_storage_preserves_exact_sources_metadata_and_no_edit_authority() {
     let fixture = Fixture::with_authoring();
     let encoded = fixture.encoded();

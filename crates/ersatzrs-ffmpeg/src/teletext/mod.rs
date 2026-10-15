@@ -285,6 +285,8 @@ mod mot_tests;
 #[cfg(test)]
 mod native_default_page_tests;
 #[cfg(test)]
+mod normalized_editorial_positions_tests;
+#[cfg(test)]
 mod object_allocation_tests;
 #[cfg(test)]
 mod object_pages_tests;

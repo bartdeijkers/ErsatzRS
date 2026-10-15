@@ -230,6 +230,26 @@ impl Fixture {
 }
 
 #[test]
+fn saved_effective_bytes_retain_noncanonical_spelling_and_decoder_limits() {
+    let encoded = Fixture::mixed().encode();
+    let value: Value = serde_json::from_slice(encoded.bytes()).unwrap();
+    let mut bytes = serde_json::to_vec_pretty(&value).unwrap();
+    bytes.extend_from_slice(b"\n\n");
+    let restored =
+        EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(bytes.clone(), budget()).unwrap();
+    assert_eq!(restored.bytes(), bytes);
+    let tight = TeletextDesignDocumentBudget {
+        max_serialized_bytes: bytes.len() - 1,
+        ..budget()
+    };
+    assert!(
+        EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(bytes.clone(), tight).is_err()
+    );
+    bytes.extend_from_slice(b"{}");
+    assert!(EncodedEffectiveTeletextDesignDocuments::from_saved_bytes(bytes, budget()).is_err());
+}
+
+#[test]
 fn effective_mixed_contracts_preserve_expired_origins_settings_and_exact_responses() {
     let fixture = Fixture::mixed();
     let encoded = fixture.encode();

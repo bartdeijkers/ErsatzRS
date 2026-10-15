@@ -82,6 +82,7 @@ pub struct TeletextCompiledCommandPosition {
     source: TeletextEnhancementSource,
     first_word: usize,
     semantic_word: usize,
+    original_local_command: Option<usize>,
 }
 impl TeletextCompiledCommandPosition {
     #[must_use]
@@ -96,6 +97,14 @@ impl TeletextCompiledCommandPosition {
     pub const fn semantic_word(&self) -> usize {
         self.semantic_word
     }
+    /// Original page-local command ordinal, bound only by the normalized
+    /// augmented factory's retained-main provenance. Standalone packing and
+    /// generated/default/object commands have no original local ordinal.
+    /// This is correspondence metadata, not edit or publication permission.
+    #[must_use]
+    pub const fn original_local_command(&self) -> Option<usize> {
+        self.original_local_command
+    }
 }
 
 /// Immutable main program and all supplied local definitions for this owner.
@@ -109,6 +118,19 @@ pub struct EncodedTeletextLocalObjectProgram {
 }
 
 impl EncodedTeletextLocalObjectProgram {
+    pub(super) fn bind_original_local_commands(
+        &mut self,
+        mut original: impl FnMut(TeletextEnhancementSource) -> Option<usize>,
+    ) {
+        for position in &mut self.commands {
+            position.original_local_command = if position.source.object.is_none() {
+                original(position.source)
+            } else {
+                None
+            };
+        }
+    }
+
     /// Actual final emission positions, never the placeholder sizing pass.
     #[must_use]
     pub fn command_positions(&self) -> &[TeletextCompiledCommandPosition] {
@@ -488,6 +510,7 @@ impl Input<'_> {
                 source: location,
                 first_word,
                 semantic_word: emission.index - 1,
+                original_local_command: None,
             });
         }
         Ok(())

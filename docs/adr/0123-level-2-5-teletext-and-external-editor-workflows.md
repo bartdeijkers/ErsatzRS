@@ -81,12 +81,16 @@ service and complete authored compiler. A private concept version2 stores those
 intents beside existing physical rows; version1 bytes and immutable original
 responses remain unchanged. Same-family colour/attribute changes retain command
 identities, character sizing and resource declarations. This narrow primitive
-grants no edit permission. Until native TTI reconciliation and protected-effect
-qualification are connected, both static and effective native replay explicitly
-reject nonempty operand intentions instead of ignoring them. Full enhancement,
-resource, geometry, panel and editor coverage remains required; this preparatory
-slice introduces no accepted product restriction. P9A-04 owns verification and
-the concrete next integration step.
+grants no edit permission. Native TTI reconciliation now binds final semantic
+words to original local commands, reconstructs the complete candidate and checks
+all protected effects, including attributes extending right of a command. The
+re-encoded X26 packets must exactly match the edited file. Static and effective
+reload apply stored intentions through that same compiler. Repeated concepts
+retain root-relative expectations; a complete operand revert creates a new
+root-equivalent concept revision. Neither import nor revert changes publication.
+Full enhancement, resource, geometry, panel and actual editor coverage remains
+required; this slice introduces no accepted product restriction. P9A-04 owns
+verification and the concrete next integration step.
 A bounded ordered TTI
 syntax codec preserves cells, triplets, decimal editor ordinals and M29 scope.
 It does not confer semantic Level 2.5/3.5, editing or publication authority.

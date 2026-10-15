@@ -34,8 +34,8 @@ use sha2::{Digest, Sha256};
 
 use super::{
     teletext_channel_documents::{
-        encode_original_producer_documents, maximum_producers, EncodedChannelTeletextOriginals,
-        TeletextChannelDocumentEncodingPolicy,
+        encode_original_producer_documents_with_operands, maximum_producers,
+        EncodedChannelTeletextOriginals, TeletextChannelDocumentEncodingPolicy,
     },
     teletext_designs::NativeTeletextDesignError,
     teletext_effective_channel_documents::EncodedEffectiveChannelTeletextDocumentCandidate,
@@ -544,7 +544,7 @@ pub(super) fn compile_effective_restored_parts(
     if parts
         .editorial_overlay
         .as_ref()
-        .is_some_and(|overlay| overlays.is_empty() || !overlay.local_program_operands().is_empty())
+        .is_some_and(|overlay| !overlay.pages().is_empty() && overlays.is_empty())
     {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
@@ -571,13 +571,18 @@ pub(super) fn compile_effective_restored_parts(
             .iter()
             .position(|index| parts.selection.bindings[*index].addon_id() == addon)
     });
-    let originals = encode_original_producer_documents(
+    let operands = parts
+        .editorial_overlay
+        .as_ref()
+        .map_or(&[][..], |overlay| overlay.local_program_operands());
+    let originals = encode_original_producer_documents_with_operands(
         entry,
         parts.documents,
         overlays,
         deadline,
         region,
         policy,
+        operands,
     )
     .map_err(|e| NativeTeletextDesignError::Encoding(Box::new(e)))?;
     check_deadline(deadline)?;

@@ -17,11 +17,11 @@ use ersatzrs_app::{
 use ersatzrs_core::repositories::TeletextGuideSourceFence;
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextColdProducerComposition,
-    TeletextComposedProducerPage, TeletextPageAddress, TeletextPhysicalBaseOverlay,
-    TeletextProducerCompositionBudget, TeletextProducerCompositionError,
-    TeletextProducerCompositionFailure, TeletextProducerCompositionMetadata,
-    TeletextProducerPresentation, TeletextProducerPresentationBudget,
-    TeletextProducerPresentationError,
+    TeletextComposedProducerPage, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
+    TeletextPhysicalBaseOverlay, TeletextProducerCompositionBudget,
+    TeletextProducerCompositionError, TeletextProducerCompositionFailure,
+    TeletextProducerCompositionMetadata, TeletextProducerPresentation,
+    TeletextProducerPresentationBudget, TeletextProducerPresentationError,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service_before, EncodedTeletextAuthoredService,
@@ -392,6 +392,31 @@ pub(super) fn encode_original_channel_documents_with_physical_overlays(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    encode_original_channel_documents_with_operands(
+        selection,
+        entry_addon_id,
+        documents,
+        (overlays, &[]),
+        deadline,
+        region,
+        policy,
+    )
+}
+
+/// Compile trusted physical rows and exact-original local operands without
+/// modifying producer documents. Permission and publication remain separate.
+pub(super) fn encode_original_channel_documents_with_operands(
+    selection: &TeletextChannelSelectionSnapshot,
+    entry_addon_id: Option<&str>,
+    documents: Vec<TeletextProfileDocument>,
+    editorial: (
+        Vec<TeletextPhysicalBaseOverlay>,
+        &[TeletextLocalProgramOperandOverlay],
+    ),
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
     check_deadline(deadline)?;
     if documents.len() != selection.bindings.len() {
         return Err(ChannelTeletextDocumentEncodingError::Association);
@@ -402,13 +427,14 @@ pub(super) fn encode_original_channel_documents_with_physical_overlays(
             .iter()
             .position(|binding| binding.addon_id == addon)
     });
-    encode_original_producer_documents(
+    encode_original_producer_documents_with_operands(
         entry_producer,
         documents,
-        overlays,
+        editorial.0,
         deadline,
         region,
         policy,
+        editorial.1,
     )
 }
 
@@ -422,10 +448,33 @@ pub(super) fn encode_original_producer_documents(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    encode_original_producer_documents_with_operands(
+        entry_producer,
+        documents,
+        overlays,
+        deadline,
+        region,
+        policy,
+        &[],
+    )
+}
+
+/// Reconstruct local operands on the composed candidate, retaining exact
+/// original producers and their associations. Complete native encoding still
+/// follows; this helper grants no permission to alter protected effects.
+pub(super) fn encode_original_producer_documents_with_operands(
+    entry_producer: Option<usize>,
+    documents: Vec<TeletextProfileDocument>,
+    overlays: Vec<TeletextPhysicalBaseOverlay>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    operands: &[TeletextLocalProgramOperandOverlay],
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
     check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
     if documents.is_empty() {
-        if !overlays.is_empty() {
+        if !overlays.is_empty() || !operands.is_empty() {
             return Err(ChannelTeletextDocumentEncodingError::Association);
         }
         return Ok(EncodedChannelTeletextOriginals {
@@ -455,7 +504,22 @@ pub(super) fn encode_original_producer_documents(
             .with_physical_base_overlays(overlays, policy.composition)
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
     }
-    let (producers, provenance, metadata, declared) = composition.into_parts();
+    let (producers, provenance, metadata, mut declared) = composition.into_parts();
+    if !operands.is_empty() {
+        declared = declared
+            .with_local_program_operand_overlays(operands, policy.composition.service)
+            .map_err(|reason| {
+                ChannelTeletextDocumentEncodingError::Composition(Box::new(
+                    TeletextProducerCompositionError {
+                        producer: None,
+                        page: None,
+                        display: None,
+                        resource: None,
+                        reason: TeletextProducerCompositionFailure::Semantic(Box::new(reason)),
+                    },
+                ))
+            })?;
+    }
     check_deadline(deadline)?;
     let encoded = encode_teletext_authored_service_before(
         declared,

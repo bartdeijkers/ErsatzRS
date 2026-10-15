@@ -32,7 +32,7 @@ use ersatzrs_ffmpeg::teletext::{
 use sha2::{Digest, Sha256};
 
 use super::teletext_channel_documents::{
-    encode_original_channel_documents_with_physical_overlays, maximum_producers,
+    encode_original_channel_documents_with_operands, maximum_producers,
     ChannelTeletextDocumentEncodingError, EncodedChannelTeletextDocumentCandidate,
     EncodedChannelTeletextOriginals, TeletextChannelDocumentEncodingPolicy,
 };
@@ -438,12 +438,12 @@ pub(super) fn compile_restored_parts(
     overlays: Vec<TeletextPhysicalBaseOverlay>,
 ) -> Result<RestoredOriginalTeletextDesign, NativeTeletextDesignError> {
     check_deadline(deadline)?;
-    // Operand storage is preparatory; this row-only replay must never silently
-    // drop an enhanced edit while producing a preview/publication candidate.
+    // Stored physical rows require the caller's authenticated reconstruction;
+    // operand-only concepts legitimately have no physical-row overlays.
     if parts
         .editorial_overlay
         .as_ref()
-        .is_some_and(|overlay| !overlay.local_program_operands().is_empty())
+        .is_some_and(|overlay| !overlay.pages().is_empty() && overlays.is_empty())
     {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
@@ -464,11 +464,15 @@ pub(super) fn compile_restored_parts(
     let region = parts.v1_region.map(|region| match region {
         TeletextSavedV1Region::WesternLatin => TeletextEncodingRegion::WesternLatin,
     });
-    let originals = encode_original_channel_documents_with_physical_overlays(
+    let operands = parts
+        .editorial_overlay
+        .as_ref()
+        .map_or(&[][..], |overlay| overlay.local_program_operands());
+    let originals = encode_original_channel_documents_with_operands(
         &parts.selection,
         parts.entry_addon_id.as_deref(),
         parts.documents,
-        overlays,
+        (overlays, operands),
         deadline,
         region,
         policy,

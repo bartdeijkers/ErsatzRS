@@ -127,6 +127,19 @@ pub struct EncodedTeletextDesignDocuments {
     bytes: Vec<u8>,
 }
 impl EncodedTeletextDesignDocuments {
+    /// Restore bounded saved bytes without normalizing their original spelling.
+    /// This structural check grants no native admission or save/publication right;
+    /// the existing native validator and revision CAS remain mandatory.
+    /// # Errors
+    /// Rejects the same malformed associations, versions and limits as decoding.
+    pub fn from_saved_bytes(
+        bytes: Vec<u8>,
+        budget: TeletextDesignDocumentBudget,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        decode_teletext_design_documents(&bytes, budget)?;
+        Ok(Self { bytes })
+    }
+
     #[must_use]
     pub const fn version(&self) -> u16 {
         TELETEXT_DESIGN_DOCUMENT_VERSION
