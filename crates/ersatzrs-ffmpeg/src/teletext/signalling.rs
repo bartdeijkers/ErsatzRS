@@ -409,6 +409,23 @@ pub(super) fn validate_pmt(
     pmt_pid: u16,
     pid: u16,
 ) -> Result<(u16, u8, u16), TeletextMultiplexError> {
+    validate_pmt_inner(source, pmt_pid, Some(pid))
+}
+
+/// Report-only input validation: permits an occupied source PID and no-PCR PMT.
+/// Authored admission continues to use `validate_pmt` and its clock/PID fences.
+pub(super) fn validate_source_pmt(
+    source: &[u8],
+    pmt_pid: u16,
+) -> Result<(u16, u8, u16), TeletextMultiplexError> {
+    validate_pmt_inner(source, pmt_pid, None)
+}
+
+fn validate_pmt_inner(
+    source: &[u8],
+    pmt_pid: u16,
+    candidate: Option<u16>,
+) -> Result<(u16, u8, u16), TeletextMultiplexError> {
     if !(16..=MAX_PMT_BYTES).contains(&source.len())
         || source[1] & 0xf0 != 0xb0
         || source[5] & 0xc1 != 0xc1
@@ -431,21 +448,21 @@ pub(super) fn validate_pmt(
     let body = &source[8..source.len() - 4];
     let pmt = PmtSection::from_bytes(body).map_err(|_| TeletextMultiplexError::Pmt)?;
     let pcr = u16::from(pmt.pcr_pid());
-    if validate_pid(pcr).is_err() || pcr == pmt_pid {
+    if (validate_pid(pcr).is_err() && !(candidate.is_none() && pcr == 0x1fff)) || pcr == pmt_pid {
         return Err(TeletextMultiplexError::Clock);
     }
-    if pid == pcr || pid == pmt_pid {
+    if let Some(pid) = candidate.filter(|&pid| pid == pcr || pid == pmt_pid) {
         return Err(TeletextMultiplexError::PidCollision { pid });
     }
     if body[0] & 0xe0 != 0xe0 || body[2] & 0xf0 != 0xf0 {
         return Err(TeletextMultiplexError::Pmt);
     }
-    let mut offset = 4 + descriptors(pmt.descriptors::<RawDescriptors<'_>>(), pid)?;
+    let mut offset = 4 + descriptors(pmt.descriptors::<RawDescriptors<'_>>(), candidate)?;
     let mut occupied = BTreeSet::new();
     for stream in pmt.streams() {
         let stream_pid = u16::from(stream.elementary_pid());
         validate_pid(stream_pid)?;
-        if stream_pid == pid {
+        if let Some(pid) = candidate.filter(|&pid| stream_pid == pid) {
             return Err(TeletextMultiplexError::PidCollision { pid });
         }
         if stream_pid == pmt_pid
@@ -455,7 +472,7 @@ pub(super) fn validate_pmt(
         {
             return Err(TeletextMultiplexError::Pmt);
         }
-        offset += 5 + descriptors(stream.descriptors::<RawDescriptors<'_>>(), pid)?;
+        offset += 5 + descriptors(stream.descriptors::<RawDescriptors<'_>>(), candidate)?;
     }
     // The library's stream iterator stops on malformed trailing records.
     // Require exact consumption so truncation cannot masquerade as a valid PMT.
@@ -467,7 +484,7 @@ pub(super) fn validate_pmt(
 
 fn descriptors<'a>(
     items: impl Iterator<Item = Result<RawDescriptors<'a>, mpeg2ts_reader::descriptor::DescriptorError>>,
-    pid: u16,
+    candidate: Option<u16>,
 ) -> Result<usize, TeletextMultiplexError> {
     let mut length = 0;
     for item in items {
@@ -481,7 +498,7 @@ fn descriptors<'a>(
             let ca_pid =
                 (u16::from(descriptor.payload[2] & 0x1f) << 8) | u16::from(descriptor.payload[3]);
             validate_pid(ca_pid).map_err(|_| TeletextMultiplexError::Descriptor)?;
-            if ca_pid == pid {
+            if let Some(pid) = candidate.filter(|&pid| ca_pid == pid) {
                 return Err(TeletextMultiplexError::PidCollision { pid });
             }
         }
@@ -493,7 +510,14 @@ pub(super) fn validate_descriptor_bytes(
     bytes: &[u8],
     pid: u16,
 ) -> Result<(), TeletextMultiplexError> {
-    descriptors(DescriptorIter::<RawDescriptors<'_>>::new(bytes), pid).map(|_| ())
+    validate_source_descriptor_bytes(bytes, Some(pid))
+}
+
+pub(super) fn validate_source_descriptor_bytes(
+    bytes: &[u8],
+    candidate: Option<u16>,
+) -> Result<(), TeletextMultiplexError> {
+    descriptors(DescriptorIter::<RawDescriptors<'_>>::new(bytes), candidate).map(|_| ())
 }
 
 pub(super) fn valid_packet(raw: &[u8; 188]) -> Result<Packet<'_>, TeletextMultiplexError> {

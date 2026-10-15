@@ -2383,6 +2383,62 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-15 supplied source-PSI/header integration components (not acquisition acceptance):
+SourceTeletextPsiObserver reuses existing PSI framing, PAT/table collection and
+PMT/descriptor validation for an already occupied elementary PID. It reserves no
+spare authored PID. Complete current PAT, every PMT and any observed CAT retain
+exact table bytes/versions, stream types and raw descriptor order. All memberships
+survive, including shared PIDs across programs; an empty membership set describes
+only the supplied current tables. Source-only validation allows no PCR, while
+existing authored PID-collision and PCR admission remain unchanged. Future section
+framing/CRC is checked without replacing current evidence; current PAT changes
+invalidate dependent PMTs. Partial tables are incomplete; contradictions, CRC,
+framing, continuity and capacity failures stay sticky. Limits remain32768 supplied
+TS188 packets,128 programs,256 sections per PAT/CAT and1024 bytes per section.
+
+SuppliedTeletextHeaderObserver now joins the strict selected-PID PES assembler
+and protected header parser. It retains up to1024 actual header occurrences in
+wire order, including repetitions, raw subcode/C4-C14/correction counts, completion
+packet/PES/unit positions and supplied PTS. Unknown/body/termination units do not
+become pages. A failed/over-bound window discards its headers; finite finish
+refuses an incomplete selected PES. Unseen initial payload stays explicit.
+The independent Python calibration window proves descriptors200/888 versus actual
+headers200/201/888/899, not a complete page inventory. The previously generated
+real two-audio FFmpeg9 remux independently passes the combined public APIs:
+program1/PMT0x1000/PCR0x100, occupied PID0x103/type6, exact English200/888 wire
+descriptors,14 complete PES and eight headers over two cycles. The unchanged
+fixture SHA472f563d11ba15c774161647dd7d4abbfa810ac7e50e5bdabf047810a7993794
+binds this to the preceding actual Local scan proof. No new decode/display or
+transport-clock claim is made.
+
+Combined unit evidence: c64ccaab-6d12-40d0-9915-a16f442cdc90 passes110/111;
+the repeated fixture initially retained old adaptation-only continuity counters.
+Correcting only that synthetic repetition makes all seven header collector tests
+pass in21e94f15-82bf-46f9-9c6b-d166321b69d4. Together111 unique source/PSI/header/
+PES/signalling units pass. All28 PMT-installation regressions additionally pass
+872d213d-8f8c-4bf5-8b95-ce94825309e7. Public source suites pass six in
+251ad957-d7e2-48c0-9eb1-b6955e799a92; its native case only failed locating a
+relative fixture from the crate working directory. With an absolute test-only
+input locator,05b3d78d-696a-4332-bc83-b1431a90ee35 passes that native case.
+Thus139 unique units and seven public integration/native tests are proven,
+including18 new units and two new public cases. Strict FFmpeg all-target Clippy,
+formatting and architecture-lint pass. The first selection had an invalid binary
+filter and executed no tests; it is not evidence. Historical attempts and final
+source/runtime/input identities live in tmp/phase9-source-observation/identity.json
+(SHA256 ab90909745006f5ab9fdcd738df4347c2c62e6558df1c46b7b3675272b0af66d).
+
+These APIs perform no production source read or persistence and grant no source-
+page selection. A final PSI snapshot cannot associate earlier headers across
+changing tables. Next add bounded owned held-handle acquisition with cancellation/
+claim/source checks, correct generation association and explicit durable observed-
+header state distinct from descriptors; then join exact-page native selection.
+TS188/strict assembler framing, single-section PMTs, unique PMT PIDs and strict
+initial discontinuities are current parser boundaries, not accepted permanent
+product restrictions. Other framing/containers and source body/charset remain
+required. Remote/missing-file/version/cache/platform and all P9A-04 gates remain
+open. All acceptance/status/dependency contracts remain intact; no milestone or
+complete source inventory is accepted.
+
 2026-10-15 Local transactional descriptor checkpoint (component, not acceptance):
 The existing Local scanner now uses guarded acquisition for other videos, films,
 music videos, TV episodes and movie/show/season extras. Original managed claims

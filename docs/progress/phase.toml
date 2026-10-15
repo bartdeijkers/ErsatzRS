@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-03/P9A-04: local claim-fenced descriptor persistence proven; connect actual source-page observations and exact-page normal-route selection; full engine acceptance open'
+current_focus = 'P9A-03/P9A-04: Local descriptors and supplied PSI/header components proven; connect owned source reads, durable observations and exact-page normal-route selection; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -113,10 +113,17 @@ lease or post-write source loss rolls back the whole leaf. Native public scans
 prove two audio languages/SRT, exact parents, unchanged rescan and isolated
 same-size/mtime replacement. Nine helper tests plus discovery and combined154
 scanner units pass; the milestone owns receipts and corrected sandbox failures.
-Next acquire actual source-page/header/body/charset observations, join the existing
-PlaybackSubtitle/cache identity and prove selected888 on normal routes.
-Descriptors stay NotAcquired and cannot become selected pages. Supported remotes,
-missing-file/version selection and native Windows/alias acceptance remain open.
+Supplied PSI/header components now pass the independent fixture and actual
+FFmpeg remux: exact occupied-PID memberships and actual header occurrences stay
+separate from descriptors. P9A-03 owns139 combined unit and seven public/native
+successes, limits and historical corrected fixture failures. These APIs do not
+read sources, persist pages or authorize playback; a final PSI snapshot cannot
+bind earlier headers across table changes. Next connect an owned bounded reader
+to the held source, associate observed headers with the correct PSI generation,
+and add explicit durable observation state before exact-page selection.
+Then join PlaybackSubtitle/cache identity and prove selected888 on normal routes.
+Body/charset, remotes, missing-file/version, Windows/aliases and all engine gates
+remain open; scanner descriptors still explicitly say NotAcquired.
 Default/custom-script eligibility and slate clocks remain open.
 Preserve normal-route captions/alternate audio and transport-clock acceptance;
 prior slate clock gaps remain open. No general audit extension.

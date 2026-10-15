@@ -15,7 +15,7 @@ use super::{
     TeletextMultiplexError, TeletextPmtPlan, TeletextServiceDescriptor,
 };
 
-const MAX_DISCOVERY_PACKETS: usize = 32_768;
+pub(super) const MAX_DISCOVERY_PACKETS: usize = 32_768;
 const MAX_PROGRAMS: usize = 128;
 
 /// Explicit source-program policy; never a guessed program number.
@@ -368,21 +368,21 @@ impl TeletextPsiDiscovery {
     }
 }
 
-struct ProgramPmt {
-    program: u16,
-    assembler: SectionAssembler,
-    section: Option<Vec<u8>>,
+pub(super) struct ProgramPmt {
+    pub(super) program: u16,
+    pub(super) assembler: SectionAssembler,
+    pub(super) section: Option<Vec<u8>>,
 }
 
 #[derive(Default)]
-struct TableSections {
+pub(super) struct TableSections {
     identity: Option<(u16, u8, u8)>,
-    sections: BTreeMap<u8, Vec<u8>>,
+    pub(super) sections: BTreeMap<u8, Vec<u8>>,
 }
 
 impl TableSections {
     // Returns true when a newly observed current generation invalidates evidence.
-    fn push(&mut self, section: Vec<u8>) -> Result<bool, TeletextPsiError> {
+    pub(super) fn push(&mut self, section: Vec<u8>) -> Result<bool, TeletextPsiError> {
         let header = TableSyntaxHeader::new(&section[3..8]);
         let identity = (header.id(), header.version(), header.last_section_number());
         let changed = match self.identity {
@@ -410,12 +410,23 @@ impl TableSections {
         Ok(changed)
     }
 
-    fn complete(&self) -> bool {
+    pub(super) fn complete(&self) -> bool {
         self.identity
             .is_some_and(|(_, _, last)| self.sections.len() == usize::from(last) + 1)
     }
 
     fn programs(&self, candidate: u16) -> Result<BTreeMap<u16, ProgramPmt>, TeletextPsiError> {
+        self.programs_optional(Some(candidate))
+    }
+
+    pub(super) fn source_programs(&self) -> Result<BTreeMap<u16, ProgramPmt>, TeletextPsiError> {
+        self.programs_optional(None)
+    }
+
+    fn programs_optional(
+        &self,
+        candidate: Option<u16>,
+    ) -> Result<BTreeMap<u16, ProgramPmt>, TeletextPsiError> {
         let mut programs = BTreeSet::new();
         let mut pids = BTreeSet::new();
         let mut pmts = BTreeMap::new();
@@ -427,7 +438,7 @@ impl TableSections {
             }
             for entry in PatSection::new(bytes).programs() {
                 let pid = u16::from(entry.pid());
-                if pid == candidate {
+                if candidate == Some(pid) {
                     return Err(TeletextMultiplexError::PidCollision { pid }.into());
                 }
                 if !pids.insert(pid) {

@@ -52,7 +52,9 @@ mod service_update;
 mod signalling;
 pub mod source_assembly;
 pub mod source_header;
+pub mod source_observation;
 pub mod source_pes;
+pub mod source_psi;
 mod transport;
 
 use ersatzrs_domain::{TeletextPageAddress, TeletextStructureError};

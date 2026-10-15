@@ -410,7 +410,20 @@ in-place stream identity updates, preserving no-op writes and ordinary tracks.
 The Local scanner now activates descriptor acquisition through those existing
 writer transactions; supported remote acquisition and actual source-page/body/
 charset observations remain open. Descriptors never confer page readiness or
-source-page selection. A separate pure parser now checks one explicitly supplied
+source-page selection. A bounded supplied-window PSI observer now reuses the section/PAT/PMT parsers
+without reserving a new output PID. It retains exact current PAT/CAT/all-PMT
+bytes, versions, descriptors and every membership of the already occupied PID.
+The source-only validator permits absent PCR without granting clock authority;
+authored admission retains its existing collision and PCR requirements. Current
+PAT changes invalidate dependent PMTs; contradictory/invalid input is sticky.
+A separate bounded header collector composes the existing PES/header parsers,
+retaining every actual occurrence, packet/PES/unit position and raw PTS. It
+rejects failed or unfinished windows rather than exposing partial success.
+Neither API reads a source or proves page bodies, charset, inventory or readiness.
+A final current PSI snapshot cannot bind earlier headers across table changes;
+the acquiring adapter must preserve/fence the actual source generation. Durable
+observed-page state and source-bound selection remain separate required work.
+A separate pure parser now checks one explicitly supplied
 46-byte DVB unit and reports protected header identity, correction counts and raw
 C4–C14 bits.
 Non-header units and FF termination stay distinct from page headers; the null

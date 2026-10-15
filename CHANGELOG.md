@@ -306,6 +306,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Add bounded source-transport PSI and actual header observation components.
+  Retain exact program memberships, descriptor bytes, header occurrences and
+  supplied positions without treating them as complete pages or playback
+  selections. Scanner page acquisition and durable observations remain open.
 - Store local DVB teletext descriptors alongside ordinary scan metadata for
   films, other videos, music videos, television episodes and their extras.
   Recheck the held source and actual managed scan claim inside each media
