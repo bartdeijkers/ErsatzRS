@@ -2968,6 +2968,65 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 owned source-page bitmap decode checkpoint (not route/engine acceptance):
+Criterion: native page-aware preparation must associate one exact source/page and
+retain admitted work until its actual workers finish. A new explicit request
+retains source/provider/version/file/stream/revision labels, global stream index,
+PID, program and decimal page. It checks Local/positive parent structure only;
+the caller still owns current database-parent validation and selection policy.
+The reusable held guard opens the exact observed filesystem revision, checks
+original and resolved regular paths and rejects copies, symlinks, lossy locators,
+mutation and same-size/mtime replacement. Hard links to the same held file work.
+Existing blocking owners now perform pre/post checks under the same caller
+absolute deadline and cleanup scope, retaining TeletextWorkHold after requester
+abort or early timeout. No new scheduler, subprocess owner or dependency is added.
+
+The existing managed local probe worker retains source plus admitted capacity
+through process/reader cleanup, quarantining admission on uncertainty or unwind.
+Unstarted retention releases normally after scope registration refusal. Decode
+requests use the already proven exact global-index page/bitmap/automatic-region
+options. Returned stream/PID/codec and explicit program membership must match;
+duplicate requested memberships, malformed/trailing invalid events and clear-only
+updates reject the whole receipt. Only actual nonempty bitmap events count.
+Missing PTS remains unknown, distinct from reported zero. Errors/Debug omit
+private locators, revision strings and raw decoder diagnostics. Stored header
+observations never change or become Ready; ordinary metadata remains untouched.
+
+Verification: initial focused b6700af9-cf34-4ae6-83d1-d712923542cb passed113/115;
+two new shell fixtures incorrectly treated ordinary -show_frames as page decode.
+Dispatch now keys on exact -txt_page:3. Corrected bf3297d1-08e5-4c9a-99f8-0aa01c9fb8b1
+passes26 source-guard/decode tests, including actual requester abort with a live
+owned process and genuine acquired revision, source mutation, closed-scope
+retention, blocking-worker abort and early-timeout capacity. After actual native
+page200 exposed a missing initial PTS, Option timestamps and a zero/unknown
+regression were added. Final decoder8aafd3d8-8bef-40b8-986c-bad49a5030e3 passes12.
+Together117 unique focused FFprobe tests pass, reusing90 unaffected first-run
+passes and the15 unchanged final guard tests. The inline argv snapshot is reviewed.
+Native17bc4302-92de-4742-beb3-a5bb70b633e9 passes the actual pinned FFprobe9
+component against the unchanged two-audio synthetic fixture:888 emits two bitmap
+events at1661333/2701333 microseconds;200 is distinct and its first PTS is unknown;
+777 has no bitmap; wrong PID/program and later equal-size/mtime replacement reject.
+After a test-only helper extraction for Clippy, final native
+6cd56e97-ef01-421e-b14c-1f39ce6fe54c passes1 in0.097s on the final source.
+Canonical tmp/phase9-source-page-decode/native-identity.json binds the original
+FFprobe3e0a8c01 and source472f563d hashes/version/replay; identity.json records
+final source hashes and check receipts. Clippy1 found only an overlong native test;
+the extracted helper avoids an allow. Final affected all-target Clippy2 passes.
+
+Current integration gate: the receipt requests an initial eight-second timestamp
+interval under at most15s execution plus existing cleanup budgets. Missing or
+discontinuous clocks do not certify an exact physical interval. Decoder-reported
+program membership is a metadata association, not stable PSI throughout every
+bitmap event. Validate program/PID against the same actual consumed/seek window
+before normal-route admission; old bounded header reports alone cannot do this.
+Then retain exact MediaFile identity with the selected version, project eligible
+source pages before existing subtitle preference filters, retain/recheck the
+source in the actual native playback owner, and prove888/Off/other-page plus
+selected alternate audio through both normal wrappers. Exact page pins, service/
+charset semantics, Direct/copy/Next, seek/cue timing, full provider/platform/admin
+and all authored/client/editor gates remain open. No permanent restriction,
+milestone acceptance/status/dependency or engine-first ordering changes.
+
 2026-10-15 exact source-caption bitmap component checkpoint:
 Criterion: an explicitly selected source page must reach the actual native
 bitmap Burn decoder without reopening a shared one-shot AV source or selecting

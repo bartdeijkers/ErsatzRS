@@ -1,6 +1,8 @@
 /// Bounded interpretation of explicitly supplied packed teletext descriptors.
 /// Production probe acquisition and ordinary track projection remain separate.
 pub mod teletext;
+/// Owned, source-associated exact-page native bitmap decode receipts.
+pub mod teletext_decode;
 /// Explicit ephemeral projection of supplied stream/program teletext metadata.
 pub mod teletext_probe;
 
@@ -11,6 +13,7 @@ mod local_teletext;
 pub use local_cleanup_scope::{LocalProbeCleanupError, LocalProbeCleanupScope};
 pub use local_teletext::{
     LocalMediaProbe, LocalTeletextAcquisition, LocalTeletextHeaderProblem, LocalTeletextHeaders,
+    LocalTeletextSourceGuard, LocalTeletextSourceGuardError,
 };
 
 use std::collections::BTreeMap;

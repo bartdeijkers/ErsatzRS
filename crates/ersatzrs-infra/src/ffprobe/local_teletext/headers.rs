@@ -5,6 +5,7 @@ use std::io::Read as _;
 use std::path::Path;
 use std::time::Duration;
 
+use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_domain::{
     SourceTeletextHeaderProgram, SourceTeletextHeaderWindow, SourceTeletextObservedHeader,
 };
@@ -26,6 +27,32 @@ use crate::ffprobe::{FfprobeError, LocalProbeCleanupScope};
 
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 const SETTLEMENT_TIMEOUT: Duration = Duration::from_secs(1);
+
+/// Reuse the existing source-read owner while retaining an admitted operation
+/// inside the actual blocking worker, independently of its awaiting caller.
+pub(super) async fn run_source_guard_owned<T, F>(
+    deadline: Instant,
+    hold: TeletextWorkHold,
+    work: F,
+) -> crate::ffprobe::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&ReadStop<'_, T>) -> crate::ffprobe::Result<T> + Send + 'static,
+{
+    let now = Instant::now();
+    if deadline <= now {
+        return Err(FfprobeError::Timeout {
+            path: "local teletext source association".into(),
+        });
+    }
+    run_owned_before(
+        Path::new("local teletext source association"),
+        deadline.min(now + READ_TIMEOUT),
+        Some(hold),
+        work,
+    )
+    .await
+}
 
 /// Why actual headers were not acquired; descriptor metadata stays independent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +117,19 @@ where
     T: Send + 'static,
     F: FnOnce(&ReadStop<'_, T>) -> crate::ffprobe::Result<T> + Send + 'static,
 {
+    run_owned_before(path, Instant::now() + timeout, None, work).await
+}
+
+async fn run_owned_before<T, F>(
+    path: &Path,
+    deadline: Instant,
+    hold: Option<TeletextWorkHold>,
+    work: F,
+) -> crate::ffprobe::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&ReadStop<'_, T>) -> crate::ffprobe::Result<T> + Send + 'static,
+{
     let label = path.display().to_string();
     let owner = local_cleanup_scope::register_current()
         .map_err(|error| match error {
@@ -108,8 +148,8 @@ where
             path: label.clone(),
         })?;
     let (response, receiver) = oneshot::channel();
-    let deadline = Instant::now() + timeout;
     let worker = tokio::task::spawn_blocking(move || {
+        let _hold = hold;
         let stop = ReadStop {
             owner: &owner,
             response: &response,
@@ -142,7 +182,7 @@ where
         .map_err(|_| FfprobeError::CleanupUnconfirmed { path: label })?
 }
 
-struct ReadStop<'a, T> {
+pub(super) struct ReadStop<'a, T> {
     owner: &'a OwnerGuard,
     response: &'a oneshot::Sender<crate::ffprobe::Result<T>>,
     deadline: Instant,
@@ -156,6 +196,20 @@ impl<T> ReadStop<'_, T> {
     fn check(&self) -> Result<(), LocalTeletextHeaderProblem> {
         if self.cancelled() || Instant::now() >= self.deadline {
             Err(LocalTeletextHeaderProblem::Deadline)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub(super) fn check_source_guard(&self) -> crate::ffprobe::Result<()> {
+        if self.cancelled() {
+            Err(FfprobeError::Cancelled {
+                path: "local teletext source association".into(),
+            })
+        } else if Instant::now() >= self.deadline {
+            Err(FfprobeError::Timeout {
+                path: "local teletext source association".into(),
+            })
         } else {
             Ok(())
         }

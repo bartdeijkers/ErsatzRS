@@ -94,6 +94,44 @@ pub(super) async fn capture(
     path: PathBuf,
     deadline: Option<Instant>,
 ) -> super::Result<Vec<u8>> {
+    capture_retained(command, path, deadline, None).await
+}
+
+/// The actual process owner retains admission and the source association through
+/// process and pipe cleanup, independently of the awaiting response future.
+pub(super) struct ProbeRetention {
+    hold: ersatzrs_core::locking::TeletextWorkHold,
+    _source: std::sync::Arc<super::LocalTeletextSourceGuard>,
+    confirmed: bool,
+}
+
+impl ProbeRetention {
+    pub(super) fn new(
+        hold: ersatzrs_core::locking::TeletextWorkHold,
+        source: std::sync::Arc<super::LocalTeletextSourceGuard>,
+    ) -> Self {
+        Self {
+            hold,
+            _source: source,
+            confirmed: true,
+        }
+    }
+}
+
+impl Drop for ProbeRetention {
+    fn drop(&mut self) {
+        if !self.confirmed {
+            self.hold.retain_until_restart();
+        }
+    }
+}
+
+pub(super) async fn capture_retained(
+    command: FfprobeCommand,
+    path: PathBuf,
+    deadline: Option<Instant>,
+    retention: Option<ProbeRetention>,
+) -> super::Result<Vec<u8>> {
     let label = path.display().to_string();
     let owner = local_cleanup_scope::register_current().map_err(|problem| match problem {
         AdmissionError::Closed => FfprobeError::Cancelled {
@@ -112,6 +150,10 @@ pub(super) async fn capture(
     // This worker intentionally outlives an abandoned caller only to perform
     // cleanup. No metadata publication or database write occurs in the worker.
     tokio::spawn(async move {
+        let mut retention = retention;
+        if let Some(retention) = &mut retention {
+            retention.confirmed = false;
+        }
         let result = run_owned_scoped(
             command,
             &owner_label,
@@ -121,6 +163,9 @@ pub(super) async fn capture(
         )
         .await;
         let confirmed = !matches!(result, Err(FfprobeError::CleanupUnconfirmed { .. }));
+        if let Some(retention) = &mut retention {
+            retention.confirmed = confirmed;
+        }
         if let Some(owner) = owner {
             owner.complete(confirmed);
         }

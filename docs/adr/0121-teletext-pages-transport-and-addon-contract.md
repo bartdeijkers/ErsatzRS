@@ -13,6 +13,23 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+Preparatory native source-page decoding now retains one held Local filesystem
+association through bounded owned source checks and the existing managed probe
+worker. Its explicit request keeps durable parent/revision labels, global stream
+index, PID, program and exact page separate. Actual decoder stream/program output
+must match and at least one nonempty bitmap event must exist; an empty update or
+successful exit alone is insufficient. Missing PTS remains unknown. The decoder
+uses automatic region with unknown charset provenance, without inferring it from
+header bits or promoting stored HeadersObserved to Ready. P9A-04 owns evidence.
+The bounded receipt requests an initial eight-second timestamp interval; missing
+or discontinuous clocks do not certify an exact physical window. It is not a
+whole-source inventory, stable
+PSI epoch certificate, resolved charset, database ownership check or ordinary-route
+selection authority. Its consuming host must retain/recheck the source through
+actual playback ownership; the held handle does not force FFmpeg's later open
+or prevent restored in-place edits. These remain integration/acceptance work,
+not accepted permanent product restrictions.
+
 Accepted frozen originals now have an explicit source-independent output intent.
 Host limits contain no program/PCR identifiers or compiler defaults. Each final
 command qualifies rate/period bounds before actual-source PSI supplies those IDs;

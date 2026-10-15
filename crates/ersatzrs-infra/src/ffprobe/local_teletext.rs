@@ -8,10 +8,11 @@
 use std::fs::{File, Metadata, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_domain::teletext::SourceTeletextRevision;
 use same_file::Handle;
 use sha2::{Digest, Sha256};
@@ -42,6 +43,125 @@ pub struct LocalTeletextAcquisition {
     revision: SourceTeletextRevision,
     guard: LocalFileRevision,
     headers: LocalTeletextHeaders,
+}
+
+/// Holds the current local file associated with an already acquired revision.
+///
+/// This observes the same file identity, size and filesystem modification time
+/// used by local acquisition. It does not certify immutable bytes, prevent a
+/// restored in-place mutation, or make acquired page metadata ready for playback.
+/// Keep this owner alive through the consuming worker and recheck its actual
+/// resolved input path before use. The handle neither locks the file against
+/// mutation nor forces an external process to consume this open handle.
+pub struct LocalTeletextSourceGuard {
+    guard: LocalFileRevision,
+}
+
+impl std::fmt::Debug for LocalTeletextSourceGuard {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("LocalTeletextSourceGuard(<held association>)")
+    }
+}
+
+/// Opaque source-association failure, without a private locator or revision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum LocalTeletextSourceGuardError {
+    /// The locator cannot safely establish a regular local file association.
+    #[error("local teletext source association is unavailable")]
+    Unavailable,
+    /// The observed source no longer matches the acquired revision.
+    #[error("local teletext source association has changed")]
+    Changed,
+}
+
+impl LocalTeletextSourceGuard {
+    /// Open and retain a regular, nonsymlink source matching an acquired revision.
+    ///
+    /// This performs synchronous filesystem operations; asynchronous consumers
+    /// must use their existing blocking-work owner. A path replacement may later
+    /// use a different locator only when [`Self::is_current`] confirms that it
+    /// still names this exact physical source with the same observed metadata.
+    ///
+    /// # Errors
+    /// Returns an opaque unavailable failure for unsafe or unreadable locators,
+    /// or changed when the observed revision or the bookended path differs.
+    pub fn open(
+        path: &Path,
+        expected_revision: &SourceTeletextRevision,
+    ) -> Result<Self, LocalTeletextSourceGuardError> {
+        let guard = LocalFileRevision::open(path)
+            .map_err(|_| LocalTeletextSourceGuardError::Unavailable)?;
+        if guard.revision().as_ref() != Some(expected_revision) || !guard.is_current(path) {
+            return Err(LocalTeletextSourceGuardError::Changed);
+        }
+        Ok(Self { guard })
+    }
+
+    /// Check the held file and actual resolved path against the original association.
+    ///
+    /// A different hard-link locator for the same regular file is accepted; a
+    /// symlink, unrelated copy, changed file or missing source is rejected. This
+    /// synchronous check retains the acquisition's observed-filesystem limits.
+    #[must_use]
+    pub fn is_current(&self, resolved_path: &Path) -> bool {
+        self.guard.is_current(resolved_path)
+    }
+}
+
+/// Establish a source association outside the async executor under the current
+/// cleanup scope, retaining admitted capacity until the actual worker exits.
+pub(crate) async fn open_source_guard_owned(
+    original: PathBuf,
+    resolved: PathBuf,
+    expected: SourceTeletextRevision,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> super::Result<Arc<LocalTeletextSourceGuard>> {
+    headers::run_source_guard_owned(deadline, hold, move |stop| {
+        stop.check_source_guard()?;
+        let guard = LocalTeletextSourceGuard::open(&original, &expected)
+            .map_err(|_| source_guard_changed())?;
+        check_source_guard_paths(&guard, &original, &resolved)?;
+        stop.check_source_guard()?;
+        check_source_guard_paths(&guard, &original, &resolved)?;
+        stop.check_source_guard()?;
+        Ok(Arc::new(guard))
+    })
+    .await
+}
+
+/// Recheck both locators before or after source-consuming work without running
+/// filesystem operations on the async executor or abandoning admitted work.
+pub(crate) async fn check_source_guard_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    original: PathBuf,
+    resolved: PathBuf,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> super::Result<()> {
+    headers::run_source_guard_owned(deadline, hold, move |stop| {
+        stop.check_source_guard()?;
+        check_source_guard_paths(&guard, &original, &resolved)?;
+        stop.check_source_guard()
+    })
+    .await
+}
+
+fn check_source_guard_paths(
+    guard: &LocalTeletextSourceGuard,
+    original: &Path,
+    resolved: &Path,
+) -> super::Result<()> {
+    if !guard.is_current(original) || !guard.is_current(resolved) {
+        return Err(source_guard_changed());
+    }
+    Ok(())
+}
+
+fn source_guard_changed() -> FfprobeError {
+    FfprobeError::InvalidOutput {
+        path: "local teletext source association".into(),
+    }
 }
 
 impl LocalTeletextAcquisition {
@@ -304,3 +424,7 @@ impl Hasher for RevisionHasher {
 #[cfg(test)]
 #[path = "local_teletext_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "local_teletext_source_guard_tests.rs"]
+mod source_guard_tests;

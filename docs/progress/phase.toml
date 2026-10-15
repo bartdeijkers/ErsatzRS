@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-03/P9A-04: owned Local header reads and durable observations proven; connect source-bound exact-page normal-route selection; full engine acceptance open'
+current_focus = 'P9A-03/P9A-04: owned source-page bitmap decode proven; fence actual consumed service/seek window before normal-route page selection; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,19 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-15 source-page decode checkpoint: P9A-04 owns final exact-source/native
+receipts and the prior fixture-dispatch correction. The existing owned probe now
+retains source and admitted work through actual process/pipe cleanup; held-source
+checks also retain their actual blocking owner after caller loss. Actual pinned
+FFprobe distinguishes888/200/absent777 and rejects wrong PID/program/replaced
+sources without changing stored header readiness or ordinary metadata. Missing
+PTS stays unknown. Next fence program/PID over the same consumed and actual-seek
+transport window: final decoder program metadata and an older header prefix are
+insufficient. Then connect exact MediaFile/version/page selection before native
+subtitle filtering and retain the source in ordinary playback ownership; prove
+888/Off/another page and alternate audio through both normal wrappers. Full
+charset, Direct/copy/Next, provider/platform/admin and engine/editor/client
+acceptance remain open; no permanent restriction or milestone status changes.
 2026-10-15 headed scoped-expiry checkpoint: P9A-04 owns exact source/trial/check
 receipts. A NEW genuine35s Lua scope uses the unchanged60s source and original
 Day/Night/observer streams. Twelve inspected frames show two themes, Day Q,

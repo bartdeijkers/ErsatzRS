@@ -17,7 +17,10 @@ release section when tagging a release.
 
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
-  one input. Scanner acquisition and automatic playback selection remain open.
+  one input. A bounded native decode preflight retains the exact local source
+  association through cancellation, checks decoder-reported stream/program identity and
+  requires real bitmap events. Unknown timestamps and charset provenance remain
+  explicit; full source-page semantics and automatic playback selection stay open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
   client navigation with isolated themes and edits. Independent transport,
