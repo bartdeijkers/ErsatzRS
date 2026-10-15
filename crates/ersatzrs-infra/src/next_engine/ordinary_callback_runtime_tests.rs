@@ -185,7 +185,7 @@ async fn run_case(live: bool, sidecar: Option<bool>, relative: bool) {
         assert_text_video_and_audio(&ffmpeg, &saved, !convert).await;
         if convert {
             let (body, duration) = vtt.expect("VTT capture attempted").unwrap();
-            assert_text_vtt(&body, true, duration);
+            let _ = assert_text_vtt(&body, true, duration);
         }
     }
     assert_source_clock(&ffmpeg, &saved, live).await;

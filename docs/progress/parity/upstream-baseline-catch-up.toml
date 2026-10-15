@@ -1,58 +1,63 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..46118d43 (v26.11.1; fixed UCU-09 boundary)'
+etv_source = '$ERSATZTV_SRC at the accepted pin in docs/automation/parity-baseline.md (through v26.11.3)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117']
+adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
 summary    = """
-208/208 accepted through v26.11.1; UCU-09 is Complete. Stable v1.1.0 is
-published with four verified archives, exact-source green CI and Linux/Windows
-package startup, browser and decoded playback proof. Docker is excluded by
-explicit maintainer release-scope approval (2026-10-09), not claimed verified.
-UCU-09 owns current proof; this feature remains In progress only for the
-explicit ongoing patch-retirement, accepted limitations and unverified debt.
-201 Port: Linux/Windows complete-window/live/finite/track/cleanup proof passes.
-202/203/206/208 N/A;204/205/207 Covered. UCU-09 owns exact acceptance evidence.
-200 Adapt(0095): exact bundled/downloaded Next default; UCU-09 owns proof.
-199 Port: rate/copy/mirror/Dutch tracks; UCU-09 owns Linux/Windows proof.
-198 Port: cached TS/HLS; UCU-09 owns runtime/routing/artwork proof.
-196-197: packaging/custom text; UCU-09 owns source/staging/selection proof.
-195 Port: deep scan/artwork; UCU-09 owns runtime/browser/restart proof.
-194 Adapt (0117): content duration/native-Next handoff and generated silence
-pass on Linux/Windows; final window gates and package publication pass.
-193 Port: preview readiness/seek; Linux/Windows and both browsers pass.
-190 Adapt (0008/0063/0117): unbundled FFmpeg9 acquisition; macOS debt remains.
-Rows209 onward remain outside UCU-09.
-Next0362692 six-RID pins and independent retirement for both patches remain;
-row186 owns package CI and runtime/cleanup.
-Windows Next/JavaScript/chapter proof passes in all four profile languages.
-ARM/macOS application proof is explicit maintainer-approved unverified debt
-(2026-10-01); Linux/Windows proof is not waived. The milestone owns exact results.
-189 Adapt (0005/0102/0105): shared deterministic song rendering, strict track
-pins and private owned Next callbacks; Linux/Windows decoded runtime, actual
-private HTTP, affected regressions, strict lint and independent review pass.
-187 Port: original-clock orphan cleanup and restart-safe Block history;
-33 core/10 SQLite checks, lint and independent review pass.
-146 Adapt (0105): graphics canvas, owned clocks/cleanup and 87 TSDuck checks.
-147-151 Port: YAML roll/graphics state, provider subtitles/availability,
-Plex folder tags, Next error cards and both-engine credits troubleshooting.
-154 Adapt (0005/0105): motion EOF/expiry/loops and preview clocks; decoded,
-argv, browser and both-engine smoke evidence is recorded in UCU-09.
-155 Port: optional Next AMF protocol; hardware acceptance remains open.
-156-166 Port/Covered: machine management, troubleshooting completion,
-maintenance isolation, movie recovery, font ownership, script validation and
-settings/template hydration, credits fallback and YAML discovery pass their
-focused/runtime/browser gates. UCU-09 owns per-row counts and review evidence.
+UCU-00–11 are Complete: all236 rows through v26.11.3 are accepted.
+The authoritative current baseline is docs/automation/parity-baseline.md. Native, stored engine/profile choices
+and international audio/subtitle behavior remain supported. UCU-10 is delivered
+through PR105 on remote main 32c12793. Run 38623973857 passes every non-browser
+gate and Chromium; Firefox has 345 passes, 30 skips and only fixture-collision
+case 329 failed. The maintainer requires only that corrected headed case rerun:
+1 pass in 11.3s, no full CI rerun. The fixture-only commit uses [skip ci]; earlier
+passed checks are reused, not claimed as a new full green exact-commit run.
+UCU-10 owns the complete receipts and superseding verification amendment.
 
-UCU-02 Complete. Rows21-22 adapt bounded JavaScript selection and deterministic
-chapter expressions (0096/0098/0097). Linux/Windows application proof now passes;
-the approved ARM/macOS debt remains explicit. Milestones retain earlier evidence.
+UCU-11 accepts rows233–236: Convert-only optional HLS text, media-only TS
+wrappers, reviewed released Next022 and the six-second remux burst. All20
+anonymous asset downloads and six-RID staging pass. Linux/native Windows
+cold/cache/bundle startup, matched bundles, six decoded lifecycle smokes,
+four focused headed browser cases, full workspace lint/test-closeout and
+required local parity gates pass. TSDuck passes87 Native/83 Next copy checks;
+focused pacing/startup captures pass22 each with five periodic samples and no
+low-delivery intervals. The owning milestone records exact identities, results
+and retained evidence. Source is pushed to remote feat/ucu-11. Under the
+2026-10-15 recovery amendment, valid original CI results are combined with
+Next417/417 on033bd29f and complete browser serial recovery22/22 on7625086f.
+Every standard browser case is accounted for with no failed or unexecuted
+followers; inherited explicit skips retain their existing ownership. This is
+composed acceptance evidence, not a new full exact-commit release gate.
+Local build caches are removed; evidence remains under
+tmp/evidence/ucu11-v26.11.3/. Application
+release remains separate. Approved hardware/platform debt stays explicitly
+unverified; ARM/macOS application proof is maintainer-approved debt, never
+inferred from packages or another GPU. Linux/Windows proof is not waived.
 
-UCU-02 owns rows23-30 decoded/browser evidence; ADR0099 retains converted HLS text.
-68-71: Plex/Classic continuity. 75: NVIDIA overlay passes; AMD live unproven.
-76-77: Classic anchors/checkpoints.
-RGB opacity is proven; UCU-09 owns evidence.
-Row39 owns Remote Stream/add-on source, caption and normal/preview lifecycle acceptance. ADR 0100 embedded text limitations remain
-explicitly refused. Row146 renders all graphics kinds through the FFmpeg canvas. UCU-09 is Complete; approved platform debt remains.
+UCU-10 owns APNG, nested filler, ZIP, search, YAML/dependency compatibility and
+local final-gate proof. All six published Next021 packages/staging and actual
+Linux/Windows bundled/cold/cache startup pass. All 20 Next-only release assets
+match anonymous downloads. Both temporary patches retain independent retirement
+requirements; source/package success alone does not justify removal.
+
+UCU-09 is Complete through v26.11.1/row208. Stable v1.1.0 has four verified
+archives, exact-source green CI and Linux/Windows package startup, browser and
+decoded playback proof. Docker is explicitly excluded from that release scope
+(2026-10-09), not claimed verified. UCU-09 owns exact row dispositions and proof
+for cached TS/HLS, managed Next default, complete preview windows, live/finite
+sources, selected international tracks, callbacks and cleanup. It also owns
+decoded graphics/song/AV1 behavior, scheduling continuity, providers, health,
+troubleshooting, machine routes and localized admin acceptance. Rows209 onward
+remain outside UCU-09; completed evidence is retained in the owning milestones.
+
+UCU-02 owns bounded JavaScript audio selection, deterministic chapter expressions
+and rows23–30 decoded/browser evidence. ADR0099 retains converted HLS text;
+ADR0100 embedded-text limitations remain explicitly refused. Earlier milestones
+own Remote Stream/add-on source, caption and normal/preview lifecycle proof,
+Classic/Plex continuity and NVIDIA overlay evidence. AMD live/hardware and
+approved ARM/macOS application acceptance remain unverified. All graphics kinds
+use the accepted FFmpeg canvas. See milestones for exact per-row counts,
+source/runtime identities, failed history and acceptance receipts.
 """
 
 [[debt]]
@@ -413,3 +418,19 @@ discovered = '2026-10-01'
 adr = '0106'
 resolved = true
 evidence = 'UCU-09 owns passing Linux application playback across item boundaries, selected audio/subtitles, unchanged profile state, fMP4 playlists and HTTP 415 transport/Next refusal. Native Windows encoding, six AV1 regressions, four localized browser cases, strict workspace lint, test-closeout, web parity, both-engine smoke and 87 TSDuck checks pass. Row183 is Adapt; pin/reference advance to 960421e8. Hardware and ARM/macOS debt is unchanged.'
+
+[[debt]]
+id = 'ucu10-next-021-runtime-and-protocol'
+description = 'Complete local six-RID runtime integration and required v26.11.2 behavior acceptance with channel0.1.2/playout0.0.6, preserved Native and existing approved hardware/platform debt.'
+discovered = '2026-10-13'
+resolved = true
+adr = '0117'
+evidence = 'UCU-10 owns both failed unpatched regressions and passing patched behavior,262 pipeline/63 host checks, actual retry/fallback and Linux/Windows component proof. Authorized macOS source CI38520704462 is green ondd043f94; six real archives/staging pass. Explicitly approved Next-only release next-7f75012-ersatzrs.1 publishes20 verified assets, all matching anonymous downloads. The canonical021 pin passes10 manager checks on both available platforms, real bundled/cold-download/managed-restart startup, three lifecycle smokes and final matched bundle. Nine adoption rows are accepted; UCU-10 is Complete and delivered through PR105 under its final focused-verification amendment. Production Next remains021; UCU-11/022 adoption is pending. No new application release occurs; approved platform/hardware debt stays unverified.'
+
+[[debt]]
+id = 'ucu10-final-dependency-audit'
+description = 'Complete accepted ADR0125 parser replacement acceptance and final local build/runtime gates without suppressing the archived-backend finding or weakening compatibility requirements.'
+discovered = '2026-10-14'
+resolved = true
+adr = '0125'
+evidence = 'ADR0125 is Accepted and locally implemented. UCU-10 owns the fully passing dependency audit,370 affected Linux checks,336 native Windows checks plus corrected104 YAML checks,101 focused Linux YAML checks,6043 workspace closeout/doctests and strict workspace/affected core lint. Native file/import behavior and portable database fixtures are corrected without disabling tests. Final matched build/bundle, six headed browser cases, parity, three lifecycle HTTP smokes, Native87 and Next83 TSDuck checks and strict complete-frame capture decoding pass. Next distribution/adoption is resolved; approved hardware/platform debt remains unverified.'

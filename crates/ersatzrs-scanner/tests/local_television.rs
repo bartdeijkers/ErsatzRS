@@ -637,6 +637,104 @@ async fn generate_deep_scan_episode(ffmpeg: &str, root: &Path, episode: &Path) {
     run_deep_scan_generator(&mut command).await;
 }
 
+/// UCU-10 row227: ordinary NFO rescans replace episode facets without re-keying AV.
+#[tokio::test]
+#[ignore = "requires verified FFmpeg9 tools via FFMPEG_PATH and FFPROBE_PATH"]
+async fn episode_nfo_rescan_adds_and_removes_genres_and_tags() {
+    let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
+    let ffprobe = ersatzrs_ffmpeg::ffprobe_path();
+    assert!(
+        Path::new(&ffmpeg).is_file(),
+        "provide the verified FFmpeg runtime"
+    );
+    assert!(
+        Path::new(&ffprobe).is_file(),
+        "provide the verified ffprobe runtime"
+    );
+    let root = tempfile::tempdir().unwrap();
+    let library = root.path().join("library");
+    let season = library.join("Synthetic Series").join("Season 01");
+    std::fs::create_dir_all(&season).unwrap();
+    let episode = season.join("Synthetic Series - S01E01.mkv");
+    generate_deep_scan_episode(&ffmpeg, root.path(), &episode).await;
+    let original_bytes = std::fs::read(&episode).unwrap();
+    let original_mtime = std::fs::metadata(&episode).unwrap().modified().unwrap();
+    let sidecar = episode.with_extension("nfo");
+    let pool = test_db().await;
+    seed_local_library(&pool, &library, 2).await;
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+        deep_scan: false,
+    };
+    let mut baseline = None;
+    for (step, genres, tags) in [
+        (0_u64, vec!["Drama", "Adventure"], vec!["first", "retained"]),
+        (1, vec!["Comedy"], vec!["replacement"]),
+        (2, vec![], vec![]),
+    ] {
+        let facets = genres
+            .iter()
+            .map(|value| format!("<genre>{value}</genre>"))
+            .chain(tags.iter().map(|value| format!("<tag>{value}</tag>")))
+            .collect::<String>();
+        std::fs::write(&sidecar, format!("<episodedetails><title>Test episode</title><season>1</season><episode>1</episode>{facets}</episodedetails>")).unwrap();
+        let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000 + step);
+        std::fs::File::options()
+            .write(true)
+            .open(&sidecar)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(stamp))
+            .unwrap();
+        let report = scan_local_library(&pool, &config).await.unwrap();
+        assert_eq!(
+            report.scanned_files, 1,
+            "NFO change must invalidate the ordinary season scan"
+        );
+        let current = deep_scan_projection(&pool).await;
+        if let Some(previous) = &baseline {
+            let previous: &DeepScanProjection = previous;
+            assert_eq!(current.identities, previous.identities);
+            assert_eq!(current.streams, previous.streams);
+            assert_eq!(current.subtitles, previous.subtitles);
+        } else {
+            baseline = Some(current);
+        }
+        for (table, mut expected) in [("Genre", genres), ("Tag", tags)] {
+            expected.sort_unstable();
+            let sql = format!(
+                r#"SELECT "Name" FROM "{table}" WHERE "EpisodeMetadataId" IS NOT NULL ORDER BY "Name""#
+            );
+            let actual: Vec<String> = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            assert_eq!(
+                actual, expected,
+                "episode {table} must exactly replace previous values"
+            );
+        }
+        let stable = deep_scan_projection(&pool).await;
+        assert_eq!(
+            scan_local_library(&pool, &config)
+                .await
+                .unwrap()
+                .scanned_files,
+            0
+        );
+        assert_eq!(
+            deep_scan_projection(&pool).await,
+            stable,
+            "identical rescan is idempotent"
+        );
+    }
+    assert_eq!(std::fs::read(&episode).unwrap(), original_bytes);
+    assert_eq!(
+        std::fs::metadata(&episode).unwrap().modified().unwrap(),
+        original_mtime
+    );
+}
+
 async fn run_deep_scan_generator(command: &mut tokio::process::Command) {
     use tokio::io::AsyncReadExt as _;
     let mut child = command

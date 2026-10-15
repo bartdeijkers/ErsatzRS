@@ -51,6 +51,14 @@ pub(super) fn flatten_sequences(
     for schedule in &mut definition.schedules {
         flatten_list(&mut schedule.playout, &definition.sequence)?;
     }
+    // Match GetFillerSequenceInstructions: expand nested instructions once per
+    // build, retaining repeat/title semantics and shared content enumerators.
+    // Keep main/scheduled-list expansion first so existing order fingerprints
+    // do not change when a schedule has no nested filler.
+    let sequences = definition.sequence.clone();
+    for sequence in &mut definition.sequence {
+        flatten_list(&mut sequence.items, &sequences)?;
+    }
     Ok(())
 }
 

@@ -787,6 +787,16 @@ async fn prove_native_off(fixture: &Fixture, context: &SuppliedTeletextGuideCont
 #[tokio::test]
 async fn native_channel_preparation_encodes_complete_multi_addon_candidates() {
     let mut fixture = Fixture::new().await;
+    // Admit both barrier-synchronized candidates through the existing resource policy.
+    fixture
+        .state
+        .application
+        .set_admin_setting(ersatzrs_app::commands::SetAdminSetting {
+            key: ersatzrs_web::host::teletext_work::MAX_CONCURRENT_SETTING,
+            value: "2".to_owned(),
+        })
+        .await
+        .unwrap();
     configure_composed_profiles(&fixture).await;
     let channels = [
         TeletextGuideChannel {

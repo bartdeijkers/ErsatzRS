@@ -13,6 +13,16 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Security
+
+- Update the locked HTTPS client runtime to Rustls 0.23.46, addressing
+  [RUSTSEC-2026-0346](https://rustsec.org/advisories/RUSTSEC-2026-0346.html),
+  [RUSTSEC-2026-0347](https://rustsec.org/advisories/RUSTSEC-2026-0347.html),
+  [RUSTSEC-2026-0348](https://rustsec.org/advisories/RUSTSEC-2026-0348.html) and
+  [RUSTSEC-2026-0349](https://rustsec.org/advisories/RUSTSEC-2026-0349.html).
+- Require Ammonia 4.2.3 for release-note HTML sanitization, addressing
+  RUSTSEC-2021-0157 and RUSTSEC-2021-0158 without weakening sanitizer policy.
+
 ### Added
 
 - Add exact-page teletext bitmap input support to the native FFmpeg command
@@ -326,6 +336,37 @@ release section when tagging a release.
   Auxiliary failure preserves ordinary tracks; lease loss rolls back the leaf.
   Video discovery includes MPEG/TS suffixes. Source-page bodies, charset,
   complete inventory and playback selections remain open.
+- Allow manually dispatched Next-only and bounded browser recovery CI for
+  corrective commits without cancelling a running full check. Focused runs
+  include complete affected serial groups and remain distinct from complete
+  CI evidence.
+
+- Start HLS-to-MPEG-TS playback with a six-second read burst in the generated
+  wrapper and bundled Unix/Windows scripts, then resume realtime pacing.
+
+- Replace the archived YAML parser with the maintained YAML organization fork
+  across scheduling, media scanning, graphics and script handling (ADR 0125),
+  preserving existing YAML models and persistent state.
+
+- Pin the supported Rust compiler explicitly in reviewed Next source builds,
+  and verify the updated upstream Windows dispatcher checksum for Next v0.2.1.
+
+- Adopt the published, checksum-pinned six-platform Next v0.2.2 dependency,
+  preserving converted-caption cue intervals, timestamp maps and WebVTT settings
+  across HLS segments. Retain the demonstrated RTSP/image corrections and source
+  provenance. Linux/Windows startup and decoded playback pass; approved
+  hardware/ARM/macOS application acceptance remains explicitly unverified.
+
+- Rebase the reviewed Next runtime to v0.2.1 across all six platforms, retaining
+  the demonstrated RTSP and scheduled-image corrections and exact package pins.
+  Verified public packages support automatic acquisition, bundled startup and
+  managed restart on Linux and Windows. Approved hardware and ARM/macOS
+  application acceptance remains explicitly unverified.
+
+- Read structured Next diagnostics with severity, channel and FFmpeg context,
+  retaining older text logs, bounded retention and credential/path redaction.
+  Flatten control characters so a message cannot forge another diagnostic line.
+
 - Expand Phase 9 to authored EN 300 706 Level 2.5 with correct base fallback and
   QTeletextMaker TTI import/export, versioned template/theme/zone metadata and
   separate drafts and explicit publication. Require independent decoding,
@@ -579,6 +620,43 @@ release section when tagging a release.
   subtitle Off. Keep wrapper startup within its existing
   deadline and clean up waiting responses even when SQLite configuration is busy.
   Full client, caption, platform and engine acceptance remains open.
+- Keep browser fixtures isolated from retained teletext revision/publication
+  identities, and verify valid midnight overlaps in real Block preview tests.
+
+- Allow callers to omit Next's HLS-only subtitle rendition with `subtitles=false`
+  and advertise it only for Convert, without marking it as the default track.
+  MPEG-TS continues to use the authenticated audio/video media playlist directly.
+
+- Limit simultaneous compilation on shared self-hosted CI runners to avoid
+  exhausting memory during workspace and Next acceptance. Preserve all test
+  selections and capture existing Next lifecycle errors in the isolated preview
+  fixture instead of reporting only its failed readiness state.
+- Clean up owned browser-test playouts after each case so synthetic Scripted
+  failures do not contaminate later Health acceptance checks.
+- Prevent Next Copy playback verification from failing on startup database
+  writers; seed its isolated engine/profile settings with a bounded wait and
+  one transaction.
+- Recognize native Windows YAML schedule-file paths and resolve their imports
+  instead of decoding the path itself as an inline schedule.
+
+- Resolve smart collection list data before rendering its SSR response so saved
+  search links work with JavaScript disabled.
+
+- Specify the bounded ffprobe diagnostic byte-buffer type explicitly so native
+  Windows builds remain valid with their Unicode iterator dependencies.
+
+- Honor repeat counts and inherited custom titles in nested Sequential YAML
+  pre-roll, mid-roll and post-roll sequences while retaining shared selection
+  state and existing continuity checks.
+
+- Preserve relative paths in troubleshooting ZIPs so Native and Next reports
+  with the same filename remain separate entries instead of losing a report.
+
+- Detect APNG graphics by their animation-control chunks, including animations
+  stored with a `.png` extension, and select the animation loop option. This
+  prevents FFmpeg startup failures. Reuse bounded image timing and file reopening
+  for finite and infinite APNG canvas animation, preserving still PNG and JPEG XL
+  behavior without rebuilding the FFmpeg runtime.
 - Preserve ordinary MPEG-TS playback when a new teletext generation arrives
   after the finite source has ended. Reject late activation before it can install
   an incomplete cycle, retain withdrawal and full-cycle checks, and load accepted
@@ -1093,7 +1171,6 @@ acceptance debt remains explicitly unverified.
 - Refresh unchanged local PQ/HLG media once so stored HDR/Dolby Vision metadata
   is populated, and expose Dolby Vision profile and HDR10 metadata presence in
   Media Info JSON while preserving non-video field omission.
-
 
 - Expose native and Next playlist-worker reports through authenticated
   `GET /api/sessions`, including last access and a nullable transcode cursor.
@@ -2870,7 +2947,6 @@ separate changelog section.
   top of the viewport restating what the tab strip already names, so the counts
   moved into the tab titles: `Installed add-ons (2/3)` reads as enabled over
   installed, and `Updates` and `Sources` carry their own totals.
-
 
 - The add-on list editor leads with the source URL and the add-on, followed by
   the fields the resolved add-on populates.

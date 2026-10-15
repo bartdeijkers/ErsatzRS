@@ -2,13 +2,155 @@
 
 ## Accepted release boundary
 
+UCU-11 is locally accepted through v26.11.3/row236 on 2026-10-15. All236
+ledger rows have justified dispositions; the required local gates pass.
+UCU-10 was delivered through PR105 on remote main32c12793. UCU-11 remote push
+and associated CI follow local acceptance under explicit maintainer approval;
+application release remains separate. The current pin is authoritative in
+`docs/automation/parity-baseline.md`. The shared upstream checkout and unrelated
+teletext work remain untouched. Approved hardware/platform debt stays unverified.
+
 On 2026-10-06 the maintainer fixed UCU-09 at upstream v26.11.1:
 `46118d43313b7828780fbfcfb46e980390ea8b0d`, ledger row208 (local and remote tag
 verified). Rows1-208 are accepted; there are no remaining in-scope
 rows. Rows209 onward remain recorded as later work and do not block or reopen
-UCU-09. Existing row acceptance, final local gates, push and terminal green
-exact-SHA CI remain required. ADR 0117 is accepted for necessary temporary
+UCU-09. Its accepted row, local-gate and exact-source CI evidence remains retained
+in the owning milestone. ADR 0117 is accepted for necessary temporary
 Next corrections and their verified packages, with mandatory upstream retirement.
+
+## UCU-11 fixed local window
+
+The maintainer authorizes rows233–236 through released v26.11.3 on2026-10-14,
+correcting the initial v26.11.13 reference. Its verified terminal source is
+`f75abe5322f2a05099579df9e95acb675949c780`. UCU-11 owns acceptance/evidence in
+`docs/progress/milestones.toml`. Later upstream changes are outside this window.
+The separate branch combines verified remote main with accepted UCU-10 work;
+main's ongoing teletext work stays intact. Local acceptance passes; the maintainer
+authorizes remote push and associated CI after acceptance, retrying only failed
+specific jobs. Application release remains separate. Approved hardware/platform
+debt stays explicitly unverified.
+
+## UCU-10 completed window
+
+The maintainer authorized rows209–232 through verified v26.11.2 on 2026-10-13.
+UCU-09 remains complete at v26.11.1. UCU-10 owns current acceptance and evidence
+in `docs/progress/milestones.toml`. The maintainer separately authorized the
+source-only branch push, two-job macOS candidate CI, verified Next dependency
+publication and later application push/CI/merge. PR105 delivers remote main32c12793.
+Full CI38623973857 passes every non-browser gate and Chromium; Firefox finishes
+345 passed,30 skipped and only fixture-collision case329 failed. The maintainer
+explicitly requires only the corrected headed case rerun, which passes11.3s,
+with no new full CI. The fixture-only commit uses [skip ci] and reuses passed
+checks; no new full green exact-commit run is claimed. No application release
+is performed. Next021's exact
+six-RID packages are publicly available with verified anonymous checksums; actual
+Linux/Windows bundled, cold-download and managed-restart startup passes.
+Native remains supported alongside Next; upstream legacy retirement is not ported.
+Approved hardware/platform acceptance debt remains explicitly unverified.
+
+### Row209 source map
+
+- Upstream: `4cdce16a`, `ErsatzTV.Application/Playouts/Commands/SyncNextPlayoutHandler.cs`.
+- UI, validators and database contracts: unchanged.
+- Side effects: Unix symlink / Windows junction publication and copied-folder recovery.
+- ErsatzRS: `next_engine/host.rs`, `config.rs`, `publication.rs` and publication tests.
+- Existing adaptation: ADR0095 supplies the stable direct per-channel folder;
+  atomic complete-file replacement avoids the upstream `current` link failure modes.
+- Acceptance: readers see only complete generations; interrupted writes preserve
+  the previous file and remove temporary files. Retain portable reader and native
+  Windows sharing-denial evidence from UCU-09 row204 where its inputs are unchanged.
+
+### Row213 source map
+
+- Upstream: `cef9793a`, graphics `ImageElementBase.cs` and `ApngDecoder.cs`
+  under `ErsatzTV.Infrastructure/Streaming/Graphics/Image/`; Skia decoding
+  explicitly retains APNG frame timing, compositing, disposal and repetition.
+- UI, validation and persistence: unchanged; NuGet replacements have no Rust counterpart.
+- ErsatzRS: shared native `InputFile::graphics_image`, bounded container
+  classification and FFmpeg's APNG demuxer. Existing drawvg graphics and native
+  overlays remain the implementation boundary under ADR0005.
+- Demonstrated gap: APNG content (even named `.png`) was treated as a still PNG
+  and passed `-loop1`, which FFmpeg rejects. Detect acTL before image data;
+  do not port an external graphics decoder or rebuild the existing FFmpeg runtime.
+- Standards: [PNG Third Edition animation control](https://www.w3.org/TR/png-3/#acTL-chunk).
+- Acceptance: actual finite/infinite generated canvases decode and repeat both colours; still
+  PNG keeps its options; bounded chunk traversal rejects truncation, invalid
+  lengths/frame counts and embedded or late markers. Preserve GIF/WebP behavior.
+
+### Next compatibility source map (rows214–216,218–219,220,225,229,231)
+
+- Upstream runtime boundary: Nextv0.2.1, source7f75012f; reviewed channel0.1.2
+  and playout0.0.6 schemas are the wire contracts.
+- Row216: `ChannelConfigConverter.cs`, `Core/Next/Config/ChannelConfig.cs`
+  and `Infrastructure/Scheduling/PlayoutItemConverter.cs`: scaling options and
+  sources without audio. Retain authoritative explicit silence/audio-off choices;
+  prove no duplicate audio and unchanged international-track decisions.
+- Row218: `Core/Next/Playout.cs`, channel fallback policy and item conversion:
+  bounded dynamic resolution retry and fallback duration; private callback
+  capability and source/occurrence ownership remain required.
+- Row219: `Application/Streaming/NextLogger.cs`, ordinary session worker and
+  troubleshooting handler: JSON logs with severity/channel/FFmpeg context.
+  ErsatzRS keeps text compatibility, bounded streams, URI/session redaction and
+  single-line diagnostics; both live and preview use the existing process boundary.
+- Remaining runtime pin rows: consolidate on the released tag; test each required
+  software behavior and keep unavailable GPU checks explicitly unverified.
+- Targets: `next_engine/protocol.rs`, `config.rs`, `selection.rs`, `media.rs`,
+  `diagnostics.rs`, `process.rs` and the existing runtime/staging regressions.
+- Native engine, settings, persistence and provider authentication: retained;
+  no bulk engine migration, retirement warning or external graphics renderer.
+
+### Row224 source map
+
+- Upstream `6e40ed98`: Jellyfin connection parameters/handler and internal
+  media/subtitle redirect; obtain the matching current API key and include it
+  on both requests for servers that require authentication.
+- ErsatzRS `next_engine/source.rs`, `media.rs`, shared scoped credential loader
+  and `provider_subtitles.rs`; resolve the owning source/current connection at
+  request time and authenticate media/sidecars over private relay boundaries.
+- Existing ADR0095/0103 headers keep credentials out of published media URLs.
+  Native materializes authenticated sidecars; Next consumes the private relay.
+- Proof: actual required-header HTTP media and external/embedded Dutch captions,
+  selected audio, Range/seek and burn/convert; current-credential rotation,
+  wrong-server/global-key refusal and cross-origin redirect isolation.
+- The current synthetic-server checks prove these transport/auth behaviors;
+  an actual Silo deployment is not claimed. The public
+  [Silo Jellyfin auth adapter](https://github.com/Silo-Server/silo-server/blob/main/internal/jellycompat/auth.go)
+  explicitly accepts `Authorization: MediaBrowser Token="..."` before legacy
+  headers/query keys, supporting the existing relay adaptation.
+
+### Row228 source and browser map
+
+- Upstream `abdae14e`: `Pages/Search.razor` and `Shared/MainLayout.razor`;
+  cancel superseded Blazor queries and remove forced circuit navigation reloads.
+- ErsatzRS routes `/search` and `/media/smart-collections`, search handler/data
+  boundary `admin/server_fns/search.rs`, SSR page `admin/pages/search.rs`,
+  layout GET form and smart collection links. Existing SSR/islands navigation
+  reloads the requested route; it has no Blazor circuit or stale component query.
+- Existing query encoding and server-rendered GET/no-JS fallback remain the
+  product contract. Actual browser proof exposes a Loading-only smart collection
+  list without JavaScript; the minimal route correction uses existing in-order
+  SSR so data resolves before the prop-bearing island. HTML geometry, translations
+  and persistence semantics are unchanged.
+- Browser acceptance: actual top-bar submit, changed-query stale-result refusal,
+  smart collection target and correct current results in Chromium/Firefox,
+  hydrated/no-JS, with no navigation/hydration exception. Reuse search-see-all
+  fixtures and error watcher.
+
+### Row230 source map
+
+- Upstream `f5b5e9aa`: `SequentialPlayoutBuilder.cs` and
+  `SequentialPlayoutNestedFillerSequenceTests.cs`; expand nested filler once,
+  retain repeat/custom title and handler state, refuse cycles before execution.
+- ErsatzRS `scheduling/yaml/sequences.rs`, `instructions/content.rs` and
+  `instructions/mod.rs`; content enumerators already share build/anchor state.
+- Demonstrated gap: nested filler dispatch ignored sequence repeat/title fields.
+  Reuse existing bounded expansion for filler definitions, after unchanged
+  main/scheduled-list expansion; preserve existing order fingerprints.
+- Acceptance: pre/mid/post-roll selection, repeated nested titles, serialized
+  Continue and KeepCurrent Refresh versus uninterrupted production builds;
+  global cycle refusal and affected existing YAML continuity regressions.
+- Persistence and health contracts: no schema/state format change or automatic
+  reset. Existing invalid-checkpoint refusal remains authoritative.
 
 ## Row 200 source map and acceptance
 
@@ -586,7 +728,9 @@ remain. See `post-publication-cleanup.json`.
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-10-15): `7a919e503a4004e9c81c7aa509b9fe6a67d7de61`
   — perf: canvas region (#3093).
-- Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
+- Ledger: **237 observed commits**, **236 accepted**, **1 pending outside the accepted boundary**.
+- Accepted release baseline: **236 commits**, **0 pending** through fixed
+  v26.11.3; row 237 belongs to UCU-12 and does not reopen UCU-11.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
@@ -655,12 +799,11 @@ remain. See `post-publication-cleanup.json`.
   Maintainer decision (2026-10-14): each window ends at an upstream release, so
   UCU-10 runs to row 232 (v26.11.2) and UCU-11 covers rows 233-236, ending at
   row 236 (v26.11.3). Rows fetched after that belong to the next window.
-  The 2026-10-15 refresh opens UCU-12 under that rule: row 236 closed UCU-11, so
+  The 2026-10-15 observation opens UCU-12 under that rule: row 236 closed UCU-11, so
   the canvas region commit starts the new window as pending row 237. All 236
   existing SHA/subject pairs remain an exact prefix.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
-  and everything fetched after it belongs to a new window. Rows 209-213 carry the
-  `ucu-10` prefix; the matching milestone still has to be added to the tracker.
+  and everything fetched after it belongs to a new window. Rows209–232 now belong to the maintainer-authorized UCU-10 milestone.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
   match upstream history; all 183 accepted rows remain unchanged. All 206
   SHA/subject pairs now follow the fetched upstream sequence.
@@ -669,7 +812,9 @@ remain. See `post-publication-cleanup.json`.
   processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **208**; in-scope total: **208**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **236**; accepted release-boundary total: **236**.
+  Row 237 is observed outside that boundary and remains pending. Empty
+  verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete with terminal green CI at `8f722099`. UCU-04 is Complete:
   rows 35-67, local window gates and terminal green exact-SHA CI run
   [36140800461](https://github.com/bartdeijkers/ErsatzRS/actions/runs/36140800461)
@@ -5813,32 +5958,32 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 206 | `d55be01f` | docs: tweak changelog | N/A | Upstream release-note wording | `docs(parity): reconcile Windows playout note wording` | ucu-09; Clarifies the row204 symptom only; source and acceptance are unchanged. |
 | 207 | `47d7716a` | docs: update changelog for next fix | Covered (ADR 0117) | Next036 and native VAAPI driver/color/depth prerequisites | `docs(parity): accept verified VAAPI padding prerequisites` | ucu-09; Pinned Next036 includes iHD BT.2020 retag/restoration and AMD/i965 rejection. Native explicit-iHD eligibility, software fallback, effective BT.709/HDR state and P010 composition preservation are already corrected. Reuse21 focused checks, four owning snapshot groups in231 passes and four decoded software range/depth cases. VAAPI execution remains explicitly unverified hardware debt; no new FFmpeg binary amendment. |
 | 208 | `46118d43` | docs: prep for release v26.11.1 | N/A | Fixed upstream v26.11.1 release boundary | `docs(parity): finish ordered catch-up through v26.11.1` | ucu-09; CHANGELOG heading/date/compare links only. Local and live remote tag agree at46118d43313b7828780fbfcfb46e980390ea8b0d. All208 rows are dispositioned; later upstream changes remain outside UCU-09. Final window gates and exact-SHA CI remain required. |
-| 209 | `4cdce16a` | fix: next playout folders on linux/macos (#3068) | | | | ucu-10; post-v26.11.1 work; provisional: Covered, pending one check, like row 204. Upstream reworks its `current` link: removal now runs on every platform before linking, a failed symlink and a failed rename are both reported instead of throwing, a leftover file where the junction belongs is replaced, and the temporary link is cleaned up. ErsatzRS hands the engine the per-channel playout folder directly (`crates/ersatzrs-infra/src/next_engine/host.rs:187`, `next_engine/config.rs:56`) and keeps no `current` link at all, so none of these failure modes exist; the audit only has to confirm the folder swap is atomic, which is the same check row 204 already carries. Claude 2026-10-07 triage. |
-| 210 | `d89f6156` | docs: update changelog for next fix | | | | ucu-10; post-v26.11.1 work; provisional: N/A for the diff (three upstream CHANGELOG lines; no source change). The entry describes a Next-engine fix outside this repository: VAAPI playback froze at the end of items on channels with an Intermittent watermark, most often music videos whose audio outlives their video, logged as an ffmpeg stall. Worth carrying into the runtime audit rather than a row: ErsatzRS has its own intermittent watermark path (`crates/ersatzrs-infra/src/next_engine/watermark.rs`, with runtime proof in `next_engine/intermittent_watermark_runtime_tests.rs`), so whether the same end-of-item stall appears belongs with the accepted hardware debt. Claude 2026-10-07 triage. |
-| 211 | `9d60b28e` | build: scope app tokens (#3069) | | | | ucu-10; provisional: N/A (upstream-only GitHub Actions change: the release-repository input becomes a name under the same owner and each app token is scoped to that repository). ErsatzRS publishes from its own repository with its own CI, as rows 191, 192 and 202 recorded. Claude 2026-10-07 triage. |
-| 212 | `5f5d2815` | build: pin a specific next version (#3070) | | | | ucu-10; provisional: N/A for the diff, with one thing to compare. Upstream adds a NEXT_PIN file plus scripts that download exactly that Next build per target (currently `v0.2.0-96aa6cb6-develop`) instead of the latest one. ErsatzRS already acquires a pinned Next engine before startup (`af7eb835`) with verified bytes, and its wire contracts are pinned in `crates/ersatzrs-infra/src/next_engine/protocol.rs:6` (playout 0.0.5, channel 0.1.1), so the workflow has no counterpart; what is worth checking is whether our pinned build matches the one upstream now pins. Claude 2026-10-07 triage. |
-| 213 | `cef9793a` | refactor: remove imagesharp dependency; update others (#3072) | | | | ucu-10; provisional: N/A (upstream dependency work). The graphics image element drops ImageSharp and decodes through SkiaSharp's SKCodec instead, with a hand-written APNG decoder added because SKCodec does not animate APNG; the rest is NuGet version bumps. ErsatzRS has no Skia or ImageSharp: images reach the graphics path through FFmpeg demuxers under the accepted drawvg design, and animated formats are already treated as animation-capable (`crates/ersatzrs-infra/src/health/checks/zero_duration.rs:89` names .gif, .webp, .apng and .avif). The audit only has to confirm APNG animation actually plays through that path, which belongs with the animated-graphics work rather than this row. Claude 2026-10-09 triage. |
-| 214 | `7861f2c3` | chore: update next (#3073) | | | | ucu-10; provisional: Adapt, and the first row of this window with real runtime consequences. The diff only moves the pinned Next build from `v0.2.0-96aa6cb6-develop` to `v0.2.1-e3dcde41-develop`, but the changelog says what that build fixes: output is now always 4:2:0, where still images and song backgrounds were encoded 4:4:4 by software encoders and many clients reject that, plus two NVIDIA watermark failures (a `yuva420p` watermark below 100% opacity, and a watermark while encoding in software such as mpeg2video). ErsatzRS pins its own reviewed distribution under ADR 0117 (`scripts/release/next-patches/manifest.json:6`, `0.1.0-0362692-ersatzrs.1`), which is older than both, so the decision is whether to rebase that pin rather than copy a tag. The 4:2:0 behaviour is worth checking against our still-image and song paths either way. Claude 2026-10-09 triage. |
-| 215 | `600de0fc` | chore: update next (#3074) | | | | ucu-10; provisional: Adapt, same decision as row 214. Pin moves to `v0.2.1-91baf6fd-develop`; the build fixes VideoToolbox h264 encoding failing on content with embedded A53 closed captions. ErsatzRS pins its own reviewed distribution under ADR 0117 (`scripts/release/next-patches/manifest.json:6`), so these bumps accumulate into one rebase decision rather than per-row ports. Claude 2026-10-12 triage. |
-| 216 | `7d96cdf1` | chore: update next (#3075) | | | | ucu-10; provisional: Port (channel config schema 0.1.2). Beyond the pin bump this adds `normalization.video.filters.scale.flags` (software scaling defaults to bicubic instead of fast_bilinear) and removes the host-side lavfi silence injection because Next now plays silence itself for sources without audio. ErsatzRS still declares 0.1.1 (`crates/ersatzrs-infra/src/next_engine/protocol.rs:7`) and has no scale-filter field, and our own silence handling has to be checked against the engine doing it. Claude 2026-10-12 triage. |
-| 217 | `e17cfe84` | fix: duplicate media_info.json in troubleshooting zip (#3071) | | | | ucu-10; provisional: Covered, pending one check. Upstream rewrites its archive loop so each file is added once, through the filesystem abstraction, after media_info.json was being written twice. ErsatzRS builds its archive in one pass (`crates/ersatzrs-web/src/api/troubleshooting.rs:274`), so the audit only has to confirm no entry name repeats. Claude 2026-10-12 triage. |
-| 218 | `e76aee8b` | feat: next dynamic callback retry (#3076) | | | | ucu-10; provisional: Port. Dynamic sources gain `retry_budget_ms` and `retry_backoff_ms` with doubling, jittered backoff, retrying transport errors, timeouts and 5xx but not 4xx or an invalid PlayoutItem body, plus `fallback.duration_seconds` so the channel keeps playing its fallback for at least the budget. ErsatzRS sends only `timeout_us` on its dynamic sources (`crates/ersatzrs-infra/src/next_engine/protocol.rs:337`), so a failed resolver currently has no retry path. Claude 2026-10-12 triage. |
-| 219 | `c53031df` | feat: parse json logs from next (#3077) | | | | ucu-10; provisional: Port. Upstream asks the engine for structured logs with `ETV_LOG_FORMAT=json` and parses the fields instead of matching a bracketed text line. ErsatzRS reads the engine's stderr through its bounded diagnostics reader (`crates/ersatzrs-infra/src/next_engine/process.rs:229`) with no JSON handling, so engine warnings reach our logs as opaque text. Claude 2026-10-12 triage. |
-| 220 | `4c131ccb` | chore: update next (#3078) | | | | ucu-10; provisional: Adapt, folded into the row 214 pin decision. Pin moves to `v0.2.1-d76c3ad1-develop`; no other change. Claude 2026-10-12 triage. |
-| 221 | `be6a225c` | build: use macos 15 runners (#3079) | | | | ucu-10; provisional: N/A (upstream CI runner images and a simplified next-pin workflow). ErsatzRS runs its own CI, as rows 191, 192, 202 and 211 recorded. Claude 2026-10-12 triage. |
-| 222 | `2cc36270` | build: mac dotnet on linux; update workflow actions (#3080) | | | | ucu-10; provisional: N/A (upstream builds its macOS artifacts on Linux and bumps workflow action versions; .NET-specific tooling with no Rust counterpart). Claude 2026-10-12 triage. |
-| 223 | `cf29faa0` | build: improve workflow performance (#3081) | | | | ucu-10; provisional: N/A (upstream workflow caching and Docker base image tweaks). Claude 2026-10-12 triage. |
-| 224 | `6e40ed98` | fix: jellyfin compatible playback (#3082) | | | | ucu-10; provisional: Port. Upstream now requires a Jellyfin API key for playback parameters and sends it on stream and subtitle requests, because some Jellyfin-compatible servers reject unauthenticated media requests. ErsatzRS builds its Jellyfin media URLs in `crates/ersatzrs-infra/src/jellyfin/` and the audit starts at the playback/subtitle request path there, checking whether the key travels with those requests. Claude 2026-10-12 triage. |
-| 225 | `16fd9979` | chore: update next (#3083) | | | | ucu-10; provisional: Adapt, folded into the row 214 pin decision. Pin moves to `v0.2.1-bff83ef6-develop`; that build stops hevc streams hanging on A53 closed captions with Mesa before 26.2.3 (captions are dropped there) and makes `crop` always scale to cover the output before cropping. The crop behaviour is worth checking against our own scaling rules regardless of the pin. Claude 2026-10-12 triage. |
-| 226 | `4b6c9dae` | feat: warn about legacy engine removal (#3084) | | | | ucu-10; provisional: N/A for the diff, but the most consequential row of this window to read. Upstream announces that its legacy streaming engine is removed in ErsatzTV 26.12: the Channels page lists channels still on it, the channel editor warns, and starting such a stream logs a warning pointing at an issue form. None of that is portable, because ErsatzRS has no legacy ErsatzTV engine to retire — its native FFmpeg pipeline is the primary engine under ADR 0095 and Next is the accepted optional second one. What it does mean for us is that the upstream reference implementation for everything the native pipeline mirrors stops being maintained after 26.12, so future rows will increasingly describe Next-only behaviour. That is a maintainer decision about the parity baseline, not a port. Claude 2026-10-12 triage. |
-| 227 | `aa88df20` | fix: local episode nfo tags and genres (#3085) | | | | ucu-10; provisional: Port, pending the audit. Upstream had excluded episode metadata from its genre and tag reconciliation, so genres and tags read from an episode NFO were never added or removed on rescan; the guard is dropped and episodes now follow the same add/remove path as every other kind. ErsatzRS parses episode genres and tags from NFO (`crates/ersatzrs-scanner/src/nfo.rs:197`) and carries them through the local television scanner (`crates/ersatzrs-scanner/src/local_television.rs:141`), so the audit has to show that a changed NFO actually adds and removes episode genres and tags on a rescan rather than only on first import. Claude 2026-10-13 triage. |
-| 228 | `abdae14e` | fix: don't force load search page (#3086) | | | | ucu-10; provisional: N/A, Blazor-specific. Searching from the search bar forced a full page navigation that their framework then logged as a failed location change; upstream reworks the Razor page to query reactively with a cancellation token instead. ErsatzRS serves search as an ordinary server-rendered route with its own query parsing (`crates/ersatzrs-web/src/admin/search_query.rs`), so there is no forced reload to remove; the audit only has to confirm a search from the bar and from a smart collection target keeps working without a full reload. Claude 2026-10-13 triage. |
-| 229 | `c1b6f0e8` | chore: update next (#3087) | | | | ucu-10; provisional: Adapt, folded into the row 214 pin decision. Pin moves to `v0.2.1-73a72616-develop`, which fixes completely green QSV output on legacy Intel encoders. That failure mode is worth remembering when the approved QSV hardware debt is finally verified. Claude 2026-10-13 triage. |
-| 230 | `f5b5e9aa` | fix: nested filler sequences (#3088) | | | | ucu-10; provisional: Port, pending the audit. A filler sequence that calls another sequence was re-read per call, so nested sequences lost their handler state; upstream expands each sequence once per build, caches the cloned instructions and rejects cycles before any filler runs. ErsatzRS flattens sequences and already rejects cycles up front (`crates/ersatzrs-core/src/scheduling/yaml/sequences.rs:6`, `:47`), so the audit has to show that a nested filler sequence keeps its state across calls in one build rather than restarting. Claude 2026-10-13 triage. |
-| 231 | `3b7d5f29` | chore: update to next v0.2.1 (#3089) | | | | ucu-10; provisional: Adapt, and the moment the row 214 pin decision becomes concrete. Upstream leaves the develop builds behind and pins the released `v0.2.1` tag. ErsatzRS pins its own reviewed distribution under ADR 0117 (`scripts/release/next-patches/manifest.json:6`, `0.1.0-0362692-ersatzrs.1`); a released upstream tag is a cleaner base to rebase onto than the develop snapshots this window has been tracking, so the audit should weigh rebasing now rather than after the next bump. Claude 2026-10-13 triage. |
-| 232 | `e6bb6c67` | prep for release v26.11.2 | | | | ucu-10; provisional: N/A (upstream CHANGELOG heading, date and compare links for v26.11.2; no source change), like rows 168, 203 and 208. This row is the release boundary that closes UCU-10. Claude 2026-10-13 triage. |
-| 233 | `7b623769` | fix: next hls subtitle rendition (#3090) | | | | ucu-11; provisional: Covered for the first half, Port for the second. Upstream stops advertising the HLS subtitle rendition unless the channel's text subtitle mode is Convert, because a Burn channel offered an empty track that froze VLC 3; ErsatzRS already gates that rendition on Convert (`crates/ersatzrs-web/src/transport/iptv/variant.rs:90`). The second half is the one to audit: upstream's MPEG-TS streams were requesting the HLS subtitle track they cannot use and started about ten seconds slower, so the audit has to confirm our MPEG-TS path never asks the Next session for that rendition and measure the start delay. Claude 2026-10-13 triage. |
-| 234 | `388ab6a0` | chore: update next (#3091) | | | | ucu-11; provisional: Adapt, folded into the row 214/231 pin decision. Upstream leaves the released v0.2.1 again for `v0.2.2-3b93b660-develop` one day later, which is worth noting for the rebase choice: their pin follows develop between releases, so ours should track a release tag rather than chase each snapshot. Claude 2026-10-13 triage. |
-| 235 | `8c3636c1` | fix: mpegts initial burst (#3092) | | | | ucu-11; provisional: Covered in the pipeline, Port in the shipped scripts. Upstream adds `-readrate_initial_burst 6` after `-readrate 1.0` so clients like Plex fill their buffer and start sooner, in both the generated command and its embedded MPEG-TS script. ErsatzRS already emits the flag from the pipeline with a burst of 8 (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:3427`), but neither shipped script carries it (`assets/Scripts/MpegTs/run.sh:3`, `assets/Scripts/MpegTs/run.bat:3`), so a channel using the script path starts without the burst. The audit should align the scripts and decide whether 8 or upstream's 6 is the value we keep. Claude 2026-10-13 triage. |
-| 236 | `f75abe53` | prep for release v26.11.3 | | | | ucu-11; provisional: N/A (upstream CHANGELOG heading, date and compare links for v26.11.3, plus the pin moving from the `v0.2.2` develop snapshot to the released `v0.2.2` tag), like rows 203, 208 and 232. Two things are worth carrying forward: upstream released v26.11.1, v26.11.2 and v26.11.3 within a day, and it pins a develop snapshot between releases and the release tag at each one — which is the pattern the row 214/231 pin decision should follow rather than chasing snapshots. Claude 2026-10-13 triage. |
+| 209 | `4cdce16a` | fix: next playout folders on linux/macos (#3068) | Covered (ADR 0095) | Atomic direct-folder Next publication | `test(next): verify portable atomic publication` | ucu-10; Upstream symlink/junction recovery has no Rust counterpart because the engine reads a stable direct channel folder and atomically replaced JSON. Fourteen local publication regressions pass at base18290023 (nextest93316384), including concurrent complete readers, interrupted write/cleanup, cancellation/deadline and redacted failure. Unchanged publication/host/config source compared with97aa48a0 preserves UCU-09 row204 native Windows sharing-denial/recovery proof; hardware/platform debt is unchanged. |
+| 210 | `d89f6156` | docs: update changelog for next fix | N/A | Upstream VAAPI release-note wording | `docs(parity): record VAAPI watermark runtime context` | ucu-10; Exact diff adds three changelog lines only. The VAAPI intermittent-watermark stall informs final Next runtime compatibility audit; unavailable hardware remains explicitly unverified, and this docs verdict does not claim hardware playback. |
+| 211 | `9d60b28e` | build: scope app tokens (#3069) | N/A | Upstream GitHub App release repository tokens | `docs(parity): reconcile scoped upstream workflow tokens` | ucu-10; Exact diff scopes upstream cross-repository App tokens and qualifies its repository-name input. ErsatzRS uses its own repository workflow permissions and has no equivalent App-token release input. No host/runtime change; no CI dispatch or publication performed. |
+| 212 | `5f5d2815` | build: pin a specific next version (#3070) | Covered (ADRs 0095/0117) | Pinned verified Next acquisition and staging | `test(release): verify existing exact Next staging` | ucu-10; Upstream replaces mutable develop downloads with a pin. Existing ErsatzRS acquisition/staging already pins source, patches, archive and payload hashes for six RIDs. All21 local offline staging tests pass, including wrong-hash/provenance rejection and ARMv7 source staging. Upstream0.2.x adoption is tracked by rows214–231; this verdict does not claim that the old036 runtime contains those later fixes. |
+| 213 | `cef9793a` | refactor: remove imagesharp dependency; update others (#3072) | Adapt | Native bounded APNG graphics classification, timing and FFmpeg concat decoding | `fix(graphics): repeat APNG graphics with bounded source timing` | ucu-10; ADR0005. Finite/infinite FFV1/NUT canvases repeat both complete colour cycles (d3407be6), bounded timing probe passes (56e0e25c), APNG/JPEG XL regressions and snapshots pass8/8 (92aebf33), affected strict lint passes. Reuse verified FFmpeg2.0.6; no external decoder/build. NuGet replacements are N/A. UCU-10 owns evidence and final window gates. |
+| 214 | `7861f2c3` | chore: update next (#3073) | Adapt (ADR 0117) | upstream-baseline-catch-up | `build(next): adopt reviewed v0.2.1 packages` | ucu-10; Consolidate runtime bumps on released Next021/source7f75012f, retaining both demonstrated temporary corrections. All six exact archives and public anonymous checksums pass. Linux/Windows4:2:0 image/song and geometry playback pass; native Windows NVIDIA YUVA opacity/software MPEG2 cases pass16/16. UCU-10 owns complete source/compatibility evidence; approved unavailable GPU/platform debt stays unverified. |
+| 215 | `600de0fc` | chore: update next (#3074) | Covered (ADR 0117) | upstream-baseline-catch-up | `build(next): adopt reviewed v0.2.1 packages` | ucu-10; The released021 source includes the upstream VideoToolbox/A53 correction; the reviewed macOS packages build, ad-hoc-sign and pass native startup. Public six-RID pin/acquisition is accepted. Actual macOS application/VideoToolbox execution remains within the explicitly approved unverified macOS Next acceptance debt; no new hardware proof is claimed. UCU-10 owns source and package evidence. |
+| 216 | `7d96cdf1` | chore: update next (#3075) | Port | upstream-baseline-catch-up | `feat(next): retain updated normalization and silence contracts` | ucu-10; Channel0.1.2/playout0.0.6 and software scale flags are ported. Reuse the engine silence path for sources without audio while preserving explicit audio-off and selected language/track identity. Actual Linux/Windows song, image, selected Dutch audio, Burn/Convert/Off and default bundled/cold startup checks pass against the published021 pin. UCU-10 owns unit/wire/runtime and lifecycle proof. |
+| 217 | `e17cfe84` | fix: duplicate media_info.json in troubleshooting zip (#3071) | Port | Native/Next troubleshooting ZIP relative paths | `fix(web): retain distinct troubleshooting report paths` | ucu-10; independent ZIP reader exposes flattened-name collision; corrected archive retains all three entries and distinct Native/Next contents. Both checks pass (1c46c417); UCU-10 owns source/runtime evidence and final gates. |
+| 218 | `e76aee8b` | feat: next dynamic callback retry (#3076) | Port | upstream-baseline-catch-up | `feat(next): bound dynamic retry and fallback duration` | ucu-10; Port bounded dynamic callback retry budget/backoff and minimum fallback duration through the existing private capability/occurrence boundary. Ten actual retry cases and two fallback cases pass; callback and HLS/TS lifecycle proof uses exact021 runtime on isolated hosts. Preserve4xx/invalid-body refusal, cancellation, source fences and selected tracks. UCU-10 owns canonical evidence. |
+| 219 | `c53031df` | feat: parse json logs from next (#3077) | Port | upstream-baseline-catch-up | `fix(next): parse bounded structured diagnostics` | ucu-10; Request and parse structured Next diagnostics with severity/channel/FFmpeg context through the existing shared normal/preview process supervisor. Retain text compatibility, byte/retention bounds, URI/session redaction and single-line output. Host/protocol/logging checks pass63/63 and actual exact021 host playback/log-signature gates pass. UCU-10 owns evidence. |
+| 220 | `4c131ccb` | chore: update next (#3078) | Covered (ADR 0117) | upstream-baseline-catch-up | `build(next): adopt reviewed v0.2.1 packages` | ucu-10; Intermediate develop pin is superseded by the reviewed released021/source7f75012f package set. All six immutable archive/payload/source/patch identities, public anonymous downloads, actual staging and available Linux/Windows bundled/cold/cache startup pass. No extra runtime change or later release is introduced; UCU-10 owns acceptance. |
+| 221 | `be6a225c` | build: use macos 15 runners (#3079) | N/A | Upstream macOS runner/version checks; existing Next source candidate matrix | `docs(parity): reconcile macOS runner update` | ucu-10; full artifacts/next-pin/PR workflow diff reviewed. Existing ErsatzRS candidate matrix already uses macos-15-intel and macos-15 with native version execution. No source change or runner execution claimed; missing new macOS candidate packages remain a blocker in UCU-10. |
+| 222 | `2cc36270` | build: mac dotnet on linux; update workflow actions (#3080) | N/A | Upstream .NET cross-build, signing and workflow action contracts | `docs(parity): reconcile upstream workflow maintenance` | ucu-10; full seven-workflow/actionlint diff reviewed. .NET publish on Linux, GitHub App client-id, Azure signing and Docker digest artifact changes do not alter Rust runtime behavior. Own source candidate actionlint passes; no new CI dispatch or publication. |
+| 223 | `cf29faa0` | build: improve workflow performance (#3081) | N/A | Upstream NuGet restore/test cache and Docker platform selection | `docs(parity): reconcile workflow performance maintenance` | ucu-10; full artifacts/PR/Dockerfile diff reviewed. NuGet package-only cache and Release --no-build test selection are .NET-specific; own multi-platform recipe already selects the requested target. No application change, FFmpeg rebuild or publication. |
+| 224 | `6e40ed98` | fix: jellyfin compatible playback (#3082) | Covered | Credential-owning Jellyfin private media/subtitle relay | `test(infra): verify authenticated Jellyfin-compatible playback` | ucu-10; current provider credentials authorize media and sidecars with Range/seek, strict source/session/cross-origin fences and no public credential URLs. Decoded Linux/Windows provider tests and four identity/state checks pass. Public Silo adapter accepts the existing MediaBrowser token header; no deployed Silo claim. UCU-10 owns exact evidence. |
+| 225 | `16fd9979` | chore: update next (#3083) | Covered (ADR 0117) | upstream-baseline-catch-up | `build(next): adopt reviewed v0.2.1 packages` | ucu-10; Released021 includes the Mesa/A53 and cover-before-crop corrections. Decoded Linux/Windows software fit/fill/crop/stretch geometry passes; upstream source compatibility is reviewed. Six-RID package/adoption and lifecycle gates pass. Actual unavailable driver/hardware execution remains explicitly unverified within existing approved debt; UCU-10 owns exact source and runtime evidence. |
+| 226 | `4b6c9dae` | feat: warn about legacy engine removal (#3084) | N/A (maintainer Native retention) | ADRs 0095/0105; Native channel/profile persistence and engine selector | `docs(parity): preserve the supported ErsatzRS streaming engine` | ucu-10; all seven changed upstream files reviewed. Legacy-removal UI/log warnings and issue URL do not apply to the retained Native engine. Existing selector exposes ErsatzRS and Next; explicit Native and stored update choices remain preserved without migration. Actual Native playback gate remains part of UCU-10 closeout. |
+| 227 | `aa88df20` | fix: local episode nfo tags and genres (#3085) | Covered | Local television NFO transactional genre/tag replacement | `test(scanner): verify episode NFO rescan reconciliation` | ucu-10; ordinary rescan adds/replaces/removes genres and tags while preserving media/version/file/show/season identities and Dutch tracks. Unchanged scan is idempotent and media bytes/mtime stay unchanged. Actual scanner test passes (3fae4335); no production SQL correction required. UCU-10 owns evidence. |
+| 228 | `abdae14e` | fix: don't force load search page (#3086) | Adapt | SSR search and resolved smart-collection list route | `fix(web): resolve smart search targets before SSR output` | ucu-10; Blazor forced-load/cancellation mechanism is inapplicable. Actual current/changed top-bar query and saved smart-search target expose a no-JS Loading-only list; route-local SsrMode::InOrder corrects it. Headed matched Chromium3/3 and Firefox3/3 pass, including hydrated/no-JS/navigation/artwork/mobile checks; no new hydration findings. UCU-10 owns evidence. |
+| 229 | `c1b6f0e8` | chore: update next (#3087) | Covered (ADR 0117) | upstream-baseline-catch-up | `build(next): adopt reviewed v0.2.1 packages` | ucu-10; Released021 includes the legacy Intel QSV green-output correction. Adopt the exact reviewed six-RID release with passing available source/software/package/runtime checks. Intel QSV hardware remains explicitly approved unverified debt, never inferred from another GPU or source build. UCU-10 owns compatibility evidence. |
+| 230 | `f5b5e9aa` | fix: nested filler sequences (#3088) | Port | Bounded YAML filler expansion and persisted scheduler continuity | `fix(core): expand nested filler definitions once per build` | ucu-10; production baseline fails repeat/title and continuity. Existing bounded expansion now resolves filler definitions after unchanged main expansion. All87 affected YAML checks, six SQLite reopen/preservation checks and shuffled-state continuation pass; native Windows counterpart passes. Cycles still fail before playback and refresh/state formats stay unchanged. UCU-10 owns evidence. |
+| 231 | `3b7d5f29` | chore: update to next v0.2.1 (#3089) | Adapt (ADR 0117) | upstream-baseline-catch-up | `build(next): adopt reviewed v0.2.1 packages` | ucu-10; Adopt released v0.2.1/source7f75012f as next-7f75012-ersatzrs.1, with independent patch retirement criteria and exact six-RID source/archive/payload pins. Authorized macOS CI is green ondd043f94;20 published assets match anonymous downloads. Linux/Windows no-bundle cold installation, managed restart, real bundled startup, decoded lifecycle and paired SSR/WASM gates pass. Native remains supported; UCU-10 owns local acceptance, not application push/CI/publication. |
+| 232 | `e6bb6c67` | prep for release v26.11.2 | N/A | Upstream CHANGELOG release heading/date/compare links | `docs(parity): record v26.11.2 reconciliation boundary` | ucu-10; full diff changes only upstream CHANGELOG.md. e6bb6c67 is the fixed release boundary; later commits are excluded. Baseline is not advanced while nine Next integration rows and final gates remain pending; no ErsatzRS release authorized. |
+| 233 | `7b623769` | fix: next hls subtitle rendition (#3090) | Port / Covered | Convert-only optional HLS text and authenticated media-only TS wrapper | `fix(web): isolate HLS text from MPEG-TS requests` | ucu-11; existing Convert-only guard retained; subtitles=false suppresses only text on normal/preview masters. TS reads authenticated AV media directly. Integrated Linux/Windows decoded Burn/Convert/Off and selected Dutch tracks, cached URL/state/reconnect, four headed Chromium/Firefox cases pass. Actual Next Convert TS starts2s without requesting text. UCU-11 owns exact source/runtime and required local gate evidence. |
+| 234 | `388ab6a0` | chore: update next (#3091) | Adapt (ADR 0117) | Released Next022 immutable public six-RID acquisition and packaging | `build(next): adopt verified released v0.2.2 packages` | ucu-11; replace intermediate develop with released source4a0b59a, next-4a0b59a-ersatzrs.1. All20 public assets and19 listed checksums match; six published packages stage, Linux/Windows Downloaded/Managed/Bundled startup and decoded runtime pass. Both unchanged unpatched retirement cases fail, retaining only RTSP/image patches. No FFmpeg amendment/build needed; approved unavailable hardware/ARM/macOS application debt stays explicitly unverified. |
+| 235 | `8c3636c1` | fix: mpegts initial burst (#3092) | Port | Generated Hybrid remux and bundled Windows/Unix scripts | `fix(streaming): bound MPEG-TS startup burst to six seconds` | ucu-11; add readrate_initial_burst6 after readrate1.0 to the final wrapper and both scripts; retain separate8s producer policy, AV copy/maps and mux/PCR settings. Exact snapshots pass. Native/Next full TSDuck87/83 pass; twenty-second Hybrid captures yield25.980/25.998s media, startup4/2s, five rolling samples each and zero low intervals. Existing VBR jitter stays informational. UCU-11 owns decoded/state/transport evidence. |
+| 236 | `f75abe53` | prep for release v26.11.3 | N/A / Covered | Upstream release metadata and released Next022 pin | `docs: record accepted v26.11.3 catch-up boundary` | ucu-11; exact CHANGELOG and pin diff reviewed; released022 adoption is covered by row234. All236 ordered SHA/subject pairs match fixed v26.11.3. Required local gates pass; advance the authoritative baseline table with accepted dispositions. Later upstream releases and application publication remain excluded; authorized remote delivery/CI follows acceptance. |
 | 237 | `7a919e50` | perf: canvas region (#3093) | | | | ucu-12; first row of the window opened after v26.11.3. Provisional: Port, with a scope question. Watermark-only canvases now render just the rectangle the watermarks cover instead of the whole frame, which cuts CPU and GPU upload for animated or opacity-expression watermarks; the region travels signed from the playout so a changed channel cannot widen it, and remote/URL watermarks still get the full frame. The pin also moves to `v0.2.3-498e4555-develop`. ErsatzRS already bypasses the canvas entirely for plain watermarks (row 173, direct layers), so the gain here only applies to the cases we still send through the canvas: animated and opacity-expression watermarks (`crates/ersatzrs-infra/src/next_engine/graphics.rs:69`, `next_engine/canvas_render.rs`). The audit should measure whether a region is worth it for those, and keep the signed-placement property if it is. Claude 2026-10-15 triage. |

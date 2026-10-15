@@ -211,16 +211,67 @@ pub(super) async fn assert_timeline(
     if convert {
         assert!(all.contains("ACROSS CUT"));
         assert!(all.contains("AFTER CUT"));
-        for (body, duration) in captions {
-            for (start, end) in body.lines().filter_map(|line| line.split_once(" --> ")) {
-                assert!(vtt_seconds(start) >= 0.0);
-                assert!(
-                    vtt_seconds(end) <= duration + 0.002,
-                    "retained cue escapes segment"
-                );
-            }
-        }
+        assert_converted_timeline(captions);
     } else {
         assert!(!all.contains(" --> "));
     }
+}
+
+fn assert_converted_timeline(captions: &[(String, f64)]) {
+    let mut cues = std::collections::BTreeSet::new();
+    let mut after_cut_occurrences = 0;
+    for (body, _) in captions {
+        assert!(body.starts_with("WEBVTT\n"));
+        let anchor = body
+            .lines()
+            .find_map(|line| line.strip_prefix("X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:"))
+            .expect("retained VTT timestamp map")
+            .parse::<u64>()
+            .unwrap();
+        assert!(anchor < 8_589_934_592);
+        let mapped = |text| {
+            let seconds = vtt_seconds(text);
+            assert!(seconds >= 0.0);
+            let millis = u64::try_from(Duration::from_secs_f64(seconds).as_millis()).unwrap();
+            (anchor + millis * 90) % 8_589_934_592
+        };
+        let mut lines = body.lines();
+        while let Some(line) = lines.next() {
+            let Some((start, end)) = line.split_once(" --> ") else {
+                continue;
+            };
+            let start = mapped(start);
+            let end = mapped(end.split_whitespace().next().unwrap());
+            assert!(end > start, "retained cue must have a positive interval");
+            let text = lines.next().expect("retained cue payload");
+            assert!(matches!(text, "ACROSS CUT" | "AFTER CUT"));
+            after_cut_occurrences += usize::from(text == "AFTER CUT");
+            cues.insert((start, end, text));
+        }
+    }
+    // Next 0.2.2 repeats full cues in overlapping segments (RFC 8216 section 3.5).
+    // Mapping each copy must recover exactly the same retained programme interval.
+    assert_eq!(
+        cues.len(),
+        3,
+        "two cut pieces and one full following cue: {cues:?}"
+    );
+    let cues: Vec<_> = cues.into_iter().collect();
+    assert_eq!(
+        [cues[0].2, cues[1].2, cues[2].2],
+        ["ACROSS CUT", "ACROSS CUT", "AFTER CUT"]
+    );
+    assert!(
+        cues[0].0 <= 90_090,
+        "first retained cue follows the programme join"
+    );
+    assert!((1..=180_090).contains(&(cues[0].1 - cues[0].0)));
+    assert!((cues[1].1 - cues[1].0).abs_diff(180_000) <= 90);
+    assert!((cues[2].1 - cues[2].0).abs_diff(720_000) <= 90);
+    assert!(cues[0].1.abs_diff(cues[1].0) <= 90);
+    assert!(cues[1].1.abs_diff(cues[2].0) <= 90);
+    assert!(
+        after_cut_occurrences >= 2,
+        "full cue must repeat across segments"
+    );
 }

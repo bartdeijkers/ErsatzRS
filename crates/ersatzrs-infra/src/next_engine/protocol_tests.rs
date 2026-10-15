@@ -28,7 +28,43 @@ fn subtitle_style_preserves_explicit_values_and_accepts_older_configs() {
 fn probe_hint_publication_uses_upstream_schema_version() {
     assert_eq!(
         PLAYOUT_VERSION,
-        "https://ersatztv.org/playout/version/0.0.5"
+        "https://ersatztv.org/playout/version/0.0.6"
+    );
+}
+
+#[test]
+fn current_schemas_preserve_dynamic_retry_and_scaling_contracts() {
+    assert_eq!(
+        CHANNEL_VERSION,
+        "https://ersatztv.org/channel/version/0.1.2"
+    );
+    let source = json!({
+        "source_type": "dynamic", "uri": "https://resolver.example.test/item",
+        "timeout_us": 20_000_000, "retry_budget_ms": 25_000, "retry_backoff_ms": 250
+    });
+    let parsed: Source = serde_json::from_value(source.clone()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap(), source);
+    let legacy: Source = serde_json::from_value(json!({
+        "source_type":"dynamic", "uri":"https://resolver.example.test/item"
+    }))
+    .unwrap();
+    let legacy = serde_json::to_value(legacy).unwrap();
+    assert!(legacy.get("retry_budget_ms").is_none());
+    assert!(legacy.get("retry_backoff_ms").is_none());
+    let fallback: Fallback =
+        serde_json::from_value(json!({"duration_seconds": 120, "show_error": true})).unwrap();
+    assert_eq!(
+        serde_json::to_value(fallback).unwrap(),
+        json!({"duration_seconds": 120, "show_error": true})
+    );
+    for flags in ["bicubic", "lanczos", "fast_bilinear+accurate_rnd"] {
+        let value = json!({"flags": flags});
+        let parsed: ScaleOptions = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), value);
+    }
+    assert_eq!(
+        serde_json::to_value(ScaleOptions::default()).unwrap(),
+        json!({})
     );
 }
 

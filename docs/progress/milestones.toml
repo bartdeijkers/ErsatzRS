@@ -2968,6 +2968,70 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 accepted UCU-11 integration checkpoint (partial):
+Integrate remote main 61d1786c with local e5e45583. The accepted UCU-10/11
+dispositions and dependencies are retained, including observed pending row 237
+outside the fixed 236-row UCU-11 boundary. All six Phase 9 acceptance strings,
+statuses and dependencies remain byte-identical. Seven source-caption runtime,
+consumer and decoder files are unchanged; shared graphics/HLS/dependency edits
+are reviewed. Foreign seven-file work is protected separately during the merge.
+
+On the combined source, native legacy run 4a2ddbda-4d74-4513-8c78-bc5f59c64a2b
+passes in 20.318 s and Hybrid run 927bebfc-8ad7-4f0c-86f1-2dfb9000b650 passes in 32.021 s.
+Each runs Off/Dutch,page 888 Burn/English,page 888 Burn/Dutch and stale-source ordinary
+fallback, proving independent RGB at media 1.6 s, 440/660 Hz audio, accepted authored
+page 200, TSDuck checks, unchanged addon calls/publication and actual default-2
+capacity/cleanup. Both include actual source-mtime rejection before open. Exact
+FFmpeg/FFprobe n9.0-20260805 and TSDuck 3.44-4676 identities, eight final TS and
+calibration RGB hashes, commands and terminal logs are retained in local
+tmp/phase9-ucu11-integration/ (native-proof-roots.json points to retained files).
+
+Run f328a81d-4978-4655-b0de-4931fe01de53 passes 3 cancellation/hardware-retry
+fallback regressions. Run 1474e192-3ce1-4a18-a067-48cd09297aeb passes 12 shared
+caption-input, paired final-argv and wrapper regressions. Run aacb791c-a3f3-4280-
+904e-0fbd4f0d4553 passes the shared Next/native HLS rendition/route regression.
+Formatting, architecture lint and new-Clippy-allow policy pass. Existing UCU-11
+composed CI and prior unaffected runtime/headed proof are reused for unchanged
+code; no new full CI, full engine, suitable-client or six-platform acceptance
+is claimed. Local integration does not complete a Phase 9 milestone or authorize
+production TV-guide-addon delivery. Next implement actual cue-window evidence
+using the source-seek prerequisite below; all broader acceptance stays open.
+
+2026-10-15 source-seek locator prerequisite (partial, not playback acceptance):
+Criterion: qualify the actual scheduled source interval instead of treating a
+bounded file prefix as proof of a later cue. The native experiment in
+local tmp/phase9-source-seek-locator/ uses FFmpeg/FFprobe n9.0-20260805
+(exact executable hashes and commands retained there). A genuine -itsoffset 40
+remux produces a 60.021333 s, 14,996,572-byte / 79,769-packet source; its first 32,768
+physical packets contain no selected PID 258. Independent decoding observes
+synthetic page 888 from 40.262 s. Source size, mtime, inode and full hash remain unchanged.
+The first hinted teletext packet is byte 10,010,248 / ordinal 53,246; its actual raw
+header has PID 258 and a PES start. Program 1 / PMT 4096 / PCR 256 and stream 2 match.
+
+Important negative evidence: subtitle-only read_intervals 0%12 and 55%57 each
+return an old packet without PTS, despite their requested intervals. Therefore
+probe interval flags, first-packet timestamps, selected packet counts and final
+program metadata cannot establish source-window or temporal coverage. The
+observed format origin 1.418667 s also differs from media-relative cue time;
+media 40..52 requires observed absolute hints 41.418667..53.418667, still with
+independent raw-clock validation. The shifted all-stream query returns 1,476
+packets with video PTS 41.440..53.400. No decoder default subtitle duration is
+accepted as an actual cue end. Native calls finish within recorded bounds;
+no production selection or readiness changes are made by this experiment.
+
+Next concrete implementation: pass actual seek/OutPoint from both ordinary
+consumers; under the same existing owner/deadline and held source, validate a
+contiguous bounded raw interval with real preceding PAT/PMT, complete selected
+PES, matching program/page and source-clock epoch/bookends. Extend the receipt
+with exact offsets and proved temporal coverage. A page absent from the scan
+prefix needs actual cue-window header evidence before qualification, rather
+than dropping the observed-page requirement. Reject changed PMT, ambiguity or
+insufficient interval evidence without harming ordinary AV. Retain the prefix
+API for scanning and prove the delayed page 888 positive plus wrong-page/current-PSI
+negatives through real ordinary playback. Rolling coverage for long programmes,
+restart/ABA and the complete authored engine/client/editor/platform gates remain
+open; these locator results do not close any milestone or accept a limitation.
+
 2026-10-15 shared source preparation and actual consumer ownership (partial):
 Criterion: ordinary native playback must preserve exact source identity and hold
 admission with the actual worker through cancellation, without reserving short
@@ -23515,4 +23579,1208 @@ handover and TSDuck evidence is reused for unchanged producer/transport code.
 No live timeline repair, native Windows package acceptance, CI or release is
 claimed. Final progress, architecture, hydration and format checks pass; the
 parity gate reuses the successful tests and strict Clippy above.
+"""
+
+[[milestone]]
+id         = 'ucu-10'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through release v26.11.2 while retaining Native'
+status     = 'Complete'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-09']
+acceptance = """
+Maintainer-authorized scope (2026-10-13): reconcile every ordered ledger row209
+through232, ending at verified upstream v26.11.2 commit
+e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0. Preserve the native ErsatzRS streaming
+engine as a supported selectable engine and preserve stored engine/profile choices,
+alternate audio and subtitles. Do not port upstream's legacy-removal warnings
+or remove Native. Later commits/releases remain outside this window.
+Work only in a separate worktree and local branch. No push to main, no automatic
+CI dispatch and no new release publication are authorized. Local acceptance is
+the delivery gate for this window; later push/CI/publication require maintainer
+instruction and must not be represented as completed.
+Bounded authorization amendment (2026-10-14): the maintainer authorizes pushing
+only source-only branch build/ucu10-next021-candidate atdd043f94 and dispatching
+its existing two-job macOS source-candidate workflow with the reviewed v0.2.1
+manifest. This does not authorize a main/application push, full application CI
+or dependency/application publication.
+Dependency-publication amendment (2026-10-14): the maintainer explicitly
+authorizes only the verified20-asset Next release next-7f75012-ersatzrs.1 and
+anonymous download/cold-start acceptance. No application/main push, application
+CI or application/add-on/FFmpeg release is authorized by this exception.
+Application-delivery amendment (2026-10-14): the maintainer subsequently
+authorizes completing UCU-10 first by pushing its application branch, requiring
+green full CI, merging into remote main and requiring green full CI on that
+resulting main commit. Preserve newer main work and the separate UCU-11
+candidate. This amendment authorizes no release publication.
+Record each row's justified disposition and source map; implement demonstrated
+behavior gaps and maintain health, persistence, provider, scheduling and browser
+contracts. Review compatibility and retire temporary runtime patches individually
+only after equivalent unpatched behavior passes existing regressions. Preserve
+approved unverified hardware/platform acceptance debt without treating it as proof.
+Focused local tests and strict affected lint pass per changed slice. At local
+window close run required workspace lint, test-closeout, matched Leptos build,
+parity/progress/architecture/hydration gates and actual native/Next playback
+smoke; use decoded playback and TSDuck for affected streaming behavior, and
+matched Chromium/Firefox hydrated/no-JS evidence for affected admin behavior.
+Verify source/checksum identities for tested runtime artifacts, preserve all
+acceptance assertions and update changelog/documentation. Advance the baseline
+only with accepted ordered row dispositions; keep existing UCU-00–09 evidence.
+"""
+evidence = """
+Maintainer-authorized cleanup (2026-10-15): after confirming no live process
+uses the completed targets, cargo clean removes152406 files/63.4GiB from UCU-10.
+The obsolete local Next021 source target and Node cache are also removed.
+Both clean Linux UCU-10 worktrees and local branches are removed after exact
+remote heads32c12793 anddd043f94 are verified; remote branches remain intact.
+All raw evidence, captures and required fixtures/runtime are preserved under
+local base tmp/evidence/ucu10-32c12793/, retaining their former relative tmp/
+and test-results/paths. UCU-11's calibration link selects those preserved clips;
+its runtime checks now use the preserved FF206 tree. The two unused Windows
+UCU-10 target directories (measured42GiB and769MiB) are removed; active UCU-11
+caches and unrelated checkouts/processes are preserved. Existing verified native
+FFmpeg/nextest/RTSP tools move to the active Windows UCU-11 acceptance mirror.
+No accepted source or remote evidence is deleted; the local retained evidence
+base is1.4GiB. WSL reports696GiB available after this cleanup.
+
+Application-delivery amendment (2026-10-14): the maintainer explicitly requests
+UCU-10 first, including push, merge and green CI with remote main. The accepted
+local checkpoint92a736fc is integrated separately with verified remote main
+fc22dac8; preserve all newer teletext work and the future pending UCU-11 rows.
+Resolve the five merge conflicts by retaining both changelog/session histories,
+YAML/Ammonia security changes, new ZIP support and accepted rows1–232 alongside
+pending233–236. This amendment authorizes the UCU-10 application branch push,
+required exact-source CI and merge only after acceptance, followed by green CI
+on the resulting remote/main commit. It authorizes no new release or UCU-11
+publication. The existing main checkout's unrelated work remains untouched.
+Integrated local acceptance passes below. Remote delivery originally requires
+terminal full CI on the final commit before merge. The maintainer's focused
+verification amendment below supersedes that rerun requirement for the final
+test-fixture-only correction. Canonical receipts are the UCU-10 application PR,
+its original CI check suite and the explicitly scoped headed Firefox receipt;
+inspect their source revisions rather than inferring remote delivery from this
+local milestone status. Do not describe the original failed run as green CI on
+the corrected commit.
+
+Focused verification amendment (2026-10-14): the maintainer explicitly requests
+only the failing Firefox case329 be rerun, with no new full CI after its fix.
+Run38623973857 at3ec5c345 passes Chromium and every non-browser gate; Firefox
+reports a Channel.Id collision before the no-JS/dark teletext visual case can
+start. The shared fixture selects two IDs from only20 random bits, overlapping
+unrelated fixtures and intentionally retained immutable playback histories.
+Reserve both channel IDs/numbers atomically above existing values instead;
+playback allocation also accounts for its shared profile/media/playout IDs.
+Keep all retained records, cleanup guards, production code and UI assertions.
+Exactly the reported case passes headed Firefox in11.3s, with no retries or
+skips. Receipts: tmp/ucu10-runtime-audit/teletext-329-firefox.log and
+tmp/ucu10-runtime-audit/teletext-329-firefox/playwright-results.json.
+Reuse the existing passed gates; use [skip ci] for this
+fixture-only commit so neither its branch push nor main push starts full CI.
+The original Firefox job finishes with345 passed,30 skipped and only case329
+failed; receipt: tmp/ucu10-runtime-audit/ucu10-pr105-final-firefox-fixture-failed.log.
+Its historical failed result remains visible; this amendment does not
+claim a new fully executed green CI run on the corrected fixture commit.
+
+Responsive browser fixture correction (2026-10-14): run38602305218 at2194f698
+passes every non-browser gate, including Test and Next engine, but Chromium
+reports one Classic rejection case failure. Its trace shows the responsive
+listener has closed navigation before the test's conditional toggle click,
+which reopens it. The existing headed wrapper reproduces that exact failure.
+Remove the racing toggle from the Classic and Scripted rejection cases and
+await the responsive closed state instead. All four affected headed cases pass
+in Chromium/Firefox (74.6s), preserving English/Dutch, no-JS, published preview,
+timeline identity, mobile bounds and error assertions. Production code and
+matched web assets remain unchanged. Receipts:
+tmp/ucu10-runtime-audit/nav-resize-{before,after}.log and
+tmp/ucu10-runtime-audit/ucu10-pr105-retry-navigation/trace.zip.
+The preceding full Firefox job is preserved; require full green CI on the
+corrected final head before remote main delivery.
+
+Security/resource CI correction (2026-10-14): run38582861679 at865407e0
+passes Chromium, but new same-day RustSec advisories reject Rustls0.23.45.
+Update only that locked package to0.23.46; keep every audit policy intact.
+Fresh strict workspace Clippy and canonical closeout pass6,312 nextest cases
+(287 skipped, one slow), followed by all11 workspace doctest stages. Actual
+cold managed FFmpeg206 acquisition passes through the updated HTTPS client,
+including normal archive checksums and capability validation; fresh matched
+Leptos and real served JS/WASM verification also pass. Logs:
+tmp/ucu10-runtime-audit/ucu10-rustls-security-{deny,clippy,test-closeout,
+https-acquisition,matched-build,matched-bundle}.log.
+Next021's unchanged source/features use private HTTP loopback callbacks in this
+application, without custom TLS-store Debug or Brotli decompression; its older
+Rustls0.23.40 is outside the ECH regression range. No demonstrated reachable
+Next package correction or new dependency publication is required for this use.
+This is not a claim that arbitrary standalone Next HTTPS use is patched.
+The Test compiler receives SIGKILL immediately after the kernel's14:50:35Z
+global OOM; four compilers retain28.8GiB RSS and swap is exhausted. Limit the
+self-hosted Test build to one compiler, Next to two, and Next execution to four
+test slots; keep every selection/assertion and avoid concurrent local heavy
+builds. The Next preview fixture reports Failed without its underlying error;
+capture the existing redacted WARN diagnostics in that isolated child without
+extending its30-second deadline or changing independence/cleanup assertions.
+Host-permission recheck passes all416 Next component/runtime cases in308s,
+including normal/preview independence and cleanup in34.8s (five slow cases).
+Every original assertion remains intact. The first sandboxed attempt cannot
+bind disposable listeners and is not acceptance evidence; the complete valid
+receipt is tmp/ucu10-runtime-audit/ucu10-resource-next-components-host.log.
+Fresh affected strict web Clippy passes after the diagnostic change. Existing
+Native/Next smoke, TSDuck and headed browser receipts remain valid because no
+production playback, graphics, routes, islands or runtime pins changed. Fresh
+progress, formatting, architecture and hydration checks pass; reuse the just-run
+workspace closeout and strict lint instead of repeating them. Structural receipt:
+tmp/ucu10-runtime-audit/ucu10-resource-structural.log. Full green CI on the final
+exact head remains required before remote main.
+
+Browser CI correction (2026-10-14): full run38562390156 atc1a62516 passes
+Format, Clippy, Test, Next engine, Cargo deny, documentation and commit lint.
+Chromium reports one failure: the playout adaptation browser fixture retains
+a synthetic Scripted channel without a checkpoint, contaminating the later
+global Scripted Health result. The existing headed runner reproduces the exact
+failure with only the adaptation and Health cases. Remove only this spec's
+owned channels after each case, using foreign-key cascades and a transaction;
+retain every exact Health, timeline and UI assertion. All26 affected headed
+Chromium/Firefox cases then pass in6.4m, including both themes and JavaScript
+enabled/disabled. Logs: tmp/ucu10-runtime-audit/health-leak-{before,after}.log.
+No production source or runtime identity changes; previous Rust/runtime gates
+remain valid. Let the original Firefox job finish: both full suites report
+only this same failure, with367 Chromium passes/5 skips and342 Firefox
+passes/30 skips; each has three unrun serial successors. Preserve both job
+logs and original failure contexts/traces under tmp/ucu10-runtime-audit/.
+Require green full CI on the corrected exact head before remote main.
+
+New-main integration (2026-10-14): the maintainer identifies remote main
+35c74ee04b40fa20f10489a7ad0dec2e0b5c245e after application head1e3f5d89 is pushed
+in PR105. Integrate all three new main commits, preserving their Phase9 work;
+resolve only three documentation conflicts by retaining both histories.
+All production UCU-10 changes remain separate; the sole Rust overlap preserves
+the two-worker fixture admission alongside newly registered teletext tests.
+Fresh strict workspace Clippy and test-closeout pass:6,312 nextest cases,287
+skipped, one slow, all doctest stages; run e0c8bbcf-8d47-4d99-a0dd-7d3735abaf47.
+Fresh ordinary Native HTTP/lifecycle smoke, parity/architecture/hydration,
+matched Leptos build and actual JS/WASM consistency gate pass on this integration.
+New main changes configured Native non-hybrid teletext recovery, with explicit
+Next exclusion and absent-policy return. It changes no admin components,
+dependencies, FFmpeg graphs or Next implementation/pin. Reuse the preceding
+six headed search cases, Next playback and87/83 TSDuck results for those unchanged
+paths. The source audit also verifies42/42 source and12/12 retained-capture hashes
+against main35 for publication receipt4446215fa3cd7c56fb878fd6cc873de112170c8bb488c1cb6005fb63871b2fcb;
+these are scoped Phase9 receipts, not full Phase9 acceptance. All existing open
+Phase9 and approved hardware/platform debt remain unverified.
+Fresh logs: tmp/ucu10-runtime-audit/ucu10-main35-{clippy,test-closeout,parity,
+native-http-smoke,matched-build,matched-bundle}.log. Canonical remote delivery:
+https://github.com/bartdeijkers/ErsatzRS/pull/105 and its exact-source CI check
+suite; merge only after full green CI and verify resulting remote main.
+
+Final integrated local acceptance (2026-10-14): all 6,250 nextest cases pass
+(one slow, 285 skipped), followed by every workspace doctest stage; run
+4dafff07-79b2-4b62-88f7-7987e0411d77. Strict workspace Clippy, dependency audit,
+parity/progress/architecture/hydration, formatting and lint-exemption policy
+pass. Native, bundled Next Copy and Next Convert real-host lifecycle gates
+pass with verified FFmpeg206 and published Next021, without ETV_NEXT_FOLDER.
+Next proves decoded Dutch audio, burned subtitles or selected Dutch WebVTT,
+cached TS/HLS reconnects, preview, private callbacks and idle cleanup.
+Native TSDuck passes 87 checks; Next Copy passes 83, both with zero failures.
+The initial Next Copy seed races a startup SQLite writer; add the existing
+bounded 30s wait, bail on errors and transact both engine/profile updates.
+The corrected gate passes without changing any transport assertion. Retain
+the failed log as history and reuse unchanged Native/HTTP results explicitly.
+The final matched Leptos build and actual JS/WASM bundle gate pass. All six
+headed Chromium/Firefox search cases pass (31.2s), covering hydration/no-JS,
+current smart collections, artwork identities, navigation and mobile bounds.
+Logs under tmp/ucu10-runtime-audit/ use prefix ucu10-main-integration- and
+suffixes test-closeout-corrected,clippy-corrected,deny-verified,parity,
+native-http-smoke,next-http-smoke,next-convert-http-smoke,native-tsduck,
+next-copy-tsduck-corrected,matched-build,matched-bundle,search-browser.log.
+Approved hardware/platform debt remains
+explicitly unverified. No application or runtime publication is authorized.
+
+Integrated test checkpoint (2026-10-14): workspace Clippy, dependency audit,
+architecture/hydration lint, formatting, progress validation and lint-exemption
+policy pass. The first complete nextest run selects 6,250 tests: 6,249 pass and one
+Next publisher test races its cancelled blocking worker's private-file cleanup.
+Synchronize that assertion by reacquiring the existing publisher admission;
+retain the 200ms deadline and no-publication assertions. This changes only the
+test, not production behavior. All four focused publisher tests pass, followed
+by the complete corrected closeout and integrated acceptance recorded above.
+Logs: tmp/ucu10-runtime-audit/ucu10-main-integration-{clippy,deny-verified,
+test-closeout,publication-fix}.log. After all running owned tests finish,
+package-scoped web cleanup removes 18.6GiB above the 60GiB threshold, preserving
+dependencies, source, runtime packages and evidence; the target returns to 50GiB.
+Log: ucu10-main-integration-threshold-cleanup.log.
+
+Final closure consistency (2026-10-14): the two focused embedded release-note
+checks pass after the published dependency notes are updated. A final matched
+Leptos build succeeds (native build 2m08s), followed by the actual server/site
+bundle gate with HTTP200 for both JS and WASM, no Next override, the bundled
+verified Next021 and the existing verified FFmpeg206 runtime. Logs under
+ tmp/ucu10-runtime-audit/: ucu10-final-published-release-notes-checks.log,
+ucu10-closure-final-matched-build.log and
+ucu10-closure-final-matched-bundle.log. The first gate invocation used a
+nonexistent fixture FFmpeg path and exited before acceptance; the corrected
+invocation uses the existing verified package and passes without source changes.
+The focused compilation grew this worktree's target above the documented60GiB
+threshold. After confirming no owned build or host was active, package-scoped
+cargo clean removed only ersatzrs-web artifacts (18.9GiB), preserving dependency
+caches, source, site assets, runtime packages and acceptance evidence. The final
+matched build follows that cleanup. Log: ucu10-final-web-threshold-cleanup.log.
+This completes local UCU-10 acceptance; integration with newer application main
+and the separately agreed next catch-up window require their own affected checks.
+
+Completed local acceptance (2026-10-14): all24 UCU-10 rows209–232 have justified
+dispositions; all232 rows across UCU-00–10 are accepted through v26.11.2.
+The Pin table advances only in this isolated application worktree; no application
+commit, push, CI or release is claimed. The shared upstream checkout and main
+remain untouched. Approved hardware/platform and accepted subtitle exceptions
+remain explicitly unverified/open as recorded in parity debt; none is waived.
+Full upstream workflow diffs221–223 confirm
+only runner/action/.NET/NuGet/Docker recipe maintenance; existing own macOS
+matrix already uses both native macos-15 architectures. Row226's seven-file
+warning/issue-link diff is deliberately inapplicable: Native remains selectable
+and stored engine/profile choices are preserved. Row232 changes only the upstream
+release heading/date/compare links. No later source window is included.
+The terminal corrected full/affected gates and actual playback results below
+complete the agreed local window. Historical failed/pending checkpoints are
+preserved after current completion evidence; they do not represent current blockers.
+
+The maintainer explicitly authorizes the Next-only publication exception. Draft
+release412424820 uploads exactly20 frozen assets, with every server digest and
+size matching the verified kit before publication. The published release is
+https://github.com/bartdeijkers/ErsatzRS-next/releases/tag/next-7f75012-ersatzrs.1.
+All20 assets subsequently download without authentication over their actual
+public URLs and match the frozen checksums, including all six archives and the
+shared manifest. Log: ucu10-next021-anonymous-downloads.log; published metadata:
+ucu10-next021-published-release.json. The public repository main remains95206a81.
+
+Actual cold Linux and native Windows hosts have no bundled Next or override:
+each anonymously acquires the exact new package, validates its pin/version and
+logs source=Downloaded before its own loopback listener and HTTP200 health.
+Restarting the same isolated state logs source=Managed and the exact021 version.
+Both captured hosts are stopped; unrelated processes and data remain intact.
+Linux evidence: next021-cold-start-linux/server-{Downloaded,Managed}.log;
+Windows: ucu10-windows-next021-cold-and-cache-startup.log and
+ucu10-windows-next021-cold-{downloaded,managed}-host.log. These plus previous
+actual bundled/lifecycle tests satisfy row200 availability for the successor.
+Rows214/231 are Adapt;215/220/225/229 Covered;216/218/219 Port. Each ledger note
+retains its specific source/behavior justification and unverified hardware scope.
+No additional FFmpeg build/release, main push or application CI occurs.
+
+Final available local acceptance (2026-10-14): ADR0125 is Accepted and locally
+implemented; the dependency audit,370 affected Linux checks,104 corrected native
+Windows YAML checks,101 focused Linux YAML checks,6043 workspace checks/doctests
+and strict workspace/core lint pass as detailed below. After the final production
+path correction, all three existing HTTP lifecycle smokes pass with verified
+FFmpeg206 and the exact local Next021 override: Native, Next Copy and Next Convert.
+They retain Dutch audio/caption selection, cache/reconnect/profile state, preview,
+idle cleanup and public/private callback isolation. Existing TSDuck gates pass
+87 Native checks and83 Next Copy checks; their own hosts terminate normally.
+Logs: tmp/ucu10-runtime-audit/ucu10-final-{native-http-smoke,next-http-smoke,
+next-convert-http-smoke,native-tsduck,next-copy-tsduck}.log.
+
+Strict decoded audio/video validation passes on all retained Native pipelines,
+Next TS and each of three Next HLS discontinuity groups separately. The raw
+Native hybrid capture ends with one188-byte packet starting a new video PES;
+its incomplete frame fails strict decoding. The final audio PES is complete
+(2574 payload bytes against2568 declared bytes plus the6-byte header). Removing
+only that single incomplete EOF video packet yields1043 complete decoded frames
+and selected audio without decoder error; raw capture and failed attempt remain
+preserved. No source correction, discarded midstream frames or relaxed decoding
+is used. Other captures decode intact: Native legacy1227 frames, segmenter3322,
+direct3600; Next TS1222 and HLS groups482/482/240. Logs:
+ucu10-final-served-capture-decode.log,ucu10-native-hybrid-decode-diagnosis.log,
+ucu10-native-hybrid-complete-prefix-decode.log,
+ucu10-final-remaining-capture-decode.log in the same runtime-audit directory.
+
+The final matched Leptos build finishes successfully; the actual server/site
+bundle gate resolves JS/WASM with HTTP200. Six existing headed Chromium/Firefox
+search cases pass (26.9s), including hydrated/no-JS current query and smart
+collection targets, artwork identities/navigation and mobile containment.
+The required web parity gate passes progress, formatting, architecture and
+hydration checks while reusing the valid complete tests/strict lint. Logs:
+ucu10-final-matched-leptos-build.log,ucu10-final-matched-web-bundle.log,
+ucu10-final-search-browser-yaml.log,ucu10-final-parity-web.log. Test hosts use
+only owned temporary data and stop; unrelated processes/caches stay intact.
+
+The earlier anonymous HTTP404 is resolved by the explicit Next-only publication
+exception and terminal download/cold/cache results above. No local UCU-10
+acceptance blocker remains. The canonical pin is the verified021 six-RID set.
+The maintainer authorizes the bounded source-only push/CI; the exact
+branchdd043f941b8024536016e9c18538e61d7b99b72f is pushed and workflow_dispatch
+run38520704462 is terminal green on that SHA with both macOS jobs passing:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/38520704462.
+No application push, full application CI or application publication occurs. Approved
+hardware/platform debt stays unverified.
+
+The two macOS artifacts pass native startup, strip/ad-hoc-signature verification
+and exact source/lock/patch/payload identity checks. OSX x64 archive SHA256 is
+6b1fc9315d8d2f73e19224aec6435f79f6c92fe7b2e468e3e3c59f6975509ea6;
+OSX ARM64 is e0fe2ab350b8c3a63b380ffd97649eb69121f9e25f1bd882800c645c6e1478db.
+CI receipt: tmp/ucu10-runtime-audit/ucu10-macos-next021-ci-result.json.
+All six actual archives pass the existing CLI staging path, with matching
+payload hashes/lengths and provenance; source/package/staging guards pass4/5/21.
+The local canonical manifest and rebased patches now pin the same reviewed
+source and all six packages. No remote dependency/application release is created.
+
+Affected manager checks pass10/10 on Linux (41879471-5a12-475b-84d4-30947bd6bcf8)
+and native Windows in the existing four-consumer application graph
+(5df8ebb9-865c-4003-a150-43dafae896d5). The first Linux attempt lacks sandbox
+loopback access; the hosted local rerun passes. Windows's first invocation omits
+the existing private nextest PATH entry; its standalone subset graph then has
+compiler import-resolution/rlib errors. The established application graph passes
+without changing source, execution policy or clearing caches; failed logs remain.
+The subsequent permission-only manifest marker removal leaves every parsed
+runtime/source/payload pin unchanged; it grants no publication authority.
+
+The first Linux bundle smoke has an incorrect test layout, with its executable
+inside next/. Correct only the owned fixture to the existing release layout:
+executable beside the host, licence/provenance in next/. All three corrected
+Native/Next Copy/Next Convert lifecycle smokes pass with no ETV_NEXT_FOLDER,
+source=Bundled and exact version0.2.1-7f75012-ersatzrs.1. Dutch880Hz audio,
+burned/unburned caption choice, Convert WebVTT, cached/reconnected TS/HLS,
+profile state, preview and idle cleanup remain verified. Logs:
+ucu10-bundled-next021-corrected-{native,next-copy,next-convert}-http-smoke.log.
+The fresh native Windows host also reaches its actual18517 listener and HTTP200
+health with the exact verified bundle and no override; only its captured test
+PID is stopped. Log: ucu10-windows-next021-bundled-startup.log. Previously
+accepted decoded Linux/Windows component and TSDuck evidence remains applicable
+to these unchanged runtime executables/graphs; no hardware/platform proof is added.
+
+The final new-pin matched Leptos build passes in44.14s with WASM generation.
+Its assembled bundle gate passes JS/WASM HTTP200 with no Next override; no
+separate host build follows it. Logs: ucu10-next021-final-matched-leptos-build.log
+and ucu10-next021-final-matched-web-bundle.log. Reuse the six headed browser
+cases: their UI/SSR route and frontend inputs are unchanged by this runtime pin.
+The final new-pin web parity gate passes progress, formatting, architecture and
+hydration lint while reusing valid complete tests/strict lint, recorded in
+ucu10-next021-final-parity-web.log. The completed20-asset kit has19 matching
+checksum entries plus SHA256SUMS; its runtime manifest equals the consumer pin.
+The reviewable dependency kit is tmp/ucu10-runtime-audit/next021-distribution-ready/
+(20 assets, checked SHA256SUMS): all six packages/receipts, source archive, two
+patches, licence, provenance, shared manifest and runtime README. It remained
+local while the concrete anonymous HTTP404 required a separate publication
+exception. The maintainer's actual approval and terminal public download/cold
+acceptance above resolve that checkpoint; no authority was inferred while waiting.
+
+Earlier failed and pending checkpoints (preserved; current completion above supersedes them):
+
+The first workspace run builds in8m15s and selects6043 ordinary checks. It finds
+stale0.1.1 schema assertions in two Next host tests; both now explicitly assert
+0.1.2, preserving every frame-rate, preview/profile and exact track assertion.
+The corresponding ignored decoded frame-rate fixture has the same expectation
+corrected; all three affected checks need terminal revalidation. One unchanged
+teletext multi-add-on preparation case also fails with Preparation(Runtime(Failed));
+its focused recheck remains due. A separate hundred-page native workload is
+still running; no timeout or failure is inferred from its slow notification.
+The branch remains an integration WIP: emitted playout0.0.6 cannot be consumed
+by the managed036 runtime, whose source accepts at most0.0.5. Production pins
+are intentionally unchanged while the six-RID adoption batch remains incomplete;
+ordinary default Next startup on this branch is not claimed ready. Main and its
+published runtime remain untouched. The current target grows beyond60GiB during
+the full gates, mostly own incremental artifacts; never clean active processes.
+The first canonical workspace run finishes6040/6043 passing in317.618s after
+its8m15s build; the hundred-page workload passes in138.633s. The three failures
+are the two corrected schema expectations and unchanged teletext preparation.
+The failed nextest stage prevents doctests from running; those remain due.
+Final cargo-deny freshly reports RUSTSEC-2021-0157/0158 for Ammonia4.2.0 and
+RUSTSEC-2024-0449 for unsafe-libyaml0.2.11 through serde_yaml. Source advisory
+pages show issuance on2026-10-12; Ammonia4.2.3 is the supplied patch. Only that
+lockfile package is updated and the web requirement now has minimum4.2.3;
+release-note sanitization, affected lint and matched web rebuild need rechecks.
+No ignore/waiver is added. unsafe-libyaml has no patched version, so the YAML
+parser maintenance finding remains a separate final audit blocker, requiring
+an agreed dependency correction rather than a silent parser replacement.
+The corrected audit confirms both Ammonia findings are cleared; only the YAML
+maintenance error remains (ucu10-final-deny-ammonia-corrected.log). Bans,
+licenses and sources pass. This is not a passing full dependency gate.
+ADR0125 was accepted by the maintainer on2026-10-14 and specifies the bounded correction: replace only the four
+serde_yaml dependencies with YAML organization's maintained yaml_serde0.10.7,
+using the documented package alias and unchanged public models/call sites.
+Context7 /yaml/yaml-serde and primary source confirm migration APIs and the
+libyaml-rs0.3 backend. Cargo's registry index independently verifies the
+published0.10.7 checksum33b729a08a9a6be689bbad3e2bf8015926db54b6622cc89c3a5f7dc174b9e918
+and Rust1.82 minimum. This backend still contains translated unsafe code;
+no unsafe-free claim or new lint allowance is proposed. The ADR requires
+parser/serialized-state/publication compatibility, native Windows and final
+local gates without suppressing the advisory. The decision is now Accepted and implementation Partial: only the four
+dependency declarations and exact lockfile packages are changed, with existing
+application models and call sites retained. yaml_serde0.10.7 archive checksum
+matches the independently reviewed registry pin; libyaml-rs0.3.0 is pinned to
+2e126dda6f34391ab7b444f9922055facc83c07a910da3eb16f1e4d9c45dc777. Both archived
+packages disappear from the resolved graph. The complete corrected cargo-deny
+audit passes: advisories, bans, licenses and sources all pass, without adding
+any ignore. Parser/state/runtime compatibility remains required; the approved
+change does not authorize push, GitHub CI or publication.
+
+Final formatting and structured progress validation pass.
+Native application TSDuck gate finishes successfully:87 checks, zero failures,
+covering legacy TS, hybrid TS, segmenter HLS and direct HLS; server logs contain
+no known failure signatures. Reuse the retained served captures in
+the gate's retained work directory for decoding rather than repeating captures. All four
+captured video and audio streams decode to completion with verified FFmpeg206,
+-xerror, bounded45s commands and positive frame/time counts; the exact counters
+are in ucu10-native-served-capture-decode.log. This verifies Native served media,
+separate from existing Next component evidence. The disposable server exits;
+no unrelated running process is stopped. The own target has no mapped live
+executables before package-scoped cargo clean -p ersatzrs-web removes46.2GiB
+and leaves47029876KiB (44.85GiB). Other crates/dependency caches, main, source,
+calibration and evidence remain intact. Focused Ammonia/schema revalidation passes4/5, with only unchanged teletext
+preparation still failing. Its barrier-synchronized two-producer fixture uses
+native work admission's conservative default of one slot: one producer is
+refused while the other waits for it. Configure two slots only for that
+explicitly concurrent fixture using the existing application setting. All10
+corrected checks pass (249741fe-5259-4461-af5d-76f4f0f3cdb7), including preserved
+default/saturation/invalid-capacity/deadline/owner admission behavior, both schema
+assertions and release-note sanitization. No production admission change occurs.
+Native Windows actual frame-rate and schema checks pass5/5 (113d7751-7b49-42be-babc-62f17bb56d91):
+integer copy, disabled passthrough, rational requested mirror/Burn, Dutch tracks,
+cadence and handoff remain valid against the checksum-verified Next021 package.
+Its target is8GiB; the existing native nextest runner is reused with no policy
+change. The source receipt is updated for six changed source/manifests only.
+After these processes are terminal, the own target exceeds60GiB. Package-scoped
+cleanup of the four consumers whose parser dependency is now obsolete removes
+49.3GiB, leaving17536604KiB (16.72GiB); all other packages, dependency caches,
+source/evidence and main remain untouched. Affected YAML/Remote Stream/graphics/
+script/troubleshooting and previous failure rechecks are now running against
+accepted yaml_serde0.10.7. Earlier parser-dependent runtime/gate evidence is
+historical until the replacement's affected proof is accepted.
+The maintained parser's affected Linux selection finishes370/370 passing
+(4c6863a2-7d11-429f-9166-f78150ca6c66), covering all identified parser consumers,
+nested filler and SQLite continuity, Remote Streams, managed playlists,
+MPEG-TS scripts, graphics import, troubleshooting and previous gate failures.
+The first four-crate native Windows compile reveals an existing scanner test
+calling fixture_addon_pool outside its Unix guard. The artwork-revision test
+is data-only and remains enabled: remove the helper's unnecessary Unix guard
+and provide its synthetic package entrypoint under correct Unix/Windows
+counterparts. All actual POSIX execution fixtures retain their guards. The
+affected Linux artwork-revision check passes1/1 (a28c7783-7af0-494b-b5e0-0d7a9ca3dfb3);
+Windows is rebuilding the full corresponding parser selection. No test is
+skipped or assertion weakened to repair the compiler error.
+The two missing macOS Next packages have a concrete local source-only CI
+checkpoint: build/ucu10-next021-candidate atdd043f941b8024536016e9c18538e61d7b99b72f,
+in tmp/worktrees/ucu10-next021-ci, based solely on already-published main49cf171b.
+Only runtime builder/source/patch files and its changelog are included; four
+source guards, five package guards and local actionlint pass. The existing
+unified-diff whitespace rule is extended to versioned patch folders, preserving
+all exact reviewed patch hashes and required blank context markers. Full
+candidate diff checking passes. The branch is local, not pushed; a bounded
+push/two-job macOS source-candidate workflow authorization is requested, and
+no answer is inferred. Main/application history is not uploaded. Full local
+workspace Clippy is now running; remaining broad tests, matched build and
+runtime gates stay required. The accepted YAML dependency decision grants
+no CI, push or publication authority.
+The strict local workspace all-target Clippy gate passes in3m52s. The corrected
+Windows four-consumer suite builds and runs337 checks:336 pass, including the
+portable artwork-revision regression. One actual file/import graphics lookup
+fails because definition_for_playout recognizes only Unix prefixes and treats
+a Windows drive path as inline YAML. Exact v26.11.2 SequentialPlayoutBuilder
+source confirms platform-native file reads and relative import resolution.
+Use std::path::Path::has_root rather than a slash-prefix assumption, preserving
+inline mappings and existing tilde handling. No test expectation changes.
+The current canonical full closeout selects6043 checks and is near the end of
+its ordinary test phase. It began before the additional native-path correction;
+retain unaffected evidence, but the changed function needs its own focused
+Linux/Windows recheck and affected lint. Native Windows YAML recheck's WSL
+handle ends143; authoritative native inspection still finds cargo-nextest15888
+and its Cargo/compiler descendants alive in the owned mirror. Do not restart
+based on that wrapper result. Wait for actual native completion and require
+observable terminal test evidence; no acceptance is inferred from a live process.
+The native job subsequently becomes terminal without a test summary in its
+lost pipe. A rerun uses the existing native runner with output and exit written
+directly to the owned Windows test directory, addressing that demonstrated
+observation gap without changing execution policy. All104 affected Windows
+YAML checks now pass, including actual schedule-file/import/reset/named-list
+graphics lookup, nested filler and SQLite continuity; native exit0 is retained
+in ucu10-windows-native-yaml-path-final.log. No assertion or test is disabled.
+The canonical Linux workspace closeout completes6043/6043 ordinary checks
+(fbbf2234-912f-475b-84d4-30947bd6bcf8) and all eleven doctest stages; no failures.
+Its initial build predates the additional native-path function correction;
+that affected YAML behavior and core lint pass the focused Linux revalidation
+recorded below. Reuse unaffected broad evidence rather than rerun
+all6043 checks. The terminal own target reaches64.85GiB; after no own build or
+mapped executable remains, package-scoped web cleanup removes39.8GiB and leaves
+32266880KiB (30.77GiB), preserving all other packages/dependencies, native Windows
+work, source/evidence and main. Matched Leptos/bundle, remaining runtime and
+parity gates plus nine Next adoption rows/macOS candidates remain open.
+The additional portable-path correction now passes101 focused Linux YAML
+checks (ucu10-linux-native-yaml-path-corrected.log) and strict core all-target
+lint in20.89s. Together with the104 native Windows checks, this resolves the
+YAML path debt without a new platform exclusion. Reuse unaffected broad
+workspace6043 and dependency/strict workspace lint results. Native, Next,
+Convert lifecycle HTTP smokes and both applicable TSDuck modes then pass
+sequentially through existing scripts on isolated ports with verified FFmpeg206
+and the local Next021 candidate. The final matched Leptos/bundle/browser gate
+passes after those scripts to retain assembly consistency. The macOS source-only
+CI request remains pending; no source branch push or workflow dispatch occurs.
+Current final architecture lint passes with zero ratcheted direct admin SQL,
+raw pool, default-loader or row-decode findings. Hydration lint has no new
+findings (same31 baseline suppressions), and the new Clippy allowance policy
+passes. Read-only public Next release inspection confirms only the previously
+published0362692 distribution exists; no matching021 macOS artifacts can be
+reused from that destination. The prepared source-only branch stays local.
+The existing runtime batch reaches terminal success; no replacement run is started.
+
+
+
+
+
+
+
+
+
+Row213 now passes finite/infinite actual FFV1/NUT canvas proof after the helper
+refactor (nextestd3407be6-fd35-4740-bc63-7a801f9375c5) and all eight APNG/JPEG XL
+cases/snapshots (92aebf33-3584-47c2-9bf4-f61fa24c4c94); earlier bounded actual
+probe56e0e25c remains valid. Graphics debt is resolved. The rejected one-cycle
+and hanging generic-loop attempts remain recorded; no FFmpeg rebuild is needed.
+Strict FFmpeg/infra/scanner/web all-target lint passes (affected-runtime-web-clippy-03.log).
+Its concrete large-future finding is corrected by boxing the unchanged owned
+scanner test future, without a lint exemption or weakened assertion.
+Row217 archive acceptance passes2/2 (1c46c417-30a1-4ae2-b136-3a3713975018):
+independent ZIP reading proves Native/Next same-named reports retain distinct
+relative paths and contents. The pre-correction read exposed two of three entries.
+Row230 production-builder baseline has two real failures: nested repeat/title
+and continuity, with cycle refusal passing. Existing bounded expansion is reused
+once per build for filler definitions, after unchanged main/list expansion.
+All87 affected YAML tests pass (nested-filler-corrected-yaml.log), including
+pre/mid/post-roll exact selections/titles, serialized Continue and KeepCurrent
+Refresh versus uninterrupted output; original order/checkpoint snapshots pass.
+Actual SQLite persistence/reopen and existing preservation checks pass6/6
+(ab7f6c79-da85-4913-9431-bcbbbf0679a9), including nested filler across repeated
+database restarts. Persisted shuffled sequence and provider credential/Range/
+cross-origin checks pass4/4 (d6ebe22e-c9f7-4e6b-8fb8-fdd537b42286). Strict core/
+infra all-target lint passes after final test edits. YAML debt is resolved; final
+row230 disposition remains later in the ordered window.
+The checksum-verified Next021 candidate remains SHA256af25e73de8f07bc0427689d70bb311f2ec227fbbdec31a56a6684a754e6c6cc6,
+source7f75012f plus the existing rebased patches, Rust1.97.1. Published FFmpeg206
+payloads are reverified; no FFmpeg build. Standard prepare-next-source.py passes
+source archive e3ea721e882c9894da18f0a0df76e03682a73739587a5a68e756e051eb278ddf,
+lock5004711e2eaea5f082d4b598ed7656fcd793edb0a50b1ca4779383af2dadeb87 and exact
+patch application; all235 prepared source files equal the tested candidate.
+The reviewed candidate manifest is local evidence only; production distribution
+pins/archives stay036 until the supported-platform adoption batch is accepted.
+Next pipeline units262/262, actual HTTP retry10/10, fallback config2/2 and host
+protocol/logging/media/process63/63 pass. The original WebP and live RTSP
+regressions pass2/2 after rebase (5528e716); equivalent unpatched failures retain
+both patches under ADR0117's mandatory retirement policy.
+New actual provider/scaling/song playback passes6/6 (6277a529-9df5-4cd7-870c-0d194a28f73e):
+Jellyfin/Emby/Plex authenticated media and external/embedded Dutch subtitles,
+unauthorized relay refusal, Range/seek, burn/convert, selected audio and cleanup;
+Native provider sidecars are also decoded. H264 and MPEG2 actual scaling/4:2:0
+and song background4:2:0 pass, preserving explicit published silence, lyrics,
+handoff and finite duration. Actual fallback silence and ordered/dynamic
+watermarks pass3/3 (e07272d9-08cc-4525-a0ad-a863c4a1771d). A filter naming error
+selected no lifecycle cases in that batch; the corrected existing lifecycle
+selection independently passes all6 local/HTTP finite/infinite GIF/WebP seek,
+repeat and exact handoff/termination cases (bc93b981-9ed1-4380-9256-34371a93c75b).
+Row227 ordinary NFO rescan evidence3fae4335 remains valid: add/replace/remove
+facets, unchanged identities/international tracks and unchanged-scan idempotence.
+All four local Linux/Windows Next candidates build/package successfully with
+source/lock/patch provenance and exact companion checks. Native Windows builds
+in2m18s and reports0.2.1-7f75012-ersatzrs.1; its archive SHA256 is
+844f9201087262e767667e4b6584b378cc20dc61308b88333dc0741ac773ec0e,
+executable47738eeef0a951bcd98c723a85a164b225d3063b1059a3ff64b9574385abf747.
+The official Windows archiveb48c7fa0dc6910475d2e8b55b2db251a4ea899b45269ab4939e4ecc1e2239dd6
+changeslibvpl.dll tob13e461c6f4c91b70772771d089b7dff01f4e753ff57103374b54fd996655787;
+the package helper pin is updated with unchanged mandatory validation.
+ARMv7's first build failed because the upstream toolchain preference selected
+Rust1.99 without the ARM target. The existing recipe now explicitly selects
+Rust1.97.1 for build/compiler provenance, preserving source, lock and the
+GLIBC2.36 ceiling. Corrected ARMv7, Linux x64 and ARM64 builds take about60s each,
+export only local payload files, and preserve shared caches; no Docker socket is
+mounted. Linux archive SHA256 values: ARMv7
+7caf2a7a0c388f427b3d76ec6de3c5d19c88340e05ab1026e193d9bf841e51d2;
+x64 558f7a3b09951ded94e5cf1ff2e04480907692a32c080bbc6bbb4c07dd0ad686;
+ARM64 35c81ba578c116f5e986421ae6abfbbbe2ae429cb6326e5d99013abeaedbd66d.
+Standard source/package guards pass4/4 each; local actionlint passes the source
+workflow after matching its canonical archive URL and explicit compiler choice.
+No workflow is dispatched. Candidate archive hashes remain local evidence;
+production distribution pins stay036, integration still WIP. The source-only
+v0.2.1 manifest and existing rebased patches are now reviewable under
+scripts/release/next-patches/v0.2.1/. A bounded choice in the existing macOS
+candidate workflow selects that source, canonical archive URL and explicit
+Rust1.97.1 without advancing production downloads. package-next-source.py now
+accepts its existing manifest parameter on the CLI. Verified Windows companion
+hashes are scoped to the reviewed source; production036 companion validation
+is preserved. Five package guards (including cross-source rejection and exact
+companion-name fencing), four source guards and local actionlint pass. The
+actual candidate CLI validates existing source/companion bytes and refuses to
+replace the already verified archive. No duplicate package/build/publication
+is performed. Both macOS packages remain unbuilt until authorized native
+candidate execution; no unavailable platform evidence is inferred.
+Native Windows acceptance uses2878 compared source files from this isolated
+worktree and independently extracted verified Next/FFmpeg206/MediaMTX tools.
+The existing private Windows nextest0.9.146 is reused, with disposable application
+state. The .ps1 wrapper is blocked by Windows policy before any test executes;
+its exit0 is not acceptance. The same native nextest command is invoked directly,
+with no policy change/override. Existing active process handle must finish; do not
+restart it because observation expires. The first direct native build reveals
+E0282/E0283 in the bounded ffprobe stderr byte queue; explicit VecDeque<u8>
+is the minimal compiler-only correction. The single changed file is compared
+with the Windows source receipt; the terminal failed build is rechecked on its
+warm cache. Existing read bounds/assertions remain unchanged. The corrected
+native build completes and starts25 selected tests (ed2c7df0-4816-4365-bacf-6cf138703cfa);
+the complete run finishes24/25. Copy/AVI, six static image formats, local/HTTP
+finite/infinite GIF/WebP, song4:2:0/selection/silence/lyrics, geometry, RTSP clock/
+EOF/handoff and Burn/Convert/Off text pass. The provider-caption case exposes a
+raw Windows subtitle-filter path in its independent Native proof fixture; reuse
+the existing production subtitles_filter escaping helper. Subsequent attempts
+expose normal peer ConnectionReset and a resolver fence rejection that the raw
+HTTP fixture treated as a panic. It now treats closed/incomplete peer reads as
+connection termination and maps resolver errors to HTTP503, matching actual
+transport/iptv/next_media.rs; the publication fence is unchanged. Temporary
+boolean diagnostics are removed without printing metadata/credentials. The
+corrected Windows provider plus shared text-subtitle cases pass2/2 (f058eb6f-f2b6-46c6-9f12-0abd4da7e781),
+with all decoded picture/audio/caption/seek/off/cleanup assertions retained.
+The final affected Linux counterpart also passes2/2 (de3a8e1b-f5c5-49bd-9764-75d7f8d3ed9b);
+strict web/infra all-target lint passes. Available native Windows NVIDIA watermark regressions pass16/16
+(aa2f1940-7cdd-43d6-b022-530c5f05b3e7): four yuva420p/opacity H264/HEVC
+cases and twelve CUDA-overlay/software-MPEG2 cases across six source formats
+and two output sizes. The existing suite hard-fails missing hardware, and
+checks actual encode/probe/geometry output. This is exact-source pipeline
+evidence, separate from application-level Native/Next HTTP acceptance.
+Approved Intel/AMD/native Linux interop debt remains explicitly unverified.
+Actual packaged Linux playback passes11/11 (92fd4f21-ec02-4711-918a-732a2116c3d7),
+including4:2:0/song, geometry, authenticated international tracks and live RTSP.
+Matched Leptos SSR/WASM builds pass; source CSS is generated by the existing
+Stylance tool and staged beside the site assets. The headed browser baseline
+has1/3 Chromium passing: the new hydrated case uses the wrong exact label case,
+and the no-JS saved-search target exposes the real Loading-only list. Preserve
+the actual translated label in the test; select SsrMode::InOrder only for the
+smart collection list, following the existing resolved-props SSR route pattern.
+All6 matched corrected headed cases now pass: Chromium3/3 in14.1s and Firefox
+3/3 in18.4s. They prove top-bar current/changed query, saved-search target,
+no-JS output, original artwork/navigation/mobile behavior and no navigation/
+hydration exception. Strict affected web/infra all-target lint passes; hydration-lint has no new
+findings (31 existing baseline suppressions). Collection debt is resolved;
+full local window/parity closeout remains separate.
+Row224 public Silo Jellyfin compatibility source confirms MediaBrowser token
+header extraction, supporting the already tested private relay adaptation; no
+actual Silo deployment is claimed. Row228 has source audit and actual top-bar/changed-query/smart-target regression
+cases for both hydrated/no-JS contexts and actual6/6 browser proof as above.
+Required six-RID runtime integration (both macOS packages remain unbuilt),
+production managed-runtime pin/staging adoption, remaining ordered ledger
+dispositions and final local window gates remain open. Available Linux/Windows
+software/source-pipeline component acceptance and headed search/browser results
+are recorded above; full local window acceptance is not yet claimed. Native Windows adds10/11
+APNG/YAML cases passing: actual finite/infinite FFV1/NUT canvases, actual one-
+cycle ffprobe timing, detector hostile/still cases, nested pre/mid/post-roll
+selection/continuation/Refresh/cycle rejection and SQLite reopen all pass. The
+only failure is a snapshot's temporary Windows path separator; normalize only
+that path placeholder while retaining the original expected FFmpeg command.
+Its focused native recheck passes1/1 (2f3464c9-2442-410a-9aed-96da2a3b01e3);
+actual command expectations and production code are unchanged. The corresponding Linux snapshot passes1/1 (65bc57c6-7ff5-4a96-8e5c-e41ebd7d8c83)
+and strict affected FFmpeg lint passes. The earlier reused main-tree xtask
+executable is no longer present; final progress validation builds/uses only
+this isolated worktree, leaving main untouched. Both macOS artifacts, production adoption
+and the complete local window gates remain outstanding.
+ Approved hardware/ARM/macOS application
+debt remains explicitly unverified. Native is never retired. Current evidence
+logs/receipts are under tmp/ucu10-runtime-audit; preserve existing processes/caches.
+
+Earlier checkpoint evidence (preserved; current notes above supersede pending claims):
+Row212 exact acquisition/staging has21/21 local offline checks passing.
+Row213's APNG runtime counterpart has a demonstrated correction: published
+FFmpeg2.0.6 with old-loop1 exits8; correct-ignore_loop0 decodes eight frames
+blue/blue/red/red repeated twice. Baseline detector test fails1/4; corrected
+four portable cases and one generated-options actual-runtime case pass, with
+both existing GIF/WebP classifier cases and strict all-target FFmpeg Clippy.
+The reviewed snapshot is-ignore_loop0; no snap.new remains. The shared image
+classifier now walks bounded PNG chunk structure, requires valid IHDR and
+acTL length/nonzero count before IDAT, and rejects truncated or misleading
+markers. FFmpeg retains responsibility for frame decoding and CRC validation.
+Canonical local records: tmp/ucu10-runtime-audit/apng-reproduction.json,
+apng-baseline-tests.log,apng-final-tests.log,apng-generated-options-runtime.log,
+existing-animation-tests.log,apng-clippy.log and stage-next-tests.log.
+Full native/Next window playback acceptance remains required. Row213 is Adapt under ADR0005 after the upstream image/APNG decoder source
+review; NuGet-specific replacements are N/A. Rows209–213 are dispositioned.
+Row214 begins the consolidated new Next runtime compatibility batch.
+Official unpatched Nextv0.2.1 still fails the unchanged decoded WebP schedule
+regression (nextestfa90270f): the captured frame visibly reports playout item1
+ended early. Patch0002 cannot be retired. Its retained screenshot and test log
+are under tmp/ucu10-runtime-audit; the RTSP patch is being checked separately.
+Row219 JSON framing implementation passes7 focused parser/bound/reader tests
+(nextest173d090a), including old text compatibility, numeric/string channels,
+FFmpeg context, malformed fields, decoded URI/session redaction and control-
+character flattening. Both normal and preview processes request JSON format.
+Affected process regressions, lint and actual runtime checks remain required;
+row219 is not yet given its final ledger disposition.
+
+2026-10-13 bootstrap: local branch feat/ucu-10-v26.11.2 starts at committed
+main18290023c14f81961a163b8847ed552aad07e07f in its separate worktree.
+Main's unrelated teletext/add-on edits are untouched. UCU-00–09 are Complete.
+Local and live upstream v26.11.2 tags agree at e6bb6c67da4fe62b637fe1f55aa9c85be04bd6a0;
+all24 appended SHA/subject pairs match ordered upstream history after46118d43.
+The shared ErsatzTV checkout remains at the old baseline; sources are read with
+explicit git show revisions. Native retention and withheld push/CI/publication
+are explicit requirements, not inferred exceptions. Rows209–211 are dispositioned in order. Row209 has14/14 local atomic-publication
+checks passing (nextest93316384-8a2c-4c69-858a-03e532e4975c), including
+concurrent complete generations, interrupted-write cleanup and bounded retry.
+Publication/host/config source is unchanged from accepted97aa48a0, preserving
+UCU-09 row204 native Windows sharing-denial/recovery proof. Rows210/211 are
+upstream-only release-note/workflow changes. Row212 pinning audit and row213
+APNG behavior audit are next. The baseline pin remains46118d43 until the local
+accepted batch is ready; no unreviewed pin bump or commit is made.
+Official Nextv0.2.1 is source7f75012f with channel0.1.2/playout0.0.6. Its
+Linux x64 archive SHA256cbd2b9fb70c28e614eb14e9b2b0c80cfa1e01c43b79cd438cc1a45cbcd91715b
+and actual executable SHA25619e6a905f87da359f63c9b96e70d0256c92e1b94f50bd19fc700cc86e475139e
+are verified; --version reports0.2.1+linux-x64. The upstream release has no
+ARMv7 artifact. Runtime adoption/patch retirement still require actual
+compatibility proof; existing production pins remain unchanged.
+"""
+
+
+[[milestone]]
+id         = 'ucu-11'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile v26.11.3 startup and subtitle behavior while retaining Native'
+status     = 'Complete'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-10']
+acceptance = """
+Maintainer-approved scope (2026-10-14): reconcile ordered ledger rows233–236,
+ending at the released ErsatzTV v26.11.3 commit
+f75abe5322f2a05099579df9e95acb675949c780. The maintainer explicitly corrects the
+initially mentioned v26.11.13 to v26.11.3. Later commits/releases are excluded;
+UCU-10 remains the completed local window through row232/v26.11.2.
+Work on the separate feat/ucu-11 branch/worktree based on verified application
+remote main, safely integrating the accepted UCU-10 source and preserving newer
+teletext work, unrelated checkouts, processes, caches and existing evidence.
+Preserve Native as a supported selectable streaming engine, stored engine and
+profile choices, international audio/subtitle selection and existing health,
+persistence, callback isolation and runtime management contracts. Existing
+approved hardware/platform acceptance debt remains explicitly unverified.
+Read exact upstream source and give each row a justified disposition. Prove HLS
+subtitle renditions are offered only for Next Convert, and MPEG-TS wrappers
+consume audio/video media playlists without requesting an HLS text rendition.
+Prove the MPEG-TS HLS wrapper and bundled platform scripts send a bounded
+initial burst consistent with the upstream six-second contract, preserving
+subsequent realtime pacing, copy mapping, selected tracks and mux/PCR policy.
+Audit released Next0.2.2 source/protocol/runtime changes and existing temporary
+patches. Retire each patch only when its equivalent unpatched regression passes;
+reuse existing verified packages unless a demonstrated behavior gap needs an
+amendment. Do not infer hardware acceptance from another GPU or a source build.
+Use focused local tests and strict affected lint per correction; reuse valid
+UCU-10 proof where code, inputs and assumptions are unchanged. Rerun affected
+acceptance after integration. Before local closeout complete required workspace
+lint, test-closeout, matched Leptos build/bundle, progress/parity/architecture/
+hydration gates, and actual Native/Next playback smoke. Use decoded playback
+and TSDuck for affected transport behavior and existing headed Chromium/Firefox
+checks for affected hydrated/no-JS behavior. Verify exact source and artifact
+checksums; update changelog/documentation and the canonical ledger and pin only
+with accepted ordered dispositions.
+No main push, CI dispatch or application/dependency publication is authorized.
+The previous UCU-10 source-only CI and Next-only publication exceptions do not
+extend to this window. Subsequent explicit maintainer amendment authorizes only
+publishing the twenty reviewed Next022 assets to the public dependency repository
+as next-4a0b59a-ersatzrs.1. Further maintainer amendment (2026-10-15) authorizes
+application push to remote only after UCU-11 acceptance is complete, followed by
+associated CI. Reuse passing gates and retry only failed specific CI jobs on the
+same commit. A demonstrated correction requires affected verification, without
+routinely rerunning the whole pipeline. Application release remains separate.
+"""
+evidence = """
+Final UCU-11 acceptance (2026-10-15): ordered rows233–236 and all236 ledger
+SHA/subject pairs are accepted through fixed v26.11.3/f75abe5322f2a05099579df9e95acb675949c780.
+The required local gates and actual Linux/native Windows startup/decoded
+playback/transport proof below remain valid. Published Next022 assets retain
+all19 verified checksums, six exact package hashes, the source archive and both
+demonstrated temporary patches. No further FFmpeg amendment is required.
+
+Targeted CI38666094421 is terminal success on exact
+7625086ff6378ca983c58b930fc7a24453c8700e: Chromium11/11 in490.026s and
+Firefox11/11 in805.569s, zero skips/failures/retries/flaky results. Complete
+serial groups include all seven previously unexecuted followers per project,
+both actual TCP publication cases and every editor JS/theme variant. Combining
+those exact matching test identities with valid original CI38654305604 results
+accounts for all376 cases per browser: Chromium371 passes/5 explicit opt-in
+skips; Firefox346 passes/30 explicit skips; no failures or unexecuted followers.
+All25 additional Firefox-only skips have matching passing Chromium cases.
+Unchanged opt-in checks retain their existing separate acceptance ownership.
+Next-only CI38657883005 on033bd29f passes417 regressions and both actual host
+smokes. Unaffected original Format/Test/Clippy/audit/docs/commitlint results are
+reused under the maintainer's efficient recovery instruction. These composed
+results are not represented as a newly executed full green release CI run.
+
+Evidence is retained in stable local tmp/evidence/ucu11-v26.11.3/:
+the former worktree tmp/ and test-results/ preserve original/focused CI JSON,
+JUnit, traces, runtime DBs/logs/captures, exact tested bundles and distribution
+source/provenance. Earlier relative tmp/ references below resolve inside this
+archive. The stopped mixed-build diagnostic runtime is preserved alongside the
+accepted matched bundle. Windows evidence remains in
+ErsatzRS-evidence/ucu11-v26.11.3/app. Source delivery is on remote feat/ucu-11;
+local checkout/branch retirement follows exact remote verification.
+
+Authorized cache cleanup preserves unrelated work, processes and shared caches.
+The UCU11 application target is cleaned (81,210 files; Cargo reports64.4GiB
+logical artifacts; pre-cleanup du63,516,520,505 bytes), after configured-target
+and process-user checks. The native Windows target removes39,974,435,359 bytes;
+three Next source targets remove4.0GiB/437MiB/418MiB. Existing packages, evidence
+and source identities remain retained. UCU10 and completed Next candidate
+worktrees/local branches are already retired with remote commits/evidence kept.
+Application publication remains separate; Native, stored choices, international
+tracks and approved explicitly unverified hardware/platform debt are preserved.
+This final entry supersedes pending closeout notes below.
+
+Original full CI final result (2026-10-15): run38654305604 on exactc41601ba
+is terminal. All non-browser jobs except the corrected Next fixture pass.
+Chromium reports361 passes,3 known fixture failures,5 explicit opt-in skips
+and7 unexecuted serial followers. Firefox reports337 passes,2 matching teletext
+fixture failures,30 explicit skips and7 unexecuted followers. All25 additional
+Firefox-only skips have corresponding passing Chromium results; the remaining
+five are unchanged opt-in checks, with their existing separate acceptance
+ownership. Result JSON and traces for both original browser jobs are retained
+under the owning runtime audit, along with exact run/job source records.
+
+Authorized complete-group browser CI recovery38666094421 is running on exact
+7625086ff6378ca983c58b930fc7a24453c8700e: only the two browser projects,11 cases
+each, through max-parallel1; unrelated jobs remain skipped. Original Firefox
+has finished and its port is released before recovery dispatch. Local11/11
+headed acceptance is complete; remote22-case acceptance remains outstanding.
+Reuse valid unaffected original gates and the417-case Next success on033bd29f;
+do not call this a new full green exact-commit release gate.
+
+Complete serial-group local recovery (2026-10-15): all eleven headed Chromium
+cases pass in9.6m, with zero failures/skips/retries/flaky results, on one fresh
+DB using the unchanged retained matched production bundle and exact published
+Next022/FFmpeg206 runtimes. This includes all four authoring JS/theme variants,
+both actual decoded TCP publication cases and all four editor JS/theme variants,
+plus Block preview. All seven followers previously left unexecuted are now
+proven locally. Raw results/DB/logs remain under
+tmp/ucu11-runtime-audit/browser-recovery-serial-local/.
+The existing bounded CI selector lists22 cases across these same three specs
+for browser_only=both and retains max-parallel1, avoiding concurrent browser
+resource contention. No runtime/source changes are introduced. CI recovery of
+these complete groups remains required, alongside the uncancelled original
+Firefox suite. Five original explicit opt-in skips are distinct from the seven
+serial followers and retain their existing separate acceptance ownership.
+
+Serial follower acceptance gap (2026-10-15): the original Chromium summary also
+reports seven tests that did not run after serial-group failures. These are
+four authoring followers (including both actual TCP publication cases) and
+three editor followers. The four-case recovery proves only its named cases;
+it does not close the seven unexecuted checks. Existing bounded browser recovery
+now runs all eleven tests in the same three affected specs, preserving serial
+predecessors. Both browser selections list exactly eleven; actionlint and Bash
+syntax pass. Headed local acceptance and scoped CI for these complete groups
+remain required. This restores existing acceptance coverage, without a full
+suite rerun or a new product requirement.
+
+Focused Chromium recovery accepted (2026-10-15): run38662128181 is terminal
+success on exact7314eaa52930164556ea7cf8b3584d658fb61bad. All four affected/
+predecessor cases pass in149.630s with no skips, retries or flaky results.
+Only Chromium runs; all unrelated jobs are skipped and the original Firefox
+suite remains uncancelled. The four-case result JSON and diagnostics are
+retained under tmp/ucu11-runtime-audit/ci-chromium-recovery-38662128181/.
+This is scoped recovery evidence, not a new complete green CI run.
+
+Further authorized cleanup removes the unused UCU11 Windows application target
+(39,974,435,359 logical bytes) after checking process users and the retained
+candidate SHA256. The native source/frontend/tools/evidence mirror is archived
+in the Windows ErsatzRS-evidence/ucu11-v26.11.3/app directory. Three completed
+Next source compilation targets (4.0GiB,437MiB,418MiB) are removed; verified
+distributions, candidates and source/provenance remain. Root-owned ARM contents
+are cleared using host Docker, an existing image, two bounded mounts, no network
+or socket, and no existing container changes. Receipts remain in the owning
+runtime audit. Keep the Linux application cache/worktree/local branch until
+the remaining Firefox acceptance and final remote delivery are complete.
+
+Browser fixture recovery (2026-10-15): original Chromium job116160434131
+finishes361 passed,5 skipped,3 failed. The real Block preview response correctly
+includes two daily blocks during the first30 minutes after midnight; its test
+now derives the exact permissible count from server-clock bounds and verifies
+every complete API/rendered row. Two teletext assertions expose reused channel
+IDs whose immutable design/publication histories survive fixture disposal.
+The existing transactional allocator now reserves those retained version1/2
+owners, including tombstones, without deleting history or weakening assertions.
+All four affected/predecessor headed Chromium cases pass in2.6m on one fresh DB
+with the retained matched production bundle; original scheduling/hydration code
+is unchanged. Evidence: tmp/ucu11-runtime-audit/browser-recovery-matched/.
+An initial attempt with the later default-SSR binary exposes a real build-mode
+hydration mismatch and is stopped; structural asset200 checks alone do not
+establish functional hydration. The retained matched bundle passes unchanged.
+Existing-workflow bounded browser recovery selects exactly these four cases,
+one browser, with separate concurrency and partial titles; actionlint and32
+routing combinations pass. Original Firefox continues; affected browser CI
+on the corrective revision remains required, reusing all unaffected gates.
+
+Focused CI recovery accepted (2026-10-15): run38657883005 is terminal success
+on exact033bd29faaaa57244f6320d19533ddb968c2e709. Only Next runs; all unrelated
+jobs are skipped and original full CI38654305604 remains uncancelled. All417
+Next regressions pass in330.100s, including the corrected retained-caption
+case7.471s; both actual Next Burn/HLS lifecycle/preview and Convert host smokes
+pass. Retained JUnit, source SHA, pinned Linux payload SHA and smoke diagnostics
+are independently checked under tmp/ucu11-runtime-audit/ci-next-only-38657883005/;
+ucu11-next-only-ci-result.json records the exact revision and job scope. The
+Linux runtime payload matches the published manifest. This supersedes the
+pending recovery below; the original one-test failure remains history, and the
+focused success is not represented as a complete green exact-commit CI run.
+Original c41601ba Format, dependency audit, Rust Test, Clippy, Commit lint and
+documentation jobs pass. Chromium/Firefox acceptance remains pending.
+
+Completed source-candidate cleanup: the clean local ucu11-next022-ci worktree
+and build/ucu11-next022-candidate branch are removed after verifying remote
+100f2d35615584f6429d047484d67081442d3bb3 and no process users. Only its Python
+bytecode cache is discarded; canonical macOS/source/package proof remains in
+the owning audit and remote history. Active application caches/evidence remain
+until browser CI and delivery closeout finish.
+
+CI recovery (2026-10-15): authorized full run38654305604 tests exact c41601ba.
+Its Next job116160433921 reports416/417 passing and one retained-caption
+fixture failure. The fixture incorrectly requires cue ends inside each HLS
+segment; released022 repeats full cue intervals under RFC8216 section3.5.
+The correction keeps all decoded video, selected Dutch audio, seek/cut exclusion
+and producer-registration assertions. It additionally checks exactly two
+retained cut pieces, the full8s following cue, contiguous mapped intervals,
+join bounds and identical full timestamps across repeated segment copies.
+Only the failed actual parent case is rerun:1 pass7.47s, nextest
+58f70e0d-95b4-4069-b5ab-4799e44c95e4, with exact published022/FF206; receipt
+ucu11-ci-retained-cue-focused.log. Production code/packages are unchanged.
+
+GitHub job reruns retain their original SHA, and the existing Test-only dispatch
+cannot execute Next. Extend the existing CI workflow with next_engine_only,
+without changing its runtime/test/smoke steps or pins. The focused concurrency
+group cannot cancel ongoing full CI; its distinct title is excluded from
+successful-full-run recognition. Conflicting focused inputs fail before checkout.
+Actionlint, eight hosted/self-hosted routing combinations, cancellation/duplicate
+and preflight-filter guards pass; unchanged Next steps are compared directly.
+Strict infra all-targets Clippy passes3m10s; receipt ucu11-retained-cue-clippy.log.
+The corrective-SHA Next-only dispatch remains pending.
+Preserve all passing unaffected original jobs; this focused mode is scoped proof,
+not a new full green exact-commit run or an application-release gate waiver.
+The full run's other jobs continue; no full rerun or application release occurs.
+
+Local acceptance complete (2026-10-15), integrated source a258df5d plus the
+published022 manifest and documentation closeout. Rows233–236 are accepted in
+order; all236 ledger SHA/subject pairs match the fixed v26.11.3 release.
+The authoritative baseline table advances with those dispositions. The shared
+upstream checkout is preserved; substantive review uses exact git revisions.
+Native, stored profiles/engine choices, international tracks and existing
+callback/health/persistence contracts remain supported. Approved hardware and
+ARM/macOS application debt remains explicitly unverified. Both unchanged
+unpatched022 retirement regressions fail, so retain the two minimal patches;
+no additional FFmpeg amendment or build is needed.
+
+Required integrated local gates pass: strict workspace all-targets Clippy,
+6312 nextest passes with288 skips and zero failures/retries (run
+9b774810-7bfe-4169-8193-b418f3bf1e19), all11 crate doctest stages, matched Leptos
+build and Linux/native Windows structural bundles, dependency audit, and web
+parity progress/format/architecture/hydration checks. The web parity invocation
+reuses the completed full tests/lint through --skip-tests --skip-clippy; it does
+not claim those gates were omitted. Receipts under tmp/ucu11-runtime-audit/:
+ucu11-integrated-test-closeout.log, ucu11-integrated-workspace-clippy.log,
+ucu11-next022-matched-leptos-build.log, ucu11-integrated-dependency-audit.log,
+ucu11-integrated-parity-web.log. Earlier actual runtime/browser/startup receipts
+below remain valid on this integrated source and published payloads.
+
+Native Windows adoption also passes ten manager regressions (run
+8d3340ec-9d86-4a49-972d-469af6a340aa) after correcting only the runner PATH;
+receipt ucu11-next022-windows-manager-corrected.log. All three actual Windows
+host smokes pass Native, Next Burn and Next Convert, matching the three passing
+Linux modes. Receipts ucu11-native-windows-{native,burn,convert}-smoke.log prove
+decoded selected Dutch audio/text, normal/preview media-only policy, cached URLs,
+reconnect and idle cleanup. Stored channel choices remain unchanged.
+
+Transport acceptance passes: Native all-four-pipeline TSDuck87 checks and
+Next copy Hybrid/HLS83 checks, zero failures. Decoded calibration frames retain
+cyclic programme order and visible counters; HLS audio cadence deviates at most
+30ms Native/20ms Next. Existing VBR PCR-jitter observations are informational;
+continuity, PCR/PTS/DTS leaps, TEI, sync and PSI/AV structure remain gated.
+Retained raw captures are under tmp/ucu11-runtime-audit/retained-runtime/
+tsduck-native and tsduck-next022-copy; receipts ucu11-native-tsduck.log and
+ucu11-next022-copy-tsduck.log. Focused twenty-second Hybrid captures then pass
+22 checks each with three-second rolling samples: Native PCR media25980ms,
+startup4s; Next Convert25998ms, startup2s. Both have five periodic samples,
+zero low-delivery intervals, and media time within20000+6000+1000ms sampling
+allowance. Exact1.0 readrate/six-second options are snapshot-tested, preserving
+the separate8s producer policy. Receipts ucu11-{native,next022-convert}-wrapper-
+rolling-timing.log and transport-timing/ retain measurements and unchanged
+channel snapshots. Initial twenty-second captures passed21 checks each but
+produced no periodic sample at the default12s interval; only this demonstrated
+measurement gap was repeated with3s sampling. No product correction or relaxed
+threshold was needed. Both original captures and decoded frames are retained.
+
+Application remote push and associated CI are authorized after this acceptance;
+CI is pending and application release remains separate. Keep active UCU-11
+caches until delivery completes, then retain evidence and remove only owned
+obsolete worktrees/local branches/build caches. UCU-10 cleanup already removed
+both worktrees/local branches and unused Linux/Windows build caches while
+retaining its evidence under tmp/evidence/ucu10-32c12793/.
+
+Earlier checkpoint history follows; open-state wording below is superseded by
+the accepted results above, not removed from the audit history.
+
+Native Windows bundle acceptance (2026-10-15): the existing structural gate
+passes on the exact current native server with the matching portable frontend
+and bundled022. Both JS and WASM resolve over HTTP; receipt:
+tmp/ucu11-runtime-audit/ucu11-next022-native-windows-bundle.log.
+The integrated workspace all-targets strict Clippy gate passes4m59s. Receipt:
+ucu11-integrated-workspace-clippy.log. Local test-closeout is now running once;
+Windows manager regression compilation and transport acceptance remain open.
+
+Integrated playback and native startup (2026-10-15): all three Linux host
+smokes pass: Native lifecycle, Next022 Burn and Next022 Convert. Decoded served
+TS/HLS retains selected Dutch audio, burned text or unburned video plus selected
+WebVTT as appropriate, cached URLs/configuration, reconnect and idle cleanup.
+Normal/preview masters and explicit media-only requests preserve the corrected
+Convert-only/default-no rendition policy. Receipts under tmp/ucu11-runtime-audit/:
+ucu11-integrated-native-smoke.log and ucu11-integrated-next022-{burn,convert}-smoke.log.
+Native Windows server build passes22m10s. Its following manager stage initially
+cannot find nextest on PATH; the existing isolated runner is located and only
+that stage is retried, preserving the passing server build. Actual native
+Windows Downloaded/Managed/Bundled startup independently passes, with exact022
+pin verification and network-blocked managed/bundled branches. Receipt:
+ucu11-next022-windows-startup.log. Current native bundle, manager regressions,
+TSDuck and final local gates remain open. UCU-10 cleanup is explicit maintainer
+scope; its owning evidence records retained paths. Clean active UCU-11 only
+after its acceptance/delivery evidence is safely retained and no longer needed.
+
+Conditional remote delivery amendment (2026-10-15): the maintainer authorizes
+pushing UCU-11 only once accepted, and explicitly requests efficient CI recovery:
+retry failed specific checks, not the complete pipeline each time. Existing
+valid acceptance remains reusable; this does not waive a required gate or mark
+an unverified platform accepted. No push has occurred under this amendment.
+
+Integrated published022 startup/browser acceptance (2026-10-14): matched Leptos
+build passes10m03s. Actual Linux application startup passes Downloaded with no
+Next override, Managed restart with outbound HTTP(S) blocked, and Bundled with
+fresh state and outbound HTTP(S) blocked. Each verifies the published pin and
+exact022 version; downloaded and bundled payloads match the reviewed manifest.
+Only the three owned server processes are stopped. Existing structural bundle
+gate passes for the matched server/site and bundled022. Four focused headed
+Chromium/Firefox cases pass21.8s with no retries/skips: cached022 SSR/no-JS/mobile
+version and authenticated Convert captions with actual browser cues/toggling.
+Receipts under tmp/ucu11-runtime-audit/: ucu11-next022-linux-startup.log,
+ucu11-next022-matched-bundle.log, ucu11-next022-focused-browsers.log and
+next022-focused-browsers/playwright-results.json. Dependency audit passes
+advisories/bans/licenses/sources. Integrated Native/Next decoded transport,
+Windows adoption and remaining local final gates are still open; no application
+push, CI or release is performed.
+
+Next022 publication amendment (2026-10-14): the maintainer explicitly approves
+all twenty reviewed assets for bartdeijkers/ErsatzRS-next, tag
+next-4a0b59a-ersatzrs.1. Release413217746 is public; every uploaded SHA256 and
+size matches the approved kit. All twenty anonymous downloads match those same
+bytes, without credentials. All six downloaded packages pass existing staging
+under the exact published manifest, now selected in the local integration
+candidate. The unchanged two patches retain their independent retirement tests.
+Receipts: tmp/next022-audit/next022-published-receipt.json,
+next022-public-download-verification.log and next022-published-six-rid-staging.log.
+Offline staging regressions pass. Matched application build, actual managed
+acquisition/restart and final integrated acceptance remain open. No application
+push, CI or release occurs. Earlier unpublished-candidate notes below describe
+pre-amendment history; approved hardware/platform debt remains unverified.
+
+Integrated local checkpoint (2026-10-14): preserve the existing UCU-11 work in
+e3ee3a36, then merge delivered remote main32c12793. All eleven conflicts retain
+both windows and newer teletext work. The delivered Rustls0.23.46 lock and both
+browser fixture corrections remain identical to main. Strict affected infra,
+web and FFmpeg all-targets Clippy passes4m42s after extracting the unchanged
+subtitle assertions and sharing case-insensitive segment selection. Formatting
+and progress validation pass; the parity summary remains within its budget.
+Receipt: tmp/ucu11-runtime-audit/ucu11-main32-affected-clippy.log.
+Both affected actual Next022 subtitle cases pass in7.087s (2440 filtered skips),
+run ed5c7cc9-d915-486f-98a2-87db8aeae923. The unchanged assertions prove
+Burn/Convert/off, selected Dutch audio, seek exclusion, repeated full cue times
+and WebVTT settings using the reviewed staged Linux package, payload SHA256
+3dec877fd5494bb4f796ab8dcca1d11026be34e9f41a5f5d36407c758c966975.
+Receipt: tmp/ucu11-runtime-audit/ucu11-main32-subtitle-runtime.log.
+The existing twenty-asset Next022 distribution kit passes all19 checksums;
+the exact staged Linux payload matches its reviewed receipt. Public managed
+download/adoption still needs separately requested publication approval; no
+publication, application push or CI is performed. Focused integrated runtime
+adoption and final window gates remain open.
+
+Window approved and version clarified on2026-10-14. Local upstream tag and primary
+GitHub tag/release identity agree at f75abe53; shared source checkout is unchanged.
+Application remote main bd1bc256 is21 commits ahead of the UCU-10 base18290023,
+with teletext work and four provisional upstream rows. An isolated three-way
+transplant preserves both source slices. Five reviewed conflicts retain both
+changelog/session histories, the YAML/Ammonia security correction, new web ZIP
+support and accepted UCU-10 rows alongside pending233–236. cargo metadata
+--locked --offline succeeds: yaml_serde0.10.7/libyaml-rs0.3.0, Ammonia4.2.3 and
+ZIP8.6.0 resolve without changing dependency pins. progress and diff checks pass.
+The accepted YAML decision is renumbered0124 to0125 to avoid the independent
+teletext ADR0124 reserved in the main worktree; acceptance and historical session
+identifiers are preserved. Source integration is not yet runtime acceptance.
+Row233 source audit finds existing Convert-only rendition guards and a direct
+Next media-playlist wrapper URL with authenticated normal/preview boundaries;
+required regressions and actual startup proof remain. Row235 demonstrates that
+the final HLS-to-TS command and both bundled scripts lack the initial burst.
+The existing8-second input burst belongs to retained programme production under
+ADR0087 and does not cover the remux wrapper; preserve that separate policy.
+Current component acceptance (2026-10-14): six FFmpeg wrapper/command checks,
+11 web variant/authenticated-wrapper/script snapshot checks, and the integrated
+master-request/shared-owner route check pass. Strict FFmpeg all-targets Clippy
+passes; web/infra strict lint is running. Logs under tmp/ucu11-runtime-audit/:
+ucu11-wrapper-corrected-checks.log,ucu11-transport-focused-checks.log,
+ucu11-master-request-and-owner-checks.log anducu11-wrapper-clippy.log.
+Patched Next022 passes all five selected Linux playback cases: scheduled WebP
+picture/silent audio, local embedded/external Burn/Convert/off with seek exclusion,
+seek beyond the last cue, actual WebVTT cue settings with identical mapped full
+intervals in adjacent segments, and HTTP/RTSP source-clock/audio playback.
+The first matrix has four passes and a missing RTSP fixture variable failure;
+an attempted correction pointed at a nonexistent subdirectory. The final single
+RTSP rerun uses the checksum-verified existing server at its actual path and
+passes28.04s. No product correction, relaxed assertion or repeated passing case
+is used. Logs: ucu11-next022-linux-playback-checks.log,
+ucu11-next022-linux-rtsp-corrected.log,
+ucu11-next022-linux-rtsp-verified.log. Existing two actual cadence cases also
+pass125.95s, proving selected Dutch audio/copy/handoff and the converted cue map
+covers decoded frame observation clocks; log:
+ucu11-next022-cadence-subtitle-clock-checks.log.
+Official unpatched022 fails both unchanged patch-retirement cases: scheduled
+WebP renders27 unexpected bright pixels with subtitles explicitly off instead
+of0; the HTTP/RTSP fixture times out on live RTSP readiness33.36s. The patched
+candidate passes both with the same FF206/test assertions. Keep both patches;
+log: ucu11-unpatched-next022-patch-retirement-checks.log.
+Source022 is4a0b59a66bef93b908e5eb2086847418492e2555; exact source archive,
+lockfile, unchanged two patches and four locally built RID receipts are retained
+in tmp/next022-audit/. Source archive SHA256 is
+2b3108b5b5d4d40ae243c6e98ce018f939ac17953dec0383fe664c8e49212742;
+lockfile SHA256 is3ef515507bbaf4e75043f59ecee515abad16fb4a4be5c2c53f0e7b097dc37fbb.
+All19 affected source/patch/WebVTT/playlist regressions and strict source lint
+pass. Native Windows candidate compilation/version/companion identity passes.
+ARMv7 and corrected ARM64 candidates require GLIBC2.34 and pass exact version
+probes under existing Bookworm emulation; physical ARM application acceptance
+remains explicitly unverified. The original Ubuntu ARM64 output requires2.39,
+is retained as rejected evidence and is never packaged under the2.36 baseline.
+The corrected existing cached Bookworm recipe builds15.38s. No FFmpeg amendment
+or build is demonstrated or performed. Four package receipts remain canonical
+under tmp/next022-audit/packages/.
+A separate source-only candidate checkpoint100f2d35615584f6429d047484d67081442d3bb3
+on build/ucu11-next022-candidate contains only seven reviewed builder/workflow/
+manifest/patch files, based on verified published mainbd1bc256. Source/package
+guards4/5 and workflow actionlint pass. The source-only push and existing two
+macOS jobs initially awaited explicit maintainer instruction; the separately
+approved bounded delivery amendment follows. Native Windows application acceptance passes10/10 in54.35s, nativeexit0 and
+run74d5c794-4939-4f1c-aa38-dcacb8fc44b4. Exact source/runtime hashes, commands,
+logs and exit proof are under tmp/next022-audit/windows-ucu11-*. The two native
+cadence/converted-clock handoff cases pass2/2 in132.95s, nativeexit0 and
+runb971804a-fb25-4721-a007-b3fe8ae91f5e. Neither reuses unproven platform claims.
+The existing run.cmd rejects Cargo-p before launch through PowerShell parameter
+binding; the previously authorized isolated native nextest runner is reused
+without changing execution policy or weakening selection. The initial launcher
+failure is retained separately from the passing native checks.
+The maintainer now explicitly authorizes only pushing100f2d35 to the dedicated
+source-candidate branch and dispatching its existing two macOS jobs with the
+reviewed022 manifest. Remote branch equality is verified before dispatch. This
+exception authorizes no main/application push, application CI or publication.
+Canonical production pin stays on published021 until complete reviewed022
+adoption/availability proof.
+Authorized macOS source-candidate run38542065540 is terminal success at exact
+source-only100f2d35615584f6429d047484d67081442d3bb3. Both osx-arm64 and osx-x64
+jobs pass native startup and provenance packaging; receipt:
+tmp/next022-audit/macos-next022-ci-result.json. Downloaded source identities,
+native version strings and the six-RID candidate distribution checks pass;
+tmp/next022-audit/distribution-ready-verification.log owns the scoped receipt.
+This is source/runtime packaging evidence, not macOS application acceptance or
+publication. Production remains the published021 pin;022 remains unpublished.
+
+UCU-10 is now delivered through PR105 on verified remote main
+32c127932647fd23568a4499f7e62db64aeb10eb, under its explicit focused-verification
+amendment. Integrating that main into this separate UCU-11 checkpoint preserves
+both histories and newer teletext work; affected integration acceptance is still
+required. Required actual-host/final gates remain open. UCU-11 rows233–236 remain
+pending; no main push, application CI or publication is authorized or claimed.
 """

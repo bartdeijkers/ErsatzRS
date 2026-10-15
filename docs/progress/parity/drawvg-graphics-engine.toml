@@ -69,3 +69,10 @@ discovered = '2026-10-05'
 resolved = true
 adr = '0115'
 evidence = 'Locally accepted 2026-10-05; v111-findings-09 retains complete acceptance. Thirteen focused checks prove native RGBA, loop/seek and Motion/VFR/24 fps timing with reviewed native/VAAPI snapshots. Eight actual editor cases and two real native HTTP/public IPTV cases prove MIME/YAML/PNG, source phase, repeated alpha/disappearance and 200 decoded frames per route. Full native producer capacity is 1.09-1.12x with three 1080p carriers active; public pacing and cold startup latency are recorded separately. All final integrated gates pass: 3867 native tests plus doctests, strict workspace all-target lint, native smoke, 87 TSDuck checks, progress/architecture/hydration parity and final paired Leptos build/HTTP bundle verification. Canonical logs live in test-results/finding09; exact Motion placement/typography is separately accepted under finding 09b.'
+
+[[debt]]
+id = 'ucu10-apng-graphics-loop-option'
+description = 'UCU-10 row213 requires bounded finite/infinite APNG graphics repetition while preserving still PNG and JPEG XL behavior.'
+discovered = '2026-10-13'
+resolved = true
+evidence = 'UCU-10: bounded PNG classifier and existing timing/concat renderer replace the invalid still-image loop option. The finite-loop experiment rejected ignore_loop0 as insufficient and generic stream_loop as hanging. Actual FFV1/NUT canvases decode both complete repeated blue/red cycles for finite and infinite files after the helper refactor (nextestd3407be6); the real bounded probe reports four frames/two seconds for each container (56e0e25c). Five APNG and three unchanged JPEG XL checks/snapshots pass (92aebf33); strict FFmpeg/infra/scanner/web all-target lint passes. No FFmpeg source/runtime update is needed. UCU-10 owns final window gates.'

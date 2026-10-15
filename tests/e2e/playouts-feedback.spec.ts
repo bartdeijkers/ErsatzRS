@@ -187,6 +187,22 @@ async function waitForHydration(page: Page): Promise<void> {
 test.describe('playout rebuild feedback', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed a playout');
 
+  test.afterEach(async ({}, testInfo) => {
+    if (!dbPath) return;
+    const projectOffset = Array.from(testInfo.project.name).reduce(
+      (total, char) => total + char.charCodeAt(0), 0,
+    ) * 100;
+    const detailedBase = 360_000 + projectOffset;
+    const channels = [160_000 + projectOffset, detailedBase + 1, detailedBase + 2, detailedBase + 3].join(',');
+    // Specs share the disposable database. Cascade only this spec's owned
+    // channels so synthetic Scripted failures cannot leak into later Health checks.
+    sqlite(`PRAGMA foreign_keys = ON;
+      BEGIN IMMEDIATE;
+      DELETE FROM "Channel" WHERE "Id" IN (${channels});
+      COMMIT;`);
+    expect(sqlite(`SELECT COUNT(*) FROM "Playout" WHERE "ChannelId" IN (${channels});`)).toBe('0');
+  });
+
   test('kind editors hydrate resolved forms and attach Scripted and Block controls', async ({ page, browser }, testInfo) => {
     test.setTimeout(90_000);
     const seed = seedDetailedPlayoutWorkflow(testInfo);
@@ -634,7 +650,7 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
       await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
       await page.setViewportSize({ width: 390, height: 844 });
       const navigation = page.getByRole('button', { name: language === 'nl' ? 'Navigatie omschakelen' : 'Toggle navigation' });
-      if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+      // Resizing closes the drawer asynchronously; a toggle can reopen it.
       await expect(navigation).toHaveAttribute('aria-expanded', 'false');
       await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(element => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0);
       await detail.scrollIntoViewIfNeeded();
@@ -673,7 +689,7 @@ SELECT COUNT(*) FROM "Playout" WHERE "Id" = ${seed.deletePlayoutId};
     await expect(page.getByRole('row').filter({ hasText: seed.primaryTitle })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     const navigation = page.getByRole('button', { name: 'Toggle navigation' });
-    if (await navigation.getAttribute('aria-expanded') === 'true') await navigation.click();
+    await expect(navigation).toHaveAttribute('aria-expanded', 'false');
     await page.getByRole('heading', { name: 'Playout Detail', exact: true }).locator('..').scrollIntoViewIfNeeded();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('rejected-timeline-mobile.png'), fullPage: true });

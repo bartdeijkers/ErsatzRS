@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: integrate UCU11 and extend verified native caption flow to general source/seek windows; full engine acceptance open'
+current_focus = 'P9A-04: qualify actual source/seek windows after verified UCU11 integration; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,12 +62,24 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
+e5e45583 source. All six Phase9 acceptance/status/dependency records survive.
+Both real ordinary Local routes pass all four caption/audio/Off/stale cases
+again; shared command and Next/native HLS regressions pass. P9A-04 owns exact
+run identities and the bounded source-seek experiment. Next pass actual seek
+and OutPoint into the existing owner and prove raw interval offsets, current
+PSI/PES/page and clock coverage on the delayed888 source before enabling it.
+FFprobe seek positions are hints: even a requested empty interval can return
+an old packet without PTS. Missing cue-window header evidence remains a concrete
+candidate-selection gap. No acceptance requirement is removed or limitation
+accepted; full engine/editor/client/platform acceptance and production-addon
+work remain open. No milestone completion, remote push or publication occurs.
+
 The finite genuine Local-source flow now passes native legacy AND Hybrid:
 qualified888 bitmap Burn, both audio preferences, Off/stale-source ordinary AV,
 accepted authored200, TSDuck and independent default2lease cleanup. P9A-04 owns
 exact receipts and the paired final-argv proof of the internal-producer pacing
-correction. Focused loader/strict Clippy/progress checks pass. Next integrate
-fetched UCU11 origin/main while preserving unrelated work and extend this
+correction. Focused loader/strict Clippy/progress checks pass. Extend this
 representative verified flow to general source/seek windows. Current qualification's
 whole-bounded-EOF requirement is an implementation gap, not a product restriction.
 Full Level2.5/editor/client/Lua/restart/platform criteria and engine-first delivery
@@ -172,6 +184,48 @@ Additional bounded maintenance removed7.1GiB of inactive /tmp browser binary/WAS
 copies after root process-reference checks, retaining their databases/logs and all
 active CI/source/UCU/proof state. TRIM completed; Windows C free170.69GiB at the
 final sample, with concurrent CI activity. tmp/wsl-cleanup-20261015 owns receipts.
+
+2026-10-15 UCU-11 is Complete through fixed v26.11.3/f75abe53,
+ordered rows233–236, with all236 ledger rows accepted. The feat/ucu-11 source
+integrates delivered remote main32c12793 and preserves unrelated teletext work.
+The milestone owns exact identities and required local proof: workspace strict
+lint,6312 nextest passes plus doctests, matched Leptos/bundles, dependency audit,
+web parity, six Linux/Windows decoded mode smokes, published022 cold/cache/bundle
+adoption, affected headed browsers and Native/Next TSDuck87/83. Focused pacing
+checks pass22 each with five periodic samples and no low intervals.
+Native, stored choices, international tracks and approved explicitly unverified
+hardware/platform debt remain supported.
+
+Under the authorized recovery amendment, retain valid original CI38654305604
+results on c41601ba and Next-only CI38657883005 on033bd29f (417 regressions and
+both host smokes). Final browser recovery38666094421 on7625086f passes22/22,
+including all seven previously unexecuted serial followers per project, both
+TCP publication cases and every editor JS/theme variant. Full test identity
+composition accounts for376 cases per browser: Chromium371 passes/5 existing
+opt-in skips, Firefox346 passes/30 existing explicit skips, zero failures or
+unexecuted followers. All25 additional Firefox-only skips have passing Chromium
+counterparts. This is composed acceptance, not a new full exact-commit release
+CI gate. Application publication remains separate.
+
+Authorized cache cleanup removes the UCU11 configured application target,
+native Windows target and three Next source targets. Exact tested bundles,
+source/provenance and raw acceptance evidence remain in
+local tmp/evidence/ucu11-v26.11.3/ (former worktree tmp/ and test-results/).
+Native Windows evidence is archived in ErsatzRS-evidence/ucu11-v26.11.3/app.
+Local checkout/branch retirement follows exact remote source verification;
+remote history and evidence remain. Completed UCU10 and Next source-candidate
+worktrees/local branches and unused caches are already removed. UCU10 evidence
+remains under local tmp/evidence/ucu10-32c12793/.
+
+UCU-10 is delivered through PR105 on remote main32c12793, with232 accepted rows
+through v26.11.2. Run38623973857 has every non-browser gate and Chromium green;
+Firefox finishes345 passed,30 skipped and only fixture-collision case329 failed.
+The maintainer authorizes only that corrected case's headed rerun:1 pass11.3s,
+no new full CI. The fixture-only commit uses [skip ci]; existing passed evidence
+is reused. This is not a new fully executed green CI run on the corrected commit.
+The ucu-10 milestone owns the complete evidence and superseding amendment.
+No application release is authorized. Preserve ongoing Phase9 work below.
+
 
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly

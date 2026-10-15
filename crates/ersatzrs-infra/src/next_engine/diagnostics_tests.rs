@@ -1,6 +1,78 @@
 use super::*;
 use tokio::io::AsyncWriteExt as _;
 
+#[test]
+fn json_levels_channel_spans_and_ffmpeg_targets_are_preserved() {
+    for level in ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] {
+        let line = serde_json::json!({
+            "message": "ready", "level": level, "target": "ffmpeg", "span": {"number": "2.1"}
+        });
+        assert_eq!(
+            parse_json(&line.to_string()),
+            Some((level, "next::channel 2.1::ffmpeg".into(), "ready".into()))
+        );
+    }
+    for (span, target, expected) in [
+        (
+            serde_json::json!({"number": 3}),
+            "worker",
+            "next::channel 3",
+        ),
+        (serde_json::Value::Null, "ffmpeg", "next::ffmpeg"),
+        (serde_json::json!({"number": false}), "worker", "next"),
+    ] {
+        let line = serde_json::json!({"message": "done", "level": "CUSTOM", "target": target, "span": span});
+        assert_eq!(
+            parse_json(&line.to_string()),
+            Some(("DEBUG", expected.into(), "done".into()))
+        );
+    }
+}
+
+#[test]
+fn malformed_json_fields_keep_the_bounded_text_fallback() {
+    for line in [
+        "{",
+        "[]",
+        "null",
+        r#"{"level":"WARN"}"#,
+        r#"{"level":42,"message":"bad"}"#,
+        r#"{"level":"WARN","message":{}}"#,
+    ] {
+        assert!(parse_json(line).is_none());
+        assert_eq!(parse(line), ("DEBUG", "next", line));
+    }
+}
+
+#[test]
+fn json_messages_are_redacted_and_cannot_forge_diagnostic_lines() {
+    let tail = Mutex::new(Tail::default());
+    let value = serde_json::json!({
+        "level":"WARN", "target":"ffmpeg", "span":{"number":"5\nforged"},
+        "message":"fixture-private-session\nsource https://user:placeholder@example.test/private?token=placeholder"
+    });
+    record(
+        &value.to_string(),
+        &tail,
+        &["fixture-private-session".into()],
+    );
+    let text = tail.lock().unwrap().text();
+    assert_eq!(text.lines().count(), 1);
+    assert!(text.contains("WARN] [next::channel 5 forged::ffmpeg]"));
+    assert!(text.contains("https://example.test"));
+    for private in [
+        "fixture-private-session",
+        "placeholder",
+        "/private",
+        "token=",
+    ] {
+        assert!(
+            !text.contains(private),
+            "private JSON field was retained: {private}"
+        );
+    }
+}
+
 fn diagnostics(redactions: Vec<String>) -> Diagnostics {
     Diagnostics {
         readers: JoinSet::new(),

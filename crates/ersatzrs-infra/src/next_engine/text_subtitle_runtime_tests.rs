@@ -172,13 +172,14 @@ fn vtt_seconds(text: &str) -> f64 {
     fields[0] * 3600.0 + fields[1] * 60.0 + fields[2]
 }
 
-fn assert_text_vtt(body: &str, converted: bool, segment_duration: f64) {
+fn assert_text_vtt(body: &str, converted: bool, segment_duration: f64) -> Option<(u64, u64)> {
     assert!(body.starts_with("WEBVTT\n"));
     let map = body
         .lines()
         .find_map(|line| line.strip_prefix("X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:"))
         .expect("VTT timestamp map");
-    assert!(map.parse::<u64>().unwrap() < 8_589_934_592);
+    let map = map.parse::<u64>().unwrap();
+    assert!(map < 8_589_934_592);
     assert!(!body.contains("BEFORE SEEK"));
     assert!(!body.contains("AFTER SEEK"));
     if converted {
@@ -187,20 +188,23 @@ fn assert_text_vtt(body: &str, converted: bool, segment_duration: f64) {
             .lines()
             .find_map(|line| line.split_once(" --> "))
             .expect("converted timed cue");
-        assert_eq!(
-            cue.0, "00:00:00.000",
-            "active seeked cue starts at segment origin"
-        );
-        let end = vtt_seconds(cue.1);
+        let start = vtt_seconds(cue.0);
+        let end = vtt_seconds(cue.1.split_whitespace().next().unwrap());
         assert!(
-            end > 0.0 && (end - segment_duration).abs() < 0.002,
-            "active cue must clip at segment end: {end} vs {segment_duration}"
+            end - start > 2.0 * segment_duration && end - start <= 50.001,
+            "the full selected cue spans segments and ends at its item/pass edge: {start}..{end}"
         );
+        let mapped = |seconds| {
+            let millis = Duration::from_secs_f64(seconds).as_millis();
+            (map + u64::try_from(millis * 90).unwrap()) % 8_589_934_592
+        };
+        Some((mapped(start), mapped(end)))
     } else {
         assert!(
             !body.contains(" --> "),
             "Burn/off must not publish text cues"
         );
+        None
     }
 }
 
@@ -285,7 +289,12 @@ async fn callback_connection(
                 let mut bytes = Vec::new();
                 while !bytes.ends_with(b"\r\n\r\n") {
                     assert!(bytes.len() < 16 * 1024, "callback headers exceed fixture limit");
-                    bytes.push(socket.read_u8().await.unwrap());
+                    let byte = match socket.read_u8().await {
+                        Ok(byte) => byte,
+                        Err(error) if matches!(error.kind(), std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted) => return,
+                        Err(error) => panic!("read callback headers: {error}"),
+                    };
+                    bytes.push(byte);
                 }
                 let request = std::str::from_utf8(&bytes).unwrap();
                 let mut lines = request.split("\r\n");
@@ -357,7 +366,10 @@ async fn callback_connection(
                         uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER)
                             .expect("official Next must expand the session header")).unwrap(), now, until).await {
                         Ok(item) => ("200 OK", serde_json::to_vec(&item).unwrap()),
-                        Err(error) => panic!("production callback for item {} failed: {error}", parts[1]),
+                        // Match the production next_media::get_dynamic boundary:
+                        // stale/preparation failures are HTTP 503, so the real
+                        // engine can apply its bounded retry policy.
+                        Err(_) => ("503 Service Unavailable", Vec::new()),
                     }
                 } else {
                     ("401 Unauthorized", Vec::new())
@@ -370,13 +382,19 @@ async fn callback_connection(
 #[tokio::test]
 #[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
 async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off() {
-    text_runtime_cases(false, false).await;
+    text_runtime_cases(false, false, false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires Next0.2.2 and FFmpeg; actual WebVTT settings and full cue repetition"]
+async fn real_next_webvtt_settings_and_spanning_cue_times_survive_conversion() {
+    text_runtime_cases(false, false, true).await;
 }
 
 #[tokio::test]
 #[ignore = "requires official Next and FFmpeg; uses disposable synthetic media"]
 async fn real_next_text_subtitles_seek_beyond_final_cue_preserves_playback() {
-    text_runtime_cases(false, true).await;
+    text_runtime_cases(false, true, false).await;
 }
 
 #[tokio::test]
@@ -388,7 +406,7 @@ async fn real_next_prepared_artifact_callbacks_preserve_text_audio_and_seek() {
 #[tokio::test]
 #[ignore = "child of real_next_prepared_artifact_callbacks_preserve_text_audio_and_seek"]
 async fn fixture_child_prepared_artifacts() {
-    text_runtime_cases(true, false).await;
+    text_runtime_cases(true, false, false).await;
 }
 
 fn text_profile() -> FFmpegProfile {
@@ -403,7 +421,7 @@ fn text_profile() -> FFmpegProfile {
     }
 }
 
-async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool) {
+async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool, settings: bool) {
     let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
     let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
@@ -412,7 +430,9 @@ async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool) {
     } else {
         tempfile::tempdir().unwrap()
     };
-    let cues = if after_final_cue {
+    let cues = if settings {
+        "WEBVTT\n\n00:00:05.000 --> 00:00:55.000 align:start position:20%\nNext text conversion proof\n"
+    } else if after_final_cue {
         "1\n00:00:00,000 --> 00:00:01,000\nBEFORE SEEK\n\n"
     } else {
         CUES
@@ -425,8 +445,19 @@ async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool) {
         (false, true, false),
         (true, true, true),
     ] {
+        if settings && (!convert || off) {
+            continue;
+        }
         let (pool, locker) = prepare_schedule(&clip, false, &text_profile()).await;
         configure_competing_text_tracks(&pool, embedded, convert, off).await;
+        if settings {
+            for sql in [
+                "UPDATE MediaStream SET Codec='webvtt' WHERE MediaStreamKind=3 AND Language='nld'",
+                "UPDATE Subtitle SET Codec='webvtt' WHERE Language='nld'",
+            ] {
+                sqlx::query(sql).execute(&pool).await.unwrap();
+            }
+        }
         if prepared_artifact {
             prepared_artifact_runtime::publish_fixture(&pool, &clip).await;
         }
@@ -471,36 +502,59 @@ async fn text_runtime_cases(prepared_artifact: bool, after_final_cue: bool) {
         .await
         .unwrap();
         let playlist = handle.trim_playlist().await.unwrap();
-        let segment = playlist
-            .lines()
-            .find(|line| {
-                !line.starts_with('#')
-                    && Path::new(line)
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
-            })
-            .unwrap();
-        let segment_duration: f64 = playlist
-            .lines()
-            .find_map(|line| line.strip_prefix("#EXTINF:"))
-            .unwrap()
-            .trim_end_matches(',')
-            .parse()
-            .unwrap();
-        let vtt_path = output.join(segment).with_extension("vtt");
-        let body = read_vtt_segment(&vtt_path).await;
-        assert_text_vtt(&body, convert && !off && !after_final_cue, segment_duration);
-        assert_text_video_and_audio(
-            &ffmpeg,
-            &output.join(segment),
-            !convert && !off && !after_final_cue,
+        let segment = assert_text_playlist(
+            &output,
+            &playlist,
+            convert && !off && !after_final_cue,
+            settings,
         )
         .await;
+        assert_text_video_and_audio(&ffmpeg, &segment, !convert && !off && !after_final_cue).await;
         assert!(registry.stop_channel("1").await);
         task.await.unwrap();
         callback.stop().await;
         assert!(!output.exists());
     }
+}
+
+async fn assert_text_playlist(
+    output: &Path,
+    playlist: &str,
+    converted: bool,
+    settings: bool,
+) -> PathBuf {
+    let mut segments = playlist.lines().filter(|line| {
+        !line.starts_with('#')
+            && Path::new(line)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
+    });
+    let segment = segments.next().unwrap();
+    let segment_duration: f64 = playlist
+        .lines()
+        .find_map(|line| line.strip_prefix("#EXTINF:"))
+        .unwrap()
+        .trim_end_matches(',')
+        .parse()
+        .unwrap();
+    let body = read_vtt_segment(&output.join(segment).with_extension("vtt")).await;
+    let cue = assert_text_vtt(&body, converted, segment_duration);
+    if converted {
+        let second = segments
+            .next()
+            .expect("adjacent complete segment for a spanning cue");
+        let adjacent = read_vtt_segment(&output.join(second).with_extension("vtt")).await;
+        assert_eq!(
+            assert_text_vtt(&adjacent, true, segment_duration),
+            cue,
+            "overlapping segments must repeat identical mapped full cue times"
+        );
+        if settings {
+            assert!(body.contains("align:start position:20%"));
+            assert!(adjacent.contains("align:start position:20%"));
+        }
+    }
+    output.join(segment)
 }
 
 async fn read_vtt_segment(path: &Path) -> String {

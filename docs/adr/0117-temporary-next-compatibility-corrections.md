@@ -14,7 +14,43 @@ CI and verified publication. It does not claim completed runtime acceptance.
 
 ## Implementation
 
-Partial — row186 corrections are implemented and accepted. The runtime
+Partial — accepted corrections are implemented; approved platform/hardware
+obligations and independent upstream patch retirement remain open.
+
+UCU-11 update (2026-10-14): the maintainer approves local catch-up through
+v26.11.3. Reviewed released Next0.2.2 corrects HLS cue intervals, timestamp maps
+and WebVTT settings; its unchanged two unpatched runtime regressions still fail.
+The patched candidate passes actual Linux subtitle/seek/settings, image and
+HTTP/RTSP acceptance, plus source checks. Four local RID candidates and both
+separately authorized macOS source jobs are verified. The maintainer subsequently
+approves publishing the exact verified Next 0.2.2 dependency packages as the
+bounded exception `next-4a0b59a-ersatzrs.1` in public `bartdeijkers/ErsatzRS-next`.
+Release 413217746 contains the reviewed 20 assets, all passing anonymous
+checksum verification; receipt: tmp/next022-audit/next022-public-download-verification.log.
+The canonical manifest selects those published packages. Integrated Linux/Windows
+adoption, decoded playback and required local UCU-11 gates pass; package
+publication alone does not prove application or hardware acceptance. This exception
+authorizes no application push, application CI, application release or additional
+dependency publication. A separate 2026-10-15 maintainer amendment authorizes
+remote application push once UCU-11 is accepted and associated CI, retrying only
+failed specific checks. Application release remains separate. No new FFmpeg
+amendment is demonstrated. UCU-11 owns
+current identities/evidence; both patches retain their independent removal
+criteria. This records execution of the accepted policy, not a new decision.
+
+UCU-10 update (2026-10-14): the maintainer separately authorizes the v26.11.2
+local catch-up, the source-only macOS candidate push/CI and verified Next021
+dependency publication. Both unchanged unpatched regressions still fail, so
+both minimal patches are retained with independent removal criteria. The exact
+six-RID `next-7f75012-ersatzrs.1` release is published; all20 assets pass anonymous
+download/checksum checks. Linux/Windows bundled startup, cold acquisition,
+managed restart and decoded lifecycle proof pass. This does not publish an
+application or FFmpeg release or verify the approved platform/hardware debt.
+The later separately authorized application delivery is integrated on main
+through PR105, with the maintainer's final fixture-only focused-verification
+amendment. UCU-10 owns source identities and detailed acceptance.
+
+Earlier row186 corrections are implemented and accepted. The runtime
 distinguishes static WebP from animated WebP and repeats
 complete GIF/WebP cycles. All six static formats and finite/infinite animated
 WebP pass decoded Linux application checks, including local/HTTP half-second

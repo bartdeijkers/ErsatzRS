@@ -370,19 +370,30 @@ async fn run(silent: bool) {
             "-v",
             "error",
             "-show_entries",
-            "format=duration",
+            "format=duration:stream=codec_type,pix_fmt",
             "-of",
-            "default=nw=1:nk=1",
+            "json",
         ])
         .arg(&playlist);
-    let duration = String::from_utf8(tool(probe).await)
+    let metadata: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    let duration = metadata["format"]["duration"]
+        .as_str()
         .unwrap()
-        .trim()
         .parse::<f64>()
         .unwrap();
     assert!(
         (duration - 8.0).abs() < 0.3,
         "finite song/video schedule: {duration}s"
+    );
+    let video = metadata["streams"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|stream| stream["codec_type"] == "video")
+        .unwrap();
+    assert_eq!(
+        video["pix_fmt"], "yuv420p",
+        "song backgrounds remain client-compatible 4:2:0"
     );
     // wait() and tool() reap the exact owned Next and fixture processes.
     drop(locker);

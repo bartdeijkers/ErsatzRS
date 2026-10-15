@@ -2910,16 +2910,17 @@ async fn graphics_render_context_with_motion_probe(
         GraphicsElementConfig::Motion(config) => config.video_path.as_deref(),
         _ => None,
     };
-    if let Some(path) =
-        image_path.filter(|path| ersatzrs_ffmpeg::image_file_is_jpeg_xl(Path::new(path)))
-    {
+    if let Some(path) = image_path.filter(|path| {
+        ersatzrs_ffmpeg::image_file_is_jpeg_xl(Path::new(path))
+            || ersatzrs_ffmpeg::image_file_is_apng(Path::new(path))
+    }) {
         let extractor = FfprobeExtractor::new(ffprobe_path());
         let (cancel, cancellation) = tokio::sync::oneshot::channel();
         let deadline = startup.as_ref().map_or_else(
             || tokio::time::Instant::now() + Duration::from_secs(15),
             |budget| budget.deadline,
         );
-        let probe = extractor.jpeg_xl_timing_cancellable(path, deadline, cancellation);
+        let probe = extractor.image_timing_cancellable(path, deadline, cancellation);
         tokio::pin!(probe);
         let timing = if let Some(startup) = startup.as_deref_mut() {
             startup.check()?;
@@ -2937,8 +2938,9 @@ async fn graphics_render_context_with_motion_probe(
             drop(cancel);
             result
         };
-        let timing = timing.map_err(|_| graphics_startup_error("JPEG XL timing unavailable"))?;
-        return Ok(render_context.with_jpeg_xl_timing(element.id, timing));
+        let timing =
+            timing.map_err(|_| graphics_startup_error("graphics image timing unavailable"))?;
+        return Ok(render_context.with_image_timing(element.id, timing));
     }
     let GraphicsElementConfig::Motion(config) = &element.config else {
         return Ok(render_context);

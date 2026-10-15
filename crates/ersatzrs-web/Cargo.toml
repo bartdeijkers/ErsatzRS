@@ -65,9 +65,9 @@ jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 jsonschema = { version = "0.58.1", default-features = false }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 futures-util = "0.3"
-serde_yaml = "0.9.34"
+serde_yaml = { package = "yaml_serde", version = "0.10.7" }
 pulldown-cmark = "0.13.4"
-ammonia = "4.2.0"
+ammonia = "4.2.3"
 zip = { version = "8", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -112,6 +112,8 @@ serde_urlencoded = "0.7"
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # Virtual deadline regressions are native tests, not hydration runtime features.
 tokio = { version = "1", features = ["test-util"] }
+# Independently validate generated troubleshooting ZIP directories and contents.
+zip = { version = "8", default-features = false }
 
 [features]
 default = ["ssr"]

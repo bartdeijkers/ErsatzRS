@@ -217,6 +217,7 @@ impl NextProcess {
             .await
             .map_err(|_| ProcessError::StartupTimeout)??;
         command
+            .env("ETV_LOG_FORMAT", "json")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

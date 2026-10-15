@@ -208,6 +208,8 @@ async fn generated_and_recursive_sources_have_no_provider_identity() {
         headers: None,
         user_agent: None,
         timeout_us: None,
+        retry_budget_ms: None,
+        retry_backoff_ms: None,
     };
     assert!(identity(&pool, &media, &dynamic).await.is_err());
     let generated = Source::Lavfi {

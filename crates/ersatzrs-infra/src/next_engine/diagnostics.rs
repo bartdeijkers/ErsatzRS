@@ -196,7 +196,11 @@ fn record(line: &str, tail: &Mutex<Tail>, redactions: &[String]) {
     if line.is_empty() {
         return;
     }
-    let (level, target, message) = parse(line);
+    let json = parse_json(line);
+    let (level, target, message) = json.as_ref().map_or_else(
+        || parse(line),
+        |(level, target, message)| (*level, target.as_str(), message.as_str()),
+    );
     let target = sanitize(target, redactions);
     let message = sanitize(message, redactions);
     match level {
@@ -234,11 +238,50 @@ fn parse(line: &str) -> (&str, &str, &str) {
     ("DEBUG", "next", line)
 }
 
+/// Upstream `NextLogger` JSON framing, retaining older text-runtime compatibility.
+fn parse_json(line: &str) -> Option<(&'static str, String, String)> {
+    if !line.trim_start().starts_with('{') {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(line).ok()?;
+    let message = value.get("message")?.as_str()?.to_owned();
+    let level = match value.get("level")?.as_str()? {
+        "ERROR" => "ERROR",
+        "WARN" => "WARN",
+        "INFO" => "INFO",
+        "TRACE" => "TRACE",
+        _ => "DEBUG",
+    };
+    let channel = value.get("span").and_then(|span| span.get("number"));
+    let channel = match channel {
+        Some(serde_json::Value::String(number)) if !number.is_empty() => Some(number.clone()),
+        Some(serde_json::Value::Number(number)) => Some(number.to_string()),
+        _ => None,
+    };
+    let ffmpeg = value.get("target").and_then(serde_json::Value::as_str) == Some("ffmpeg");
+    let target = match (channel, ffmpeg) {
+        (Some(channel), true) => format!("next::channel {channel}::ffmpeg"),
+        (Some(channel), false) => format!("next::channel {channel}"),
+        (None, true) => "next::ffmpeg".to_owned(),
+        (None, false) => "next".to_owned(),
+    };
+    Some((level, target, message))
+}
+
 fn sanitize(value: &str, redactions: &[String]) -> String {
     let value = redactions.iter().fold(value.to_owned(), |value, private| {
         value.replace(private, "[redacted]")
     });
     crate::remote_stream::sanitize_remote_stream_diagnostic(&value)
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

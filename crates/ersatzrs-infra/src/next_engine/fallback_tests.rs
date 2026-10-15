@@ -52,6 +52,8 @@ fn gaps_preserve_overlap_union_and_have_stable_authenticated_sources() {
     );
     let value = serde_json::to_value(gap).unwrap();
     assert_eq!(value["source"]["source_type"], "dynamic");
+    assert_eq!(value["source"]["retry_budget_ms"], 25_000);
+    assert_eq!(value["source"]["retry_backoff_ms"], 250);
     assert!(value["source"]["uri"]
         .as_str()
         .unwrap()

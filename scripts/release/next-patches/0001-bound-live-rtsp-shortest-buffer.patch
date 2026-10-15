@@ -1,6 +1,6 @@
 --- a/crates/ffpipeline/src/pipeline.rs
 +++ b/crates/ffpipeline/src/pipeline.rs
-@@ -367,6 +367,15 @@
+@@ -379,6 +379,15 @@
          output_settings: OutputSettings,
      ) -> Result<Pipeline, FFPipelineError> {
          let mut final_output_settings = output_settings;
@@ -14,9 +14,9 @@
 +            ))
 +        .then_some(Duration::from_millis(500));
  
-         if let Some(accel) = &final_output_settings.accel
-             && accel
-@@ -1004,7 +1013,7 @@
+         if let Some(silence) = input_settings.audio_input.silence_if_missing() {
+             log::info!(
+@@ -1062,7 +1071,7 @@
                  OutputOption::DoNotMapMetadata,
                  OutputOption::Duration(duration),
                  // apad does not end; stop at the end of video
@@ -25,7 +25,7 @@
                  OutputOption::TsOffset(pts_offset),
                  OutputOption::VideoTrackTimeScale(90_000),
                  OutputOption::FrameRate(output_frame_rate),
-@@ -2170,6 +2179,80 @@
+@@ -2292,6 +2301,80 @@
          args.windows(2)
              .find(|a| a[0] == "-shortest_buf_duration")
              .map(|a| a[1].as_ref())

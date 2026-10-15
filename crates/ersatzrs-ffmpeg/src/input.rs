@@ -132,7 +132,7 @@ impl InputFile {
     /// | input | `-loop 1` | `-ignore_loop 0` |
     /// |---|---|---|
     /// | still image (image2) | works | `Option ignore_loop not found` |
-    /// | animated `GIF` / `WebP` | `Option loop not found` | works |
+    /// | animated `GIF` / `WebP` / `APNG` | `Option loop not found` | works |
     ///
     /// Either mismatch fails at `Error opening input file`, so a graphics
     /// element pointing at an animated image used to take the whole channel
@@ -141,8 +141,10 @@ impl InputFile {
     #[must_use]
     pub fn graphics_image(path: impl Into<String>) -> Self {
         let path = path.into();
-        if image_file_is_jpeg_xl(std::path::Path::new(&path)) {
-            // JPEG XL's demuxer has no image2 loop option. The render context
+        if image_file_is_jpeg_xl(std::path::Path::new(&path))
+            || image_file_is_apng(std::path::Path::new(&path))
+        {
+            // These demuxers cannot use image2 looping. The render context
             // supplies decoded timing and a finite concat input for animations.
             return Self::new(InputKind::GraphicsImage, path, 0);
         }
@@ -368,7 +370,23 @@ pub fn image_file_is_animated(path: &std::path::Path) -> bool {
     if header.starts_with(b"RIFF") && header[8..12] == *b"WEBP" {
         return webp_is_animated(&mut file, &header);
     }
+    if header.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return png_has_animation_control(&mut file);
+    }
     false
+}
+
+/// Identify APNG by its bounded container structure, including a `.png` filename.
+#[must_use]
+pub fn image_file_is_apng(path: &std::path::Path) -> bool {
+    use std::io::Read as _;
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut signature = [0_u8; 8];
+    file.read_exact(&mut signature).is_ok()
+        && signature == *b"\x89PNG\r\n\x1a\n"
+        && png_has_animation_control(&mut file)
 }
 
 /// Total bytes any single reader will pull from a file.
@@ -377,6 +395,62 @@ pub fn image_file_is_animated(path: &std::path::Path) -> bool {
 /// enough that a hostile or corrupt file cannot be used to read a whole disk
 /// into memory. Hitting it means "stop looking", not "animated".
 const MAX_STRUCTURE_BYTES: u64 = 1 << 20;
+
+/// Recognize APNG's acTL before image data (PNG section 11.3.6.1).
+///
+/// Only classify the bounded container structure; `FFmpeg` validates image data
+/// and CRCs. A one-frame APNG still needs the APNG demuxer's loop option.
+fn png_has_animation_control(file: &mut std::fs::File) -> bool {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+
+    if file.seek(SeekFrom::Start(8)).is_err() {
+        return false;
+    }
+    let mut reader = std::io::BufReader::new(file.take(MAX_STRUCTURE_BYTES));
+    let mut first = true;
+    loop {
+        let mut chunk = [0_u8; 8];
+        if reader.read_exact(&mut chunk).is_err() {
+            return false;
+        }
+        let size = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        let kind = &chunk[4..8];
+        if first {
+            if kind != b"IHDR" || size != 13 {
+                return false;
+            }
+            first = false;
+        } else if kind == b"IHDR" {
+            return false;
+        }
+        match kind {
+            b"acTL" => {
+                if size != 8 {
+                    return false;
+                }
+                let mut control_and_crc = [0_u8; 12];
+                if reader.read_exact(&mut control_and_crc).is_err() {
+                    return false;
+                }
+                return u32::from_be_bytes([
+                    control_and_crc[0],
+                    control_and_crc[1],
+                    control_and_crc[2],
+                    control_and_crc[3],
+                ]) > 0;
+            }
+            b"IDAT" | b"IEND" => return false,
+            _ => {
+                // Bound both reading and arithmetic on every supported target.
+                if u64::from(size) > MAX_STRUCTURE_BYTES
+                    || skip_exact(&mut reader, size as usize + 4).is_err()
+                {
+                    return false;
+                }
+            }
+        }
+    }
+}
 
 /// Count `GIF` image descriptors, stopping at the second.
 ///

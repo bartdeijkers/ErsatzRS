@@ -5430,7 +5430,6 @@ create_playlist: true
         assert_eq!(detected.sha256, hex_hash(b"operator poster"));
     }
 
-    #[cfg(unix)]
     async fn fixture_addon_pool(root: &Path) -> DbPool {
         let database_path = root
             .parent()
@@ -5440,6 +5439,10 @@ create_playlist: true
         let pool = ersatzrs_infra::db::init(&database_url)
             .await
             .expect("fixture database");
+        #[cfg(unix)]
+        let (entrypoint_path, entrypoint_kind) = ("fixture.sh", "posix_shell");
+        #[cfg(windows)]
+        let (entrypoint_path, entrypoint_kind) = ("fixture.bat", "windows_batch");
         let manifest = serde_json::json!({
             "manifest_version": 1,
             "id": "org.ersatzrs.addon.fixture",
@@ -5455,7 +5458,7 @@ create_playlist: true
                 {"id": "remote-stream.play.v1"}
             ],
             "entrypoints": {
-                "any": {"path": "fixture.sh", "kind": "posix_shell"}
+                "any": {"path": entrypoint_path, "kind": entrypoint_kind}
             },
             "permissions": {},
             "settings": [],
