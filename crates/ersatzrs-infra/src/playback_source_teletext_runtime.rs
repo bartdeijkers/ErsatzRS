@@ -256,10 +256,7 @@ async fn prepare(
                 Err(_) => continue,
             };
             let window = decoded.window();
-            if !window.ended_at_eof
-                || window.skipped_selected_prefix_packets != 0
-                || window.source_packets != window.decoder_packets
-            {
+            if !window.covers_entire_source_bytes() {
                 tracing::warn!(media_item_id = item,
                     "source teletext interval is not fully qualified; ordinary playback remains available");
                 continue;

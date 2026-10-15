@@ -17,8 +17,8 @@ Shared native preparation now uses existing configuration and EntityLocker
 admission independently of host/UI state. It releases preparation work before
 playback, rechecks current candidates and filesystem association before opens,
 and transfers the receipt with actual playback admission into each consuming
-child. Reaping, cancellation and quarantine follow that actual owner. Ordinary
-legacy/HLS hookup is under runtime verification in P9A-04. Current whole-window
+child. Reaping, cancellation and quarantine follow that actual owner. Finite
+Local-source legacy/Hybrid caption flows are proven in P9A-04. Current whole-window
 qualification is temporary incomplete coverage, not an accepted long-source or
 seek restriction; general cue/seek semantics and the full source matrix remain.
 
@@ -55,7 +55,17 @@ input/source resources before work capacity and scope completion.
 Returned decoder stream/program facts must still match and at least one nonempty
 bitmap event must exist. Missing PTS stays unknown; automatic region does not
 resolve charset provenance or promote stored HeadersObserved to Ready. P9A-04
-owns evidence. This bounded initial byte window does not prove later playback
+owns evidence. Explicit bounded packet spans now reuse this same held-handle
+capture and actual decoder owner. Their checked offsets must fit the source;
+the selected range supplies its own current PAT/PMT and complete selected PES,
+without copying authority from the earlier scan prefix. Receipts distinguish
+the absolute first source packet, all inspected packets, omitted selected prefix
+and trimmed tail from actual decoder bytes. Reaching EOF at a nonzero offset
+never establishes whole-source byte coverage. The whole-source byte predicate
+retains the existing automatic-selection fence; an explicit-span bitmap receipt
+alone grants no playback seek or temporal authority. Raw clock epoch and actual
+cue coverage remain required before automatic interval selection.
+This bounded byte window does not prove later playback
 seek/cue coverage, whole-source inventory, current database ownership or future
 source opens. Source bookends remain observed associations, not immutable-byte or
 restored-in-place-mutation certificates. Actual route/seek ownership, orphan

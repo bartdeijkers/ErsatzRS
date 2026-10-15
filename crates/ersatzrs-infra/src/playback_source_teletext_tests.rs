@@ -39,9 +39,11 @@ fn candidate(page: u16, language: &str, role: u8) -> SourceTeletextCaptionCandid
 
 fn window() -> SourceTeletextDecodeWindowEvidence {
     SourceTeletextDecodeWindowEvidence {
+        first_source_packet: 0,
         source_packets: 100,
         decoder_packets: 100,
         skipped_selected_prefix_packets: 0,
+        trimmed_source_tail_packets: 0,
         ended_at_eof: true,
         decoder_sha256: [8; 32],
         psi_fingerprint: [7; 32],

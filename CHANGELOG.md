@@ -40,6 +40,9 @@ release section when tagging a release.
   finite Local-source proof preserves both audio preferences, Off/stale fallback,
   authored pages and default-capacity cleanup. Owned legacy caption producers use
   the existing pacing opt-out while the final wrapper retains its clock and bounds.
+  Explicit bounded packet spans can decode pages beyond the initial scan prefix
+  from the same held source, with exact offsets and omission accounting. Reaching
+  EOF from a later offset does not qualify the whole source or a playback cue.
   General source/seek semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible

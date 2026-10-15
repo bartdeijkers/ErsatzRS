@@ -28,8 +28,12 @@ pub use headers::{LocalTeletextHeaderProblem, LocalTeletextHeaders};
 mod headers;
 mod source_window;
 
-pub use source_window::SourceTeletextDecodeWindowEvidence;
-pub(crate) use source_window::{capture_source_window_owned, LocalTeletextSourceWindow};
+pub(crate) use source_window::{
+    capture_source_packet_span_owned, capture_source_window_owned, LocalTeletextSourceWindow,
+};
+pub use source_window::{
+    SourceTeletextDecodeWindowEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
+};
 
 const AUXILIARY_TIMEOUT: Duration = Duration::from_secs(10);
 

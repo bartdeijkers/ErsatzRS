@@ -1,6 +1,6 @@
 //! Source-associated, exact-page native bitmap decoding (ADR 0121).
 //!
-//! A receipt proves actual decoder bitmap events within one bounded prefix. It
+//! A receipt proves actual decoder bitmap events within one bounded source span. It
 //! neither resolves charset provenance nor promotes stored header observations
 //! to ready pages. Selection policy, database ownership and the lifetime of a
 //! later playback worker remain the caller's responsibilities.
@@ -18,7 +18,9 @@ use super::{
     LocalTeletextSourceGuard,
 };
 
-pub use super::local_teletext::SourceTeletextDecodeWindowEvidence;
+pub use super::local_teletext::{
+    SourceTeletextDecodeWindowEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
+};
 
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_FRAMES: usize = 4096;
@@ -86,7 +88,7 @@ pub struct SourceTeletextBitmapEvents {
     pub last_pts_microseconds: Option<i64>,
 }
 
-/// Successful prefix decode retaining the exact held source and requested page.
+/// Successful bounded decode retaining the exact held source and requested page.
 ///
 /// The decoder uses automatic region (`-1`); charset provenance remains unknown.
 /// The decoder consumes only the same private byte window whose program/PID and
@@ -191,6 +193,47 @@ impl FfprobeExtractor {
         deadline: Instant,
         hold: TeletextWorkHold,
     ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        self.decode_local_teletext_window(request, original, resolved, None, deadline, hold)
+            .await
+    }
+
+    /// Decode an exact page from an explicitly positioned bounded source span.
+    ///
+    /// A locator supplies only untrusted packet positions. The original held
+    /// bytes must contain their own stable current PSI and complete selected
+    /// PES, under the same source association, deadline and actual work owner
+    /// as the prefix decoder. No preceding PSI is invented or copied in.
+    ///
+    /// The receipt proves decoded content and byte positions, not media-clock
+    /// coverage or suitability for a later playback seek. In particular, a
+    /// nonzero span reaching EOF does not prove the whole source. Automatic
+    /// playback must qualify its actual interval separately before selecting it.
+    ///
+    /// # Errors
+    /// Rejects out-of-source spans, missing/changing transport associations,
+    /// absent bitmaps, stale sources and uncertain cleanup as the prefix API does.
+    pub async fn decode_local_teletext_page_at_packet_span(
+        &self,
+        request: SourceTeletextPageDecodeRequest,
+        original: PathBuf,
+        resolved: PathBuf,
+        span: SourceTeletextPacketSpan,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        self.decode_local_teletext_window(request, original, resolved, Some(span), deadline, hold)
+            .await
+    }
+
+    async fn decode_local_teletext_window(
+        &self,
+        request: SourceTeletextPageDecodeRequest,
+        original: PathBuf,
+        resolved: PathBuf,
+        span: Option<SourceTeletextPacketSpan>,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
         request.validate()?;
         check_deadline(deadline)?;
         if LocalProbeCleanupScope::current().is_none() {
@@ -206,7 +249,18 @@ impl FfprobeExtractor {
         .await
         .map_err(probe_error)?;
         check_deadline(deadline)?;
-        let local_teletext::LocalTeletextSourceWindow { snapshot, evidence } =
+        let captured = if let Some(span) = span {
+            local_teletext::capture_source_packet_span_owned(
+                guard.clone(),
+                (original.clone(), resolved.clone()),
+                request.pid,
+                request.program_number,
+                span,
+                deadline,
+                hold.clone(),
+            )
+            .await
+        } else {
             local_teletext::capture_source_window_owned(
                 guard.clone(),
                 original.clone(),
@@ -217,7 +271,9 @@ impl FfprobeExtractor {
                 hold.clone(),
             )
             .await
-            .map_err(probe_error)?;
+        };
+        let local_teletext::LocalTeletextSourceWindow { snapshot, evidence } =
+            captured.map_err(probe_error)?;
         check_deadline(deadline)?;
         let command = self.teletext_page_decode_command(&request, snapshot.path())?;
         let output = local::capture_retained(
@@ -389,3 +445,7 @@ fn parse_bitmap_events(
 #[cfg(test)]
 #[path = "teletext_decode_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "teletext_decode_seek_tests.rs"]
+mod seek_tests;

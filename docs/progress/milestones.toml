@@ -2968,6 +2968,56 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 positioned same-byte source decoding checkpoint (partial):
+Criterion: decode a real later source page without authorizing unrelated prefix
+bytes or weakening actual worker ownership. A checked TS188 packet span now
+reuses the original held file, existing blocking/probe owner and absolute
+deadline. Counts remain bounded to 32,768 packets with checked byte arithmetic
+and source-length validation. The range supplies its own actual current PAT/PMT
+and complete selected PES; neither earlier PSI nor fabricated tables are used.
+Evidence retains the absolute first source packet and exact inspected, selected-
+prefix omission, trimmed-tail and decoder counts plus the existing byte hash.
+The prefix API remains compatible. Whole-source byte coverage now explicitly
+requires offset zero, EOF and no omissions; it implies no media-time coverage.
+Automatic playback retains that fence and does not enable later spans yet.
+
+Run 638354d7-86df-4b1a-8418-666ea78a61fe passes 43 focused window, decoder,
+owned-cancellation and qualification tests, including eight new span cases.
+These reject zero/excessive/overflow/out-of-file ranges, borrowing earlier PSI,
+wrong PID/program and late table changes; valid captures prove exact held bytes,
+omission accounting and nonzero-EOF distinction. Actual native run
+a2d3beb9-5b9f-4426-b68c-8f2423f111f6 passes 1.180 s on FFmpeg/FFprobe
+n9.0-20260805. Its tracked portable fixture generates the same genuine delayed
+60-second source as the locator prerequisite below: 79,769 packets with no
+selected PID in the first 32,768. Real preceding PAT/PMT select ordinal 53,193
+and 26,576 packets through EOF. Eight actual bitmap events decode for each of
+888 and 200; absent 777 and wrong program are rejected. Decoder bytes match the
+actual selected source span hash and differ from the equally sized offset-zero
+prefix. Source bytes/hash remain unchanged and owned cleanup releases work.
+The successful native receipt proves content and offsets, not cue-clock coverage,
+ordinary later-cue playback, charset completeness or full engine acceptance.
+Exact logs/commands live in local tmp/phase9-source-span-checkpoint/; the new
+native fixture is ffprobe/teletext_decode_seek_tests.rs. Initial hash-display
+compilation and strict documentation/test lint failures are retained; their
+corrections do not alter production bytes or decoding behavior.
+
+Final strict infra all-target Clippy passes (clippy-2.log), as do the web
+consumer check (2m36s), seven-file formatting, architecture lint and structured
+progress validation. New-Clippy-allow policy and commit-message lint pass.
+The native/43-test results remain valid after documentation, checked test-index
+conversion and equivalent hash-display lint corrections; no production algorithm
+or decoder command changes after those successes. Earlier ordinary-route and
+headed evidence is reused where its relevant code/input remains unchanged.
+
+Next connect the actual content seek/end to this existing owner and add raw
+clock-epoch/bookend evidence before runtime qualification. The descriptor page
+absent from the scan prefix still needs actual cue-window header evidence.
+Prove the delayed-page cue and wrong-page/current-PSI negatives through both
+ordinary routes, retaining default capacity and ordinary AV. General rolling
+coverage, restart/ABA, full source/Next/platform and every authored Level2.5,
+fallback, editor/metadata/zones, localized admin and suitable-client criterion
+remain open. No permanent limitation, milestone completion or push is claimed.
+
 2026-10-15 accepted UCU-11 integration checkpoint (partial):
 Integrate remote main 61d1786c with local e5e45583. The accepted UCU-10/11
 dispositions and dependencies are retained, including observed pending row 237

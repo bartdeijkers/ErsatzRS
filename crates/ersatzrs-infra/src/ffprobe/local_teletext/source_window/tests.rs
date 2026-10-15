@@ -33,6 +33,15 @@ fn advanced_current_pmt(bytes: &[u8]) -> Vec<u8> {
 }
 
 async fn capture_bytes(bytes: &[u8], pid: u16, program: u16) -> Result<LocalTeletextSourceWindow> {
+    capture_bytes_with_span(bytes, pid, program, None).await
+}
+
+async fn capture_bytes_with_span(
+    bytes: &[u8],
+    pid: u16,
+    program: u16,
+    span: Option<SourceTeletextPacketSpan>,
+) -> Result<LocalTeletextSourceWindow> {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("private-source.ts");
     std::fs::write(&path, bytes).unwrap();
@@ -44,16 +53,36 @@ async fn capture_bytes(bytes: &[u8], pid: u16, program: u16) -> Result<LocalTele
     let locker = EntityLocker::new();
     let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
     let scope = LocalProbeCleanupScope::new();
+    let deadline = Instant::now() + std::time::Duration::from_secs(5);
     let result = scope
-        .scope(capture_source_window_owned(
-            guard,
-            path.clone(),
-            path,
-            pid,
-            program,
-            Instant::now() + std::time::Duration::from_secs(5),
-            work.hold_work(),
-        ))
+        .scope(async {
+            match span {
+                Some(span) => {
+                    capture_source_packet_span_owned(
+                        guard,
+                        (path.clone(), path),
+                        pid,
+                        program,
+                        span,
+                        deadline,
+                        work.hold_work(),
+                    )
+                    .await
+                }
+                None => {
+                    capture_source_window_owned(
+                        guard,
+                        path.clone(),
+                        path,
+                        pid,
+                        program,
+                        deadline,
+                        work.hold_work(),
+                    )
+                    .await
+                }
+            }
+        })
         .await;
     scope.close();
     scope.wait_cleanup().await.unwrap();
@@ -75,9 +104,12 @@ async fn same_byte_snapshot_retains_psi_and_completed_pes_with_exact_evidence() 
     let expected = [&bytes[..2 * PACKET_BYTES], &bytes[3 * PACKET_BYTES..]].concat();
     assert_eq!(snapshot_bytes(&window), expected);
     assert_eq!(window.evidence.source_packets, 16);
+    assert_eq!(window.evidence.first_source_packet, 0);
+    assert_eq!(window.evidence.trimmed_source_tail_packets, 0);
     assert_eq!(window.evidence.decoder_packets, 15);
     assert_eq!(window.evidence.skipped_selected_prefix_packets, 1);
     assert!(window.evidence.ended_at_eof);
+    assert!(!window.evidence.covers_entire_source_bytes());
     assert_eq!(
         window.evidence.decoder_sha256,
         <[u8; 32]>::from(Sha256::digest(&expected))
@@ -152,6 +184,7 @@ async fn capped_window_trims_an_incomplete_tail_to_the_last_complete_pes() {
     assert_eq!(snapshot_bytes(&window), expected);
     assert_eq!(window.evidence.source_packets, 32_768);
     assert_eq!(window.evidence.decoder_packets, 15);
+    assert_eq!(window.evidence.trimmed_source_tail_packets, 32752);
     assert!(!window.evidence.ended_at_eof);
 }
 
@@ -229,4 +262,164 @@ async fn missing_scope_never_reads_or_leaks_a_source_snapshot() {
     assert!(matches!(error, FfprobeError::Cancelled { ref path } if path == LABEL));
     drop(work);
     assert_eq!(locker.active_teletext_work(), 0);
+}
+
+#[test]
+fn packet_span_checks_count_exclusive_end_and_byte_arithmetic() {
+    let span = SourceTeletextPacketSpan::new(37, 123).unwrap();
+    assert_eq!(span.first_packet(), 37);
+    assert_eq!(span.packet_count(), 123);
+    assert_eq!(span.end_packet_exclusive(), 160);
+    assert_eq!(span.byte_offset(), 37 * 188);
+    assert_eq!(span.byte_end_exclusive(), 160 * 188);
+    for count in [0, 32769, u32::MAX] {
+        assert_eq!(
+            SourceTeletextPacketSpan::new(0, count),
+            Err(SourceTeletextPacketSpanError::Count)
+        );
+    }
+    for first in [u64::MAX, u64::MAX / 188] {
+        assert_eq!(
+            SourceTeletextPacketSpan::new(first, 1),
+            Err(SourceTeletextPacketSpanError::Offset)
+        );
+    }
+    let final_valid = SourceTeletextPacketSpan::new(u64::MAX / 188 - 1, 1).unwrap();
+    assert_eq!(final_valid.byte_end_exclusive(), (u64::MAX / 188) * 188);
+    assert!(SourceTeletextPacketSpan::new(0, 32768).is_ok());
+}
+
+fn complete_span_bytes() -> Vec<u8> {
+    let bytes = fixture();
+    // Omit the fixture's adaptation-only selected-PID prefix in the SOURCE
+    // itself, so this independent raw span needs no decoder filtering.
+    [&bytes[..2 * PACKET_BYTES], &bytes[3 * PACKET_BYTES..]].concat()
+}
+
+#[tokio::test]
+async fn nonzero_span_reads_exact_held_bytes_without_using_invalid_earlier_source() {
+    let actual = complete_span_bytes();
+    let invalid = [0x55; 2 * PACKET_BYTES];
+    let bytes = [invalid.as_slice(), &null_packet(), &actual].concat();
+    let span = SourceTeletextPacketSpan::new(3, 15).unwrap();
+    let captured = capture_bytes_with_span(&bytes, 0x100, 1, Some(span))
+        .await
+        .unwrap();
+    assert_eq!(
+        snapshot_bytes(&captured),
+        bytes[usize::try_from(span.byte_offset()).unwrap()
+            ..usize::try_from(span.byte_end_exclusive()).unwrap()]
+    );
+    assert_eq!(captured.evidence.first_source_packet, 3);
+    assert_eq!(captured.evidence.source_packets, 15);
+    assert_eq!(captured.evidence.decoder_packets, 15);
+    assert_eq!(captured.evidence.skipped_selected_prefix_packets, 0);
+    assert_eq!(captured.evidence.trimmed_source_tail_packets, 0);
+    assert!(captured.evidence.ended_at_eof);
+    assert!(!captured.evidence.covers_entire_source_bytes());
+    assert_eq!(
+        captured.evidence.decoder_sha256,
+        <[u8; 32]>::from(Sha256::digest(&actual))
+    );
+    assert!(
+        capture_bytes(&bytes, 0x100, 1).await.is_err(),
+        "prefix API still validates its own actual source range"
+    );
+}
+
+#[tokio::test]
+async fn explicit_span_ignores_later_bytes_but_does_not_claim_source_eof() {
+    let actual = complete_span_bytes();
+    let bytes = [&null_packet()[..], &actual, &[0x55; PACKET_BYTES]].concat();
+    let captured = capture_bytes_with_span(
+        &bytes,
+        0x100,
+        1,
+        Some(SourceTeletextPacketSpan::new(1, 15).unwrap()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(snapshot_bytes(&captured), actual);
+    assert_eq!(captured.evidence.first_source_packet, 1);
+    assert!(!captured.evidence.ended_at_eof);
+    assert_eq!(captured.evidence.trimmed_source_tail_packets, 0);
+}
+
+#[tokio::test]
+async fn full_unfiltered_prefix_covers_only_source_bytes_without_temporal_claim() {
+    let bytes = complete_span_bytes();
+    let captured = capture_bytes(&bytes, 0x100, 1).await.unwrap();
+    assert_eq!(snapshot_bytes(&captured), bytes);
+    assert!(captured.evidence.covers_entire_source_bytes());
+    assert_eq!(captured.evidence.first_source_packet, 0);
+    assert_eq!(captured.evidence.source_packets, 15);
+    assert_eq!(captured.evidence.decoder_packets, 15);
+}
+
+#[tokio::test]
+async fn explicit_span_rejects_out_of_file_extent_without_reducing_requested_count() {
+    let bytes = fixture();
+    for span in [
+        SourceTeletextPacketSpan::new(16, 1).unwrap(),
+        SourceTeletextPacketSpan::new(1, 16).unwrap(),
+    ] {
+        assert!(capture_bytes_with_span(&bytes, 0x100, 1, Some(span))
+            .await
+            .is_err());
+    }
+}
+
+#[tokio::test]
+async fn explicit_span_cannot_borrow_current_tables_from_before_its_first_packet() {
+    let bytes = fixture();
+    let span = SourceTeletextPacketSpan::new(3, 13).unwrap();
+    assert!(capture_bytes_with_span(&bytes, 0x100, 1, Some(span))
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn nonzero_span_rejects_wrong_selection_and_late_current_pmt_change() {
+    let actual = fixture();
+    let bytes = [&null_packet()[..], &actual].concat();
+    let span = SourceTeletextPacketSpan::new(1, 16).unwrap();
+    for (pid, program) in [(0x101, 1), (0x100, 2)] {
+        assert!(capture_bytes_with_span(&bytes, pid, program, Some(span))
+            .await
+            .is_err());
+    }
+    let changed = [bytes, advanced_current_pmt(&actual)].concat();
+    assert!(capture_bytes_with_span(
+        &changed,
+        0x100,
+        1,
+        Some(SourceTeletextPacketSpan::new(1, 17).unwrap())
+    )
+    .await
+    .is_err());
+}
+
+#[tokio::test]
+async fn nonzero_capped_span_reports_exact_selected_prefix_and_partial_tail_omissions() {
+    let actual = fixture();
+    let mut pending: [u8; PACKET_BYTES] = actual[15 * PACKET_BYTES..].try_into().unwrap();
+    pending[3] = 0x17;
+    pending[8..10].copy_from_slice(&362_u16.to_be_bytes());
+    let bytes = [&null_packet()[..], &actual, &pending, &null_packet()].concat();
+    let captured = capture_bytes_with_span(
+        &bytes,
+        0x100,
+        1,
+        Some(SourceTeletextPacketSpan::new(1, 17).unwrap()),
+    )
+    .await
+    .unwrap();
+    let expected = [&actual[..2 * PACKET_BYTES], &actual[3 * PACKET_BYTES..]].concat();
+    assert_eq!(snapshot_bytes(&captured), expected);
+    assert_eq!(captured.evidence.first_source_packet, 1);
+    assert_eq!(captured.evidence.source_packets, 17);
+    assert_eq!(captured.evidence.decoder_packets, 15);
+    assert_eq!(captured.evidence.skipped_selected_prefix_packets, 1);
+    assert_eq!(captured.evidence.trimmed_source_tail_packets, 1);
+    assert!(!captured.evidence.ended_at_eof);
 }
