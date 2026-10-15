@@ -5,8 +5,13 @@ use ersatzrs_ffmpeg::teletext::{
     source_native_epoch::SourceNativeEpoch,
 };
 
-use super::{SourceTeletextNativeClockEvidence, SourceTeletextPacketSpan};
-use crate::ffprobe::teletext_origin::NativeSourceOrigin;
+use super::{
+    source_cue_prelude::{PagePreludeCollector, SourceTeletextPagePrelude},
+    SourceTeletextNativeClockEvidence, SourceTeletextPacketSpan,
+};
+use crate::ffprobe::{
+    teletext_decode::SourceTeletextPageDecodeRequest, teletext_origin::NativeSourceOrigin, Result,
+};
 
 /// Explicit effective native microseconds and bounded source-PCR observation policy.
 ///
@@ -67,6 +72,7 @@ pub struct SourceTeletextCueEvidence {
     before: SourceTeletextClockSample,
     after: SourceTeletextClockSample,
     span: SourceTeletextPacketSpan,
+    prelude: SourceTeletextPagePrelude,
 }
 
 impl SourceTeletextCueEvidence {
@@ -99,7 +105,15 @@ impl SourceTeletextCueEvidence {
         self.after
     }
 
-    /// Contains the actual bounding PCR packets; no packet-rate guess or seek hint.
+    /// Actual preceding reset/header witness, still requiring fresh decoder-byte
+    /// retention and context validation. It is not complete page-body authority.
+    #[must_use]
+    pub fn page_prelude(&self) -> &SourceTeletextPagePrelude {
+        &self.prelude
+    }
+
+    /// Contains the actual PCR bookends and preceding selected-page PES/PSI bytes;
+    /// no packet-rate guess, arbitrary preroll or seek hint is substituted.
     #[must_use]
     pub const fn span(&self) -> SourceTeletextPacketSpan {
         self.span
@@ -115,6 +129,7 @@ pub(super) struct CueCollector {
     before: Option<SourceTeletextClockSample>,
     after: Option<SourceTeletextClockSample>,
     invalid: bool,
+    prelude: Option<PagePreludeCollector>,
 }
 
 impl CueCollector {
@@ -138,7 +153,39 @@ impl CueCollector {
             before: None,
             after: None,
             invalid: false,
+            prelude: None,
         })
+    }
+
+    pub(super) fn with_page(
+        mut self,
+        request: &SourceTeletextPageDecodeRequest,
+        pmt_pid: u16,
+    ) -> Option<Self> {
+        let duration_ticks = (self.request.end - self.request.start).checked_mul(27)?;
+        let start_upper = self.target_ticks.1.checked_sub(duration_ticks)?;
+        self.prelude = Some(PagePreludeCollector::new(
+            request.pid,
+            pmt_pid,
+            request.page,
+            self.epoch,
+            start_upper,
+            self.target_ticks.1,
+        )?);
+        Some(self)
+    }
+
+    pub(super) fn observe_packet(
+        &mut self,
+        raw: &[u8; 188],
+        ordinal: u64,
+        report: SourceTeletextClockReport,
+    ) -> Result<()> {
+        if let Some(prelude) = &mut self.prelude {
+            prelude.push(raw, ordinal)?;
+        }
+        self.push(report);
+        Ok(())
     }
 
     pub(super) fn push(&mut self, report: SourceTeletextClockReport) {
@@ -189,25 +236,34 @@ impl CueCollector {
     pub(super) fn finish(
         self,
         clock: SourceTeletextNativeClockEvidence,
-    ) -> Option<SourceTeletextCueEvidence> {
+    ) -> Result<Option<SourceTeletextCueEvidence>> {
         if self.invalid {
-            return None;
+            return Ok(None);
         }
-        let (before, after) = (self.before?, self.after?);
-        let count = after
+        let prelude = self
+            .prelude
+            .map(PagePreludeCollector::finish)
+            .transpose()?
+            .flatten();
+        let (Some(before), Some(after), Some(prelude)) = (self.before, self.after, prelude) else {
+            return Ok(None);
+        };
+        let first = before.source_packet.min(prelude.psi_start_packet());
+        let span = after
             .source_packet
-            .checked_sub(before.source_packet)?
-            .checked_add(1)?;
-        let span =
-            SourceTeletextPacketSpan::new(before.source_packet, u32::try_from(count).ok()?).ok()?;
-        Some(SourceTeletextCueEvidence {
+            .checked_sub(first)
+            .and_then(|count| count.checked_add(1))
+            .and_then(|count| u32::try_from(count).ok())
+            .and_then(|count| SourceTeletextPacketSpan::new(first, count).ok());
+        Ok(span.map(|span| SourceTeletextCueEvidence {
             clock,
             request: self.request,
             target_ticks: self.target_ticks,
             before,
             after,
             span,
-        })
+            prelude,
+        }))
     }
 }
 

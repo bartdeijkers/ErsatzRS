@@ -6,7 +6,7 @@ use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_ffmpeg::teletext::{
     source_clock::{SourceTeletextClockObserver, SourceTeletextClockReport},
     source_observation::MAX_SOURCE_OBSERVATION_PACKETS,
-    source_psi::SourceTeletextPsiObserver,
+    source_psi::{ObservedSourcePsi, SourceTeletextPsiObserver},
 };
 use sha2::{Digest as _, Sha256};
 use tokio::time::Instant;
@@ -184,7 +184,10 @@ fn native_request(
     let (request, origin, trace) = observed;
     let native_clock = NativeClockCollector::new(&request, &origin, trace)?;
     let cue = if let Some(cue) = cue {
-        Some(CueCollector::new(cue, &origin, native_clock.epoch())?)
+        Some(
+            CueCollector::new(cue, &origin, native_clock.epoch())?
+                .with_page(&request, native_clock.selection().pmt)?,
+        )
     } else {
         None
     };
@@ -267,7 +270,7 @@ fn observe<T>(
         psi.push(&raw).map_err(|_| invalid())?;
         let report = clock.push(&raw).map_err(|_| invalid())?;
         if let Some(cue) = &mut cue {
-            cue.push(report);
+            cue.observe_packet(&raw, ordinal, report)?;
         }
         if let Some(av) = &mut av {
             av.push(&raw)?;
@@ -315,14 +318,32 @@ fn observe<T>(
         source_sha256: digest.finalize().into(),
         first_current_psi_packet: first_current_psi_packet.ok_or_else(invalid)?,
     };
+    finish_observations(clock, av, native_clock, cue, &observed)
+}
+
+fn finish_observations(
+    clock: SourceTeletextContinuousClockEvidence,
+    av: Option<AvOriginCollector>,
+    native_clock: Option<NativeClockCollector>,
+    cue: Option<CueCollector>,
+    observed: &ObservedSourcePsi,
+) -> Result<SourceWalkEvidence> {
     let mut av = av
-        .map(|collector| collector.finish(clock, &observed))
+        .map(|collector| collector.finish(clock, observed))
         .transpose()?;
     let mut native_clock = native_clock
-        .map(|collector| collector.finish(av.take().ok_or_else(invalid)?, &observed))
+        .map(|collector| collector.finish(av.take().ok_or_else(invalid)?, observed))
         .transpose()?
         .flatten();
-    let cue = cue.and_then(|collector| collector.finish(native_clock.take()?));
+    let cue = if let Some(collector) = cue {
+        native_clock
+            .take()
+            .map(|clock| collector.finish(clock))
+            .transpose()?
+            .flatten()
+    } else {
+        None
+    };
     Ok(SourceWalkEvidence {
         clock,
         av,

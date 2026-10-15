@@ -29,6 +29,7 @@ mod headers;
 mod source_av_origin;
 mod source_clock;
 mod source_cue;
+mod source_cue_prelude;
 mod source_native_clock;
 mod source_window;
 
@@ -38,6 +39,7 @@ pub(crate) use source_clock::observe_owned as observe_source_clock_owned;
 pub use source_clock::SourceTeletextContinuousClockEvidence;
 pub(crate) use source_clock::{observe_native_clock_owned, observe_native_cue_owned};
 pub use source_cue::{SourceTeletextCueEvidence, SourceTeletextCueRequest};
+pub use source_cue_prelude::SourceTeletextPagePrelude;
 pub use source_native_clock::SourceTeletextNativeClockEvidence;
 
 pub(crate) use source_window::{

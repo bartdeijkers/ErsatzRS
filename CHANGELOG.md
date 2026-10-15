@@ -63,10 +63,12 @@ release section when tagging a release.
   Exact requested times remain separate from effective native microseconds.
   Effective native-format intervals can now locate real held PCR bookends and
   decode current page headers from their bounded spans, rechecking exact request
-  identity and original source/decoder hashes. Descriptor discovery retains
-  pages absent from the initial scan without declaring them ready for playback.
-  Enabled-stream consumer timing, initial page state and general source/seek
-  semantics remain unqualified; complete stream-route acceptance stays open.
+  identity and original source/decoder hashes. Actual preceding page resets,
+  PES timestamps and PAT/PMT bytes now preserve the first bitmap in tested cue
+  windows; filtering must retain the exact protected reset header and timestamp.
+  Descriptor discovery retains pages absent from the initial scan without
+  declaring them ready. Enabled-stream timing, complete inherited page context
+  and general source/seek semantics remain unqualified; route acceptance stays open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
   client navigation with isolated themes and edits. Independent transport,

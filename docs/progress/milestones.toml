@@ -2968,6 +2968,73 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 selected-PES/page-prelude checkpoint (partial):
+Criterion: repair the demonstrated seven-versus-eight bitmap regression when a
+requested native-format cue begins after required teletext bytes already arrived.
+The same owned raw reader now reuses one bounded SuppliedTeletextAssembler and
+the existing protected-header parser. It records actual selected PES PUSI and
+completion positions, raw PTS and candidate native-program ticks. Latest preceding
+C4 resets survive incremental updates; absent earlier page state, the first
+in-range future reset can anchor initial acquisition. Unknown prefix/timestamps/
+epoch, decreasing selected PTS or incremental state without a known reset grant
+no prelude. Identical duplicate PUSI never replaces the original PES start.
+
+Actual preceding PAT/selected-PMT locator bytes extend the physical span before
+the unchanged PCR bookends. These are hints, not copied or assumed-valid PSI.
+Fresh snapshot PSI/PES/header validation must retain the exact protected reset
+header and raw PTS at its physical completion position after actual selected-
+prefix omissions. A later identical header cannot substitute for a lost anchor.
+The existing full-source/decoder digest join, per-window bounds, source/work
+owners and absolute deadline remain mandatory. Missing/over-bound prelude now
+returns no cue rather than qualifying PCR-only coverage; this is conservative
+implementation progress, not an accepted generic source restriction.
+
+Focused run 0df28673-eecd-4650-ac82-64ba38b9b22e passes 26 cases: ten prelude
+cases, ten native-epoch constructor boundaries, five provisional cue cases and
+the existing actual decoder-span omission/tail-hash test. New cases cover prior
+C4/incremental updates, first-future reset/end boundary, missing PTS/prefix/PSI,
+duplicate multi-packet PES PUSI, decreasing timing, transport/header/incomplete
+failures, exact whole-walk ordinals and retained-anchor offset/substitution.
+The initial unused public re-export warning is resolved by exporting the witness
+through the existing decoder facade. Final run 952988cc-c8c0-437c-a1d5-bf7c3c701d71
+passes 11 raw-walk/prelude cases after extracting unchanged observer finalization
+into a small helper. Test PTS bit masks now use equivalent hexadecimal notation.
+The final native run below follows that production extraction; no native input
+or algorithm changes follow its success. Final affected all-target strict Clippy
+passes (clippy-3.log, 1m24s), alongside owned Rust formatting and architecture/
+progress validation. The pre-existing summary-length warning is informational.
+
+Native run 013e5e48-1424-4916-a6fe-14db229e5486 passes in 3.122 s on the pinned
+n9.0-20260805 FFmpeg/FFprobe/libzvbi. Both 40..52 s pages 888/200 now decode all eight
+bitmap events, including identical first/last decoder timestamps versus independent
+original later-window decoding. PCR bookends stay 54,123..70,107. For 888 the
+actual reset PES is packet 53,778/raw PTS 3,765,600 with preceding PSI 53,699 and
+span 16,409 packets; decoder SHA256 is
+ff2424bb86d649986556139ff2e89cd749fd84fcd5524c59191b783b5be95d8b.
+For 200 the reset PES is 53,246/raw PTS 3,729,600 with preceding PSI 53,193 and
+span 16,915; decoder SHA256 is
+8c2891f31b19384190ba2a776c14d0f1239c74af21ef367f1c85cd148910b04a.
+The same run also proves an already-active 888 reset for 43..52 s: PES 56,438,
+raw PTS 3,945,600, preceding PSI 56,384, cue-side PCR 58,112 and six retained bitmap
+events (active state plus five later events). Original source bytes/track metadata
+and actual cleanup remain unchanged. Restored-mtime null-tail mutation outside
+the snapshot and exact request mismatch still reject. Missing page/reset, no end
+coverage, too-tight gaps and over-bound spans remain unavailable. No arbitrary
+preroll or byte-rate assumption supplies the recovered state.
+
+Commands and detailed receipts: tmp/phase9-source-prelude-checkpoint/.
+Independent scoped review found no actionable substitution, timing/span or worker-
+ownership defect. Only the proven reset/header event restoration is claimed:
+complete body/subpage/resource/charset context, non-AV/native decoder timestamp
+mapping and actual enabled-stream consumer normalization remain unqualified.
+Next qualify the actual generated physical input flags and selected-audio/video
+origin adjustment, then connect that consumer cue proof to descriptor-request
+selection and rechecks. Existing ordinary route, TSDuck, editor and headed client
+proof remains scoped to unchanged tested inputs. All full authored Level2.5,
+editor-interchange, Lua/restart, localization, platform and engine-first criteria
+stay open and unchanged. No production addon, full CI, milestone completion,
+remote push or publication is claimed.
+
 2026-10-15 requested native-format cue/descriptor discovery checkpoint (partial):
 Criterion: connect actual requested times to held source windows and current page
 validation instead of guessing packet offsets or treating the scan prefix as the

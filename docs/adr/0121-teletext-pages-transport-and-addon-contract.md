@@ -193,9 +193,24 @@ current stored PSI/descriptor provenance, ambiguity and capacity checks, while
 allowing descriptor pages absent from the scan prefix. It never writes readiness
 or substitutes a descriptor for a transmitted page. Only actual current-window
 validation can bridge such a request into a playback choice; later rechecks must
-preserve that distinction. A PCR-bounded span may omit earlier-arriving PES or
-initial page state, even if seven later bitmaps decode. Actual consumer policy
-and enabled-stream origin also remain separate: n9.0
+preserve that distinction. A PCR-bounded span can omit earlier-arriving PES.
+The same owned reader now runs one bounded existing teletext PES assembler,
+retaining actual selected PUSI/completion positions, protected requested-page
+C4 reset headers and native-epoch-mapped PES PTS. Keep the latest preceding reset
+across incremental updates, or the first in-range future reset when no preceding
+requested-page state was observed. Unknown prefix/PTS/epoch, decreasing selected
+PTS or incremental state without a known reset grant no prelude; duplicate PUSI
+must not replace the real PES start. Extend the decode span backwards through
+actual preceding PAT/PMT locator bytes while keeping the original PCR bookends.
+No arbitrary time/byte preroll or copied PSI can supply authority. Fresh snapshot
+PSI/PES validation must retain the exact anchor header and raw PTS at its mapped
+physical completion ordinal after actual prefix omissions; a later identical
+header cannot replace it. The existing decoder/full-source hash join still
+applies. Missing/over-bound prelude evidence remains unknown, not a permanent
+product restriction. This reset/PES evidence repairs the tested first bitmap;
+complete page bodies, subpage/resource/charset context, native decoder timestamp
+mapping and generic initial-state qualification remain required work.
+Actual consumer policy and enabled-stream origin also remain separate: n9.0
 [correct_input_start_times](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffmpeg_opt.c#L345)
 can change normalization when the earliest audio is disabled or another stream
 is selected. Neither native format origin nor a successful partial window grants

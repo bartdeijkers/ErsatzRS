@@ -62,22 +62,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-P9A-04 now connects effective native-FORMAT 40..52s to actual held PCR
-bookends, a bounded physical span and same-byte headers/bitmap decoding for
-pages888/200. Descriptor-only requests can discover pages absent from the stored
-scan prefix without synthesizing readiness. Exact request identity and the
-full-source/decoder digest join reject a changed null tail despite restored
-metadata; ordinary source bytes/tracks and actual cleanup survive. P9A-04 owns
-exact receipts and the corrected early-window test expectation. This remains a
-component flow: seven bitmaps versus the earlier eight exposes missing initial
-page state. Next include actual selected-PES PTS and preceding page/PSI state,
-and qualify generated consumer flags plus enabled-stream origin correction
-(including alternate audio) before automatic later-cue selection/rechecks.
-Observed gap bounds alone do not prove absence of whole timestamp periods.
-General shared/non-AV/late initializers and large/multiwindow sources remain
-required work, not accepted restrictions. Reuse applicable ordinary/editor/client
-proof. All full engine/Level2.5/editor/Lua/restart/platform criteria and engine-
-first order remain open; no production addon, push or publication occurs.
+P9A-04 now preserves actual selected-page reset/PES/PSI preludes in native-
+FORMAT cue windows. Genuine 40..52s pages 888/200 restore all eight bitmap events with
+unchanged first/last timestamps versus the independent reference window. A
+43..52s trial retains the preceding active 888 reset and all six remaining events.
+Exact anchor retention, fresh snapshot PSI/PES and source/decoder hashes remain
+mandatory; unknown/incremental state is not guessed. P9A-04 owns exact receipts
+and the initial seven-event regression. Next qualify generated consumer input
+flags and enabled-stream start correction for actual audio selection, then join
+consumer cue/decoder timing and complete initial page/resource/charset context
+before descriptor requests enter runtime selection and rechecks. General
+shared/non-AV/late initializers, whole-period ambiguity and large/multiwindow
+sources remain required work, not accepted restrictions. Reuse applicable
+ordinary/editor/client proof. Full engine/Level2.5/editor/Lua/restart/platform
+criteria and engine-first order stay open; no production addon, push or publication.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.

@@ -15,7 +15,9 @@ impl FfprobeExtractor {
     /// native-format clock receipt. Exact source/request identity must match;
     /// the existing held raw walk checks the retained decoder digest and the
     /// original full-source digest under the same work/deadline ownership.
-    /// This grants no enabled-stream consumer normalization or initial page state.
+    /// The exact protected prelude header/PTS must survive snapshot filtering at
+    /// its mapped physical completion position. This still grants no complete
+    /// inherited page context or enabled-stream consumer normalization.
     /// # Errors
     /// Rejects mismatched requests, changed bytes, absent current headers/bitmaps,
     /// invalid transport, deadline/cancellation or uncertain actual cleanup.
@@ -32,6 +34,16 @@ impl FfprobeExtractor {
         let decoded = self
             .decode_prepared_local_teletext_page(source, cue.span(), deadline, hold.clone())
             .await?;
+        let retained = decoded.headers().is_some_and(|headers| {
+            cue.page_prelude().is_retained_in(
+                headers,
+                decoded.window().first_source_packet,
+                decoded.window().skipped_selected_prefix_packets,
+            )
+        });
+        if !retained {
+            return Err(SourceTeletextPageDecodeError::UnobservedPage);
+        }
         let actual = decoded.observe_source_clock(deadline, hold).await?;
         if actual.source_sha256() != cue.native_clock().av_origin().clock().source_sha256() {
             return Err(SourceTeletextPageDecodeError::SourceChanged);
@@ -48,7 +60,8 @@ impl FfprobeExtractor {
     /// # Errors
     /// Rejects stale sources, malformed transport, expired deadlines, lost
     /// cancellation ownership or unconfirmed worker cleanup. Unknown numeric,
-    /// epoch, gap or bounded-span evidence returns `None` without cue admission.
+    /// epoch, gap, reset/header prelude or bounded-span evidence returns `None`
+    /// without complete cue admission.
     pub async fn observe_prepared_local_native_cue(
         &self,
         source: &PreparedLocalTeletextSource,
