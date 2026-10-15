@@ -2724,6 +2724,83 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 ordinary generated-wrapper checkpoint (representative, not engine acceptance):
+Criterion: ordinary final wrapper routes recover genuinely saved/explicitly accepted
+originals without invoking producers; invalid policy or unavailable profiles retain
+ordinary playback, and admission/cancellation preserve actual ownership.
+Native run11bfc749-406e-4c56-a0b3-ce41cfa66222 passes86.978s, one/1192 skipped.
+Fourteen real TCP /iptv/channel/1.ts trials use pinned ErsatzRS-ffmpeg2.0.6
+FFmpeg/ffprobe n9.0-20261006 and TSDuck3.44-4676, a migrated disposable DB,
+actual installed profile/publication and genuine internal/public/provider listeners.
+The twelve generated-wrapper trials cover legacy/hybrid with absent/invalid/v1/v2
+policy plus actual selected-profile tombstone under both policy versions/modes.
+Both valid modes emit independently decoded page200 stored-original text; all
+fourteen captured prefixes retain actual red-source framemd5, English440Hz audio,
+referenced PSI, zero CC/PCR/PTS discontinuities and profile muxrate. Default capacity stays2,
+active/peak stay2, body drop reaches0, source/addon calls and historical accepted
+metadata survive. This is selected-English AV, not routed alternate-audio/caption
+or suitable-client/navigation acceptance.
+
+Precondition and concrete gap: isolated NEW app-data seeds exact bundled scripts.
+Two additional default-script v1/v2 trials prove its actual opaque command and AV
+preservation without authored PID512. Explicit empty existing
+ffmpeg.default_mpegts_script then selects the generated native hybrid wrapper;
+actual prepared commands/artifact cleanup and this setting are asserted.
+Initial native8583f036 failed at hybridv1 after six successes because ambient
+bundled default scripts selected an opaque command. That failure remains retained.
+No output hint is inferred from script filenames; default/custom-script teletext
+is unresolved, not an accepted permanent restriction or default-path acceptance.
+
+Production optional recovery now accepts only final direct/wrapper roles, retains
+one original startup deadline and follows actual wrapper capacity/command admission.
+Internal workers, Next and slates never gain automatic authority. Waiting wrappers
+recover current selection for their own fresh source epoch; no gate crosses slates.
+Hybrid preparation/reservation and immediate legacy/hybrid post-recovery refuse
+expired startup. Blocking temporary writes retain TempPath ownership on timeout.
+Both waiting actors cancel held configuration reads and clean/unregister before
+SQLite is released, preserving a separately occupied capacity slot. A subsequent
+concrete review found plain prepared paths could leak on HTTP-future drop between
+preparation and admission. Existing TempPath guards now span capacity/recovery
+and actor handoff, retaining unconfirmed-process artifact quarantine. Actual task
+abort and successful wait-body handoff both pass while SQLite stays held;
+cleanup and the separately occupied slot are asserted before connection release.
+Final ownership runb5d1a36f-3eb2-42a4-988f-eb715a53b198 passes9 cases/1186 skipped;
+unchanged positive role/capacity/script evidence supplies the remaining coverage.
+Focused1b36a87a-e279-4803-aa7d-e7780f6ec548 has12 passes/one strict paused-clock
+assertion failure; corrected350679d9-8eb7-4597-8697-7c1e82c3eb9a passes that case.
+These13 unique regressions include role guards, deadline sharing, actual capacity
+release and five new startup/cancellation cases. Pinned Tokio1.53.1 timer-wheel
+rounding explains the1ms test-only wake bound; production deadlines are unchanged.
+Two existing script rendering/environment regressions pass1a7265a1-bf65-4109-9036-d60e42ad1e01.
+No encoder, generated FFmpeg argv, dependency, admin translation or acceptance changes.
+The final mechanical Clippy changes box the shared request future and extract
+identical config/header logic; a5cf3e6c-cc56-4730-86b2-b0cef74b6de1 passes three
+changed regressions. Final strict web all-target Clippy and formatting pass after
+prepared-script ownership correction. Existing native2 route evidence is reused
+for unchanged selection, output bytes/argv and fixture semantics; subsequent
+ownership tests cover the added guard. Current actual-host playback smoke exits0
+with both MPEG-TS modes returning200/body and segmenter/direct HLS returning200
+with playlists/segments; all three public internal callbacks return404.
+Canonical tmp/phase9-wrapper-selection/smoke-1.log and smoke-1-result.json retain
+the exact command, disposable port and result; the final configured-target host
+uses the pinned FFmpeg9 runtime. This is the ordinary playback smoke, not full
+transport, source-caption, suitable-client or platform acceptance.
+
+Next prove wrapper source captions/alternate audio and connect simultaneous
+profile/theme selection, preview, explicit publication and client navigation to
+this ordinary continuous route. Reuse the real four-stream source fixture through
+normal metadata/encoding and switch preferred_audio_language_code eng to nld:
+the item encoder selects one audio track, so wrapper-only multi-track proof does
+not prove routed alternate selection. Legacy/hybrid currently burn/omit source
+teletext captions before wrapping; source-page888 passthrough remains a concrete
+integration gap. Resolve default-script eligibility/visible
+unsupported state and existing separate-clock slate defects rather than treating
+this representative matrix as engine acceptance. Existing pinned editor,
+all-culture headed admin, direct warm/expiry and lower-level four-stream wrapper
+proof remain valid for unchanged inputs. Full authored Level2.5/fallback, resource
+updates, editor/metadata/zones, Lua/restart, native/Next/all-six-platform and
+suitable-client gates remain unchanged. Production NOS200–299 addon still waits.
+
 2026-10-15 headed natural-expiry userflow checkpoint (representative, not engine acceptance):
 Criterion: genuine Lua expiry on original ordinary responses, with two contrasting
 channel/profile themes, actual old-content clearing and200 ->201 ->200 navigation.

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect ordinary continuous legacy accepted-teletext selection; headed expiry clearing/navigation proven with explicit Base selection, full engine acceptance open'
+current_focus = 'P9A-04: prove routed wrapper captions/alternate audio and client flow; generated wrapper selection proven, default-script and full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -71,9 +71,26 @@ metadata/Clippy/format pass. Automatic Day Base rendering is unproven with this
 VLC; full suitable-client/resource updates remain open. No permanent limitation
 is accepted. Prior qualified native ACK proof is reused; new observed suffixes
 are not new sink ACKs. Historical failed trials remain retained.
-Next connect the actual missing ordinary continuous legacy selected-teletext call
-through existing recovery/admission; prove normal-route source captions/alternate
-audio, cancellation and clocks. Do not start a general audit/measurement extension.
+Generated native ordinary legacy/hybrid wrappers now recover accepted originals
+after actual capacity/command admission. Fifteen unique startup/role/cancellation
+regressions and two script rendering tests pass. A NEW isolated14-trial actual TCP
+fixture passes pinned FFmpeg/TSDuck, independent page200 decoding, unchanged
+selected English AV, default capacity2, profile tombstone and real caller cleanup.
+P9A-04 owns exact receipts and the initial ambient-default-script failure.
+Explicit empty script configuration selects the generated hybrid wrapper; bundled
+default and custom scripts remain opaque and cannot gain authority from filenames.
+Their automatic teletext is an integration gap, not an accepted limitation.
+Next prove routed captions/alternate audio and connect simultaneous profiles,
+themes, preview/publication and client navigation to this continuous wrapper route.
+Resolve default-script eligibility/visible unsupported state and slate clock gaps.
+Final strict Clippy/format, prepared-script abort/handoff regressions and actual-host
+playback smoke pass for both MPEG-TS routes and both HLS routes. Next extend the
+genuine routed source/metadata fixture to select English then Dutch audio alongside
+authored pages. The item encoder selects one audio track; source teletext captions
+are currently burned/omitted on legacy/hybrid, so source-page passthrough remains
+a concrete integration gap rather than a proven normal-route property.
+Preserve normal-route captions/alternate audio and transport-clock acceptance;
+prior slate clock gaps remain open. No general audit extension.
 Reuse valid editor/all-culture headed admin/warm evidence for unchanged inputs.
 Full authored Level2.5/fallback, QTM GUI/metadata/zones, resources, restart/applied,
 source/native/Next/all-six-platform and default-capacity slate gates remain.
@@ -83,6 +100,9 @@ and complete combined CI covers prior reds; a single fully green run is not
 required. Follow remote changes, preserve concurrent UCU work, publish nothing.
 2026-10-15 WSL maintenance removed only idle main target/debug/incremental cache;
 source, commits, all dirty files, UCU caches and canonical Phase9 evidence survive.
+Subsequent authorized maintenance removed an unused CI build cache (36.8 GiB),
+preserving the active main build, UCU11 target, all modified source bytes and
+Phase9 evidence. This maintenance does not complete a Phase9 checkpoint.
 
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly

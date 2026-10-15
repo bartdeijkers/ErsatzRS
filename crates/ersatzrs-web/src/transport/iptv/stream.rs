@@ -22,6 +22,15 @@ mod wrapper_teletext_runtime_tests;
 mod wrapper_admission_runtime_tests;
 
 #[cfg(test)]
+#[path = "stream_wrapper_startup_tests.rs"]
+mod wrapper_startup_tests;
+
+// The owned shell add-on fixture is Unix-only; native Windows proof is separate.
+#[cfg(all(test, unix))]
+#[path = "stream_ordinary_wrapper_tests.rs"]
+mod ordinary_wrapper_tests;
+
+#[cfg(test)]
 use std::process::Stdio;
 use std::{
     path::PathBuf,
@@ -160,7 +169,14 @@ pub async fn serve_transport_stream(
     headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
-    serve_transport_stream_with_binding(state, channel_number, headers, query, None).await
+    Box::pin(serve_transport_stream_with_binding(
+        state,
+        channel_number,
+        headers,
+        query,
+        None,
+    ))
+    .await
 }
 
 /// Serve a final MPEG-TS wrapper with an immutable authored-page snapshot.
@@ -172,7 +188,14 @@ pub async fn serve_transport_stream_with_teletext(
     query: &HlsQuery,
     binding: Arc<TeletextOutputBinding>,
 ) -> Response {
-    serve_transport_stream_with_binding(state, channel_number, headers, query, Some(binding)).await
+    Box::pin(serve_transport_stream_with_binding(
+        state,
+        channel_number,
+        headers,
+        query,
+        Some(binding),
+    ))
+    .await
 }
 
 async fn serve_transport_stream_with_binding(
@@ -182,12 +205,16 @@ async fn serve_transport_stream_with_binding(
     query: &HlsQuery,
     binding: Option<Arc<TeletextOutputBinding>>,
 ) -> Response {
-    let channel = match state
-        .repositories
-        .channel
-        .get_by_number(channel_number)
-        .await
-    {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    let lookup = tokio::time::timeout_at(
+        deadline,
+        state.repositories.channel.get_by_number(channel_number),
+    )
+    .await;
+    let Ok(lookup) = lookup else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let channel = match lookup {
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) => return StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
@@ -206,13 +233,8 @@ async fn serve_transport_stream_with_binding(
     };
 
     if !matches!(mode, TransportStreamMode::RedirectToHls) {
-        if let Err(response) = super::validate_profile_output(
-            state,
-            channel.id,
-            OutputFormat::MpegTs,
-            tokio::time::Instant::now() + Duration::from_secs(20),
-        )
-        .await
+        if let Err(response) =
+            super::validate_profile_output(state, channel.id, OutputFormat::MpegTs, deadline).await
         {
             return response;
         }
@@ -227,9 +249,11 @@ async fn serve_transport_stream_with_binding(
             );
             axum::response::Redirect::temporary(&target).into_response()
         }
-        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel, output).await,
+        TransportStreamMode::Legacy => {
+            serve_legacy_concat_stream(state, &channel, output, deadline).await
+        }
         TransportStreamMode::HybridWrapper => {
-            serve_segmenter_wrapper_stream(state, &channel, query, output).await
+            serve_segmenter_wrapper_stream(state, &channel, query, output, deadline).await
         }
     }
 }
@@ -366,8 +390,13 @@ async fn serve_channel_stream_with_output(
         && effective_streaming_mode != StreamingMode::TransportStreamHybrid
         && channel.streaming_engine != ersatzrs_domain::StreamingEngine::Next
     {
-        if let Some(accepted) =
-            ordinary_teletext::recover_optional_output(state, channel.id, deadline).await
+        if let Some(accepted) = ordinary_teletext::recover_optional_output(
+            state,
+            channel.id,
+            TeletextOutputRole::FinalDirectMpegTs,
+            deadline,
+        )
+        .await
         {
             output = accepted;
         }
@@ -2287,6 +2316,7 @@ async fn serve_channel_stream_admitted_inner(
                     remote_stream.clone(),
                     external_subtitle_owner,
                     output,
+                    None,
                 )
                 .await;
             }
@@ -2473,6 +2503,7 @@ async fn serve_segmenter_wrapper_stream(
     channel: &Channel,
     query: &HlsQuery,
     output: TeletextOutputAdmission,
+    startup_deadline: tokio::time::Instant,
 ) -> Response {
     if output.validate_format(OutputFormat::MpegTs).is_err() {
         return teletext_output_unavailable();
@@ -2480,7 +2511,7 @@ async fn serve_segmenter_wrapper_stream(
     let Some(streaming_addr) = state.streaming_http_addr.get() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let deadline = startup_deadline.into_std();
     let path_replacements = match tokio::time::timeout_at(
         tokio::time::Instant::from_std(deadline),
         load_required_path_replacements(state, channel, "wrapped segmenter"),
@@ -2498,10 +2529,18 @@ async fn serve_segmenter_wrapper_stream(
         }
     };
 
-    let initial_segment_count = hls::load_initial_segment_count(state).await;
-    let startup_timeout = hls::load_segmenter_startup_timeout(state)
-        .await
-        .min(deadline.saturating_duration_since(std::time::Instant::now()));
+    let settings = tokio::time::timeout_at(startup_deadline, async {
+        (
+            hls::load_initial_segment_count(state).await,
+            hls::load_segmenter_startup_timeout(state).await,
+        )
+    })
+    .await;
+    let Ok((initial_segment_count, startup_timeout)) = settings else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let startup_timeout =
+        startup_timeout.min(deadline.saturating_duration_since(std::time::Instant::now()));
     let wait_result = hls::start_and_wait_for_initial_segments(
         &*state.hls_sessions,
         &channel.number,
@@ -2531,7 +2570,9 @@ async fn serve_segmenter_wrapper_stream(
     }
 
     let (playback_profile, target_frame_rate, runtime_capabilities) =
-        match load_capacity_slate_context(state, channel, "wrapped segmenter").await {
+        match load_wrapper_capacity_context(state, channel, "wrapped segmenter", startup_deadline)
+            .await
+        {
             Ok(context) => context,
             Err(response) => return response,
         };
@@ -2545,46 +2586,64 @@ async fn serve_segmenter_wrapper_stream(
     );
     let metadata = channel_stream_metadata(channel);
     let wrapper_muxrate_bps = mpeg_ts_wrapper_muxrate_bps(&playback_profile);
-    let (command, cleanup_paths) = segmenter_wrapper_command(
+    let (command, cleanup_paths) = match segmenter_wrapper_command(
         state,
         channel,
         hls_url,
         &metadata,
         aac_latm_audio,
         wrapper_muxrate_bps,
+        startup_deadline,
     )
-    .await;
-
-    let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
-        Ok(Some(reservation)) => Some(reservation),
-        Ok(None) => {
-            return mpeg_ts_capacity_wait_response(
-                state,
-                channel,
-                command,
-                cleanup_paths,
-                Vec::new(),
-                &playback_profile,
-                target_frame_rate,
-                metadata,
-                runtime_capabilities,
-                None,
-                None,
-                None,
-                output,
-            )
-            .await;
-        }
+    .await
+    {
+        Ok(prepared) => prepared,
+        Err(response) => return response,
+    };
+    let mut prepared_scripts = match guard_prepared_mpegts_scripts(&cleanup_paths) {
+        Ok(guards) => guards,
         Err(error) => {
-            tracing::error!(
-                %error,
-                channel_id = channel.id,
-                channel_number = %channel.number,
-                "failed to load wrapped-segmenter transcode capacity"
-            );
+            tracing::error!(%error, channel_number = %channel.number, "failed to own prepared MPEG-TS scripts");
+            cleanup_stream_artifacts(&cleanup_paths).await;
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+
+    let capacity_reservation =
+        match reserve_wrapper_capacity_before(state, channel, &cleanup_paths, startup_deadline)
+            .await
+        {
+            Ok(Some(reservation)) => Some(reservation),
+            Ok(None) => {
+                let response = mpeg_ts_capacity_wait_response(
+                    state,
+                    channel,
+                    command,
+                    cleanup_paths,
+                    Vec::new(),
+                    &playback_profile,
+                    target_frame_rate,
+                    metadata,
+                    runtime_capabilities,
+                    None,
+                    None,
+                    None,
+                    output,
+                    Some((state.clone(), channel.clone())),
+                )
+                .await;
+                if response.status() == StatusCode::OK {
+                    disarm_prepared_mpegts_scripts(&mut prepared_scripts);
+                }
+                return response;
+            }
+            Err(response) => return response,
+        };
+
+    let output = recover_wrapper_teletext(state, channel, &command, output, startup_deadline).await;
+    if let Some(response) = reject_expired_wrapper_start(startup_deadline, &cleanup_paths).await {
+        return response;
+    }
 
     match spawn_stream_body(
         &command,
@@ -2600,20 +2659,44 @@ async fn serve_segmenter_wrapper_stream(
     .await
     {
         Ok(body) => {
-            let mut response = body.into_response();
-            response
-                .headers_mut()
-                .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
-            response
-                .headers_mut()
-                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-            response
+            disarm_prepared_mpegts_scripts(&mut prepared_scripts);
+            mpegts_body_response(body)
         }
         Err(error) => {
+            if !error.cleanup_confirmed() {
+                disarm_prepared_mpegts_scripts(&mut prepared_scripts);
+            }
             tracing::error!(%error, channel_number = %channel.number, "failed to spawn ffmpeg for wrapped segmenter");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+fn guard_prepared_mpegts_scripts(
+    paths: &[PathBuf],
+) -> Result<Vec<tempfile::TempPath>, std::io::Error> {
+    paths
+        .iter()
+        .cloned()
+        .map(tempfile::TempPath::try_from_path)
+        .collect()
+}
+
+fn disarm_prepared_mpegts_scripts(guards: &mut [tempfile::TempPath]) {
+    for guard in guards {
+        guard.disable_cleanup(true);
+    }
+}
+
+fn mpegts_body_response(body: Body) -> Response {
+    let mut response = body.into_response();
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 async fn segmenter_wrapper_command(
@@ -2623,19 +2706,115 @@ async fn segmenter_wrapper_command(
     metadata: &OutputMetadata,
     aac_latm_audio: bool,
     wrapper_muxrate_bps: i64,
-) -> (FfmpegCommand, Vec<PathBuf>) {
-    match configured_mpegts_script_command(state, channel, &hls_url, wrapper_muxrate_bps).await {
-        Some(command) => command,
-        None => (
-            build_mpegts_segmenter_wrapper_command(
-                hls_url,
-                metadata,
-                aac_latm_audio,
-                Some(wrapper_muxrate_bps),
-            ),
-            Vec::new(),
-        ),
+    deadline: tokio::time::Instant,
+) -> Result<(FfmpegCommand, Vec<PathBuf>), Response> {
+    if tokio::time::Instant::now() >= deadline {
+        return Err(StatusCode::SERVICE_UNAVAILABLE.into_response());
     }
+    let prepared = tokio::time::timeout_at(deadline, async {
+        match configured_mpegts_script_command(state, channel, &hls_url, wrapper_muxrate_bps).await
+        {
+            Some(command) => command,
+            None => (
+                build_mpegts_segmenter_wrapper_command(
+                    hls_url,
+                    metadata,
+                    aac_latm_audio,
+                    Some(wrapper_muxrate_bps),
+                ),
+                Vec::new(),
+            ),
+        }
+    })
+    .await
+    .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    if let Some(response) = reject_expired_wrapper_start(deadline, &prepared.1).await {
+        return Err(response);
+    }
+    Ok(prepared)
+}
+
+async fn reserve_wrapper_capacity_before(
+    state: &AppState,
+    channel: &Channel,
+    cleanup_paths: &[PathBuf],
+    deadline: tokio::time::Instant,
+) -> Result<Option<ActiveTranscodeReservation>, Response> {
+    if let Some(response) = reject_expired_wrapper_start(deadline, cleanup_paths).await {
+        return Err(response);
+    }
+    let result =
+        tokio::time::timeout_at(deadline, reserve_mpeg_ts_capacity(state, &channel.number)).await;
+    match result {
+        Ok(Ok(reservation)) => {
+            if let Some(response) = reject_expired_wrapper_start(deadline, cleanup_paths).await {
+                return Err(response);
+            }
+            Ok(reservation)
+        }
+        Ok(Err(error)) => {
+            tracing::error!(%error, channel_id = channel.id, channel_number = %channel.number,
+                "failed to load wrapped-segmenter transcode capacity");
+            cleanup_stream_artifacts(cleanup_paths).await;
+            Err(StatusCode::INTERNAL_SERVER_ERROR.into_response())
+        }
+        Err(_) => {
+            cleanup_stream_artifacts(cleanup_paths).await;
+            Err(StatusCode::SERVICE_UNAVAILABLE.into_response())
+        }
+    }
+}
+
+async fn reject_expired_wrapper_start(
+    deadline: tokio::time::Instant,
+    cleanup_paths: &[PathBuf],
+) -> Option<Response> {
+    if tokio::time::Instant::now() < deadline {
+        return None;
+    }
+    cleanup_stream_artifacts(cleanup_paths).await;
+    Some(StatusCode::SERVICE_UNAVAILABLE.into_response())
+}
+
+async fn load_wrapper_capacity_context(
+    state: &AppState,
+    channel: &Channel,
+    context: &str,
+    deadline: tokio::time::Instant,
+) -> Result<(PlaybackProfile, Option<FrameRate>, FfmpegCapabilityReport), Response> {
+    match tokio::time::timeout_at(
+        deadline,
+        load_capacity_slate_context(state, channel, context),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE.into_response()),
+    }
+}
+
+async fn recover_wrapper_teletext(
+    state: &AppState,
+    channel: &Channel,
+    command: &FfmpegCommand,
+    output: TeletextOutputAdmission,
+    deadline: tokio::time::Instant,
+) -> TeletextOutputAdmission {
+    if output.has_authored_output()
+        || output.role() != TeletextOutputRole::FinalWrapperMpegTs
+        || channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next
+        || command.mpegts_output_policy().is_none()
+    {
+        return output;
+    }
+    ordinary_teletext::recover_optional_output(
+        state,
+        channel.id,
+        TeletextOutputRole::FinalWrapperMpegTs,
+        deadline,
+    )
+    .await
+    .unwrap_or(output)
 }
 
 fn segmenter_wrapper_wait_failure_response(
@@ -2677,6 +2856,7 @@ async fn serve_legacy_concat_stream(
     state: &AppState,
     channel: &Channel,
     output: TeletextOutputAdmission,
+    deadline: tokio::time::Instant,
 ) -> Response {
     if output.validate_format(OutputFormat::MpegTs).is_err() {
         return teletext_output_unavailable();
@@ -2686,18 +2866,20 @@ async fn serve_legacy_concat_stream(
     };
     let metadata = channel_stream_metadata(channel);
     let (playback_profile, target_frame_rate, runtime_capabilities) =
-        match load_capacity_slate_context(state, channel, "legacy stream").await {
+        match load_wrapper_capacity_context(state, channel, "legacy stream", deadline).await {
             Ok(context) => context,
             Err(response) => return response,
         };
     let wrapper_muxrate_bps = mpeg_ts_wrapper_muxrate_bps(&playback_profile);
-    let limit = match load_active_transcode_limit(&state.pool).await {
-        Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
-        Err(error) => {
-            tracing::error!(%error, "failed to load legacy wrapper transcode capacity");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+    let limit =
+        match tokio::time::timeout_at(deadline, load_active_transcode_limit(&state.pool)).await {
+            Ok(Ok(limit)) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
+            Ok(Err(error)) => {
+                tracing::error!(%error, "failed to load legacy wrapper transcode capacity");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        };
     if limit < 2 {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -2725,23 +2907,27 @@ async fn serve_legacy_concat_stream(
         )
         .await;
     };
-    let owner = match state.legacy_wrappers.register(
-        &channel.number,
-        &wrapper,
-        first_encoder,
-        tokio::time::Instant::now() + Duration::from_secs(20),
-    ) {
-        Ok(owner) => owner,
-        Err(error) => {
-            tracing::warn!(%error, "legacy wrapper ownership registration failed");
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
-        }
-    };
+    let owner =
+        match state
+            .legacy_wrappers
+            .register(&channel.number, &wrapper, first_encoder, deadline)
+        {
+            Ok(owner) => owner,
+            Err(error) => {
+                tracing::warn!(%error, "legacy wrapper ownership registration failed");
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+        };
     let command = build_mpegts_concat_command(
         build_owned_legacy_concat_url(*internal_addr, &channel.number, owner.id()),
         &metadata,
         Some(wrapper_muxrate_bps),
     );
+
+    let output = recover_wrapper_teletext(state, channel, &command, output, deadline).await;
+    if let Some(response) = reject_expired_wrapper_start(deadline, &[]).await {
+        return response;
+    }
 
     match spawn_stream_body_with_lifetime(
         &command,
@@ -2760,16 +2946,7 @@ async fn serve_legacy_concat_stream(
     )
     .await
     {
-        Ok(body) => {
-            let mut response = body.into_response();
-            response
-                .headers_mut()
-                .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
-            response
-                .headers_mut()
-                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-            response
-        }
+        Ok(body) => mpegts_body_response(body),
         Err(error) => {
             tracing::error!(%error, channel_number = %channel.number, "failed to spawn ffmpeg for legacy concat stream");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -2782,10 +2959,6 @@ async fn serve_legacy_concat_stream(
 #[allow(
     clippy::too_many_arguments,
     reason = "Carries the existing finite slate and the independently admitted wrapper context together"
-)]
-#[expect(
-    clippy::too_many_lines,
-    reason = "Keeps plain capacity retry, exact wrapper ownership and child cleanup under one supervised response lifetime"
 )]
 async fn legacy_wrapper_capacity_wait_response(
     state: &AppState,
@@ -2812,10 +2985,44 @@ async fn legacy_wrapper_capacity_wait_response(
         cleanup_stream_artifact(&slate_dir).await;
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
+    let body = legacy_wrapper_capacity_wait_body(
+        state,
+        channel,
+        address,
+        slate_command,
+        slate_dir,
+        metadata,
+        muxrate_bps,
+    );
+    let mut response = body.into_response();
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keeps plain capacity retry, exact wrapper ownership and child cleanup under one supervised response lifetime"
+)]
+fn legacy_wrapper_capacity_wait_body(
+    state: &AppState,
+    channel: &Channel,
+    address: std::net::SocketAddr,
+    slate_command: FfmpegCommand,
+    slate_dir: PathBuf,
+    metadata: OutputMetadata,
+    muxrate_bps: i64,
+) -> Body {
     let registry = state.legacy_wrappers.clone();
     let session_registry = state.hls_sessions.clone();
     let pool = state.pool.clone();
     let channel_number = channel.number.clone();
+    let recovery_state = state.clone();
+    let recovery_channel = channel.clone();
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
     let handle: Arc<dyn HlsSessionHandle> = handle;
@@ -2836,7 +3043,12 @@ async fn legacy_wrapper_capacity_wait_response(
             if fence.closed.load(Ordering::Acquire) {
                 break DirectStreamOutcome::Cancelled;
             }
-            let limit = match load_active_transcode_limit(&pool).await {
+            let loaded = tokio::select! {
+                biased;
+                () = cancel.notified() => break DirectStreamOutcome::Cancelled,
+                result = load_active_transcode_limit(&pool) => result,
+            };
+            let limit = match loaded {
                 Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
                 Err(error) => {
                     tracing::warn!(%error, "legacy wrapper capacity reload failed");
@@ -2858,20 +3070,20 @@ async fn legacy_wrapper_capacity_wait_response(
             if let Some((wrapper, first_encoder)) =
                 try_reserve_mpeg_ts_wrapper_capacity(limit, &channel_number)
             {
-                let owner = match registry.register(
-                    &channel_number,
-                    &wrapper,
-                    first_encoder,
-                    tokio::time::Instant::now() + Duration::from_secs(20),
-                ) {
-                    Ok(owner) => owner,
-                    Err(error) => {
-                        tracing::warn!(%error, "legacy waiting wrapper registration failed");
-                        break DirectStreamOutcome::Failed(
-                            "legacy wrapper ownership unavailable".to_owned().into(),
-                        );
-                    }
-                };
+                // This admitted wrapper is a new source epoch, after any plain
+                // slate epochs. Its own startup deadline is shared with recovery
+                // and first-item admission; no authored state crosses the slate.
+                let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+                let owner =
+                    match registry.register(&channel_number, &wrapper, first_encoder, deadline) {
+                        Ok(owner) => owner,
+                        Err(error) => {
+                            tracing::warn!(%error, "legacy waiting wrapper registration failed");
+                            break DirectStreamOutcome::Failed(
+                                "legacy wrapper ownership unavailable".to_owned().into(),
+                            );
+                        }
+                    };
                 fence.attach(owner.close_handle());
                 if fence.closed.load(Ordering::Acquire) {
                     break DirectStreamOutcome::Cancelled;
@@ -2881,6 +3093,17 @@ async fn legacy_wrapper_capacity_wait_response(
                     &metadata,
                     Some(muxrate_bps),
                 );
+                let selected = tokio::select! {
+                    biased;
+                    () = cancel.notified() => break DirectStreamOutcome::Cancelled,
+                    selected = recover_wrapper_teletext(
+                        &recovery_state, &recovery_channel, &command, output.clone(), deadline,
+                    ) => selected,
+                };
+                if fence.closed.load(Ordering::Acquire) {
+                    break DirectStreamOutcome::Cancelled;
+                }
+                let selected = selected.with_command(&command);
                 let mut child = match spawn_stream_process(&command, None, &channel_number) {
                     Ok(child) => child,
                     Err(error) => {
@@ -2916,7 +3139,7 @@ async fn legacy_wrapper_capacity_wait_response(
                         &channel_number,
                         &mut retry,
                         None,
-                        &output,
+                        &selected,
                     );
                     tokio::pin!(operation);
                     tokio::select! {
@@ -2990,14 +3213,7 @@ async fn legacy_wrapper_capacity_wait_response(
         }
         drop(writer);
     });
-    let mut response = body.into_response();
-    response
-        .headers_mut()
-        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    response
+    body
 }
 
 fn build_legacy_concat_url(address: std::net::SocketAddr, channel_number: &str) -> String {
@@ -3126,6 +3342,7 @@ async fn mpeg_ts_capacity_wait_response(
     remote_stream: Option<ResolvedRemoteStream>,
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
     output: TeletextOutputAdmission,
+    deferred_wrapper: Option<(AppState, Channel)>,
 ) -> Response {
     let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
     let Some(slate_command) = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
@@ -3168,6 +3385,7 @@ async fn mpeg_ts_capacity_wait_response(
         remote_stream,
         subtitle_owner,
         output,
+        deferred_wrapper,
     );
     let mut response = body.into_response();
     response
@@ -3354,8 +3572,7 @@ async fn render_mpegts_script_command(
     let template_path = script.folder.join(script_name);
     let template = tokio::fs::read_to_string(&template_path).await?;
     let rendered = render_mpegts_script_template(&template, data);
-    let temp_path = temp_mpegts_script_path(cfg!(windows));
-    tokio::fs::write(&temp_path, rendered).await?;
+    let temp_path = write_mpegts_script(temp_mpegts_script_path(cfg!(windows)), rendered).await?;
 
     // MpegTsScriptService: environment values avoid cmd.exe's batch-file
     // code-page decoding of Unicode channel names and executable paths.
@@ -3387,6 +3604,19 @@ async fn render_mpegts_script_command(
             vec![temp_path],
         ))
     }
+}
+
+async fn write_mpegts_script(path: PathBuf, rendered: String) -> Result<PathBuf, std::io::Error> {
+    // A cancelled preparation must not leave a detached filesystem write that
+    // creates an unowned script after the startup deadline has expired.
+    let temporary = tokio::task::spawn_blocking(move || {
+        let temporary = tempfile::TempPath::try_from_path(path)?;
+        std::fs::write(&temporary, rendered)?;
+        Ok::<_, std::io::Error>(temporary)
+    })
+    .await
+    .map_err(std::io::Error::other)??;
+    temporary.keep().map_err(|error| error.error)
 }
 
 fn platform_mpegts_script_name(definition: &MpegTsScriptDefinition) -> Option<String> {
@@ -5177,13 +5407,20 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     remote_stream: Option<ResolvedRemoteStream>,
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
     output: TeletextOutputAdmission,
+    deferred_wrapper: Option<(AppState, Channel)>,
 ) -> Body {
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
     let handle_cancel = handle.cancel.clone();
     let handle: Arc<dyn HlsSessionHandle> = handle;
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
-    let (body, output_completion) = stream_body_for_output(reader, handle_cancel, &output);
+    let (body, output_completion) = stream_body_for_lifetime(
+        reader,
+        handle_cancel,
+        &output,
+        deferred_wrapper.is_some(),
+        None,
+    );
 
     tokio::spawn(async move {
         session_registry.register_direct(handle.clone()).await;
@@ -5192,7 +5429,12 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
         let mut output_result = Err("encoded output ended before producer startup");
         let mut cleanup_unconfirmed = false;
         loop {
-            let limit = match load_active_transcode_limit(&pool).await {
+            let loaded = tokio::select! {
+                biased;
+                () = cancel.notified() => break,
+                result = load_active_transcode_limit(&pool) => result,
+            };
+            let limit = match loaded {
                 Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
                 Err(error) => {
                     tracing::error!(
@@ -5220,6 +5462,19 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 if let Some(song) = retry.as_ref().and_then(|retry| retry.song.as_ref()) {
                     song.mark_in_use();
                 }
+                // Only the newly admitted final wrapper owns this recovery.
+                // Any capacity slate was supervised without authored output.
+                let selected = if let Some((state, channel)) = &deferred_wrapper {
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+                    tokio::select! {
+                        biased;
+                        () = cancel.notified() => break,
+                        selected = recover_wrapper_teletext(state, channel, &command, output.clone(), deadline) => selected,
+                    }
+                } else {
+                    output.clone()
+                };
+                let selected = selected.with_command(&command);
                 match spawn_stream_process(&command, producer, &channel_number) {
                     Ok(child) => {
                         let song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
@@ -5230,7 +5485,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                             &channel_number,
                             &mut retry,
                             remote_stream.as_ref(),
-                            &output,
+                            &selected,
                         )
                         .await;
                         output_result = stream_output_result(&outcome);
@@ -8431,6 +8686,7 @@ mod tests {
             None,
             None,
             TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
+            None,
         );
         let release = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -8507,6 +8763,7 @@ mod tests {
             None,
             None,
             TeletextOutputAdmission::plain(TeletextOutputRole::FinalDirectMpegTs),
+            None,
         );
 
         let bytes = axum::body::to_bytes(body, 64 * 1024)

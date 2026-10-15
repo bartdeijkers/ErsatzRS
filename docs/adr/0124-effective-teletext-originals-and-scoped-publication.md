@@ -180,6 +180,18 @@ unproven. This observed limitation does not waive suitable-client/resource gates
 P9A-04 owns the representative native/headed proof, exact selection boundary and
 remaining cache/resource, full engine and platform acceptance.
 
+Generated native legacy/hybrid final wrappers now reuse the same optional accepted
+selection path after actual command/capacity admission. Internal workers and
+slates remain plain; a wrapper admitted after a slate recovers current selection
+for its own new source epoch. Bounded startup and caller cancellation preserve
+temporary script and child/lease ownership. This extends route composition,
+without changing publication authority, Lua intervals or safe-output boundaries.
+P9A-04 owns native route evidence and the still-open slate, resource/client,
+caption/alternate-audio and platform delivery matrix. The existing bundled
+default/custom script path is opaque and does not gain transport authority from
+its filename. Automatic teletext on that default path remains an integration
+gap; no permanent restriction or default-wrapper acceptance is inferred.
+
 ## Alternatives Considered
 
 - Store an interval as a base snapshot: loses authority and original expiry.

@@ -67,8 +67,8 @@ impl TeletextOutputAdmission {
         })
     }
 
-    /// Accepted-original supervision currently supports the direct final owner.
-    /// Retained/wrapper command provenance remains a separate implementation.
+    /// Explicit accepted-original admission retains the direct final contract.
+    /// Optional wrapper recovery qualifies its own actual command and source.
     pub(crate) fn with_accepted(
         role: TeletextOutputRole,
         intent: Arc<TeletextAcceptedOutputIntent>,
@@ -89,20 +89,23 @@ impl TeletextOutputAdmission {
     }
 
     /// Ordinary output may abandon automatic authored attachment when actual
-    /// source discovery finds a role whose provenance is not supported yet.
+    /// source discovery rejects the final wrapper or direct source epoch.
     pub(crate) fn with_optional_accepted(
+        role: TeletextOutputRole,
         intent: Arc<TeletextAcceptedOutputIntent>,
         application: Arc<ApplicationServices>,
         deadline: Instant,
     ) -> Result<Self, TeletextPumpError> {
-        let mut output = Self::with_accepted(
-            TeletextOutputRole::FinalDirectMpegTs,
-            intent,
-            application,
-            deadline,
-        )?;
-        output.optional_accepted = true;
-        Ok(output)
+        Self::validate_optional_role(role)?;
+        Ok(Self {
+            accepted: Some(Arc::new(AcceptedTeletextAdmission {
+                intent,
+                application,
+                deadline,
+            })),
+            optional_accepted: true,
+            ..Self::plain(role)
+        })
     }
 
     /// Preserve explicit accepted/fixed contracts; only automatic attachment
@@ -115,16 +118,32 @@ impl TeletextOutputAdmission {
         }
     }
 
-    /// Opt-in response-owned selection is tied to one final direct source clock.
+    /// Reject optional authority before configuration or recovery side effects.
+    pub(crate) fn validate_optional_role(
+        role: TeletextOutputRole,
+    ) -> Result<(), TeletextPumpError> {
+        if matches!(
+            role,
+            TeletextOutputRole::FinalDirectMpegTs | TeletextOutputRole::FinalWrapperMpegTs
+        ) {
+            Ok(())
+        } else {
+            Err(TeletextPumpError::Configuration)
+        }
+    }
+
+    /// Opt-in response-owned selection is tied to one final source clock.
     pub(crate) fn with_optional_live(
+        role: TeletextOutputRole,
         intent: Arc<TeletextLiveOutputIntent>,
         deadline: Instant,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, TeletextPumpError> {
+        Self::validate_optional_role(role)?;
+        Ok(Self {
             live: Some(Arc::new(LiveTeletextAdmission { intent, deadline })),
             optional_accepted: true,
-            ..Self::plain(TeletextOutputRole::FinalDirectMpegTs)
-        }
+            ..Self::plain(role)
+        })
     }
 
     pub(crate) fn live(&self) -> Option<&LiveTeletextAdmission> {
@@ -198,5 +217,93 @@ impl TeletextOutputAdmission {
             return Err(TeletextPumpError::Configuration);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::host::{
+        state::{AppState, IptvAccessTokenVerifier},
+        teletext_runtime_policy::parse_native_teletext_runtime_policy,
+    };
+    use crate::transport::iptv::teletext_live_output::TeletextAcceptedUpdatePolicy;
+    use ersatzrs_ffmpeg::{build_mpegts_concat_command, OutputMetadata};
+    use std::time::Duration;
+
+    fn absent_intent() -> Arc<TeletextLiveOutputIntent> {
+        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        let policy = parse_native_teletext_runtime_policy(include_str!(
+            "../../../tests/fixtures/teletext-output-policy-v1.json"
+        ))
+        .unwrap();
+        Arc::new(
+            TeletextLiveOutputIntent::new_selected(
+                state.application,
+                1,
+                policy.design,
+                policy.encoding,
+                policy.source,
+                TeletextAcceptedUpdatePolicy::new(
+                    Duration::from_millis(25),
+                    Duration::from_secs(2),
+                )
+                .unwrap(),
+                None,
+            )
+            .unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn optional_live_admission_preserves_final_role_intent_deadline_and_command() {
+        let intent = absent_intent();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let command = build_mpegts_concat_command(
+            "synthetic.ffconcat",
+            &OutputMetadata::default(),
+            Some(5_000_000),
+        );
+        assert!(command.mpegts_output_policy().is_some());
+        for role in [
+            TeletextOutputRole::FinalDirectMpegTs,
+            TeletextOutputRole::FinalWrapperMpegTs,
+        ] {
+            let output =
+                TeletextOutputAdmission::with_optional_live(role, Arc::clone(&intent), deadline)
+                    .unwrap();
+            assert_eq!(output.role(), role);
+            assert!(Arc::ptr_eq(&output.live().unwrap().intent, &intent));
+            assert_eq!(output.live().unwrap().deadline, deadline);
+            assert!(output.validate_format(OutputFormat::MpegTs).is_ok());
+            assert!(output.validate_format(OutputFormat::Mp4).is_err());
+            assert!(output.matches_channel(1));
+            assert!(!output.matches_channel(2));
+            assert!(output.binding().is_none() && output.accepted().is_none());
+            let captured = output.with_command(&command);
+            assert!(Arc::ptr_eq(&captured.live().unwrap().intent, &intent));
+            assert_eq!(captured.command().unwrap(), &command);
+            let plain = captured.without_optional_accepted();
+            assert_eq!(plain.role(), role);
+            assert!(!plain.has_authored_output());
+            assert!(plain.command().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn optional_live_admission_cannot_attach_to_internal_worker_slate_or_other_container() {
+        let intent = absent_intent();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        for role in [
+            TeletextOutputRole::InternalItem,
+            TeletextOutputRole::HlsWorker,
+            TeletextOutputRole::CapacitySlate,
+            TeletextOutputRole::OtherContainer,
+        ] {
+            assert!(matches!(
+                TeletextOutputAdmission::with_optional_live(role, Arc::clone(&intent), deadline),
+                Err(TeletextPumpError::Configuration)
+            ));
+        }
     }
 }

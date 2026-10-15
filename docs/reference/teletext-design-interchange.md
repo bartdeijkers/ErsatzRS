@@ -4933,14 +4933,36 @@ timings must be positive and representable; missing/null/unknown/duplicate field
 reject. Version 1 rejects this additional field and retains startup-only behavior.
 No implicit live-monitor cadence or production preset is introduced.
 
-With version 2, each compatible ordinary final direct response owns a separate
+Ordinary `/iptv/channel/{channel}.ts` also permits automatic selected-original
+recovery on generated native final legacy-concat and hybrid-segmenter wrappers.
+Recovery follows actual wrapper admission and command preparation, using the same optional
+policy and the owner's original twenty-second startup deadline. Hybrid command
+preparation and capacity reservation share that deadline; an expired startup
+cleans prepared scripts and releases leases before child launch. Script write
+workers retain their temporary-file cleanup ownership through request cancellation.
+Opaque custom commands, Next output, internal item/HLS workers and slates skip
+automatic lookup. Explicit fixed or accepted admissions retain their own contracts.
+Hybrid's explicit empty `ffmpeg.default_mpegts_script` setting selects that
+generated native wrapper. Missing configuration can discover the installed
+bundled default script, which currently produces an opaque command too. Its
+automatic teletext connection is unresolved; this is an integration gap, not an
+accepted permanent limitation or full default-wrapper acceptance. Keep this
+precondition explicit and isolate app-data when reproducing native route tests.
+
+With version 2, each compatible ordinary final direct or native wrapper response
+owns a separate
 bounded accepted-state monitor and its safe-boundary control. Initially Off uses
 an absent gate: original PSI and AV continue, and later explicitly accepted native
 output can use the same source clock. Pending drafts remain unpublished. A stale
 initial candidate is rechecked after source discovery and starts absent. Unsupported
 source qualification or precommit admission still forwards the original prefix.
-Hybrid/retained/Next and separate-clock capacity slates remain outside this route
-connection; their accepted delivery obligations remain open.
+Capacity-wait actors leave their slates plain and recover selection only when the
+actual final wrapper starts a fresh source epoch, with a new bounded epoch startup
+deadline. They retain the actual child command and cancel blocked configuration
+reads when the response is dropped. No authored gate or stale selection crosses a
+slate epoch. Next, other retained-output combinations and separate-clock slate
+handover retain their own unfulfilled delivery obligations; this connection does
+not settle the existing slate timestamp/PCR gaps or complete engine acceptance.
 
 The monitor reconciles immediately, then waits the configured poll interval after
 each bounded reconciliation. Each read/recovery shares one fresh configured

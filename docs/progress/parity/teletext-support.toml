@@ -89,8 +89,11 @@ Native TSDuck/clock/AV, twelve page decodes, exact state and cleanup pass. Autom
 Day Base rendering is NOT proven: the receipted VLC decoder loses selection after
 withdrawal. This is an observed client limitation, not a permanent scope waiver;
 full suitable-client/resource updates remain open. Older exact owner-ACK proof is
-reused separately; new model-observed suffixes do not invent ACKs. Next connect
-ordinary continuous legacy selection with existing recovery/admission and retain
+reused separately; new model-observed suffixes do not invent ACKs. Generated
+ordinary legacy/hybrid wrappers now reuse selection/admission, with actual route,
+default-capacity, rejection and cancellation proof owned by P9A-04. Their
+default/custom script path remains an explicit integration gap. Next connect
+wrapper caption/alternate-audio and simultaneous client/theme proof, preserving
 all client/engine criteria. Canonical P9A-04 owns exact receipts and history:
 
 P9A-04 now owns explicit original request/intent/slot/epoch qualification and the

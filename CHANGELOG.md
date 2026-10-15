@@ -542,6 +542,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Restore selected accepted teletext on generated native legacy and hybrid MPEG-TS
+  wrappers without rerunning addons. Missing or invalid policies and unavailable
+  profiles preserve ordinary playback. Keep wrapper startup within its existing
+  deadline and clean up waiting responses even when SQLite configuration is busy.
+  Full client, caption, platform and engine acceptance remains open.
 - Preserve ordinary MPEG-TS playback when a new teletext generation arrives
   after the finite source has ended. Reject late activation before it can install
   an incomplete cycle, retain withdrawal and full-cycle checks, and load accepted
