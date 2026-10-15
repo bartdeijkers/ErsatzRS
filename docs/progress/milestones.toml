@@ -2968,6 +2968,88 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 explicit native consumer-origin checkpoint (partial):
+Criterion: connect source-window timing to actual enabled-stream selection
+without confusing native input seeking with later presentation correction.
+The bounded typed projection retains requested global indices, exact PIDs/roles,
+including subtitle streams, optional signed start PTS and rational bases. It
+rejects ambiguous/missing inventories, malformed identities (including signed
+hex strings), bad timing and overflow. Missing starts remain absent. The
+existing AV-only/ordinary metadata projections are unchanged.
+
+The original held-source probe now has an explicit consumer observation using
+the existing builder standard_format_flags, normal stream-info, default 5 MB
+probe and correct_ts_overflow=1. The actual process/source/work owner, caller-
+loss cancellation, bounded readers, one deadline and original/resolved source
+bookends are reused. Both projections parse before the final deadline/source
+check. No new process runner, package, schema or production route is introduced.
+
+Official FFmpeg n9.0 fftools/ffmpeg_demux.c:2076-2106 seeks first from F+S,
+where F is container start and S effective input seek; MPEG-TS video-delay
+preroll is separately required. fftools/ffmpeg_opt.c:344-375 later computes E
+from ALL enabled known-start streams, including subtitle, using nearest-away
+rational rescaling. Under the explicitly scoped no-copyts/offset/sync/scaling/
+loop policy the presentation zero is max(F+S,E), without a second seek. The
+numeric projection preserves these distinct checked bounds; it does not certify
+actual physical input, final flags, seek landing, decoder timing or eligibility.
+Sources: https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffmpeg_demux.c and
+https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffmpeg_opt.c.
+
+Ignored native fixture uses pinned FFmpeg/FFprobe n9.0-20260805/libzvbi (the
+unchanged executable hashes recorded in the preceding checkpoints). Generated
+8 s MPEG-TS has staggered video, English440, Dutch660 and earlier teletext.
+Same-source -copyts framecrc supplies a packet reference; explicit video+English,
+video+Dutch and video+Dutch+teletext run with no seek, 0.5 s and 4 s seek. Every
+known-timestamp output packet must retain its source stream, payload size/CRC
+and expected normalized PTS within one 90 kHz rescale tick. Assertions require
+three distinct enabled origins (subtitle before English before Dutch) and
+4 s seek dominance, so coincident starts cannot weaken the fixture.
+
+Initial combined native/focused run 059ed141-051f-4b6b-87ac-44f965805f86 passes
+17/18 and exposes the first post-0.5 s subtitle packet as a timing counterexample.
+Actual bounded native -debug_ts then proves its input PTS/DTS are NOPTS while
+framecrc muxing emits zero. The native regression now checks this diagnostic
+through the existing retained capture/error tail, with deliberate tiny-output
+empty-AV rejection; it explicitly classifies that one packet as unknown and
+never treats invented zero as timing evidence. All other AV/subtitle packets
+remain subject to the normalization comparison. This is a concrete pending
+consumer/decoder admission gap, not an accepted source restriction.
+
+Native run 3554aecd-7f23-497c-b47f-fd0c0d00a1ff passes all nine normalization
+trials (after explicit unknown-prefix classification), with 501/362/346 English,
+408/349/349 Dutch and 464/383/380 subtitle-enabled known packets. The bounded
+in-test NOPTS diagnostic is additionally checked in the final run below.
+The source SHA256 is c58a94db4893823a979044e6ab5131e6104081acb44309b367677885f5f7b18c.
+Ordinary metadata and source bytes survive; invalid/duplicate/negative/oversized
+selection, missing row, absent ownership and deliberate changed source reject.
+Actual cleanup drains before the final work guard releases. Sixteen initial
+projection/preparation cases pass, d8ce9b7c-d9cf-4468-afeb-ddb4945d1a47, including
+aborted actual-process retention. The unchanged genuine 40..52 s page888/page200
+and 43..52 s prior-reset proof passes again in the initial combined run with
+unchanged bitmap counts/timestamps and hashes. Final exact-source run
+6dcfc0e1-7ad0-4e92-b270-2a445ccf54ef passes all 18 selected cases in 3.653 s,
+including the in-test native NOPTS diagnostic and both genuine source trials.
+All nine frozen Rust hashes match the final source; strict affected all-target
+Clippy and workspace formatting pass. Initial reference-versus-owned string
+iterator compile errors and literal/closure style lints were corrected without
+lint exemptions. Architecture, progress and scoped-stage checks accompany this
+checkpoint; no full CI or full engine acceptance is claimed.
+
+Evidence: tmp/phase9-consumer-origin-checkpoint (final native/focused logs,
+bounded first-packet debug diagnostic, exact-source safety and scoped commit
+receipts). Prior ordinary-route AV/TSDuck, client/editor/headed-admin and other
+platform evidence remains applicable to unchanged inputs, not these new gaps.
+Next connect actual selected video/audio and physical input ownership to the
+native context and final generated command/hardware retry fence. Automatic
+audio must reuse builder index normalization; Intel's separately reopened audio
+input must not enter the video/subtitle enabled set. Then join actual landing,
+missing first timestamps, decoder cue timing and complete page/resources/charset
+before descriptor-request admission and late rechecks. Shared/non-AV/late epoch
+initialization, wrap ambiguity, large/multiwindow and all full Level2.5/TTI/
+QTeletextMaker/theme/zone/Lua/restart/localized-admin/client/playback/platform
+criteria remain required. No milestone status/acceptance/dependency changes,
+production TV-guide addon, remote push or publication.
+
 2026-10-15 selected-PES/page-prelude checkpoint (partial):
 Criterion: repair the demonstrated seven-versus-eight bitmap regression when a
 requested native-format cue begins after required teletext bytes already arrived.

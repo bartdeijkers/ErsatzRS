@@ -20,6 +20,8 @@ use super::{
 const PACKET_BYTES: usize = 188;
 const SELECTED_PID: u16 = 258;
 
+#[path = "teletext_decode_consumer_native_tests.rs"]
+mod consumer;
 #[path = "teletext_decode_cue_native_tests.rs"]
 mod cue;
 #[path = "teletext_decode_demux_native_tests.rs"]

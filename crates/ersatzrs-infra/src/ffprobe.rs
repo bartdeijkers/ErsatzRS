@@ -1,6 +1,8 @@
 /// Bounded interpretation of explicitly supplied packed teletext descriptors.
 /// Production probe acquisition and ordinary track projection remain separate.
 pub mod teletext;
+/// Explicit enabled-stream timing, separate from native input seek and playback admission.
+pub mod teletext_consumer_origin;
 /// Owned, source-associated exact-page native bitmap decode receipts.
 pub mod teletext_decode;
 /// Bounded native demux order, packet positions and signed timestamp observations.

@@ -62,6 +62,30 @@ impl FfprobeExtractor {
         deadline: Instant,
         hold: TeletextWorkHold,
     ) -> Result<NativeSourceOrigin, SourceTeletextPageDecodeError> {
+        self.capture_local_teletext_origin(
+            guard,
+            paths.clone(),
+            self.source_origin_command(&paths.1)?,
+            deadline,
+            hold,
+            |output| {
+                parse_source_origin(output)
+                    .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)
+            },
+        )
+        .await
+    }
+
+    /// Shared original-source capture, with actual worker and source ownership.
+    pub(super) async fn capture_local_teletext_origin<T>(
+        &self,
+        guard: Arc<LocalTeletextSourceGuard>,
+        paths: (PathBuf, PathBuf),
+        command: FfprobeCommand,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+        parse: impl FnOnce(&[u8]) -> Result<T, SourceTeletextPageDecodeError>,
+    ) -> Result<T, SourceTeletextPageDecodeError> {
         check_deadline(deadline)?;
         if LocalProbeCleanupScope::current().is_none() {
             return Err(SourceTeletextPageDecodeError::NoCleanupScope);
@@ -76,15 +100,14 @@ impl FfprobeExtractor {
         .await
         .map_err(probe_error)?;
         let output = local::capture_retained(
-            self.source_origin_command(&paths.1)?,
+            command,
             "source teletext native AV origin".into(),
             Some(deadline),
             Some(local::ProbeRetention::new(hold.clone(), guard.clone())),
         )
         .await
         .map_err(probe_error)?;
-        let origin = parse_source_origin(&output)
-            .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)?;
+        let origin = parse(&output)?;
         check_deadline(deadline)?;
         local_teletext::check_source_guard_owned(guard, paths.0, paths.1, deadline, hold)
             .await

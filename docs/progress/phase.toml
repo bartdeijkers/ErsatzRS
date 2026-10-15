@@ -62,20 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-P9A-04 now preserves actual selected-page reset/PES/PSI preludes in native-
-FORMAT cue windows. Genuine 40..52s pages 888/200 restore all eight bitmap events with
-unchanged first/last timestamps versus the independent reference window. A
-43..52s trial retains the preceding active 888 reset and all six remaining events.
-Exact anchor retention, fresh snapshot PSI/PES and source/decoder hashes remain
-mandatory; unknown/incremental state is not guessed. P9A-04 owns exact receipts
-and the initial seven-event regression. Next qualify generated consumer input
-flags and enabled-stream start correction for actual audio selection, then join
-consumer cue/decoder timing and complete initial page/resource/charset context
-before descriptor requests enter runtime selection and rechecks. General
-shared/non-AV/late initializers, whole-period ambiguity and large/multiwindow
-sources remain required work, not accepted restrictions. Reuse applicable
-ordinary/editor/client proof. Full engine/Level2.5/editor/Lua/restart/platform
-criteria and engine-first order stay open; no production addon, push or publication.
+P9A-04 now observes explicit enabled AV/subtitle starts through the existing
+held-source/process owner with native builder format flags. Seek F+S stays
+separate from presentation max(F+S,E). P9A-04 owns the nine actual normalization
+trials, source/cancellation checks and the post-seek NOPTS diagnostic: a muxed
+zero cannot qualify missing native timing. Prior page-prelude/decoder proof is
+retained. Next carry actual normalized video/audio selections and physical input
+ownership into the existing native caption context, fence the final generated
+command and hardware retry topology, then join actual first-packet/decoder cue
+timing and complete initial page/resource/charset context before descriptor
+requests enter runtime selection/rechecks. Separate Intel audio reopening cannot
+borrow a shared-input origin. General shared/non-AV/late initializers,
+whole-period ambiguity and large/multiwindow sources remain required work, not
+accepted restrictions. Reuse applicable ordinary/editor/client proof. Full
+engine/Level2.5/editor/Lua/restart/platform criteria and engine-first order stay
+open; no production addon, push or publication.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.
