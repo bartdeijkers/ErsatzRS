@@ -280,7 +280,8 @@ release section when tagging a release.
 
 - Allow manually dispatched Next-only and bounded browser recovery CI for
   corrective commits without cancelling a running full check. Focused runs
-  remain distinct from complete CI evidence.
+  include complete affected serial groups and remain distinct from complete
+  CI evidence.
 
 - Start HLS-to-MPEG-TS playback with a six-second read burst in the generated
   wrapper and bundled Unix/Windows scripts, then resume realtime pacing.

@@ -59,7 +59,7 @@ on:
         required: false
         default: false
       browser_only:
-        description: Run the four failed-fixture recovery cases in one browser (partial CI; incompatible with other focused modes)
+        description: Run the 11 cases in the three failed-fixture specs in selected browsers (partial CI; incompatible with other focused modes)
         type: choice
         required: false
         default: none
@@ -67,6 +67,7 @@ on:
           - none
           - chromium
           - firefox
+          - both
       reset_target_dir:
         description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
         type: boolean
@@ -527,8 +528,7 @@ jobs:
           export PATH="$ffmpeg_bin_dir:$PATH"
           playwright_args=(--project="$BROWSER_PROJECT")
           if [[ -n "$BROWSER_ONLY" && "$BROWSER_ONLY" != 'none' ]]; then
-            playwright_args+=(block-preview.spec.ts teletext-authoring-flow.spec.ts teletext-editor-flow.spec.ts
-              --grep 'previews unsaved draft state through the real scheduler in responsive layouts$|teletext static authoring flow \(JavaScript true, dark (false|true)\)$|teletext editor file flow \(JavaScript true, dark false\)$')
+            playwright_args+=(block-preview.spec.ts teletext-authoring-flow.spec.ts teletext-editor-flow.spec.ts)
           fi
           scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
       - name: Upload Playwright diagnostics

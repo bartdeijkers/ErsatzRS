@@ -22731,6 +22731,51 @@ same commit. A demonstrated correction requires affected verification, without
 routinely rerunning the whole pipeline. Application release remains separate.
 """
 evidence = """
+Complete serial-group local recovery (2026-10-15): all eleven headed Chromium
+cases pass in9.6m, with zero failures/skips/retries/flaky results, on one fresh
+DB using the unchanged retained matched production bundle and exact published
+Next022/FFmpeg206 runtimes. This includes all four authoring JS/theme variants,
+both actual decoded TCP publication cases and all four editor JS/theme variants,
+plus Block preview. All seven followers previously left unexecuted are now
+proven locally. Raw results/DB/logs remain under
+tmp/ucu11-runtime-audit/browser-recovery-serial-local/.
+The existing bounded CI selector lists22 cases across these same three specs
+for browser_only=both and retains max-parallel1, avoiding concurrent browser
+resource contention. No runtime/source changes are introduced. CI recovery of
+these complete groups remains required, alongside the uncancelled original
+Firefox suite. Five original explicit opt-in skips are distinct from the seven
+serial followers and retain their existing separate acceptance ownership.
+
+Serial follower acceptance gap (2026-10-15): the original Chromium summary also
+reports seven tests that did not run after serial-group failures. These are
+four authoring followers (including both actual TCP publication cases) and
+three editor followers. The four-case recovery proves only its named cases;
+it does not close the seven unexecuted checks. Existing bounded browser recovery
+now runs all eleven tests in the same three affected specs, preserving serial
+predecessors. Both browser selections list exactly eleven; actionlint and Bash
+syntax pass. Headed local acceptance and scoped CI for these complete groups
+remain required. This restores existing acceptance coverage, without a full
+suite rerun or a new product requirement.
+
+Focused Chromium recovery accepted (2026-10-15): run38662128181 is terminal
+success on exact7314eaa52930164556ea7cf8b3584d658fb61bad. All four affected/
+predecessor cases pass in149.630s with no skips, retries or flaky results.
+Only Chromium runs; all unrelated jobs are skipped and the original Firefox
+suite remains uncancelled. The four-case result JSON and diagnostics are
+retained under tmp/ucu11-runtime-audit/ci-chromium-recovery-38662128181/.
+This is scoped recovery evidence, not a new complete green CI run.
+
+Further authorized cleanup removes the unused UCU11 Windows application target
+(39,974,435,359 logical bytes) after checking process users and the retained
+candidate SHA256. The native source/frontend/tools/evidence mirror is archived
+in the Windows ErsatzRS-evidence/ucu11-v26.11.3/app directory. Three completed
+Next source compilation targets (4.0GiB,437MiB,418MiB) are removed; verified
+distributions, candidates and source/provenance remain. Root-owned ARM contents
+are cleared using host Docker, an existing image, two bounded mounts, no network
+or socket, and no existing container changes. Receipts remain in the owning
+runtime audit. Keep the Linux application cache/worktree/local branch until
+the remaining Firefox acceptance and final remote delivery are complete.
+
 Browser fixture recovery (2026-10-15): original Chromium job116160434131
 finishes361 passed,5 skipped,3 failed. The real Block preview response correctly
 includes two daily blocks during the first30 minutes after midnight; its test

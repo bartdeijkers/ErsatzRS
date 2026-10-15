@@ -81,11 +81,20 @@ only Next and leaves the original run uncancelled. Original Chromium finishes
 361 passed,5 skipped,3 failed: valid midnight Block overlap and retained
 teletext fixture identities require test-only corrections. All four affected/
 predecessor headed Chromium cases now pass on one fresh DB with the retained
-matched bundle. Dispatch only their bounded browser recovery on the corrected
-revision; finish original Firefox acceptance, record combined evidence and close out the
+matched bundle. Focused Chromium CI38662128181 passes all four on exact7314eaa5
+with no skips/retries. The original summary also records seven serial followers
+that did not run, so four cases alone do not close Chromium acceptance. Recover
+all eleven tests in the same three affected specs, including both actual TCP
+publication cases. All eleven headed local cases now pass in9.6m without skips,
+retries or failures. Push the recovery selector and dispatch browser_only=both
+after original Firefox releases its port; this schedules22 cases serially,
+without a full suite rerun. Record combined evidence and close out the
 application checkout/cache cleanup. Do not claim this focused success as a new
 complete green exact-commit CI run. The completed Next source-candidate local
 worktree/branch are already removed with their remote commit/evidence retained.
+The unused UCU11 native Windows target and three Next compilation caches are
+removed; exact native candidate/frontend/source/tools/evidence are archived.
+Retain the Linux application cache/worktree until Firefox acceptance is complete.
 Application release remains separate.
 Maintainer-authorized UCU-10 cleanup removed both completed worktrees/local
 branches and unused Linux/Windows caches; evidence remains under

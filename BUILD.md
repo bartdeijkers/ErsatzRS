@@ -305,25 +305,29 @@ satisfy the exact-candidate release gate above.
 
 ### Retry the failed browser fixtures on a corrected revision
 
-Use the bounded recovery mode to run one browser's Block preview, teletext static
-authoring (JavaScript enabled, light then dark) and editor (JavaScript enabled,
-light) cases. The authoring predecessor is included to reproduce retained
-history before the failed dark-mode case.
+Use the bounded recovery mode to run all 11 cases per selected browser in the
+Block preview, teletext authoring and editor specs. Run complete serial groups
+so failures are rechecked with their predecessors and any followers that did not
+run after the original failure, including both TCP publication cases.
 
 ```bash
-gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f browser_only=chromium
-# Use browser_only=firefox for the same four cases in Firefox.
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f browser_only=both
+# Use browser_only=chromium or browser_only=firefox to recover just one project.
 ```
 
-This runs one browser job with the existing matched Leptos build, pinned runtime
-staging and isolated application runner. Normal CI still runs both full browser
-suites. The `CI (Browser recovery)` title identifies partial evidence and cannot
-suppress full CI through Preflight. Its browser-specific concurrency group
-preserves other running gates. Combining this mode with `test_only` or
+This runs the selected browser jobs with the existing matched Leptos build,
+pinned runtime staging and isolated application runner. `both` runs 22 cases
+through the existing matrix with `max-parallel: 1`, preserving serial execution
+and avoiding resource contention between browser projects. Normal CI still runs
+both full browser suites. The `CI (Browser recovery)` title identifies partial
+evidence and cannot suppress full CI through Preflight. Its browser-specific
+concurrency group preserves other running gates. On a shared host, wait for an
+existing job of the same project to release its port before starting recovery.
+Combining this mode with `test_only` or
 `next_engine_only` fails before checkout or building.
 
 Record the repaired SHA and the earlier full run when reusing unaffected
-results. This four-case recovery is scoped evidence; it does not establish full
+results. This three-spec recovery is scoped evidence; it does not establish full
 green CI or satisfy the exact-candidate release gate.
 
 ## Inner-loop strategy (don't recompile the source 5×)
