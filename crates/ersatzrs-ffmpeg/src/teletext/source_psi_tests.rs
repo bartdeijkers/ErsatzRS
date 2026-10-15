@@ -294,3 +294,21 @@ fn source_psi_program_count_bound_uses_shared_pat_validation() {
     assert_eq!(result, Err(TeletextPsiError::Capacity));
     assert_fenced(&mut observer, TeletextPsiError::Capacity);
 }
+
+#[test]
+fn source_psi_change_witness_survives_a_return_to_the_initial_wire_tables() {
+    let mut observer = ready(PID);
+    let initial = observer.observation().unwrap();
+    assert!(!initial.current_tables_changed);
+    assert!(observer.has_complete_current_tables());
+    observer
+        .push(&one(100, 1, &source_pmt(10, 1, 0x100, PID, &descriptors())))
+        .unwrap();
+    assert!(observer.observation().unwrap().current_tables_changed);
+    observer
+        .push(&one(100, 2, &source_pmt(10, 0, 0x100, PID, &descriptors())))
+        .unwrap();
+    let returned = observer.observation().unwrap();
+    assert_eq!(returned.programs, initial.programs);
+    assert!(returned.current_tables_changed);
+}

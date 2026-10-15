@@ -2,8 +2,8 @@ use ersatzrs_core::repositories::Result;
 use ersatzrs_domain::{
     MediaSourceKind, SourceTeletextBinding, SourceTeletextBindingIdentity,
     SourceTeletextDescriptor, SourceTeletextDescriptors, SourceTeletextObservation,
-    SourceTeletextObservedPages, SourceTeletextPid, SourceTeletextProgram, SourceTeletextPrograms,
-    SourceTeletextProvenance, SourceTeletextRevision, TeletextLanguage,
+    SourceTeletextPid, SourceTeletextProgram, SourceTeletextPrograms, SourceTeletextProvenance,
+    SourceTeletextRevision, TeletextLanguage,
 };
 use sqlx::Transaction;
 
@@ -127,6 +127,7 @@ pub(super) async fn replace_children(
                 .execute(&mut **tx).await.map_err(|_| storage())?;
         }
     }
+    super::header_codec::replace(tx, id, &observation.observed_pages).await?;
     Ok(())
 }
 
@@ -170,7 +171,7 @@ pub(super) async fn decode(
             column(row, "TrailingUnpairedPairs")?,
         )
         .await?,
-        observed_pages: SourceTeletextObservedPages::NotAcquired,
+        observed_pages: super::header_codec::load(tx, id).await?,
     };
     validate(&observation)?;
     Ok(observation)

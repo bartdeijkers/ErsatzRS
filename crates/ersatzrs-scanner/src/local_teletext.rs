@@ -10,7 +10,8 @@ use ersatzrs_core::repositories::{ManagedLibraryOperationClaim, RepositoryError}
 use ersatzrs_domain::{
     MediaSourceKind, SourceTeletextBinding, SourceTeletextBindingIdentity,
     SourceTeletextDescriptor, SourceTeletextDescriptors, SourceTeletextObservation,
-    SourceTeletextPid, SourceTeletextProgram, SourceTeletextPrograms, SourceTeletextProvenance,
+    SourceTeletextObservedPages, SourceTeletextPid, SourceTeletextProgram, SourceTeletextPrograms,
+    SourceTeletextProvenance,
 };
 use ersatzrs_infra::db::Db;
 use ersatzrs_infra::ffprobe::teletext::TeletextProjectionWarning;
@@ -251,7 +252,7 @@ fn observation(
         TeletextProbePid::Unusable => SourceTeletextPid::Unusable,
         TeletextProbePid::Available(pid) => SourceTeletextPid::Reported(pid),
     };
-    SourceTeletextObservation::new(
+    let mut observation = SourceTeletextObservation::new(
         SourceTeletextBinding::Bound(binding),
         stream.stream_index,
         SourceTeletextProvenance::Ffprobe9PackedDescriptorProjection,
@@ -259,7 +260,15 @@ fn observation(
         programs(&stream.programs)?,
         descriptors(&stream.descriptors)?,
     )
-    .map_err(|_| conflict("invalid local teletext projection"))
+    .map_err(|_| conflict("invalid local teletext projection"))?;
+    if let Some(headers) = acquisition.headers().for_stream(stream.stream_index) {
+        observation.observed_pages =
+            SourceTeletextObservedPages::HeadersObserved(Box::new(headers.clone()));
+        observation
+            .validate()
+            .map_err(|_| conflict("invalid local teletext header observation"))?;
+    }
+    Ok(observation)
 }
 
 fn programs(programs: &TeletextProbePrograms) -> Result<SourceTeletextPrograms> {

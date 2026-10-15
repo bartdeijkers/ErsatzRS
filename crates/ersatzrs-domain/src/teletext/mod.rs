@@ -51,6 +51,7 @@ mod resource_header;
 mod resource_identity;
 mod service;
 mod source;
+mod source_headers;
 mod spatial_trace;
 
 pub use attribute_execution::*;
@@ -97,6 +98,7 @@ pub use resource_header::*;
 pub use resource_identity::*;
 pub use service::*;
 pub use source::*;
+pub use source_headers::*;
 pub use spatial_trace::*;
 
 #[cfg(test)]

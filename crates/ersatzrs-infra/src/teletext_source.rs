@@ -13,6 +13,7 @@ use crate::db::{Db, DbRow};
 use crate::repositories::managed_library_operation::claim_is_current;
 
 mod codec;
+mod header_codec;
 mod parents;
 
 /// Per-observation resource policy, not a DVB inventory ceiling.

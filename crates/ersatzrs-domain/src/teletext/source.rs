@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use super::{TeletextLanguage, TeletextPageNumber};
+use super::{SourceTeletextHeaderWindow, TeletextLanguage, TeletextPageNumber};
 use crate::{EntityId, MediaSourceKind};
 
 /// Resource policy for opaque adapter revision text, not a provider protocol limit.
@@ -34,6 +34,16 @@ pub enum SourceTeletextError {
     DuplicateOrdinal,
     #[error("reported trailing unpaired descriptor warning must have a positive count")]
     EmptyShrinkWarning,
+    #[error("source teletext header window exceeds its structural bounds")]
+    HeaderWindow,
+    #[error("source teletext header program membership is invalid or duplicated")]
+    HeaderProgram,
+    #[error("source teletext observed header contains invalid wire fields")]
+    ObservedHeader,
+    #[error("source teletext observed headers must retain strict transport order")]
+    HeaderOrder,
+    #[error("source teletext header observations require a bound source and actual PID")]
+    HeaderBinding,
 }
 
 /// Opaque adapter-supplied revision; syntax validation establishes no assurance.
@@ -258,11 +268,12 @@ pub enum SourceTeletextDescriptors {
     },
 }
 
-/// No page observer exists in this acquisition slice.
-/// Actual page/subcode, charset, region and national option all remain unknown.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Actual bounded observations remain distinct from selectable/complete pages.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SourceTeletextObservedPages {
     NotAcquired,
+    /// Packet-0 observations only; body, charset and readiness remain unproven.
+    HeadersObserved(Box<SourceTeletextHeaderWindow>),
 }
 
 /// Independent report-only fields from one supplied stream snapshot.
@@ -340,6 +351,14 @@ impl SourceTeletextObservation {
                     return Err(SourceTeletextError::DuplicateOrdinal);
                 }
             }
+        }
+        if let SourceTeletextObservedPages::HeadersObserved(window) = &self.observed_pages {
+            if !matches!(self.binding, SourceTeletextBinding::Bound(_))
+                || !matches!(self.pid, SourceTeletextPid::Reported(0x20..=0x1ffe))
+            {
+                return Err(SourceTeletextError::HeaderBinding);
+            }
+            window.validate()?;
         }
         Ok(())
     }

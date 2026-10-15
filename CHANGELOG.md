@@ -306,16 +306,13 @@ release section when tagging a release.
 
 ### Changed
 
-- Add bounded source-transport PSI and actual header observation components.
-  Retain exact program memberships, descriptor bytes, header occurrences and
-  supplied positions without treating them as complete pages or playback
-  selections. Scanner page acquisition and durable observations remain open.
-- Store local DVB teletext descriptors alongside ordinary scan metadata for
-  films, other videos, music videos, television episodes and their extras.
-  Recheck the held source and actual managed scan claim inside each media
-  transaction; lease loss rolls back the complete leaf write. Auxiliary probe
-  failure preserves ordinary tracks. Video discovery now includes MPEG/TS
-  suffixes. Actual page acquisition and source-page selection remain open.
+- Store local DVB teletext descriptors and bounded actual header observations
+  alongside ordinary film, video, music-video, television and extras metadata.
+  Keep reader ownership through cancellation, bind headers to stable current
+  PSI, and recheck the held source and scan claim inside each media transaction.
+  Auxiliary failure preserves ordinary tracks; lease loss rolls back the leaf.
+  Video discovery includes MPEG/TS suffixes. Source-page bodies, charset,
+  complete inventory and playback selections remain open.
 - Expand Phase 9 to authored EN 300 706 Level 2.5 with correct base fallback and
   QTeletextMaker TTI import/export, versioned template/theme/zone metadata and
   separate drafts and explicit publication. Require independent decoding,

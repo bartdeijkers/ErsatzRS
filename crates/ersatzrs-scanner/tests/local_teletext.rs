@@ -1,5 +1,5 @@
 //! Actual Local scan routes with a pinned probe and redistributable AV/200/888.
-//! Descriptor reports are not observed pages or playback-selection acceptance.
+//! Actual bounded header observations still do not establish page bodies or selection.
 
 use std::path::{Path, PathBuf};
 
@@ -171,10 +171,41 @@ async fn reports(pool: &SqlitePool, files: usize) -> Vec<(i64, SourceTeletextRev
         );
         assert_eq!(report.stream_index, 3);
         assert_eq!(report.pid, SourceTeletextPid::Reported(0x103));
+        let SourceTeletextObservedPages::HeadersObserved(headers) = report.observed_pages else {
+            panic!("native scan must persist actual bounded headers");
+        };
+        assert_eq!(headers.packet_count, 303);
+        assert_eq!(headers.complete_pes, 14);
+        assert!(headers.ended_at_eof);
+        assert!(!headers.unobserved_prefix);
+        assert_eq!(headers.programs.len(), 1);
         assert_eq!(
-            report.observed_pages,
-            SourceTeletextObservedPages::NotAcquired
+            (
+                headers.programs[0].program_number,
+                headers.programs[0].pmt_pid,
+                headers.programs[0].pcr_pid,
+                headers.programs[0].stream_type
+            ),
+            (1, 0x1000, 0x100, 6)
         );
+        assert_eq!(
+            headers
+                .headers
+                .iter()
+                .map(|h| (h.wire_magazine, h.wire_page))
+                .collect::<Vec<_>>(),
+            [
+                (2, 0),
+                (2, 1),
+                (0, 0x88),
+                (0, 0x99),
+                (2, 0),
+                (2, 1),
+                (0, 0x88),
+                (0, 0x99)
+            ]
+        );
+        assert_ne!(headers.psi_fingerprint, [0; 32]);
         let SourceTeletextDescriptors::Reported {
             entries,
             trailing_unpaired_pairs,
@@ -324,4 +355,74 @@ async fn native_local_scans_bind_reports_across_leaf_writers_without_losing_trac
         &fixture,
     )
     .await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned FFprobe 9 and synthetic two-audio AV/200/888 input"]
+async fn native_rejected_source_header_clears_old_window_without_losing_ordinary_tracks() {
+    let (probe, fixture) = inputs();
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("Synthetic.ts");
+    std::fs::copy(fixture, &path).unwrap();
+    std::fs::write(
+        path.with_extension("eng.srt"),
+        "1\n00:00:00,000 --> 00:00:01,000\nSynthetic caption\n",
+    )
+    .unwrap();
+    let pool = database(root.path(), 4).await;
+    let config = config(&pool, &probe).await;
+    scan(&pool, &config).await;
+    let before_tracks = tracks(&pool, 1).await;
+    let before_subtitles = subtitles(&pool, 1).await;
+    let before_reports = reports(&pool, 1).await;
+    let modified = path.metadata().unwrap().modified().unwrap();
+    let mut bytes = std::fs::read(&path).unwrap();
+    let packet = bytes
+        .chunks_exact_mut(188)
+        .find(|p| (u16::from(p[1] & 31) << 8 | u16::from(p[2])) == 0x103 && p[1] & 0x40 != 0)
+        .unwrap();
+    assert_eq!(packet[3] & 0x30, 0x10);
+    assert_eq!(&packet[4..7], &[0, 0, 1]);
+    // Two flipped bits in the first protected page byte: invalid optional
+    // teletext metadata, with every audio/video packet left byte-identical.
+    packet[4 + 46 + 6] ^= 3;
+    std::fs::write(&path, bytes).unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(
+            std::fs::FileTimes::new().set_modified(modified + std::time::Duration::from_secs(1)),
+        )
+        .unwrap();
+    scan(&pool, &config).await;
+    assert_eq!(tracks(&pool, 1).await, before_tracks);
+    assert_eq!(subtitles(&pool, 1).await, before_subtitles);
+    let (stream_id,file_id):(i64,i64)=sqlx::query_as(r#"SELECT s."Id",f."Id" FROM "MediaStream" s JOIN "MediaFile" f ON f."MediaVersionId"=s."MediaVersionId" WHERE s."Codec"='dvb_teletext'"#).fetch_one(&pool).await.unwrap();
+    // read-only transaction: inspect the replacement descriptor report/window.
+    let mut tx = pool.begin().await.unwrap();
+    let report = teletext_source::load(&mut tx, stream_id, file_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        report.observed_pages,
+        SourceTeletextObservedPages::NotAcquired
+    );
+    let SourceTeletextBinding::Bound(binding) = report.binding else {
+        panic!("current source binding")
+    };
+    assert_eq!(file_id, before_reports[0].0);
+    assert_ne!(binding.source_revision, before_reports[0].1);
+    assert!(matches!(
+        report.descriptors,
+        SourceTeletextDescriptors::Reported { .. }
+    ));
+    tx.rollback().await.unwrap();
+    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "SourceTeletextHeaderWindow""#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    pool.close().await;
 }

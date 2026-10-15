@@ -2383,6 +2383,74 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-15 owned Local header-read/persistence checkpoint (not engine acceptance):
+Managed Local acquisition now reads the original held regular file outside SQLite,
+under the existing LocalProbeCleanupScope. Its registered blocking owner survives
+requester abort and early timeout; successful return joins the actual worker.
+Even failed response delivery disposes retained output before releasing capacity.
+No scope starts no reader. One cooperative10s deadline,1s settlement budget,
+32768 TS188 packets and1024 successful aggregate header occurrences bound the read.
+An uninterruptible filesystem call cannot be preempted: its owner remains active
+until real completion and an early uncertain-cleanup reply is fatal. Header/PSI/
+read/deadline failures confirmed by the completed worker remain optional and keep
+descriptors and ordinary metadata. These limits are not a whole-process RSS bound.
+
+Header collection starts only after complete current PAT/all-PMT/observed-CAT
+state. Selected payload before that point remains an explicit unobserved prefix.
+A current-table replacement invalidates the whole observation, even if later wire
+tables return to their initial bytes. Exact matching-PID memberships, table-byte
+fingerprint, raw header/control/subcode/correction fields, PTS and physical
+completion/PES/unit positions survive. Source association is checked before/after
+reading and again through the existing claim-fenced leaf transaction's commit.
+This associates observed filesystem state; it does not certify immutable bytes.
+
+SourceTeletextObservedPages now distinguishes NotAcquired from bounded boxed
+HeadersObserved. Neither state declares body/charset/inventory or Ready. Strict
+constructors/serde enforce resource, bit-width, identity and occurrence order.
+The additive202610150333 migration adds one versioned child under the exact source
+report. The already-applied parent status stays its legacy zero sentinel; only
+explicit valid child presence means header observations. SQL caps JSON at1MiB
+before transfer/deserialization, corruption fails conservatively, replacement
+clears old windows and parent invalidation/deletion cascades. Existing source/
+stream/file/claim identities and ordinary metadata tables remain unchanged.
+
+Initial cross-crate run9ce2d5d7-b564-4562-a6d3-3014c4ee94a2 passes141/142,
+including migration/upgrade regressions. The sole failure was a copy-based reopen
+fixture whose new connection could not open its intended file. Reusing the same
+seed helper with a genuinely file-backed database and actual acquired claim makes
+the close/reopen proof pass; no product cause is inferred. Final source storage/
+reader/change-witness runcd7fd563-1461-4983-b458-d6ec83db5087 passes29/29 (6.072s).
+After strengthening successful return to join the worker, all nine owned-reader
+cases passcaafef0a-5938-447f-b91e-c9fb6cbc84b6 (0.077s), including actual blocked
+worker capacity after caller abort, virtual-time early timeout, closed scope,
+source/PSI changes, unknown prefix, read bound and optional malformed input.
+All ten scanner ownership/source/isolation regressions pass
+685592b3-8608-46ac-88ac-74301b1ed859 (2.235s). Together152 unique units pass.
+
+Pinned FFprobe9 n9.0-20261006 public Local scans pass all video writers/TV extras,
+initial/unchanged rescan and isolated same-size/mtime replacement in
+0a0df3f4-d0d5-4471-bdcf-7b12492a90eb (2.450s). Every actual file stores program1,
+PMT0x1000/PCR0x100, PID0x103/type6,303 packets,14 PES and eight observed headers
+(two200/201/888/899 cycles), while English/Dutch audio, SRT and media identities
+survive. Native050acba0-67b4-444f-9871-cdc17466710b (0.511s) then corrupts only
+a protected teletext header: rescan clears the old header child, retains fresh
+bound descriptors and all ordinary tracks/SRT, and records the new source revision.
+This is metadata/scan safety proof, not new routed playback or transport-clock proof.
+Final strict all-target Clippy passes domain/FFmpeg/infra/scanner/web; formatting,
+architecture and progress checks pass. Three initial reader style lints were
+corrected without exemptions. Exact sources/runtime/input/commands and historical
+attempts are retained in tmp/phase9-source-headers/identity.json (SHA256
+e9bf3bb57986bcfe25836582f25622fdc6539e37f8348a4875aed74503099076).
+
+Next bind exact source/file/version/stream/revision/page selection into the existing
+PlaybackSubtitle/native bitmap input and prove selected888 versus Off/wrong page
+on ordinary routes with retained alternate audio. Header observations alone
+cannot confer runtime readiness. Page bodies/charset, finite derivative cache,
+remotes/missing-file/version selection, alias/Windows/six-platform proof and every
+P9A-04 full authored/editor/theme/zone/Lua/restart/client/transport gate remain open.
+Current framing/parser boundaries remain implementation gaps, not accepted product
+restrictions. All milestone contracts/statuses/dependencies remain unchanged.
+
 2026-10-15 supplied source-PSI/header integration components (not acquisition acceptance):
 SourceTeletextPsiObserver reuses existing PSI framing, PAT/table collection and
 PMT/descriptor validation for an already occupied elementary PID. It reserves no

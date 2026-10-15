@@ -22,6 +22,10 @@ use super::{
     local, FfprobeCommand, FfprobeError, FfprobeExtractor, FfprobeMediaVersion, FfprobeOutput,
 };
 
+pub use headers::{LocalTeletextHeaderProblem, LocalTeletextHeaders};
+
+mod headers;
+
 const AUXILIARY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Ordinary projection plus an independently optional, report-only association.
@@ -37,9 +41,16 @@ pub struct LocalTeletextAcquisition {
     snapshot: TeletextProbeSnapshot,
     revision: SourceTeletextRevision,
     guard: LocalFileRevision,
+    headers: LocalTeletextHeaders,
 }
 
 impl LocalTeletextAcquisition {
+    /// Actual bounded header observations, separate from the packed descriptor projection.
+    #[must_use]
+    pub fn headers(&self) -> &LocalTeletextHeaders {
+        &self.headers
+    }
+
     /// Exact auxiliary projection, without inferred page readiness.
     #[must_use]
     pub fn snapshot(&self) -> &TeletextProbeSnapshot {
@@ -121,11 +132,15 @@ async fn acquire(
             let Some(revision) = guard.revision() else {
                 return Ok(None);
             };
-            Ok(Some(Arc::new(LocalTeletextAcquisition {
+            let acquired = LocalTeletextAcquisition {
                 snapshot,
                 revision,
                 guard,
-            })))
+                headers: LocalTeletextHeaders::NotAcquired(
+                    LocalTeletextHeaderProblem::NoManagedScope,
+                ),
+            };
+            Ok(Some(Arc::new(headers::acquire(acquired, path).await?)))
         }
     }
 }

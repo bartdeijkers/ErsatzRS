@@ -9,7 +9,9 @@ mod local_cleanup_scope;
 mod local_teletext;
 
 pub use local_cleanup_scope::{LocalProbeCleanupError, LocalProbeCleanupScope};
-pub use local_teletext::{LocalMediaProbe, LocalTeletextAcquisition};
+pub use local_teletext::{
+    LocalMediaProbe, LocalTeletextAcquisition, LocalTeletextHeaderProblem, LocalTeletextHeaders,
+};
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -131,8 +133,9 @@ impl FfprobeExtractor {
     /// arguments and its no-total-timeout policy remain unchanged.
     ///
     /// Auxiliary failure preserves ordinary metadata, except cancellation and
-    /// unconfirmed process cleanup. A retained association certifies neither
-    /// immutable source bytes nor selectable/actually transmitted pages.
+    /// unconfirmed owner cleanup. Within a managed scope the original held
+    /// source also supplies a bounded stable-PSI/header window. A retained
+    /// association certifies neither immutable bytes nor complete/usable pages.
     /// # Errors
     /// Returns ordinary probe failures, cancellation or uncertain cleanup.
     pub async fn extract_local_with_teletext(

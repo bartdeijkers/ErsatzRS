@@ -419,10 +419,26 @@ PAT changes invalidate dependent PMTs; contradictory/invalid input is sticky.
 A separate bounded header collector composes the existing PES/header parsers,
 retaining every actual occurrence, packet/PES/unit position and raw PTS. It
 rejects failed or unfinished windows rather than exposing partial success.
-Neither API reads a source or proves page bodies, charset, inventory or readiness.
-A final current PSI snapshot cannot bind earlier headers across table changes;
-the acquiring adapter must preserve/fence the actual source generation. Durable
-observed-page state and source-bound selection remain separate required work.
+The pure APIs establish no source or page readiness by themselves. The managed
+Local adapter now reads only the original held regular file, outside SQLite,
+through a bounded blocking owner registered in the existing cleanup scope. Caller
+loss or an early uncertainty reply cannot release that owner's capacity while the
+worker continues. Successful return joins the worker. Reads admit at most32768
+TS188 packets and1024 successful aggregate header occurrences, under one ten-second
+cooperative deadline and one-second settlement budget. Uninterruptible filesystem
+calls retain the owner until they actually finish. No-scope calls start no reader.
+Header collection starts only after complete current PSI; a sticky current-table
+change witness rejects the whole read even if the wire tables later return to
+their initial bytes. Source association is rechecked after reading and before the
+ordinary media transaction commits. This still certifies no immutable source bytes.
+A new additive version-1 bounded JSON child stores HeadersObserved under the exact
+existing source report. The applied parent status remains its legacy zero sentinel;
+child presence is decoded explicitly, never as Ready. SQL gates untrusted payload
+bytes before decoding; replacement clears old children and parent invalidation
+cascades. Cancellation/uncertain cleanup remain fatal, while confirmed optional
+framing/PSI/read/deadline failures preserve ordinary metadata and descriptors.
+Page body/charset, complete inventory, source-bound selection and finite cache
+remain required work; this slice does not accept source or engine delivery.
 A separate pure parser now checks one explicitly supplied
 46-byte DVB unit and reports protected header identity, correction counts and raw
 C4–C14 bits.

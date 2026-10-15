@@ -26,6 +26,13 @@ async fn fixture(provider: MediaSourceKind) -> (DbPool, ManagedLibraryOperationC
         .connect("sqlite::memory:")
         .await
         .unwrap();
+    fixture_on_pool(pool, provider).await
+}
+
+async fn fixture_on_pool(
+    pool: DbPool,
+    provider: MediaSourceKind,
+) -> (DbPool, ManagedLibraryOperationClaim) {
     pool.execute("PRAGMA foreign_keys=ON").await.unwrap();
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
     sqlx::raw_sql(r#"
@@ -568,3 +575,6 @@ async fn source_teletext_corrupt_text_and_scalar_values_fail_without_echoing_rev
         .await
         .unwrap();
 }
+
+#[path = "header_tests.rs"]
+mod headers;

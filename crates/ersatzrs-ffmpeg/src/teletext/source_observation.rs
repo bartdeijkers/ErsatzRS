@@ -128,6 +128,13 @@ impl SuppliedTeletextHeaderObserver {
         result
     }
 
+    /// Retained occurrence count for a caller's aggregate admission bound.
+    /// This exposes no partial header result or page readiness.
+    #[must_use]
+    pub fn retained_header_count(&self) -> usize {
+        self.window.headers.len()
+    }
+
     /// Close the supplied window without declaring EOF or a complete inventory.
     /// # Errors
     /// Returns the first sticky failure or an incomplete selected PES. Byte-tail

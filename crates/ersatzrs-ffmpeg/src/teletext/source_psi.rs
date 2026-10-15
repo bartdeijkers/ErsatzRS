@@ -67,6 +67,9 @@ pub struct ObservedSourceProgram {
 pub struct ObservedSourcePsi {
     pub requested_pid: u16,
     pub packets_observed: usize,
+    /// At least one previously observed current table was replaced in this window.
+    /// Earlier payload cannot be associated with the final snapshot implicitly.
+    pub current_tables_changed: bool,
     pub pat: ObservedSourcePsiTable,
     /// `None` means no CAT packet was observed, not that the source has no CAT.
     pub cat: Option<ObservedSourcePsiTable>,
@@ -107,6 +110,7 @@ impl ObservedSourcePsi {
 pub struct SourceTeletextPsiObserver {
     pid: u16,
     packets: usize,
+    current_tables_changed: bool,
     failure: Option<TeletextPsiError>,
     pat_assembler: SectionAssembler,
     pat: TableSections,
@@ -125,6 +129,7 @@ impl SourceTeletextPsiObserver {
         Ok(Self {
             pid,
             packets: 0,
+            current_tables_changed: false,
             failure: None,
             pat_assembler: SectionAssembler::default(),
             pat: TableSections::default(),
@@ -149,6 +154,20 @@ impl SourceTeletextPsiObserver {
         result
     }
 
+    /// Cheap current-table completeness check, without copying table payloads.
+    /// A false result also covers a permanently failed observer.
+    #[must_use]
+    pub fn has_complete_current_tables(&self) -> bool {
+        self.failure.is_none()
+            && self.pat.complete()
+            && !self.pat_assembler.is_pending()
+            && self
+                .pmts
+                .values()
+                .all(|pmt| pmt.section.is_some() && !pmt.assembler.is_pending())
+            && (!self.cat_seen || self.cat.complete() && !self.cat_assembler.is_pending())
+    }
+
     /// Copy complete current PAT, every PMT and any observed CAT.
     /// # Errors
     /// Incomplete is retryable after further packets. Sticky failures are retained.
@@ -156,14 +175,7 @@ impl SourceTeletextPsiObserver {
         if let Some(error) = &self.failure {
             return Err(error.clone());
         }
-        if !self.pat.complete()
-            || self.pat_assembler.is_pending()
-            || self
-                .pmts
-                .values()
-                .any(|pmt| pmt.section.is_none() || pmt.assembler.is_pending())
-            || self.cat_seen && (!self.cat.complete() || self.cat_assembler.is_pending())
-        {
+        if !self.has_complete_current_tables() {
             return Err(TeletextPsiError::Incomplete);
         }
         let mut programs = Vec::with_capacity(self.pmts.len());
@@ -193,6 +205,7 @@ impl SourceTeletextPsiObserver {
         Ok(ObservedSourcePsi {
             requested_pid: self.pid,
             packets_observed: self.packets,
+            current_tables_changed: self.current_tables_changed,
             pat: ObservedSourcePsiTable::new(self.pat.sections.values().cloned().collect()),
             cat: self.cat_seen.then(|| {
                 ObservedSourcePsiTable::new(self.cat.sections.values().cloned().collect())
@@ -214,7 +227,9 @@ impl SourceTeletextPsiObserver {
                     if !current_section(&section, 0)? {
                         continue;
                     }
+                    let previous = !self.pat.sections.is_empty();
                     if self.pat.push(section)? {
+                        self.current_tables_changed |= previous;
                         self.pmts.clear();
                     }
                     if self.pat.complete() && self.pmts.is_empty() {
@@ -229,7 +244,8 @@ impl SourceTeletextPsiObserver {
                         continue;
                     }
                     validate_source_descriptor_bytes(&section[8..section.len() - 4], None)?;
-                    self.cat.push(section)?;
+                    let previous = !self.cat.sections.is_empty();
+                    self.current_tables_changed |= self.cat.push(section)? && previous;
                 }
             }
             _ => {
@@ -246,6 +262,7 @@ impl SourceTeletextPsiObserver {
                             if section[5] == previous[5] && section != *previous {
                                 return Err(TeletextPsiError::Version);
                             }
+                            self.current_tables_changed |= section != *previous;
                         }
                         pmt.section = Some(section);
                     }

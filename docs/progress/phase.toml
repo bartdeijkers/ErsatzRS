@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-03/P9A-04: Local descriptors and supplied PSI/header components proven; connect owned source reads, durable observations and exact-page normal-route selection; full engine acceptance open'
+current_focus = 'P9A-03/P9A-04: owned Local header reads and durable observations proven; connect source-bound exact-page normal-route selection; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -113,17 +113,19 @@ lease or post-write source loss rolls back the whole leaf. Native public scans
 prove two audio languages/SRT, exact parents, unchanged rescan and isolated
 same-size/mtime replacement. Nine helper tests plus discovery and combined154
 scanner units pass; the milestone owns receipts and corrected sandbox failures.
-Supplied PSI/header components now pass the independent fixture and actual
-FFmpeg remux: exact occupied-PID memberships and actual header occurrences stay
-separate from descriptors. P9A-03 owns139 combined unit and seven public/native
-successes, limits and historical corrected fixture failures. These APIs do not
-read sources, persist pages or authorize playback; a final PSI snapshot cannot
-bind earlier headers across table changes. Next connect an owned bounded reader
-to the held source, associate observed headers with the correct PSI generation,
-and add explicit durable observation state before exact-page selection.
-Then join PlaybackSubtitle/cache identity and prove selected888 on normal routes.
-Body/charset, remotes, missing-file/version, Windows/aliases and all engine gates
-remain open; scanner descriptors still explicitly say NotAcquired.
+Managed Local scans now connect owned held-source reads to explicit durable
+HeadersObserved state. Header collection starts only after complete current PSI;
+any later current-table replacement rejects the window. Blocking ownership stays
+registered after caller loss/early timeout through actual worker completion.
+Native scans prove actual headers across all video writers, ordinary audio/SRT,
+rescan and isolated replacement; actual file-backed SQL reopen also passes.
+P9A-03 owns152 combined unit successes, final native all-leaf/rejected-header
+proofs and strict five-crate lint. Rejected headers clear old windows while
+ordinary tracks survive. Next join exact source/file/version/stream/revision/page
+identity to PlaybackSubtitle and prove selected888 through
+the ordinary stream route. Headers still prove no body, charset, full inventory
+or runtime readiness. Finite extraction/cache, remotes, missing-file/version,
+Windows/aliases and every complete engine gate remain open.
 Default/custom-script eligibility and slate clocks remain open.
 Preserve normal-route captions/alternate audio and transport-clock acceptance;
 prior slate clock gaps remain open. No general audit extension.
