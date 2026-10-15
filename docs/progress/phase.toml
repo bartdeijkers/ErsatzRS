@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: prove actual QTM local-X26 edit/import/preview/publication; full acceptance open'
+current_focus = 'P9A-04: connect proven QTM colour edits to localized admin; full authored/editor acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -90,8 +90,14 @@ Final compiler positions retain exact original local-command correspondence;
 TTI import reconstructs same-family operands, checks complete protected effects
 and requires byte-exact re-encoded X26 output. Repeated imports retain root
 expectations and a complete operand revert saves a new unpublished root-equivalent
-concept. Next prove an actual pinned QTM foreground edit through native import,
-preview and explicit publication, preserving the existing channel/client flow.
+concept. An actual pinned QTM foreground edit now passes native import, preview,
+explicit publication, reopen and ordinary two-channel transport/AV checks.
+Independent imager0.2.0 proves literal Level1.5/2.5 cells; inspected VLC3.0.20/
+libzvbi0.2.42 replay preserves two simultaneous themes and124/125/124 navigation.
+P9A-04 owns the exact receipt and retained failed trials. Next connect this actual
+enhanced edit to the existing localized headed admin workflow; do not describe
+the prior base-row browser receipt as a new operand/admin proof. Then extend the
+concrete missing resource/panel editor step and authored conformance clauses.
 Resource/panel/set/geometry editing and full authored Level2.5/fallback remain
 open; no base-row-only or size restriction is accepted. Sought HTTP source-caption
 proof remains open.

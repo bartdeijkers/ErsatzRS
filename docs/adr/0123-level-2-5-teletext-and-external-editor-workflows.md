@@ -88,6 +88,11 @@ re-encoded X26 packets must exactly match the edited file. Static and effective
 reload apply stored intentions through that same compiler. Repeated concepts
 retain root-relative expectations; a complete operand revert creates a new
 root-equivalent concept revision. Neither import nor revert changes publication.
+An actual pinned QTM foreground-popup edit now reaches native concept validation,
+the shared preview, explicit publication and ordinary two-channel MPEG-TS output.
+Independent Level1.5/2.5 cell decoding and inspected VLC MAIN-plane replay retain
+fallback, separate themes and 124/125/124 navigation. This is a representative
+local-colour workflow, not new localized-admin, live-URL or full-editor proof.
 Full enhancement, resource, geometry, panel and actual editor coverage remains
 required; this slice introduces no accepted product restriction. P9A-04 owns
 verification and the concrete next integration step.

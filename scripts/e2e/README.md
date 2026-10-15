@@ -272,6 +272,55 @@ completion line and these four captures, then inspect the captures:
 - `edited-qtm-save-dialog.png`
 - `edited-qtm-saved.png`
 
+For a native compiler-selected local foreground operand, use the same isolated
+launch with `ERSATZRS_QTM_DRIVER_MODE=single-page-foreground` and supply these
+additional Docker environment arguments:
+
+```bash
+-e "ERSATZRS_QTM_TRIPLET_INDEX=$qtm_triplet" \
+-e "ERSATZRS_QTM_TRIPLET_COLUMN=$qtm_column" \
+-e "ERSATZRS_QTM_FROM_COLOUR=$qtm_from" \
+-e "ERSATZRS_QTM_TO_COLOUR=$qtm_to" \
+```
+
+Select the ignored native probe
+`external_editor_probe::pinned_external_editor_foreground_operand_preserves_native_structure`
+instead of the base-row probe, keeping the same explicit runtime and interchange
+directory variables. Its `ready.json` edit supplies `semantic_word`, `column`,
+`expected` and `replacement`; these are the four driver values above. The fixture
+keeps two channels and reciprocal pages 124/125, with only page 124's declared
+editable row receiving the colour change. Its `operand_units` receipts retain
+bounded actual stream units for independent decoding; SRT text alone proves no
+colour. Existing base-row and DRCS probe interfaces remain unchanged.
+
+The native full compiler must provide `qtm_triplet` from the exact original
+command's final `semantic_word()` position, plus its main-column address and
+current/replacement palette indices. Do not search for the first foreground
+triplet or use an original command ordinal as the emitted row number. Values
+must be canonical decimals: triplet `0..207`, column `0..39`, colours `0..31`,
+with distinct current/replacement colours. All four are mandatory in this mode;
+other modes reject them, including explicitly empty values. Keep the original
+panel and companion arguments unchanged.
+
+The driver opens Tools' actual `X/26 triplets` dock, floats it for a separate
+visible capture and verifies the selected table row's raw address/mode/data
+against the native tuple before selecting it with a mouse click. It then clicks
+the actual colour combo popup item after bounded mouse-hover/index agreement,
+verifies the changed table tuple and the
+editor's modified state, and invokes the same actual Save As workflow. It does
+not call the editor model's mutation API, synthesize an activation signal, patch
+the editor or rewrite the saved TTI. Retain and inspect the additional
+`edited-qtm-foreground-before.png`, `edited-qtm-foreground-popup.png` and
+`edited-qtm-foreground-edited.png` captures and the `QTM actual foreground popup edit` completion line. These
+replace the `Q` insertion; the ordinary level/edited/save captures still apply.
+On a popup-layout, hover or activation failure, the driver records the actual
+raw tuple, table/combo/popup indices, focus and modified state, plus separately
+named failure captures; retain these before another trial. The native importer
+must independently authenticate the original and validate
+the saved edit's complete effects before storing a concept. A successful GUI
+operand edit is a representative interchange check, not full Level 2.5 editor
+acceptance or publication authority.
+
 After the editor process exits zero, its actual save completes and the independent
 identity/window evidence is retained, write the bounded schema-1 completion
 marker. Use the actual verified executable digest, not a remembered digest or a

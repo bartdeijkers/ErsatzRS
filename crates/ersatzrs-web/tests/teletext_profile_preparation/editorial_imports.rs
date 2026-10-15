@@ -383,6 +383,16 @@ async fn assert_concept_preview(
     edited: &SavedEditorialTeletextDesign,
     edited_row: u8,
 ) -> TeletextRaster {
+    assert_concept_preview_edit(fixture, flow, edited, edited_row, None).await
+}
+
+async fn assert_concept_preview_edit(
+    fixture: &Fixture,
+    flow: &Flow,
+    edited: &SavedEditorialTeletextDesign,
+    edited_row: u8,
+    operand: Option<(usize, u8, u8)>,
+) -> TeletextRaster {
     let restored = reload_original_teletext_design_revision(
         &fixture.state.application,
         edited.head().id,
@@ -425,8 +435,19 @@ async fn assert_concept_preview(
             _ => None,
         })
         .unwrap();
-    assert!(project_encoded_teletext_display(page, 128).unwrap().records.iter().any(|record|
-        matches!(record, TeletextEncodedDisplayRecord::BaseRow { row, cells } if *row == edited_row && cells[8] == b'Q')));
+    if let Some((command, expected, replacement)) = operand {
+        external_editor_probe::assert_stored_operand(
+            fixture,
+            edited,
+            command,
+            expected,
+            replacement,
+        )
+        .await;
+    } else {
+        assert!(project_encoded_teletext_display(page, 128).unwrap().records.iter().any(|record|
+            matches!(record, TeletextEncodedDisplayRecord::BaseRow { row, cells } if *row == edited_row && cells[8] == b'Q')));
+    }
     let preview = project_teletext_preview(
         encoded,
         channel_documents::address(124, 32),
@@ -705,6 +726,18 @@ mod external_editor_probe {
     };
     use std::{io, path::Path};
 
+    #[derive(Clone, Copy)]
+    enum ProbeEdit {
+        BaseRowQ,
+        Foreground {
+            command: usize,
+            row: u8,
+            column: u8,
+            expected: u8,
+            replacement: u8,
+        },
+    }
+
     const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_QTM_INTERCHANGE_DIR";
     const EDITOR_COMMIT: &str = "cac2167bac933a6160cca45a45d5d4ee95355898";
 
@@ -779,6 +812,102 @@ mod external_editor_probe {
         response
     }
 
+    fn foreground_response(theme: &str, page: u16, subcode: u16) -> serde_json::Value {
+        let mut response = editor_response(theme, page, subcode);
+        let commands = response["service"]["page_enhancements"][0]["local_program"]["commands"]
+            .as_array_mut()
+            .unwrap();
+        assert_eq!(commands.len(), 3);
+        commands.extend(
+            serde_json::json!([
+                {"kind":"set_position","position":{"row":2,"column":8}},
+                {"kind":"at_column","column":8,"operation":{"kind":"foreground","colour":18}},
+                {"kind":"at_column","column":8,"operation":{"kind":"g0","code":65}},
+                {"kind":"at_column","column":9,"operation":{"kind":"g0","code":66}},
+                {"kind":"set_position","position":{"row":4,"column":8}},
+                {"kind":"at_column","column":8,"operation":{"kind":"foreground","colour":18}},
+                {"kind":"at_column","column":8,"operation":{"kind":"g0","code":67}}
+            ])
+            .as_array()
+            .unwrap()
+            .iter()
+            .cloned(),
+        );
+        response["authoring"]["pages"][0]["regions"][0]["width"] = serde_json::json!(39);
+        response
+    }
+
+    fn foreground_word(
+        service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+        command: usize,
+    ) -> usize {
+        service
+            .pages()
+            .iter()
+            .find_map(|page| match page {
+                EncodedTeletextAuthoredPage::CompiledDisplay(page)
+                    if page.page().address() == channel_documents::address(124, 32) =>
+                {
+                    let mut positions = page
+                        .normalized()
+                        .encoded()
+                        .command_positions()
+                        .iter()
+                        .filter(|position| position.original_local_command() == Some(command));
+                    let word = positions.next().unwrap().semantic_word();
+                    assert!(positions.next().is_none());
+                    Some(word)
+                }
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    pub(super) async fn assert_stored_operand(
+        fixture: &Fixture,
+        edited: &SavedEditorialTeletextDesign,
+        command: usize,
+        expected: u8,
+        replacement: u8,
+    ) {
+        use ersatzrs_app::teletext_design_documents::decode_teletext_design_documents;
+        use ersatzrs_domain::{TeletextColourReference, TeletextColumnOperation};
+        let stored = fixture
+            .state
+            .application
+            .teletext_design_revision(
+                edited.head().id,
+                edited.head().revision,
+                designs::budget().max_serialized_bytes,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let document =
+            decode_teletext_design_documents(&stored.document, designs::budget()).unwrap();
+        let overlay = document.editorial_overlay().unwrap();
+        assert_eq!(overlay.schema_version(), 2);
+        assert!(overlay.pages().is_empty());
+        let operands = overlay.local_program_operands();
+        assert_eq!(operands.len(), 1);
+        let operand = operands[0];
+        assert_eq!(operand.owner(), channel_documents::address(124, 32));
+        assert_eq!(operand.command(), command);
+        assert_eq!(operand.column(), 8);
+        let colour = |value| TeletextColumnOperation::Foreground {
+            colour: TeletextColourReference::new(value).unwrap(),
+        };
+        assert_eq!(operand.expected(), colour(expected));
+        assert_eq!(operand.replacement(), colour(replacement));
+    }
+
+    fn assert_foreground_preview(raster: &TeletextRaster, geometry: &serde_json::Value) {
+        let column = usize::try_from(geometry["target_visual_column"].as_u64().unwrap()).unwrap();
+        for column in [column, column + 1] {
+            assert!((column*12..(column+1)*12).any(|x| (20..30).any(|y| matches!(raster.pixel(x,y),Some(TeletextRasterPixel::Colour(TeletextColourPixel::Rgb(rgb))) if rgb.get() == [0,0,15]))));
+        }
+    }
+
     fn charset_response(theme: &str, page: u16, subcode: u16, primary: u8) -> serde_json::Value {
         let mut response = editor_response(theme, page, subcode);
         for page in response["service"]["pages"].as_array_mut().unwrap() {
@@ -816,12 +945,94 @@ mod external_editor_probe {
         }
     }
 
+    fn assert_native_record(
+        old: &TeletextEncodedDisplayRecord,
+        new: &TeletextEncodedDisplayRecord,
+        edited_page: bool,
+        edited_word: Option<usize>,
+        edit: ProbeEdit,
+    ) -> usize {
+        let mut changed_words = 0;
+        match (old, new) {
+            (
+                TeletextEncodedDisplayRecord::EditorialLinks {
+                    nibbles: a,
+                    crc: old_crc,
+                },
+                TeletextEncodedDisplayRecord::EditorialLinks {
+                    nibbles: b,
+                    crc: new_crc,
+                },
+            ) => {
+                assert_eq!(a, b);
+                // Native X27 regenerates its content CRC after the allowed
+                // row edit. Link identities stay exact; no imported packet
+                // or receipt is masked or repaired by this test oracle.
+                if matches!(edit, ProbeEdit::BaseRowQ) && edited_page {
+                    assert_ne!(old_crc, new_crc);
+                } else {
+                    assert_eq!(old_crc, new_crc);
+                }
+            }
+            (
+                TeletextEncodedDisplayRecord::Triplets {
+                    row: 26,
+                    designation: a,
+                    words: old_words,
+                },
+                TeletextEncodedDisplayRecord::Triplets {
+                    row: 26,
+                    designation: b,
+                    words: new_words,
+                },
+            ) if edited_word.is_some() => {
+                assert_eq!(a, b);
+                for (slot, (old, new)) in old_words.iter().zip(new_words).enumerate() {
+                    if edited_page && Some(usize::from(*a) * 13 + slot) == edited_word {
+                        let ProbeEdit::Foreground {
+                            column,
+                            expected,
+                            replacement,
+                            ..
+                        } = edit
+                        else {
+                            unreachable!()
+                        };
+                        assert_eq!(*old, u32::from(column) | (u32::from(expected) << 11));
+                        assert_eq!(*new, u32::from(column) | (u32::from(replacement) << 11));
+                        changed_words += 1;
+                    } else {
+                        assert_eq!(old, new);
+                    }
+                }
+            }
+            _ => assert_eq!(old, new),
+        }
+        changed_words
+    }
+
     fn assert_native_protected_records(
         original: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
         edited: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
         expected_header: u16,
+        edit: ProbeEdit,
     ) {
         assert_eq!(original.magazine_units(), edited.magazine_units());
+        let edited_word = match edit {
+            ProbeEdit::Foreground { command, .. } => Some(foreground_word(original, command)),
+            ProbeEdit::BaseRowQ => None,
+        };
+        let mut changed_words = 0;
+        assert_eq!(original.pages().len(), edited.pages().len());
+        for (before, after) in original.pages().iter().zip(edited.pages()) {
+            if !matches!(
+                before,
+                EncodedTeletextAuthoredPage::NativeDisplay(_)
+                    | EncodedTeletextAuthoredPage::CompiledDisplay(_)
+            ) {
+                assert_eq!(before.data_units(), after.data_units());
+            }
+        }
         let displays = |service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService| {
             service
                 .pages()
@@ -835,7 +1046,13 @@ mod external_editor_probe {
                     let mut projection = project_encoded_teletext_display(page, 128).unwrap();
                     assert_eq!(projection.header.controls.raw(), expected_header);
                     projection.records.retain(|record| {
-                        !matches!(record, TeletextEncodedDisplayRecord::BaseRow { row: 2, .. })
+                        !matches!(
+                            (edit, record),
+                            (
+                                ProbeEdit::BaseRowQ,
+                                TeletextEncodedDisplayRecord::BaseRow { row: 2, .. }
+                            )
+                        )
                     });
                     projection
                 })
@@ -851,30 +1068,17 @@ mod external_editor_probe {
             assert_eq!(before.header, after.header);
             assert_eq!(before.records.len(), after.records.len());
             for (old, new) in before.records.iter().zip(&after.records) {
-                match (old, new) {
-                    (
-                        TeletextEncodedDisplayRecord::EditorialLinks {
-                            nibbles: a,
-                            crc: old_crc,
-                        },
-                        TeletextEncodedDisplayRecord::EditorialLinks {
-                            nibbles: b,
-                            crc: new_crc,
-                        },
-                    ) => {
-                        assert_eq!(a, b);
-                        // Native X27 regenerates its content CRC after the allowed
-                        // row edit. Link identities stay exact; no imported packet
-                        // or receipt is masked or repaired by this test oracle.
-                        if before.address.page.get() == 124 {
-                            assert_ne!(old_crc, new_crc);
-                        } else {
-                            assert_eq!(old_crc, new_crc);
-                        }
-                    }
-                    _ => assert_eq!(old, new),
-                }
+                changed_words += assert_native_record(
+                    old,
+                    new,
+                    before.address.page.get() == 124,
+                    edited_word,
+                    edit,
+                );
             }
+        }
+        if edited_word.is_some() {
+            assert_eq!(changed_words, 1);
         }
     }
 
@@ -906,7 +1110,7 @@ mod external_editor_probe {
             "main_origin_column":geometry.left_width(),"target_visual_column":geometry.left_width()+8})
     }
 
-    fn write_ready(directory: &Path, flow: &Flow) -> io::Result<()> {
+    fn write_ready(directory: &Path, flow: &Flow, edit: ProbeEdit) -> io::Result<()> {
         let mut channels = Vec::new();
         for (index, exported) in flow.exported.iter().enumerate() {
             let prefix = format!("channel-{}", index + 1);
@@ -933,8 +1137,58 @@ mod external_editor_probe {
                 "editor_geometry":editor_geometry(flow,index,page.page.page,page.page.subcode),
                 "pages":exported.sidecar().project.pages,"assets":exported.sidecar().project.assets,"files":files}));
         }
+        let edit = match edit {
+            ProbeEdit::BaseRowQ => serde_json::json!({"channel_id":1,"row":2,"column":8,"code":81}),
+            ProbeEdit::Foreground {
+                command,
+                row,
+                column,
+                expected,
+                replacement,
+            } => {
+                let encoded = flow.saved[0].candidate().encoded().unwrap();
+                let semantic_word = foreground_word(encoded, command);
+                let page = encoded
+                    .pages()
+                    .iter()
+                    .find_map(|page| match page {
+                        EncodedTeletextAuthoredPage::CompiledDisplay(page)
+                            if page.page().address() == channel_documents::address(124, 32) =>
+                        {
+                            Some(page.page())
+                        }
+                        _ => None,
+                    })
+                    .unwrap();
+                let projection = project_encoded_teletext_display(page, 128).unwrap();
+                let original_word = projection
+                    .records
+                    .iter()
+                    .find_map(|record| match record {
+                        TeletextEncodedDisplayRecord::Triplets {
+                            row: 26,
+                            designation,
+                            words,
+                        } if usize::from(*designation) == semantic_word / 13 => {
+                            Some(words[semantic_word % 13])
+                        }
+                        _ => None,
+                    })
+                    .unwrap();
+                assert_eq!(
+                    original_word,
+                    u32::from(column) | (u32::from(expected) << 11)
+                );
+                serde_json::json!({"kind":"foreground","channel_id":1,"command":command,"row":row,"column":column,
+                    "expected":expected,"replacement":replacement,"semantic_word":semantic_word,
+                    "designation":semantic_word/13,"triplet_slot":semantic_word%13,
+                    "original_word":u32::from(column)|(u32::from(expected)<<11),
+                    "replacement_word":u32::from(column)|(u32::from(replacement)<<11),
+                    "mode":0})
+            }
+        };
         let ready = serde_json::json!({"probe_version":1,"channels":channels,
-            "edit":{"channel_id":1,"row":2,"column":8,"code":81},
+            "edit":edit,
             "save_as":"edited.tti","completion":"editor-saved.json",
             "editor":{"name":"QTeletextMaker","version":"1.0","source_commit":EDITOR_COMMIT},
             "publication":"only after explicit native test request and acceptance"});
@@ -1203,6 +1457,7 @@ mod external_editor_probe {
         bytes: &[u8],
         channel: i64,
         service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+        edit: ProbeEdit,
     ) -> Vec<serde_json::Value> {
         let mut pages = Vec::new();
         for page in [124, 125] {
@@ -1225,12 +1480,15 @@ mod external_editor_probe {
                 text.contains(&original_glyph),
                 "actual decode must retain the original enhanced glyph and Z"
             );
-            let edited = channel == 1 && page == 124;
+            let edited = matches!(edit, ProbeEdit::BaseRowQ) && channel == 1 && page == 124;
             assert_eq!(
                 text.contains('Q'),
                 edited,
                 "actual decoder must observe Q only on the edited page/channel"
             );
+            if matches!(edit, ProbeEdit::Foreground { .. }) {
+                assert_eq!(text.contains("AB"),page==124,"decoded text retains authored AB on page124 of both channels; SRT does not prove colour");
+            }
             let preview = preview_page(service, page);
             pages.push(serde_json::json!({"page":page,"subcode":32,
                 "decoded_text":filename,"decoded_sha256":hash(text.as_bytes()),
@@ -1247,6 +1505,7 @@ mod external_editor_probe {
         bytes: &[u8],
         channel: i64,
         accepted: &AcceptedTeletextOutputCandidate,
+        edit: ProbeEdit,
     ) -> serde_json::Value {
         let filename = format!("channel-{channel}.ts");
         // Retain exact route bytes if an independent check discovers a defect;
@@ -1255,15 +1514,27 @@ mod external_editor_probe {
         client_capture::verify_transport(&tools.tsanalyze, &tools.ffprobe, bytes).await;
         client_capture::verify_av(&tools.ffmpeg, source, bytes).await;
         ordinary_stream_flow::assert_emitted_model(bytes, accepted.service());
-        let drcs_units = write_captured_drcs_units(directory, bytes, channel, accepted.service());
+        let captured_units =
+            write_captured_drcs_units(directory, bytes, channel, accepted.service(), edit);
         let pages =
-            decoded_delivery_pages(directory, tools, bytes, channel, accepted.service()).await;
-        serde_json::json!({"channel_id":channel,"capture":filename,"bytes":bytes.len(),
+            decoded_delivery_pages(directory, tools, bytes, channel, accepted.service(), edit)
+                .await;
+        let mut proof = serde_json::json!({"channel_id":channel,"capture":filename,"bytes":bytes.len(),
             "sha256":hash(bytes),"generation_id":accepted.generation().id,
             "request_id":accepted.generation().request.id,"revision":accepted.generation().request.revision,
             "theme_rgb4":if channel==1 {[15,0,0]} else {[0,0,15]},
             "tsduck_transport_passed":true,"source_av_passed":true,"complete_emitted_model_equal":true,
-            "pages":pages,"drcs_units":drcs_units})
+            "pages":pages});
+        let key = if matches!(edit, ProbeEdit::Foreground { .. }) {
+            "operand_units"
+        } else {
+            "drcs_units"
+        };
+        proof.as_object_mut().unwrap().insert(
+            key.to_owned(),
+            serde_json::to_value(captured_units).unwrap(),
+        );
+        proof
     }
 
     fn write_captured_drcs_units(
@@ -1271,8 +1542,9 @@ mod external_editor_probe {
         bytes: &[u8],
         channel: i64,
         service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+        edit: ProbeEdit,
     ) -> Option<serde_json::Value> {
-        if !drcs_companion::has_drcs(service) {
+        if !drcs_companion::has_drcs(service) && !matches!(edit, ProbeEdit::Foreground { .. }) {
             return None;
         }
         let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
@@ -1290,7 +1562,12 @@ mod external_editor_probe {
         }
         assembler.finish().unwrap();
         assert!(!units.is_empty());
-        let filename = format!("channel-{channel}-drcs-units.json");
+        let role = if matches!(edit, ProbeEdit::Foreground { .. }) {
+            "operand"
+        } else {
+            "drcs"
+        };
+        let filename = format!("channel-{channel}-{role}-units.json");
         let json = serde_json::to_vec(&units).unwrap();
         write_new(&directory.join(&filename), &json).unwrap();
         Some(
@@ -1306,6 +1583,7 @@ mod external_editor_probe {
         edited: &AcceptedTeletextOutputCandidate,
         tools: &StreamTools,
         source_path: &Path,
+        edit: ProbeEdit,
     ) -> serde_json::Value {
         let source = read_bounded(source_path, 8 * 1024 * 1024).unwrap();
         assert_eq!(
@@ -1320,8 +1598,17 @@ mod external_editor_probe {
             ordinary_stream_flow::capture(fixture, 1),
             ordinary_stream_flow::capture(fixture, 2),
         );
-        let day = verify_delivery(directory, tools, &source, &first, 1, edited).await;
-        let night = verify_delivery(directory, tools, &source, &second, 2, &flow.accepted[1]).await;
+        let day = verify_delivery(directory, tools, &source, &first, 1, edited, edit).await;
+        let night = verify_delivery(
+            directory,
+            tools,
+            &source,
+            &second,
+            2,
+            &flow.accepted[1],
+            edit,
+        )
+        .await;
         assert_eq!(
             preview_page(edited.service(), 125),
             preview_page(flow.saved[0].candidate().encoded().unwrap(), 125)
@@ -1371,6 +1658,7 @@ mod external_editor_probe {
             drcs_companion::encoding_policy,
             0x0081,
             0xc040,
+            ProbeEdit::BaseRowQ,
         ))
         .await;
     }
@@ -1383,6 +1671,7 @@ mod external_editor_probe {
             drcs_companion::dense_encoding_policy,
             0x0081,
             0xc040,
+            ProbeEdit::BaseRowQ,
         ))
         .await;
     }
@@ -1395,6 +1684,7 @@ mod external_editor_probe {
             drcs_companion::sparse_encoding_policy,
             0x0081,
             0xc040,
+            ProbeEdit::BaseRowQ,
         ))
         .await;
     }
@@ -1409,8 +1699,59 @@ mod external_editor_probe {
             channel_documents::policy,
             expected_header,
             expected_status,
+            ProbeEdit::BaseRowQ,
         ))
         .await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires pinned headed QTeletextMaker foreground editing, FFmpeg/ffprobe9 and TSDuck"]
+    async fn pinned_external_editor_foreground_operand_preserves_native_structure() {
+        Box::pin(run_pinned_probe_policy(
+            foreground_response,
+            channel_documents::policy,
+            0x0081,
+            0xc040,
+            ProbeEdit::Foreground {
+                command: 4,
+                row: 2,
+                column: 8,
+                expected: 18,
+                replacement: 4,
+            },
+        ))
+        .await;
+    }
+
+    fn describe_foreground_proof(success: &mut serde_json::Value, edit: ProbeEdit, flow: &Flow) {
+        if let ProbeEdit::Foreground {
+            command,
+            row,
+            column,
+            expected,
+            replacement,
+        } = edit
+        {
+            let proof = success.as_object_mut().unwrap();
+            proof.insert("edit".to_owned(),serde_json::json!({"kind":"foreground","command":command,"row":row,"column":column,"expected":expected,"replacement":replacement,"semantic_word":foreground_word(flow.saved[0].candidate().encoded().unwrap(),command)}));
+            proof.remove("native_headers_enhancements_and_link_targets_unchanged");
+            proof.insert(
+                "native_headers_and_link_targets_unchanged".to_owned(),
+                serde_json::json!(true),
+            );
+            proof.insert(
+                "base_rows_and_content_crcs_unchanged".to_owned(),
+                serde_json::json!(true),
+            );
+            proof.insert(
+                "exactly_one_original_x26_operand_changed".to_owned(),
+                serde_json::json!(true),
+            );
+            proof.insert(
+                "edited_page_content_crc_changed".to_owned(),
+                serde_json::json!(false),
+            );
+        }
     }
 
     async fn run_pinned_probe_policy(
@@ -1418,6 +1759,7 @@ mod external_editor_probe {
         encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
         expected_header: u16,
         expected_status: u16,
+        edit: ProbeEdit,
     ) {
         let directory =
             std::path::PathBuf::from(super::super::client_capture::selected(DIRECTORY_ENV));
@@ -1432,7 +1774,7 @@ mod external_editor_probe {
         ))
         .await;
         assert_carrier(&flow, expected_header, expected_status);
-        write_ready(&directory, &flow).unwrap();
+        write_ready(&directory, &flow, edit).unwrap();
         let (marker, request) = checked_external_request(&directory, &fixture, &flow).await;
         let edited_hash = hash(
             &request
@@ -1446,11 +1788,23 @@ mod external_editor_probe {
         assert_eq!(edited.head().id, flow.saved[0].head().id);
         assert_eq!(edited.head().revision, 2);
         assert_original_pointers(&fixture, &flow).await;
-        let preview = assert_concept_preview(&fixture, &flow, &edited, 2).await;
+        let operand = match edit {
+            ProbeEdit::BaseRowQ => None,
+            ProbeEdit::Foreground {
+                command,
+                expected,
+                replacement,
+                ..
+            } => Some((command, expected, replacement)),
+        };
+        let preview = assert_concept_preview_edit(&fixture, &flow, &edited, 2, operand).await;
+        if operand.is_some() {
+            assert_foreground_preview(&preview, &editor_geometry(&flow, 0, 124, 32));
+        }
         fixture = fixture.reopen().await;
         assert_original_pointers(&fixture, &flow).await;
         assert_eq!(
-            assert_concept_preview(&fixture, &flow, &edited, 2).await,
+            assert_concept_preview_edit(&fixture, &flow, &edited, 2, operand).await,
             preview
         );
         let accepted = publish_and_accept(&fixture, &flow, &edited).await;
@@ -1458,6 +1812,7 @@ mod external_editor_probe {
             flow.saved[0].candidate().encoded().unwrap(),
             accepted.service(),
             expected_header,
+            edit,
         );
         assert_eq!(generations::preview(accepted.service()).raster(), &preview);
         fixture = fixture.reopen().await;
@@ -1472,9 +1827,10 @@ mod external_editor_probe {
             &accepted,
             &tools,
             &source_path,
+            edit,
         )
         .await;
-        let success = serde_json::json!({"probe_version":1,"scope":"native application interchange and ordinary MPEG-TS flow",
+        let mut success = serde_json::json!({"probe_version":1,"scope":"native application interchange and ordinary MPEG-TS flow",
             "editor_completion":marker,"edited_tti_sha256":edited_hash,
             "editor_profile":"qteletextmaker-1.0-carrier-v4",
             "native_header_controls":expected_header,"editor_status":expected_status,
@@ -1486,6 +1842,7 @@ mod external_editor_probe {
             "stream":stream,
             "second_channel_unchanged":true,"originals_and_receipts_unchanged":true,
             "headed_editor_and_client_evidence":"must be attached independently"});
+        describe_foreground_proof(&mut success, edit, &flow);
         write_new(
             &directory.join("success.json"),
             &serde_json::to_vec_pretty(&success).unwrap(),

@@ -2968,6 +2968,54 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 actual QTM foreground edit to ordinary stream and client (partial):
+Criterion: prove one real Level2.5 local-colour editor change through the existing
+synthetic profile/validation/preview/explicit-publication flow, with independent
+fallback decoding and unchanged ordinary playback/channel isolation.
+The pinned QTeletextMaker1.0/cac2167 artifact is unchanged (SHA256af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a).
+Its actual X/26 dock/popup changes original command4's native-selected final
+semantic word4 from foreground18 to4, then its own Save As writes edited.tti.
+The driver now checks actual popup hover/index agreement before mouse activation;
+it neither changes the model directly nor patches editor output. Seven inspected
+editor captures show the tuple, popup, redAZ/protectedC, blueAB and completed save.
+
+The existing installed synthetic addon serves two channels with distinct day/night
+profiles. Authenticated import saves an operand-only schema2 concept; original
+sidecars, producer documents, receipts, base rows, X27 content CRCs, all resources,
+page125 and other X26 words remain exact. Import preserves publication pointers.
+Native shared preview, AppState/pool reopen, explicit publication and generation
+acceptance/recovery pass. Concurrent ordinary /iptv/hls-direct/{channel}.ts route
+captures preserve the complete emitted model, AV and TSDuck transport checks on
+both channels using the retained FFmpeg9 runtime package2.0.6; TSDuck3.44-4676.
+Actual probe9a443035-b5de-483d-bf10-4e778cfff344 passes; the final36 ordinary
+editorial/repeated/effective regressions pass (8aa385be-82f1-48b0-8182-eb984b2325d2).
+Strict changed-test-target Clippy, formatting and offline Qt driver compilation
+pass; unchanged product/compiler checks from4868718e remain valid.
+
+Unmodified, hash-guarded teletextimager0.2.0/2b0125b independently decodes two
+captured page124/0020 acquisitions at Level1.5 and2.5:20 literal cell tuples retain
+fallback ZZ/spaces, enhanced AZ/AB/C and the one changed foreground index. Selected
+units preserve exact original captured indices0..27,55, including actual M29 and
+mFF closure; no packet bytes are synthesized. This is cell/index proof, not RGB.
+Inspected VLC3.0.20/libzvbi0.2.42 MAIN bitmap windows show red dayAZ/C with blueAB,
+unchanged blue nightAZ/AB/C, then125.20 and back124.20 in both actual Qt controls.
+Both exact-byte finite replays and both clients exit zero; this is captured
+ordinary-route replay, not live application URL attachment or56-column panels.
+
+Exact source/log/receipt/image identities and retained failures:
+tmp/phase9-x26-editor-import/foreground-flow-identity.json
+(SHA256f77db89773a5dacf2b6ff7b25757d303027185c28e1cc43db4d1bf05f4a5ad99).
+The first native start
+refused a mismatched FFmpeg8.1 default; the first GUI popup failed before save and
+its native waiter was deliberately interrupted without import/publication. Two
+helper line-count lints were corrected without weakening assertions. These are
+retained failures, not hidden retries. No fullCI, whole-process/platform restart,
+new operand-specific headed admin, full editor or engine acceptance is claimed.
+Next connect the actual colour-edit result to the existing localized headed admin
+workflow, then the concrete missing resource/panel/set/geometry editor steps and
+remaining authored conformance clauses. All agreed criteria/dependencies/statuses
+remain unchanged; production TV-guide content still waits. No push/publication.
+
 2026-10-16 qualified native local-X26 editorial connection (partial):
 Criterion: connect existing colour/attribute editing to authenticated TTI import,
 complete native validation, the shared preview/compiler and durable concepts.
@@ -6595,24 +6643,24 @@ argv, transport or admin changes. Receipt: tmp/phase9-editorial-import/identity.
 and receipt-sha256.txt, SHA256b2e3ec1e5a5691a09eab216b3376a42090fa2014ea004c6ed0c878ae5b8cb73d. It binds final source/logs and
 excludes mutable progress prose; unchanged prerequisite receipts remain valid.
 
-Current criterion-to-next-step map (updated after native operand integration; historical receipts below retain their original scope):
+Current criterion-to-next-step map (updated after actual QTM foreground/stream/client proof; historical receipts below retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
-| Original addon templates/themes/zones | Captured metadata, immutable originals, base rows and qualified local-X26 concepts implemented with focused native proof | V3 capture/reload, authenticated sidecars, existing row effects/Q/R concepts;83 compiler,54 document and85+2 native cases above | Actual GUI operand/publication/client proof and full resource/panel/geometry/set editing remain absent | Prove a real pinned QTM colour edit through the existing userflow |
+| Original addon templates/themes/zones | Captured metadata, immutable originals, base rows and qualified local-X26 concepts implemented | V3 capture/reload, authenticated sidecars,83 compiler/54 document/85+2 native cases; actual QTM foreground/native publication and protected-cell client proof above | Full resource/panel/geometry/set editing and operand-specific headed admin remain absent | Connect the actual enhanced edit to existing localized admin before extending the next unsupported authored edit |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE carrier tests; actual equal-NOS1 and independent fallback1/enhanced0 QTM Save As/native import; nine-culture headed transfer | General charset/resource/set/subpage fidelity remains open; sparse normative S1=1 independent decoding/client is blocked by the audited decoder defect | Reuse corrected carrier receipts; extend supported authored changes and select a correct independent sparse-resource decoder/client |
 | Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative flow; full acceptance open | Exact tmp/phase9-effective-editor-browser/flow-identity.json receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37: actual QTM, localized headed admin, two-theme TCP captures, independent decoding/TSDuck and VLC200->201->200 captured-byte replay; separate real-URL scoped/warm receipts | The GUI-editor/admin receipt uses captured replay; live-URL trials use fixture-generated edits. Full Level2.5, applied-state admin, default-capacity handoff and complete live-client updates remain unproven | Reuse each exact receipt without claiming one combined live-GUI run; extend the editor/Level2.5 step that blocks richer authored pages |
-| Actual pinned QTM workflow | Base-row workflow proven; native local-operand import/replay proven with synthetic files | Actual QTM1.0/cac2167 base-row Save As, NOS carriers, protected dependency loading and prior stream/client receipts retain original scope | No actual GUI-edited local operand acceptance yet; resource/side-panel editing remains absent and dependency loading is not editing | Edit the exact original foreground triplet through QTM widgets, then import/preview/explicitly publish and retain decoder/client proof |
+| Actual pinned QTM workflow | Base-row and representative actual foreground edit/import/preview/publication proven; full acceptance open | QTM1.0/cac2167 actual popup/Save As, authenticated schema2 concept/reopen, ordinary transport/AV/TSDuck, independent Level1.5/2.5 and inspected two-theme VLC124/125/124 replay above | New operand-specific localized headed admin, resource/side-panel/set/geometry editing and live-URL chain remain absent; dependency loading is not editing | Reuse this exact colour receipt; prove its admin step, then extend the missing resource/panel editor operation without treating a representative success as full acceptance |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: use the
-retained final semantic-word/original-command correspondence to drive an actual
-QTM foreground widget edit. Import its unchanged sidecar and actual saved TTI,
-preview the revalidated complete model and explicitly publish it. Retain exact
-editor/version and packet/effect results, then connect the existing ordinary-route
-and suitable-client flow. Resource/panel/geometry/set editing remains required;
-this first operand integration grants no full enhanced-editor acceptance.
+Concrete next action: connect the proven actual QTM colour edit to the existing
+localized headed admin import/preview/explicit-publication workflow, retaining its
+exact original/export association. The native/ordinary-route and inspected client
+replay colour proof above is complete for its stated scope; do not rerun general
+caption or compiler audits without a demonstrated blocker. Then extend the missing
+resource/panel/geometry/set editor operation and authored conformance clauses.
+This representative integration grants no full enhanced-editor acceptance.
 The representative userflow already exists; its archived logs, receipts and68
 images remain hash-exact. Four harness sources evolved afterwards, so that receipt
 is retained evidence for its recorded inputs, not new exact-head browser CI.
@@ -6631,9 +6679,10 @@ X27 defects block its streamed glyph proof. Select/verify a correct independent
 candidate and actual client; never shift native packet fields or add native S1=0.
 Attached-resource editing has no QTM save action and remains required integration
 work. Full charset/resource/editor/panel, warm open-client and remaining
-admin/Lua flows stay required. Base-row-only import, unchanged-file refusal,
-protected enhancement/PS edits and repeated-overlay refusal remain pending
-implementation/proof; none is a permanent accepted limitation.
+admin/Lua flows stay required. Authenticated base-row/local-operand imports,
+unchanged-file refusal and cumulative concepts now have proof above. Other
+protected enhancement/PS/resource and geometry editing still require the explicit
+qualified workflow; no current rejection is a permanent accepted limitation.
 No criteria/status/dependencies change. Engine-first/NOS200–299-only sequencing
 remains; production guide waits for independent generic acceptance. No remote push,
 production installation or publication occurs; no full editor/engine/platform/CI claim.

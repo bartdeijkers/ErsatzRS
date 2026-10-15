@@ -6,6 +6,9 @@
 #include <QAction>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QComboBox>
+#include <QDockWidget>
+#include <QTableView>
 #include <QMainWindow>
 #include <QRadioButton>
 #include <QLineEdit>
@@ -39,6 +42,11 @@ static void capture(const char *name) {
 struct DriverContext {
     bool singlePage;
     bool editZone;
+    bool editForeground;
+    int tripletIndex;
+    int tripletColumn;
+    int fromColour;
+    int toColour;
     int drcsSubpage;
     QByteArray inputName;
     QByteArray outputName;
@@ -71,10 +79,30 @@ static int panelColumns(const char *name) {
         qFatal("Explicit native Level 2.5 panel count must be canonical decimal 0..16");
     return value;
 }
+static int boundedDecimal(const char *name, int maximum) {
+    const QByteArray supplied = qgetenv(name);
+    bool valid = false;
+    const int value = supplied.toInt(&valid, 10);
+    if (!valid || value < 0 || value > maximum || supplied != QByteArray::number(value))
+        qFatal("Required foreground operand must be a canonical bounded decimal");
+    return value;
+}
 static DriverContext driverContext() {
     const QByteArray mode = qgetenv("ERSATZRS_QTM_DRIVER_MODE");
     const QByteArray input = qgetenv("ERSATZRS_QTM_INPUT_BASENAME");
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
+    const bool foreground = mode == "single-page-foreground";
+    const bool suppliedForeground = qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_INDEX")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_COLUMN")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_COLOUR")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_COLOUR");
+    if (!foreground && suppliedForeground)
+        qFatal("Foreground operands require explicit single-page-foreground mode");
+    const int triplet = foreground ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
+    const int column = foreground ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", 39) : 0;
+    const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
+    const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
+    if (foreground && from == to) qFatal("Foreground trial requires a changed colour");
     if (mode.isEmpty()) {
         if (!input.isEmpty() || !output.isEmpty()
             || !qgetenv("ERSATZRS_QTM_LEFT_PANEL_COLUMNS").isEmpty()
@@ -82,10 +110,10 @@ static DriverContext driverContext() {
             || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME").isEmpty()
             || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE").isEmpty())
             qFatal("Native basenames/panels require explicit single-page driver mode");
-        return {false, true, 0, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
+        return {false, true, false, 0, 0, 0, 0, 0, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
             "/work/synthetic-editor-audit.tti", "/work/edited-editor-audit.tti", {}, 0, 0};
     }
-    if ((mode != "single-page-zone-q" && mode != "single-page-save") || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -102,7 +130,7 @@ static DriverContext driverContext() {
             || suppliedSubpage != QByteArray::number(drcsSubpage) || drcs.isEmpty())
             qFatal("Synthetic DRCS pixel oracle supports only explicit S1=0 or S1=1");
     }
-    return {true, mode == "single-page-zone-q", drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
+    return {true, mode == "single-page-zone-q", foreground, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
         QString("/work/") + QString::fromLatin1(output), drcs, left, right};
 }
 static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
@@ -166,6 +194,109 @@ static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
     std::printf("QTM actual Normal DRCS glyph: S1=%d all 120 literal bitmap/day palette pixels match\n", context.drcsSubpage);
     std::printf("QTM actual Normal DRCS Load file complete: %s\n", context.drcsName.constData());
 }
+static void editForeground(QMainWindow *main, const DriverContext &context) {
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets")
+        qFatal("Pinned X/26 triplets dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    // Arrange the actual Tools dock for a separately inspectable headed capture.
+    // No document/model mutation is performed by this display arrangement.
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000))
+        qFatal("Actual floating X/26 dock was not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Expected exactly one actual X/26 table");
+    auto table = tables.front();
+    auto model = table->model();
+    if (!model || context.tripletIndex >= model->rowCount() || model->columnCount() != 4)
+        qFatal("Native semantic word is outside the actual X/26 table");
+    const auto raw = [model, context](int column) {
+        bool valid = false;
+        const int value = model->data(model->index(context.tripletIndex, column), Qt::UserRole).toInt(&valid);
+        if (!valid) qFatal("Actual X/26 raw operand absent");
+        return value;
+    };
+    if (raw(0) != context.tripletColumn || raw(1) != 0 || raw(2) != context.fromColour)
+        qFatal("Actual X/26 row does not match native foreground tuple");
+    const QModelIndex target = model->index(context.tripletIndex, 0);
+    table->scrollTo(target, QAbstractItemView::PositionAtCenter);
+    if (!QTest::qWaitFor([table, target] {
+        return table->isVisible() && table->isEnabled()
+            && table->viewport()->rect().contains(table->visualRect(target).center());
+    }, 3000)) qFatal("Actual X/26 target row is not clickable");
+    QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, table->visualRect(target).center());
+    if (table->currentIndex().row() != context.tripletIndex)
+        qFatal("Actual X/26 row selection failed");
+    QComboBox *colour = nullptr;
+    for (QComboBox *candidate : dock->findChildren<QComboBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != 32) continue;
+        if (colour) qFatal("Ambiguous visible X/26 colour selector");
+        colour = candidate;
+    }
+    if (!colour || colour->currentIndex() != context.fromColour || main->isWindowModified())
+        qFatal("Actual foreground colour selector/current document state differs from native baseline");
+    if (!dock->grab().save(QString("/work/") + context.captureName("foreground-before")))
+        qFatal("Actual foreground dock baseline capture failed");
+    QTest::mouseClick(colour, Qt::LeftButton, Qt::NoModifier, colour->rect().center());
+    auto popup = colour->view();
+    if (!QTest::qWaitFor([popup] { return popup->isVisible(); }, 3000))
+        qFatal("Actual colour popup did not open");
+    const QModelIndex choice = popup->model()->index(context.toColour, colour->modelColumn(), colour->rootModelIndex());
+    popup->scrollTo(choice, QAbstractItemView::PositionAtCenter);
+    const auto observeFailure = [popup, table, colour, dock, main, context, raw](const char *stage) {
+        auto focus = QApplication::focusWidget();
+        std::fprintf(stderr,
+            "QTM foreground failure stage=%s target=%d table_row=%d raw=%d/%d/%d combo=%d expected=%d popup_visible=%d popup_current=%d focus=%s active_popup=%s\n",
+            stage, context.tripletIndex, table->currentIndex().row(), raw(0), raw(1), raw(2),
+            colour->currentIndex(), context.toColour, popup->isVisible(), popup->currentIndex().row(),
+            focus ? focus->metaObject()->className() : "none",
+            QApplication::activePopupWidget() ? QApplication::activePopupWidget()->metaObject()->className() : "none");
+        std::fprintf(stderr, "QTM foreground failure modified=%d title=%s\n", main->isWindowModified(),
+            main->windowTitle().toUtf8().constData());
+        if (!dock->grab().save(QString("/work/") + context.captureName("foreground-failed-dock")))
+            qFatal("Foreground failure dock capture failed");
+        capture(context.captureName("foreground-failed-main").toUtf8().constData());
+        if (popup->isVisible()
+            && !popup->window()->grab().save(QString("/work/") + context.captureName("foreground-failed-popup")))
+            qFatal("Foreground failure popup capture failed");
+        std::fflush(stderr);
+    };
+    if (!QTest::qWaitFor([popup, choice] {
+        const QPoint point = popup->visualRect(choice).center();
+        return choice.isValid() && popup->viewport()->rect().contains(point)
+            && popup->indexAt(point) == choice;
+    }, 3000)) {
+        observeFailure("choice-layout");
+        qFatal("Actual replacement colour item is not clickable");
+    }
+    // Qt's combo popup activates its current hovered item. A synthetic click
+    // alone has no preceding mouse movement; scrollTo does not hover the item.
+    const QPoint point = popup->visualRect(choice).center();
+    QTest::mouseMove(popup->viewport(), point);
+    if (!QTest::qWaitFor([popup, choice, point] {
+        return popup->isVisible() && popup->indexAt(point) == choice
+            && popup->currentIndex() == choice;
+    }, 3000)) {
+        observeFailure("choice-hover");
+        qFatal("Actual replacement colour item did not receive mouse hover");
+    }
+    if (!popup->window()->grab().save(QString("/work/") + context.captureName("foreground-popup")))
+        qFatal("Actual foreground popup capture failed");
+    QTest::mouseClick(popup->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+    if (!QTest::qWaitFor([colour, main, context, raw] {
+        return colour->currentIndex() == context.toColour && main->isWindowModified()
+            && raw(0) == context.tripletColumn && raw(1) == 0 && raw(2) == context.toColour;
+    }, 3000)) {
+        observeFailure("activation");
+        qFatal("Actual foreground widget edit did not update the expected X/26 tuple");
+    }
+    if (!dock->grab().save(QString("/work/") + context.captureName("foreground-edited")))
+        qFatal("Actual foreground dock edited capture failed");
+    std::printf("QTM actual foreground popup edit: triplet=%d column=%d mode=0 from=%d to=%d\n",
+        context.tripletIndex, context.tripletColumn, context.fromColour, context.toColour);
+}
 static void saveAs(QMainWindow *main, const DriverContext &context) {
     QAction *save = nullptr;
     for (QAction *action : main->findChildren<QAction *>()) {
@@ -227,7 +358,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         capture(context.captureName("saved").toUtf8().constData());
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                context.editZone, context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -269,6 +400,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
                 qFatal("Actual widget geometry disagrees with the native Level 2.5 panel counts");
             std::printf("QTM actual widget geometry: width=%d height=%d left=%d right=%d; target row=2 column=8\n",
                 view->width(), view->height(), context.leftPanelColumns, context.rightPanelColumns);
+            if (context.editForeground) editForeground(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));

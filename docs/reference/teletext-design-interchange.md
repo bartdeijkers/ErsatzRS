@@ -5288,8 +5288,10 @@ imports compare against the latest qualified concept while persisted expectation
 retain the immutable root operation. Reverting all operand edits with no physical
 rows saves a new concept revision containing the authenticated root bytes, without
 an empty or no-op overlay. Import, re-export, preview and revert never implicitly
-publish. Full resource/geometry/panel editor coverage and actual QTM operand-edit
-proof remain open; P9A-04 owns the evidence and next step.
+publish. Actual pinned QTM foreground-popup editing now has a representative
+native import/preview/publication and ordinary-stream/client replay proof.
+Full resource/geometry/panel/set editing and the expanded localized-admin trial
+remain open; P9A-04 owns the evidence and next step.
 No permanent import restriction or reduced Level2.5 target is accepted. P9A-04 owns
 positive/negative codec, native import and durable qualification evidence.
 
