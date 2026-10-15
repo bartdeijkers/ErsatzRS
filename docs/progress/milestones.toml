@@ -22731,6 +22731,66 @@ same commit. A demonstrated correction requires affected verification, without
 routinely rerunning the whole pipeline. Application release remains separate.
 """
 evidence = """
+Final UCU-11 acceptance (2026-10-15): ordered rows233–236 and all236 ledger
+SHA/subject pairs are accepted through fixed v26.11.3/f75abe5322f2a05099579df9e95acb675949c780.
+The required local gates and actual Linux/native Windows startup/decoded
+playback/transport proof below remain valid. Published Next022 assets retain
+all19 verified checksums, six exact package hashes, the source archive and both
+demonstrated temporary patches. No further FFmpeg amendment is required.
+
+Targeted CI38666094421 is terminal success on exact
+7625086ff6378ca983c58b930fc7a24453c8700e: Chromium11/11 in490.026s and
+Firefox11/11 in805.569s, zero skips/failures/retries/flaky results. Complete
+serial groups include all seven previously unexecuted followers per project,
+both actual TCP publication cases and every editor JS/theme variant. Combining
+those exact matching test identities with valid original CI38654305604 results
+accounts for all376 cases per browser: Chromium371 passes/5 explicit opt-in
+skips; Firefox346 passes/30 explicit skips; no failures or unexecuted followers.
+All25 additional Firefox-only skips have matching passing Chromium cases.
+Unchanged opt-in checks retain their existing separate acceptance ownership.
+Next-only CI38657883005 on033bd29f passes417 regressions and both actual host
+smokes. Unaffected original Format/Test/Clippy/audit/docs/commitlint results are
+reused under the maintainer's efficient recovery instruction. These composed
+results are not represented as a newly executed full green release CI run.
+
+Evidence is retained in stable local tmp/evidence/ucu11-v26.11.3/:
+the former worktree tmp/ and test-results/ preserve original/focused CI JSON,
+JUnit, traces, runtime DBs/logs/captures, exact tested bundles and distribution
+source/provenance. Earlier relative tmp/ references below resolve inside this
+archive. The stopped mixed-build diagnostic runtime is preserved alongside the
+accepted matched bundle. Windows evidence remains in
+ErsatzRS-evidence/ucu11-v26.11.3/app. Source delivery is on remote feat/ucu-11;
+local checkout/branch retirement follows exact remote verification.
+
+Authorized cache cleanup preserves unrelated work, processes and shared caches.
+The UCU11 application target is cleaned (81,210 files; Cargo reports64.4GiB
+logical artifacts; pre-cleanup du63,516,520,505 bytes), after configured-target
+and process-user checks. The native Windows target removes39,974,435,359 bytes;
+three Next source targets remove4.0GiB/437MiB/418MiB. Existing packages, evidence
+and source identities remain retained. UCU10 and completed Next candidate
+worktrees/local branches are already retired with remote commits/evidence kept.
+Application publication remains separate; Native, stored choices, international
+tracks and approved explicitly unverified hardware/platform debt are preserved.
+This final entry supersedes pending closeout notes below.
+
+Original full CI final result (2026-10-15): run38654305604 on exactc41601ba
+is terminal. All non-browser jobs except the corrected Next fixture pass.
+Chromium reports361 passes,3 known fixture failures,5 explicit opt-in skips
+and7 unexecuted serial followers. Firefox reports337 passes,2 matching teletext
+fixture failures,30 explicit skips and7 unexecuted followers. All25 additional
+Firefox-only skips have corresponding passing Chromium results; the remaining
+five are unchanged opt-in checks, with their existing separate acceptance
+ownership. Result JSON and traces for both original browser jobs are retained
+under the owning runtime audit, along with exact run/job source records.
+
+Authorized complete-group browser CI recovery38666094421 is running on exact
+7625086ff6378ca983c58b930fc7a24453c8700e: only the two browser projects,11 cases
+each, through max-parallel1; unrelated jobs remain skipped. Original Firefox
+has finished and its port is released before recovery dispatch. Local11/11
+headed acceptance is complete; remote22-case acceptance remains outstanding.
+Reuse valid unaffected original gates and the417-case Next success on033bd29f;
+do not call this a new full green exact-commit release gate.
+
 Complete serial-group local recovery (2026-10-15): all eleven headed Chromium
 cases pass in9.6m, with zero failures/skips/retries/flaky results, on one fresh
 DB using the unchanged retained matched production bundle and exact published

@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0005', '0008', '0063', '0095', '0096', '0097', '0098', '0099', '0100', '0101', '0102', '0103', '0104', '0105', '0106', '0116', '0117', '0125']
 summary    = """
-UCU-00–11 are locally Complete: all236 rows through v26.11.3 are accepted.
+UCU-00–11 are Complete: all236 rows through v26.11.3 are accepted.
 The authoritative current baseline is docs/automation/parity-baseline.md. Native, stored engine/profile choices
 and international audio/subtitle behavior remain supported. UCU-10 is delivered
 through PR105 on remote main 32c12793. Run 38623973857 passes every non-browser
@@ -22,8 +22,14 @@ four focused headed browser cases, full workspace lint/test-closeout and
 required local parity gates pass. TSDuck passes87 Native/83 Next copy checks;
 focused pacing/startup captures pass22 each with five periodic samples and no
 low-delivery intervals. The owning milestone records exact identities, results
-and retained evidence. Remote push/associated CI follows local acceptance under
-the2026-10-15 amendment; only failed specific jobs are retried. Application
+and retained evidence. Source is pushed to remote feat/ucu-11. Under the
+2026-10-15 recovery amendment, valid original CI results are combined with
+Next417/417 on033bd29f and complete browser serial recovery22/22 on7625086f.
+Every standard browser case is accounted for with no failed or unexecuted
+followers; inherited explicit skips retain their existing ownership. This is
+composed acceptance evidence, not a new full exact-commit release gate.
+Local build caches are removed; evidence remains under
+tmp/evidence/ucu11-v26.11.3/. Application
 release remains separate. Approved hardware/platform debt stays explicitly
 unverified; ARM/macOS application proof is maintainer-approved debt, never
 inferred from packages or another GPU. Linux/Windows proof is not waived.

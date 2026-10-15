@@ -62,44 +62,37 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-10-15 UCU-11 local acceptance is Complete through fixed v26.11.3,
-ordered rows233–236. The feat/ucu-11 candidate integrates delivered remote
-main32c12793 and preserves unrelated ongoing teletext work. The milestone owns
-exact identities and all required local gates: full workspace strict lint,
-6312 nextest passes plus doctests, matched Leptos/bundles, dependency audit,
-web parity checks, six Linux/Windows decoded mode smokes, published022
-cold/cache/bundle adoption, affected headed browsers and Native/Next TSDuck.
-Focused startup/pacing captures pass with five periodic samples and no low
-intervals; Native starts4s and Next Convert2s. All236 ledger rows are accepted;
-the baseline table advances with them. Native, stored choices, international
-tracks and approved explicitly unverified hardware/platform debt remain.
-Original full CI38654305604 on c41601ba has passed every non-browser job
-except its one retained-caption assertion, corrected on033bd29f. Focused Next
-run38657883005 is terminal success:417 regressions and both real-host smoke
-checks pass, with exact source/runtime/JUnit evidence retained. It schedules
-only Next and leaves the original run uncancelled. Original Chromium finishes
-361 passed,5 skipped,3 failed: valid midnight Block overlap and retained
-teletext fixture identities require test-only corrections. All four affected/
-predecessor headed Chromium cases now pass on one fresh DB with the retained
-matched bundle. Focused Chromium CI38662128181 passes all four on exact7314eaa5
-with no skips/retries. The original summary also records seven serial followers
-that did not run, so four cases alone do not close Chromium acceptance. Recover
-all eleven tests in the same three affected specs, including both actual TCP
-publication cases. All eleven headed local cases now pass in9.6m without skips,
-retries or failures. Push the recovery selector and dispatch browser_only=both
-after original Firefox releases its port; this schedules22 cases serially,
-without a full suite rerun. Record combined evidence and close out the
-application checkout/cache cleanup. Do not claim this focused success as a new
-complete green exact-commit CI run. The completed Next source-candidate local
-worktree/branch are already removed with their remote commit/evidence retained.
-The unused UCU11 native Windows target and three Next compilation caches are
-removed; exact native candidate/frontend/source/tools/evidence are archived.
-Retain the Linux application cache/worktree until Firefox acceptance is complete.
-Application release remains separate.
-Maintainer-authorized UCU-10 cleanup removed both completed worktrees/local
-branches and unused Linux/Windows caches; evidence remains under
-local tmp/evidence/ucu10-32c12793/. Keep active UCU-11 caches until delivery
-finishes, then retain its evidence and perform the same scoped cleanup.
+2026-10-15 UCU-11 is Complete through fixed v26.11.3/f75abe53,
+ordered rows233–236, with all236 ledger rows accepted. The feat/ucu-11 source
+integrates delivered remote main32c12793 and preserves unrelated teletext work.
+The milestone owns exact identities and required local proof: workspace strict
+lint,6312 nextest passes plus doctests, matched Leptos/bundles, dependency audit,
+web parity, six Linux/Windows decoded mode smokes, published022 cold/cache/bundle
+adoption, affected headed browsers and Native/Next TSDuck87/83. Focused pacing
+checks pass22 each with five periodic samples and no low intervals.
+Native, stored choices, international tracks and approved explicitly unverified
+hardware/platform debt remain supported.
+
+Under the authorized recovery amendment, retain valid original CI38654305604
+results on c41601ba and Next-only CI38657883005 on033bd29f (417 regressions and
+both host smokes). Final browser recovery38666094421 on7625086f passes22/22,
+including all seven previously unexecuted serial followers per project, both
+TCP publication cases and every editor JS/theme variant. Full test identity
+composition accounts for376 cases per browser: Chromium371 passes/5 existing
+opt-in skips, Firefox346 passes/30 existing explicit skips, zero failures or
+unexecuted followers. All25 additional Firefox-only skips have passing Chromium
+counterparts. This is composed acceptance, not a new full exact-commit release
+CI gate. Application publication remains separate.
+
+Authorized cache cleanup removes the UCU11 configured application target,
+native Windows target and three Next source targets. Exact tested bundles,
+source/provenance and raw acceptance evidence remain in
+local tmp/evidence/ucu11-v26.11.3/ (former worktree tmp/ and test-results/).
+Native Windows evidence is archived in ErsatzRS-evidence/ucu11-v26.11.3/app.
+Local checkout/branch retirement follows exact remote source verification;
+remote history and evidence remain. Completed UCU10 and Next source-candidate
+worktrees/local branches and unused caches are already removed. UCU10 evidence
+remains under local tmp/evidence/ucu10-32c12793/.
 
 UCU-10 is delivered through PR105 on remote main32c12793, with232 accepted rows
 through v26.11.2. Run38623973857 has every non-browser gate and Chromium green;
