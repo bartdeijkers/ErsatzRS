@@ -122,6 +122,65 @@ Level 2.5 enhancement. This does not prove every subpage enhancement or resource
 function. Stop only the owned test containers after retaining evidence. Shared
 X11 access is a local manual-test exception and is never a server dependency.
 
+### Edit a synthetic DRCS resource in the pinned editor
+
+The same driver also exercises an ordinary MAIN-document bitmap-byte edit. This
+is different from attaching a resource through View > DRCS pages: attachments
+are render dependencies and are not saved with the main display document.
+
+Prepare a new disposable workspace with the exact singleton resource fixture:
+
+```bash
+python3 scripts/e2e/teletext-qtm-calibration.py fixture-drcs "$qtm_work/native-input.tti"
+```
+
+Use the existing offline/X11 launch above, replacing its driver environment with:
+
+```bash
+-e ERSATZRS_QTM_DRIVER_MODE=single-page-drcs-bit \
+-e ERSATZRS_QTM_INPUT_BASENAME=native-input.tti \
+-e ERSATZRS_QTM_OUTPUT_BASENAME=edited.tti \
+-e ERSATZRS_QTM_LEFT_PANEL_COLUMNS=0 \
+-e ERSATZRS_QTM_RIGHT_PANEL_COLUMNS=0 \
+```
+
+This fixed synthetic carrier has raw resource page `1C0`, S1 `0`, X28/3 and one
+defined mode-0 glyph. The driver clicks zero-based MAIN row1/column1 and types
+`C` over `A` with ordinary overwrite input, then performs actual Save As. It does
+not modify a model directly or write TTI. Inspect the four level/edited/dialog/
+saved images and require terminal zero before verifying the saved file:
+
+```bash
+python3 scripts/e2e/teletext-qtm-calibration.py verify-drcs \
+  "$qtm_work/native-input.tti" "$qtm_work/edited.tti"
+```
+
+The bounded, literal verifier checks every record: only that bitmap byte changes;
+PN/PS hexadecimal case normalizes and QTM adds `RE,0` and `CT,20,T`. Raw resource
+identity, S1, status, X28/3 function/modes, undefined slots and all other bytes
+remain exact. PTU0's first twelve-bit row changes `0x801` to `0x803`; its other
+nine rows remain unchanged. This is a calibration oracle for this fixture,
+not a production resource parser or permission grant.
+
+For a separate actual saved-resource rendering trial, copy the original day
+display from the existing native DRCS companion probe into a fresh workspace.
+Copy the actual saved resource there as `edited-resource.tti`, retain the native
+four-left/twelve-right geometry and launch with
+`ERSATZRS_QTM_DRIVER_MODE=single-page-drcs-verify` plus
+`ERSATZRS_QTM_NORMAL_DRCS_BASENAME=edited-resource.tti`. That mode uses the real
+Normal DRCS Load dialog and checks all120 glyph pixels against the changed
+literal bitmap and day palette before the ordinary save-only path. Inspect its
+six captures and preserve the resource's hash before/after loading.
+
+The unchanged pinned editor remains both writer and renderer in this trial;
+this is not independent decoding or an external broadcast-client test. The
+actual saved resource still needs receipt-qualified native concept import,
+shared preview and explicit publication. Check every shared display consumer,
+including unexported/protected regions, before admitting a resource change.
+Singleton mode-0 success does not establish indexed sets, other resource
+functions, full DRCS or full Level2.5 acceptance. No such product restriction is
+accepted. P9A-04 owns current evidence and remaining work.
+
 ### Replay the pinned editor against a native export
 
 This opt-in Linux/X11 probe connects the existing native synthetic fixture to an

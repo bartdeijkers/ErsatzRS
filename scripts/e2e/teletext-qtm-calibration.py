@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Reproduce and verify one synthetic QTeletextMaker 1.0 edit/save trial.
 
-Pinned source: cac2167bac933a6160cca45a45d5d4ee95355898. This fixture uses
-G0 mode 9 enhancement words and no private engine sidecar. Verification covers
-only the recorded synthetic editor trial, not arbitrary TTI or Rust roundtrips.
+Pinned source: cac2167bac933a6160cca45a45d5d4ee95355898. The fixtures cover
+G0 mode 9 enhancement words and a singleton mode-0 DRCS bitmap carrier, without
+private engine sidecars. Verification covers only the recorded synthetic editor
+trials, not arbitrary TTI, import permissions or Rust roundtrips.
 """
 
 import argparse
@@ -20,6 +21,7 @@ DESCRIPTION = b"DE,Synthetic ErsatzRS external-editor audit"
 LINKS = b"FL,201,202,203,204,205,206"
 ENHANCEMENT = b"OL,26,@iD@Ei`" + b"\x7f" * 33
 SIDECAR = b"XX,not-an-ErsatzRS-sidecar"
+DRCS_ORIGINAL_SHA256 = "208ee7a257e7300d7de8f8b413d943ce2c4b71a36c3d565f42895bec3d1ab0cf"
 
 
 class CalibrationError(Exception):
@@ -114,6 +116,58 @@ def verify(original_path, edited_path):
     }
 
 
+def drcs_original_bytes():
+    """The singleton mode-0 resource exported by the native companion fixture."""
+    payload = b"\r\n".join([
+        b"PN,1C000", b"SC,0000", b"PS,C07C",
+        b"OL,28,CE@@p" + b"\x7f" * 31 + b"@@@@",
+        row(1, b"`A`@P@H@D@B@A@@`@P@I"),
+    ]) + b"\r\n"
+    require(digest(payload) == DRCS_ORIGINAL_SHA256,
+            "internal DRCS fixture differs from the native export")
+    return payload
+
+
+def verify_drcs(original_path, edited_path):
+    """Qualify one saved bitmap change, not generic TTI or engine admission."""
+    original = bounded_read(original_path)
+    edited = bounded_read(edited_path)
+    require(original == drcs_original_bytes(), "original is not the pinned DRCS fixture")
+    records = lines(original)
+    saved = lines(edited)
+    # Case-normalized identities and added normal-editor timing records are
+    # explicit observations. No packet, undefined glyph or header change is lost.
+    expected = [b"PN,1c000", b"SC,0000", b"PS,c07c", b"RE,0", b"CT,20,T",
+                records[3], row(1, b"`C`@P@H@D@B@A@@`@P@I")]
+    require(saved == expected, "saved DRCS identity, function, modes or bitmap bytes differ")
+    before = records[4].split(b",", 2)[2]
+    after = saved[6].split(b",", 2)[2]
+    require([i for i, pair in enumerate(zip(before, after)) if pair[0] != pair[1]] == [1],
+            "DRCS edit changed more than OL1 column1")
+    # Two consecutive six-bit characters encode each 12-bit PTU row; validate
+    # all ten rows independently of the external writer and Rust implementation.
+    def bitmap(payload):
+        return [((payload[2*i] & 0x3f) << 6) | (payload[2*i+1] & 0x3f)
+                for i in range(10)]
+    old_bitmap = [0x801, 0x800, 0x400, 0x200, 0x100,
+                  0x080, 0x040, 0x020, 0x010, 0x009]
+    new_bitmap = [0x803, *old_bitmap[1:]]
+    require(bitmap(before) == old_bitmap and bitmap(after) == new_bitmap,
+            "DRCS PTU0 bitmap differs from the literal oracle")
+    return {
+        "calibration_passed": True, "engine_roundtrip_proven": False,
+        "editor": "QTeletextMaker", "editor_version": "1.0",
+        "editor_commit": EDITOR_COMMIT,
+        "original_sha256": digest(original), "edited_sha256": digest(edited),
+        "original_bytes": len(original), "edited_bytes": len(edited),
+        "resource_page_hex": "1C0", "resource_s1": 0, "glyph_slot": 0,
+        "changed_row": 1, "changed_column": 1,
+        "bitmap_before": old_bitmap, "bitmap_after": new_bitmap,
+        "normalizations": ["PN/PS hexadecimal case", "added RE,0 and CT,20,T"],
+        "protected_packets_preserved": True,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -122,15 +176,22 @@ def main():
     verifier = commands.add_parser("verify", help="verify the recorded original and saved files")
     verifier.add_argument("original", type=Path)
     verifier.add_argument("edited", type=Path)
+    drcs_fixture = commands.add_parser("fixture-drcs", help="write the singleton DRCS trial input")
+    drcs_fixture.add_argument("destination", type=Path)
+    drcs_verifier = commands.add_parser("verify-drcs", help="verify the single DRCS bitmap edit")
+    drcs_verifier.add_argument("original", type=Path)
+    drcs_verifier.add_argument("edited", type=Path)
     args = parser.parse_args()
-    if args.command == "fixture":
-        payload = original_bytes()
+    if args.command in ("fixture", "fixture-drcs"):
+        payload = original_bytes() if args.command == "fixture" else drcs_original_bytes()
         with args.destination.open("xb") as handle:
             handle.write(payload)
         result = {"fixture_bytes": len(payload), "fixture_sha256": digest(payload),
                   "engine_roundtrip_proven": False}
-    else:
+    elif args.command == "verify":
         result = verify(args.original, args.edited)
+    else:
+        result = verify_drcs(args.original, args.edited)
     print(json.dumps(result, sort_keys=True))
 
 

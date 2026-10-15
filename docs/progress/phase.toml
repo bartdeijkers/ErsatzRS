@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: qualify actual DRCS editor changes; full authored Level2.5 and editor acceptance open'
+current_focus = 'P9A-04: connect proven DRCS editor changes to native concepts; full acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -98,8 +98,12 @@ P9A-04 also records a fresh actual QTM200/0000 colour edit through headed
 Chromium/JavaScript/light admin, English/Dutch concept/selected views, explicit
 Lua-scoped publication, ordinary TCP, independent decoding/TSDuck and inspected
 two-theme200/201/200 client replay. Failed focus/selector trials are retained.
-Next exercise the pinned editor's actual DRCS resource edit/save path and connect
-the missing qualified resource import; protected dependency loading is not editing.
+Actual QTM MAIN-document DRCS overwrite/SaveAs and fresh saved-resource rendering
+now pass with exact singleton identity/function/bitmap checks and120 literal pixels.
+P9A-04 owns ten inspected images,16 negative byte cases and exact identities.
+Next connect receipt-bound bitmap intents/resource import and protect every shared
+consumer before shared preview/publication. The additional legacy SaveAs focus
+failure remains explicit; a failed pointer-hover hypothesis was reverted.
 Keep the resource/panel/set/geometry, wider operand browser and remaining authored
 conformance requirements open; this representative flow grants no full acceptance.
 Resource/panel/set/geometry editing and full authored Level2.5/fallback remain

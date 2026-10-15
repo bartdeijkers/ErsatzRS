@@ -3057,8 +3057,16 @@ packet export. Palette/side-panel/local-object editing exists, but
 [documented limitations](https://github.com/gkthemac/QTeletextMaker/blob/cac2167bac933a6160cca45a45d5d4ee95355898/README.md)
 include skipped POP/GPOP invocations. The
 [DRCS workflow](https://github.com/gkthemac/QTeletextMaker/blob/cac2167bac933a6160cca45a45d5d4ee95355898/examples/Level2p5-DRCS/README-drcs.md)
-loads dependencies separately and does not provide bitmap editing. Resource-page
-classification and unsupported editor transformations must be checked explicitly.
+loads attached dependencies separately from the editable document. An attachment
+is not saved by the main display's Save As. A singleton mode-0 DRCS carrier can
+instead be opened as the MAIN document and its bitmap bytes edited with ordinary
+overwrite input; the actual pinned-editor trial preserves its resource identity,
+S1, status and X28/3. The writer lowercases hexadecimal PN/PS and adds normal-editor
+`RE,0`/`CT,20,T`. The calibration helper verifies this exact recorded case, including
+all ten bitmap rows and untouched bytes; it does not define general compatibility
+or grant native import authority. P9A-04 owns the evidence and missing native
+resource-concept/preview/publication connection. Resource-page classification and
+unsupported editor transformations must be checked explicitly.
 QTeletextMaker alone cannot establish the full enhanced broadcast-client gate.
 
 ### Actual synthetic edit/save calibration

@@ -43,6 +43,8 @@ struct DriverContext {
     bool singlePage;
     bool editZone;
     bool editForeground;
+    bool editDrcs;
+    bool verifyEditedDrcs;
     int tripletIndex;
     int tripletColumn;
     int fromColour;
@@ -110,10 +112,12 @@ static DriverContext driverContext() {
             || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME").isEmpty()
             || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE").isEmpty())
             qFatal("Native basenames/panels require explicit single-page driver mode");
-        return {false, true, false, 0, 0, 0, 0, 0, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
+        return {false, true, false, false, false, 0, 0, 0, 0, 0, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
             "/work/synthetic-editor-audit.tti", "/work/edited-editor-audit.tti", {}, 0, 0};
     }
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    const bool drcsEdit = mode == "single-page-drcs-bit";
+    const bool drcsVerify = mode == "single-page-drcs-verify";
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -121,6 +125,8 @@ static DriverContext driverContext() {
     if (!drcs.isEmpty() && (!safeTtiBasename(drcs) || drcs == input || drcs == output))
         qFatal("Invalid explicit protected Normal DRCS companion name");
     if (left + right > 16) qFatal("Native Level 2.5 panel counts exceed sixteen columns");
+    if (drcsEdit && (left != 0 || right != 0 || !drcs.isEmpty()))
+        qFatal("Synthetic DRCS bitmap edit requires a standalone no-panel resource document");
     int drcsSubpage = 0;
     const QByteArray suppliedSubpage = qgetenv("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE");
     if (!suppliedSubpage.isEmpty()) {
@@ -130,7 +136,9 @@ static DriverContext driverContext() {
             || suppliedSubpage != QByteArray::number(drcsSubpage) || drcs.isEmpty())
             qFatal("Synthetic DRCS pixel oracle supports only explicit S1=0 or S1=1");
     }
-    return {true, mode == "single-page-zone-q", foreground, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
+    if (drcsVerify && (drcs.isEmpty() || drcsSubpage != 0))
+        qFatal("Edited DRCS verification requires the synthetic S1=0 companion");
+    return {true, mode == "single-page-zone-q", foreground, drcsEdit, drcsVerify, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
         QString("/work/") + QString::fromLatin1(output), drcs, left, right};
 }
 static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
@@ -187,11 +195,13 @@ static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
     const auto &rows = patterns[context.drcsSubpage];
     for (int y = 0; y < 10; ++y)
         for (int x = 0; x < 12; ++x) {
-            const QColor expected = ((rows[y] >> (11 - x)) & 1) ? QColor(255, 0, 0) : QColor(0, 0, 0);
+            const unsigned short row = (context.verifyEditedDrcs && y == 0) ? 0x803 : rows[y];
+            const QColor expected = ((row >> (11 - x)) & 1) ? QColor(255, 0, 0) : QColor(0, 0, 0);
             if (bitmap.pixelColor((context.leftPanelColumns + 8) * 12 + x, 10 + y) != expected)
                 qFatal("Actual attached DRCS pixels/palette differ from synthetic literal");
         }
-    std::printf("QTM actual Normal DRCS glyph: S1=%d all 120 literal bitmap/day palette pixels match\n", context.drcsSubpage);
+    std::printf("QTM actual Normal DRCS glyph: S1=%d edited=%d all 120 literal bitmap/day palette pixels match\n",
+        context.drcsSubpage, context.verifyEditedDrcs);
     std::printf("QTM actual Normal DRCS Load file complete: %s\n", context.drcsName.constData());
 }
 static void editForeground(QMainWindow *main, const DriverContext &context) {
@@ -391,7 +401,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         capture(context.captureName("saved").toUtf8().constData());
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -431,13 +441,24 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (view->width() < expected.width() || view->height() < expected.height()
                 || (panelTotal != 0 && view->size() != expected))
                 qFatal("Actual widget geometry disagrees with the native Level 2.5 panel counts");
-            std::printf("QTM actual widget geometry: width=%d height=%d left=%d right=%d; target row=2 column=8\n",
+            std::printf("QTM actual widget geometry: width=%d height=%d left=%d right=%d\n",
                 view->width(), view->height(), context.leftPanelColumns, context.rightPanelColumns);
             if (context.editForeground) editForeground(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));
                 QTest::keyClicks(view, "Q", Qt::NoModifier, 20);
+            }
+            if (context.editDrcs) {
+                // Fixed singleton synthetic DRCS carrier: OL1 column1 is A.
+                // Ordinary overwrite A->C adds bit1 to PTU0's first bitmap row.
+                // The controller must verify the original and every saved byte;
+                // the widget driver grants no resource-import permission.
+                QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier, QPoint(18, 15));
+                QTest::keyClicks(view, "C", Qt::NoModifier, 20);
+                if (!QTest::qWaitFor([main] { return main->isWindowModified(); }, 3000))
+                    qFatal("Actual DRCS carrier overwrite did not modify the document");
+                std::puts("QTM actual DRCS carrier keyboard overwrite: row=1 column=1 A->C");
             }
             QTimer::singleShot(100, qApp, [main, context] {
                 capture(context.captureName("edited").toUtf8().constData());

@@ -30,8 +30,9 @@ release section when tagging a release.
   checks. Repeated edits, previews and reload preserve original documents and
   fallback packets. A pinned QTeletextMaker colour-edit trial now connects
   localized concept previews, explicit publication, ordinary-stream delivery and
-  two-theme client navigation; full external-editor and Level 2.5 acceptance
-  remains open.
+  two-theme client navigation. An additional recorded DRCS bitmap edit/save and
+  reload calibration preserves singleton resource identity and function; native
+  resource import and full external-editor/Level 2.5 acceptance remain open.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source

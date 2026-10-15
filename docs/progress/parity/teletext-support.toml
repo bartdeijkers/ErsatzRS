@@ -32,7 +32,7 @@ empty owners and one MOT/magazine.
 Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/nested pass.
-QTM base-row roundtrip passes; full enhanced editor proof stays open.
+QTM DRCS GUI edit/reload passes; native resource import remains open.
 
 v2 stays pinned; Base refuses v2. Encoding retains
 defaults, secondary uncertainty and channel/model/deadline fences.
