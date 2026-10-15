@@ -11,6 +11,9 @@ use ersatzrs_ffmpeg::{
     SourceVideoCodec, SourceVideoStream,
 };
 
+#[path = "teletext_decode_consumer_burn_tests.rs"]
+mod burn;
+
 async fn staggered_source(
     scope: &LocalProbeCleanupScope,
     ffmpeg: &str,
@@ -175,7 +178,6 @@ async fn decode(
         .unwrap();
     assert!(std::sync::Arc::ptr_eq(&source.guard, &decoded.guard));
     assert_eq!(decoded.request(), source.request());
-    assert_eq!(decoded.request().page.get(), 888);
     assert!(decoded.events().count > 0);
     assert!(decoded
         .headers()

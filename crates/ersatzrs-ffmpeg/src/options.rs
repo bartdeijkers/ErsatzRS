@@ -376,6 +376,20 @@ pub fn format_time_limit(duration: Duration) -> String {
     format!("{hours:02}:{minutes:02}:{seconds:02}.{ticks:07}")
 }
 
+/// Microseconds parsed from the current generated `HH:MM:SS.fffffff` syntax.
+///
+/// Native `FFmpeg` 9 `av_parse_time` consumes at most four hour digits and six
+/// fractional digits. Larger hour values emitted by [`format_time_limit`]
+/// therefore have no valid native time, even when their microseconds fit i64.
+/// This does not validate arbitrary custom time strings or source timing.
+#[must_use]
+pub fn parsed_time_limit_microseconds(duration: Duration) -> Option<i64> {
+    if duration.as_secs() / 3_600 > 9_999 {
+        return None;
+    }
+    i64::try_from(duration.as_micros()).ok()
+}
+
 #[must_use]
 pub fn no_autoscale() -> PipelineStep {
     PipelineStep::generic("no_autoscale", ["-noautoscale"])
@@ -417,6 +431,24 @@ mod tests {
             (Duration::from_hours(100), "100:00:00.0000000"),
         ] {
             assert_eq!(format_time_limit(duration), expected);
+        }
+    }
+
+    #[test]
+    fn parsed_time_limits_require_four_hour_digits_and_floor_fractional_microseconds() {
+        assert_eq!(parsed_time_limit_microseconds(Duration::ZERO), Some(0));
+        assert_eq!(
+            parsed_time_limit_microseconds(Duration::new(90_061, 123_456_789)),
+            Some(90_061_123_456)
+        );
+        let last = Duration::new(35_999_999, 999_999_999);
+        assert_eq!(format_time_limit(last), "9999:59:59.9999999");
+        assert_eq!(
+            parsed_time_limit_microseconds(last),
+            Some(35_999_999_999_999)
+        );
+        for invalid in [Duration::from_hours(10_000), Duration::MAX] {
+            assert_eq!(parsed_time_limit_microseconds(invalid), None);
         }
     }
 

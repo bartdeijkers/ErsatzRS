@@ -2321,6 +2321,7 @@ fn build_pipeline_command_with_optional_source_plan(
     }
     let inputs = request.inputs.clone();
     let executable = request.ffmpeg_executable.clone();
+    let timing = crate::SourceTeletextInputTiming::from_state(&request.state);
     let pipeline = build_pipeline_for_acceleration(acceleration, request);
     let mut command = pipeline.command(&inputs);
     if let Some(executable) = executable {
@@ -2336,8 +2337,10 @@ fn build_pipeline_command_with_optional_source_plan(
             crate::SourceTeletextInputPlan::from_generated(
                 &command,
                 effective_inputs,
+                &inputs,
                 &pipeline.steps,
                 pipeline.is_intel_vaapi_or_qsv,
+                timing,
             )
         })
         .flatten();

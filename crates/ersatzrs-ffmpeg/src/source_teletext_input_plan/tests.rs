@@ -190,7 +190,15 @@ fn duplicate_sources_share_the_same_generator_and_filter_ownership() {
     assert_eq!(complex.video_label, "0:4");
     assert_eq!(complex.audio_label, "2:3");
     let command = crate::CommandGenerator::generate_command(&inputs, &[], true);
-    let plan = SourceTeletextInputPlan::from_generated(&command, &inputs, &[], true).unwrap();
+    let plan = SourceTeletextInputPlan::from_generated(
+        &command,
+        &inputs,
+        &inputs,
+        &[],
+        true,
+        SourceTeletextInputTiming::from_state(&FfmpegState::default()),
+    )
+    .unwrap();
     assert_eq!(
         command.arguments.iter().filter(|arg| *arg == "-i").count(),
         3
@@ -249,4 +257,168 @@ fn disabled_audio_and_same_index_aliases_do_not_invent_enabled_streams() {
     request.inputs[2] = request.inputs[2].clone().with_stream_index(4);
     let (_, alias) = build(HardwareAccelerationKind::None, request);
     assert_eq!(alias.enabled_caption_input_streams(), [4, 0]);
+}
+
+#[test]
+fn timing_preserves_separate_generated_seeks_duration_and_transport_offset() {
+    let mut request = request();
+    let seek = Duration::new(90_061, 123_456_789);
+    let output_seek = Duration::new(3, 987_654_321);
+    let duration = Duration::new(40, 999_999_999);
+    request.state.start = Some(seek);
+    request.state.output_start = Some(output_seek);
+    request.state.duration = Some(duration);
+    request.state.output_ts_offset = Some(Duration::from_millis(456));
+    let old = build_pipeline_command(HardwareAccelerationKind::None, request.clone()).unwrap();
+    let (command, plan) = build(HardwareAccelerationKind::None, request);
+    assert_eq!(command, old);
+    let timing = plan.timing();
+    assert_eq!(timing.input_seek(), Some(seek));
+    assert_eq!(
+        timing.effective_input_seek_microseconds(),
+        Some(90_061_123_456)
+    );
+    assert_eq!(timing.output_seek(), Some(output_seek));
+    assert_eq!(timing.duration(), Some(duration));
+    assert_eq!(timing.output_ts_offset(), Some(Duration::from_millis(456)));
+    assert!(!timing.retained_stream_timestamps());
+    assert!(!timing.has_opaque_input_options());
+}
+
+#[test]
+fn later_caption_input_does_not_inherit_first_input_seek_or_video_options() {
+    let mut request = request();
+    request.state.start = Some(Duration::from_secs(40));
+    request.state.output_start = Some(Duration::from_secs(2));
+    request.inputs[0]
+        .input_options
+        .extend(["-itsoffset".into(), "5".into()]);
+    request.inputs[2].input_instance = 1;
+    let (command, plan) = build(HardwareAccelerationKind::None, request.clone());
+    assert_eq!(
+        command,
+        build_pipeline_command(HardwareAccelerationKind::None, request).unwrap()
+    );
+    assert_eq!(plan.caption_physical_input_index(), 1);
+    let timing = plan.timing();
+    assert_eq!(timing.input_seek(), None);
+    assert_eq!(timing.effective_input_seek_microseconds(), Some(0));
+    assert_eq!(timing.output_seek(), Some(Duration::from_secs(2)));
+    assert!(!timing.has_opaque_input_options());
+}
+
+#[test]
+fn only_original_options_emitted_for_the_actual_caption_owner_make_seek_opaque() {
+    let mut request = request();
+    request.inputs[2]
+        .input_options
+        .extend(["-ss".into(), "15".into()]);
+    // Deduplicated logical caption options never reach the shared physical input.
+    let (_, shared) = build(HardwareAccelerationKind::None, request.clone());
+    assert!(!shared.timing().has_opaque_input_options());
+    assert_eq!(shared.timing().effective_input_seek_microseconds(), Some(0));
+    request.inputs[2].input_instance = 1;
+    let (_, independent) = build(HardwareAccelerationKind::None, request.clone());
+    assert!(independent.timing().has_opaque_input_options());
+    assert_eq!(independent.timing().input_seek(), None);
+    assert_eq!(
+        independent.timing().effective_input_seek_microseconds(),
+        None
+    );
+    request.inputs[2].input_instance = 0;
+    request.inputs[0]
+        .input_options
+        .extend(["-ss".into(), "25".into()]);
+    let (_, owner) = build(HardwareAccelerationKind::None, request);
+    assert!(owner.timing().has_opaque_input_options());
+    assert_eq!(owner.timing().effective_input_seek_microseconds(), None);
+}
+
+#[test]
+fn intel_reopen_audio_options_do_not_override_caption_owner_seek() {
+    let mut request = request();
+    request.state.start = Some(Duration::from_millis(500));
+    request.inputs[1]
+        .input_options
+        .extend(["-ss".into(), "7".into()]);
+    let (_, shared) = build(HardwareAccelerationKind::None, request.clone());
+    assert!(shared.timing().has_opaque_input_options());
+    assert_eq!(shared.timing().effective_input_seek_microseconds(), None);
+    for acceleration in [
+        HardwareAccelerationKind::Vaapi,
+        HardwareAccelerationKind::Qsv,
+    ] {
+        let (_, reopened) = build(acceleration, request.clone());
+        assert!(!reopened.timing().has_opaque_input_options());
+        assert_eq!(
+            reopened.timing().input_seek(),
+            Some(Duration::from_millis(500))
+        );
+        assert_eq!(
+            reopened.timing().effective_input_seek_microseconds(),
+            Some(500_000)
+        );
+    }
+}
+
+#[test]
+fn retained_timestamps_and_unparseable_seeks_never_disappear_from_timing() {
+    let mut request = request();
+    request.state.retained_stream_timestamps = true;
+    request.state.start = Some(Duration::from_hours(10_000));
+    let (_, plan) = build(HardwareAccelerationKind::None, request);
+    assert!(plan.timing().retained_stream_timestamps());
+    assert_eq!(
+        plan.timing().input_seek(),
+        Some(Duration::from_hours(10_000))
+    );
+    assert_eq!(plan.timing().effective_input_seek_microseconds(), None);
+}
+
+#[test]
+fn song_background_conversion_keeps_moved_per_input_seek_unknown() {
+    let mut request = request();
+    request.state.start = Some(Duration::from_secs(40));
+    let request = request.with_song_background(
+        InputFile::video("song.png"),
+        SourceVideoStream::new(SourceVideoCodec::Unknown),
+        false,
+    );
+    assert_eq!(request.state.start, None);
+    assert_eq!(request.state.output_start, None);
+    let old = build_pipeline_command(HardwareAccelerationKind::None, request.clone()).unwrap();
+    let (command, plan) = build(HardwareAccelerationKind::None, request);
+    assert_eq!(command, old);
+    assert_eq!(plan.video_stream(), Some((0, 0)));
+    assert_eq!(plan.audio_stream(), Some((1, 0)));
+    assert_eq!(plan.caption_physical_input_index(), 1);
+    assert_eq!(plan.timing().input_seek(), None);
+    assert!(plan.timing().has_opaque_input_options());
+    assert_eq!(plan.timing().effective_input_seek_microseconds(), None);
+}
+
+#[test]
+fn suppressed_fmp4_transport_offset_is_not_reported_as_emitted() {
+    let mut request = request();
+    request.state.output_ts_offset = Some(Duration::from_secs(5));
+    request.state.output_format = crate::OutputFormat::HlsMp4;
+    request.state.hls = Some(crate::HlsOutput {
+        segment_template: "segment-%d.m4s".into(),
+        init_template: Some("init.mp4".into()),
+        playlist_path: "stream.m3u8".into(),
+        segment_options: None,
+        is_first_transcode: true,
+        discontinuity: false,
+        troubleshooting: false,
+    });
+    let (command, plan) = build(HardwareAccelerationKind::None, request.clone());
+    assert_eq!(
+        command,
+        build_pipeline_command(HardwareAccelerationKind::None, request).unwrap()
+    );
+    assert!(!command
+        .arguments
+        .iter()
+        .any(|arg| arg == "-output_ts_offset"));
+    assert_eq!(plan.timing().output_ts_offset(), None);
 }

@@ -274,6 +274,22 @@ pub(crate) fn physical_input_options(
     intel: bool,
 ) -> Vec<String> {
     let input = owners[index];
+    let mut options = physical_input_base_options(inputs, input, intel);
+    if !owners[..index]
+        .iter()
+        .any(|owner| owner.source_key() == input.source_key())
+    {
+        options.extend(source_teletext_caption_input_options(inputs, input));
+    }
+    options
+}
+
+/// Options supplied on physical owners, before generated caption decoder flags.
+pub(crate) fn physical_input_base_options(
+    inputs: &[InputFile],
+    input: &InputFile,
+    intel: bool,
+) -> Vec<String> {
     let mut options = Vec::new();
     if input.kind == InputKind::Video && same_audio_and_video(inputs) && !intel {
         for audio in inputs.iter().filter(|audio| {
@@ -285,12 +301,6 @@ pub(crate) fn physical_input_options(
         }
     }
     options.extend(input.input_options.iter().cloned());
-    if !owners[..index]
-        .iter()
-        .any(|owner| owner.source_key() == input.source_key())
-    {
-        options.extend(source_teletext_caption_input_options(inputs, input));
-    }
     options
 }
 

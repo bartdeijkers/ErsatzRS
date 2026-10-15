@@ -1,12 +1,94 @@
 //! Generated native caption input observations, sealed to one complete command.
 
-use std::fmt;
+use std::{fmt, time::Duration};
 
 use crate::{
-    command::{input_prefix_options, physical_input_options, selected_bitmap_burn_input},
+    command::{
+        input_prefix_options, physical_input_base_options, physical_input_options,
+        selected_bitmap_burn_input,
+    },
     physical_inputs::{physical_input_index, physical_inputs},
-    FfmpegCommand, InputFile, InputKind, PipelineStep,
+    FfmpegCommand, FfmpegState, InputFile, InputKind, PipelineStep,
 };
+
+/// Typed generated clock settings, distinct from native decoding observations.
+///
+/// Input seek applies only to the caption's physical input. Output seek,
+/// duration and timestamp offset remain separate output operations. Opaque
+/// supplied input options may override those settings; they are not parsed or
+/// treated as a qualified native policy. No value proves actual seek landing,
+/// bitmap onset, video-frame alignment or source-caption eligibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceTeletextInputTiming {
+    input_seek: Option<Duration>,
+    output_seek: Option<Duration>,
+    duration: Option<Duration>,
+    output_ts_offset: Option<Duration>,
+    retained_stream_timestamps: bool,
+    opaque_input_options: bool,
+}
+
+impl SourceTeletextInputTiming {
+    pub(crate) fn from_state(state: &FfmpegState) -> Self {
+        Self {
+            input_seek: None,
+            output_seek: state.output_start,
+            duration: state.duration,
+            output_ts_offset: state.output_ts_offset,
+            retained_stream_timestamps: state.retained_stream_timestamps,
+            opaque_input_options: false,
+        }
+    }
+
+    /// Exact typed pre-input seek; absent for a separately opened caption input.
+    /// Opaque supplied options can still contain an unqualified seek.
+    #[must_use]
+    pub const fn input_seek(self) -> Option<Duration> {
+        self.input_seek
+    }
+
+    /// Parsed generated pre-input seek, or zero when none was generated.
+    /// Original owner options make this unknown rather than assuming zero.
+    /// Retained-clock mode still needs separate native timestamp semantics.
+    #[must_use]
+    pub fn effective_input_seek_microseconds(self) -> Option<i64> {
+        if self.opaque_input_options {
+            return None;
+        }
+        crate::parsed_time_limit_microseconds(self.input_seek.unwrap_or_default())
+    }
+
+    /// Exact output-side seek, independent of pre-input seeking.
+    #[must_use]
+    pub const fn output_seek(self) -> Option<Duration> {
+        self.output_seek
+    }
+
+    /// Exact typed output duration, before native argument parsing.
+    #[must_use]
+    pub const fn duration(self) -> Option<Duration> {
+        self.duration
+    }
+
+    /// Output transport timestamp offset, not a source seek.
+    #[must_use]
+    pub const fn output_ts_offset(self) -> Option<Duration> {
+        self.output_ts_offset
+    }
+
+    /// Whether the generated command retains source timestamps with `copyts`.
+    #[must_use]
+    pub const fn retained_stream_timestamps(self) -> bool {
+        self.retained_stream_timestamps
+    }
+
+    /// Original options actually emitted for this owner may alter native timing.
+    /// Options on a deduplicated caption input are not emitted and do not count.
+    #[must_use]
+    pub const fn has_opaque_input_options(self) -> bool {
+        self.opaque_input_options
+    }
+}
 
 /// Final generated physical inputs for the first selected source bitmap Burn.
 ///
@@ -23,6 +105,7 @@ pub struct SourceTeletextInputPlan {
     video: Option<(usize, usize)>,
     audio: Option<(usize, usize)>,
     physical_options: Vec<String>,
+    timing: SourceTeletextInputTiming,
 }
 
 impl fmt::Debug for SourceTeletextInputPlan {
@@ -40,8 +123,10 @@ impl SourceTeletextInputPlan {
     pub(crate) fn from_generated(
         command: &FfmpegCommand,
         inputs: &[InputFile],
+        original_inputs: &[InputFile],
         steps: &[PipelineStep],
         intel: bool,
+        mut timing: SourceTeletextInputTiming,
     ) -> Option<Self> {
         let caption = selected_bitmap_burn_input(inputs)?;
         caption.streams.first()?.source_teletext_page?;
@@ -65,6 +150,35 @@ impl SourceTeletextInputPlan {
             caption_index,
             intel,
         ));
+        // The generator emits StreamSeek before the first physical -i only.
+        // A later caption owner must not borrow the video's pre-input seek.
+        timing.input_seek = (caption_index == 0)
+            .then(|| {
+                steps.iter().find_map(|step| match step {
+                    PipelineStep::StreamSeek { position } => Some(*position),
+                    _ => None,
+                })
+            })
+            .flatten();
+        // Some output modes deliberately suppress the requested TS offset.
+        if !steps.iter().any(|step| {
+            matches!(
+                step,
+                PipelineStep::Generic {
+                    name: "output_ts_offset",
+                    ..
+                }
+            )
+        }) {
+            timing.output_ts_offset = None;
+        }
+        let owner = owners[caption_index];
+        timing.opaque_input_options = original_inputs
+            .iter()
+            .find(|input| input.kind == owner.kind && input.source_key() == owner.source_key())
+            .is_none_or(|original| {
+                !physical_input_base_options(original_inputs, original, intel).is_empty()
+            });
         Some(Self {
             command: command.clone(),
             caption: caption.clone(),
@@ -72,6 +186,7 @@ impl SourceTeletextInputPlan {
             video: selected_stream(InputKind::Video, false),
             audio: selected_stream(InputKind::Audio, true),
             physical_options,
+            timing,
         })
     }
 
@@ -129,6 +244,12 @@ impl SourceTeletextInputPlan {
     #[must_use]
     pub fn physical_input_options(&self) -> &[String] {
         &self.physical_options
+    }
+
+    /// Clock settings from this sealed generation, not inferred from argv.
+    #[must_use]
+    pub const fn timing(&self) -> SourceTeletextInputTiming {
+        self.timing
     }
 }
 

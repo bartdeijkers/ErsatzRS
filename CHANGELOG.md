@@ -76,6 +76,10 @@ release section when tagging a release.
   labels. Command/page mismatches retain the existing ordinary playback fallback.
   Native opening now checks generated stream selections and caption PID against
   the same held source; stale stream roles also preserve ordinary playback.
+  Generated caption plans retain separate input/output seeks, duration and
+  transport offset without interpreting custom options as native timing proof.
+  Effective-time observations reject arguments outside FFmpeg's generated-hour
+  syntax instead of claiming an interval the native parser cannot accept.
   Final consumer-policy binding, complete inherited page context and general
   source/seek semantics remain unqualified; route acceptance stays open.
 - Add a representative two-channel teletext acceptance flow through ordinary

@@ -85,12 +85,14 @@ impl SourceTeletextPlaybackInterval {
     /// Flooring the requested end instead can add a spurious microsecond when
     /// the discarded fractions carry. Exact caller intent remains unchanged.
     ///
-    /// Empty effective duration, native signed-range conversion or end overflow
-    /// remains unknown (`None`). This is no source-clock or cue admission.
+    /// Each generated argument must also fit native's four-digit hour syntax.
+    /// Empty effective duration, an unparseable argument or end overflow remains
+    /// unknown (`None`). This is no source-clock or cue admission.
     #[must_use]
     pub fn effective_native_interval(self) -> Option<SourceTeletextEffectiveInterval> {
-        let start_microseconds = i64::try_from(self.start.as_micros()).ok()?;
-        let duration_microseconds = i64::try_from(self.duration().as_micros()).ok()?;
+        let start_microseconds = ersatzrs_ffmpeg::parsed_time_limit_microseconds(self.start)?;
+        let duration_microseconds =
+            ersatzrs_ffmpeg::parsed_time_limit_microseconds(self.duration())?;
         if duration_microseconds == 0 {
             return None;
         }
@@ -201,22 +203,22 @@ mod tests {
     }
 
     #[test]
-    fn native_signed_microsecond_boundaries_never_overflow_or_clamp() {
-        let maximum = u64::try_from(i64::MAX).unwrap();
-        let exact = SourceTeletextPlaybackInterval::from_start_and_duration(
-            Duration::from_micros(maximum - 1),
-            Duration::from_micros(1),
-        )
-        .unwrap()
-        .effective_native_interval()
-        .unwrap();
-        assert_eq!(exact.start_microseconds(), i64::MAX - 1);
-        assert_eq!(exact.end_microseconds(), i64::MAX);
-        assert_eq!(exact.duration_microseconds(), 1);
+    fn native_arguments_require_four_hour_digits_but_their_sum_is_not_an_argument() {
+        let last = Duration::new(35_999_999, 999_999_999);
+        let effective = SourceTeletextPlaybackInterval::from_start_and_duration(last, last)
+            .unwrap()
+            .effective_native_interval()
+            .unwrap();
+        assert_eq!(effective.start_microseconds(), 35_999_999_999_999);
+        assert_eq!(effective.duration_microseconds(), 35_999_999_999_999);
+        assert_eq!(effective.end_microseconds(), 71_999_999_999_998);
         for (start, duration) in [
-            (Duration::from_micros(maximum), Duration::from_micros(1)),
-            (Duration::from_micros(maximum + 1), Duration::from_micros(1)),
-            (Duration::ZERO, Duration::from_micros(maximum + 1)),
+            (Duration::from_hours(10_000), Duration::from_secs(1)),
+            (Duration::ZERO, Duration::from_hours(10_000)),
+            (
+                Duration::from_micros(u64::try_from(i64::MAX).unwrap()),
+                Duration::from_micros(1),
+            ),
             (
                 Duration::MAX.saturating_sub(Duration::from_nanos(1)),
                 Duration::from_nanos(1),
@@ -228,13 +230,5 @@ mod tests {
             assert_eq!(requested.start(), start);
             assert_eq!(requested.duration(), duration);
         }
-        let exact_duration = SourceTeletextPlaybackInterval::from_start_and_duration(
-            Duration::ZERO,
-            Duration::from_micros(maximum),
-        )
-        .unwrap()
-        .effective_native_interval()
-        .unwrap();
-        assert_eq!(exact_duration.duration_microseconds(), i64::MAX);
     }
 }

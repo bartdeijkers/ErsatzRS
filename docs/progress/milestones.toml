@@ -2968,6 +2968,76 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 generated clock and native-parser checkpoint (partial):
+Criterion: retain actual generated caption-input seek scope separately from
+output seek/duration/transport offset before qualifying source windows. The
+sealed companion now records typed clock settings captured before request
+consumption and resolved against final physical owners/StreamSeek steps.
+Only physical input0 inherits the prefix seek. Original options actually emitted
+for the caption owner remain opaque; deduplicated logical caption options do not
+create fake overrides, while merged audio options and moved song seeks cannot
+silently become zero. Intel reopened audio remains a distinct owner. Retained
+copyts mode stays explicit. No raw argv timing parser or new runtime admission
+is introduced; generated executable/environment/arguments remain unchanged.
+
+A concrete conversion defect was found: checked signed microseconds alone did
+not prove that generated HH:MM:SS arguments were parseable. Native n9's %J
+accepts at most four hour digits. The shared generated-time conversion now
+rejects either independently unparseable seek or duration, retains exact intent
+and floors fractional microseconds independently. Their summed interval end is
+not a separately parsed argument and is not constrained to four hour digits.
+Pinned FFmpeg n9.0-20260805 (SHA0da9feb315425f096496ff3d86afe05abf4099e3973da17efe93f5a676cee73a)
+completes a one-frame lavfi output with -t9999:59:59.9999999, exit0; the same
+command with -t10000:00:00.0000000 rejects option parsing, exit234. Both finish
+within their five-second bound. Evidence: tmp/phase9-consumer-policy/native-time-parser.
+This corrects an overstated current-command observation; it does not accept a
+new permanent product limitation or change ordinary playback commands.
+
+Focused working-tree verification passes 328 cases, including all 234 unchanged
+pipeline argv/filter snapshots and clock/owner/runtime/recovery tests, Nextest
+9e2b3312-f845-478e-8c38-36ce8aad16f3. A separate final ignored native case passes,
+9eb2a9e2-a4ac-4801-a453-b04ea05d9283: the existing eight-second staggered source
+(SHA c58a94db4893823a979044e6ab5131e6104081acb44309b367677885f5f7b18c) yields
+real page888 and page200 receipts under the same held guard. Six exact generated
+software commands retain all input/decoder/stream options, environment and graph:
+Off/888/200, each unseeked and at input seek0.5s, finite4s/492x250 output. Typed
+seek/duration assertions and full command seals precede retained-process capture.
+Original source bytes, actual guard/work ownership and drained cleanup remain.
+Each resulting MPEG-TS is independently AV-decoded: 120 frames retain their own
+native PTS trace; every fifth decoded gray frame is joined without a new fps grid.
+
+Both Burn pages are distinct and visible at first unseeked output PTS0; Off stays
+black. Sought page200 is visible at its first output frame, but sought page888
+matches Off through sampled PTS3.670333 and is visible at3.837167. This bounds an
+observed transition, not its exact or expected source-relative onset. Whole-source
+receipts each have eight events:888 first1661067us/last8660689us;200 first1060978us/
+last8061344us. Actual software graphs contain no setpts reset; -r30000/1001 and
+-fps_mode:v cfr can duplicate video onto the output grid. Off's first unseeked
+muxed framePTS0.021333 also differs from Burn's0. OutputPTS0 therefore does not
+prove source video onset. The known missing post-seek packetPTS is a hypothesis,
+not a proven explanation for this page-specific presentation. No production
+clock rewrite or blanket restriction is justified from these samples alone.
+Evidence: tmp/phase9-consumer-policy (frozen owned Rust, final focused/native logs,
+per-case sealed commands, MPEG-TS, actual frame traces, pixels and summary).
+Tests precede only a rustdoc-format lint correction, with no executable change.
+Final strict affected three-crate/all-target Clippy, formatting, architecture
+and progress checks pass. No new lint exemption conceals a production warning.
+Reuse cd19e52f's genuine legacy/Hybrid route/TSDuck results and 108e1a08's ordinary
+host smoke: final argv snapshots and unchanged runtime admission/recovery support
+that reuse. This is scoped working-tree proof, not exact-source full CI.
+
+Next correlate the actual sought bitmap completion event and first kept video
+frame to original source events, accounting separately for native normalization
+and CFR duplication. Whole-source byte EOF qualification is not temporal cue
+coverage. The origin probe still uses fixed unseeked discovery; expected onset,
+unknown timestamps and complete inherited page context must be joined before
+later-cue runtime admission. Complete authored Level2.5,
+Level1/1.5 fallback, pinned QTeletextMaker interchange/metadata/templates/zones,
+profiles/themes, Lua/restart, localized headed admin, independent decoding,
+TSDuck/suitable-client navigation and playback/six-platform safety remain open.
+All milestone acceptance/status/dependency records remain unchanged; production
+TV-guide work waits for independent engine acceptance. No push/publication.
+
 2026-10-15 same-held native consumer inventory checkpoint (partial):
 Criterion: connect generated physical input selection to the actual original
 source before native open/retry, retaining ordinary playback when selected

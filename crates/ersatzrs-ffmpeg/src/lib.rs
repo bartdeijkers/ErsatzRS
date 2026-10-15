@@ -40,7 +40,7 @@ pub use locator::*;
 pub use options::*;
 pub use pipeline::*;
 pub use runtime::*;
-pub use source_teletext_input_plan::SourceTeletextInputPlan;
+pub use source_teletext_input_plan::{SourceTeletextInputPlan, SourceTeletextInputTiming};
 pub use teletext_probe::*;
 pub use version::*;
 
