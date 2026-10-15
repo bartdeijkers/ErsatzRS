@@ -80,7 +80,9 @@ release section when tagging a release.
   transport offset without interpreting custom options as native timing proof.
   Effective-time observations reject arguments outside FFmpeg's generated-hour
   syntax instead of claiming an interval the native parser cannot accept.
-  Final consumer-policy binding, complete inherited page context and general
+  Comparable generated seek/duration mismatches now reject before opening or
+  retrying a source-caption consumer, preserving ordinary playback fallback.
+  Native seek initialization, complete inherited page context and general
   source/seek semantics remain unqualified; route acceptance stays open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible

@@ -2968,6 +2968,76 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 comparable consumer interval checkpoint (partial):
+Criterion: bind the actual source-caption consumer to the retained playback
+request before open/retry, preserving ordinary playback on rejection. A fresh
+internally valid command/plan for the same file/page could previously carry a
+different seek or duration. The shared pure command fence now rejects independently
+parseable mismatches when video and caption share seek-bearing physical input0.
+Seek and duration use the existing native microsecond conversion independently;
+output timestamp offset remains separate. Missing output duration stays unknown
+while known seek still compares. Independent caption owners, opaque options,
+retained clocks and output-side seeks remain noncomparable, not refused merely
+for being unknown and not promoted to new timing/cue authority. Generated argv,
+source admission, cleanup and ordinary recovery mechanisms remain unchanged.
+
+Eighteen related checks pass across two working-tree selections: interval/native
+precision and fresh generated-plan tests, unchanged final HLS plan/retry,
+cancellation and no-SQL admission, and both genuine ordinary legacy/Hybrid Local
+routes. Actual receipts use matching nonzero fractional timing. Independently
+rebuilt valid seals for a different seek or duration reject at BOTH before_open
+and before_retry; rounded native-equivalent timing, absent duration and separate
+caption owners do not create false mismatches. Dynamic wrong-role rejection is
+still reached. Real streams retain Off, English/Dutch audio, page888 Burn,
+authored200, TSDuck and source/process/admission cleanup. Nextest selections
+ e2c9d734-e485-40b2-9e7a-5b6444f5b9ed (15 passes) and
+ 051e2ce8-d61d-48dc-92b6-546868b03e7d (3 passes)
+are NOT green runs: each also contains the exploratory diagnostic failure below.
+Final strict affected three-crate/all-target Clippy, formatting, architecture
+and progress checks pass (progress retains its summary-length advisory). Two
+post-test lint corrections change only an equal-duration test spelling and a
+verbatim helper extraction called at the same position. Exact block equality,
+frozen sources and test-reuse.json retain the applicable runtime evidence.
+Reuse unchanged234 pipeline argv snapshots and earlier ordinary host smoke from
+the generated-policy checkpoint below. No full CI or milestone acceptance claim.
+
+Concrete remaining clock-proof blocker, preserved uncommitted experiment:
+The existing actual worker's bounded test-only complete-stderr adapter supports
+separate filter taps and packet/pre-CFR logging; original diagnostics/cleanup
+regressions pass19 cases (12a9a69c-1368-4589-8223-b77a8503af0c). A combined first
+trace failed because native multi-call checksum logging interleaved packet lines.
+Separating traces gives contiguous ordinals; one run passed complete transport
+comparison (991f9273-585d-494b-b4fd-89e227903a87). Its observations join unseeked
+caption800122us to source event1661067us and sought caption3299856us to the FOURTH
+event4660800us. First kept video reconstructs raw397920/90000 vs441120/90000.
+Transparent heartbeats can precede older bitmaps in delivery order; NOPTS stays
+unknown and CFR outputPTS0 is not a source origin. These are individual native
+observations, not generally calibrated consumer/cue evidence.
+
+Later calibration rejects: sealed baseline and logging derivatives have different
+transport bytes. A final diagnostic-only correction retains every baseline and
+derivative BEFORE asserting equality. Independent full decoded SHA256 framehash
+comparison (all120 video frames, demux timebase1/90000) shows actual pixel changes:
+taps differs in frame113/PTS339339; packet logging differs in18 frames, first
+frame9/PTS27027. All video counts/PTS/DTS/durations and164 decoded audio frames
+match. Equality therefore cannot be weakened to packet interleaving or metadata.
+No derivative trace is accepted as evidence for that sealed baseline. Source
+clock rewrites, disabling CFR and blanket nonzero-seek refusal are unjustified.
+Evidence: tmp/phase9-bitmap-clock-join (mixed-run logs, saved commands/TS/traces,
+full decoded comparison and frozen source hashes). Four diagnostic source edits
+remain separate from this verified interval checkpoint; no experiment is lost.
+Next test the concrete hypothesis that identical UNLOGGED sealed commands vary
+under native scheduling, against the alternative that logging/taps perturb
+caption/video scheduling. Reuse the exact held source, persist all outputs and
+compare complete decoded pixels/clocks before transferring any trace authority.
+Then qualify page888's retained nonzero cue using actual decoder initialization,
+landing and output clock in the existing selector. Whole-source EOF remains
+insufficient. General initializers, wrap/charset ambiguity and large/multiwindow
+sources remain open. All129 milestone acceptance/status/dependency contracts and
+full authored Level2.5/editor/profile/Lua/restart/admin/client/platform criteria
+remain unchanged. Production guide content waits for independent engine
+acceptance. No push/publication.
+
 2026-10-15 generated clock and native-parser checkpoint (partial):
 Criterion: retain actual generated caption-input seek scope separately from
 output seek/duration/transport offset before qualifying source windows. The

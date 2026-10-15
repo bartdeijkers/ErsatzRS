@@ -102,7 +102,8 @@ impl PlaybackSource {
     ///
     /// # Errors
     /// Returns a static unavailable error for missing/stale command plans or a
-    /// caption path, instance, method, stream or selected-page mismatch.
+    /// caption path, instance, method, stream, selected-page or known generated
+    /// playback-interval mismatch. Unknown clock policies gain no cue authority.
     pub fn check_consumer_command(
         &self,
         command: &ersatzrs_ffmpeg::FfmpegCommand,
@@ -120,6 +121,9 @@ impl PlaybackSource {
             || actual.subtitle_method != expected.subtitle_method
             || actual.is_image_based_subtitle != expected.is_image_based_subtitle
             || actual.streams.first() != expected.streams.first()
+            || self
+                .playback_interval
+                .is_some_and(|interval| interval.has_known_consumer_mismatch(plan))
         {
             return Err(unavailable());
         }

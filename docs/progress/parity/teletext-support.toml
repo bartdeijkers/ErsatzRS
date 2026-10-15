@@ -68,8 +68,11 @@ Linux x64/Windows-interop/QEMU ARM64/ARMv7:admission/tokens/reaping,
 video/selected audio/Dutch200/TSDuck. Finite Local888 scan/Burn works through
 legacy/Hybrid with two audio choices, Off/stale fallback, AV/authored200 and
 default2 cleanup. P9A-04 owns generated input/command fences and same-held native
-selection/PID checks for web/HLS, typed physical/output clock settings and
-native-parseable effective times. Native policy/bitmap timing, general seeks,
+selection/PID checks for web/HLS, typed physical/output clocks and native times.
+Comparable seek/duration mismatches reject before open/retry. Diagnostic traces
+change actual pixels, so transferring their clock observations to sealed output
+is blocked; P9A-04 owns the red and next unlogged scheduling test. Native cue
+eligibility, general seeks,
 provider/Next and native Windows/ARM acceptance remain open.
 
 P9A-02: decoder Health/six-RID licenses.

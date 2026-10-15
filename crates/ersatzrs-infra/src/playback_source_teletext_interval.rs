@@ -45,6 +45,41 @@ impl SourceTeletextEffectiveInterval {
 }
 
 impl SourceTeletextPlaybackInterval {
+    /// Reject only a known generated request mismatch for a shared source input.
+    /// This does not qualify native seek landing, decoder state or cue coverage.
+    pub(super) fn has_known_consumer_mismatch(
+        self,
+        plan: &ersatzrs_ffmpeg::SourceTeletextInputPlan,
+    ) -> bool {
+        let timing = plan.timing();
+        // StreamSeek belongs to physical input zero. An independent caption
+        // owner can intentionally remain unseeked while the video is sought.
+        if plan.caption_physical_input_index() != 0
+            || plan
+                .video_stream()
+                .is_none_or(|(physical, _)| physical != 0)
+            || timing.has_opaque_input_options()
+            || timing.retained_stream_timestamps()
+            || timing.output_seek().is_some()
+        {
+            return false;
+        }
+        let seek_mismatch = timing
+            .effective_input_seek_microseconds()
+            .zip(ersatzrs_ffmpeg::parsed_time_limit_microseconds(
+                self.start(),
+            ))
+            .is_some_and(|(actual, expected)| actual != expected);
+        let duration_mismatch = timing
+            .duration()
+            .and_then(ersatzrs_ffmpeg::parsed_time_limit_microseconds)
+            .zip(ersatzrs_ffmpeg::parsed_time_limit_microseconds(
+                self.duration(),
+            ))
+            .is_some_and(|(actual, expected)| actual != expected);
+        seek_mismatch || duration_mismatch
+    }
+
     /// Preserve a finite request, rejecting empty or overflowing intervals.
     /// An absent duration remains unknown at the caller; never substitute EOF,
     /// an arbitrary horizon or a rounded seconds value for it.
@@ -106,6 +141,110 @@ impl SourceTeletextPlaybackInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn consumer_request() -> ersatzrs_ffmpeg::PipelineRequest {
+        use ersatzrs_ffmpeg::{DesiredVideoState, InputFile, PipelineRequest};
+        let mut request = PipelineRequest::new(
+            InputFile::video("synthetic-source.ts"),
+            DesiredVideoState::h264_1080p(),
+        );
+        request.inputs.push(InputFile::teletext_subtitle(
+            "synthetic-source.ts",
+            2,
+            ersatzrs_domain::TeletextPageNumber::new(888).unwrap(),
+        ));
+        request.state.start = Some(Duration::from_secs(40));
+        request.state.duration = Some(Duration::from_secs(12));
+        request
+    }
+
+    fn consumer_plan(
+        request: ersatzrs_ffmpeg::PipelineRequest,
+    ) -> ersatzrs_ffmpeg::SourceTeletextInputPlan {
+        let (command, plan) = ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+            ersatzrs_domain::HardwareAccelerationKind::None,
+            request,
+        )
+        .unwrap();
+        let plan = plan.unwrap();
+        assert!(plan.matches_command(&command));
+        plan
+    }
+
+    #[test]
+    fn independently_sealed_shared_consumers_reject_changed_seek_or_duration() {
+        let interval = SourceTeletextPlaybackInterval::from_start_and_duration(
+            Duration::from_secs(40),
+            Duration::from_secs(12),
+        )
+        .unwrap();
+        let request = consumer_request();
+        assert!(!interval.has_known_consumer_mismatch(&consumer_plan(request.clone())));
+        let mut changed = request.clone();
+        changed.state.start = Some(Duration::from_secs(41));
+        assert!(interval.has_known_consumer_mismatch(&consumer_plan(changed)));
+        let mut changed = request;
+        changed.state.duration = Some(Duration::from_secs(13));
+        assert!(interval.has_known_consumer_mismatch(&consumer_plan(changed)));
+    }
+
+    #[test]
+    fn consumer_identity_uses_native_precision_and_keeps_transport_offset_separate() {
+        let interval = SourceTeletextPlaybackInterval::from_start_and_duration(
+            Duration::new(40, 123_456_789),
+            Duration::new(12, 987_654_321),
+        )
+        .unwrap();
+        let mut request = consumer_request();
+        request.state.start = Some(Duration::new(40, 123_456_999));
+        request.state.duration = Some(Duration::new(12, 987_654_999));
+        request.state.output_ts_offset = Some(Duration::from_mins(10));
+        assert!(!interval.has_known_consumer_mismatch(&consumer_plan(request)));
+    }
+
+    #[test]
+    fn absent_duration_does_not_invent_a_bound_but_known_seek_still_matches() {
+        let interval = SourceTeletextPlaybackInterval::from_start_and_duration(
+            Duration::from_secs(40),
+            Duration::from_secs(12),
+        )
+        .unwrap();
+        let mut request = consumer_request();
+        request.state.duration = None;
+        assert!(!interval.has_known_consumer_mismatch(&consumer_plan(request.clone())));
+        request.state.start = Some(Duration::from_secs(41));
+        assert!(interval.has_known_consumer_mismatch(&consumer_plan(request)));
+    }
+
+    #[test]
+    fn independent_caption_and_unqualified_clock_policies_remain_noncomparable() {
+        let interval = SourceTeletextPlaybackInterval::from_start_and_duration(
+            Duration::from_secs(40),
+            Duration::from_secs(12),
+        )
+        .unwrap();
+        let mut independent = consumer_request();
+        independent.inputs.last_mut().unwrap().input_instance = 1;
+        let plan = consumer_plan(independent);
+        assert_eq!(plan.caption_physical_input_index(), 1);
+        assert_eq!(plan.video_stream().unwrap().0, 0);
+        assert_eq!(plan.timing().effective_input_seek_microseconds(), Some(0));
+        assert!(!interval.has_known_consumer_mismatch(&plan));
+
+        let mut opaque = consumer_request();
+        opaque.inputs[0]
+            .input_options
+            .extend(["-itsoffset".into(), "5".into()]);
+        let mut retained = consumer_request();
+        retained.state.retained_stream_timestamps = true;
+        let mut output_seek = consumer_request();
+        output_seek.state.output_start = Some(Duration::from_secs(3));
+        for mut request in [opaque, retained, output_seek] {
+            request.state.start = Some(Duration::from_secs(41));
+            request.state.duration = Some(Duration::from_secs(13));
+            assert!(!interval.has_known_consumer_mismatch(&consumer_plan(request)));
+        }
+    }
 
     #[test]
     fn requested_cue_retains_subsecond_seek_and_exclusive_end() {

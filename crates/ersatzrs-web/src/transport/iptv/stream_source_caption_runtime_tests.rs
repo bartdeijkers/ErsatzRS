@@ -439,8 +439,8 @@ async fn late_source_rejection_uses_actual_receipt(
         subtitle_mode: ChannelSubtitleMode::Any,
         streaming_mode: StreamingMode::TransportStream,
         playback_interval: runtime::SourceTeletextPlaybackInterval::from_start_and_duration(
-            Duration::ZERO,
-            Duration::from_secs(12),
+            Duration::new(2, 123_456_789),
+            Duration::new(9, 876_543_210),
         ),
         deadline,
     })
@@ -451,8 +451,8 @@ async fn late_source_rejection_uses_actual_receipt(
     let interval = receipt
         .playback_interval()
         .expect("actual finite caller timing survives source preparation");
-    assert_eq!(interval.start(), Duration::ZERO);
-    assert_eq!(interval.end(), Duration::from_secs(12));
+    assert_eq!(interval.start(), Duration::new(2, 123_456_789));
+    assert_eq!(interval.duration(), Duration::new(9, 876_543_210));
     assert_eq!(locker.active_teletext_work(), 0);
     let reservation = try_reserve_active_transcode(
         DEFAULT_ACTIVE_TRANSCODE_LIMIT,
@@ -562,6 +562,9 @@ async fn assert_native_inventory_fallback(
             .with_index(caption.streams[0].index),
     );
     request.inputs.push(caption);
+    let interval = receipt.playback_interval().unwrap();
+    request.state.start = Some(interval.start());
+    request.state.duration = Some(interval.duration());
     request.ffmpeg_executable = Some("synthetic-caption-command-not-spawned".into());
     let (command, plan) = ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
         ersatzrs_domain::HardwareAccelerationKind::None,
@@ -623,6 +626,9 @@ async fn assert_consumer_plan_fences(
         desired,
     );
     request.inputs.push(caption.clone());
+    let interval = receipt.playback_interval().unwrap();
+    request.state.start = Some(interval.start());
+    request.state.duration = Some(interval.duration());
     request.ffmpeg_executable = Some("synthetic-caption-command-not-spawned".into());
     let (primary, plan) = ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
         ersatzrs_domain::HardwareAccelerationKind::None,
@@ -675,6 +681,7 @@ async fn assert_consumer_plan_fences(
         retried.before_retry(&primary, None).await.is_err(),
         "retry cannot borrow its previous plan"
     );
+    assert_consumer_interval_fences(&request, &receipt, &consumer, reservation, deadline).await;
     let stream = request
         .inputs
         .last_mut()
@@ -695,8 +702,79 @@ async fn assert_consumer_plan_fences(
             .await
             .is_err()
     );
-    println!("generated consumer fences: valid initial/fresh retry accepted; changed executable/argv, missing or reused retry plan and independently sealed wrong page rejected before spawn");
+    println!("generated consumer fences: matching nonzero initial/fresh retry and native-equivalent timing accepted; changed seek/duration, executable/argv, missing or reused retry plan and independently sealed wrong page rejected before spawn; unknown duration/independent caption clock not inferred");
     (consumer, primary)
+}
+
+async fn assert_consumer_interval_fences(
+    request: &ersatzrs_ffmpeg::PipelineRequest,
+    receipt: &std::sync::Arc<ersatzrs_infra::playback::source_teletext::runtime::PlaybackSource>,
+    consumer: &super::super::source_teletext::Consumer,
+    reservation: &ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation,
+    deadline: tokio::time::Instant,
+) {
+    let interval = receipt.playback_interval().unwrap();
+    for (start, duration) in [
+        (
+            interval.start() + Duration::from_secs(1),
+            interval.duration(),
+        ),
+        (
+            interval.start(),
+            interval.duration() + Duration::from_secs(1),
+        ),
+    ] {
+        let mut changed = request.clone();
+        changed.state.start = Some(start);
+        changed.state.duration = Some(duration);
+        let (changed, changed_plan) =
+            ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+                ersatzrs_domain::HardwareAccelerationKind::None,
+                changed,
+            )
+            .unwrap();
+        assert!(changed_plan.as_ref().unwrap().matches_command(&changed));
+        assert!(receipt
+            .check_consumer_command(&changed, changed_plan.as_ref())
+            .is_err());
+        assert!(super::super::source_teletext::Consumer::new(
+            receipt.clone(),
+            changed_plan.clone(),
+        )
+        .before_open(&changed, Some(reservation), deadline)
+        .await
+        .is_err());
+        assert!(consumer
+            .clone()
+            .before_retry(&changed, changed_plan)
+            .await
+            .is_err());
+    }
+    // Native independently drops submicrosecond fractions from each argument.
+    // Missing -t and an independently opened caption remain noncomparable;
+    // these pure checks do not grant native bitmap or seek eligibility.
+    let mut rounded = request.clone();
+    rounded.state.start = Some(Duration::from_micros(
+        u64::try_from(interval.start().as_micros()).unwrap(),
+    ));
+    rounded.state.duration = Some(Duration::from_micros(
+        u64::try_from(interval.duration().as_micros()).unwrap(),
+    ));
+    let mut unbounded = request.clone();
+    unbounded.state.duration = None;
+    let mut independent = request.clone();
+    independent.inputs[0].path = "synthetic-other-source.ts".into();
+    for compatible in [rounded, unbounded, independent] {
+        let (command, plan) = ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+            ersatzrs_domain::HardwareAccelerationKind::None,
+            compatible,
+        )
+        .unwrap();
+        assert!(plan.as_ref().unwrap().matches_command(&command));
+        receipt
+            .check_consumer_command(&command, plan.as_ref())
+            .expect("compatible or unknown timing must not create a false mismatch");
+    }
 }
 
 async fn finish_hybrid_case(state: &AppState, mode: StreamingMode) {
