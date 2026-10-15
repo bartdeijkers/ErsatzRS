@@ -51,6 +51,7 @@ mod resource_transmission;
 mod service_update;
 mod signalling;
 pub mod source_assembly;
+pub mod source_av_timestamps;
 pub mod source_clock;
 pub mod source_descriptors;
 pub mod source_header;

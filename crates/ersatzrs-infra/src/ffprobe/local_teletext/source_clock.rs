@@ -12,9 +12,12 @@ use sha2::{Digest as _, Sha256};
 use tokio::time::Instant;
 
 use super::{
-    headers, source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
+    headers,
+    source_av_origin::{AvOriginCollector, SourceTeletextAvOriginEvidence},
+    source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
     SourceTeletextPacketSpan,
 };
+use crate::ffprobe::teletext_origin::NativeSourceOrigin;
 use crate::ffprobe::{FfprobeError, Result};
 
 /// Raw clock/PSI evidence from every physical packet of one held source.
@@ -58,10 +61,44 @@ pub(crate) async fn observe_owned(
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<SourceTeletextContinuousClockEvidence> {
+    walk_owned(guard, paths, pid, expected, None, deadline, hold)
+        .await
+        .map(|observed| observed.clock)
+}
+
+pub(crate) async fn observe_av_origin_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    paths: (PathBuf, PathBuf),
+    pid: u16,
+    expected: SourceTeletextDecodeWindowEvidence,
+    origin: NativeSourceOrigin,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<SourceTeletextAvOriginEvidence> {
+    walk_owned(guard, paths, pid, expected, Some(origin), deadline, hold)
+        .await?
+        .av
+        .ok_or_else(invalid)
+}
+
+struct SourceWalkEvidence {
+    clock: SourceTeletextContinuousClockEvidence,
+    av: Option<SourceTeletextAvOriginEvidence>,
+}
+
+async fn walk_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    paths: (PathBuf, PathBuf),
+    pid: u16,
+    expected: SourceTeletextDecodeWindowEvidence,
+    origin: Option<NativeSourceOrigin>,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<SourceWalkEvidence> {
     headers::run_source_guard_owned(deadline, hold, move |stop| {
         stop.check_source_guard()?;
         super::check_source_guard_paths(&guard, &paths.0, &paths.1)?;
-        let evidence = observe(&guard, pid, expected, stop)?;
+        let evidence = observe(&guard, pid, expected, origin, stop)?;
         stop.check_source_guard()?;
         super::check_source_guard_paths(&guard, &paths.0, &paths.1)?;
         stop.check_source_guard()?;
@@ -75,8 +112,9 @@ fn observe<T>(
     guard: &LocalTeletextSourceGuard,
     pid: u16,
     expected: SourceTeletextDecodeWindowEvidence,
+    origin: Option<NativeSourceOrigin>,
     stop: &headers::ReadStop<'_, T>,
-) -> Result<SourceTeletextContinuousClockEvidence> {
+) -> Result<SourceWalkEvidence> {
     let len = guard.guard.len;
     if len == 0 || !len.is_multiple_of(188) {
         return Err(invalid());
@@ -103,6 +141,7 @@ fn observe<T>(
     let mut skipped_prefix = 0_u32;
     let mut retained_packets = 0_u32;
     let mut first_current_psi_packet = None;
+    let mut av = origin.map(AvOriginCollector::new).transpose()?;
     for ordinal in 0..len / 188 {
         stop.check_source_guard()?;
         if ordinal > 0 && ordinal.is_multiple_of(MAX_SOURCE_OBSERVATION_PACKETS as u64) {
@@ -117,6 +156,9 @@ fn observe<T>(
         )?;
         psi.push(&raw).map_err(|_| invalid())?;
         clock.push(&raw).map_err(|_| invalid())?;
+        if let Some(av) = &mut av {
+            av.push(&raw)?;
+        }
         digest.update(raw);
         if ordinal >= span.first_packet() && ordinal < retained_end {
             let raw_pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
@@ -147,10 +189,16 @@ fn observe<T>(
     {
         return Err(invalid());
     }
-    Ok(SourceTeletextContinuousClockEvidence {
+    let clock = SourceTeletextContinuousClockEvidence {
         clock: clock.report().map_err(|_| invalid())?,
         source_sha256: digest.finalize().into(),
         first_current_psi_packet: first_current_psi_packet.ok_or_else(invalid)?,
+    };
+    Ok(SourceWalkEvidence {
+        clock,
+        av: av
+            .map(|collector| collector.finish(clock, &observed))
+            .transpose()?,
     })
 }
 

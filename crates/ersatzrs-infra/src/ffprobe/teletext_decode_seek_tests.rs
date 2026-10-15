@@ -20,6 +20,9 @@ use super::{
 const PACKET_BYTES: usize = 188;
 const SELECTED_PID: u16 = 258;
 
+#[path = "teletext_decode_origin_native_tests.rs"]
+mod origin;
+
 fn hex_text(bytes: &[u8]) -> String {
     let mut text = String::new();
     for byte in bytes {
@@ -531,6 +534,9 @@ async fn native_later_packet_span_decodes_exact_pages_without_prefix_or_temporal
     source.assert_exact_span(&guide);
     source
         .assert_continuous_clock(&scope, &work, &subtitle)
+        .await;
+    source
+        .assert_native_av_origin(&scope, &work, &subtitle)
         .await;
     assert_eq!(subtitle.window(), guide.window());
     eprintln!(

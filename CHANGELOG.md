@@ -49,6 +49,9 @@ release section when tagging a release.
   A bounded-memory held-source walk checks current PSI and raw PCR across
   continuing windows and rechecks the retained decoder-byte hash. Raw clock
   observations do not establish media-relative cue coverage.
+  Native format and all AV start times now retain exact signed decimal/rational
+  precision and their raw PES-header witnesses under that same ownership,
+  without choosing a first-track origin or enabling unqualified later cues.
   General source/seek semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible

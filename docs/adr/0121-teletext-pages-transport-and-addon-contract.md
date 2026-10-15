@@ -91,6 +91,26 @@ These are historical raw observations, not bounded-PCR-gap, AV-origin, cue-end,
 subtitle-PTS-correction or presentation-EOF proof. General restored in-place/ABA
 exclusion is not implied. Automatic later-window selection remains fenced until
 actual native media origin, cue bookends and page-header evidence are joined.
+Native format start and every AV stream's global index/PID/role/start_pts/time_base
+now have a separate bounded exact projection. Unknown timing stays absent;
+negative starts, reported decimal precision and positive rational time bases are
+preserved without floating point or changes to ordinary metadata. A conservative
+one-printed-quantum enclosure is observational only, not an audited rescale or
+origin certificate. A retained original-source native probe shares the existing
+work/source/process owner and absolute startup deadline; the later private
+bitmap snapshot cannot supply native media zero.
+The same held-source walk joins those identities to bounded MPEG-2 PES headers,
+including split headers, strict timestamp prefix/marker bits, continuity/duplicates
+and independent raw PTS/DTS. AV payloads and entire PES packets are not buffered;
+video PES length zero and PTS reorder/wrap do not manufacture new origins.
+Actual PSI must advertise each native AV PID. Exact native-start rescaling/modulo
+matches retain their source header positions, without certifying unwrapped epochs.
+Selected-program AV/PCR epoch agreement, bounded gaps, requested cue coverage and
+current cue-window page headers remain required before automatic admission.
+The current decoded-receipt adapter is preparatory: the automatic later-cue path
+must acquire native timing under held ownership before selecting/decoding its
+cue window, without requiring prefix page observations or an earlier bitmap.
+Do not weaken global scan-header qualification to bypass that missing path.
 This bounded byte window does not prove later playback
 seek/cue coverage, whole-source inventory, current database ownership or future
 source opens. Source bookends remain observed associations, not immutable-byte or

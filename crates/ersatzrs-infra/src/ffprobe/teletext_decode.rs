@@ -19,9 +19,13 @@ use super::{
 };
 
 pub use super::local_teletext::{
+    SourceTeletextAvOriginEvidence, SourceTeletextAvOriginWitness,
     SourceTeletextContinuousClockEvidence, SourceTeletextDecodeWindowEvidence,
     SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
 };
+
+#[path = "teletext_decode_origin.rs"]
+mod origin;
 
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_FRAMES: usize = 4096;

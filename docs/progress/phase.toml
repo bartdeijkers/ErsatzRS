@@ -62,17 +62,16 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Exact requested intervals and complete source tails are checkpointed locally.
-The next owned continuous source walk now keeps PSI state across bounded batches,
-checks raw PCR and rehashes the old decoder span before joining evidence. P9A-04
-owns 85 focused, one omission/tail and actual delayed-source native results.
-Restored-mtime clock and payload mutations are rejected; this is no general
-immutable-source or ABA guarantee. Next retain source-associated native AV origin,
-corroborate raw AV PES/gaps, then prove requested cue bookends and actual cue-window
-headers before automatic later-span selection. Raw PCR elapsed, wire subtitle
-PTS and corrected decoder timestamps remain distinct from media zero. Reuse
-unchanged ordinary/editor/client evidence. Full acceptance stays open; no general
-audit expansion, content addon, remote push or publication at this checkpoint.
+Native format/all-AV starts now retain exact signed decimal/rational precision
+and original-source process ownership. The same held walk matches actual raw AV
+header witnesses without equating video/audio/PCR or choosing a first-track
+origin. P9A-04 records 14 AV-header tests, nine origin/hash tests and native proof.
+Next acquire this timing before cue-window selection/decode, qualify selected-
+program AV/PCR epoch and bounded gaps, and retain requested cue bookends plus
+actual page headers. The decoded-receipt adapter is preparatory; it cannot solve
+the scanner-prefix-only candidate gap by itself. Reuse unchanged ordinary/editor/
+client evidence. Full engine criteria stay open; no general audit expansion,
+content addon, remote push or publication occurs at this checkpoint.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.

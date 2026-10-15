@@ -3,6 +3,7 @@
 pub mod teletext;
 /// Owned, source-associated exact-page native bitmap decode receipts.
 pub mod teletext_decode;
+pub mod teletext_origin;
 /// Explicit ephemeral projection of supplied stream/program teletext metadata.
 pub mod teletext_probe;
 

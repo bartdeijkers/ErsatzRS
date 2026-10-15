@@ -2968,6 +2968,61 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 native AV start/source-header checkpoint (partial):
+Criterion: bind actual native media-start observations to the held source before
+qualifying a requested later cue. Separate bounded native projection preserves
+signed decimal format start/precision and every AV global index/PID/role plus
+independent optional start_pts/time_base; ordinary metadata is unchanged. Missing,
+null or N/A timing stays unknown, while invalid/duplicate/overflow evidence is
+rejected. Exact rational products and a conservative one-printed-quantum enclosure
+avoid floating-point comparisons or an assumed first-stream origin.
+
+A dedicated original-source probe uses the existing retained process/source/work
+owner and same absolute startup deadline. It never probes the later private
+bitmap snapshot for media zero. The existing continuous held-source walk now
+optionally collects raw AV header witnesses too, preserving PSI/program/PCR and
+exact decoder-span hash checks. Each AV observer retains at most a 264-byte PES
+header and one duplicate-check packet. Split headers, adaptation plus payload,
+PTS/DTS prefixes/markers, CC/duplicates, zero-length video PES, missing timestamps
+and PTS reorder/wrap are explicit. Raw native-start modulo matches retain actual
+header positions without certifying unwrapped epochs or cue coverage. Every
+native AV PID must belong to the actual full current PSI inventory.
+
+Run 93baf996-71aa-4b4c-a40d-0a8c612557b1 passes all 14 new AV-header cases;
+run dd953fa4-550d-4187-a53d-8f2e15a9b6fd passes nine native-origin and existing
+omission/tail-hash tests. These cover exact signed/unknown values, checked quantum
+and rational bounds, duplicate identities, bounded input and ordinary-projection
+equality. Actual native run 76b312da-d10f-4dbd-bcd3-94dadbf54124 passes in 1.706 s
+on pinned n9.0-20260805 and the same genuine delayed source. Its original-source
+format start is exactly 1,418,667/1,000,000 s; video starts 129,600/90,000 s,
+with DTS 126,000. Both audio starts are 127,680/90,000 s, observed at physical
+ordinals 427/443. All three native starts match actual raw header witnesses;
+video has 1,500 headers; each audio track has 176. The first PCR 18,962,100/27,000,000 s
+remains explicitly different from format and AV start. No first stream is chosen.
+All 79,769 source packets, decoder-span/full-source hashes, page 888/200 decoding,
+missing 777/wrongprogram rejection and actual cleanup survive. Missing scope
+starts no probe; stale source metadata rejects before optional native acquisition.
+Earlier restored-mtime clock/payload mutation negatives remain in the same run.
+
+Exact commands and logs live in local tmp/phase9-source-origin-checkpoint/.
+Initial strict Clippy found three test literal readability issues; equivalent
+numeric separators preserve values, production algorithms and native inputs.
+Final affected lint, formatting, architecture/progress, scoped policy and two
+independent read-only reviews accompany this engineering checkpoint. Unchanged
+ordinary-route/TSDuck/editor/browser evidence is reused; this is not full CI.
+
+Next connect native-origin acquisition before cue-window selection/decode,
+qualify the selected program's AV/PCR epoch and bounded clock gaps, then obtain
+requested cue bookends and current cue-window page headers under the same owner.
+The current decoded-receipt adapter is preparatory, not an automatic-selection
+path. The missing scan-prefix header must not be bypassed by globally relaxing
+candidate qualification. Neither modulo matches nor decimal enclosures certify
+media zero or the requested media interval 40..52. All rolling-source, authored Level2.5/fallback,
+QTeletextMaker/editor/metadata/zones, localized admin/Lua/restart/client and
+Native/Next/six-platform acceptance remain open. No permanent restriction,
+acceptance waiver, milestone completion, production addon or push is implied.
+
+
 2026-10-15 continuous held-source clock checkpoint (partial):
 Criterion: exclude hidden intervening source-clock/table changes before joining
 later packet-window decoding to an actual playback interval. A constant-memory
