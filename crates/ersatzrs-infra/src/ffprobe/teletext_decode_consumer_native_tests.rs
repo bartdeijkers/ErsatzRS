@@ -2,9 +2,14 @@
 
 use super::*;
 use crate::ffprobe::teletext_consumer_origin::{
-    NativeSourceConsumerStream, NativeSourceConsumerTiming,
+    NativeSourceConsumerOrigin, NativeSourceConsumerStream, NativeSourceConsumerTiming,
 };
 use crate::ffprobe::teletext_decode::PreparedLocalTeletextSource;
+use ersatzrs_ffmpeg::{
+    build_pipeline_command_with_source_teletext_plan, DesiredVideoState, InputFile,
+    PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceTeletextInputPlan,
+    SourceVideoCodec, SourceVideoStream,
+};
 
 async fn staggered_source(
     scope: &LocalProbeCleanupScope,
@@ -148,6 +153,114 @@ async fn prepare(
         .unwrap()
 }
 
+async fn decode(
+    scope: &LocalProbeCleanupScope,
+    extractor: &FfprobeExtractor,
+    source: &PreparedLocalTeletextSource,
+    original: &[u8],
+    work: &TeletextWorkGuard,
+) -> DecodedLocalTeletextPage {
+    assert!(original.len().is_multiple_of(PACKET_BYTES));
+    let span =
+        SourceTeletextPacketSpan::new(0, u32::try_from(original.len() / PACKET_BYTES).unwrap())
+            .expect("existing short fixture fits one bounded actual packet span");
+    let decoded = scope
+        .scope(extractor.decode_prepared_local_teletext_page(
+            source,
+            span,
+            Instant::now() + Duration::from_secs(15),
+            work.hold_work(),
+        ))
+        .await
+        .unwrap();
+    assert!(std::sync::Arc::ptr_eq(&source.guard, &decoded.guard));
+    assert_eq!(decoded.request(), source.request());
+    assert_eq!(decoded.request().page.get(), 888);
+    assert!(decoded.events().count > 0);
+    assert!(decoded
+        .headers()
+        .unwrap()
+        .headers()
+        .iter()
+        .any(|occurrence| { occurrence.header.display_page() == Some(decoded.request().page) }));
+    assert!(decoded.window().covers_entire_source_bytes());
+    assert_eq!(
+        decoded.window().decoder_sha256,
+        <[u8; 32]>::from(Sha256::digest(original))
+    );
+    decoded
+}
+
+fn generated_plan(
+    source: &PreparedLocalTeletextSource,
+    decoded: &DecodedLocalTeletextPage,
+    audio: usize,
+    ffmpeg: &str,
+) -> SourceTeletextInputPlan {
+    let path = source.resolved.to_str().unwrap();
+    let mut request = PipelineRequest::new(InputFile::video(path), DesiredVideoState::h264_1080p())
+        .with_source_video_stream(
+            SourceVideoStream::new(SourceVideoCodec::Mpeg2Video).with_index(0),
+        )
+        .with_source_audio_streams(vec![
+            SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1),
+            SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3),
+        ]);
+    request.inputs[1] = request.inputs[1].clone().with_stream_index(audio);
+    request.inputs.push(decoded.native_burn_input());
+    request.ffmpeg_executable = Some(ffmpeg.into());
+    let (command, plan) = build_pipeline_command_with_source_teletext_plan(
+        ersatzrs_domain::HardwareAccelerationKind::None,
+        request,
+    )
+    .unwrap();
+    let plan = plan.unwrap();
+    assert!(plan.matches_command(&command));
+    assert_eq!(plan.caption_input(), &decoded.native_burn_input());
+    assert_eq!(plan.caption_physical_input_index(), 0);
+    assert_eq!(plan.video_stream(), Some((0, 0)));
+    assert_eq!(plan.audio_stream(), Some((0, audio)));
+    assert_eq!(plan.enabled_caption_input_streams(), [0, audio, 2]);
+    assert_eq!(
+        command.arguments.iter().filter(|arg| *arg == "-i").count(),
+        1
+    );
+    assert!(command.arguments.iter().any(|arg| arg == "-txt_page:2"));
+    // Command generation only: these graphs are not spawned or timing-qualified.
+    plan
+}
+
+async fn equal_origins(
+    scope: &LocalProbeCleanupScope,
+    extractor: &FfprobeExtractor,
+    source: &PreparedLocalTeletextSource,
+    decoded: &DecodedLocalTeletextPage,
+    enabled: &[i32],
+    work: &TeletextWorkGuard,
+) -> NativeSourceConsumerOrigin {
+    let origin = scope
+        .scope(extractor.observe_local_teletext_consumer_origin(
+            decoded,
+            enabled,
+            Instant::now() + Duration::from_secs(15),
+            work.hold_work(),
+        ))
+        .await
+        .unwrap();
+    let prepared = scope
+        .scope(extractor.observe_prepared_local_consumer_origin(
+            source,
+            enabled,
+            Instant::now() + Duration::from_secs(15),
+            work.hold_work(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(origin, prepared);
+    assert!(std::sync::Arc::ptr_eq(&source.guard, &decoded.guard));
+    origin
+}
+
 #[derive(Debug)]
 struct CrcPacket {
     index: i32,
@@ -282,12 +395,16 @@ async fn native_consumer_origin_matches_two_audio_choices_and_enabled_subtitle_w
     let locker = EntityLocker::new();
     let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
     let source = prepare(&scope, &extractor, &path, &work).await;
+    let decoded = decode(&scope, &extractor, &source, &original, &work).await;
     let native = source.native_origin().clone();
     let reference = capture_crc(&scope, &ffmpeg, &source, &[0, 1, 2, 3], None, &work).await;
     assert_missing_prefix(&scope, &ffmpeg, &source, &work).await;
-    assert_trials(&scope, &extractor, &ffmpeg, &source, &work, &reference).await;
+    assert_trials(
+        &scope, &extractor, &ffmpeg, &source, &decoded, &work, &reference,
+    )
+    .await;
     assert_eq!(source.native_origin(), &native);
-    assert_boundaries(&scope, &extractor, &source, &work).await;
+    assert_boundaries(&scope, &extractor, &source, &decoded, &work).await;
     assert_eq!(
         scope.scope(extractor.extract(&path)).await.unwrap().streams,
         ordinary.streams
@@ -298,18 +415,29 @@ async fn native_consumer_origin_matches_two_audio_choices_and_enabled_subtitle_w
         .await
         .unwrap();
     std::fs::write(&path, b"synthetic changed consumer source").unwrap();
-    let result = scope
-        .scope(extractor.observe_prepared_local_consumer_origin(
-            &source,
-            &[0, 1],
-            Instant::now() + Duration::from_secs(15),
-            work.hold_work(),
-        ))
-        .await;
-    assert_eq!(
-        result.unwrap_err(),
-        SourceTeletextPageDecodeError::SourceChanged
-    );
+    for result in [
+        scope
+            .scope(extractor.observe_prepared_local_consumer_origin(
+                &source,
+                &[0, 1],
+                Instant::now() + Duration::from_secs(15),
+                work.hold_work(),
+            ))
+            .await,
+        scope
+            .scope(extractor.observe_local_teletext_consumer_origin(
+                &decoded,
+                &[0, 1],
+                Instant::now() + Duration::from_secs(15),
+                work.hold_work(),
+            ))
+            .await,
+    ] {
+        assert_eq!(
+            result.unwrap_err(),
+            SourceTeletextPageDecodeError::SourceChanged
+        );
+    }
     scope.close();
     assert_eq!(scope.wait_cleanup().await, Ok(()));
     assert_eq!(locker.active_teletext_work(), 1);
@@ -323,20 +451,24 @@ async fn assert_trials(
     extractor: &FfprobeExtractor,
     ffmpeg: &str,
     source: &PreparedLocalTeletextSource,
+    decoded: &DecodedLocalTeletextPage,
     work: &TeletextWorkGuard,
     reference: &[CrcPacket],
 ) {
+    let english = generated_plan(source, decoded, 1, ffmpeg);
+    let dutch = generated_plan(source, decoded, 3, ffmpeg);
+    let indices = |plan: &SourceTeletextInputPlan| {
+        plan.enabled_caption_input_streams()
+            .into_iter()
+            .map(|index| i32::try_from(index).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let english = indices(&english);
+    let dutch = indices(&dutch);
+    let caption_english = equal_origins(scope, extractor, source, decoded, &english, work).await;
     let mut enabled_starts = Vec::new();
-    for enabled in [vec![0, 1], vec![0, 3], vec![0, 3, 2]] {
-        let origin = scope
-            .scope(extractor.observe_prepared_local_consumer_origin(
-                source,
-                &enabled,
-                Instant::now() + Duration::from_secs(15),
-                work.hold_work(),
-            ))
-            .await
-            .unwrap();
+    for enabled in [english[..2].to_vec(), dutch[..2].to_vec(), dutch] {
+        let origin = equal_origins(scope, extractor, source, decoded, &enabled, work).await;
         assert_eq!(
             origin
                 .streams()
@@ -374,6 +506,13 @@ async fn assert_trials(
     }
     assert!(enabled_starts[2] < enabled_starts[0]);
     assert!(enabled_starts[0] < enabled_starts[1]);
+    assert_eq!(
+        caption_english
+            .timing(0)
+            .unwrap()
+            .enabled_start_microseconds(),
+        enabled_starts[2]
+    );
 }
 
 async fn assert_missing_prefix(
@@ -423,6 +562,7 @@ async fn assert_boundaries(
     scope: &LocalProbeCleanupScope,
     extractor: &FfprobeExtractor,
     source: &PreparedLocalTeletextSource,
+    decoded: &DecodedLocalTeletextPage,
     work: &TeletextWorkGuard,
 ) {
     let unavailable = FfprobeExtractor::new("must-not-start-synthetic-consumer-probe");
@@ -439,6 +579,18 @@ async fn assert_boundaries(
             result.unwrap_err(),
             SourceTeletextPageDecodeError::InvalidRequest
         );
+        let decoded_result = scope
+            .scope(unavailable.observe_local_teletext_consumer_origin(
+                decoded,
+                &enabled,
+                Instant::now() + Duration::from_secs(15),
+                work.hold_work(),
+            ))
+            .await;
+        assert_eq!(
+            decoded_result.unwrap_err(),
+            SourceTeletextPageDecodeError::InvalidRequest
+        );
     }
     let result = unavailable
         .observe_prepared_local_consumer_origin(
@@ -452,6 +604,18 @@ async fn assert_boundaries(
         result.unwrap_err(),
         SourceTeletextPageDecodeError::NoCleanupScope
     );
+    let decoded_result = unavailable
+        .observe_local_teletext_consumer_origin(
+            decoded,
+            &[0],
+            Instant::now() + Duration::from_secs(15),
+            work.hold_work(),
+        )
+        .await;
+    assert_eq!(
+        decoded_result.unwrap_err(),
+        SourceTeletextPageDecodeError::NoCleanupScope
+    );
     let result = scope
         .scope(extractor.observe_prepared_local_consumer_origin(
             source,
@@ -462,6 +626,18 @@ async fn assert_boundaries(
         .await;
     assert_eq!(
         result.unwrap_err(),
+        SourceTeletextPageDecodeError::InvalidOutput
+    );
+    let decoded_result = scope
+        .scope(extractor.observe_local_teletext_consumer_origin(
+            decoded,
+            &[99],
+            Instant::now() + Duration::from_secs(15),
+            work.hold_work(),
+        ))
+        .await;
+    assert_eq!(
+        decoded_result.unwrap_err(),
         SourceTeletextPageDecodeError::InvalidOutput
     );
 }

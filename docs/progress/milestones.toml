@@ -2968,6 +2968,69 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 same-held native consumer inventory checkpoint (partial):
+Criterion: connect generated physical input selection to the actual original
+source before native open/retry, retaining ordinary playback when selected
+metadata does not match native stream identity. Origin timing is not cue proof.
+
+The prepared-source and new decoded-receipt consumer-origin APIs share the
+existing capture helper, held guard, original/resolved locators, fixed unseeked
+probe policy, work retention and actual child/pipe cleanup. No second source
+preparation, source association, snapshot probe or independent work pool exists.
+PlaybackSource first fences the complete command/caption, derives checked native
+indices from its plan and observes only AV sharing the caption's physical owner.
+It validates actual selected codec roles and the requested subtitle PID. Current
+candidate checks bracket capture, followed by a final filesystem bookend under
+the same absolute deadline, existing admission and ClosingScope. Web open/fresh
+hardware retry and native HLS open now use this validation. Refusal retains the
+existing ordinary-caption command or same-occurrence HLS retry. Timestamp values
+are not passed to page/cue eligibility, and existing page qualification remains.
+
+The existing eight-second staggered fixture now decodes page888 from its original
+byte span. Prepared/decoded guard pointer identity and original decoder/source
+hashes match. Final generated plans select [video0,audio1,caption2] and
+[video0,audio3,caption2]. Both entry points observe equal native origins, including
+English+caption. The same nine real stream-copy framecrc trials retain earlier
+AV/late AV/subtitle E ordering and the known post-seek native NOPTS exclusion;
+no generated bitmap Burn graph is timing-qualified by these trials. Both API
+boundaries reject invalid enabled sets, absent scope/indices and changed source,
+then drain actual work. Source and ordinary metadata remain unchanged before
+the deliberate mutation. Final combined parser/runtime/recovery and genuine
+origin selection: 43 cases pass, Nextest
+c312e3ad-b70e-4832-866b-0bda7288519f.
+
+Fresh genuine ordinary legacy and native-HLS Hybrid routes pass, respectively
+4a760bd1-5a2e-459e-8e52-c36a10398b0d and
+e1fa76b0-c98b-4b67-97f7-6fecc53aee5a. Their shared web pre-open helper checks
+a valid command seal whose selected video index identifies a subtitle: native
+inventory validation rejects it, returns
+the exact ordinary fallback and drains work; its marker command is not spawned.
+Separate actual captures retain Off-Dutch, Burn-English, Burn-Dutch and stale-
+source-English behavior, selected AV, accepted authored200, TSDuck, original
+PID512, default capacity2 and actual source/process cleanup.
+Evidence: tmp/phase9-consumer-origin-bridge (frozen Rust, native and focused logs).
+Strict affected three-crate/all-target Clippy, format, architecture and final
+progress checks pass. Strict lint exposed propagated async-frame growth; the
+complete optional observation is now pinned once at the shared entry, without
+spawning/detaching work or adding a lint exemption. Both genuine routes above
+were rerun on that final frozen source.
+
+Reuse 108e1a08's 234 unchanged pipeline snapshots and ordinary host smoke: no
+FFmpeg argv generator or non-source-caption branch changed. Existing unchanged
+headed profile/theme/publication/client evidence remains applicable. This is a
+source-inventory checkpoint, not exact-source full CI or engine acceptance.
+
+Next bind actual generated native input policy and effective seek to observed
+seek landing and bitmap decoder timing. The origin probe still uses a fixed
+unseeked discovery policy; matching indices, source and command cannot certify
+arbitrary options, resource/charset inheritance, decoded cue timing or missing
+PTS. Keep missing timestamps unknown and complete initial page/resources/charset
+before descriptor-request runtime admission. Full authored Level2.5/fallback,
+QTeletextMaker/TTI metadata/templates/zones, profile/theme isolation, Lua, restart,
+localized headed admin, independent decoding/TSDuck/suitable-client navigation
+and playback/platform criteria remain required. No milestone acceptance/status/
+dependency changes, production TV-guide addon, push or publication.
+
 2026-10-15 generated physical-input/consumer fence checkpoint (partial):
 Criterion: bind selected source captions to the actual normalized command and
 physical video/audio/subtitle owners before ordinary native playback opens or

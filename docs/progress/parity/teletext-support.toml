@@ -67,9 +67,9 @@ MPEG-TS wrapper/encoder leases, lifecycle/Health remain.
 Linux x64/Windows-interop/QEMU ARM64/ARMv7:admission/tokens/reaping,
 video/selected audio/Dutch200/TSDuck. Finite Local888 scan/Burn works through
 legacy/Hybrid with two audio choices, Off/stale fallback, AV/authored200 and
-default2 cleanup. P9A-04 owns explicit AV/subtitle timing and final generated
-input/command fences for web/native HLS. Native policy/decoder timing, general
-seeks, provider/Next and native Windows/ARM acceptance remain open.
+default2 cleanup. P9A-04 owns generated input/command fences and same-held native
+selection/PID checks for web/HLS. Native policy/decoder timing, general seeks,
+provider/Next and native Windows/ARM acceptance remain open.
 
 P9A-02: decoder Health/six-RID licenses.
 P9A-03/04 retain persistence/rescans, page/language/forced/default

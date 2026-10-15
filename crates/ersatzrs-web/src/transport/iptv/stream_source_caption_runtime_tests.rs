@@ -466,6 +466,8 @@ async fn late_source_rejection_uses_actual_receipt(
         Vec::new(),
         vec!["-f".into(), "null".into(), "-".into()],
     );
+    assert_native_inventory_fallback(state, receipt.clone(), &reservation, deadline, &ordinary)
+        .await;
     let (consumer, primary) =
         assert_consumer_plan_fences(state, receipt, &reservation, deadline).await;
     let mut context = source_caption_denial_context(state, consumer, ordinary.clone());
@@ -528,6 +530,71 @@ fn source_caption_denial_context(
         ffmpeg_path: "synthetic-caption-command-not-spawned".into(),
         rebuild: None,
     }
+}
+
+async fn assert_native_inventory_fallback(
+    state: &AppState,
+    receipt: std::sync::Arc<ersatzrs_infra::playback::source_teletext::runtime::PlaybackSource>,
+    reservation: &ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation,
+    deadline: tokio::time::Instant,
+    ordinary: &ersatzrs_ffmpeg::FfmpegCommand,
+) {
+    let profile = ersatzrs_infra::playback::load_playback_profile(&state.pool, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    let caption = receipt.input();
+    let desired = ersatzrs_ffmpeg::DesiredVideoState::from_profile(
+        &profile.profile,
+        &profile.resolution,
+        None,
+        None,
+        StreamingMode::TransportStream,
+    );
+    let mut request = ersatzrs_ffmpeg::PipelineRequest::new(
+        ersatzrs_ffmpeg::InputFile::video(&caption.path),
+        desired,
+    );
+    // A valid command seal and matching caption cannot turn a real subtitle
+    // stream into the video track asserted by stale selection metadata.
+    request.source_video_stream = Some(
+        ersatzrs_ffmpeg::SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::H264)
+            .with_index(caption.streams[0].index),
+    );
+    request.inputs.push(caption);
+    request.ffmpeg_executable = Some("synthetic-caption-command-not-spawned".into());
+    let (command, plan) = ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+        ersatzrs_domain::HardwareAccelerationKind::None,
+        request,
+    )
+    .unwrap();
+    receipt
+        .check_consumer_command(&command, plan.as_ref())
+        .expect("command and caption identity match before actual inventory checking");
+    let consumer = super::super::source_teletext::Consumer::new(receipt, plan);
+    let mut context = source_caption_denial_context(state, consumer, ordinary.clone());
+    let selected = super::super::source_caption_recovery::before_open(
+        &command,
+        &mut context,
+        Some(reservation),
+        deadline,
+        None,
+        None,
+    )
+    .await
+    .unwrap()
+    .expect("actual native subtitle cannot qualify as selected video");
+    assert_eq!(&selected, ordinary);
+    assert!(context.source_caption.is_none());
+    assert_eq!(
+        state
+            .application
+            .operations()
+            .entity_locker()
+            .active_teletext_work(),
+        0
+    );
+    eprintln!("actual native wrong-role selection rejected despite valid plan/caption seal; exact ordinary command retained and probe work drained");
 }
 
 async fn assert_consumer_plan_fences(

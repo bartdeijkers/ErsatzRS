@@ -1,10 +1,13 @@
 //! Same-source consumer-origin acquisition through the existing retained owner.
 
+use std::{path::PathBuf, sync::Arc};
+
 use ersatzrs_core::locking::TeletextWorkHold;
 use tokio::time::Instant;
 
 use super::{
-    FfprobeCommand, FfprobeExtractor, PreparedLocalTeletextSource, SourceTeletextPageDecodeError,
+    DecodedLocalTeletextPage, FfprobeCommand, FfprobeExtractor, LocalTeletextSourceGuard,
+    PreparedLocalTeletextSource, SourceTeletextPageDecodeError,
 };
 use crate::ffprobe::teletext_consumer_origin::{
     parse_consumer_origin, validate_enabled, NativeSourceConsumerOrigin,
@@ -32,18 +35,60 @@ impl FfprobeExtractor {
         deadline: Instant,
         hold: TeletextWorkHold,
     ) -> Result<NativeSourceConsumerOrigin, SourceTeletextPageDecodeError> {
-        validate_enabled(enabled).map_err(|_| SourceTeletextPageDecodeError::InvalidRequest)?;
-        self.capture_local_teletext_origin(
+        self.capture_local_teletext_consumer_origin(
             source.guard.clone(),
             (source.original.clone(), source.resolved.clone()),
-            self.consumer_origin_command(&source.resolved)?,
+            enabled,
             deadline,
             hold,
-            |bytes| {
-                parse_consumer_origin(bytes, enabled)
-                    .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)
-            },
         )
+        .await
+    }
+
+    /// Observe explicitly enabled streams using an already decoded source guard.
+    ///
+    /// Reuses the receipt's exact held association and locators without opening
+    /// another guard, preparing another source or probing the decoder snapshot.
+    /// The existing retained worker owns source/admission through actual cleanup.
+    /// Its fixed, unseeked origin-probe policy is identical to the prepared-source
+    /// API above; caller-supplied enabled indices are observations, not evidence
+    /// that arbitrary final decoder options or consumer policies are equivalent.
+    /// This grants no seek landing, cue, bitmap presentation or playback admission.
+    ///
+    /// # Errors
+    /// Rejects invalid enabled indices, missing ownership, changed source,
+    /// malformed optional metadata, deadline/cancellation or uncertain cleanup.
+    pub async fn observe_local_teletext_consumer_origin(
+        &self,
+        source: &DecodedLocalTeletextPage,
+        enabled: &[i32],
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<NativeSourceConsumerOrigin, SourceTeletextPageDecodeError> {
+        self.capture_local_teletext_consumer_origin(
+            source.guard.clone(),
+            (source.original.clone(), source.resolved.clone()),
+            enabled,
+            deadline,
+            hold,
+        )
+        .await
+    }
+
+    async fn capture_local_teletext_consumer_origin(
+        &self,
+        guard: Arc<LocalTeletextSourceGuard>,
+        paths: (PathBuf, PathBuf),
+        enabled: &[i32],
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<NativeSourceConsumerOrigin, SourceTeletextPageDecodeError> {
+        validate_enabled(enabled).map_err(|_| SourceTeletextPageDecodeError::InvalidRequest)?;
+        let command = self.consumer_origin_command(&paths.1)?;
+        self.capture_local_teletext_origin(guard, paths, command, deadline, hold, |bytes| {
+            parse_consumer_origin(bytes, enabled)
+                .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)
+        })
         .await
     }
 

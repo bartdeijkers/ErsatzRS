@@ -79,7 +79,10 @@ impl Consumer {
     ) -> Result<()> {
         self.check_command(command)?;
         self.reservation = Some(reservation.ok_or_else(unavailable)?.clone());
-        self.source.recheck(deadline).await
+        self.source
+            .observe_consumer_origin(command, self.plan.as_ref(), deadline)
+            .await
+            .map(|_| ())
     }
 
     pub(super) async fn before_retry(
@@ -92,8 +95,13 @@ impl Consumer {
         self.plan = plan;
         self.check_command(command)?;
         self.source
-            .recheck(Instant::now() + Duration::from_secs(15))
+            .observe_consumer_origin(
+                command,
+                self.plan.as_ref(),
+                Instant::now() + Duration::from_secs(15),
+            )
             .await
+            .map(|_| ())
     }
 
     fn check_command(&self, command: &ersatzrs_ffmpeg::FfmpegCommand) -> Result<()> {

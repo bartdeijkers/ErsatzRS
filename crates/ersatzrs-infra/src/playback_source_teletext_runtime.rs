@@ -20,6 +20,7 @@ use super::{
 use crate::{
     db::DbPool,
     ffprobe::{
+        teletext_consumer_origin::NativeSourceConsumerOrigin,
         teletext_decode::{DecodedLocalTeletextPage, SourceTeletextPageDecodeError},
         FfprobeExtractor, LocalProbeCleanupScope,
     },
@@ -139,6 +140,119 @@ impl PlaybackSource {
     /// deadline, occupied capacity or unconfirmed process/read cleanup.
     pub async fn recheck(&self, deadline: Instant) -> Result<()> {
         let deadline = deadline.min(Instant::now() + MAX_STARTUP);
+        self.recheck_candidate(deadline).await?;
+        let work = begin(&self.pool, &self.locker, deadline).await?;
+        let scope = ClosingScope(LocalProbeCleanupScope::new());
+        let checked = scope
+            .0
+            .scope(self.receipt.check_source(deadline, work.hold_work()))
+            .await;
+        scope.0.close();
+        scope.0.wait_cleanup().await.map_err(|_| unavailable())?;
+        checked.map_err(|_| unavailable())
+    }
+
+    /// Check the generated caption owner's selected native stream identities.
+    ///
+    /// The probe reuses this decoded receipt's held source and existing bounded
+    /// work/process owner. Only video/audio on the caption's physical input
+    /// participate. The fixed unseeked probe policy observes native origins;
+    /// its timestamps do not qualify the generated command's seek, decoder,
+    /// arbitrary input options or delayed cues. Existing page qualification
+    /// remains required independently.
+    ///
+    /// # Errors
+    /// Rejects command/source/selection changes, missing or wrong-role native
+    /// streams, a different caption PID, deadline or uncertain worker cleanup.
+    pub async fn observe_consumer_origin(
+        &self,
+        command: &ersatzrs_ffmpeg::FfmpegCommand,
+        plan: Option<&ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+        deadline: Instant,
+    ) -> Result<NativeSourceConsumerOrigin> {
+        self.check_consumer_command(command, plan)?;
+        let plan = plan.ok_or_else(unavailable)?;
+        // Bound this optional probe's state at its shared entry point instead
+        // of inflating every ordinary stream future. This spawns no new task.
+        Box::pin(self.observe_selected_consumer_origin(plan, deadline)).await
+    }
+
+    async fn observe_selected_consumer_origin(
+        &self,
+        plan: &ersatzrs_ffmpeg::SourceTeletextInputPlan,
+        deadline: Instant,
+    ) -> Result<NativeSourceConsumerOrigin> {
+        let enabled: Vec<i32> = plan
+            .enabled_caption_input_streams()
+            .into_iter()
+            .map(|index| i32::try_from(index).map_err(|_| unavailable()))
+            .collect::<Result<_>>()?;
+        let deadline = deadline.min(Instant::now() + MAX_STARTUP);
+        self.recheck_candidate(deadline).await?;
+        let work = begin(&self.pool, &self.locker, deadline).await?;
+        let scope = ClosingScope(LocalProbeCleanupScope::new());
+        let extractor = FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
+        let observed = scope
+            .0
+            .scope(async {
+                let origin = extractor
+                    .observe_local_teletext_consumer_origin(
+                        &self.receipt,
+                        &enabled,
+                        deadline,
+                        work.hold_work(),
+                    )
+                    .await
+                    .map_err(|_| unavailable())?;
+                self.check_consumer_inventory(plan, &origin)?;
+                self.recheck_candidate(deadline).await?;
+                self.receipt
+                    .check_source(deadline, work.hold_work())
+                    .await
+                    .map_err(|_| unavailable())?;
+                Ok(origin)
+            })
+            .await;
+        scope.0.close();
+        scope.0.wait_cleanup().await.map_err(|_| unavailable())?;
+        observed
+    }
+
+    fn check_consumer_inventory(
+        &self,
+        plan: &ersatzrs_ffmpeg::SourceTeletextInputPlan,
+        origin: &NativeSourceConsumerOrigin,
+    ) -> Result<()> {
+        let request = self.receipt.request();
+        let caption = origin
+            .streams()
+            .iter()
+            .find(|stream| stream.index() == request.stream_index)
+            .ok_or_else(unavailable)?;
+        if caption.pid() != request.pid || caption.codec_type() != "subtitle" {
+            return Err(unavailable());
+        }
+        for (selection, role) in [
+            (plan.video_stream(), "video"),
+            (plan.audio_stream(), "audio"),
+        ] {
+            if let Some((physical, index)) = selection {
+                if physical == plan.caption_physical_input_index() {
+                    let index = i32::try_from(index).map_err(|_| unavailable())?;
+                    if !origin
+                        .streams()
+                        .iter()
+                        .any(|stream| stream.index() == index && stream.codec_type() == role)
+                    {
+                        return Err(unavailable());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn recheck_candidate(&self, deadline: Instant) -> Result<()> {
         let request = self.receipt.request();
         let current = before(
             deadline,
@@ -160,15 +274,7 @@ impl PlaybackSource {
         {
             return Err(unavailable());
         }
-        let work = begin(&self.pool, &self.locker, deadline).await?;
-        let scope = ClosingScope(LocalProbeCleanupScope::new());
-        let checked = scope
-            .0
-            .scope(self.receipt.check_source(deadline, work.hold_work()))
-            .await;
-        scope.0.close();
-        scope.0.wait_cleanup().await.map_err(|_| unavailable())?;
-        checked.map_err(|_| unavailable())
+        Ok(())
     }
 }
 

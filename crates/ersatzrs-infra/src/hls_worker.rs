@@ -2873,13 +2873,11 @@ impl HlsSessionWorker {
                 );
             }
             if source
-                .check_consumer_command(&command, plan.as_ref())
-                .is_err()
-            {
-                return HlsProcessOutcome::SourceCaptionUnavailable;
-            }
-            if source
-                .recheck(self.source_caption_check_deadline(source.initial_deadline()))
+                .observe_consumer_origin(
+                    &command,
+                    plan.as_ref(),
+                    self.source_caption_check_deadline(source.initial_deadline()),
+                )
                 .await
                 .is_err()
             {

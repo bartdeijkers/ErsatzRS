@@ -74,6 +74,8 @@ release section when tagging a release.
   Final source-caption commands now carry an optional normalized physical-input
   plan through native opening and retries, sharing ownership rules with filter
   labels. Command/page mismatches retain the existing ordinary playback fallback.
+  Native opening now checks generated stream selections and caption PID against
+  the same held source; stale stream roles also preserve ordinary playback.
   Final consumer-policy binding, complete inherited page context and general
   source/seek semantics remain unqualified; route acceptance stays open.
 - Add a representative two-channel teletext acceptance flow through ordinary
