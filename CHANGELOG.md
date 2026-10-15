@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Add a representative two-channel teletext acceptance flow through ordinary
+  legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
+  client navigation with isolated themes and edits. Independent transport,
+  decoding and cleanup checks accompany the client proof; complete engine
+  acceptance remains open.
 - Let Scripted Lua validate existing channel-bound teletext profiles and On/Off
   choices through shared application controls without changing the admin base
   or activating packages. Publish cursor intervals atomically with the schedule,

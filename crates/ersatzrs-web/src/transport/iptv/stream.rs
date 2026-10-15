@@ -30,6 +30,11 @@ mod wrapper_startup_tests;
 #[path = "stream_ordinary_wrapper_tests.rs"]
 mod ordinary_wrapper_tests;
 
+// The scoped shell-package owner and headed client fixture intentionally use Unix.
+#[cfg(all(test, unix))]
+#[path = "stream_scoped_legacy_client_tests.rs"]
+mod scoped_legacy_client_tests;
+
 #[cfg(test)]
 use std::process::Stdio;
 use std::{

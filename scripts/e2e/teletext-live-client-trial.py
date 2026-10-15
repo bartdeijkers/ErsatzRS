@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -177,6 +178,23 @@ def ordinary_url(value, channel_id):
     return port
 
 
+
+def legacy_wrapper_url(value, channel_id):
+    if not isinstance(value, str):
+        raise RuntimeError("Expected a literal owned legacy-wrapper URL")
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        raise RuntimeError("Invalid owned legacy-wrapper URL") from None
+    if (parsed.scheme != "http" or parsed.hostname != "127.0.0.1"
+            or parsed.username is not None or parsed.password is not None
+            or not port or parsed.netloc != f"127.0.0.1:{port}"
+            or parsed.path != f"/iptv/channel/{channel_id}.ts"
+            or parsed.query != "mode=ts-legacy" or parsed.fragment):
+        raise RuntimeError("Wrapper trial requires exact loopback legacy ordinary URLs")
+    return port
+
 def legacy_ready(ready):
     channels = ready.get("channels")
     if not isinstance(channels, list) or len(channels) != 2 or not all(isinstance(v, dict) for v in channels):
@@ -196,21 +214,25 @@ def legacy_ready(ready):
     return by_theme
 
 
-def effective_ready(ready, directory):
+def effective_ready(ready, directory, legacy_wrapper=False):
     keys = {"probe_version", "scope", "source", "channels", "active_transcode_limit", "completion_file",
             "completion_timeout_seconds", "expected_completion", "client_actions", "limitations"}
-    if set(ready) != keys or type(ready["probe_version"]) is not int or ready["probe_version"] != 2:
+    version = 3 if legacy_wrapper else 2
+    if set(ready) != keys or type(ready["probe_version"]) is not int or ready["probe_version"] != version:
         raise RuntimeError("Expected closed cumulative effective live readiness")
     if any(not isinstance(ready[key], str) or not ready[key] or len(ready[key]) > 2048
            for key in ["scope", "client_actions", "limitations"]):
         raise RuntimeError("Expected bounded live trial descriptions")
+    completion = {"probe_version": version, "client_name": "VLC", "client_version": "3.0.20",
+                  "decoder_version": "0.2.42", "proof_suffix": "cumulative-effective-live-ordinary"}
+    if legacy_wrapper:
+        completion.update(proof_suffix="cumulative-effective-legacy-ordinary", termination="owned-sigterm")
     if (type(ready["active_transcode_limit"]) is not int or ready["active_transcode_limit"] != 4
             or ready["completion_file"] != "client-complete.json"
             or type(ready["completion_timeout_seconds"]) is not int or ready["completion_timeout_seconds"] != 180
             or not isinstance(ready["expected_completion"], dict)
             or type(ready["expected_completion"].get("probe_version")) is not int
-            or ready["expected_completion"] != {"probe_version": 2, "client_name": "VLC", "client_version": "3.0.20",
-                "decoder_version": "0.2.42", "proof_suffix": "cumulative-effective-live-ordinary"}):
+            or ready["expected_completion"] != completion):
         raise RuntimeError("Unsupported cumulative effective client completion identity")
     source = ready["source"]
     if (not isinstance(source, dict) or set(source) != {"file", "sha256", "bytes", "duration_seconds"}
@@ -260,7 +282,8 @@ def effective_ready(ready, directory):
                 or not exact_cell(item["edited_q_cell"], 2) or not exact_cell(item["edited_r_cell"], 3)):
             raise RuntimeError("Unsupported scoped pages, navigation, theme or Q/R edit ownership")
         utc_expiry(item["original_valid_until"])
-        ports.add(ordinary_url(item["url"], item["channel_id"]))
+        validate_url = legacy_wrapper_url if legacy_wrapper else ordinary_url
+        ports.add(validate_url(item["url"], item["channel_id"]))
         by_theme[item["theme"]] = item
     if set(by_theme) != {"day", "night"} or len(ports) != 1 or by_theme["day"]["addon_id"] != by_theme["night"]["addon_id"]:
         raise RuntimeError("Expected two themes of one addon on one actual native host")
@@ -287,7 +310,23 @@ def validate_readiness(raw, directory, captured_replay=False):
         return ready, legacy_ready(ready), "124", "125", 32
     if ready["probe_version"] == 2:
         return ready, effective_ready(ready, directory), "200", "201", 0
+    if ready["probe_version"] == 3:
+        return ready, effective_ready(ready, directory, legacy_wrapper=True), "200", "201", 0
     raise RuntimeError("Unsupported native readiness version")
+
+
+
+def stop_owned_wrapper_client(owned, deadline):
+    client = owned["client"]
+    if client.poll() is not None:
+        raise RuntimeError("Owned wrapper client exited before the requested stop")
+    assert_owned_window(owned["window"], client.pid, deadline)
+    # Target the exact Popen owner; no global keyboard focus or Qt action.
+    client.terminate()
+    status = client.wait(timeout=remaining(deadline, 10))
+    if status not in [0, -signal.SIGTERM]:
+        raise RuntimeError("Owned wrapper client failed controlled SIGTERM teardown")
+    return status
 
 
 def main():
@@ -314,7 +353,8 @@ def main():
     raw_ready = bounded_bytes(ready_path, MAX_READY)
     ready, by_theme, first_page, next_page, subcode = validate_readiness(raw_ready, ready_path.parent, args.captured_replay)
     channels = ready.get("channels")
-    effective = not args.captured_replay and ready["probe_version"] == 2
+    effective = not args.captured_replay and ready["probe_version"] in [2, 3]
+    legacy_wrapper = not args.captured_replay and ready["probe_version"] == 3
     original_started = time.monotonic()
     deadline = original_started + TRIAL_SECONDS
     if effective:
@@ -344,6 +384,8 @@ def main():
                  if args.captured_replay else {"native_ready_sha256": digest(raw_ready),
                                               "channels": channels, "source": ready.get("source"), "live_application_url_attachment_expected": True,
                                               "effective_cumulative_role": effective}),
+              **({"ordinary_wrapper_role": "generated-legacy", "expected_termination": "owned-sigterm",
+                  "natural_eof_proven": False} if legacy_wrapper else {}),
               "client": "VLC 3.0.20-3build6", "decoder": "libzvbi 0.2.42-2",
               "scope": "Finite captured-ordinary MAIN palette/AZ and requested page navigation inspection"
                        if args.captured_replay else "MAIN glyph/palette and requested page navigation inspection",
@@ -443,11 +485,14 @@ def main():
                       "stage": stage, "image": image.name, "sha256": image_hash,
                       "rendered_page_verified": False, "expected_header": f"{page}.{subcode:02X}"})
         for owned in clients:
-            client_exit = owned["client"].wait(timeout=remaining(deadline, 80))
+            client_exit = (stop_owned_wrapper_client(owned, deadline) if legacy_wrapper
+                           else owned["client"].wait(timeout=remaining(deadline, 80)))
             emit({"event": "finished", "theme": owned["theme"], "client_exit": client_exit,
+                  **({"termination": "owned-sigterm", "stop": "owned SIGTERM after all navigation screenshots",
+                      "natural_eof_proven": False} if legacy_wrapper else {}),
                   **({"replay_url": owned["metadata"]["url"]} if args.captured_replay
                      else {"ordinary_url": owned["metadata"]["url"]})})
-            if client_exit != 0:
+            if client_exit != 0 and not (legacy_wrapper and client_exit == -signal.SIGTERM):
                 raise RuntimeError("Owned live-route client did not exit successfully")
             for key in ["client_log"]:
                 owned[key].flush()
@@ -465,6 +510,8 @@ def main():
                                                "next": ("Inspect actual200/201 headers, AZ, day200-only cumulative Q/R and isolated red/blue themes in six captured windows."
                                                         if effective else "Inspect actual headers, day-only Q and red/blue indexed DRCS/Z in six captured windows."),
                                                "effective_cumulative_role": effective, "interactive_numeric_entry_verified": False}),
+              **({"ordinary_wrapper_role": "generated-legacy", "owned_sigterm_and_expected_exit_proven": True,
+                  "natural_eof_proven": False, "transport_phase_completed": False} if legacy_wrapper else {}),
               "native_completion_released": False,
               "rendered_navigation_proven": False, "theme_isolation_proven": False,
               "panel_display_proven": False})

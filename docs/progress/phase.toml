@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect scoped two-theme client flow to generated legacy URLs; routed eng/nld selection proven, selected source captions/default scripts/full engine acceptance open'
+current_focus = 'P9A-04: representative scoped two-theme legacy client flow proven; selected source captions, opaque scripts, slate clocks and full engine acceptance remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -92,16 +92,18 @@ The item encoder selects one audio track. SubtitleMode::None is explicit Off and
 may omit source page888; that is not selected-caption acceptance.
 Selected exact-page burn-in, verified video-copy carriage or source-bound sidecars,
 and visible unsupported selections remain unproven on this normal wrapper route.
-Next join the existing two-channel Lua/profile/validation/preview/Q/R-publication
-flow to genuine generated legacy URLs with actual headed client200/201/200. Use
-four explicitly configured disposable slots for two wrapper clients, close them
-and prove cleanup before separate cold transport captures; default2 proof remains.
-The integration leaf cannot access the private playback router/addresses. Its
-registration is removed; next use a bounded same-temporary-DB handoff to an
-in-crate listener actor while preserving original roots/expiry and post-cleanup
-state. No public test backdoor or duplicate fixture graph; actual headed proof
-remains outstanding. Preparatory client sources stay separate from the verified
-audio checkpoint.
+The genuine two-channel Lua/profile/validation/preview/Q/R-publication flow now
+reaches real generated legacy URLs. Six root-inspected VLC frames prove contrasting
+themes, Day200-only Q/R and200/201/200 on both channels. Actual native owner/actor
+terminal0 checks bind original roots/expiry, unchanged state, independent AV/page
+and TSDuck validation, actual drain and joined listeners. P9A-04 owns all receipts,
+including the failed Qt-teardown trial and bounded owned-SIGTERM correction.
+The private same-database handoff closes the integration-test privacy gap without
+widening host APIs. Four disposable slots permit both wrapper clients; prior
+product-default2 proof remains. Separate post-client cold captures do not prove
+original-response transport, natural EOF, warm continuity or full engine acceptance.
+Next add explicit selected source-page identity and owned decoder options before
+the real caption matrix; default/custom-script eligibility and slate clocks remain.
 Preserve normal-route captions/alternate audio and transport-clock acceptance;
 prior slate clock gaps remain open. No general audit extension.
 Reuse valid editor/all-culture headed admin/warm evidence for unchanged inputs.
@@ -116,6 +118,10 @@ source, commits, all dirty files, UCU caches and canonical Phase9 evidence survi
 Subsequent authorized maintenance removed an unused CI build cache (36.8 GiB),
 preserving the active main build, UCU11 target, all modified source bytes and
 Phase9 evidence. This maintenance does not complete a Phase9 checkpoint.
+Additional bounded maintenance removed7.1GiB of inactive /tmp browser binary/WASM
+copies after root process-reference checks, retaining their databases/logs and all
+active CI/source/UCU/proof state. TRIM completed; Windows C free170.69GiB at the
+final sample, with concurrent CI activity. tmp/wsl-cleanup-20261015 owns receipts.
 
 2026-10-09 Windows admin recovery: the corrected packaged Windows candidate is
 installed and running. The authorized native offline repair attaches exactly

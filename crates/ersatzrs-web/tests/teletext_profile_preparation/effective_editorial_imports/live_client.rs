@@ -456,7 +456,7 @@ pub(super) async fn configure_source(fixture: &Fixture, source: &Path) {
     );
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(super) fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write as _;
     let temporary = path.with_extension("closed-part");
     let mut file = std::fs::OpenOptions::new()
@@ -506,7 +506,7 @@ async fn wait_for_client(directory: &Path) -> io::Result<Complete> {
     .map_err(|_| io::Error::other("scoped live-client trial exceeded 180 seconds"))?
 }
 
-async fn retained_state(fixture: &Fixture) -> Vec<Vec<String>> {
+pub(super) async fn retained_state(fixture: &Fixture) -> Vec<Vec<String>> {
     let mut state = stable_state(fixture).await;
     for statement in [
         r#"SELECT json_array("Key","Value") FROM "ConfigElement" ORDER BY "Key""#,

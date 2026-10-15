@@ -553,7 +553,7 @@ fn pid(packet: &[u8]) -> u16 {
     (u16::from(packet[1] & 31) << 8) | u16::from(packet[2])
 }
 
-async fn video_hashes(ffmpeg: &str, bytes: &[u8]) -> Vec<String> {
+pub(super) async fn video_hashes(ffmpeg: &str, bytes: &[u8]) -> Vec<String> {
     let output = probe(
         ffmpeg,
         &[
@@ -585,7 +585,7 @@ async fn video_hashes(ffmpeg: &str, bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
-async fn verify_av(ffmpeg: &str, source_hashes: &BTreeSet<String>, bytes: &[u8]) {
+pub(super) async fn verify_av(ffmpeg: &str, source_hashes: &BTreeSet<String>, bytes: &[u8]) {
     verify_selected_av(ffmpeg, source_hashes, bytes, 440).await;
 }
 
@@ -647,7 +647,7 @@ async fn verify_selected_av(
     );
 }
 
-async fn verify_transport(tsanalyze: &str, bytes: &[u8], selected: bool) {
+pub(super) async fn verify_transport(tsanalyze: &str, bytes: &[u8], selected: bool) {
     verify_transport_for_language(tsanalyze, bytes, selected, "eng").await;
 }
 

@@ -33,6 +33,8 @@ use ersatzrs_web::host::{
 };
 use serde_json::{json, Value};
 
+#[path = "effective_editorial_imports/legacy_client.rs"]
+mod legacy_client;
 #[path = "effective_editorial_imports/live_client.rs"]
 mod live_client;
 #[path = "effective_editorial_imports/live_updates.rs"]

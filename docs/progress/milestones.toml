@@ -2724,6 +2724,53 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 generated-legacy two-channel client checkpoint (representative only):
+Criterion: existing channel/profile Lua selection, validation, native preview and
+cumulative Q/R concept edits followed by explicit publication/reopen reach the
+ordinary /iptv/channel/{1,2}.ts?mode=ts-legacy routes and actual client navigation.
+The same installed synthetic addon serves separate Day/Night profiles and red/blue
+AZ themes. Both visible VLC3.0.20-3build6/libzvbi0.2.42-2 clients show200.00,
+201.00,200.00; root inspected all six PNGs. Only Day200 contains both Q and R,
+including after returning; Night and both201 pages remain unchanged.
+Canonical tmp/phase9-legacy-client/identity.json binds source-identity-4.json,
+trial-2/ready.json, clients-2/trial.ndjson, headed-inspection-2.json, cold captures
+and terminal native receipts. Owner65c499b5-3efe-47b8-b1a5-3079f1183a10 passes61.303s;
+actor70a72fe1-4601-4a53-a3bf-397d2f5458c9 passes61.177s. These are original actual
+Nextest processes, not inferred completion from a client marker. No production
+host API is widened: a closed private handoff opens the genuine owner's existing
+temporary SQLite/package/source and matches current accepted roots, profile
+revisions, original receipt digests and expiry before binding private listeners.
+The 180s client allowance is clamped once to the earliest original UTC expiry.
+Both exact owned clients receive SIGTERM only after navigation; both actual exits
+are0. Natural EOF is explicitly unproven. Root creates completion only after PNG,
+ready/source identity and original-scope checks; the marker alone is not acceptance.
+After both clients close, capacity/registry drain before separate cold responses
+of2097516/2097704 aligned bytes. Those prefixes independently retain real source
+framemd5 and440Hz audio, authored200/201 AZ, Day200-only Q/R and referenced PSI;
+TSDuck3.44-4676 reports zero sync/transport/CC/PTS/PCR faults. Both listeners join,
+actual capacity reaches0, registry empties, and package/profile/settings/calls,
+accepted generation/root and source snapshots remain unchanged. The explicit4-slot
+disposable fixture permits two wrapper+encoder owners; product default2 and its
+previous fourteen+eight genuine route checks are unchanged and reused.
+Seven closed-handoff regressions pass80ece1bf-e986-4765-9a90-2d57c7faef0b;
+16 driver tests pass. Final strict web all-target Clippy, formatting, structured
+progress and scoped new-Clippy-allow checks pass. The initial trial-1 rendered
+all six pages but Qt teardown
+timed out; driver exit1 and actor/owner exit100 remain retained. It is not a
+successful full flow. Owned PID-targeted SIGTERM reuses the existing warm-driver
+mechanism, with bounded real joins and distinct non-natural termination receipts.
+Earlier compiler/privacy/hash-format/lint failures also remain in the proof root.
+Production playback/argv/admin/editor inputs are unchanged; reuse the scoped
+editor/headed all-culture admin, wrapper smoke/default2 and audio evidence already
+owned here. This trial proves a cold generated-legacy representative flow; its
+later transport captures are separate reconnects, not original GUI-response
+transport, warm continuity or full-file timing. It adds no new QTM GUI, full
+Level2.5/resource/fallback, source-caption, default-script, slate-clock, native/Next
+or six-platform acceptance. Next close selected source-page identity and decoder
+option ownership before the real caption matrix; resolve opaque default/custom
+script eligibility and same-response slate/programme clocks. Full engine-first
+acceptance and all previous requirements/dependencies remain intact.
+
 2026-10-15 routed alternate-audio checkpoint (representative, not engine acceptance):
 Criterion: real ordinary legacy/hybrid item encoding retains the channel-selected
 English/Dutch audio while recovering the same explicitly accepted authored pages;
