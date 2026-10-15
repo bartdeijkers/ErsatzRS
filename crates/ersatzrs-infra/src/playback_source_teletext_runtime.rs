@@ -36,6 +36,10 @@ const MAX_CONCURRENT_SETTING: &str = "teletext.work.max_concurrent";
 mod interval;
 pub use interval::{SourceTeletextEffectiveInterval, SourceTeletextPlaybackInterval};
 
+#[path = "playback_source_teletext_consumer.rs"]
+mod consumer;
+pub use consumer::SourceTeletextConsumerRequest;
+
 /// Persisted source identity plus the actual resolved playback locator.
 /// Transient/external inputs have no durable identity and remain inapplicable.
 pub struct RuntimeSelectionContext<'a> {
@@ -115,12 +119,7 @@ impl PlaybackSource {
         }
         let actual = plan.caption_input();
         let expected = self.input();
-        if actual.path != expected.path
-            || actual.input_instance != expected.input_instance
-            || actual.kind != expected.kind
-            || actual.subtitle_method != expected.subtitle_method
-            || actual.is_image_based_subtitle != expected.is_image_based_subtitle
-            || actual.streams.first() != expected.streams.first()
+        if actual != &expected
             || self
                 .playback_interval
                 .is_some_and(|interval| interval.has_known_consumer_mismatch(plan))

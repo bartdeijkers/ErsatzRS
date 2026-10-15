@@ -2968,6 +2968,70 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 source-bound caption initializer integration (partial):
+Criterion: connect the witnessed independent-decoder correction to actual native
+opening/retry while preserving selected ordinary AV and optional-caption fallback.
+The web and HLS builders now expose their completed requests without duplicating
+selection, retained/song or hardware normalization. Initial opening and fresh
+retries rebuild the full command/plan before initialization. The shared runtime
+uses the held exact source and existing bounded process/work owner to observe
+the actual AV-owner enabled set separately from the caption-only set. A fresh
+independent input repeats standard per-input flags, keeps source seek on AV,
+and uses a checked measured offset. Every correlated format-origin possibility
+must rescale to exactly equal caption packet ticks at its actual time base;
+native intermediate arithmetic overflow rejects. No bound is treated as exact,
+no fixed90k assumption or new timing tolerance is introduced. Final generated
+caption/AV owners, options and output policy are checked before source bookends
+and cleanup. The existing instance0 receipt fence remains strict. Missing,
+changed or opaque initialization requests retain the ordinary-caption command.
+Source/admission transfer remains synchronous immediately after the actual local
+child spawn; existing retained-worker cancellation/quarantine evidence is reused.
+
+Managed scan -> interval/page selection -> shared initializer -> actual owned
+FFmpeg child now passes on the same staggered source SHA256 c58a94db4893823a979044e6ab5131e6104081acb44309b367677885f5f7b18c:
+e1aa2518-2979-47f1-a60e-65733b078332. At seek0.5s/duration4s, both selected audio
+tracks1/3 and both original400/800VBV and distinct no-buffer policies yield120
+decoded frames. All24 original every-fifth-frame masks equal the independently
+generated650-pixel888 reference from first outputPTS0. Complete decoded audio
+SHA256 framehash rows, sizes/durations and absolute PTS/DTS equal separately
+built Off for all four pairs:62 English frames,142 Dutch frames. Measured input
+offsets differ correctly (-539056us versus -2539056us). This proves sampled
+monochrome glyph placement and audio preservation, not exact color or unobserved
+frames, HTTP delivery of this sought fixture, or full engine/client acceptance.
+
+Actual ordinary legacy route87685668-6f64-4162-aad8-6e5e15aae92a and Hybrid/HLS
+route e748e7ef-70a1-4102-98e4-5ead843b6331 pass all four existing Off/Burn/audio/
+stale cases with the new initializer. They also prove exact ordinary fallback
+for real native wrong-role inventory and changed/missing request/command plans,
+authored200 independent decoding, TSDuck and default2-capacity/worker cleanup.
+These route receipts cover their existing finite source; the staggered sought
+fixture above is a separate shared-runtime proof. Native tools remain the pinned
+n9.0-20260805 pair and TSDuck3.44-4676 with recorded binary/source hashes.
+
+Final focused run0822dca8-8ba8-45bf-8bac-0b4ee27c4d7e passes322 tests, including
+the234 existing pipeline snapshots, the new reviewed independent argv snapshot,
+native-clock arithmetic, selected AV/Intel reopen topology and request/fallback
+regressions. The initial snapshot-only red and corrected test-build diagnostics
+remain preserved. Evidence: tmp/phase9-runtime-caption-init, including exact
+commands/TS, original source, complete frame/audio traces and pair comparisons;
+the existing bounded-encoder variation and dedicated ownership proofs remain
+valid and are not rerun merely for a new green result.
+
+Emergency preservation checkpoint requested during WSL instability: strict
+Clippy was still running at interruption; its result is not claimed. Runtime
+smoke and final checkpoint closeout remain outstanding. No full milestone claim.
+Next connect profile selection -> validation -> preview -> explicit publication
+-> ordinary stream -> suitable-client navigation using existing synthetic flow
+components and valid isolation/theme/playback receipts. Then prioritize missing
+full authored Level2.5 and actual QTeletextMaker editor roundtrip acceptance.
+Nonzero-seek HTTP delivery remains unproven. General
+seek-window context, charset/resource/wrap, opaque policies and large sources
+remain open. Full authored Level2.5/fallback, QTM/editor/metadata/templates/zones,
+Lua/restart, localized headed admin, independent decoding, suitable clients and
+all platform criteria remain unchanged. No milestone completion or accepted
+restriction; generic engine acceptance still precedes the NOS200-299-inspired
+production guide addon. No push or publication.
+
 2026-10-15 independent caption initialization control (partial):
 Criterion: show the requested source page at a nonzero seek while preserving
 ordinary selected AV, before choosing a trusted production initialization policy.

@@ -82,8 +82,11 @@ release section when tagging a release.
   syntax instead of claiming an interval the native parser cannot accept.
   Comparable generated seek/duration mismatches now reject before opening or
   retrying a source-caption consumer, preserving ordinary playback fallback.
-  Native seek initialization, complete inherited page context and general
-  source/seek semantics remain unqualified; route acceptance stays open.
+  Qualified source captions now open on a separate native input aligned to the
+  selected AV clock, preserving ordinary audio when playback seeks. Initial
+  opening and retries validate the exact completed request; unknown policies
+  retain ordinary playback. Complete inherited page context and general
+  source/seek acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
   client navigation with isolated themes and edits. Independent transport,

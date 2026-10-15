@@ -336,6 +336,7 @@ struct HlsProcessCapacity<'a> {
         Arc<crate::playback::source_teletext::runtime::PlaybackSource>,
         crate::transcode_capacity::ActiveTranscodeReservation,
         Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+        crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest,
     )>,
 }
 
@@ -2159,7 +2160,7 @@ impl HlsSessionWorker {
                     }
                 }
             };
-            let command = build_hls_command_with_input_explicit_discontinuity(
+            let (acceleration, request) = build_hls_request_with_input_explicit_discontinuity(
                 media_input,
                 self.output_format,
                 is_first,
@@ -2187,6 +2188,12 @@ impl HlsSessionWorker {
                 },
                 song.as_ref(),
             );
+            let source_caption_request =
+                crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest::new(
+                    acceleration,
+                    request,
+                );
+            let command = source_caption_request.build();
             let retained_failure = Arc::new(std::sync::Mutex::new(RetainedHlsFailure::default()));
             let (outcome, selected_graph_for_denial) = match command {
                 Ok((command, source_caption_plan)) => {
@@ -2238,6 +2245,7 @@ impl HlsSessionWorker {
                                         Arc::clone(source),
                                         active_transcode_reservation.clone(),
                                         source_caption_plan,
+                                        source_caption_request.clone(),
                                     )
                                 }),
                             },
@@ -2818,7 +2826,7 @@ impl HlsSessionWorker {
     #[allow(clippy::too_many_lines, clippy::too_many_arguments)] // Preserve the existing process state machine behind the provenance wrapper.
     async fn run_hls_process_with_remote_inner(
         &self,
-        command: FfmpegCommand,
+        mut command: FfmpegCommand,
         cleanup_interval: &mut tokio::time::Interval,
         idle_timeout: Option<Duration>,
         watch_idle_timeout: Option<Duration>,
@@ -2863,7 +2871,7 @@ impl HlsSessionWorker {
             .as_ref()
             .map(|retained| Arc::clone(&retained.failure));
         let mut reserve_interval = tokio::time::interval(Duration::from_millis(250));
-        if let Some((source, _, plan)) = &capacity.source_caption {
+        if let Some((source, _, plan, request)) = &capacity.source_caption {
             if producer.is_some() || retained.is_some() {
                 if let Some(retained) = retained {
                     let _ = retained.prepared.cancel().await;
@@ -2872,16 +2880,17 @@ impl HlsSessionWorker {
                     "local source captions cannot use a remote HLS producer".into(),
                 );
             }
-            if source
-                .observe_consumer_origin(
+            match source
+                .initialize_consumer_command(
                     &command,
                     plan.as_ref(),
+                    request,
                     self.source_caption_check_deadline(source.initial_deadline()),
                 )
                 .await
-                .is_err()
             {
-                return HlsProcessOutcome::SourceCaptionUnavailable;
+                Ok(initialized) => command = initialized,
+                Err(_) => return HlsProcessOutcome::SourceCaptionUnavailable,
             }
         }
         if let Some(song) = capacity.song {
@@ -2926,7 +2935,7 @@ impl HlsSessionWorker {
         // No await separates a local consumer spawn from transfer of its exact
         // receipt and actual transcode admission. The child adapter, including
         // its uncertainty Drop, owns them independently of the requesting UI.
-        if let Some((source, reservation, _)) = &capacity.source_caption {
+        if let Some((source, reservation, _, _)) = &capacity.source_caption {
             if let Err(error) =
                 child.attach_local_teletext_source(source.receipt(), reservation.clone())
             {
@@ -4116,6 +4125,58 @@ fn build_hls_command_with_input_explicit_discontinuity(
     ),
     ersatzrs_ffmpeg::UnsupportedSource,
 > {
+    let (acceleration, request) = build_hls_request_with_input_explicit_discontinuity(
+        input,
+        output_format,
+        is_first_transcode,
+        troubleshooting,
+        hls_realtime,
+        start_position,
+        duration,
+        output_ts_offset,
+        playback_profile,
+        target_frame_rate,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        audio_selection,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        hls_discontinuity,
+        opacity_clock,
+        input_timeline,
+        song,
+    );
+    ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(acceleration, request)
+}
+
+#[allow(clippy::too_many_arguments)] // Keep the existing HLS builder's completed policy at one shared boundary.
+fn build_hls_request_with_input_explicit_discontinuity(
+    input: InputFile,
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    troubleshooting: bool,
+    hls_realtime: bool,
+    start_position: Duration,
+    duration: Option<Duration>,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    audio_selection: PlaybackAudioSelection,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    hls_discontinuity: HlsDiscontinuity,
+    opacity_clock: Option<WatermarkOpacityClock>,
+    input_timeline: HlsInputTimeline,
+    song: Option<&crate::song_background::NativeSongBackground>,
+) -> (HardwareAccelerationKind, PipelineRequest) {
     let seek_after_input = input.seek_after_input;
     let mut desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
@@ -4206,10 +4267,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
         }
         song.apply(&mut request);
     }
-    ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
-        playback_profile.profile.hardware_acceleration,
-        request,
-    )
+    (playback_profile.profile.hardware_acceleration, request)
 }
 
 #[allow(clippy::too_many_arguments)]

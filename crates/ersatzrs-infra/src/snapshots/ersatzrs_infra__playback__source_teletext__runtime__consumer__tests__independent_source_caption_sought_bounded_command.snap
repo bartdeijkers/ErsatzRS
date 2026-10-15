@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-infra/src/playback_source_teletext_consumer_tests.rs
+assertion_line: 239
+expression: "command.arguments.join(\" \")"
+---
+-nostdin -hide_banner -nostats -loglevel error -fflags +genpts+discardcorrupt+igndts -c:v h264 -ss 00:00:00.5000000 -i source.ts -fflags +genpts+discardcorrupt+igndts -itsoffset -0.539056 -txt_page:7 888 -txt_format:7 bitmap -txt_default_region:7 -1 -i source.ts -filter_complex [0:4]scale=1920:1080:flags=fast_bilinear,setsar=1[v];[1:7]scale=1920:1080:force_original_aspect_ratio=decrease,pad=w=1920:h=1080:x=-1:y=-1:color=black@0[st];[v][st]overlay=x=(W-w)/2:y=(H-h)/2:format=0[vst];[vst]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709[vpf];[0:3]aresample=async=1,apad[a] -map [vpf] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v libx264 -profile:v high -preset:v veryfast -codec:a aac -b:a 192k -maxrate:a 192k -bufsize:a 384k -ar 48k -r 30000/1001 -fps_mode:v cfr -video_track_timescale 90000 -b:v 400k -maxrate:v 400k -bufsize:v 800k -muxrate 710400 -pcr_period 20 -output_ts_offset 0.456s -map_metadata -1 -t 00:00:04.0000000 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

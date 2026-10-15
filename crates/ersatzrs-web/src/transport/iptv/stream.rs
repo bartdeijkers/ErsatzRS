@@ -2130,7 +2130,7 @@ async fn serve_channel_stream_admitted_inner(
         media_input.clone()
     };
     let build_command = |input, metadata, subtitle_input| {
-        build_stream_command_with_retained_inputs(
+        let (acceleration, request) = build_stream_request_with_retained_inputs(
             input,
             output_format,
             start_position,
@@ -2149,7 +2149,9 @@ async fn serve_channel_stream_admitted_inner(
             Some(opacity_clock),
             retained_stream,
             song.as_deref(),
-        )
+        );
+        let request = source_teletext::SourceTeletextConsumerRequest::new(acceleration, request);
+        request.build().map(|command| (command, request))
     };
     let commands = build_command(primary_input, metadata.clone(), subtitle_input.clone()).and_then(
         |command| {
@@ -2163,40 +2165,46 @@ async fn serve_channel_stream_admitted_inner(
                     )
                 })
                 .transpose()
-                .map(|fallback| (command, fallback.map(|(command, _)| command)))
+                .map(|fallback| (command, fallback.map(|((command, _), _)| command)))
         },
     );
-    let ((command, source_caption_plan), ordinary_caption_fallback) = match commands {
-        Ok(command) => command,
-        Err(error) => {
-            // ADR 0064: refuse rather than transcode a source whose colour
-            // ErsatzRS cannot render correctly. No FFmpeg child is spawned and
-            // the reason reaches the operator.
-            tracing::error!(
-                channel_id = channel.id,
-                channel_number = %channel.number,
-                reason = %error,
-                "refusing to transcode an unsupported source"
-            );
-            cancel_retained_startup(
-                retained_playback.take().map(|playback| playback.prepared),
-                interval_reservation.as_ref(),
-                Some(&mut external_subtitle_owner),
-                &graphics_cleanup_dirs,
-                Some(&mut dynamic_text_controllers),
-            )
-            .await;
-            return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
-        }
-    };
+    let (((command, source_caption_plan), source_caption_request), ordinary_caption_fallback) =
+        match commands {
+            Ok(command) => command,
+            Err(error) => {
+                // ADR 0064: refuse rather than transcode a source whose colour
+                // ErsatzRS cannot render correctly. No FFmpeg child is spawned and
+                // the reason reaches the operator.
+                tracing::error!(
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    reason = %error,
+                    "refusing to transcode an unsupported source"
+                );
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &graphics_cleanup_dirs,
+                    Some(&mut dynamic_text_controllers),
+                )
+                .await;
+                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
+            }
+        };
     let slate_metadata = metadata.clone();
     let slate_runtime_capabilities = runtime_capabilities.clone();
     let retry_playback_profile = playback_profile.clone();
     let retry_preferred_audio_title = preferred_audio_title.map(str::to_owned);
     let retry_preferred_audio_language = preferred_audio_language.clone();
     let retry = StreamDenialRetry {
-        source_caption: source_caption_owner
-            .map(|source| source_teletext::Consumer::new(source, source_caption_plan)),
+        source_caption: source_caption_owner.map(|source| {
+            source_teletext::Consumer::new(
+                source,
+                source_caption_plan,
+                Some(source_caption_request),
+            )
+        }),
         ordinary_caption_fallback,
         song: song.clone(),
         pool: state.pool.clone(),
@@ -2364,7 +2372,7 @@ async fn serve_channel_stream_admitted_inner(
                     } else {
                         media_input
                     };
-                    let command = build_stream_command_with_retained_inputs(
+                    let (acceleration, request) = build_stream_request_with_retained_inputs(
                         primary_input,
                         output_format,
                         start_position,
@@ -2384,6 +2392,9 @@ async fn serve_channel_stream_admitted_inner(
                         retained_stream,
                         song.as_deref(),
                     );
+                    let source_caption_request =
+                        source_teletext::SourceTeletextConsumerRequest::new(acceleration, request);
+                    let command = source_caption_request.build();
                     let (Ok((command, source_caption_plan)), Ok(ordinary_caption_fallback)) =
                         (command, ordinary_caption_fallback)
                     else {
@@ -2409,6 +2420,7 @@ async fn serve_channel_stream_admitted_inner(
                     Ok(Some(StreamRetryAttempt {
                         command,
                         source_caption_plan,
+                        source_caption_request: Some(source_caption_request),
                         ordinary_caption_fallback,
                         source_stream,
                         prepared: fresh.map(|fresh| fresh.prepared),
@@ -4360,7 +4372,10 @@ fn build_stream_command_with_input_and_opacity_clock(
     .map(|(command, _)| command)
 }
 
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "The command wrapper preserves the existing playback selection contract."
+)]
 fn build_stream_command_with_retained_inputs(
     input: InputFile,
     output_format: OutputFormat,
@@ -4387,6 +4402,54 @@ fn build_stream_command_with_retained_inputs(
     ),
     ersatzrs_ffmpeg::UnsupportedSource,
 > {
+    let (acceleration, request) = build_stream_request_with_retained_inputs(
+        input,
+        output_format,
+        start_position,
+        duration,
+        playback_profile,
+        target_frame_rate,
+        streaming_mode,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        audio_selection,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        opacity_clock,
+        retained_stream,
+        song,
+    );
+    ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(acceleration, request)
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "Final request construction keeps retained, song, audio and hardware mutations in one ordered path."
+)]
+fn build_stream_request_with_retained_inputs(
+    input: InputFile,
+    output_format: OutputFormat,
+    start_position: Duration,
+    duration: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    streaming_mode: StreamingMode,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<SourceAudioStream>,
+    audio_selection: PlaybackAudioSelection,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    opacity_clock: Option<WatermarkOpacityClock>,
+    retained_stream: bool,
+    song: Option<&ersatzrs_infra::song_background::NativeSongBackground>,
+) -> (ersatzrs_domain::HardwareAccelerationKind, PipelineRequest) {
     let seek_after_input = input.seek_after_input;
     let needs_hls_direct_mpegts_transcode = hls_direct_mpegts_needs_transcode(
         output_format,
@@ -4486,7 +4549,7 @@ fn build_stream_command_with_retained_inputs(
     } else {
         playback_profile.profile.hardware_acceleration
     };
-    ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(acceleration, request)
+    (acceleration, request)
 }
 
 fn native_generated_audio_duration(
@@ -4874,6 +4937,7 @@ struct StreamDenialRetry {
 struct StreamRetryAttempt {
     command: FfmpegCommand,
     source_caption_plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    source_caption_request: Option<source_teletext::SourceTeletextConsumerRequest>,
     ordinary_caption_fallback: Option<FfmpegCommand>,
     source_stream: Option<SourceVideoStream>,
     prepared: Option<PreparedRemoteStreamInput>,
@@ -4972,6 +5036,7 @@ fn immediate_stream_retry(
             Ok(build(mode).map(|command| StreamRetryAttempt {
                 command,
                 source_caption_plan: None,
+                source_caption_request: None,
                 ordinary_caption_fallback: None,
                 source_stream: None,
                 prepared: None,
@@ -6901,6 +6966,7 @@ mod tests {
         let result = spawn_stream_retry(
             StreamRetryAttempt {
                 source_caption_plan: None,
+                source_caption_request: None,
                 command: FfmpegCommand {
                     mpegts_output: None,
                     executable: "must-not-spawn".into(),

@@ -532,6 +532,15 @@ fn source_caption_denial_context(
     }
 }
 
+fn consumer_request(
+    request: &ersatzrs_ffmpeg::PipelineRequest,
+) -> super::super::source_teletext::SourceTeletextConsumerRequest {
+    super::super::source_teletext::SourceTeletextConsumerRequest::new(
+        ersatzrs_domain::HardwareAccelerationKind::None,
+        request.clone(),
+    )
+}
+
 async fn assert_native_inventory_fallback(
     state: &AppState,
     receipt: std::sync::Arc<ersatzrs_infra::playback::source_teletext::runtime::PlaybackSource>,
@@ -566,15 +575,12 @@ async fn assert_native_inventory_fallback(
     request.state.start = Some(interval.start());
     request.state.duration = Some(interval.duration());
     request.ffmpeg_executable = Some("synthetic-caption-command-not-spawned".into());
-    let (command, plan) = ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
-        ersatzrs_domain::HardwareAccelerationKind::None,
-        request,
-    )
-    .unwrap();
+    let request = consumer_request(&request);
+    let (command, plan) = request.build().unwrap();
     receipt
         .check_consumer_command(&command, plan.as_ref())
         .expect("command and caption identity match before actual inventory checking");
-    let consumer = super::super::source_teletext::Consumer::new(receipt, plan);
+    let consumer = super::super::source_teletext::Consumer::new(receipt, plan, Some(request));
     let mut context = source_caption_denial_context(state, consumer, ordinary.clone());
     let selected = super::super::source_caption_recovery::before_open(
         &command,
@@ -637,8 +643,11 @@ async fn assert_consumer_plan_fences(
     .unwrap();
     let plan = plan.expect("actual generated source-caption plan");
     assert!(plan.matches_command(&primary));
-    let mut consumer =
-        super::super::source_teletext::Consumer::new(receipt.clone(), Some(plan.clone()));
+    let mut consumer = super::super::source_teletext::Consumer::new(
+        receipt.clone(),
+        Some(plan.clone()),
+        Some(consumer_request(&request)),
+    );
     consumer
         .before_open(&primary, Some(reservation), deadline)
         .await
@@ -669,18 +678,46 @@ async fn assert_consumer_plan_fences(
         .before_open(&changed, Some(reservation), deadline)
         .await
         .is_err());
-    let mut missing = super::super::source_teletext::Consumer::new(receipt.clone(), None);
+    let mut missing = super::super::source_teletext::Consumer::new(
+        receipt.clone(),
+        None,
+        Some(consumer_request(&request)),
+    );
     assert!(missing
         .before_open(&primary, Some(reservation), deadline)
         .await
         .is_err());
-    assert!(consumer.clone().before_retry(&primary, None).await.is_err());
+    assert!(consumer
+        .clone()
+        .before_retry(&primary, None, Some(consumer_request(&request)))
+        .await
+        .is_err());
     let mut retried = consumer.clone();
-    retried.before_retry(&primary, Some(plan)).await.unwrap();
+    retried
+        .before_retry(
+            &primary,
+            Some(plan.clone()),
+            Some(consumer_request(&request)),
+        )
+        .await
+        .unwrap();
     assert!(
-        retried.before_retry(&primary, None).await.is_err(),
+        retried
+            .before_retry(&primary, None, Some(consumer_request(&request)))
+            .await
+            .is_err(),
         "retry cannot borrow its previous plan"
     );
+    assert_consumer_request_fences(
+        &request,
+        &receipt,
+        &consumer,
+        reservation,
+        deadline,
+        &primary,
+        &plan,
+    )
+    .await;
     assert_consumer_interval_fences(&request, &receipt, &consumer, reservation, deadline).await;
     let stream = request
         .inputs
@@ -690,20 +727,57 @@ async fn assert_consumer_plan_fences(
         .first_mut()
         .unwrap();
     stream.source_teletext_page = Some(ersatzrs_domain::TeletextPageNumber::new(200).unwrap());
-    let (wrong_page, wrong_plan) =
-        ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
-            ersatzrs_domain::HardwareAccelerationKind::None,
-            request,
-        )
-        .unwrap();
+    let request = consumer_request(&request);
+    let (wrong_page, wrong_plan) = request.build().unwrap();
     assert!(
-        super::super::source_teletext::Consumer::new(receipt, wrong_plan)
+        super::super::source_teletext::Consumer::new(receipt, wrong_plan, Some(request))
             .before_open(&wrong_page, Some(reservation), deadline)
             .await
             .is_err()
     );
-    println!("generated consumer fences: matching nonzero initial/fresh retry and native-equivalent timing accepted; changed seek/duration, executable/argv, missing or reused retry plan and independently sealed wrong page rejected before spawn; unknown duration/independent caption clock not inferred");
+    println!("generated consumer fences: matching nonzero initial/fresh retry and native-equivalent timing accepted; changed seek/duration, executable/argv, missing request, missing or reused retry plan and independently sealed wrong page rejected before spawn; unknown duration/independent caption clock not inferred");
     (consumer, primary)
+}
+
+async fn assert_consumer_request_fences(
+    request: &ersatzrs_ffmpeg::PipelineRequest,
+    receipt: &std::sync::Arc<ersatzrs_infra::playback::source_teletext::runtime::PlaybackSource>,
+    consumer: &super::super::source_teletext::Consumer,
+    reservation: &ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation,
+    deadline: tokio::time::Instant,
+    primary: &ersatzrs_ffmpeg::FfmpegCommand,
+    plan: &ersatzrs_ffmpeg::SourceTeletextInputPlan,
+) {
+    assert!(super::super::source_teletext::Consumer::new(
+        receipt.clone(),
+        Some(plan.clone()),
+        None,
+    )
+    .before_open(primary, Some(reservation), deadline)
+    .await
+    .is_err());
+    assert!(consumer
+        .clone()
+        .before_retry(primary, Some(plan.clone()), None)
+        .await
+        .is_err());
+    let mut changed_request = request.clone();
+    changed_request.state.duration =
+        Some(receipt.playback_interval().unwrap().duration() + Duration::from_secs(1));
+    let changed_request = consumer_request(&changed_request);
+    assert!(super::super::source_teletext::Consumer::new(
+        receipt.clone(),
+        Some(plan.clone()),
+        Some(changed_request.clone()),
+    )
+    .before_open(primary, Some(reservation), deadline)
+    .await
+    .is_err());
+    assert!(consumer
+        .clone()
+        .before_retry(primary, Some(plan.clone()), Some(changed_request))
+        .await
+        .is_err());
 }
 
 async fn assert_consumer_interval_fences(
@@ -727,12 +801,8 @@ async fn assert_consumer_interval_fences(
         let mut changed = request.clone();
         changed.state.start = Some(start);
         changed.state.duration = Some(duration);
-        let (changed, changed_plan) =
-            ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
-                ersatzrs_domain::HardwareAccelerationKind::None,
-                changed,
-            )
-            .unwrap();
+        let request = consumer_request(&changed);
+        let (changed, changed_plan) = request.build().unwrap();
         assert!(changed_plan.as_ref().unwrap().matches_command(&changed));
         assert!(receipt
             .check_consumer_command(&changed, changed_plan.as_ref())
@@ -740,13 +810,14 @@ async fn assert_consumer_interval_fences(
         assert!(super::super::source_teletext::Consumer::new(
             receipt.clone(),
             changed_plan.clone(),
+            Some(request.clone()),
         )
         .before_open(&changed, Some(reservation), deadline)
         .await
         .is_err());
         assert!(consumer
             .clone()
-            .before_retry(&changed, changed_plan)
+            .before_retry(&changed, changed_plan, Some(request))
             .await
             .is_err());
     }
@@ -944,3 +1015,6 @@ fn normal_hybrid_local_route_burns_exact_source_caption_and_preserves_off_and_al
         0
     );
 }
+
+#[path = "stream_source_caption_initializer_tests.rs"]
+mod initializer;

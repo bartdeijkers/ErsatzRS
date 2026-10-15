@@ -8,7 +8,7 @@ use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionC
 use tokio::time::Instant;
 
 pub(super) use ersatzrs_infra::playback::source_teletext::runtime::{
-    PlaybackSource, Selection, SourceTeletextPlaybackInterval,
+    PlaybackSource, Selection, SourceTeletextConsumerRequest, SourceTeletextPlaybackInterval,
 };
 
 use super::ActivePlayoutItem;
@@ -52,6 +52,7 @@ pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selec
 pub(super) struct Consumer {
     source: Arc<PlaybackSource>,
     plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    request: Option<SourceTeletextConsumerRequest>,
     reservation: Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
 }
 
@@ -59,10 +60,12 @@ impl Consumer {
     pub(super) fn new(
         source: Arc<PlaybackSource>,
         plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+        request: Option<SourceTeletextConsumerRequest>,
     ) -> Self {
         Self {
             source,
             plan,
+            request,
             reservation: None,
         }
     }
@@ -76,32 +79,38 @@ impl Consumer {
         command: &ersatzrs_ffmpeg::FfmpegCommand,
         reservation: Option<&ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
         deadline: Instant,
-    ) -> Result<()> {
+    ) -> Result<ersatzrs_ffmpeg::FfmpegCommand> {
         self.check_command(command)?;
         self.reservation = Some(reservation.ok_or_else(unavailable)?.clone());
         self.source
-            .observe_consumer_origin(command, self.plan.as_ref(), deadline)
+            .initialize_consumer_command(
+                command,
+                self.plan.as_ref(),
+                self.request.as_ref().ok_or_else(unavailable)?,
+                deadline,
+            )
             .await
-            .map(|_| ())
     }
 
     pub(super) async fn before_retry(
         &mut self,
         command: &ersatzrs_ffmpeg::FfmpegCommand,
         plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
-    ) -> Result<()> {
+        request: Option<SourceTeletextConsumerRequest>,
+    ) -> Result<ersatzrs_ffmpeg::FfmpegCommand> {
         // A changed hardware topology needs this attempt's own generated plan.
         // Never let an absent or mismatched retry borrow the initial seal.
         self.plan = plan;
+        self.request = request;
         self.check_command(command)?;
         self.source
-            .observe_consumer_origin(
+            .initialize_consumer_command(
                 command,
                 self.plan.as_ref(),
+                self.request.as_ref().ok_or_else(unavailable)?,
                 Instant::now() + Duration::from_secs(15),
             )
             .await
-            .map(|_| ())
     }
 
     fn check_command(&self, command: &ersatzrs_ffmpeg::FfmpegCommand) -> Result<()> {
