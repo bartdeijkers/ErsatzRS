@@ -43,6 +43,9 @@ release section when tagging a release.
   Explicit bounded packet spans can decode pages beyond the initial scan prefix
   from the same held source, with exact offsets and omission accounting. Reaching
   EOF from a later offset does not qualify the whole source or a playback cue.
+  Complete AV/PCR tails remain in captured non-EOF ranges; only an unfinished
+  selected PES requires trimming. Both native consumers now retain the exact
+  requested seek/end separately from source-clock and decoder timestamps.
   General source/seek semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible

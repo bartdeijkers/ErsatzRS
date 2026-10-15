@@ -666,6 +666,7 @@ async fn episode_nfo_rescan_adds_and_removes_genres_and_tags() {
         library_id: 1,
         ffprobe_path: ffprobe,
         deep_scan: false,
+        managed_claim: None,
     };
     let mut baseline = None;
     for (step, genres, tags) in [

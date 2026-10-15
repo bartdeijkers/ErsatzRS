@@ -7,7 +7,9 @@ use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
 use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionContext};
 use tokio::time::Instant;
 
-pub(super) use ersatzrs_infra::playback::source_teletext::runtime::{PlaybackSource, Selection};
+pub(super) use ersatzrs_infra::playback::source_teletext::runtime::{
+    PlaybackSource, Selection, SourceTeletextPlaybackInterval,
+};
 
 use super::ActivePlayoutItem;
 use crate::host::state::AppState;
@@ -19,6 +21,7 @@ pub(super) struct SelectionContext<'a> {
     pub languages: &'a [String],
     pub subtitle_mode: ChannelSubtitleMode,
     pub streaming_mode: StreamingMode,
+    pub playback_interval: Option<SourceTeletextPlaybackInterval>,
     pub deadline: Instant,
 }
 
@@ -38,6 +41,7 @@ pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selec
         languages: context.languages,
         subtitle_mode: context.subtitle_mode,
         streaming_mode: context.streaming_mode,
+        playback_interval: context.playback_interval,
         deadline: context.deadline,
     })
     .await

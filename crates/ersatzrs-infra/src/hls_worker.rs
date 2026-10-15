@@ -1684,6 +1684,12 @@ impl HlsSessionWorker {
                             channel: &channel_for_streams,
                             resolution: &playback_profile.resolution,
                             start: start_seconds,
+                            playback_interval: duration.and_then(|duration| {
+                                source_caption::SourceTeletextPlaybackInterval::from_start_and_duration(
+                                    start_position,
+                                    duration,
+                                )
+                            }),
                             ordinary_only: source_caption_fallback.take().is_some_and(
                                 |occurrence| {
                                     occurrence == source_caption::CaptionOccurrence::from(&active)

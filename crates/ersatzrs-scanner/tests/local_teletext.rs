@@ -548,6 +548,7 @@ async fn native_shared_caption_runtime_releases_preparation_and_preserves_ordina
         languages: &languages,
         subtitle_mode: ChannelSubtitleMode::Any,
         streaming_mode: StreamingMode::TransportStream,
+        playback_interval: None,
         deadline: Instant::now() + std::time::Duration::from_secs(20),
     };
     let selected = runtime::select(context()).await.unwrap().unwrap();

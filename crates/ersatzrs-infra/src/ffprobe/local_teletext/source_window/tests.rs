@@ -423,3 +423,96 @@ async fn nonzero_capped_span_reports_exact_selected_prefix_and_partial_tail_omis
     assert_eq!(captured.evidence.trimmed_source_tail_packets, 1);
     assert!(!captured.evidence.ended_at_eof);
 }
+
+fn separate_program_pcr_tail() -> (Vec<u8>, [u8; PACKET_BYTES], [u8; PACKET_BYTES]) {
+    let fixture = fixture();
+    let mut complete = complete_span_bytes();
+    // Independently calculated MPEG CRC for this existing source PMT with
+    // PCR_PID changed to 0x101; selected teletext remains PID 0x100.
+    complete[PACKET_BYTES + 14] = 1;
+    complete[PACKET_BYTES + 34..PACKET_BYTES + 38].copy_from_slice(&[0x58, 0x88, 0xd5, 0xe0]);
+    let mut first: [u8; PACKET_BYTES] = fixture[2 * PACKET_BYTES..3 * PACKET_BYTES]
+        .try_into()
+        .unwrap();
+    let mut second: [u8; PACKET_BYTES] = fixture[4 * PACKET_BYTES..5 * PACKET_BYTES]
+        .try_into()
+        .unwrap();
+    first[2] = 1;
+    second[2] = 1;
+    (complete, first, second)
+}
+
+#[tokio::test]
+async fn non_eof_span_retains_complete_nonselected_program_pcr_tail_byte_exactly() {
+    let (complete, first_pcr, last_pcr) = separate_program_pcr_tail();
+    let actual = [complete.as_slice(), &first_pcr, &last_pcr].concat();
+    let bytes = [&null_packet()[..], &actual, &null_packet()].concat();
+    let captured = capture_bytes_with_span(
+        &bytes,
+        0x100,
+        1,
+        Some(SourceTeletextPacketSpan::new(1, 17).unwrap()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(snapshot_bytes(&captured), actual);
+    assert_eq!(captured.evidence.pcr_pid, 0x101);
+    assert_eq!(captured.evidence.first_source_packet, 1);
+    assert_eq!(captured.evidence.source_packets, 17);
+    assert_eq!(captured.evidence.decoder_packets, 17);
+    assert_eq!(captured.evidence.skipped_selected_prefix_packets, 0);
+    assert_eq!(captured.evidence.trimmed_source_tail_packets, 0);
+    assert!(!captured.evidence.ended_at_eof);
+    assert!(!captured.evidence.covers_entire_source_bytes());
+    assert_eq!(
+        captured.evidence.decoder_sha256,
+        <[u8; 32]>::from(Sha256::digest(&actual))
+    );
+}
+
+#[tokio::test]
+async fn partial_selected_pes_still_trims_following_pcr_tail_only_before_real_eof() {
+    let (complete, first_pcr, last_pcr) = separate_program_pcr_tail();
+    let fixture = fixture();
+    let mut pending: [u8; PACKET_BYTES] = fixture[15 * PACKET_BYTES..].try_into().unwrap();
+    pending[3] = 0x17;
+    pending[8..10].copy_from_slice(&362_u16.to_be_bytes());
+    let actual = [complete.as_slice(), &pending, &first_pcr, &last_pcr].concat();
+    let bytes = [&null_packet()[..], &actual, &null_packet()].concat();
+    let span = SourceTeletextPacketSpan::new(1, 18).unwrap();
+    let captured = capture_bytes_with_span(&bytes, 0x100, 1, Some(span))
+        .await
+        .unwrap();
+    assert_eq!(snapshot_bytes(&captured), complete);
+    assert_eq!(captured.evidence.decoder_packets, 15);
+    assert_eq!(captured.evidence.trimmed_source_tail_packets, 3);
+    assert!(!captured.evidence.ended_at_eof);
+    let eof = [&null_packet()[..], &actual].concat();
+    assert!(capture_bytes_with_span(&eof, 0x100, 1, Some(span))
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn malformed_selected_tail_never_becomes_an_allowed_incomplete_trim() {
+    let (complete, first_pcr, _) = separate_program_pcr_tail();
+    let fixture = fixture();
+    let mut pending: [u8; PACKET_BYTES] = fixture[15 * PACKET_BYTES..].try_into().unwrap();
+    pending[3] = 0x17;
+    pending[8..10].copy_from_slice(&362_u16.to_be_bytes());
+    let mut wrong_counter = pending;
+    wrong_counter[3] = 0x10;
+    let mut bad_pes = pending;
+    bad_pes[4] = 0xff;
+    for malformed in [wrong_counter, bad_pes] {
+        let bytes = [complete.as_slice(), &malformed, &first_pcr, &null_packet()].concat();
+        assert!(capture_bytes_with_span(
+            &bytes,
+            0x100,
+            1,
+            Some(SourceTeletextPacketSpan::new(0, 17).unwrap()),
+        )
+        .await
+        .is_err());
+    }
+}

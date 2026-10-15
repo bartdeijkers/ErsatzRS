@@ -2968,6 +2968,49 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 requested-interval and complete-tail checkpoint (partial):
+Both native consumers now carry the exact requested media seek/end in a typed
+interval through existing retained ownership; unknown or invalid intervals gain
+no temporal authority. Non-EOF capture keeps complete trailing AV/PCR packets
+and trims only an unfinished selected PES. Actual worker/deadline/admission,
+whole-source byte fencing and ordinary fallback remain intact. These changes
+support the source-caption timing and ordinary-playback safety criteria.
+
+Focused run 3b832645-b00c-407c-b2cb-9e28c7da6ff1 passes 50 tests. Native run
+aacf2137-f018-4124-8e7d-318b7bfc14bf passes on n9.0-20260805, including a
+non-EOF later span retaining 512 real nonselected tail packets including PCR:
+first ordinal 53,193, count 10,938, exact SHA-256
+da34ce3db6267e9f1bb98c70d131a8c1063af84b0ec86b38d245a52fb10eede5.
+Web recovery run 17f8f71c-3aeb-4226-bc55-c5eca6c8e103 passes three tests.
+Actual ordinary legacy b1b8f787-1d3d-4e5a-af42-ba33e8217552 (20.532 s) and
+Hybrid e07b7d60-a406-4ebb-82a3-dd37f21388ff (34.110 s) pass four cases each:
+Off, selected888 with English/Dutch audio, and stale-source ordinary fallback.
+They retain TSDuck, decoded AV, authored200, source identity and owned cleanup
+checks. Exact logs are in local tmp/phase9-source-interval-checkpoint/.
+
+The actual pinned FFprobe raw-clock experiment in
+local tmp/phase9-source-seek-locator/ confirms first PCR is not media origin and
+default teletext PTS correction differs from wire PES PTS at the same position.
+Requested media times, raw source clocks and effective decoder times therefore
+remain separate. This evidence does not qualify automatic later source spans.
+
+Maintainer-requested WSL cleanup waited for all live checks and preserved source,
+commits and evidence. Strict infra/web/scanner all-target Clippy passes in
+clippy-3.log. Earlier failures identified unchecked Duration subtraction and an
+existing scanner fixture missing managed_claim; the private positive-interval
+accessor now uses saturating subtraction without changing any valid value, and
+the ordinary scanner fixture supplies None. The two interval regressions pass again in run
+1115825c-c7c8-4d53-b91c-57348ebf2ea9 after that arithmetic change; native decoder/caller algorithms, inputs
+and earlier successful native evidence are unchanged. Formatting, architecture,
+structured progress, scoped policy and independent read-only review are checked
+for this local engineering checkpoint; no full CI or engine acceptance is claimed.
+Next prove actual
+media-origin/continuous clock epoch, cue-end bookends and cue-window page headers
+under the existing owner before connecting the delayed-page ordinary flow.
+Full engine, authored Level2.5/fallback, editor, metadata/zones, localized admin,
+client, platform and Next acceptance remain open. No milestone is completed.
+
+
 2026-10-15 positioned same-byte source decoding checkpoint (partial):
 Criterion: decode a real later source page without authorizing unrelated prefix
 bytes or weakening actual worker ownership. A checked TS188 packet span now

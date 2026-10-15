@@ -6,6 +6,8 @@ use ersatzrs_domain::{Channel, ChannelSubtitleMode, Resolution, StreamingMode};
 use super::{external, ActiveHlsItem, DbPool, HlsSessionWorker, RepositoryResult};
 use crate::playback::source_teletext::runtime::{self, RuntimeSelectionContext, Selection};
 
+pub(super) use crate::playback::source_teletext::runtime::SourceTeletextPlaybackInterval;
+
 pub(super) struct AutomaticCaptionRequest<'a> {
     pub active: &'a ActiveHlsItem,
     pub languages: &'a [String],
@@ -13,6 +15,7 @@ pub(super) struct AutomaticCaptionRequest<'a> {
     pub channel: &'a Channel,
     pub resolution: &'a Resolution,
     pub start: i64,
+    pub playback_interval: Option<SourceTeletextPlaybackInterval>,
     pub ordinary_only: bool,
 }
 
@@ -106,6 +109,7 @@ impl HlsSessionWorker {
             languages: request.languages,
             subtitle_mode: request.mode,
             streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+            playback_interval: request.playback_interval,
             deadline: external::deadline(self),
         })
         .await;

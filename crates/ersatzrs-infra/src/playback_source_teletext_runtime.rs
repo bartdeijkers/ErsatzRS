@@ -31,6 +31,10 @@ use crate::{
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_SETTING: &str = "teletext.work.max_concurrent";
 
+#[path = "playback_source_teletext_interval.rs"]
+mod interval;
+pub use interval::SourceTeletextPlaybackInterval;
+
 /// Persisted source identity plus the actual resolved playback locator.
 /// Transient/external inputs have no durable identity and remain inapplicable.
 pub struct RuntimeSelectionContext<'a> {
@@ -44,6 +48,8 @@ pub struct RuntimeSelectionContext<'a> {
     pub languages: &'a [String],
     pub subtitle_mode: ChannelSubtitleMode,
     pub streaming_mode: StreamingMode,
+    /// Actual finite media-relative request, not source-clock qualification.
+    pub playback_interval: Option<SourceTeletextPlaybackInterval>,
     pub deadline: Instant,
 }
 
@@ -64,9 +70,17 @@ pub struct PlaybackSource {
     pool: DbPool,
     locker: EntityLocker,
     deadline: Instant,
+    playback_interval: Option<SourceTeletextPlaybackInterval>,
 }
 
 impl PlaybackSource {
+    /// Exact requested media interval retained through consumer/retry ownership.
+    /// This is caller intent, not proof that the receipt covers that source time.
+    #[must_use]
+    pub const fn playback_interval(&self) -> Option<SourceTeletextPlaybackInterval> {
+        self.playback_interval
+    }
+
     /// Share the held exact-source association with its actual consuming child.
     #[must_use]
     pub fn receipt(&self) -> Arc<DecodedLocalTeletextPage> {
@@ -212,6 +226,7 @@ pub async fn select(context: RuntimeSelectionContext<'_>) -> Result<Option<Selec
             pool: context.pool.clone(),
             locker: context.locker.clone(),
             deadline: work_deadline,
+            playback_interval: context.playback_interval,
         })
     });
     Ok(Some(Selection {
@@ -368,6 +383,7 @@ mod tests {
                 languages: &[],
                 subtitle_mode,
                 streaming_mode,
+                playback_interval: None,
                 deadline: Instant::now(),
             })
             .await

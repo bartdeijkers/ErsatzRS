@@ -438,12 +438,21 @@ async fn late_source_rejection_uses_actual_receipt(
         languages: &["eng".to_owned()],
         subtitle_mode: ChannelSubtitleMode::Any,
         streaming_mode: StreamingMode::TransportStream,
+        playback_interval: runtime::SourceTeletextPlaybackInterval::from_start_and_duration(
+            Duration::ZERO,
+            Duration::from_secs(12),
+        ),
         deadline,
     })
     .await
     .unwrap()
     .expect("actual scanned source must select an exact decoded page");
     let receipt = selection.source.expect("genuine exact-page source receipt");
+    let interval = receipt
+        .playback_interval()
+        .expect("actual finite caller timing survives source preparation");
+    assert_eq!(interval.start(), Duration::ZERO);
+    assert_eq!(interval.end(), Duration::from_secs(12));
     assert_eq!(locker.active_teletext_work(), 0);
     let reservation = try_reserve_active_transcode(
         DEFAULT_ACTIVE_TRANSCODE_LIMIT,

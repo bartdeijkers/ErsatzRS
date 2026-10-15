@@ -4,7 +4,7 @@ use std::{io::Write as _, path::PathBuf, sync::Arc};
 
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_ffmpeg::teletext::{
-    source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyEvent},
+    source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyError, TeletextAssemblyEvent},
     source_observation::MAX_SOURCE_OBSERVATION_PACKETS,
     source_psi::{ObservedSourcePsi, SourceTeletextPsiObserver},
 };
@@ -91,7 +91,8 @@ impl SourceTeletextPacketSpan {
 /// Selected payload is retained only after complete current PSI; current table
 /// changes anywhere in the captured source are rejected. Selected-PID packets
 /// preceding its first post-PSI PES start are omitted. A capped source may also
-/// omit the tail after the last completed selected PES. Neither omission proves
+/// omit an incomplete selected-PES tail after the last completed selected PES.
+/// Complete nonselected tails are retained. Neither omission proves
 /// absent pages or a complete inventory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceTeletextDecodeWindowEvidence {
@@ -104,8 +105,9 @@ pub struct SourceTeletextDecodeWindowEvidence {
     pub decoder_packets: u32,
     /// Selected-PID packets omitted before the first post-current-PSI PES start.
     pub skipped_selected_prefix_packets: u32,
-    /// All packets removed after the final complete selected PES at a capped
-    /// window end. Source count equals decoder+skipped prefix+trimmed tail.
+    /// All packets removed after the final complete selected PES when an
+    /// incomplete selected PES reaches a non-EOF window end. Source count
+    /// equals decoder+skipped prefix+trimmed tail.
     pub trimmed_source_tail_packets: u32,
     /// The INSPECTED span's byte end equals the held source length. Nonzero
     /// `first_source_packet` still excludes earlier bytes; this is not whole-file
@@ -274,10 +276,12 @@ fn capture<T>(
     if observed.current_tables_changed {
         return Err(invalid());
     }
-    if ended_at_eof {
-        assembler.finish().map_err(|_| invalid())?;
-    } else {
-        bytes.truncate(last_complete.ok_or_else(invalid)?);
+    match assembler.finish() {
+        Ok(()) => (),
+        Err(TeletextAssemblyError::Incomplete) if !ended_at_eof => {
+            bytes.truncate(last_complete.ok_or_else(invalid)?);
+        }
+        Err(_) => return Err(invalid()),
     }
     let fingerprint = headers::fingerprint(&observed);
     validate_decoder_window(&bytes, pid, program_number, fingerprint, stop)?;

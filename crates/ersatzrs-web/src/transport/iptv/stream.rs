@@ -1371,6 +1371,12 @@ async fn serve_channel_stream_admitted_inner(
         active.remote_stream.as_ref(),
         active.content_seek_position(now),
     );
+    let source_caption_playback_interval = active.remaining_duration(now).and_then(|duration| {
+        source_teletext::SourceTeletextPlaybackInterval::from_start_and_duration(
+            start_position,
+            duration,
+        )
+    });
     let start_seconds = duration_as_i64_seconds(start_position);
     let content_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
     fence_cancelled_startup!(&[], None);
@@ -1594,6 +1600,7 @@ async fn serve_channel_stream_admitted_inner(
                     state, active: &active, resolved: &resolved,
                     languages: &preferred_subtitle_languages, subtitle_mode,
                     streaming_mode: effective_streaming_mode, deadline: startup_deadline,
+                    playback_interval: source_caption_playback_interval,
                 }).await;
                 match selected {
                     Ok(Some(selected)) => {
@@ -2080,6 +2087,7 @@ async fn serve_channel_stream_admitted_inner(
                 languages: &preferred_subtitle_languages,
                 subtitle_mode,
                 streaming_mode: effective_streaming_mode,
+                playback_interval: source_caption_playback_interval,
                 deadline: startup_deadline,
             },
             output_format,

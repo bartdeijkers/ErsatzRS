@@ -252,6 +252,17 @@ impl LaterSource {
         page: u16,
         program: u16,
     ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        self.decode_at(scope, work, page, program, self.span).await
+    }
+
+    async fn decode_at(
+        &self,
+        scope: &LocalProbeCleanupScope,
+        work: &TeletextWorkGuard,
+        page: u16,
+        program: u16,
+        span: SourceTeletextPacketSpan,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
         let mut request = self.request.clone();
         request.page = TeletextPageNumber::new(page).unwrap();
         request.program_number = program;
@@ -260,11 +271,55 @@ impl LaterSource {
                 request,
                 self.path.clone(),
                 self.path.clone(),
-                self.span,
+                span,
                 Instant::now() + Duration::from_secs(15),
                 work.hold_work(),
             ))
             .await
+    }
+
+    async fn assert_complete_non_eof_tail(
+        &self,
+        scope: &LocalProbeCleanupScope,
+        work: &TeletextWorkGuard,
+    ) {
+        let packets: Vec<_> = self.bytes.chunks_exact(PACKET_BYTES).collect();
+        let last_selected = packets
+            .iter()
+            .rposition(|packet| packet_pid(packet) == SELECTED_PID)
+            .unwrap();
+        let end = last_selected + 513;
+        assert!(end < packets.len());
+        let tail = &packets[last_selected + 1..end];
+        assert!(tail.iter().all(|packet| packet_pid(packet) != SELECTED_PID));
+        assert!(tail.iter().any(|packet| {
+            packet_pid(packet) == 256
+                && packet[3] & 0x20 != 0
+                && packet[4] > 0
+                && packet[5] & 0x10 != 0
+        }));
+        let first = usize::try_from(self.span.first_packet()).unwrap();
+        let span = SourceTeletextPacketSpan::new(
+            self.span.first_packet(),
+            u32::try_from(end - first).unwrap(),
+        )
+        .unwrap();
+        let decoded = self.decode_at(scope, work, 888, 1, span).await.unwrap();
+        let window = decoded.window();
+        assert!(decoded.events().count > 0);
+        assert!(!window.ended_at_eof);
+        assert!(!window.covers_entire_source_bytes());
+        assert_eq!(window.source_packets, span.packet_count());
+        assert_eq!(window.decoder_packets, span.packet_count());
+        assert_eq!(window.skipped_selected_prefix_packets, 0);
+        assert_eq!(window.trimmed_source_tail_packets, 0);
+        let expected: [u8; 32] =
+            Sha256::digest(&self.bytes[first * PACKET_BYTES..end * PACKET_BYTES]).into();
+        assert_eq!(window.decoder_sha256, expected);
+        eprintln!(
+            "later-source non-EOF component: retained 512 actual nonselected tail packets including PCR; first={}, count={}, exact_sha256={}",
+            span.first_packet(), span.packet_count(), hex_text(&expected)
+        );
     }
 
     fn assert_exact_span(&self, decoded: &DecodedLocalTeletextPage) {
@@ -340,6 +395,7 @@ async fn native_later_packet_span_decodes_exact_pages_without_prefix_or_temporal
         source.decode(&scope, &work, 888, 2).await,
         Err(SourceTeletextPageDecodeError::InvalidTransportWindow)
     ));
+    source.assert_complete_non_eof_tail(&scope, &work).await;
     let after = std::fs::read(&source.path).unwrap();
     assert_eq!(Sha256::digest(&after), Sha256::digest(&source.bytes));
     assert_eq!(after, source.bytes);

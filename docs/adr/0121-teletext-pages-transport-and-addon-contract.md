@@ -46,7 +46,9 @@ index, PID, program and exact page separate. A completed private TS188 window no
 contains only bytes read from that held file. The same captured bytes pass stable
 current PSI, explicit program/PID/type-6 membership and selected-PES validation
 before they are decoded. Selected packets before the first post-PSI PES start are
-omitted explicitly; a capped window ends at a completed PES. Late current table
+omitted explicitly. A capped incomplete selected PES is trimmed to the last
+complete PES; otherwise the complete nonselected AV/PCR tail remains in the
+same decoder bytes. Late current table
 changes anywhere in the captured source reject even when trimming would hide them.
 The final decoder bytes are independently rechecked and hashed. The native owner
 retains the temporary input through actual process/pipe cleanup; uncertainty
@@ -65,6 +67,17 @@ never establishes whole-source byte coverage. The whole-source byte predicate
 retains the existing automatic-selection fence; an explicit-span bitmap receipt
 alone grants no playback seek or temporal authority. Raw clock epoch and actual
 cue coverage remain required before automatic interval selection.
+Both actual native consumers retain the existing request's exact media-relative
+seek and finite duration, including subsecond precision, through source ownership
+and retry. Unknown duration, an empty interval or overflow supplies no finite
+interval; this never manufactures source-clock evidence or rejects ordinary AV.
+Raw PCR/PES clocks, caller media-relative time and native effective timestamps
+are distinct. In particular, FFprobe's default teletext-PTS correction can alter
+the wire PTS, and the first PCR is not the media origin. Qualification must bind
+the observed AV presentation origin and actual cue to a verified source-clock
+epoch; matching PSI fingerprints or modular PCR differences alone cannot prove
+an unobserved interval has no reset. Do not change native timestamp correction
+or promote caller intent to temporal authority without that evidence.
 This bounded byte window does not prove later playback
 seek/cue coverage, whole-source inventory, current database ownership or future
 source opens. Source bookends remain observed associations, not immutable-byte or
