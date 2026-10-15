@@ -4,7 +4,7 @@ use super::*;
 use crate::ffprobe::teletext_decode::PreparedLocalTeletextSource;
 
 impl LaterSource {
-    async fn prepare(
+    pub(super) async fn prepare(
         &self,
         scope: &LocalProbeCleanupScope,
         work: &TeletextWorkGuard,

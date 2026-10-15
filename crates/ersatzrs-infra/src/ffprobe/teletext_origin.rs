@@ -124,7 +124,7 @@ impl NativeSourceTimeBase {
         self.denominator
     }
 
-    fn parse(value: &str) -> Result<Self, NativeSourceOriginError> {
+    pub(super) fn parse(value: &str) -> Result<Self, NativeSourceOriginError> {
         if value.len() > 21 {
             return Err(NativeSourceOriginError::Timing);
         }

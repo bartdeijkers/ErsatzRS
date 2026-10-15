@@ -25,6 +25,8 @@ pub use super::local_teletext::{
     SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
 };
 
+#[path = "teletext_decode_demux.rs"]
+mod demux;
 #[path = "teletext_decode_origin.rs"]
 mod origin;
 #[path = "teletext_decode_prepared.rs"]

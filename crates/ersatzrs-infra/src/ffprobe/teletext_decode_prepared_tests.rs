@@ -125,6 +125,10 @@ mod unix {
             extractor.source_origin_command(&path),
             Err(SourceTeletextPageDecodeError::SourceChanged)
         );
+        assert_eq!(
+            extractor.source_demux_command(&path),
+            Err(SourceTeletextPageDecodeError::SourceChanged)
+        );
         let command = extractor.source_origin_command(&sibling).unwrap();
         assert_eq!(command.args.last().unwrap(), sibling.to_str().unwrap());
     }

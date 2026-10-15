@@ -56,6 +56,10 @@ release section when tagging a release.
   reuse the same held source and require the requested page's actual header in
   the exact decoder bytes. Missing headers reject before launching the decoder,
   and native probe paths cannot silently substitute a different lossy filename.
+  A bounded original-source demux trace now preserves native packet order,
+  positions and signed timestamps independently of ordinary metadata. Explicit
+  timestamp-wrap candidates retain program inheritance and PCR extensions;
+  hidden duration-probe initialization and actual cue coverage remain unqualified.
   General source/seek semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible

@@ -121,6 +121,29 @@ program wrap interpretation, selected-program AV/PCR epoch, bounded clock gaps
 and requested cue bookends still require qualification. A nearest modular
 AV/PCR match alone cannot resolve a common whole-period ambiguity. Neither
 printed native decimal precision nor raw subtitle PTS supplies that proof.
+The source-associated native demux trace therefore retains all stream identities,
+program order/memberships and bounded native packet order, signed PTS/DTS and
+optional physical positions. It starts without a seek or stream filter and uses
+`-nofind_stream_info`, `noparse+nofillin` and explicit overflow correction through
+the existing retained process owner. The independent ordinary native format-origin
+probe remains unchanged. Disable stream-info only for this explicit trace: the
+normal duration estimator can flush its queue, seek near EOF and initialize wrap
+state there before seeking back. A clean trace must not silently certify the
+normal consumer's initialization. Missing positions or timestamps stay unknown.
+
+The pure fixed-33-bit/90-kHz transform follows FFmpeg n9.0's DTS-first initial
+reference, exact add/subtract thresholds and native program/default inheritance.
+PCR conversion retains its extension using that same candidate program rule;
+nearest-modular AV/PCR offset is not substituted. Actual first-demux identity,
+all memberships, shared-state propagation, raw timestamp/position witnesses and
+normal-consumer equivalence remain preconditions, never authority granted by
+constructing a candidate. Non-AV initializers cannot silently become first AV.
+The audited primary paths are [wrap initialization and propagation](https://github.com/FFmpeg/FFmpeg/blob/n9.0/libavformat/demux.c#L441),
+[timestamp transformation](https://github.com/FFmpeg/FFmpeg/blob/n9.0/libavformat/demux.c#L48)
+and [duration estimation](https://github.com/FFmpeg/FFmpeg/blob/n9.0/libavformat/demux.c#L1733).
+Installed n9.0-20260805 receipts corroborate tested behavior; its version string
+alone does not identify an exact custom-build source commit. Full cue qualification
+and ordinary playback behavior still require independent proof.
 Do not weaken global scan-header qualification to bypass the remaining exact-
 source candidate path; connect descriptor-only discovery only with independently
 qualified current cue-window headers and the existing selection checks.

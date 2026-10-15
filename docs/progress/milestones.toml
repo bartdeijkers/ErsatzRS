@@ -2968,6 +2968,82 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 native demux/wrap association checkpoint (partial):
+Criterion: replace guessed first-AV/nearest-PCR epochs with explicit native
+initialization observations before qualifying later source cues. A new bounded
+original-source trace reuses the prepared guard, process/work retention and one
+absolute deadline. It preserves all native stream/PID identities, all program
+memberships/order, returned demux order and optional signed PTS/DTS/positions.
+No initial seek or stream filter occurs. Required arrays, index/PID/reference
+uniqueness, unknown values and numeric bounds are validated before projection;
+limits remain 8 MiB output, 4,096 packets, 8,192 streams, 1,024 programs and
+16,384 projected memberships. A cap hit proves neither EOF nor page absence.
+
+The audited FFmpeg n9.0 duration estimator can flush buffered packets, seek near
+EOF, initialize hidden wrap state and seek back. The first ordinary show_packets
+record therefore need not be its initializer. This explicit trace disables
+find_stream_info plus PES parsing/fill-in, and enables overflow correction.
+Actual n9.0-20260805 accepts these options and still reports PMT/global identities
+and true PES-level packet positions. The ordinary native format-origin probe and
+all runtime playback arguments remain unchanged. Trace policy is explicit and
+must not silently certify normal-consumer initialization equivalence.
+
+The pure fixed-33-bit/90-kHz candidate follows DTS-first/PTS fallback, signed
+initial-reference masking, exact add/subtract boundaries and program/default
+inheritance. PCR base conversion retains extension ticks. Actual initializer,
+shared-state propagation, stable PSI, raw positions/timestamps and native policy
+provenance remain caller obligations. Missing/non-AV/unobserved initializers do
+not grant a first-AV assumption, epoch, media origin or requested cue coverage.
+ADR0121 links primary wrap and duration-estimator paths; the custom tool version
+string does not identify its exact build-source commit.
+
+Focused run f4bc574f-1a4e-4a55-9650-7d7b5d7116e3 passes 26 cases: 11 pure
+wrap/inheritance/PCR cases, nine bounded demux projection cases and six existing
+preparation boundaries. Packet order is deliberately unsorted by physical offset;
+global indices differ from PIDs, signed/beyond-33-bit clocks and unknown offsets
+stay distinct, duplicate/unresolved identities and capacity overflow reject, and
+ordinary metadata projection is unchanged. Run c524514c-0dda-487b-97f8-018180d95532
+also passes the updated non-UTF8 native-path regression for both probe commands.
+
+Native run f3ff421e-673e-4721-b60c-b81c41c292c4 passes in 1.059 s on the same
+pinned tools and genuine delayed source, plus a new native stream-copy remux
+crossing the timestamp boundary. Each trace has 1,908 native PES packets; every
+one of its 1,852 returned AV positions matches an actual original raw PUSI/header,
+including native DTS copied from raw PTS-only PES. This is a returned-packet
+association proof, not a complete source inventory. The early candidate uses
+AddOffset/reference -5,274,000. The wrapped candidate uses SubtractOffset/reference
+8,584,504,320 and includes negative then positive native timestamps. Its raw PCR
+wrap count is one; candidate PCR coordinates run -27,919,500..1,591,547,844 ticks
+with exact continuous elapsed agreement and retained extensions. Original source
+bytes remain unchanged and actual cleanup returns work to zero. Non-AV packets
+are retained as observations; this test does not certify their raw timestamp
+correction or every native initialization path.
+
+Commands/logs live in local tmp/phase9-native-epoch-checkpoint/. Equivalent native
+oracle map/flatten simplification and path access preserve its values/inputs, so
+valid native evidence is reused. Initial strict lint required documentation
+backticks and a private DTO field rename with the same explicit JSON name; no
+wrap algorithm, native command, input or public contract changes. Unchanged
+ordinary playback, editor, headed client and TSDuck evidence remains scoped to
+its tested inputs, not fresh full CI. Final parser run 1caea61e-d5a5-4156-8a90-d3d6e9f834be passes all nine cases
+after the explicit JSON-name-preserving DTO correction. Final affected all-target
+strict Clippy (clippy-3.log), owned Rust formatting, architecture/progress checks, scoped lint
+policy, commitlint and independent read-only retention/association review pass.
+All 129 milestone acceptance/status/dependency records are preserved.
+Next construct private ordinary-wrap-equivalence evidence from the actual first
+global timestamped demux packet and held raw witness. The targeted n9.0 audit
+shows MPEG-TS NOHEADER plus positive probing forces an initial read before tail
+duration estimation; raw-probe FIFO cannot let later packets overtake that first
+accepted initializer. Require explicit input policy, complete stable selected
+PSI and matching native/raw timestamps; do not substitute a first-AV guess.
+This sufficient single-program proof is not implemented by this checkpoint and
+is no permanent product restriction. General shared/non-AV initialization still
+requires qualification. Join the proven state to the same owned raw walk, then
+retain bounded PCR gaps and requested effective cue bookends. Caller duration and FFmpeg microsecond parsing remain separate.
+Automatic later-cue admission and scan-header selection stay fenced. All agreed
+engine/editor/client/platform acceptance remains open and unchanged; no permanent
+restriction, production addon, milestone completion, push or publication occurs.
+
 2026-10-15 pre-decode source/window connection (engineering checkpoint):
 Criterion: acquire native timing before choosing/decoding a later source window,
 without requiring an initial scan-prefix page or a prior bitmap. The new prepared

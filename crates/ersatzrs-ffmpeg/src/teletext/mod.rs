@@ -55,6 +55,7 @@ pub mod source_av_timestamps;
 pub mod source_clock;
 pub mod source_descriptors;
 pub mod source_header;
+pub mod source_native_epoch;
 pub mod source_observation;
 pub mod source_pes;
 pub mod source_psi;
