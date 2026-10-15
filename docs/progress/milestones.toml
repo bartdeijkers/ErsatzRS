@@ -2724,6 +2724,64 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 routed alternate-audio checkpoint (representative, not engine acceptance):
+Criterion: real ordinary legacy/hybrid item encoding retains the channel-selected
+English/Dutch audio while recovering the same explicitly accepted authored pages;
+explicit subtitle Off and ordinary capacity/cleanup remain intact.
+Native6de4740f-d42e-4388-8fd3-bc660579687a passes58.734s, one/1195 skipped.
+Canonical tmp/phase9-routed-audio/native-3.log and native-3-result.json retain
+all eight mode x policy-v1/v2 x eng440/nld660 receipts. Pinned FFmpeg/ffprobe
+n9.0-20261006 and TSDuck3.44-4676 match the previous wrapper checkpoint.
+The new12s source has video/index0, EnglishAAC/index1, DVB teletext/index2 and
+DutchAAC/index3; actual ffprobe and source888 decoding establish these identities.
+The shared probe source advertises English main200 and caption888; ffprobe's exact
+eng,eng descriptor languages remain intact and TSDuck reports English on that PID.
+Real Plex metadata and channel repository updates select eng then nld through
+normal /iptv/channel/1.ts and the actual native item encoder. Every aligned
+captured prefix retains source framemd5, selected440/660Hz audio/language,
+independent authored200 text/PID512, referenced PSI and zero CC/PCR/PTS faults.
+Default capacity2 is unchanged: each actual request uses two slots, peak never
+exceeds2, and body drop reaches0. The installed producer is not rerun; accepted
+generation identity survives all language changes.
+These prefixes do not establish complete programme handoff or full-file timing.
+The original fourteen-trial policy/profile matrix and unchanged production
+source/startup/Clippy/smoke evidence from e2f17753 are reused; helper extraction
+retains its exact440/eng inputs and assertions. No argv, encoder, dependency,
+admin, platform or acceptance changes occur. Final strict web all-target Clippy,
+formatting and progress validation pass; unchanged playback smoke from e2f17753
+is reused because production playback/argv and runtime inputs are unchanged.
+
+Two initial source-inventory failures remain retained: eefa1c9b-b0f2-4770-b414-9b1227153474
+stops on ffprobe early pipe closure; count_packets now consumes the complete
+bounded input. 38b2101f-2490-408d-817d-1bf5080e5856 correctly exposes eng,eng rather
+than the fixture's mistaken single-language expectation; exact source descriptors
+are now asserted. Neither failure reached the normal route or showed a playback
+failure. Source/test identity files retain each attempt; no failure is discarded.
+
+Explicit SubtitleMode::None is asserted and source888 is intentionally omitted;
+only accepted authored200 remains a delivered subtitle service. This proves Off,
+not selected-source-caption acceptance. Upstream FFmpegStreamSelector and native
+selection agree: blanket elementary retention is not promised. Exact-page native
+burn, verified video-copy carriage/source-bound sidecars and visible unsupported
+selections remain open. PlaybackSubtitle currently has stream identity but no page
+identity, and generic text preparation lacks txt_page/txt_format ownership; this
+is the concrete prerequisite to a genuine selected888 matrix.
+Next connect the existing two-profile Lua/validation/preview/Q/R-publication flow
+to actual generated legacy URLs and headed200/201/200. Explicit disposable4 slots
+allow two wrapper clients; close them and prove cleanup before separate cold
+transport captures. Those reopens are not warm continuity or full engine proof.
+The preparatory integration leaf failed compiler privacy checks for the private
+internal router and listener addresses; clippy-1.log retains that result. Its
+registration was removed before the passing clippy-2 check. Do not expose private
+host APIs merely for this test or duplicate the whole integration fixture graph.
+The next concrete connection is a bounded handoff of the same temporary database
+from the existing preparation owner to an in-crate private-listener test actor;
+original roots/scope and post-cleanup immutable state must match. Preparatory
+client-driver offline tests do not establish actual headed wrapper acceptance.
+Default/custom scripts, slate clocks, complete authored Level2.5/fallback,
+QTM/metadata/zones, Lua/restart, suitable-client/resource, native/Next/all-six-
+platform gates and engine-first production sequencing remain unchanged.
+
 2026-10-15 ordinary generated-wrapper checkpoint (representative, not engine acceptance):
 Criterion: ordinary final wrapper routes recover genuinely saved/explicitly accepted
 originals without invoking producers; invalid policy or unavailable profiles retain
@@ -2791,9 +2849,13 @@ profile/theme selection, preview, explicit publication and client navigation to
 this ordinary continuous route. Reuse the real four-stream source fixture through
 normal metadata/encoding and switch preferred_audio_language_code eng to nld:
 the item encoder selects one audio track, so wrapper-only multi-track proof does
-not prove routed alternate selection. Legacy/hybrid currently burn/omit source
-teletext captions before wrapping; source-page888 passthrough remains a concrete
-integration gap. Resolve default-script eligibility/visible
+not prove routed alternate selection. Source review clarifies the earlier gap
+description: SubtitleMode::None explicitly disables subtitles in both upstream
+FFmpegStreamSelector and native selection. Source888 omission under Off is intended;
+it does not prove selected captions. The remaining criterion is selected exact-page
+burn-in, verified video-copy carriage or source-bound sidecars, with unsupported
+selections visible. Blanket elementary-stream retention is not an existing promise.
+Resolve default-script eligibility/visible
 unsupported state and existing separate-clock slate defects rather than treating
 this representative matrix as engine acceptance. Existing pinned editor,
 all-culture headed admin, direct warm/expiry and lower-level four-stream wrapper

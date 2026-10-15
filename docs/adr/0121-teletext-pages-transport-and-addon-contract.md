@@ -65,7 +65,8 @@ is an experiment, not production compiler defaults or full engine acceptance.
 Retained late construction preflights gate/journal/probe overlap and
 charges actual retained-prefix capacity before allocating its validation gate.
 The existing optional pumps retain original ages, reserve ownership and exact
-pre-write fallback. Ordinary final-direct MPEG-TS lookup now opts in only through
+pre-write fallback. Ordinary final-direct and generated native final-wrapper
+MPEG-TS lookup now opt in only through
 the existing ConfigElement key teletext.output.policy. Its closed version-1 JSON
 requires every design, validation, input, composition, encoding and source limit,
 including all thirteen service-work credits. There are no production defaults.
@@ -75,8 +76,12 @@ invokes packages or accepts pending drafts. Configuration access and recovery
 together receive at most half of the remaining original twenty-second startup
 deadline, additionally capped by the configured positive recovery timeout.
 Missing/invalid policy, unavailable/stale selection, exhausted credit or busy work
-preserves ordinary playback. Unsupported retained/hybrid/container roles skip
-this automatic recovery. The existing Health view reads this policy afresh and
+preserves ordinary playback. Internal workers, slates, Next, other containers and
+opaque configured-script commands skip automatic recovery. Generated legacy/hybrid
+wrappers recover only after actual capacity and command admission; an explicit
+empty ffmpeg.default_mpegts_script selects the generated hybrid path. Default/custom
+script support remains an integration gap, not an accepted permanent restriction.
+The existing Health view reads this policy afresh and
 reports configuration validity, not delivery or complete authored readiness.
 Production compiler limits, ongoing publication ownership and complete client
 acceptance remain open; P9A-04 owns the scoped ordinary-route receipt.

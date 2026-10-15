@@ -586,6 +586,15 @@ async fn video_hashes(ffmpeg: &str, bytes: &[u8]) -> Vec<String> {
 }
 
 async fn verify_av(ffmpeg: &str, source_hashes: &BTreeSet<String>, bytes: &[u8]) {
+    verify_selected_av(ffmpeg, source_hashes, bytes, 440).await;
+}
+
+async fn verify_selected_av(
+    ffmpeg: &str,
+    source_hashes: &BTreeSet<String>,
+    bytes: &[u8],
+    frequency: usize,
+) {
     let hashes = video_hashes(ffmpeg, bytes).await;
     assert!(
         hashes.len() >= 20 && hashes.iter().all(|hash| source_hashes.contains(hash)),
@@ -628,17 +637,26 @@ async fn verify_av(ffmpeg: &str, source_hashes: &BTreeSet<String>, bytes: &[u8])
                 .windows(2)
                 .filter(|pair| (pair[0] < 0) != (pair[1] < 0))
                 .count();
-            (crossings * 48000 / (2 * samples.len())).abs_diff(440) <= 20
+            (crossings * 48000 / (2 * samples.len())).abs_diff(frequency) <= 20
                 && samples.iter().any(|sample| sample.unsigned_abs() > 100)
         })
         .count();
     assert!(
         tones >= 10,
-        "ordinary selected English audio must retain the genuine source tone"
+        "ordinary selected audio must retain the genuine source tone"
     );
 }
 
 async fn verify_transport(tsanalyze: &str, bytes: &[u8], selected: bool) {
+    verify_transport_for_language(tsanalyze, bytes, selected, "eng").await;
+}
+
+async fn verify_transport_for_language(
+    tsanalyze: &str,
+    bytes: &[u8],
+    selected: bool,
+    language: &str,
+) -> Value {
     let report: Value = serde_json::from_slice(
         &probe(tsanalyze, &["--json"], bytes, 256 * 1024)
             .await
@@ -661,7 +679,7 @@ async fn verify_transport(tsanalyze: &str, bytes: &[u8], selected: bool) {
     }
     assert_eq!(
         pids.iter().find(|pid| pid["id"] == 257).unwrap()["language"],
-        "eng"
+        language
     );
     assert_eq!(pids.iter().any(|pid| pid["id"] == 512), selected);
     for pid in pids {
@@ -669,6 +687,7 @@ async fn verify_transport(tsanalyze: &str, bytes: &[u8], selected: bool) {
             assert_eq!(pid["packets"][field], 0);
         }
     }
+    report
 }
 
 async fn trial(
@@ -933,6 +952,340 @@ fn normal_routed_wrappers_recover_selected_originals_and_preserve_playback_on_po
         .build()
         .unwrap()
         .block_on(run());
+    assert_eq!(
+        active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
+        0
+    );
+}
+
+async fn multi_track_source(ffmpeg: &str, root: &Path) -> PathBuf {
+    let rate = muxrate().to_string();
+    // Reuse the independently generated page888 transport from the existing
+    // four-stream wrapper fixture; no replacement teletext encoder is added.
+    let bytes = probe(
+        ffmpeg,
+        &[
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:size=160x90:rate=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=660:sample_rate=48000",
+            "-f",
+            "mpegts",
+            "-i",
+            "pipe:0",
+            "-t",
+            "12",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-map",
+            "3:s:0",
+            "-map",
+            "2:a:0",
+            "-c:v",
+            "mpeg2video",
+            "-b:v",
+            "200k",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "64k",
+            "-c:s",
+            "copy",
+            "-metadata:s:a:0",
+            "language=eng",
+            "-metadata:s:a:1",
+            "language=nld",
+            "-muxrate",
+            &rate,
+            "-pcr_period",
+            "20",
+            "-mpegts_start_pid",
+            "256",
+            "-mpegts_pmt_start_pid",
+            "4096",
+            "-f",
+            "mpegts",
+            "pipe:1",
+        ],
+        ersatzrs_ffmpeg::teletext_probe::TELETEXT_DECODE_FIXTURE,
+        MAX_CAPTURE,
+    )
+    .await
+    .unwrap();
+    assert_eq!(bytes.len() % 188, 0);
+    assert!(!bytes.chunks_exact(188).any(|packet| pid(packet) == 512));
+    let path = root.join("ordinary-multi-track-source.ts");
+    tokio::fs::write(&path, bytes).await.unwrap();
+    path
+}
+
+async fn multi_track_provider(source: &Path) -> Server {
+    let file = tower_http::services::ServeFile::new(source);
+    Server::start(Router::new()
+        .route("/library/metadata/1", get(|| async {
+            axum::Json(json!({"MediaContainer":{"Metadata":[{"ratingKey":"1","title":"Synthetic source",
+                "Media":[{"id":1,"duration":12000,"width":160,"height":90,"Part":[{"id":1,"file":"synthetic-missing.ts",
+                    "key":"/library/parts/1/file.ts","Stream":[
+                    {"index":0,"streamType":1,"codec":"mpeg2video","frameRate":"25","width":160,"height":90},
+                    {"index":1,"streamType":2,"codec":"aac","channels":1,"languageCode":"eng","default":true},
+                    {"index":2,"streamType":3,"codec":"dvb_teletext","languageCode":"eng","default":false,"forced":false},
+                    {"index":3,"streamType":2,"codec":"aac","channels":1,"languageCode":"nld","default":false}
+                    ]}]}]}]}}))
+        }))
+        .route("/library/parts/1/file.ts", get(move |request: axum::extract::Request| {
+            let file=file.clone(); async move { file.oneshot(request).await.unwrap() }
+        }))).await
+}
+
+async fn stream_inventory(ffprobe: &str, bytes: &[u8]) -> Vec<Value> {
+    // Consume the complete bounded pipe: metadata-only probing may close it
+    // while the existing fixture helper is still writing source packets.
+    let report: Value = serde_json::from_slice(
+        &probe(
+            ffprobe,
+            &[
+                "-v",
+                "error",
+                "-f",
+                "mpegts",
+                "-i",
+                "pipe:0",
+                "-count_packets",
+                "-show_entries",
+                "stream=index,codec_name,codec_type:stream_tags=language",
+                "-of",
+                "json",
+            ],
+            bytes,
+            256 * 1024,
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    report["streams"].as_array().unwrap().clone()
+}
+
+async fn verify_multi_track_source(tools: &[String; 3], bytes: &[u8]) -> BTreeSet<String> {
+    let streams = stream_inventory(&tools[1], bytes).await;
+    assert_eq!(streams.len(), 4);
+    for (index, codec, kind, language) in [
+        (0, "mpeg2video", "video", None),
+        (1, "aac", "audio", Some("eng")),
+        // The shared probe fixture advertises English main page200 and caption
+        // page888 in the same stream; ffprobe retains both descriptor languages.
+        (2, "dvb_teletext", "subtitle", Some("eng,eng")),
+        (3, "aac", "audio", Some("nld")),
+    ] {
+        let stream = streams
+            .iter()
+            .find(|stream| stream["index"] == index)
+            .unwrap();
+        assert_eq!(stream["codec_name"], codec);
+        assert_eq!(stream["codec_type"], kind);
+        if let Some(language) = language {
+            assert_eq!(stream["tags"]["language"], language);
+        }
+    }
+    let caption = decode_text(&tools[0], bytes, "888", "0:s:0").await;
+    assert!(String::from_utf8(caption)
+        .unwrap()
+        .contains("Synthetic subtitle page 888"));
+    let report: Value = serde_json::from_slice(
+        &probe(&tools[2], &["--json"], bytes, 256 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let pids = report["pids"].as_array().unwrap();
+    for (id, language) in [(257, "eng"), (258, "eng"), (259, "nld")] {
+        assert_eq!(
+            pids.iter().find(|pid| pid["id"] == id).unwrap()["language"],
+            language
+        );
+    }
+    println!(
+        "ordinary alternate source verified: audio=eng440,nld660, caption888=decoded, tracks=4"
+    );
+    video_hashes(&tools[0], bytes).await.into_iter().collect()
+}
+
+async fn alternate_audio_trial(
+    state: &AppState,
+    public: &Server,
+    root: &Path,
+    tools: &[String; 3],
+    source_hashes: &BTreeSet<String>,
+    scenario: (StreamingMode, &str, &str, usize),
+) {
+    let (mode, policy, language, frequency) = scenario;
+    let label = if policy == POLICY { "v1" } else { "v2" };
+    println!("ordinary alternate trial: mode={mode:?}, policy={label}, language={language}, frequency={frequency}");
+    reset_active_transcode_state_for_tests();
+    let mut channel = state.repositories.channel.get_by_number("1").await.unwrap();
+    assert_eq!(
+        channel.subtitle_mode,
+        ersatzrs_domain::ChannelSubtitleMode::None
+    );
+    channel.preferred_audio_language_code = Some(language.to_owned());
+    state.repositories.channel.upsert(&channel).await.unwrap();
+    programme_start(state, root, mode).await;
+    config(state, NATIVE_TELETEXT_RUNTIME_POLICY_SETTING, Some(policy)).await;
+    let calls = tokio::fs::read(root.join("addon-calls")).await.unwrap();
+    let bytes = capture(public).await;
+    assert!(bytes.chunks_exact(188).any(|packet| pid(packet) == 512));
+    verify_selected_av(&tools[0], source_hashes, &bytes, frequency).await;
+    verify_transport_for_language(&tools[2], &bytes, true, language).await;
+    let streams = stream_inventory(&tools[1], &bytes).await;
+    let audio: Vec<_> = streams
+        .iter()
+        .filter(|stream| stream["codec_type"] == "audio")
+        .collect();
+    assert_eq!(
+        audio.len(),
+        1,
+        "native item encoder emits the selected audio track"
+    );
+    assert_eq!(audio[0]["tags"]["language"], language);
+    let subtitles: Vec<_> = streams
+        .iter()
+        .filter(|stream| stream["codec_type"] == "subtitle")
+        .collect();
+    assert_eq!(subtitles.len(), 1);
+    assert_eq!(subtitles[0]["codec_name"], "dvb_teletext");
+    let authored = decode_text(&tools[0], &bytes, "200", "0:s:0").await;
+    assert!(String::from_utf8(authored)
+        .unwrap()
+        .contains("Routed stored original"));
+    let captions = decode_text(&tools[0], &bytes, "888", "0:s:0").await;
+    // Explicit subtitle Off intentionally omits the source caption stream.
+    // This proves that existing choice survives authored teletext; selected
+    // exact-page burn or verified carriage remains separate acceptance work.
+    assert!(!String::from_utf8(captions)
+        .unwrap()
+        .contains("Synthetic subtitle page 888"));
+    assert_eq!(
+        tokio::fs::read(root.join("addon-calls")).await.unwrap(),
+        calls
+    );
+    println!("ordinary alternate verified: mode={mode:?}, policy={label}, language={language}, frequency={frequency}, authored200=decoded, caption888=omitted-explicit-subtitle-off, packets={}", bytes.len()/188);
+}
+
+async fn run_alternate_audio() {
+    isolated_bundled_wrapper().await;
+    let tools = [
+        exact_tool("ERSATZRS_TELETEXT_TEST_FFMPEG"),
+        exact_tool("FFPROBE_PATH"),
+        exact_tool("ERSATZRS_TELETEXT_TEST_TSANALYZE"),
+    ];
+    assert_eq!(ersatzrs_ffmpeg::ffmpeg_path(), tools[0]);
+    assert_eq!(ersatzrs_ffmpeg::ffprobe_path(), tools[1]);
+    for tool in &tools[..2] {
+        let version =
+            String::from_utf8(probe(tool, &["-version"], &[], 65536).await.unwrap()).unwrap();
+        assert_eq!(
+            ersatzrs_ffmpeg::version::parse_version(version.lines().next().unwrap())
+                .unwrap()
+                .major,
+            9
+        );
+    }
+    let root = tempfile::tempdir().unwrap();
+    let source = multi_track_source(&tools[0], root.path()).await;
+    let source_bytes = tokio::fs::read(&source).await.unwrap();
+    let hashes = verify_multi_track_source(&tools, &source_bytes).await;
+    let provider = multi_track_provider(&source).await;
+    let state = application(root.path(), &provider).await;
+    assert_eq!(DEFAULT_ACTIVE_TRANSCODE_LIMIT, 2);
+    assert_eq!(
+        load_active_transcode_limit(&state.pool)
+            .await
+            .unwrap()
+            .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
+        2
+    );
+    config(
+        &state,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
+        Some("5"),
+    )
+    .await;
+    config(
+        &state,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT,
+        Some(""),
+    )
+    .await;
+    assert_wrapper_command_policy(&state, true).await;
+    let internal = Server::start(build_internal_app(state.clone())).await;
+    state.internal_http_addr.set(internal.address).unwrap();
+    state.next_engine.media.configure(internal.address).unwrap();
+    let public = Server::start(build_app(state.clone())).await;
+    state.streaming_http_addr.set(public.address).unwrap();
+    let generation = install_and_accept(&state, root.path()).await;
+    let mut live: Value = serde_json::from_str(POLICY).unwrap();
+    live["version"] = json!(2);
+    live["live_updates"] = json!({"poll_interval_ms":100,"recovery_timeout_ms":5000});
+    let live = serde_json::to_string(&live).unwrap();
+    for mode in [
+        StreamingMode::TransportStream,
+        StreamingMode::TransportStreamHybrid,
+    ] {
+        for policy in [POLICY, live.as_str()] {
+            for (language, frequency) in [("eng", 440), ("nld", 660)] {
+                alternate_audio_trial(
+                    &state,
+                    &public,
+                    root.path(),
+                    &tools,
+                    &hashes,
+                    (mode, policy, language, frequency),
+                )
+                .await;
+                assert_eq!(
+                    state
+                        .application
+                        .accepted_teletext_generation(1)
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .id,
+                    generation
+                );
+            }
+        }
+    }
+    public.finish().await;
+    internal.finish().await;
+    provider.finish().await;
+    state.pool.close().await;
+}
+
+#[test]
+#[ignore = "requires FFmpeg/ffprobe9, TSDuck, loopback and new isolated app-data; genuine normal-route audio selection plus accepted teletext"]
+fn normal_routed_wrappers_select_alternate_audio_with_accepted_teletext() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(run_alternate_audio());
     assert_eq!(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0

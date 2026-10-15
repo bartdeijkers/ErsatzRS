@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: prove routed wrapper captions/alternate audio and client flow; generated wrapper selection proven, default-script and full engine acceptance open'
+current_focus = 'P9A-04: connect scoped two-theme client flow to generated legacy URLs; routed eng/nld selection proven, selected source captions/default scripts/full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -84,11 +84,24 @@ Next prove routed captions/alternate audio and connect simultaneous profiles,
 themes, preview/publication and client navigation to this continuous wrapper route.
 Resolve default-script eligibility/visible unsupported state and slate clock gaps.
 Final strict Clippy/format, prepared-script abort/handoff regressions and actual-host
-playback smoke pass for both MPEG-TS routes and both HLS routes. Next extend the
-genuine routed source/metadata fixture to select English then Dutch audio alongside
-authored pages. The item encoder selects one audio track; source teletext captions
-are currently burned/omitted on legacy/hybrid, so source-page passthrough remains
-a concrete integration gap rather than a proven normal-route property.
+playback smoke pass for both MPEG-TS routes and both HLS routes. Eight additional
+genuine routed trials now prove eng440/nld660 selection alongside accepted page200
+under both modes and both policy versions, with default2 capacity and actual cleanup.
+P9A-04 owns exact receipts and the two corrected source-inventory failures.
+The item encoder selects one audio track. SubtitleMode::None is explicit Off and
+may omit source page888; that is not selected-caption acceptance.
+Selected exact-page burn-in, verified video-copy carriage or source-bound sidecars,
+and visible unsupported selections remain unproven on this normal wrapper route.
+Next join the existing two-channel Lua/profile/validation/preview/Q/R-publication
+flow to genuine generated legacy URLs with actual headed client200/201/200. Use
+four explicitly configured disposable slots for two wrapper clients, close them
+and prove cleanup before separate cold transport captures; default2 proof remains.
+The integration leaf cannot access the private playback router/addresses. Its
+registration is removed; next use a bounded same-temporary-DB handoff to an
+in-crate listener actor while preserving original roots/expiry and post-cleanup
+state. No public test backdoor or duplicate fixture graph; actual headed proof
+remains outstanding. Preparatory client sources stay separate from the verified
+audio checkpoint.
 Preserve normal-route captions/alternate audio and transport-clock acceptance;
 prior slate clock gaps remain open. No general audit extension.
 Reuse valid editor/all-culture headed admin/warm evidence for unchanged inputs.
