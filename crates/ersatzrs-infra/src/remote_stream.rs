@@ -27,10 +27,13 @@ use crate::addons::{
 use crate::db::DbPool;
 
 mod prepared_input;
+#[path = "remote_stream_source_caption.rs"]
+mod source_caption;
 pub use prepared_input::{
     spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput,
     PreparedRemoteStreamTransfer,
 };
+pub use source_caption::SourceCaptionAttachmentError;
 
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
 const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
@@ -306,6 +309,7 @@ pub struct RemoteStreamProcess {
     /// file. `kill_on_drop(true)` on the child means there is no path that
     /// leaves `FFmpeg` running without this guard.
     filter_graph_file: Option<crate::filter_graph_file::FilterGraphFile>,
+    source_caption: Option<source_caption::SourceCaptionRetention>,
 }
 
 impl RemoteStreamProcess {
@@ -329,6 +333,11 @@ impl RemoteStreamProcess {
     /// the consumer accepted a partial input. A cancelled wait retains cleanup.
     pub async fn wait(&mut self) -> std::io::Result<ExitStatus> {
         let result = self.child.wait().await;
+        if result.is_ok() {
+            if let Some(source) = &mut self.source_caption {
+                source.confirm_reaped();
+            }
+        }
         let prepared_result = self
             .producer_pipe
             .as_ref()
@@ -351,6 +360,11 @@ impl RemoteStreamProcess {
     pub async fn kill(&mut self) -> std::io::Result<()> {
         self.cancel_producer();
         let result = self.child.kill().await;
+        if result.is_ok() {
+            if let Some(source) = &mut self.source_caption {
+                source.confirm_reaped();
+            }
+        }
         self.shutdown_producer().await?;
         result
     }
@@ -1232,6 +1246,7 @@ pub fn spawn_ffmpeg_with_remote_input(
         child: consumer,
         producer_pipe,
         filter_graph_file,
+        source_caption: None,
     })
 }
 

@@ -2968,6 +2968,74 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 shared source preparation and actual consumer ownership (partial):
+Criterion: ordinary native playback must preserve exact source identity and hold
+admission with the actual worker through cancellation, without reserving short
+teletext preparation capacity for the whole programme. Shared infra preparation
+uses the existing EntityLocker/configuration, one bounded optional work deadline,
+current exact-file candidates, the held-source decoder and shared preferences.
+Known competing choices are excluded before decode. Its returned source retains
+no preparation permit. Each later check revalidates the durable candidate and
+both filesystem locators under newly admitted owned work. Off/Direct/transient
+paths do not touch source storage or probe media.
+
+The native consumer adapter attaches the source receipt and its existing actual
+transcode reservation synchronously after spawn. Successful wait/kill confirms
+reaping, including nonzero exit. Cancelled waits and start_kill do not confirm it.
+Unconfirmed disposal retains the source and quarantines that playback slot until
+restart; it cannot free admission while the actual child may continue. No new
+queue, background coordinator or hours-long preparation lease is introduced.
+
+Verification: infra run49d24a5a-09d6-4bdb-890b-b7649dc502d8 passes3 focused
+admission/early-return/actual-child tests. The real process fixture checks wait,
+kill, cancelled wait, unknown disposal and attachment refusal, and demonstrates
+that another preparation fits default capacity1 while playback retains its slot.
+Unavailable OS process-state inspection is conservatively handled but not fault-
+injected. A test-module path error is corrected before this passing run.
+Final focused run7e867333-63d7-4488-b45c-89e07dbc5183 passes19 selection,
+shared-runtime, HLS deadline and actual Local scanner cases. The final scanner
+trial supersedes852a57fb-925f-4a65-aaac-c50c1b8fc362 and connects actual Local
+scan -> shared preparation ->888 selection -> current-source recheck. Shared
+admission saturation, stale revision and missing source reports preserve ordinary
+caption preferences, unchanged tracks/subtitle facts and zero leaked work slots.
+A missing-report integration gap is corrected: final ordinary exact-version
+ranking must still exclude unqualified extracted teletext, without a probe or
+fallback through the old whole-stream selector. Narrow independent review finds
+ordinary eligibility and flags preserved; exact-version filtering prevents
+cross-version embedded caption leakage while retaining external/generated rows. An initial
+fixture wrongly expected Dutch fallback for English-only preferences; the final
+oracle verifies no such substitution and separately proves requested Dutch
+sidecar selection. The earlier missing HLS trait import is corrected.
+
+Temporary coverage gap, not an accepted product restriction: qualification
+currently requires the bounded transport to reach EOF without prefix/tail
+omission. Longer sources and general playback seek/cue windows still need the
+required source-window solution; a short successful source is not acceptance.
+Legacy/HLS route wiring is implemented but not accepted. Actual ordinary-route
+trial c5e96c7d-ca0c-40da-9bd6-da2ee17b44ac fails7.674s: the TCP body ends
+unexpectedly before the required2MiB capture, so no routed pixel/audio/transport
+success is claimed. Source creation, independent888/200/plain pixel calibration,
+managed scan and publication setup finish; source duration remains12s. Preserve
+the failure and add bounded partial-capture/FFmpeg diagnostics before retrying.
+Earlier test compilation required updating two existing optional-field fixtures. Legacy rejection after the final
+pre-open recheck still needs ordinary-AV recovery rather than an error response;
+HLS has a typed same-occurrence ordinary retry, with actual runtime proof pending.
+Copy/Next/provider/live, mid-cue and edited clocks, full source/charset/platform,
+restart uncertainty cleanup and all authored Level2.5/editor/client criteria stay
+open. Next finish the real routed trial and correct the concrete gap it exposes.
+Strict infra/scanner all-target Clippy4 passes after nonsemantic if/else style
+corrections; core formatting, architecture-lint and progress validation pass.
+Clippy3 is cancelled after a failed edit assertion leaves the known old style;
+it supplies no passing evidence. Existing valid child/selection results are
+reused after equivalent branch flattening rather than repeated for formatting.
+The local checkpoint contains shared preparation/consumer adapters and their
+verification; unaccepted legacy/HLS route wiring and diagnostics stay unstaged.
+Fetched remote main61d1786c contains UCU11; original CI38654305604 has matching
+successful unaffected jobs, with Next recovery38657883005 and both-browser
+recovery38666094421 terminal success. This is composed CI, not a new full green
+exact-source run. Integrate remote after the route checkpoint; no push occurs.
+Canonical receipts: tmp/phase9-native-source-route/. No milestone closes.
+
 2026-10-15 exact-file caption candidate/selection checkpoint (not route/engine acceptance):
 Criterion: source page/language/role and explicit program identity must reach the
 existing native preferences without making a whole teletext pipe automatically

@@ -13,6 +13,15 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+Shared native preparation now uses existing configuration and EntityLocker
+admission independently of host/UI state. It releases preparation work before
+playback, rechecks current candidates and filesystem association before opens,
+and transfers the receipt with actual playback admission into each consuming
+child. Reaping, cancellation and quarantine follow that actual owner. Ordinary
+legacy/HLS hookup is under runtime verification in P9A-04. Current whole-window
+qualification is temporary incomplete coverage, not an accepted long-source or
+seek restriction; general cue/seek semantics and the full source matrix remain.
+
 Read-only source-caption candidates now bind the exact item, version, file and
 original locator to existing current-parent validation. Raw PMT descriptors keep
 wire tags/ordinals, page language, subtitle roles and all actual programs. Only
@@ -25,10 +34,10 @@ winning rich result. Ambiguous pages/services/roles are excluded; ISO language
 aliases for the same exact choice are equivalent. Native Burn cannot fall back
 to an extracted teletext row without exact-page qualification. Direct retains its
 existing ordinary behavior and receives no qualified source choice. Off returns
-before SQL. P9A-04 owns verification. This is a selection bridge, not normal-route
-integration: current database/file revalidation, actual seek/cue coverage,
-per-child source ownership, pins/custom selectors and the full output matrix
-remain open. No installed package, playback route or readiness state changes.
+before SQL. P9A-04 owns verification. Current database/file revalidation and
+per-child ownership now have shared runtime adapters; their ordinary route and
+seek/cue acceptance, pins/custom selectors and the full output matrix remain open.
+No installed package or stored readiness state changes.
 
 Preparatory native source-page decoding retains one held Local filesystem
 association through bounded owned source checks and the existing managed probe

@@ -517,6 +517,111 @@ async fn native_scan_caption_selection_uses_wire_language_and_exact_decoded_page
 
 #[tokio::test]
 #[ignore = "requires pinned FFprobe 9 and synthetic two-audio AV/200/888 input"]
+async fn native_shared_caption_runtime_releases_preparation_and_preserves_ordinary_fallback() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
+    use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionContext};
+    use tokio::time::Instant;
+
+    let (probe, fixture) = inputs();
+    let (root, pool) = caption_selection_fixture(&probe, &fixture).await;
+    let path = root.path().join("Synthetic.ts");
+    let (item, version, file, original): (i64, i64, i64, String) = sqlx::query_as(
+        r#"SELECT v."OtherVideoId",v."Id",f."Id",f."Path"
+        FROM "MediaVersion" v JOIN "MediaFile" f ON f."MediaVersionId"=v."Id""#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let before_tracks = tracks(&pool, 1).await;
+    let before_subtitles = subtitles(&pool, 1).await;
+    let locker = EntityLocker::new();
+    let languages = ["en".to_owned()];
+    let context = || RuntimeSelectionContext {
+        pool: &pool,
+        locker: &locker,
+        media_item_id: Some(item),
+        media_version_id: Some(version),
+        media_file_id: Some(file),
+        original_path: &original,
+        resolved_path: path.to_str().unwrap(),
+        languages: &languages,
+        subtitle_mode: ChannelSubtitleMode::Any,
+        streaming_mode: StreamingMode::TransportStream,
+        deadline: Instant::now() + std::time::Duration::from_secs(20),
+    };
+    let selected = runtime::select(context()).await.unwrap().unwrap();
+    assert_eq!(selected.subtitle.unwrap().language.as_deref(), Some("eng"));
+    let source = selected.source.unwrap();
+    assert_eq!(source.receipt().request().page.get(), 888);
+    assert_eq!(locker.active_teletext_work(), 0);
+    source.recheck(source.initial_deadline()).await.unwrap();
+    assert_eq!(locker.active_teletext_work(), 0);
+    let other = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let fallback = runtime::select(context()).await.unwrap().unwrap();
+    assert!(fallback.source.is_none());
+    assert!(
+        fallback.subtitle.is_none(),
+        "English preferences must not substitute Dutch captions"
+    );
+    let dutch = ["nl".to_owned()];
+    let ordinary = runtime::select(RuntimeSelectionContext {
+        languages: &dutch,
+        ..context()
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(ordinary.source.is_none());
+    assert_eq!(ordinary.subtitle.unwrap().language.as_deref(), Some("dut"));
+    assert!(source.recheck(source.initial_deadline()).await.is_err());
+    drop(other);
+    assert_eq!(locker.active_teletext_work(), 0);
+    let modified = path.metadata().unwrap().modified().unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_times(
+            std::fs::FileTimes::new().set_modified(modified + std::time::Duration::from_secs(1)),
+        )
+        .unwrap();
+    assert!(source
+        .recheck(Instant::now() + std::time::Duration::from_secs(15))
+        .await
+        .is_err());
+    let stale = runtime::select(context()).await.unwrap().unwrap();
+    assert!(stale.source.is_none());
+    assert!(
+        stale.subtitle.is_none(),
+        "Stale English pages cannot authorize another language"
+    );
+    assert_eq!(locker.active_teletext_work(), 0);
+    sqlx::query(r#"DELETE FROM "SourceTeletextMetadata""#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let missing = runtime::select(context()).await.unwrap().unwrap();
+    assert!(missing.source.is_none());
+    assert!(missing.subtitle.is_none());
+    let ordinary = runtime::select(RuntimeSelectionContext {
+        languages: &dutch,
+        ..context()
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(ordinary.source.is_none());
+    assert_eq!(ordinary.subtitle.unwrap().language.as_deref(), Some("dut"));
+    assert_eq!(locker.active_teletext_work(), 0);
+    assert_eq!(tracks(&pool, 1).await, before_tracks);
+    assert_eq!(subtitles(&pool, 1).await, before_subtitles);
+    drop(source);
+    pool.close().await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned FFprobe 9 and synthetic two-audio AV/200/888 input"]
 async fn native_rejected_source_header_clears_old_window_without_losing_ordinary_tracks() {
     let (probe, fixture) = inputs();
     let root = tempfile::tempdir().unwrap();

@@ -23,8 +23,10 @@ release section when tagging a release.
   Late table changes cannot hide behind truncation; real bitmap events are required. Unknown timestamps and charset provenance remain
   explicit. Exact-file source candidates now retain page language, wire roles and
   service identity; qualified decode receipts join shared native subtitle ranking
-  without changing ordinary metadata. Full source-page semantics and ordinary
-  stream-route integration remain open.
+  without changing ordinary metadata. Shared native preparation releases its
+  short work permit before playback; actual consumers retain exact-source
+  receipts and playback admission through confirmed cleanup or quarantine.
+  Full source-page semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
   client navigation with isolated themes and edits. Independent transport,

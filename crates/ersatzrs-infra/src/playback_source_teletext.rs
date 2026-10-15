@@ -6,6 +6,10 @@
 
 use std::sync::Arc;
 
+#[path = "playback_source_teletext_runtime.rs"]
+/// Owned source-caption preparation shared by native transport consumers.
+pub mod runtime;
+
 use ersatzrs_core::{
     locking::TeletextWorkHold,
     repositories::{RepositoryError, Result},
@@ -305,8 +309,20 @@ fn conflicting_source(
     sources: &[&SourceTeletextCaptionCandidate],
     version: i64,
 ) -> bool {
+    source_caption_has_competing_choice(source, sources.iter().copied(), version)
+}
+
+/// Whether known source facts leave another page, service or role equally
+/// eligible for this stream and language. Call before bounded decoding: a page
+/// absent from that decode window is not proven absent from the source.
+#[must_use]
+pub fn source_caption_has_competing_choice<'a>(
+    source: &SourceTeletextCaptionCandidate,
+    mut sources: impl Iterator<Item = &'a SourceTeletextCaptionCandidate>,
+    version: i64,
+) -> bool {
     let codes = ersatzrs_core::language_codes::all_language_codes([source.language.as_str()]);
-    sources.iter().any(|other| {
+    sources.any(|other| {
         other.request.binding.media_version_id == version
             && other.request.stream_index == source.request.stream_index
             && matches!(other.descriptor_type, 2 | 5)
