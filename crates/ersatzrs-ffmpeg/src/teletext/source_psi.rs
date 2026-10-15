@@ -66,6 +66,8 @@ pub struct ObservedSourceProgram {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObservedSourcePsi {
     pub requested_pid: u16,
+    /// Packets supplied in the current bounded observation window. A continuing
+    /// owner tracks its total physical source position separately.
     pub packets_observed: usize,
     /// At least one previously observed current table was replaced in this window.
     /// Earlier payload cannot be associated with the final snapshot implicitly.
@@ -96,7 +98,7 @@ impl ObservedSourcePsi {
 
 /// A bounded report-only PSI reader for one exact existing elementary PID.
 ///
-/// At most 32,768 packets (6,160,384 supplied bytes), 128 PAT programs and 256
+/// At most 32,768 packets (6,160,384 supplied bytes) per explicit window, 128 PAT programs and 256
 /// sections of at most 1,024 bytes per PAT/CAT are admitted. PMTs retain the
 /// existing single-section validation boundary. Future table framing/CRC is validated, but future tables
 /// never replace current evidence. A new current PAT invalidates all dependent
@@ -106,6 +108,9 @@ impl ObservedSourcePsi {
 /// incomplete. A returned report is a historical snapshot, never publication or
 /// selected-page authority; callers must bind it to their actual source epoch.
 ///
+/// Without explicit continuation, the packet limit applies to the entire reader.
+/// Continuation retains this same source epoch's PSI/continuity state; it is not
+/// discovery for an independent decode window, which needs a fresh observer.
 /// There is no I/O, task, decoder cache or implicit source restart here.
 pub struct SourceTeletextPsiObserver {
     pid: u16,
@@ -152,6 +157,26 @@ impl SourceTeletextPsiObserver {
             self.failure = Some(error.clone());
         }
         result
+    }
+
+    /// Begin another bounded window in the same continuously observed source.
+    ///
+    /// Only the packet counter is cleared. Complete and in-flight sections,
+    /// continuity counters, table-change evidence and failures are retained.
+    /// The owner must bound total source work and its absolute deadline, and
+    /// retain its own absolute packet count. Observations report this window's
+    /// count and may retain tables acquired in earlier windows; they cannot
+    /// establish self-contained PSI for an independent decoder snapshot.
+    /// Call before exceeding the current window's limit; capacity failure is
+    /// terminal and cannot be recovered through continuation.
+    /// # Errors
+    /// Returns the existing sticky failure without changing any reader state.
+    pub fn begin_continuation_window(&mut self) -> Result<(), TeletextPsiError> {
+        if let Some(error) = &self.failure {
+            return Err(error.clone());
+        }
+        self.packets = 0;
+        Ok(())
     }
 
     /// Cheap current-table completeness check, without copying table payloads.

@@ -379,7 +379,7 @@ fn validate_program(observed: &ObservedSourcePsi, program_number: u16) -> Result
     Ok(())
 }
 
-fn read_packet<T>(
+pub(super) fn read_packet<T>(
     file: &std::fs::File,
     raw: &mut [u8; PACKET_BYTES],
     offset: u64,
@@ -416,7 +416,7 @@ fn invalid() -> FfprobeError {
     FfprobeError::InvalidOutput { path: LABEL.into() }
 }
 
-fn window_error(error: FfprobeError) -> FfprobeError {
+pub(super) fn window_error(error: FfprobeError) -> FfprobeError {
     match error {
         FfprobeError::InvalidOutput { ref path } if path == "local teletext source association" => {
             error

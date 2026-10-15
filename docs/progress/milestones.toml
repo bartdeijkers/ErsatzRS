@@ -2968,6 +2968,58 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 continuous held-source clock checkpoint (partial):
+Criterion: exclude hidden intervening source-clock/table changes before joining
+later packet-window decoding to an actual playback interval. A constant-memory
+owned zero-to-EOF read now preserves the original held association, existing
+blocking owner/work hold, cancellation and absolute read deadline. Explicit PSI
+continuation retains table assemblers, CC, CRC and sticky changes/errors across
+32,768-packet batches; original independent-window limits remain unchanged.
+Raw selected-PCR observation retains absolute ordinals, samples, modulo wraps
+and elapsed ticks without a muxrate or media-origin assumption. Missing PCR is
+absent evidence. Shared PCR syntax validation preserves authored CBR behavior.
+
+Review found a concrete old-bitmap/new-bytes join: matching PSI and restored
+mtime alone did not recheck the retained decoder payload. The same continuous
+walk now reconstructs the original span's exact hash/counts, respecting selected-
+prefix omissions and capped incomplete-PES trimming, and rejects disagreement.
+This catches changed valid transport payload without another reader or worker.
+It does not claim a general immutable-file or restored-edit/ABA guarantee.
+
+Run 83131180-3e61-4738-9839-d518e7fbb816 passes 85 selected PSI, source-clock,
+existing authored-clock, decoder/window and actual worker-cleanup regressions.
+Run 6f238ada-2138-4e21-9dec-40e48ffdcb1b adds a passing owned read/hash case
+covering one real omitted prefix packet and 32,752 trimmed tail packets.
+Actual native run a528f641-1e08-447d-b445-76a09e41c4ed passes in 1.426 s on
+the unchanged pinned FFmpeg/FFprobe n9.0-20260805 and genuine delayed source.
+The held walk observes all 79,769 physical packets and 3,000 PCR samples; first
+current PSI is ordinal2, first PCR ordinal3/raw18,962,100 and last PCR ordinal
+79,761/raw1,638,368,532. Seven later packets remain explicit, not extrapolated
+presentation EOF. Whole-source SHA matches the independently generated source.
+A real intervening discontinuity at10,027 before the late decoder span rejects
+while the restored metadata association still matches. A two-bit retained
+payload change at53,246 likewise rejects despite unchanged raw clocks and
+restored metadata. EOF and complete non-EOF later spans retain matching hashes;
+888/200 decode and missing777/wrongprogram remain rejected. No managed scope
+starts no new reader, and actual work/cleanup drains to zero.
+
+Exact commands, runs and terminal logs live in local
+tmp/phase9-source-clock-checkpoint/. Initial Clippy rejected an unnecessary test
+clone; its equivalent reference-slice correction preserves algorithms/inputs.
+Final strict affected lint, formatting, architecture, progress and scoped policy
+checks accompany the local checkpoint. Earlier ordinary route/TSDuck and browser
+results are reused where code/inputs remain unchanged; no full CI is claimed.
+
+Next preserve a source-associated native AV origin, corroborate raw AV PES
+anchors and bounded clock gaps, then retain requested cue bookends and current
+cue-window page headers under this same owner. First PCR and default corrected
+teletext PTS remain distinct from native media zero. This raw report alone cannot
+qualify media40..52 or enable automatic later-caption selection. General rolling
+coverage and all authored Level2.5/fallback/editor/metadata/zones/admin/Lua/restart/
+client/Native/Next/platform criteria remain open; no acceptance waiver, milestone
+completion, production content addon or push is implied.
+
+
 2026-10-15 requested-interval and complete-tail checkpoint (partial):
 Both native consumers now carry the exact requested media seek/end in a typed
 interval through existing retained ownership; unknown or invalid intervals gain

@@ -78,6 +78,19 @@ the observed AV presentation origin and actual cue to a verified source-clock
 epoch; matching PSI fingerprints or modular PCR differences alone cannot prove
 an unobserved interval has no reset. Do not change native timestamp correction
 or promote caller intent to temporal authority without that evidence.
+A preparatory constant-memory walk now observes every TS188 packet from zero
+through EOF on the existing held handle under its actual work owner and deadline.
+Explicit PSI continuation resets only the bounded batch counter; table fragments,
+continuity state, CRC validation and sticky failures/change evidence survive.
+The selected program/PCR and complete current PSI must match the decoder receipt.
+The same walk reconstructs and checks its retained decoder hash, including prefix
+omissions and trimmed tails, before combining old bitmap and new raw evidence.
+PCR syntax/order/wrap/discontinuity checks share syntax validation with the
+unchanged authored CBR policy; no muxrate is inferred for source observation.
+These are historical raw observations, not bounded-PCR-gap, AV-origin, cue-end,
+subtitle-PTS-correction or presentation-EOF proof. General restored in-place/ABA
+exclusion is not implied. Automatic later-window selection remains fenced until
+actual native media origin, cue bookends and page-header evidence are joined.
 This bounded byte window does not prove later playback
 seek/cue coverage, whole-source inventory, current database ownership or future
 source opens. Source bookends remain observed associations, not immutable-byte or

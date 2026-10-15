@@ -312,3 +312,125 @@ fn source_psi_change_witness_survives_a_return_to_the_initial_wire_tables() {
     assert_eq!(returned.programs, initial.programs);
     assert!(returned.current_tables_changed);
 }
+
+#[test]
+fn source_psi_three_full_windows_retain_unchanged_tables_and_continuity() {
+    let mut observer = ready(PID);
+    let initial = observer.observation().unwrap();
+    let null = packet(0x1fff, false, 0, &[0xff]);
+    for cc in 1..=3 {
+        for _ in observer.observation().unwrap().packets_observed..MAX_DISCOVERY_PACKETS {
+            observer.push(&null).unwrap();
+        }
+        assert_eq!(
+            observer.observation().unwrap().packets_observed,
+            MAX_DISCOVERY_PACKETS
+        );
+        observer.begin_continuation_window().unwrap();
+        let continued = observer.observation().unwrap();
+        assert_eq!(continued.packets_observed, 0);
+        assert_eq!(continued.pat, initial.pat);
+        assert_eq!(continued.programs, initial.programs);
+        observer
+            .push(&one(0, cc, &pat(0, 0, 0, &[(10, 100)])))
+            .unwrap();
+        observer
+            .push(&one(
+                100,
+                cc,
+                &source_pmt(10, 0, 0x100, PID, &descriptors()),
+            ))
+            .unwrap();
+        let repeated = observer.observation().unwrap();
+        assert_eq!(repeated.packets_observed, 2);
+        assert!(!repeated.current_tables_changed);
+        assert_eq!(repeated.programs, initial.programs);
+    }
+}
+
+#[test]
+fn source_psi_inflight_section_crosses_a_full_continuation_boundary() {
+    let mut observer = ready(PID);
+    let null = packet(0x1fff, false, 0, &[0xff]);
+    for _ in 2..MAX_DISCOVERY_PACKETS - 1 {
+        observer.push(&null).unwrap();
+    }
+    let pmt = source_pmt(10, 1, 0x100, PID, &descriptors());
+    observer.push(&one(100, 1, &pmt[..6])).unwrap();
+    assert_eq!(observer.observation(), Err(TeletextPsiError::Incomplete));
+    observer.begin_continuation_window().unwrap();
+    assert_eq!(observer.observation(), Err(TeletextPsiError::Incomplete));
+    observer.push(&packet(100, false, 2, &pmt[6..])).unwrap();
+    let completed = observer.observation().unwrap();
+    assert_eq!(completed.packets_observed, 1);
+    assert_eq!(
+        completed.programs[0].pmt.sections.as_slice(),
+        std::slice::from_ref(&pmt)
+    );
+    assert!(completed.current_tables_changed);
+    observer.begin_continuation_window().unwrap();
+    observer.push(&one(100, 3, &pmt)).unwrap();
+    assert_eq!(observer.observation().unwrap().programs, completed.programs);
+    assert!(observer.observation().unwrap().current_tables_changed);
+}
+
+#[test]
+fn source_psi_cross_window_pmt_change_remains_witnessed_after_return() {
+    let mut observer = ready(PID);
+    let initial = observer.observation().unwrap();
+    observer.begin_continuation_window().unwrap();
+    observer
+        .push(&one(100, 1, &source_pmt(10, 1, 0x101, 0x104, &[])))
+        .unwrap();
+    let changed = observer.observation().unwrap();
+    assert_eq!(changed.memberships().count(), 0);
+    assert!(changed.current_tables_changed);
+    observer.begin_continuation_window().unwrap();
+    observer
+        .push(&one(100, 2, &source_pmt(10, 0, 0x100, PID, &descriptors())))
+        .unwrap();
+    let returned = observer.observation().unwrap();
+    assert_eq!(returned.programs, initial.programs);
+    assert!(returned.current_tables_changed);
+}
+
+#[test]
+fn source_psi_continuation_never_revives_capacity_crc_or_continuity_faults() {
+    let mut observer = ready(PID);
+    let null = packet(0x1fff, false, 0, &[0xff]);
+    for _ in 2..MAX_DISCOVERY_PACKETS {
+        observer.push(&null).unwrap();
+    }
+    assert_eq!(observer.push(&null), Err(TeletextPsiError::Capacity));
+    assert_eq!(
+        observer.begin_continuation_window(),
+        Err(TeletextPsiError::Capacity)
+    );
+    assert_fenced(&mut observer, TeletextPsiError::Capacity);
+
+    let mut observer = ready(PID);
+    observer.begin_continuation_window().unwrap();
+    let mut corrupt = pat(1, 0, 0, &[(10, 100)]);
+    corrupt[10] ^= 1;
+    assert_eq!(
+        observer.push(&one(0, 1, &corrupt)),
+        Err(TeletextPsiError::Crc)
+    );
+    assert_eq!(
+        observer.begin_continuation_window(),
+        Err(TeletextPsiError::Crc)
+    );
+    assert_fenced(&mut observer, TeletextPsiError::Crc);
+
+    let mut observer = ready(PID);
+    observer.begin_continuation_window().unwrap();
+    assert_eq!(
+        observer.push(&one(100, 2, &source_pmt(10, 0, 0x100, PID, &descriptors()))),
+        Err(TeletextPsiError::Continuity)
+    );
+    assert_eq!(
+        observer.begin_continuation_window(),
+        Err(TeletextPsiError::Continuity)
+    );
+    assert_fenced(&mut observer, TeletextPsiError::Continuity);
+}

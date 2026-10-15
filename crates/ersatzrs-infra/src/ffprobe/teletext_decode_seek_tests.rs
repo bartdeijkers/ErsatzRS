@@ -5,7 +5,9 @@ use std::{fmt::Write as _, path::PathBuf, time::Duration};
 use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
 use ersatzrs_domain::{MediaSourceKind, SourceTeletextBindingIdentity, TeletextPageNumber};
 use ersatzrs_ffmpeg::teletext::{
-    source_observation::MAX_SOURCE_OBSERVATION_PACKETS, source_psi::SourceTeletextPsiObserver,
+    source_clock::{SourceTeletextClockObserver, SourceTeletextClockReport},
+    source_observation::MAX_SOURCE_OBSERVATION_PACKETS,
+    source_psi::SourceTeletextPsiObserver,
 };
 use sha2::{Digest as _, Sha256};
 use tokio::time::Instant;
@@ -316,6 +318,18 @@ impl LaterSource {
         let expected: [u8; 32] =
             Sha256::digest(&self.bytes[first * PACKET_BYTES..end * PACKET_BYTES]).into();
         assert_eq!(window.decoder_sha256, expected);
+        let clock =
+            scope
+                .scope(decoded.observe_source_clock(
+                    Instant::now() + Duration::from_secs(10),
+                    work.hold_work(),
+                ))
+                .await
+                .unwrap();
+        assert_eq!(
+            clock.source_sha256(),
+            Sha256::digest(&self.bytes).as_slice()
+        );
         eprintln!(
             "later-source non-EOF component: retained 512 actual nonselected tail packets including PCR; first={}, count={}, exact_sha256={}",
             span.first_packet(), span.packet_count(), hex_text(&expected)
@@ -342,6 +356,145 @@ impl LaterSource {
             (window.program_number, window.pmt_pid, window.pcr_pid),
             (1, 4096, 256)
         );
+    }
+
+    async fn assert_continuous_clock(
+        &self,
+        scope: &LocalProbeCleanupScope,
+        work: &TeletextWorkGuard,
+        decoded: &DecodedLocalTeletextPage,
+    ) {
+        assert_eq!(
+            decoded
+                .observe_source_clock(Instant::now() + Duration::from_secs(10), work.hold_work())
+                .await,
+            Err(SourceTeletextPageDecodeError::NoCleanupScope)
+        );
+        let evidence =
+            scope
+                .scope(decoded.observe_source_clock(
+                    Instant::now() + Duration::from_secs(10),
+                    work.hold_work(),
+                ))
+                .await
+                .unwrap();
+        let clock = evidence.clock();
+        assert_eq!(clock.first_source_packet, 0);
+        assert_eq!(clock.packets_seen, 79_769);
+        assert_eq!(clock.pcr_samples, 3_000);
+        assert_eq!(clock.wraps, 0);
+        let first = clock.first.unwrap();
+        let last = clock.last.unwrap();
+        assert_eq!((first.source_packet, first.raw_ticks), (3, 18_962_100));
+        assert_eq!(
+            (last.source_packet, last.raw_ticks),
+            (79_761, 1_638_368_532)
+        );
+        assert_eq!(last.elapsed_ticks, last.raw_ticks - first.raw_ticks);
+        assert_eq!(clock.packets_since_last_pcr(), Some(7));
+        assert!(evidence.first_current_psi_packet() < first.source_packet);
+        let expected: [u8; 32] = Sha256::digest(&self.bytes).into();
+        assert_eq!(evidence.source_sha256(), expected);
+        self.assert_payload_clock_binding(scope, work, decoded, clock)
+            .await;
+        eprintln!(
+            "later-source continuous raw clock: {clock:?}; first_current_psi={}; full_source_sha256={}",
+            evidence.first_current_psi_packet(), hex_text(&evidence.source_sha256())
+        );
+
+        // The metadata association can survive a restored in-place edit. A real
+        // discontinuity before the retained decoder span must still be found.
+        let modified_time = std::fs::metadata(&self.path).unwrap().modified().unwrap();
+        let mut changed = self.bytes.clone();
+        let ordinal = self
+            .bytes
+            .chunks_exact(PACKET_BYTES)
+            .enumerate()
+            .find(|(ordinal, raw)| {
+                *ordinal > 10_000
+                    && *ordinal < 20_000
+                    && packet_pid(raw) == 256
+                    && raw[3] & 0x20 != 0
+                    && raw[4] > 0
+                    && raw[5] & 0x10 != 0
+            })
+            .map(|(ordinal, _)| ordinal)
+            .unwrap();
+        assert!(u64::try_from(ordinal).unwrap() < self.span.first_packet());
+        changed[ordinal * PACKET_BYTES + 5] |= 0x80;
+        std::fs::write(&self.path, changed).unwrap();
+        let file = std::fs::File::options()
+            .write(true)
+            .open(&self.path)
+            .unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(modified_time))
+            .unwrap();
+        scope
+            .scope(decoded.check_source(Instant::now() + Duration::from_secs(10), work.hold_work()))
+            .await
+            .expect("held metadata association alone still matches");
+        assert_eq!(
+            scope
+                .scope(decoded.observe_source_clock(
+                    Instant::now() + Duration::from_secs(10),
+                    work.hold_work()
+                ))
+                .await,
+            Err(SourceTeletextPageDecodeError::InvalidTransportWindow)
+        );
+        std::fs::write(&self.path, &self.bytes).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(modified_time))
+            .unwrap();
+        eprintln!("later-source continuous clock rejects actual intervening discontinuity at packet {ordinal} despite matching restored metadata");
+    }
+
+    async fn assert_payload_clock_binding(
+        &self,
+        scope: &LocalProbeCleanupScope,
+        work: &TeletextWorkGuard,
+        decoded: &DecodedLocalTeletextPage,
+        expected_clock: SourceTeletextClockReport,
+    ) {
+        let modified_time = std::fs::metadata(&self.path).unwrap().modified().unwrap();
+        let mut changed = self.bytes.clone();
+        let first = usize::try_from(self.span.first_packet()).unwrap();
+        let ordinal = changed
+            .chunks_exact(PACKET_BYTES)
+            .enumerate()
+            .find(|(ordinal, raw)| *ordinal >= first && packet_pid(raw) == SELECTED_PID)
+            .map(|(ordinal, _)| ordinal)
+            .unwrap();
+        // Two payload bits retain their parity and leave TS/PSI/PCR intact.
+        changed[ordinal * PACKET_BYTES + 100] ^= 3;
+        let mut raw_clock = SourceTeletextClockObserver::new_source_epoch(256, 0).unwrap();
+        for raw in changed.chunks_exact(PACKET_BYTES) {
+            raw_clock.push(raw.try_into().unwrap()).unwrap();
+        }
+        assert_eq!(raw_clock.report().unwrap(), expected_clock);
+        std::fs::write(&self.path, changed).unwrap();
+        let file = std::fs::File::options()
+            .write(true)
+            .open(&self.path)
+            .unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(modified_time))
+            .unwrap();
+        scope
+            .scope(decoded.check_source(Instant::now() + Duration::from_secs(10), work.hold_work()))
+            .await
+            .expect("held metadata association alone still matches");
+        assert_eq!(
+            scope
+                .scope(decoded.observe_source_clock(
+                    Instant::now() + Duration::from_secs(10),
+                    work.hold_work()
+                ))
+                .await,
+            Err(SourceTeletextPageDecodeError::InvalidTransportWindow)
+        );
+        std::fs::write(&self.path, &self.bytes).unwrap();
+        file.set_times(std::fs::FileTimes::new().set_modified(modified_time))
+            .unwrap();
+        eprintln!("later-source continuous clock rejects changed retained payload at packet {ordinal} despite matching raw clocks and restored metadata");
     }
 }
 
@@ -376,6 +529,9 @@ async fn native_later_packet_span_decodes_exact_pages_without_prefix_or_temporal
     );
     source.assert_exact_span(&subtitle);
     source.assert_exact_span(&guide);
+    source
+        .assert_continuous_clock(&scope, &work, &subtitle)
+        .await;
     assert_eq!(subtitle.window(), guide.window());
     eprintln!(
         "later-source component: source_packets={}, first_source_packet={}, span_packets={}, decoded888={}, decoded200={}, source_sha256={}, decoder_sha256={}",

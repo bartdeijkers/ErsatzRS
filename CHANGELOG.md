@@ -46,6 +46,9 @@ release section when tagging a release.
   Complete AV/PCR tails remain in captured non-EOF ranges; only an unfinished
   selected PES requires trimming. Both native consumers now retain the exact
   requested seek/end separately from source-clock and decoder timestamps.
+  A bounded-memory held-source walk checks current PSI and raw PCR across
+  continuing windows and rechecks the retained decoder-byte hash. Raw clock
+  observations do not establish media-relative cue coverage.
   General source/seek semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible

@@ -26,7 +26,11 @@ use super::{
 pub use headers::{LocalTeletextHeaderProblem, LocalTeletextHeaders};
 
 mod headers;
+mod source_clock;
 mod source_window;
+
+pub(crate) use source_clock::observe_owned as observe_source_clock_owned;
+pub use source_clock::SourceTeletextContinuousClockEvidence;
 
 pub(crate) use source_window::{
     capture_source_packet_span_owned, capture_source_window_owned, LocalTeletextSourceWindow,

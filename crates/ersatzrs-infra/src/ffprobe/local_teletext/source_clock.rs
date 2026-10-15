@@ -1,0 +1,183 @@
+//! Continuous held-source clock evidence; never a media-origin or cue grant.
+
+use std::{path::PathBuf, sync::Arc};
+
+use ersatzrs_core::locking::TeletextWorkHold;
+use ersatzrs_ffmpeg::teletext::{
+    source_clock::{SourceTeletextClockObserver, SourceTeletextClockReport},
+    source_observation::MAX_SOURCE_OBSERVATION_PACKETS,
+    source_psi::SourceTeletextPsiObserver,
+};
+use sha2::{Digest as _, Sha256};
+use tokio::time::Instant;
+
+use super::{
+    headers, source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
+    SourceTeletextPacketSpan,
+};
+use crate::ffprobe::{FfprobeError, Result};
+
+/// Raw clock/PSI evidence from every physical packet of one held source.
+///
+/// This retains no source bytes and grants no playback interval, subtitle
+/// inventory, AV origin, presentation EOF or default decoder timestamp mapping.
+/// Only the owned reader can construct it; missing PCR stays explicitly absent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceTeletextContinuousClockEvidence {
+    clock: SourceTeletextClockReport,
+    source_sha256: [u8; 32],
+    first_current_psi_packet: u64,
+}
+
+impl SourceTeletextContinuousClockEvidence {
+    /// Physical source ordinals and unwrapped raw PCR, not media-relative time.
+    #[must_use]
+    pub const fn clock(&self) -> SourceTeletextClockReport {
+        self.clock
+    }
+
+    /// Hash of all held source bytes, including packets after the final PCR.
+    #[must_use]
+    pub const fn source_sha256(&self) -> [u8; 32] {
+        self.source_sha256
+    }
+
+    /// First complete current PAT/PMT observation, without inventing earlier PSI.
+    #[must_use]
+    pub const fn first_current_psi_packet(&self) -> u64 {
+        self.first_current_psi_packet
+    }
+}
+
+/// Reuse actual worker ownership and deadline for a constant-memory raw walk.
+pub(crate) async fn observe_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    paths: (PathBuf, PathBuf),
+    pid: u16,
+    expected: SourceTeletextDecodeWindowEvidence,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<SourceTeletextContinuousClockEvidence> {
+    headers::run_source_guard_owned(deadline, hold, move |stop| {
+        stop.check_source_guard()?;
+        super::check_source_guard_paths(&guard, &paths.0, &paths.1)?;
+        let evidence = observe(&guard, pid, expected, stop)?;
+        stop.check_source_guard()?;
+        super::check_source_guard_paths(&guard, &paths.0, &paths.1)?;
+        stop.check_source_guard()?;
+        Ok(evidence)
+    })
+    .await
+    .map_err(source_window::window_error)
+}
+
+fn observe<T>(
+    guard: &LocalTeletextSourceGuard,
+    pid: u16,
+    expected: SourceTeletextDecodeWindowEvidence,
+    stop: &headers::ReadStop<'_, T>,
+) -> Result<SourceTeletextContinuousClockEvidence> {
+    let len = guard.guard.len;
+    if len == 0 || !len.is_multiple_of(188) {
+        return Err(invalid());
+    }
+    let mut psi = SourceTeletextPsiObserver::new(pid).map_err(|_| invalid())?;
+    let mut clock = SourceTeletextClockObserver::new_source_epoch(expected.pcr_pid, 0)
+        .map_err(|_| invalid())?;
+    let mut digest = Sha256::new();
+    let span = SourceTeletextPacketSpan::new(expected.first_source_packet, expected.source_packets)
+        .map_err(|_| invalid())?;
+    if span.byte_end_exclusive() > len
+        || u64::from(expected.decoder_packets)
+            + u64::from(expected.skipped_selected_prefix_packets)
+            + u64::from(expected.trimmed_source_tail_packets)
+            != u64::from(expected.source_packets)
+    {
+        return Err(invalid());
+    }
+    let retained_end = span
+        .end_packet_exclusive()
+        .checked_sub(u64::from(expected.trimmed_source_tail_packets))
+        .ok_or_else(invalid)?;
+    let mut decoder_digest = Sha256::new();
+    let mut skipped_prefix = 0_u32;
+    let mut retained_packets = 0_u32;
+    let mut first_current_psi_packet = None;
+    for ordinal in 0..len / 188 {
+        stop.check_source_guard()?;
+        if ordinal > 0 && ordinal.is_multiple_of(MAX_SOURCE_OBSERVATION_PACKETS as u64) {
+            psi.begin_continuation_window().map_err(|_| invalid())?;
+        }
+        let mut raw = [0; 188];
+        source_window::read_packet(
+            guard.guard.original.as_file(),
+            &mut raw,
+            ordinal * 188,
+            stop,
+        )?;
+        psi.push(&raw).map_err(|_| invalid())?;
+        clock.push(&raw).map_err(|_| invalid())?;
+        digest.update(raw);
+        if ordinal >= span.first_packet() && ordinal < retained_end {
+            let raw_pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
+            if raw_pid == pid && skipped_prefix < expected.skipped_selected_prefix_packets {
+                skipped_prefix += 1;
+            } else {
+                decoder_digest.update(raw);
+                retained_packets += 1;
+            }
+        }
+        if first_current_psi_packet.is_none() && psi.has_complete_current_tables() {
+            validate_program(&psi, expected)?;
+            first_current_psi_packet = Some(ordinal);
+        }
+    }
+    stop.check_source_guard()?;
+    validate_program(&psi, expected)?;
+    let observed = psi.observation().map_err(|_| invalid())?;
+    if observed.current_tables_changed
+        || headers::fingerprint(&observed) != expected.psi_fingerprint
+    {
+        return Err(invalid());
+    }
+    let decoder_sha256: [u8; 32] = decoder_digest.finalize().into();
+    if retained_packets != expected.decoder_packets
+        || skipped_prefix != expected.skipped_selected_prefix_packets
+        || decoder_sha256 != expected.decoder_sha256
+    {
+        return Err(invalid());
+    }
+    Ok(SourceTeletextContinuousClockEvidence {
+        clock: clock.report().map_err(|_| invalid())?,
+        source_sha256: digest.finalize().into(),
+        first_current_psi_packet: first_current_psi_packet.ok_or_else(invalid)?,
+    })
+}
+
+fn validate_program(
+    psi: &SourceTeletextPsiObserver,
+    expected: SourceTeletextDecodeWindowEvidence,
+) -> Result<()> {
+    let observed = psi.observation().map_err(|_| invalid())?;
+    let mut selected = observed
+        .memberships()
+        .filter(|(program, _)| program.program_number == expected.program_number);
+    let (program, stream) = selected.next().ok_or_else(invalid)?;
+    if selected.next().is_some()
+        || stream.stream_type != 6
+        || program.pmt_pid != expected.pmt_pid
+        || program.pcr_pid != expected.pcr_pid
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn invalid() -> FfprobeError {
+    FfprobeError::InvalidOutput {
+        path: "source teletext decode window".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests;

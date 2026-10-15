@@ -232,12 +232,7 @@ impl TeletextClockValidator {
         clock: ClockRef,
         position: u64,
     ) -> Result<(), TeletextClockError> {
-        // The dependency decodes, but does not validate, these syntax fields.
-        // PCR begins at byte 6, making byte 10 its base/reserved/extension byte.
-        if clock.extension() >= 300 || packet.buffer()[10] & 0x7e != 0x7e {
-            return Err(TeletextClockError::Pcr);
-        }
-        let ticks = u64::from(clock);
+        let ticks = validated_pcr_ticks(packet, clock).ok_or(TeletextClockError::Pcr)?;
         if let Some((previous_position, previous_ticks)) = self.previous {
             let delta = (ticks + PCR_MODULUS - previous_ticks) % PCR_MODULUS;
             if delta == 0 || delta >= PCR_MODULUS / 2 {
@@ -291,4 +286,10 @@ impl TeletextClockValidator {
         }
         Ok(())
     }
+}
+
+/// The dependency decodes, but does not validate, the extension/reserved bits.
+pub(super) fn validated_pcr_ticks(packet: &Packet<'_>, clock: ClockRef) -> Option<u64> {
+    // PCR begins at byte 6; byte 10 holds base/reserved/extension bits.
+    (clock.extension() < 300 && packet.buffer()[10] & 0x7e == 0x7e).then(|| u64::from(clock))
 }

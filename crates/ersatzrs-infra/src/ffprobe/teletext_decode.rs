@@ -19,7 +19,8 @@ use super::{
 };
 
 pub use super::local_teletext::{
-    SourceTeletextDecodeWindowEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
+    SourceTeletextContinuousClockEvidence, SourceTeletextDecodeWindowEvidence,
+    SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
 };
 
 const MAX_STARTUP: Duration = Duration::from_secs(15);
@@ -116,6 +117,42 @@ impl std::fmt::Debug for DecodedLocalTeletextPage {
 }
 
 impl DecodedLocalTeletextPage {
+    /// Observe every held source packet from zero through EOF under the existing
+    /// work owner, retaining only current PSI, raw clock state and a byte hash.
+    /// Current programme/PCR association must match this decoded receipt.
+    /// The retained decoder bytes are rehashed during that same walk; changed
+    /// valid payload cannot silently join an older bitmap receipt.
+    ///
+    /// This establishes neither a native media origin nor requested cue coverage.
+    /// Raw PCR elapsed from its first sample is not media-relative seek time, and
+    /// the last PCR is not presentation EOF. Independent bounded decode windows
+    /// still need their own real PSI/PES; no source packets are manufactured.
+    /// Large/slow sources remain subject to the same absolute owner deadline.
+    ///
+    /// # Errors
+    /// Rejects missing ownership, changed source/PSI, malformed transport or clock
+    /// epochs, deadline/cancellation and uncertain worker cleanup.
+    pub async fn observe_source_clock(
+        &self,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<SourceTeletextContinuousClockEvidence, SourceTeletextPageDecodeError> {
+        check_deadline(deadline)?;
+        if LocalProbeCleanupScope::current().is_none() {
+            return Err(SourceTeletextPageDecodeError::NoCleanupScope);
+        }
+        local_teletext::observe_source_clock_owned(
+            self.guard.clone(),
+            (self.original.clone(), self.resolved.clone()),
+            self.request.pid,
+            self.window,
+            deadline,
+            hold,
+        )
+        .await
+        .map_err(probe_error)
+    }
+
     #[must_use]
     pub fn request(&self) -> &SourceTeletextPageDecodeRequest {
         &self.request
