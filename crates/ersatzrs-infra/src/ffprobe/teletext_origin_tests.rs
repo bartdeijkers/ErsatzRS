@@ -215,6 +215,89 @@ fn native_decimal_quantum_enclosure_is_signed_inclusive_and_never_uses_float() {
 }
 
 #[test]
+fn audited_format_writer_bounds_are_signed_closed_and_require_six_decimals() {
+    for (reported, expected) in [
+        ("0.000000", (-1, 1)),
+        ("-0.000000", (-1, 1)),
+        ("1.418667", (1_418_666, 1_418_668)),
+        ("-1.418667", (-1_418_668, -1_418_666)),
+    ] {
+        assert_eq!(
+            NativeSourceTime::parse(reported)
+                .unwrap()
+                .ffprobe_n9_format_microsecond_bounds(),
+            Some(expected)
+        );
+    }
+    for reported in ["0", "1.41867", "1.4186670", "0.000000000000000001"] {
+        assert_eq!(
+            NativeSourceTime::parse(reported)
+                .unwrap()
+                .ffprobe_n9_format_microsecond_bounds(),
+            None
+        );
+    }
+    assert!(parse(&json!({})).unwrap().format_start().is_none());
+    assert!(parse(&json!({"format":{"start_time":"N/A"}}))
+        .unwrap()
+        .format_start()
+        .is_none());
+}
+
+#[test]
+fn audited_format_writer_bounds_reject_large_values_without_clamping_or_overflow() {
+    for (reported, expected) in [
+        (
+            "8796093.022208",
+            Some((8_796_093_022_207, 8_796_093_022_209)),
+        ),
+        (
+            "-8796093.022208",
+            Some((-8_796_093_022_209, -8_796_093_022_207)),
+        ),
+        ("8796093.022209", None),
+        ("-8796093.022209", None),
+        ("9223372036854.775807", None),
+        ("-9223372036854.775808", None),
+        ("170141183460469231731687303715884.105727", None),
+        ("-170141183460469231731687303715884.105728", None),
+    ] {
+        assert_eq!(
+            NativeSourceTime::parse(reported)
+                .unwrap()
+                .ffprobe_n9_format_microsecond_bounds(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn audited_format_writer_encloses_roundtripped_integer_microseconds() {
+    // Exercise the audited double multiplication and six-decimal formatting;
+    // actual native writer provenance is verified by the native integration.
+    let limit = 1_i64 << 43;
+    for native_us in [
+        -limit,
+        -limit + 1,
+        -8_388_608_000_001,
+        -1_418_667,
+        -1,
+        0,
+        1,
+        1_418_667,
+        8_388_608_000_001,
+        limit - 1,
+        limit,
+    ] {
+        let native_double = native_us.to_string().parse::<f64>().unwrap();
+        let seconds = (1.0_f64 / 1_000_000.0) * native_double;
+        let reported = NativeSourceTime::parse(&format!("{seconds:.6}")).unwrap();
+        let (lower, upper) = reported.ffprobe_n9_format_microsecond_bounds().unwrap();
+        assert!(lower <= native_us && native_us <= upper);
+    }
+}
+
+#[test]
 fn native_origin_rejects_invalid_av_timing_types_syntax_and_overflow() {
     for invalid in [json!(true), json!(0), json!([]), json!({}), json!("N/a")] {
         let mut metadata = fixture();

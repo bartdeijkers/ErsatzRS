@@ -14,6 +14,7 @@ use tokio::time::Instant;
 use super::{
     headers,
     source_av_origin::{AvOriginCollector, SourceTeletextAvOriginEvidence},
+    source_cue::{CueCollector, SourceTeletextCueEvidence, SourceTeletextCueRequest},
     source_native_clock::{NativeClockCollector, SourceTeletextNativeClockEvidence},
     source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
     SourceTeletextPacketSpan,
@@ -36,6 +37,7 @@ struct SourceWalkRequest {
     expected: Option<SourceTeletextDecodeWindowEvidence>,
     origin: Option<NativeSourceOrigin>,
     native_clock: Option<NativeClockCollector>,
+    cue: Option<CueCollector>,
 }
 
 impl SourceWalkRequest {
@@ -54,6 +56,7 @@ impl SourceWalkRequest {
             expected: Some(expected),
             origin,
             native_clock: None,
+            cue: None,
         }
     }
 }
@@ -142,25 +145,63 @@ pub(crate) async fn observe_native_clock_owned(
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<Option<SourceTeletextNativeClockEvidence>> {
-    let (request, origin, trace) = observed;
-    let Some(native_clock) = NativeClockCollector::new(&request, &origin, trace) else {
+    let Some(request) = native_request(observed, None) else {
         return Ok(None);
-    };
-    let request = SourceWalkRequest {
-        selection: native_clock.selection(),
-        expected: None,
-        origin: Some(origin),
-        native_clock: Some(native_clock),
     };
     walk_owned(guard, paths, request, deadline, hold)
         .await
         .map(|observed| observed.native_clock)
 }
 
+pub(crate) async fn observe_native_cue_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    paths: (PathBuf, PathBuf),
+    observed: (
+        SourceTeletextPageDecodeRequest,
+        NativeSourceOrigin,
+        NativeSourceDemuxTrace,
+    ),
+    cue: SourceTeletextCueRequest,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<Option<SourceTeletextCueEvidence>> {
+    let Some(request) = native_request(observed, Some(cue)) else {
+        return Ok(None);
+    };
+    walk_owned(guard, paths, request, deadline, hold)
+        .await
+        .map(|observed| observed.cue)
+}
+
+fn native_request(
+    observed: (
+        SourceTeletextPageDecodeRequest,
+        NativeSourceOrigin,
+        NativeSourceDemuxTrace,
+    ),
+    cue: Option<SourceTeletextCueRequest>,
+) -> Option<SourceWalkRequest> {
+    let (request, origin, trace) = observed;
+    let native_clock = NativeClockCollector::new(&request, &origin, trace)?;
+    let cue = if let Some(cue) = cue {
+        Some(CueCollector::new(cue, &origin, native_clock.epoch())?)
+    } else {
+        None
+    };
+    Some(SourceWalkRequest {
+        selection: native_clock.selection(),
+        expected: None,
+        origin: Some(origin),
+        native_clock: Some(native_clock),
+        cue,
+    })
+}
+
 struct SourceWalkEvidence {
     clock: SourceTeletextContinuousClockEvidence,
     av: Option<SourceTeletextAvOriginEvidence>,
     native_clock: Option<SourceTeletextNativeClockEvidence>,
+    cue: Option<SourceTeletextCueEvidence>,
 }
 
 async fn walk_owned(
@@ -193,6 +234,7 @@ fn observe<T>(
         expected,
         origin,
         mut native_clock,
+        mut cue,
     } = request;
     let len = guard.guard.len;
     if len == 0 || !len.is_multiple_of(188) {
@@ -223,7 +265,10 @@ fn observe<T>(
             stop,
         )?;
         psi.push(&raw).map_err(|_| invalid())?;
-        clock.push(&raw).map_err(|_| invalid())?;
+        let report = clock.push(&raw).map_err(|_| invalid())?;
+        if let Some(cue) = &mut cue {
+            cue.push(report);
+        }
         if let Some(av) = &mut av {
             av.push(&raw)?;
         }
@@ -273,14 +318,16 @@ fn observe<T>(
     let mut av = av
         .map(|collector| collector.finish(clock, &observed))
         .transpose()?;
-    let native_clock = native_clock
+    let mut native_clock = native_clock
         .map(|collector| collector.finish(av.take().ok_or_else(invalid)?, &observed))
         .transpose()?
         .flatten();
+    let cue = cue.and_then(|collector| collector.finish(native_clock.take()?));
     Ok(SourceWalkEvidence {
         clock,
         av,
         native_clock,
+        cue,
     })
 }
 

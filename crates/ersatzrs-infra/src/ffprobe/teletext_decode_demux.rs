@@ -4,12 +4,73 @@ use ersatzrs_core::locking::TeletextWorkHold;
 use tokio::time::Instant;
 
 use super::{
-    check_deadline, local, local_teletext, probe_error, FfprobeCommand, FfprobeExtractor,
-    PreparedLocalTeletextSource, SourceTeletextNativeClockEvidence, SourceTeletextPageDecodeError,
+    check_deadline, local, local_teletext, probe_error, DecodedLocalTeletextPage, FfprobeCommand,
+    FfprobeExtractor, PreparedLocalTeletextSource, SourceTeletextCueEvidence,
+    SourceTeletextCueRequest, SourceTeletextNativeClockEvidence, SourceTeletextPageDecodeError,
 };
 use crate::ffprobe::teletext_demux::{parse_source_demux, NativeSourceDemuxTrace, MAX_PACKETS};
 
 impl FfprobeExtractor {
+    /// Decode the located cue span and join its bytes back to the original
+    /// native-format clock receipt. Exact source/request identity must match;
+    /// the existing held raw walk checks the retained decoder digest and the
+    /// original full-source digest under the same work/deadline ownership.
+    /// This grants no enabled-stream consumer normalization or initial page state.
+    /// # Errors
+    /// Rejects mismatched requests, changed bytes, absent current headers/bitmaps,
+    /// invalid transport, deadline/cancellation or uncertain actual cleanup.
+    pub async fn decode_prepared_local_teletext_cue(
+        &self,
+        source: &PreparedLocalTeletextSource,
+        cue: &SourceTeletextCueEvidence,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        if source.request() != cue.native_clock().request() {
+            return Err(SourceTeletextPageDecodeError::SourceChanged);
+        }
+        let decoded = self
+            .decode_prepared_local_teletext_page(source, cue.span(), deadline, hold.clone())
+            .await?;
+        let actual = decoded.observe_source_clock(deadline, hold).await?;
+        if actual.source_sha256() != cue.native_clock().av_origin().clock().source_sha256() {
+            return Err(SourceTeletextPageDecodeError::SourceChanged);
+        }
+        Ok(decoded)
+    }
+
+    /// Locate bounded native-format cue bookends from the original held source.
+    ///
+    /// Native format-origin precision, first-global epoch, stable PSI/AV and
+    /// selected PCR observations share the existing source/worker/deadline.
+    /// The returned span still needs its own current headers/PES and decoding.
+    /// Consumer enabled-stream origin and seek semantics are not granted here.
+    /// # Errors
+    /// Rejects stale sources, malformed transport, expired deadlines, lost
+    /// cancellation ownership or unconfirmed worker cleanup. Unknown numeric,
+    /// epoch, gap or bounded-span evidence returns `None` without cue admission.
+    pub async fn observe_prepared_local_native_cue(
+        &self,
+        source: &PreparedLocalTeletextSource,
+        cue: SourceTeletextCueRequest,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<Option<SourceTeletextCueEvidence>, SourceTeletextPageDecodeError> {
+        let trace = self
+            .observe_prepared_local_demux_trace(source, deadline, hold.clone())
+            .await?;
+        local_teletext::observe_native_cue_owned(
+            source.guard.clone(),
+            (source.original.clone(), source.resolved.clone()),
+            (source.request.clone(), source.native.clone(), trace),
+            cue,
+            deadline,
+            hold,
+        )
+        .await
+        .map_err(probe_error)
+    }
+
     /// Bind the clean first-global AV initializer to the held raw walk and the
     /// explicitly configured ordinary native probe's program epoch.
     /// Unknown dispositions or non-AV/shared/late initialization return `None`.

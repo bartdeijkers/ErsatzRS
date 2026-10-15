@@ -172,6 +172,35 @@ Empty effective durations and signed-range overflow remain unknown. Native
 origin enclosure, bounded PCR gaps, effective cue bookends, current page headers
 and the exact decoder-byte association remain required before later-cue admission.
 
+The same held walk can provisionally locate requested native-FORMAT cue
+bookends using the audited n9.0 plain six-decimal writer enclosure, independently
+parsed effective seek/duration and actual selected-PCR observations. Use the last
+PCR at/before the conservative start and first PCR at/after the conservative end;
+never interpolate by byte rate or substitute native seek hints. Explicit packet
+and tick gap limits fence missing observations. Publish an opaque receipt only
+after native epoch/PSI/AV/source checks succeed. It retains the exact source/page
+request, and later decoding must rejoin its full-source digest and the retained
+decoder-byte hash through the existing owned raw walk. Every captured span still
+requires its own current PSI, complete selected PES and actual requested header.
+The bounded-span mechanism is implementation progress, not an accepted duration
+limit or general multiwindow solution. Modulo gap bounds alone do not exclude an
+omitted whole period. Writer magnitudes/precisions outside the audited numerical
+enclosure remain unknown, not a permanent product restriction.
+
+Unqualified descriptor discovery is explicitly distinct from strict observed-
+header candidate loading. It retains exact file/version/stream ownership,
+current stored PSI/descriptor provenance, ambiguity and capacity checks, while
+allowing descriptor pages absent from the scan prefix. It never writes readiness
+or substitutes a descriptor for a transmitted page. Only actual current-window
+validation can bridge such a request into a playback choice; later rechecks must
+preserve that distinction. A PCR-bounded span may omit earlier-arriving PES or
+initial page state, even if seven later bitmaps decode. Actual consumer policy
+and enabled-stream origin also remain separate: n9.0
+[correct_input_start_times](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffmpeg_opt.c#L345)
+can change normalization when the earliest audio is disabled or another stream
+is selected. Neither native format origin nor a successful partial window grants
+that consumer's complete subtitle presentation interval.
+
 Do not weaken global scan-header qualification to bypass the remaining exact-
 source candidate path; connect descriptor-only discovery only with independently
 qualified current cue-window headers and the existing selection checks.

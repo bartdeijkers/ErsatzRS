@@ -42,6 +42,34 @@ impl NativeSourceTime {
         (1, self.scale)
     }
 
+    /// Closed integer-microsecond bounds for plain `FFprobe` n9.0 format starts.
+    ///
+    /// The audited `fftools/textformat/avtextformat.c` writer converts the
+    /// `AV_TIME_BASE_Q` timestamp through `av_q2d(base) * ts` and plain `%f`.
+    /// This assumes binary64 round-to-nearest and its six-decimal formatting,
+    /// without unit prefixes or sexagesimal output. With reported magnitude at
+    /// most 2^43 microseconds, the nearby integer timestamp converts exactly;
+    /// coefficient and multiplication rounding together contribute less than
+    /// 0.002 microseconds, and decimal rounding at most 0.5 microseconds. The
+    /// closed ±1 microsecond range therefore conservatively encloses that
+    /// native integer. Other precisions and larger values remain unknown.
+    ///
+    /// The caller must establish this writer/version provenance. This method
+    /// qualifies neither an actual consumer origin nor a program/PCR epoch.
+    #[must_use]
+    pub fn ffprobe_n9_format_microsecond_bounds(self) -> Option<(i64, i64)> {
+        const MAX_REPORTED_MICROSECONDS: i128 = 1_i128 << 43;
+        if self.scale != 1_000_000
+            || !(-MAX_REPORTED_MICROSECONDS..=MAX_REPORTED_MICROSECONDS).contains(&self.units)
+        {
+            return None;
+        }
+        Some((
+            i64::try_from(self.units.checked_sub(1)?).ok()?,
+            i64::try_from(self.units.checked_add(1)?).ok()?,
+        ))
+    }
+
     /// Whether an exact rational lies in the closed reported ±one-quantum range.
     ///
     /// This conservative observational enclosure assumes no tighter native

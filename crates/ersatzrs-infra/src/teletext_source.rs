@@ -17,7 +17,10 @@ mod header_codec;
 mod parents;
 mod playback;
 
-pub use playback::{load_caption_candidates, SourceTeletextCaptionCandidate};
+pub use playback::{
+    discover_caption_requests, load_caption_candidates, SourceTeletextCaptionCandidate,
+    SourceTeletextCaptionDescriptorRequest,
+};
 
 /// Per-observation resource policy, not a DVB inventory ceiling.
 pub const MAX_SOURCE_TELETEXT_DESCRIPTORS: usize =

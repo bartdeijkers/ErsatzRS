@@ -2968,6 +2968,85 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 requested native-format cue/descriptor discovery checkpoint (partial):
+Criterion: connect actual requested times to held source windows and current page
+validation instead of guessing packet offsets or treating the scan prefix as the
+whole source. A separate descriptor-request API reuses exact read-snapshot
+item/version/file/path ownership, current-parent revision, codec/global index,
+actual PSI/descriptor provenance and existing bounds. It preserves every page,
+program, language and role absent from prefix headers without writing observed
+readiness. Strict observed-header loading is unchanged. Missing/malformed/noncaption
+provenance, duplicate/global ownership and capacity failures remain atomic.
+
+Effective native microseconds now feed the SAME owned raw read as native first-
+global epoch, stable PSI, all AV witnesses and full-source hash. A plain n9.0
+six-decimal writer enclosure supplies conservative target coordinates; actual
+PCR samples supply the last start-side and first end-side bookends. Explicit
+packet/tick gap bounds and bounded span arithmetic reject uncertainty. The
+reported writer range/precision is checked, not assumed universally exact.
+Only final native-epoch success can publish the opaque cue receipt. It retains
+the exact source/page request. Decoding requires that request match, actual
+same-snapshot page headers/bitmaps, and another existing owned raw walk joining
+the decoder-byte hash and original full-source hash. A physical span alone is
+never a cue-to-decoder receipt or a playback grant.
+
+Focused run a7a46e4a-13f5-4508-bf1a-0e5b79ce641b passes 30 discovery, origin,
+provisional-cue and existing raw-hash cases. The discovery tests include a real
+stored current-PSI 32,768-packet prefix with no page headers, descriptor pages
+888/889/899, unchanged raw reports, all programs/roles and invalid provenance.
+The writer tests cover signed/six-decimal values, inclusive safe magnitude,
+unknown precision/overflow and numerical roundtrips. Cue tests preserve the
+numeric enclosure, refuse interpolated or absent bookends, consume actual
+non-PCR packet gaps and fence bad policy/timing atomically. Final focused run 6aafdf36-fe76-4eaf-8710-953d73bd2e9f passes 15 cue and
+constructor/epoch cases after the new exact-request receipt binding. A test-only
+similar variable rename resolves strict lint; production/native inputs remain
+unchanged and the valid native results are reused.
+
+Native component run 95ba4943-a98d-4530-9aba-ead385554205 passes in 2.604 s on
+the pinned n9.0-20260805 FFmpeg/FFprobe with libzvbi. Exact caller intent
+40.0000009s + 12.0000009s remains distinct from effective 40,000,000..52,000,000us.
+Actual conservative program targets are 1,118,303,982..1,442,304,036 ticks;
+PCR bookends are packets54,123 and70,107, producing15,985 physical packets.
+Both requested pages888/200 independently decode seven real bitmaps from that
+same bounded non-EOF span and its current headers. Decoder SHA256 is
+2b33abe4c4cee54539f38f0cefb247af19ac0ac942d7138fc17fcf887c950d63.
+The full original hash remains52bc48e7ccb368f1e48ddce78d86a95371ebd58934bb7a451304d4073ff24022.
+A modified actual null packet70,108 outside the decoder span, with restored
+mtime and unchanged association/window bytes, rejects the old cue as SourceChanged.
+A different exact requested page rejects before decoding. Missing end coverage,
+a one-packet PCR bound and a too-large single span return no cue. An early span
+with no selected PES rejects transport qualification. Ordinary track metadata,
+original source bytes and actual scope/work drain remain unchanged.
+
+The earlier combined native run2c935b83-d651-4e7c-800e-fc2765d40a06 passed the
+three retained actual original/wrapped/corrupt-first/later-window regressions;
+its new cue test was red only because the early no-PES window was incorrectly
+expected to return NoBitmap rather than InvalidTransportWindow. The expectation
+was corrected after inspecting the actual window path; native-2.log above is
+that case's final success. Those unchanged valid native cases are reused.
+Final affected all-target strict Clippy passes (clippy-2.log). Owned formatting,
+architecture/progress checks and the scoped lint policy pass; the existing
+teletext summary-length warning remains informational. The new read-only test
+transaction is explicitly documented for the architecture checker.
+Commands and detailed receipts live in tmp/phase9-source-cue-clock-checkpoint/.
+Independent cue review found no arithmetic/bookend/worker defect; its identified
+cue-to-decoder digest join is now implemented with the actual null-tail negative.
+
+Remaining concrete integration blockers: the clock-derived window produces seven
+bitmaps versus the earlier eight because PCR packet time does not retain all
+preceding arriving selected PES/initial page state. Add selected-PES PTS and real
+preceding PSI/page state before treating the window as complete subtitle coverage.
+Generated consumer flags and n9.0 enabled-stream start correction, including
+alternate-audio selection, must qualify actual consumer normalization separately
+from native FORMAT origin. Descriptor discovery must then enter runtime prepare
+and rechecks through that complete current-window proof, not bypass the existing
+whole-byte gate. No automatic later-cue selection is enabled here. Observed gap
+limits alone do not exclude omitted whole timestamp periods. General shared/non-AV/
+late initializers, large/multiwindow sources and all remaining engine criteria
+stay open; none is an accepted product restriction. Existing ordinary route,
+TSDuck, editor and headed client proof is reused only for unchanged tested inputs.
+No full engine acceptance, full CI, content-addon delivery, push or publication.
+
 2026-10-15 held default-probe epoch checkpoint (partial):
 Criterion: replace the initializer hypothesis with actual held raw/native
 association before qualifying general source/seek cues, preserving ordinary

@@ -21,8 +21,9 @@ use super::{
 
 pub use super::local_teletext::{
     SourceTeletextAvOriginEvidence, SourceTeletextAvOriginWitness,
-    SourceTeletextContinuousClockEvidence, SourceTeletextDecodeWindowEvidence,
-    SourceTeletextNativeClockEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
+    SourceTeletextContinuousClockEvidence, SourceTeletextCueEvidence, SourceTeletextCueRequest,
+    SourceTeletextDecodeWindowEvidence, SourceTeletextNativeClockEvidence,
+    SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
 };
 
 #[path = "teletext_decode_demux.rs"]

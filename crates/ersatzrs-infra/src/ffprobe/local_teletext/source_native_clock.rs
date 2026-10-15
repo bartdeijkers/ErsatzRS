@@ -32,6 +32,7 @@ use crate::ffprobe::{
 /// page headers and decoder timestamps before admission. No cue follows here.
 #[derive(Debug, Clone)]
 pub struct SourceTeletextNativeClockEvidence {
+    request: SourceTeletextPageDecodeRequest,
     av: SourceTeletextAvOriginEvidence,
     epoch: SourceNativeEpoch,
     first_packet: NativeSourceDemuxPacket,
@@ -41,6 +42,12 @@ pub struct SourceTeletextNativeClockEvidence {
 }
 
 impl SourceTeletextNativeClockEvidence {
+    /// Exact prepared source binding, program, PID, global index and requested page.
+    #[must_use]
+    pub fn request(&self) -> &SourceTeletextPageDecodeRequest {
+        &self.request
+    }
+
     #[must_use]
     pub fn av_origin(&self) -> &SourceTeletextAvOriginEvidence {
         &self.av
@@ -70,6 +77,7 @@ impl SourceTeletextNativeClockEvidence {
 }
 
 pub(super) struct NativeClockCollector {
+    request: SourceTeletextPageDecodeRequest,
     selection: SourceSelection,
     trace: NativeSourceDemuxTrace,
     epoch: SourceNativeEpoch,
@@ -168,6 +176,7 @@ impl NativeClockCollector {
         };
         let epoch = SourceNativeEpoch::from_first_demux_timestamps(first.pts(), first.dts());
         Some(Self {
+            request: request.clone(),
             selection,
             epoch,
             first_packet: first,
@@ -176,6 +185,10 @@ impl NativeClockCollector {
             header: None,
             mismatched: false,
         })
+    }
+
+    pub(super) const fn epoch(&self) -> SourceNativeEpoch {
+        self.epoch
     }
 
     pub(super) const fn selection(&self) -> SourceSelection {
@@ -267,6 +280,7 @@ impl NativeClockCollector {
             return Ok(None);
         }
         Ok(Some(SourceTeletextNativeClockEvidence {
+            request: self.request,
             av,
             epoch: self.epoch,
             first_packet: self.first_packet,

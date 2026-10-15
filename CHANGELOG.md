@@ -61,8 +61,12 @@ release section when tagging a release.
   Held raw witnesses now corroborate the tested default-probe program/PCR epoch;
   unknown or corrupt first packets cannot borrow an initializer from later AV.
   Exact requested times remain separate from effective native microseconds.
-  Actual consumer-policy equivalence and later cue coverage remain unqualified.
-  General source/seek semantics and complete stream-route acceptance remain open.
+  Effective native-format intervals can now locate real held PCR bookends and
+  decode current page headers from their bounded spans, rechecking exact request
+  identity and original source/decoder hashes. Descriptor discovery retains
+  pages absent from the initial scan without declaring them ready for playback.
+  Enabled-stream consumer timing, initial page state and general source/seek
+  semantics remain unqualified; complete stream-route acceptance stays open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
   client navigation with isolated themes and edits. Independent transport,

@@ -62,19 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-P9A-04 now binds the actual clean first GLOBAL native packet to its held raw
-PES header and stable selected PSI, corroborating signed native AV starts and
-PCR coordinates for the tested default-probe epoch. Genuine original/wrapped
-sources pass; a deliberately corrupt first PES stays unknown instead of gaining
-an epoch from a later AV packet. Exact caller intent and effective native
-microsecond seek/duration remain separate. This is not cue or arbitrary-consumer
-admission. Next qualify the generated consumer input policy and native format-
-origin enclosure, then join effective cue bookends and bounded PCR gaps to the
-same owned raw walk. Prove current cue-window headers before exact-file candidate
-selection; do not weaken scan-header readiness. General shared/non-AV/late native
-initializers remain open, not accepted product restrictions. Reuse applicable
-ordinary/editor/client evidence. Full engine criteria stay open; no production
-content addon, push or publication occurs.
+P9A-04 now connects effective native-FORMAT 40..52s to actual held PCR
+bookends, a bounded physical span and same-byte headers/bitmap decoding for
+pages888/200. Descriptor-only requests can discover pages absent from the stored
+scan prefix without synthesizing readiness. Exact request identity and the
+full-source/decoder digest join reject a changed null tail despite restored
+metadata; ordinary source bytes/tracks and actual cleanup survive. P9A-04 owns
+exact receipts and the corrected early-window test expectation. This remains a
+component flow: seven bitmaps versus the earlier eight exposes missing initial
+page state. Next include actual selected-PES PTS and preceding page/PSI state,
+and qualify generated consumer flags plus enabled-stream origin correction
+(including alternate audio) before automatic later-cue selection/rechecks.
+Observed gap bounds alone do not prove absence of whole timestamp periods.
+General shared/non-AV/late initializers and large/multiwindow sources remain
+required work, not accepted restrictions. Reuse applicable ordinary/editor/client
+proof. All full engine/Level2.5/editor/Lua/restart/platform criteria and engine-
+first order remain open; no production addon, push or publication occurs.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.

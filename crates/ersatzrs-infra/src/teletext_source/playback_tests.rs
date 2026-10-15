@@ -98,6 +98,10 @@ impl Fixture {
     async fn candidates(&self) -> Result<Vec<SourceTeletextCaptionCandidate>> {
         load_caption_candidates(&self.pool, 101, 301, 501, "fixture/one.ts").await
     }
+
+    async fn requests(&self) -> Result<Vec<SourceTeletextCaptionDescriptorRequest>> {
+        discover_caption_requests(&self.pool, 101, 301, 501, "fixture/one.ts").await
+    }
 }
 
 fn descriptors(tag: u8, entries: &[(&str, u8, u8, u8)]) -> Vec<u8> {
@@ -271,6 +275,10 @@ async fn candidates_never_fall_back_to_another_item_version_file_or_locator() {
             .await
             .unwrap_err();
         assert!(!error.to_string().contains("private-input-must-not-appear"));
+        let error = discover_caption_requests(&fixture.pool, item, version, file, path)
+            .await
+            .unwrap_err();
+        assert!(!error.to_string().contains("private-input-must-not-appear"));
     }
     assert!(
         load_caption_candidates(&fixture.pool, 101, 301, 502, "fixture/two.ts")
@@ -284,6 +292,14 @@ async fn candidates_never_fall_back_to_another_item_version_file_or_locator() {
             .unwrap()
             .is_empty()
     );
+    for (version, file, path) in [(301, 502, "fixture/two.ts"), (302, 503, "fixture/other.ts")] {
+        assert!(
+            discover_caption_requests(&fixture.pool, 101, version, file, path)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
 }
 
 #[tokio::test]
@@ -298,6 +314,7 @@ async fn ambiguous_equal_version_owners_and_stale_source_parents_are_rejected() 
     .await
     .unwrap();
     assert!(fixture.candidates().await.is_err());
+    assert!(fixture.requests().await.is_err());
     sqlx::query(r#"UPDATE "MediaVersion" SET "SongId"=NULL WHERE "Id"=301"#)
         .execute(&fixture.pool)
         .await
@@ -311,6 +328,7 @@ async fn ambiguous_equal_version_owners_and_stale_source_parents_are_rejected() 
     .await
     .unwrap();
     assert!(fixture.candidates().await.is_err());
+    assert!(fixture.requests().await.is_err());
 }
 
 #[tokio::test]
@@ -322,6 +340,7 @@ async fn duplicate_global_indexes_are_rejected_even_without_a_second_report() {
             VALUES (405,301,4,?,?,0,0,0)"#).bind(codec).bind(if codec == "aac" { 2 } else { 3 })
             .execute(&fixture.pool).await.unwrap();
         assert!(fixture.candidates().await.is_err());
+        assert!(fixture.requests().await.is_err());
     }
 }
 
@@ -329,16 +348,20 @@ async fn duplicate_global_indexes_are_rejected_even_without_a_second_report() {
 async fn absent_unbound_nonlocal_and_headerless_reports_provide_no_caption_readiness() {
     let fixture = Fixture::new(MediaSourceKind::Local).await;
     assert!(fixture.candidates().await.unwrap().is_empty());
+    assert!(fixture.requests().await.unwrap().is_empty());
     let mut observation = report(MediaSourceKind::Local);
     observation.observed_pages = SourceTeletextObservedPages::NotAcquired;
     fixture.store(&observation).await;
     assert!(fixture.candidates().await.unwrap().is_empty());
+    assert!(fixture.requests().await.unwrap().is_empty());
     observation.binding = SourceTeletextBinding::Unavailable;
     fixture.store(&observation).await;
     assert!(fixture.candidates().await.unwrap().is_empty());
+    assert!(fixture.requests().await.unwrap().is_empty());
     let remote = Fixture::new(MediaSourceKind::Plex).await;
     remote.store(&report(MediaSourceKind::Plex)).await;
     assert!(remote.candidates().await.unwrap().is_empty());
+    assert!(remote.requests().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -394,11 +417,13 @@ async fn malformed_wire_descriptors_and_ambiguous_program_identity_never_return_
     window(&mut report).programs.push(malformed);
     fixture.store(&report).await;
     assert!(fixture.candidates().await.is_err());
+    assert!(fixture.requests().await.is_err());
     let mut duplicate = window(&mut report).programs[0].clone();
     duplicate.pmt_pid = 4097;
     window(&mut report).programs[1] = duplicate;
     fixture.store(&report).await;
     assert!(fixture.candidates().await.is_err());
+    assert!(fixture.requests().await.is_err());
 }
 
 #[tokio::test]
@@ -420,6 +445,15 @@ async fn aggregate_wire_limit_counts_repeated_entries_before_folding_candidates(
     fixture.store(&report).await;
     let choices = fixture.candidates().await.unwrap();
     assert_eq!(choices.len(), 6);
+    let requests = fixture.requests().await.unwrap();
+    assert_eq!(requests.len(), 6);
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| request.candidate.descriptor_occurrences.len())
+            .sum::<usize>(),
+        1024
+    );
     assert_eq!(
         choices
             .iter()
@@ -431,6 +465,7 @@ async fn aggregate_wire_limit_counts_repeated_entries_before_folding_candidates(
         descriptors(0x56, &vec![("eng", 2, 0, 0x88); 170]);
     fixture.store(&report).await;
     assert!(fixture.candidates().await.is_err());
+    assert!(fixture.requests().await.is_err());
 }
 
 #[tokio::test]
@@ -443,8 +478,123 @@ async fn exact_stream_bound_succeeds_but_next_row_rejects_the_whole_result() {
     SELECT 1000+n,301,1000+n,'dvb_teletext',3,0,0,0 FROM sequence;"#)
         .execute(&fixture.pool).await.unwrap();
     assert_eq!(fixture.candidates().await.unwrap().len(), 2);
+    assert_eq!(fixture.requests().await.unwrap().len(), 3);
     sqlx::query(r#"INSERT INTO "MediaStream" ("Id","MediaVersionId","Index","Codec","MediaStreamKind","Channels","Default","Forced")
         VALUES (1256,301,1256,'dvb_teletext',3,0,0,0)"#)
         .execute(&fixture.pool).await.unwrap();
     assert!(fixture.candidates().await.is_err());
+    assert!(fixture.requests().await.is_err());
+}
+
+#[tokio::test]
+async fn descriptor_requests_discover_delayed_pages_without_claiming_prefix_headers() {
+    let fixture = Fixture::new(MediaSourceKind::Local).await;
+    let mut report = report(MediaSourceKind::Local);
+    let prefix = window(&mut report);
+    prefix.headers.clear();
+    prefix.complete_pes = 0;
+    prefix.packet_count = 32_768;
+    prefix.ended_at_eof = false;
+    fixture.store(&report).await;
+    assert!(fixture.candidates().await.unwrap().is_empty());
+    let requests = fixture.requests().await.unwrap();
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| (
+                request.candidate.request.page.get(),
+                request.candidate.language.as_str(),
+                request.candidate.descriptor_type,
+            ))
+            .collect::<Vec<_>>(),
+        [(888, "eng", 2), (889, "nld", 5), (899, "eng", 2)]
+    );
+    let first = &requests[0].candidate;
+    assert_eq!((first.request.stream_index, first.request.pid), (4, 258));
+    assert_eq!(first.request.program_number, 1);
+    assert_eq!(first.request.binding.media_version_id, 301);
+    assert_eq!(first.request.binding.media_file_id, 501);
+    assert_eq!(first.request.binding.media_stream_id, 401);
+    assert_eq!(
+        first.request.binding.source_revision.as_str(),
+        "synthetic-source-revision"
+    );
+    assert_eq!(first.psi_fingerprint, [7; 32]);
+    assert_eq!(first.descriptor_occurrences.len(), 2);
+    assert_eq!(first.descriptor_occurrences[0].descriptor_tag, 0x56);
+    assert_eq!(first.descriptor_occurrences[1].descriptor_tag, 0x46);
+    // read-only transaction: discovery does not promote or persist observations.
+    let mut tx = fixture.pool.begin().await.unwrap();
+    assert_eq!(load(&mut tx, 401, 501).await.unwrap(), Some(report));
+    tx.rollback().await.unwrap();
+    assert!(fixture.candidates().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn descriptor_requests_require_valid_caption_descriptors_and_actual_program_membership() {
+    let fixture = Fixture::new(MediaSourceKind::Local).await;
+    let mut report = report(MediaSourceKind::Local);
+    window(&mut report).headers.clear();
+    window(&mut report).programs[0].descriptors.clear();
+    fixture.store(&report).await;
+    assert!(fixture.requests().await.unwrap().is_empty());
+    window(&mut report).programs[0].descriptors = descriptors(
+        0x56,
+        &[("eng", 1, 2, 0), ("eng", 3, 2, 1), ("eng", 2, 0, 0x8a)],
+    );
+    fixture.store(&report).await;
+    assert!(fixture.requests().await.unwrap().is_empty());
+    window(&mut report).programs[0].descriptors = descriptors(0x56, &[("eng", 2, 0, 0x88)]);
+    window(&mut report).programs[0].stream_type = 5;
+    fixture.store(&report).await;
+    assert!(fixture.requests().await.unwrap().is_empty());
+    window(&mut report).programs[0].stream_type = 6;
+    let mut malformed = window(&mut report).programs[0].clone();
+    malformed.program_number = 2;
+    malformed.pmt_pid = 4097;
+    malformed.descriptors = vec![0x56, 5, b'e'];
+    window(&mut report).programs.push(malformed);
+    fixture.store(&report).await;
+    assert!(fixture.requests().await.is_err());
+}
+
+#[tokio::test]
+async fn descriptor_requests_keep_all_programs_and_pages_before_ambiguity_resolution() {
+    let fixture = Fixture::new(MediaSourceKind::Local).await;
+    let mut report = report(MediaSourceKind::Local);
+    window(&mut report).headers.clear();
+    let mut second = window(&mut report).programs[0].clone();
+    second.program_number = 2;
+    second.pmt_pid = 4097;
+    second.descriptors = descriptors(
+        0x56,
+        &[
+            ("eng", 2, 0, 0x88),
+            ("nld", 2, 0, 0x88),
+            ("eng", 5, 0, 0x88),
+        ],
+    );
+    window(&mut report).programs.push(second);
+    fixture.store(&report).await;
+    let requests = fixture.requests().await.unwrap();
+    assert_eq!(
+        requests
+            .iter()
+            .map(|request| (
+                request.candidate.request.program_number,
+                request.candidate.request.page.get(),
+                request.candidate.language.as_str(),
+                request.candidate.descriptor_type,
+            ))
+            .collect::<Vec<_>>(),
+        [
+            (1, 888, "eng", 2),
+            (1, 889, "nld", 5),
+            (1, 899, "eng", 2),
+            (2, 888, "eng", 2),
+            (2, 888, "nld", 2),
+            (2, 888, "eng", 5),
+        ]
+    );
+    assert!(fixture.candidates().await.unwrap().is_empty());
 }

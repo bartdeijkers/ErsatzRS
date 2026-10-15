@@ -28,14 +28,16 @@ pub use headers::{LocalTeletextHeaderProblem, LocalTeletextHeaders};
 mod headers;
 mod source_av_origin;
 mod source_clock;
+mod source_cue;
 mod source_native_clock;
 mod source_window;
 
 pub use source_av_origin::{SourceTeletextAvOriginEvidence, SourceTeletextAvOriginWitness};
 pub(crate) use source_clock::observe_av_origin_owned as observe_source_av_origin_owned;
-pub(crate) use source_clock::observe_native_clock_owned;
 pub(crate) use source_clock::observe_owned as observe_source_clock_owned;
 pub use source_clock::SourceTeletextContinuousClockEvidence;
+pub(crate) use source_clock::{observe_native_clock_owned, observe_native_cue_owned};
+pub use source_cue::{SourceTeletextCueEvidence, SourceTeletextCueRequest};
 pub use source_native_clock::SourceTeletextNativeClockEvidence;
 
 pub(crate) use source_window::{

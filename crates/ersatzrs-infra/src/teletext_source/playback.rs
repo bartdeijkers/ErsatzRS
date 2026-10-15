@@ -1,8 +1,10 @@
 //! Read-only caption choices from exact stored local source observations.
 //!
 //! An actually observed header and a wire subtitle descriptor identify a
-//! candidate, not a ready page. The caller must verify current source bytes,
-//! actual bitmap decoding and playback-worker ownership separately. Descriptor
+//! candidate, not a ready page. Separate descriptor discovery can request a
+//! later current window without asserting that its page was observed. The
+//! caller must verify current source bytes, actual bitmap decoding and
+//! playback-worker ownership separately. Descriptor
 //! tag 0x46 retains its provenance but never classifies a codec by itself; the
 //! existing exact `dvb_teletext` stream/report association is required first.
 
@@ -41,6 +43,24 @@ pub struct SourceTeletextCaptionCandidate {
     pub descriptor_occurrences: Vec<SourceTeletextWireDescriptor>,
 }
 
+/// Descriptor-only request for held current-window preparation, never a choice.
+///
+/// The nested fields retain the exact stored binding, actual program and wire
+/// provenance, but the requested page need not occur in the stored header
+/// prefix. Before ranking, callers must independently require its current
+/// same-byte page header, bitmap and actual playback-interval qualification.
+/// This wrapper grants no stored readiness or `HeadersObserved` authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceTeletextCaptionDescriptorRequest {
+    pub candidate: SourceTeletextCaptionCandidate,
+}
+
+#[derive(Clone, Copy)]
+enum DiscoveryMode {
+    ObservedHeader,
+    DescriptorOnly,
+}
+
 impl SourceTeletextCaptionCandidate {
     /// Hearing-impaired subtitle role, independent from forced/default policy.
     #[must_use]
@@ -68,6 +88,63 @@ pub async fn load_caption_candidates(
     media_file_id: i64,
     original_path: &str,
 ) -> Result<Vec<SourceTeletextCaptionCandidate>> {
+    load_requests(
+        pool,
+        media_item_id,
+        media_version_id,
+        media_file_id,
+        original_path,
+        DiscoveryMode::ObservedHeader,
+    )
+    .await
+}
+
+/// Discover unqualified wire subtitle requests against one exact source file.
+///
+/// Reuses the candidate loader's read snapshot, current parent/revision checks,
+/// bounds, exact codec/index and actual type-6 program descriptor provenance.
+/// The stored current-PSI window may contain no page headers; a descriptor page
+/// absent from that prefix remains discoverable, never an observed/ready page.
+/// Missing current PSI, missing descriptors, unbound and nonlocal observations
+/// supply no requests. Every page/language/role/program remains distinct so
+/// callers can reject ambiguity before bounded window preparation. This API
+/// performs no source I/O, decoding, ranking or database writes.
+///
+/// # Errors
+/// Rejects stale/ambiguous ownership, malformed descriptors and excessive
+/// metadata atomically, without returning partial requests or private locators.
+pub async fn discover_caption_requests(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    media_file_id: i64,
+    original_path: &str,
+) -> Result<Vec<SourceTeletextCaptionDescriptorRequest>> {
+    load_requests(
+        pool,
+        media_item_id,
+        media_version_id,
+        media_file_id,
+        original_path,
+        DiscoveryMode::DescriptorOnly,
+    )
+    .await
+    .map(|requests| {
+        requests
+            .into_iter()
+            .map(|candidate| SourceTeletextCaptionDescriptorRequest { candidate })
+            .collect()
+    })
+}
+
+async fn load_requests(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    media_file_id: i64,
+    original_path: &str,
+    mode: DiscoveryMode,
+) -> Result<Vec<SourceTeletextCaptionCandidate>> {
     if [media_item_id, media_version_id, media_file_id]
         .iter()
         .any(|id| *id <= 0)
@@ -83,6 +160,7 @@ pub async fn load_caption_candidates(
         media_version_id,
         media_file_id,
         original_path,
+        mode,
     )
     .await
     .map_err(|_| unavailable());
@@ -96,6 +174,7 @@ async fn load_in_transaction(
     version: i64,
     file: i64,
     path: &str,
+    mode: DiscoveryMode,
 ) -> Result<Vec<SourceTeletextCaptionCandidate>> {
     let row = sqlx::query(
         r#"SELECT v."MovieId", v."EpisodeId", v."MusicVideoId",
@@ -151,7 +230,7 @@ async fn load_in_transaction(
         let Some(observed) = load(tx, column(&row, "Id")?, file).await? else {
             continue;
         };
-        append_candidates(&observed, &mut candidates, &mut wire_entries)?;
+        append_candidates(&observed, &mut candidates, &mut wire_entries, mode)?;
     }
     Ok(candidates)
 }
@@ -160,6 +239,7 @@ fn append_candidates(
     observation: &SourceTeletextObservation,
     candidates: &mut Vec<SourceTeletextCaptionCandidate>,
     wire_entries: &mut usize,
+    mode: DiscoveryMode,
 ) -> Result<()> {
     let (
         SourceTeletextBinding::Bound(binding),
@@ -201,7 +281,8 @@ fn append_candidates(
         *wire_entries = total;
         for entry in entries {
             if !matches!(entry.descriptor_type, 2 | 5)
-                || !observed.contains(&(entry.wire_magazine, entry.wire_page))
+                || (matches!(mode, DiscoveryMode::ObservedHeader)
+                    && !observed.contains(&(entry.wire_magazine, entry.wire_page)))
             {
                 continue;
             }
