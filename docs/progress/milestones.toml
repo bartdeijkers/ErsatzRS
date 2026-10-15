@@ -2968,6 +2968,65 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 same-byte source decode-window checkpoint (not route/engine acceptance):
+Criterion: a bitmap decode must not borrow program authority from final metadata
+or an older, separately consumed source prefix. The existing held-source owner
+now reads at explicit offsets into one bounded private TS188 snapshot. Original
+and resolved source association bookends remain; decoder bytes never come from
+a later reopen of that source. The entire captured source (at most32768 packets)
+passes current PSI and explicit program/PID/type-6 checks. Selected packets before
+the first post-PSI PES start are omitted explicitly. At EOF incomplete TS/PES is
+rejected; a capped window truncates after its last completed selected PES. A late
+current table replacement still rejects even when truncation would discard it.
+A second pass checks exactly the final decoder bytes for complete selected PES,
+complete current PSI and the same versioned table fingerprint. Safe typed evidence
+retains source/decoder packet counts, omitted prefix, EOF, explicit program/PMT/
+PCR and SHA256 of the actual decoder bytes. It makes no temporal-coverage claim.
+
+FFprobe now consumes only that completed file under forced MPEG-TS, without the
+former timestamp-based read_intervals request. Actual stream/PID/program output
+and nonempty bitmap events remain mandatory. The native process owner owns the
+file through all process/reader cleanup; confirmed disposal precedes idle scope
+confirmation and capacity release. Snapshot/source fields drop before the work
+hold. Uncertainty preserves the bounded private input and quarantines admission;
+after-restart orphan cleanup remains unproved and is not silently accepted.
+Ordinary metadata, stored HeadersObserved and existing playback paths stay intact.
+The returned native Burn input still names the original resolved source: it does
+not inherit later seek/read coverage from this disposable decoder snapshot.
+
+Verification: 7e1efd67-c6a7-4487-9565-805393925207 passes84 focused local probe/
+source/decode tests. Final lifecycle/window508d7096-1c4b-4443-94ea-61abe71b7031
+passes12. An independent calibration fixture proves source16/decoder15 packets,
+one omitted initial selected PCR packet, exact checksum and explicit service.
+The fake process independently compares its actual last input argument with
+that expected byte sequence; it cannot pass by reopening the original source.
+Actual child cancellation proves the private file exists while running, then
+file deletion, drained scope and released work after cleanup. Independent review
+finds no concrete blocker in captured-prefix/PES/PSI/ownership behavior.
+The late-PMT fixtures separately prove valid CRC and actual current version1,
+so rejection cannot pass merely because a corrupted table was supplied.
+Clippy1 identified a similar local test name and an unchecked u64-to-usize cast.
+Both are corrected without allows; final window59e43eb0-615a-4b9d-b0df-9f72ac310794
+passes9, including exact cap/truncation cases after the checked conversion.
+Final nativef2b2b469-6ccf-43ea-b022-4a5d416fe4e8 passes1 in0.078s on the unchanged
+pinned FFprobe9/source fixture. All303 source packets equal all303 decoder packets,
+with zero omitted prefix and EOF; the decoder input hash equals the whole actual
+source472f563d. Program1/PMT0x1000/PCR0x100 and globalTTX3/PID0x103 are retained.
+Actual888 bitmap events, distinct200, missing777, unknown initial PTS, wrong
+PID/program rejection and equal-size/mtime replacement checks pass. Both original
+English/Dutch audio facts remain intact; this is not new routed audio acceptance.
+Final strict affected all-target Clippy2 passes. Canonical
+tmp/phase9-source-decode-window/identity.json owns final source/input/check hashes
+and replay, reusing unchanged native dependencies and earlier applicable evidence.
+
+Next connect exact current database MediaFile/version/page eligibility to the
+normal-route selection seam and retain its source in actual playback ownership.
+Qualify the actual seek/cue interval rather than promote an initial-window receipt
+to later-stream authority; source-bound captions/Off/other-page and selected audio
+must reach both ordinary wrappers. Full source charset/inventory, native/Next/copy,
+restart cleanup, six-platform and authored/editor/client acceptance remain open.
+No accepted permanent restriction or milestone acceptance/status/dependency changes.
+
 2026-10-15 owned source-page bitmap decode checkpoint (not route/engine acceptance):
 Criterion: native page-aware preparation must associate one exact source/page and
 retain admitted work until its actual workers finish. A new explicit request

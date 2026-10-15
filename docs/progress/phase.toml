@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-03/P9A-04: owned source-page bitmap decode proven; fence actual consumed service/seek window before normal-route page selection; full engine acceptance open'
+current_focus = 'P9A-04: same-byte stable-PSI source decode proven; connect actual-seek page selection and native worker lifetime; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,17 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-15 same-byte decoder-window checkpoint: P9A-04 owns exact hashes,
+receipts and the remaining criterion map. The source consumer now validates the
+actual private TS188 bytes sent to FFprobe, including late PSI change fencing,
+complete selected PES and explicit prefix/tail omissions. Final decoder metadata
+alone no longer supplies service authority. The input stays with the actual
+process owner through cleanup, with existing cancellation/admission safety.
+Next join exact database file/version/page selection, actual playback seek/cue
+coverage and native worker lifetime to ordinary wrappers; prove888/Off/other-page
+with selected alternate audio. A bounded initial decoder window does not prove
+those later opens or seeks. Full source/charset/platform, uncertain-file restart
+cleanup and authored/editor/client acceptance stay open; no milestone closes.
 2026-10-15 source-page decode checkpoint: P9A-04 owns final exact-source/native
 receipts and the prior fixture-dispatch correction. The existing owned probe now
 retains source and admitted work through actual process/pipe cleanup; held-source

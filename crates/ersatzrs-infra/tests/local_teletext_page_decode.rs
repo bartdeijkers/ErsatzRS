@@ -56,6 +56,30 @@ fn request_for(
     }
 }
 
+fn assert_exact_source_window(
+    page: &ersatzrs_infra::ffprobe::teletext_decode::DecodedLocalTeletextPage,
+    path: &Path,
+) {
+    assert_eq!(page.window().source_packets, 303);
+    assert_eq!(page.window().decoder_packets, 303);
+    assert_eq!(page.window().skipped_selected_prefix_packets, 0);
+    assert!(page.window().ended_at_eof);
+    assert_eq!(
+        (
+            page.window().program_number,
+            page.window().pmt_pid,
+            page.window().pcr_pid
+        ),
+        (1, 0x1000, 0x100)
+    );
+    assert_eq!(
+        page.window().decoder_sha256,
+        <[u8; 32]>::from(<sha2::Sha256 as sha2::Digest>::digest(
+            std::fs::read(path).unwrap()
+        ))
+    );
+}
+
 #[tokio::test]
 #[ignore = "requires pinned FFprobe 9 and redistributable two-audio source fixture"]
 async fn native_exact_page_decode_requires_actual_bitmaps_and_current_source() {
@@ -91,6 +115,7 @@ async fn native_exact_page_decode_requires_actual_bitmaps_and_current_source() {
         ))
     };
     let caption = decode(request.clone()).await.unwrap();
+    assert_exact_source_window(&caption, &path);
     assert_eq!(caption.events().count, 2);
     assert_eq!(caption.events().first_pts_microseconds, Some(1_661_333));
     assert_eq!(caption.events().last_pts_microseconds, Some(2_701_333));
@@ -114,13 +139,13 @@ async fn native_exact_page_decode_requires_actual_bitmaps_and_current_source() {
     request.pid = 0x104;
     assert_eq!(
         decode(request.clone()).await.unwrap_err(),
-        SourceTeletextPageDecodeError::StreamChanged
+        SourceTeletextPageDecodeError::InvalidTransportWindow
     );
     request.pid = 0x103;
     request.program_number = 2;
     assert_eq!(
         decode(request).await.unwrap_err(),
-        SourceTeletextPageDecodeError::StreamChanged
+        SourceTeletextPageDecodeError::InvalidTransportWindow
     );
     assert_eq!(
         acquisition.headers().for_stream(3),

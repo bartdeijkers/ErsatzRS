@@ -100,8 +100,11 @@ pub(super) async fn capture(
 /// The actual process owner retains admission and the source association through
 /// process and pipe cleanup, independently of the awaiting response future.
 pub(super) struct ProbeRetention {
-    hold: ersatzrs_core::locking::TeletextWorkHold,
+    // Field destruction must close/remove the actual input before releasing
+    // admission, including the confirmed-cleanup path through ordinary Drop.
+    snapshot: Option<tempfile::NamedTempFile>,
     _source: std::sync::Arc<super::LocalTeletextSourceGuard>,
+    hold: ersatzrs_core::locking::TeletextWorkHold,
     confirmed: bool,
 }
 
@@ -113,8 +116,14 @@ impl ProbeRetention {
         Self {
             hold,
             _source: source,
+            snapshot: None,
             confirmed: true,
         }
+    }
+
+    pub(super) fn with_snapshot(mut self, snapshot: tempfile::NamedTempFile) -> Self {
+        self.snapshot = Some(snapshot);
+        self
     }
 }
 
@@ -122,6 +131,13 @@ impl Drop for ProbeRetention {
     fn drop(&mut self) {
         if !self.confirmed {
             self.hold.retain_until_restart();
+            // An unconfirmed process may still be opening/reading this file.
+            // Preserve its bounded private input rather than revoke it early.
+            if let Some(snapshot) = self.snapshot.take() {
+                let mut path = snapshot.into_temp_path();
+                path.disable_cleanup(true);
+                tracing::warn!("unconfirmed source teletext decoder input retained");
+            }
         }
     }
 }
@@ -166,6 +182,9 @@ pub(super) async fn capture_retained(
         if let Some(retention) = &mut retention {
             retention.confirmed = confirmed;
         }
+        // Dispose the completed temporary input before reporting the owner idle.
+        // Its admitted-work hold survives this actual file cleanup as well.
+        drop(retention);
         if let Some(owner) = owner {
             owner.complete(confirmed);
         }

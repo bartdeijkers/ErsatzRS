@@ -403,7 +403,7 @@ fn project_header(
     })
 }
 
-fn fingerprint(psi: &ObservedSourcePsi) -> [u8; 32] {
+pub(super) fn fingerprint(psi: &ObservedSourcePsi) -> [u8; 32] {
     let mut digest = Sha256::new();
     digest.update(b"ersatzrs:source-psi-window:v1\0");
     for (pid, sections) in std::iter::once((0, &psi.pat.sections))

@@ -13,22 +13,28 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
-Preparatory native source-page decoding now retains one held Local filesystem
+Preparatory native source-page decoding retains one held Local filesystem
 association through bounded owned source checks and the existing managed probe
 worker. Its explicit request keeps durable parent/revision labels, global stream
-index, PID, program and exact page separate. Actual decoder stream/program output
-must match and at least one nonempty bitmap event must exist; an empty update or
-successful exit alone is insufficient. Missing PTS remains unknown. The decoder
-uses automatic region with unknown charset provenance, without inferring it from
-header bits or promoting stored HeadersObserved to Ready. P9A-04 owns evidence.
-The bounded receipt requests an initial eight-second timestamp interval; missing
-or discontinuous clocks do not certify an exact physical window. It is not a
-whole-source inventory, stable
-PSI epoch certificate, resolved charset, database ownership check or ordinary-route
-selection authority. Its consuming host must retain/recheck the source through
-actual playback ownership; the held handle does not force FFmpeg's later open
-or prevent restored in-place edits. These remain integration/acceptance work,
-not accepted permanent product restrictions.
+index, PID, program and exact page separate. A completed private TS188 window now
+contains only bytes read from that held file. The same captured bytes pass stable
+current PSI, explicit program/PID/type-6 membership and selected-PES validation
+before they are decoded. Selected packets before the first post-PSI PES start are
+omitted explicitly; a capped window ends at a completed PES. Late current table
+changes anywhere in the captured source reject even when trimming would hide them.
+The final decoder bytes are independently rechecked and hashed. The native owner
+retains the temporary input through actual process/pipe cleanup; uncertainty
+preserves the bounded input and quarantines admission. Field disposal releases
+input/source resources before work capacity and scope completion.
+Returned decoder stream/program facts must still match and at least one nonempty
+bitmap event must exist. Missing PTS stays unknown; automatic region does not
+resolve charset provenance or promote stored HeadersObserved to Ready. P9A-04
+owns evidence. This bounded initial byte window does not prove later playback
+seek/cue coverage, whole-source inventory, current database ownership or future
+source opens. Source bookends remain observed associations, not immutable-byte or
+restored-in-place-mutation certificates. Actual route/seek ownership, orphan
+cleanup after uncertain-process restart and full source/platform acceptance stay
+open; these are not accepted permanent product restrictions.
 
 Accepted frozen originals now have an explicit source-independent output intent.
 Host limits contain no program/PCR identifiers or compiler defaults. Each final

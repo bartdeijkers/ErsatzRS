@@ -18,6 +18,8 @@ use super::{
     LocalTeletextSourceGuard,
 };
 
+pub use super::local_teletext::SourceTeletextDecodeWindowEvidence;
+
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_FRAMES: usize = 4096;
 const SOURCE_LABEL: &str = "source teletext page";
@@ -69,6 +71,8 @@ pub enum SourceTeletextPageDecodeError {
     InvalidOutput,
     #[error("source teletext page stream or program differs from the request")]
     StreamChanged,
+    #[error("source teletext decode window has invalid or changing transport associations")]
+    InvalidTransportWindow,
     #[error("source teletext page produced no bitmap in the bounded decode window")]
     NoBitmap,
 }
@@ -85,8 +89,8 @@ pub struct SourceTeletextBitmapEvents {
 /// Successful prefix decode retaining the exact held source and requested page.
 ///
 /// The decoder uses automatic region (`-1`); charset provenance remains unknown.
-/// Returned program metadata proves association only, not a stable PSI epoch
-/// across every bitmap event. This does not certify the entire page inventory,
+/// The decoder consumes only the same private byte window whose program/PID and
+/// stable current PSI were checked. This does not certify the entire page inventory,
 /// all later page updates or a source's Level 2.5 semantics. The input getter
 /// constructs native bitmap Burn only; it adds no Direct/copy/Next support.
 pub struct DecodedLocalTeletextPage {
@@ -95,6 +99,7 @@ pub struct DecodedLocalTeletextPage {
     resolved: PathBuf,
     guard: Arc<LocalTeletextSourceGuard>,
     events: SourceTeletextBitmapEvents,
+    window: SourceTeletextDecodeWindowEvidence,
     input: InputFile,
 }
 
@@ -103,6 +108,7 @@ impl std::fmt::Debug for DecodedLocalTeletextPage {
         f.debug_struct("DecodedLocalTeletextPage")
             .field("request", &self.request)
             .field("events", &self.events)
+            .field("window", &self.window)
             .finish_non_exhaustive()
     }
 }
@@ -118,10 +124,18 @@ impl DecodedLocalTeletextPage {
         self.events
     }
 
+    /// Exact byte-window evidence, not coverage of a later playback seek/open.
+    #[must_use]
+    pub fn window(&self) -> &SourceTeletextDecodeWindowEvidence {
+        &self.window
+    }
+
     /// Construct the already decoded exact page on its associated physical input.
     /// The consuming worker must retain this receipt through actual cleanup and
     /// call `check_source` immediately before its later source open. This getter
-    /// alone neither starts playback nor closes the external-open mutation race.
+    /// targets the original source, not the temporary decoder snapshot. Later
+    /// seek/cue reads need their own transport qualification; this getter alone
+    /// neither starts playback nor closes the external-open mutation race.
     #[must_use]
     pub fn native_burn_input(&self) -> InputFile {
         self.input.clone()
@@ -158,10 +172,12 @@ impl FfprobeExtractor {
     /// The caller supplies a current durable binding and admitted work. One
     /// absolute deadline (at most fifteen seconds) includes held source opening,
     /// decode and final source checks. No scope means no worker is started.
-    /// The decoder requests an initial eight-second timestamp interval. Missing
-    /// or discontinuous clocks do not establish an exact physical window; the
-    /// execution deadline and output cap remain enforced. No bitmap means none
-    /// decoded in this window, not absence from the source. Ordinary metadata, publication and playback are untouched.
+    /// The decoder consumes a completed private window of at most 32,768 TS188
+    /// packets read from the original held file. The same bytes pass stable PSI
+    /// and selected-PES checks before decoding; no later source reopen supplies
+    /// decoder bytes. Missing/discontinuous clocks imply no temporal coverage.
+    /// No bitmap means none decoded in this window, not absence from the source.
+    /// Ordinary metadata, publication and playback remain untouched.
     /// The real process owner retains source and admission after caller loss.
     ///
     /// # Errors
@@ -190,12 +206,25 @@ impl FfprobeExtractor {
         .await
         .map_err(probe_error)?;
         check_deadline(deadline)?;
-        let command = self.teletext_page_decode_command(&request, &resolved)?;
+        let local_teletext::LocalTeletextSourceWindow { snapshot, evidence } =
+            local_teletext::capture_source_window_owned(
+                guard.clone(),
+                original.clone(),
+                resolved.clone(),
+                request.pid,
+                request.program_number,
+                deadline,
+                hold.clone(),
+            )
+            .await
+            .map_err(probe_error)?;
+        check_deadline(deadline)?;
+        let command = self.teletext_page_decode_command(&request, snapshot.path())?;
         let output = local::capture_retained(
             command,
             PathBuf::from(SOURCE_LABEL),
             Some(deadline),
-            Some(local::ProbeRetention::new(hold.clone(), guard.clone())),
+            Some(local::ProbeRetention::new(hold.clone(), guard.clone()).with_snapshot(snapshot)),
         )
         .await
         .map_err(probe_error)?;
@@ -212,6 +241,7 @@ impl FfprobeExtractor {
             resolved,
             guard,
             events,
+            window: evidence,
             input,
         };
         decoded.check_source(deadline, hold).await?;
@@ -232,11 +262,10 @@ impl FfprobeExtractor {
             format!("-txt_format:{}", request.stream_index), "bitmap".into(),
             format!("-txt_default_region:{}", request.stream_index), "-1".into(),
             "-select_streams".into(), request.stream_index.to_string(),
-            "-read_intervals".into(), "%+8".into(),
             "-show_frames".into(), "-show_streams".into(), "-show_programs".into(),
             "-show_entries".into(),
             "stream=index,codec_name,codec_type,id:program=program_id,program_num,pmt_pid,pcr_pid:program_stream=index,codec_name,codec_type,id:frame=media_type,pts,format,num_rects".into(),
-            "-of".into(), "json".into(), path.into(),
+            "-of".into(), "json".into(), "-f".into(), "mpegts".into(), path.into(),
         ] })
     }
 }
@@ -261,6 +290,9 @@ fn probe_error(error: FfprobeError) -> SourceTeletextPageDecodeError {
         FfprobeError::Timeout { .. } => SourceTeletextPageDecodeError::Deadline,
         FfprobeError::InvalidOutput { path } if path == "local teletext source association" => {
             SourceTeletextPageDecodeError::SourceChanged
+        }
+        FfprobeError::InvalidOutput { path } if path == "source teletext decode window" => {
+            SourceTeletextPageDecodeError::InvalidTransportWindow
         }
         _ => SourceTeletextPageDecodeError::Decoder,
     }

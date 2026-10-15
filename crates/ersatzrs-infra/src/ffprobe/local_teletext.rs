@@ -26,6 +26,10 @@ use super::{
 pub use headers::{LocalTeletextHeaderProblem, LocalTeletextHeaders};
 
 mod headers;
+mod source_window;
+
+pub use source_window::SourceTeletextDecodeWindowEvidence;
+pub(crate) use source_window::{capture_source_window_owned, LocalTeletextSourceWindow};
 
 const AUXILIARY_TIMEOUT: Duration = Duration::from_secs(10);
 

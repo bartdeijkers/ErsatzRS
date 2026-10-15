@@ -243,23 +243,23 @@ fn malformed_missing_and_excessive_output_never_returns_a_partial_receipt() {
 fn command_limits_one_exact_page_and_global_stream_without_charset_guessing() {
     let extractor = FfprobeExtractor::new("synthetic-ffprobe");
     let command = extractor
-        .teletext_page_decode_command(&request(), std::path::Path::new("synthetic-source.ts"))
+        .teletext_page_decode_command(&request(), std::path::Path::new("synthetic-window.ts"))
         .unwrap();
     for pair in [
         ["-txt_page:3", "888"],
         ["-txt_format:3", "bitmap"],
         ["-txt_default_region:3", "-1"],
         ["-select_streams", "3"],
-        ["-read_intervals", "%+8"],
+        ["-f", "mpegts"],
     ] {
         assert!(command.args.windows(2).any(|args| args == pair));
     }
     assert_eq!(command.program, "synthetic-ffprobe");
-    assert_eq!(command.args.last().unwrap(), "synthetic-source.ts");
+    assert_eq!(command.args.last().unwrap(), "synthetic-window.ts");
     assert!(!command
         .args
         .iter()
-        .any(|arg| arg == "-show_data" || arg == "-txt_page:0"));
+        .any(|arg| arg == "-show_data" || arg == "-txt_page:0" || arg == "-read_intervals"));
     // ADR 0121: scope decoder settings to the original absolute stream before input.
     insta::assert_snapshot!(command.args.join("\n"), @r"
     -v
@@ -272,8 +272,6 @@ fn command_limits_one_exact_page_and_global_stream_without_charset_guessing() {
     -1
     -select_streams
     3
-    -read_intervals
-    %+8
     -show_frames
     -show_streams
     -show_programs
@@ -281,7 +279,9 @@ fn command_limits_one_exact_page_and_global_stream_without_charset_guessing() {
     stream=index,codec_name,codec_type,id:program=program_id,program_num,pmt_pid,pcr_pid:program_stream=index,codec_name,codec_type,id:frame=media_type,pts,format,num_rects
     -of
     json
-    synthetic-source.ts
+    -f
+    mpegts
+    synthetic-window.ts
     ");
 }
 
@@ -344,16 +344,39 @@ async fn unowned_decode_starts_no_process_and_releases_admitted_work() {
 mod unix {
     use super::*;
     use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    use sha2::{Digest as _, Sha256};
     use std::os::unix::fs::PermissionsExt as _;
 
-    const PRIMARY: &str = r#"{"format":{"format_name":"mpegts","duration":"1"},"streams":[{"index":0,"id":"0x100","codec_type":"video","codec_name":"mpeg2video","width":320,"height":180},{"index":3,"id":"0x103","codec_type":"subtitle","codec_name":"dvb_teletext","tags":{"language":"eng,eng"}}]}"#;
-    const AUXILIARY: &str = r#"{"format":{"format_name":"mpegts"},"streams":[{"index":3,"id":"0x103","codec_type":"subtitle","codec_name":"dvb_teletext","extradata":"CgAQiA==","extradata_size":4,"tags":{"language":"eng,eng"}}],"programs":[{"program_id":1,"program_num":1,"pmt_pid":4096,"pcr_pid":256,"streams":[{"index":3}]}]}"#;
+    const PRIMARY: &str = r#"{"format":{"format_name":"mpegts","duration":"1"},"streams":[{"index":0,"id":"0x101","codec_type":"video","codec_name":"mpeg2video","width":320,"height":180},{"index":3,"id":"0x100","codec_type":"subtitle","codec_name":"dvb_teletext","tags":{"language":"eng,eng"}}]}"#;
+    const AUXILIARY: &str = r#"{"format":{"format_name":"mpegts"},"streams":[{"index":3,"id":"0x100","codec_type":"subtitle","codec_name":"dvb_teletext","extradata":"CgAQiA==","extradata_size":4,"tags":{"language":"eng,eng"}}],"programs":[{"program_id":1,"program_num":1,"pmt_pid":4096,"pcr_pid":256,"streams":[{"index":3}]}]}"#;
+
+    fn fixture() -> Vec<u8> {
+        include_str!("../../../ersatzrs-ffmpeg/tests/fixtures/teletext-source-assembly.hex")
+            .split_whitespace()
+            .map(|value| u8::from_str_radix(value, 16).unwrap())
+            .collect()
+    }
+
+    fn decoder_fixture() -> Vec<u8> {
+        let source = fixture();
+        // This independent fixture's packet 2 is selected-PID PCR-only before
+        // its first PES start. The snapshot contract omits that selected prefix.
+        [&source[..2 * 188], &source[3 * 188..]].concat()
+    }
+
+    fn decoded_output() -> Value {
+        let mut value = output();
+        value["streams"][0]["id"] = json!("0x100");
+        value["programs"][0]["streams"][0]["id"] = json!("0x100");
+        value
+    }
 
     struct Probe {
         _directory: tempfile::TempDir,
         extractor: FfprobeExtractor,
         source: PathBuf,
         pid_file: PathBuf,
+        window_path_file: PathBuf,
     }
 
     impl Probe {
@@ -361,16 +384,18 @@ mod unix {
             let directory = tempfile::tempdir().unwrap();
             let program = directory.path().join("probe");
             let script = format!(
-                "#!/bin/sh\nauxiliary=false\ndecode=false\nfor arg in \"$@\"; do\n  if [ \"$arg\" = -data_dump_format ]; then auxiliary=true; fi\n  if [ \"$arg\" = -txt_page:3 ]; then decode=true; fi\ndone\nif $decode; then\n{decode}\nelif $auxiliary; then\ncat <<'AUXILIARY_JSON'\n{AUXILIARY}\nAUXILIARY_JSON\nelse\ncat <<'PRIMARY_JSON'\n{PRIMARY}\nPRIMARY_JSON\nfi\n"
+                "#!/bin/sh\nauxiliary=false\ndecode=false\nfor arg in \"$@\"; do\n  input=$arg\n  if [ \"$arg\" = -data_dump_format ]; then auxiliary=true; fi\n  if [ \"$arg\" = -txt_page:3 ]; then decode=true; fi\ndone\nif $decode; then\ncmp \"$input\" \"${{0}}.expected-window\" || exit 73\nprintf '%s' \"$input\" >\"${{0}}.window\"\n{decode}\nelif $auxiliary; then\ncat <<'AUXILIARY_JSON'\n{AUXILIARY}\nAUXILIARY_JSON\nelse\ncat <<'PRIMARY_JSON'\n{PRIMARY}\nPRIMARY_JSON\nfi\n"
             );
             std::fs::write(&program, script).unwrap();
+            std::fs::write(program.with_extension("expected-window"), decoder_fixture()).unwrap();
             std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
             let source = directory.path().join("source.ts");
-            std::fs::write(&source, b"synthetic source association").unwrap();
+            std::fs::write(&source, fixture()).unwrap();
             Self {
                 extractor: FfprobeExtractor::new(program.to_string_lossy().into_owned()),
                 source,
                 pid_file: program.with_extension("pid"),
+                window_path_file: program.with_extension("window"),
                 _directory: directory,
             }
         }
@@ -381,6 +406,7 @@ mod unix {
                 .await
                 .unwrap();
             let mut requested = request();
+            requested.pid = 0x100;
             requested.binding.source_revision = acquired.teletext.unwrap().revision().clone();
             requested
         }
@@ -399,11 +425,32 @@ mod unix {
             .await
             .expect("actual owned decode process must report its identity")
         }
+
+        async fn decoder_path(&self) -> PathBuf {
+            PathBuf::from(
+                tokio::fs::read_to_string(&self.window_path_file)
+                    .await
+                    .unwrap(),
+            )
+        }
+    }
+
+    async fn snapshot_is_removed(path: &std::path::Path) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while tokio::fs::try_exists(path).await.unwrap() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("completed owned decode must remove its temporary snapshot");
     }
 
     #[tokio::test]
     async fn decoded_receipt_retains_the_requested_page_and_rejects_later_source_replacement() {
-        let probe = Probe::new(&format!("cat <<'DECODE_JSON'\n{}\nDECODE_JSON", output()));
+        let probe = Probe::new(&format!(
+            "cat <<'DECODE_JSON'\n{}\nDECODE_JSON",
+            decoded_output()
+        ));
         let scope = LocalProbeCleanupScope::new();
         let requested = probe.request(&scope).await;
         let locker = EntityLocker::new();
@@ -420,6 +467,25 @@ mod unix {
             .unwrap();
         assert_eq!(decoded.request(), &requested);
         assert_eq!(decoded.events().count, 2);
+        let window = decoded.window();
+        assert_eq!(
+            (
+                window.source_packets,
+                window.decoder_packets,
+                window.skipped_selected_prefix_packets,
+                window.ended_at_eof
+            ),
+            (16, 15, 1, true)
+        );
+        assert_eq!(
+            (window.program_number, window.pmt_pid, window.pcr_pid),
+            (1, 0x1000, 0x100)
+        );
+        let expected_digest: [u8; 32] = Sha256::digest(decoder_fixture()).into();
+        assert_eq!(window.decoder_sha256, expected_digest);
+        let decoder_path = probe.decoder_path().await;
+        assert_ne!(decoder_path, probe.source);
+        snapshot_is_removed(&decoder_path).await;
         let input = decoded.native_burn_input();
         assert_eq!(input.streams[0].index, 3);
         assert_eq!(input.streams[0].source_teletext_page, Some(requested.page));
@@ -480,6 +546,9 @@ mod unix {
                 .await
         });
         let pid = probe.pid().await;
+        let decoder_path = probe.decoder_path().await;
+        assert_ne!(decoder_path, probe.source);
+        assert!(tokio::fs::try_exists(&decoder_path).await.unwrap());
         assert_eq!(locker.active_teletext_work(), 1);
         assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
         caller.abort();
@@ -497,6 +566,7 @@ mod unix {
         );
         scope.close();
         assert_eq!(scope.wait_cleanup().await, Ok(()));
+        snapshot_is_removed(&decoder_path).await;
         assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_some());
     }
 }
