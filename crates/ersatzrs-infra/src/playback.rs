@@ -3,6 +3,8 @@
 
 #[path = "playback_candidate.rs"]
 mod candidate;
+#[path = "playback_source_teletext.rs"]
+pub mod source_teletext;
 #[path = "playback_transient.rs"]
 pub mod transient;
 use crate::repositories::SqlxResultExt as _;
@@ -1993,20 +1995,36 @@ fn select_subtitle_preferences(
     preferred_languages: &[String],
     subtitle_mode: ChannelSubtitleMode,
 ) -> Option<PlaybackSubtitle> {
+    select_subtitle_preference_index(
+        candidates
+            .iter()
+            .enumerate()
+            .map(|(index, subtitle)| (index, subtitle, subtitle.language.as_deref())),
+        preferred_languages,
+        subtitle_mode,
+    )
+    .map(|index| candidates[index].clone())
+}
+
+fn select_subtitle_preference_index<'a>(
+    candidates: impl Iterator<Item = (usize, &'a PlaybackSubtitle, Option<&'a str>)> + Clone,
+    preferred_languages: &[String],
+    subtitle_mode: ChannelSubtitleMode,
+) -> Option<usize> {
     if preferred_languages.is_empty() {
-        return select_subtitle_by_mode(candidates.iter(), subtitle_mode).cloned();
+        return select_subtitle_by_mode(candidates, subtitle_mode);
     }
 
     for language in preferred_languages {
         let codes = language_codes::all_language_codes([language]);
         let selected = select_subtitle_by_mode(
-            candidates.iter().filter(|subtitle| {
-                language_matches_preference(subtitle.language.as_deref(), &codes)
-            }),
+            candidates
+                .clone()
+                .filter(|(_, _, language)| language_matches_preference(*language, &codes)),
             subtitle_mode,
         );
         if let Some(selected) = selected {
-            return Some(selected.clone());
+            return Some(selected);
         }
     }
 
@@ -2256,17 +2274,20 @@ fn optional_stream_text_matches(expected: Option<&str>, actual: Option<&str>) ->
 }
 
 fn select_subtitle_by_mode<'a>(
-    candidates: impl Iterator<Item = &'a PlaybackSubtitle>,
+    candidates: impl Iterator<Item = (usize, &'a PlaybackSubtitle, Option<&'a str>)>,
     subtitle_mode: ChannelSubtitleMode,
-) -> Option<&'a PlaybackSubtitle> {
+) -> Option<usize> {
     match subtitle_mode {
         ChannelSubtitleMode::Forced => candidates
-            .filter(|subtitle| subtitle.forced)
-            .min_by_key(|subtitle| subtitle.stream_index),
-        ChannelSubtitleMode::Default => {
-            candidates.min_by_key(|subtitle| (!subtitle.default, subtitle.stream_index))
-        }
-        ChannelSubtitleMode::Any => candidates.min_by_key(|subtitle| subtitle.stream_index),
+            .filter(|(_, subtitle, _)| subtitle.forced)
+            .min_by_key(|(_, subtitle, _)| subtitle.stream_index)
+            .map(|(index, _, _)| index),
+        ChannelSubtitleMode::Default => candidates
+            .min_by_key(|(_, subtitle, _)| (!subtitle.default, subtitle.stream_index))
+            .map(|(index, _, _)| index),
+        ChannelSubtitleMode::Any => candidates
+            .min_by_key(|(_, subtitle, _)| subtitle.stream_index)
+            .map(|(index, _, _)| index),
         ChannelSubtitleMode::None => None,
     }
 }

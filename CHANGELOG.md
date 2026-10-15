@@ -21,7 +21,10 @@ release section when tagging a release.
   association through cancellation and decodes only a completed private byte
   window checked for stable PSI, exact program/PID membership and complete PES.
   Late table changes cannot hide behind truncation; real bitmap events are required. Unknown timestamps and charset provenance remain
-  explicit; full source-page semantics and automatic playback selection stay open.
+  explicit. Exact-file source candidates now retain page language, wire roles and
+  service identity; qualified decode receipts join shared native subtitle ranking
+  without changing ordinary metadata. Full source-page semantics and ordinary
+  stream-route integration remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
   client navigation with isolated themes and edits. Independent transport,

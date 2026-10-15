@@ -13,6 +13,23 @@ interchange; it supersedes the Level 1/1.5-only target below, not the other gate
 
 Partial.
 
+Read-only source-caption candidates now bind the exact item, version, file and
+original locator to existing current-parent validation. Raw PMT descriptors keep
+wire tags/ordinals, page language, subtitle roles and all actual programs. Only
+observed decimal pages with descriptor roles 2/5 become candidates; header C6,
+newsflash or a descriptor alone never grants readiness, Default or Forced.
+A qualified candidate must match the actual decoded request and stable PSI.
+The shared native preference selector can rank those page languages beside
+ordinary subtitles while retaining real metadata and admitted work in the
+winning rich result. Ambiguous pages/services/roles are excluded; ISO language
+aliases for the same exact choice are equivalent. Native Burn cannot fall back
+to an extracted teletext row without exact-page qualification. Direct retains its
+existing ordinary behavior and receives no qualified source choice. Off returns
+before SQL. P9A-04 owns verification. This is a selection bridge, not normal-route
+integration: current database/file revalidation, actual seek/cue coverage,
+per-child source ownership, pins/custom selectors and the full output matrix
+remain open. No installed package, playback route or readiness state changes.
+
 Preparatory native source-page decoding retains one held Local filesystem
 association through bounded owned source checks and the existing managed probe
 worker. Its explicit request keeps durable parent/revision labels, global stream

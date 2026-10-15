@@ -166,21 +166,26 @@ pub(super) fn retain_playable_subtitles(
     engine: SubtitleSelectionEngine,
     media_server: bool,
 ) {
-    subtitles.retain(|subtitle| provider_subtitle_supported(subtitle, media_server));
-    if mode != StreamingMode::HttpLiveStreamingDirect {
-        subtitles.retain(|subtitle| {
-            subtitle.subtitle_kind != subtitle_kind::EMBEDDED
-                || subtitle.is_image()
-                || (subtitle.is_extracted
-                    && subtitle
-                        .path
-                        .as_deref()
-                        .is_some_and(|path| !path.trim().is_empty()))
-        });
-    }
-    if engine == SubtitleSelectionEngine::Next {
-        subtitles.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
-    }
+    subtitles.retain(|subtitle| subtitle_is_playable(subtitle, mode, engine, media_server));
+}
+
+pub(super) fn subtitle_is_playable(
+    subtitle: &PlaybackSubtitle,
+    mode: StreamingMode,
+    engine: SubtitleSelectionEngine,
+    media_server: bool,
+) -> bool {
+    provider_subtitle_supported(subtitle, media_server)
+        && (mode == StreamingMode::HttpLiveStreamingDirect
+            || subtitle.subtitle_kind != subtitle_kind::EMBEDDED
+            || subtitle.is_image()
+            || (subtitle.is_extracted
+                && subtitle
+                    .path
+                    .as_deref()
+                    .is_some_and(|path| !path.trim().is_empty())))
+        && (engine != SubtitleSelectionEngine::Next
+            || next_subtitle_supported(subtitle, media_server))
 }
 
 #[cfg(test)]

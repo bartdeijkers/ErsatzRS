@@ -2968,6 +2968,78 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 exact-file caption candidate/selection checkpoint (not route/engine acceptance):
+Criterion: source page/language/role and explicit program identity must reach the
+existing native preferences without making a whole teletext pipe automatically
+eligible. The bounded wire reader reuses DescriptorIter and preserves tags0x56/
+0x46, all descriptor/entry ordinals, repeats, raw types and nondisplay addresses.
+The0x46 descriptor alone never classifies stream type6 as teletext. Malformed
+framing, partial five-byte entries, invalid language or excess bytes reject the
+entire list. EN300468 V1.20.1 tables101/108 own the shared five-byte syntax.
+
+One read-only SQLite snapshot checks exact item/version/file/original locator,
+single version ownership, current source/library parents and unique global stream
+indexes. Existing bound Local HeadersObserved reports and actual type6 program
+associations supply observed decimal pages; only wire subtitle roles2/5 qualify
+as candidates. Guide/newsflash/C6 alone grants no caption, Default, Forced or Ready.
+The reader keeps all programs/languages/roles and folds only equivalent repeated
+wire choices, retaining every occurrence. Limits cover256 streams and1024 wire
+entries before folding; overflow rejects rather than truncates.
+
+The qualified native selection bridge matches each candidate to its actual decode
+request and PSI generation. Existing exact-version subtitle metadata, provider
+eligibility and the shared language/mode selector then rank ordinary captions
+and unique qualified pages together. Packed stream language is replaced only by
+the selected page language; affirmative SDH augments metadata, while IDs/titles/
+Default/Forced/extraction facts stay real. Only the winning rich result clones
+its receipt and admitted-work hold. Ambiguous pages/programs/roles/files are
+excluded; unqualified extracted teletext cannot become a native Burn fallback.
+Direct keeps existing ordinary behavior and gains no qualified source choice.
+Off returns before SQL. The supplied qualified list is bounded before allocation.
+Independent review found equivalent fra/fre descriptors falsely conflicting on
+the same page. Shared alias equivalence now folds that choice; the regression
+also proves distinct pages with equivalent language labels remain ambiguous.
+
+Verification: b5612df0-3ee3-49c7-a52b-2dda6b831b42 passes38 focused parser,
+SQLite candidate, native selection and unchanged transient-selection regressions.
+Strict FFmpeg all-target Clippy2 passes after documentation/test-helper fixes.
+The first bridge compile caught a private-module import; it now uses the existing
+public reexport. Native c2e69450-f036-4d13-bddb-ac4b1e1a2fba passes the real
+Local scan -> stored exact-file candidates -> actual FFprobe bitmap decode ->
+shared native preference selection. The unchanged synthetic source472f563d and
+pinned FFprobe3e0a8c01 supply all303 packets with EOF and matching PSI; page888
+is the only caption candidate and page200 is excluded. The selected English page
+retains globalTTX3/PID0x103/program1 and exact888 input. Wrong-page and wrong-PSI
+receipt joins reject. Dutch ordinary sidecar selection, Off, unchanged metadata/
+English-Dutch audio facts and retained work until final selection-owner drop pass.
+The first native invocation used a fixture path relative to nextest's crate cwd;
+the corrected invocation resolves external input paths. Its next trial exposed
+the existing Dutch sidecar normalization to dut rather than nld; the corrected
+oracle preserves that exact metadata and shared nl alias matching. No product
+behavior was changed to accommodate either harness correction. Final combined
+cfe401e8-593f-4ef1-9b2c-4e71a7e58ce8 passes2: the same native scan/selection
+proof after test-helper extraction and existing generated music-video credits.
+The other10 subtitle SQL regressions passed in093cab47-41ba-4708-a0e2-5ea72a5aea1f;
+only the credits case required an isolated writable application-data override.
+Its first run failed against the sandbox's read-only default cache, not a changed
+selection result. Generated credits still precede explicit Off, as upstream.
+This is component selection proof, not routed caption/audio or seek acceptance.
+Final strict all-target infra/scanner Clippy3 passes after removing redundant
+must_use, adding test statement semicolons and extracting the native fixture
+helper without new lint allows. Existing FFmpeg Clippy2 and applicable runtime
+results are reused; no functional implementation changed after the focused run.
+Canonical tmp/phase9-source-caption-selection/ owns exact source/input/check hashes.
+
+Next carry MediaFile identity through the ordinary MPEG-TS/HLS loaders, recapture
+current database/file association and qualify actual seek/cue reads before each
+native child open. Retain the source and relevant existing worker admission through each child/retry,
+including uncertain cleanup, before proving888/Off/other-page plus selected audio
+through both ordinary wrappers. The current bridge neither runs preparation nor
+enables a playback route; initial decode evidence is not later-read authority.
+Pins/custom page selection, extraction, Direct/copy/Next/provider/charset, restart,
+six-platform and complete authored Level2.5/editor/client acceptance stay open.
+No acceptance/status/dependency changes or accepted permanent restrictions.
+
 2026-10-15 same-byte source decode-window checkpoint (not route/engine acceptance):
 Criterion: a bitmap decode must not borrow program authority from final metadata
 or an older, separately consumed source prefix. The existing held-source owner

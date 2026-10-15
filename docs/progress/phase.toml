@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: same-byte stable-PSI source decode proven; connect actual-seek page selection and native worker lifetime; full engine acceptance open'
+current_focus = 'P9A-04: connect exact-file qualified caption selection to ordinary route seek/cue and native child ownership; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,13 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-10-15 exact-file caption-selection checkpoint: P9A-04 owns the criterion,
+verification and remaining gap map. Raw descriptor candidates and bounded native
+decode receipts now join shared subtitle preference ranking without losing page
+language, role, service or work ownership. Next retain MediaFile identity in the
+ordinary route, qualify actual seek/cue reads and retain the source in each actual
+native child/retry before proving888/Off/other-page with selected alternate audio.
+This component does not enable a route or close engine/source/editor/client gates.
 2026-10-15 same-byte decoder-window checkpoint: P9A-04 owns exact hashes,
 receipts and the remaining criterion map. The source consumer now validates the
 actual private TS188 bytes sent to FFprobe, including late PSI change fencing,

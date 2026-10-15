@@ -15,6 +15,9 @@ use crate::repositories::managed_library_operation::claim_is_current;
 mod codec;
 mod header_codec;
 mod parents;
+mod playback;
+
+pub use playback::{load_caption_candidates, SourceTeletextCaptionCandidate};
 
 /// Per-observation resource policy, not a DVB inventory ceiling.
 pub const MAX_SOURCE_TELETEXT_DESCRIPTORS: usize =

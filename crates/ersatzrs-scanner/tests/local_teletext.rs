@@ -357,6 +357,164 @@ async fn native_local_scans_bind_reports_across_leaf_writers_without_losing_trac
     .await;
 }
 
+async fn caption_selection_fixture(probe: &str, fixture: &Path) -> (tempfile::TempDir, SqlitePool) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("Synthetic.ts");
+    std::fs::copy(fixture, &path).unwrap();
+    std::fs::write(
+        path.with_extension("nld.srt"),
+        "1\n00:00:00,000 --> 00:00:01,000\nSynthetic ordinary caption\n",
+    )
+    .unwrap();
+    let pool = database(root.path(), 4).await;
+    scan(&pool, &config(&pool, probe).await).await;
+    (root, pool)
+}
+
+async fn qualify_scanned_caption(
+    probe: &str,
+    path: &Path,
+    candidate: teletext_source::SourceTeletextCaptionCandidate,
+    scope: &LocalProbeCleanupScope,
+    work: &ersatzrs_core::locking::TeletextWorkGuard,
+) -> ersatzrs_infra::playback::source_teletext::QualifiedSourceCaption {
+    use ersatzrs_infra::ffprobe::FfprobeExtractor;
+    use ersatzrs_infra::playback::source_teletext::QualifiedSourceCaption;
+    use std::{sync::Arc, time::Duration};
+    use tokio::time::Instant;
+
+    assert_eq!(candidate.request.page.get(), 888);
+    assert_eq!(candidate.request.stream_index, 3);
+    assert_eq!(candidate.request.pid, 0x103);
+    assert_eq!(candidate.request.program_number, 1);
+    assert_eq!(candidate.language.as_str(), "eng");
+    assert_eq!(candidate.descriptor_type, 2);
+    assert!(!candidate.is_sdh());
+    assert_eq!(candidate.descriptor_occurrences.len(), 1);
+    assert_eq!(candidate.descriptor_occurrences[0].descriptor_tag, 0x56);
+
+    let decoded = Arc::new(
+        scope
+            .scope(FfprobeExtractor::new(probe).decode_local_teletext_page(
+                candidate.request.clone(),
+                path.to_path_buf(),
+                path.to_path_buf(),
+                Instant::now() + Duration::from_secs(15),
+                work.hold_work(),
+            ))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(decoded.window().psi_fingerprint, candidate.psi_fingerprint);
+    assert_eq!(decoded.events().count, 2);
+    assert_eq!(decoded.window().source_packets, 303);
+    assert_eq!(decoded.window().decoder_packets, 303);
+    assert!(decoded.window().ended_at_eof);
+    let mut wrong_page = candidate.clone();
+    wrong_page.request.page = ersatzrs_domain::TeletextPageNumber::new(200).unwrap();
+    assert!(QualifiedSourceCaption::new(wrong_page, decoded.clone(), work.hold_work()).is_err());
+    let mut wrong_psi = candidate.clone();
+    wrong_psi.psi_fingerprint[0] ^= 1;
+    assert!(QualifiedSourceCaption::new(wrong_psi, decoded.clone(), work.hold_work()).is_err());
+    QualifiedSourceCaption::new(candidate, decoded, work.hold_work()).unwrap()
+}
+
+#[tokio::test]
+#[ignore = "requires pinned FFprobe 9 and synthetic two-audio AV/200/888 input"]
+async fn native_scan_caption_selection_uses_wire_language_and_exact_decoded_page() {
+    use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
+    use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
+    use ersatzrs_infra::playback::{
+        load_subtitles_for_media_item, source_teletext::select_native_playback_subtitle_for_version,
+    };
+
+    let (probe, fixture) = inputs();
+    let (root, pool) = caption_selection_fixture(&probe, &fixture).await;
+    let path = root.path().join("Synthetic.ts");
+    let (item, version, file, original): (i64, i64, i64, String) = sqlx::query_as(
+        r#"SELECT v."OtherVideoId",v."Id",f."Id",f."Path"
+        FROM "MediaVersion" v JOIN "MediaFile" f ON f."MediaVersionId"=v."Id""#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let before = load_subtitles_for_media_item(&pool, item).await.unwrap();
+    let before_tracks = tracks(&pool, 1).await;
+    let choices = teletext_source::load_caption_candidates(&pool, item, version, file, &original)
+        .await
+        .unwrap();
+    assert_eq!(choices.len(), 1, "observed guide 200 is not a caption");
+    let candidate = choices.into_iter().next().unwrap();
+    let locker = EntityLocker::new();
+    let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let scope = LocalProbeCleanupScope::new();
+    let qualified = [qualify_scanned_caption(&probe, &path, candidate, &scope, &work).await];
+    let selected = select_native_playback_subtitle_for_version(
+        &pool,
+        item,
+        version,
+        &["en".into()],
+        ChannelSubtitleMode::Any,
+        StreamingMode::TransportStream,
+        &qualified,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(selected.subtitle().language.as_deref(), Some("eng"));
+    let source = selected.source().unwrap();
+    assert_eq!(source.candidate().request.page.get(), 888);
+    let input = source.receipt().native_burn_input();
+    assert!(input.is_image_based_subtitle);
+    assert_eq!(input.streams[0].index, 3);
+    assert_eq!(input.streams[0].source_teletext_page.unwrap().get(), 888);
+    let original_subtitle = before.iter().find(|s| s.stream_index == 3).unwrap();
+    assert_eq!(selected.subtitle().default, original_subtitle.default);
+    assert_eq!(selected.subtitle().forced, original_subtitle.forced);
+    assert_eq!(selected.subtitle().id, original_subtitle.id);
+    let ordinary = select_native_playback_subtitle_for_version(
+        &pool,
+        item,
+        version,
+        &["nl".into()],
+        ChannelSubtitleMode::Any,
+        StreamingMode::TransportStream,
+        &qualified,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    // Existing sidecar parsing normalizes Dutch to its bibliographic ISO alias.
+    assert_eq!(ordinary.subtitle().language.as_deref(), Some("dut"));
+    assert!(ordinary.source().is_none());
+    assert!(select_native_playback_subtitle_for_version(
+        &pool,
+        item,
+        version,
+        &["en".into()],
+        ChannelSubtitleMode::None,
+        StreamingMode::TransportStream,
+        &qualified,
+    )
+    .await
+    .unwrap()
+    .is_none());
+    assert_eq!(
+        before,
+        load_subtitles_for_media_item(&pool, item).await.unwrap()
+    );
+    assert_eq!(before_tracks, tracks(&pool, 1).await);
+    scope.close();
+    scope.wait_cleanup().await.unwrap();
+    drop(work);
+    assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+    drop(qualified);
+    assert!(TeletextWorkGuard::try_acquire(&locker, 1).is_none());
+    drop(selected);
+    assert_eq!(locker.active_teletext_work(), 0);
+    pool.close().await;
+}
+
 #[tokio::test]
 #[ignore = "requires pinned FFprobe 9 and synthetic two-audio AV/200/888 input"]
 async fn native_rejected_source_header_clears_old_window_without_losing_ordinary_tracks() {
