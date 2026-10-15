@@ -2968,6 +2968,77 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 held default-probe epoch checkpoint (partial):
+Criterion: replace the initializer hypothesis with actual held raw/native
+association before qualifying general source/seek cues, preserving ordinary
+playback and the existing worker ownership/cancellation bounds. A new opaque
+receipt binds the first GLOBAL clean native packet to its actual raw PES header,
+complete stable preceding PSI, exact global/program/native AV inventories, every
+signed native AV start and continuous selected PCR coordinates. It reuses the
+existing owned raw reader, full-source hash, source bookends, absolute deadline
+and admitted worker lifetime; existing decoder-span byte/hash checks remain.
+The ordinary format-origin query now observes MPEG-TS identity and makes positive
+probe size/overflow correction explicit. The independent clean trace observes
+native key/discard/corrupt flags; missing/unfamiliar flags remain unknown. A
+single stable program and AV first initializer qualify this tested branch only.
+General shared-state, non-AV and late initializers remain open requirements, not
+accepted product restrictions. No trace record is silently replaced by later AV.
+
+Native n9.0 NOHEADER/positive-probe/FIFO source ordering supplies this default-
+probe equivalence before duration-tail initialization. Actual generated consumers
+also use genpts+discardcorrupt+igndts. Their corruption drop precedes wrap setup:
+a corrupt clean-trace initializer therefore cannot authorize ordinary consumption.
+The native negative below confirms that distinction; other actual consumer-policy
+conditions remain to be qualified. Discard flags are conservatively unknown here,
+without claiming ordinary wrap initialization skips discard packets. Exact
+requested seek/end remain intact. A separate typed effective interval floors
+seek and original duration independently to native microseconds before adding;
+zero effective duration and signed overflow stay unknown. This fixes the
+fractional-carry counterexample without changing generated FFmpeg arguments.
+
+Focused run d99ab70b-c191-4f62-99a0-eb5d90c2b069 passes 40 held-clock, constructor,
+origin/demux projection, preparation and requested/effective interval cases.
+Final constructor run 3ac21796-4910-4355-b181-03cc6fbd8ad9 passes ten cases after
+review added exact global-program inventory and all-native-AV identity negatives.
+Missing/unknown/corrupt/discard first packets, untimed/non-AV first globals,
+unaligned/missing positions, conflicting program/PID/index/timebase, incomplete
+memberships and unsupported shared-program initializers receive no epoch.
+Independent review found no further concrete first-global/ownership/hash defect.
+
+Actual native run 1077b05c-95bf-49dd-8e38-63e0f9bf0c14 passes three tests in
+4.271 s with the existing pinned n9.0-20260805 tools. Original and wrapped source
+receipts bind the actual first raw PES at packet3 to default program epochs;
+original PCR coordinates are 18,962,100..1,638,368,532 ticks, wrapped coordinates
+-27,919,500..1,591,547,844, retaining extensions and exact elapsed agreement.
+Each bounded trace still matches every returned AV PES position/signed timestamp.
+The original source hash remains
+52bc48e7ccb368f1e48ddce78d86a95371ebd58934bb7a451304d4073ff24022;
+wrapped source hash is
+f28d5b2e63be2777355c50b57e9c2b2291aff14fdf4306418e57169235e42209.
+A genuine deliberately overdeclared first video PES is observed corrupt by native
+FFprobe and returns no epoch; ordinary track metadata/source association survives
+and actual owned work drains. The retained later-page decode, exact-byte headers,
+wrong/missing page/program rejection, restored-metadata payload/clock negatives
+and genuine non-EOF AV/PCR tail checks also pass in that native run.
+
+The final raw-walk/constructor run 33c02285-e130-41b6-a358-8881a953287d passes
+11 cases after extracting unchanged decoder-span validation into a small helper
+for the strict function-size lint. Native inputs, commands and algorithms remain
+unchanged by that extraction, so the actual native receipts above are reused.
+Final affected all-target strict Clippy passes (clippy-2.log, 1m27s), as do owned
+Rust formatting, architecture/progress validation and the scoped Clippy policy.
+The pre-existing teletext summary-length warning remains informational.
+Commands and detailed local receipts: tmp/phase9-source-epoch-binding-checkpoint/.
+No arbitrary-consumer eligibility, immutable-byte certificate, media zero or cue
+coverage is granted. Next qualify actual generated input policy and numeric native
+format-origin enclosure; combine effective cue bookends and bounded PCR gaps in
+the same owned raw walk. Then require current cue-window page/PES/PSI evidence
+before exact-file descriptor-only selection and decoding. Existing ordinary
+playback, editor, TSDuck and headed client evidence remains valid only for its
+unchanged tested inputs. Full engine acceptance, all Level2.5/editor/Lua/restart/
+platform criteria and engine-first production-addon order remain unchanged.
+No milestone completion, complete CI, remote push or publication is claimed.
+
 2026-10-15 native demux/wrap association checkpoint (partial):
 Criterion: replace guessed first-AV/nearest-PCR epochs with explicit native
 initialization observations before qualifying later source cues. A new bounded

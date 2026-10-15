@@ -176,11 +176,17 @@ impl NativeAvOrigin {
 /// Supplied format start and every AV track, never a first-track origin choice.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeSourceOrigin {
+    format_name: Option<String>,
     format_start: Option<NativeSourceTime>,
     streams: Vec<NativeAvOrigin>,
 }
 
 impl NativeSourceOrigin {
+    /// Actual native demux format identity, not inferred from a filename.
+    #[must_use]
+    pub fn format_name(&self) -> Option<&str> {
+        self.format_name.as_deref()
+    }
     /// Native container start as reported; absence remains unknown.
     #[must_use]
     pub const fn format_start(&self) -> Option<NativeSourceTime> {
@@ -217,6 +223,7 @@ struct Output {
 
 #[derive(Deserialize)]
 struct Format {
+    format_name: Option<String>,
     start_time: Option<Value>,
 }
 
@@ -314,6 +321,20 @@ pub(super) fn parse_source_origin(
     )?
     .map(NativeSourceTime::parse)
     .transpose()?;
+    let format_name = output
+        .format
+        .as_ref()
+        .and_then(|format| format.format_name.as_deref())
+        .filter(|name| *name != "N/A");
+    if format_name.is_some_and(|name| {
+        name.is_empty()
+            || name.len() > 64
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b','))
+    }) {
+        return Err(NativeSourceOriginError::Metadata);
+    }
     let mut indexes = BTreeSet::new();
     let mut pids = BTreeSet::new();
     let mut streams = Vec::new();
@@ -342,6 +363,7 @@ pub(super) fn parse_source_origin(
         });
     }
     Ok(NativeSourceOrigin {
+        format_name: format_name.map(str::to_owned),
         format_start,
         streams,
     })

@@ -6,6 +6,42 @@ use crate::ffprobe::teletext_demux::{
     parse_source_demux, NativeSourceDemuxError, NativeSourceDemuxTrace,
 };
 
+#[test]
+fn native_packet_flags_keep_unknown_discard_and_corrupt_distinct() {
+    for (flags, discard, corrupt) in [
+        ("___", false, false),
+        ("K__", false, false),
+        ("_D_", true, false),
+        ("KD_", true, false),
+        ("__C", false, true),
+        ("K_C", false, true),
+        ("_DC", true, true),
+        ("KDC", true, true),
+    ] {
+        let mut value = fixture();
+        value["packets"][0]["flags"] = json!(flags);
+        let trace = parse(&value).unwrap();
+        let packet = trace.packets()[0];
+        assert_eq!(packet.is_discard(), Some(discard));
+        assert_eq!(packet.is_corrupt(), Some(corrupt));
+    }
+    for flags in [
+        Value::Null,
+        json!("N/A"),
+        json!(""),
+        json!("K_"),
+        json!("_X_"),
+        json!("___C"),
+    ] {
+        let mut value = fixture();
+        value["packets"][0]["flags"] = flags;
+        let packet = parse(&value).unwrap().packets()[0];
+        assert_eq!(packet.is_discard(), None);
+        assert_eq!(packet.is_corrupt(), None);
+    }
+    assert_eq!(parse(&fixture()).unwrap().packets()[0].is_corrupt(), None);
+}
+
 fn fixture() -> Value {
     json!({
         "format": {"format_name": "mpegts", "duration": "60.0"},

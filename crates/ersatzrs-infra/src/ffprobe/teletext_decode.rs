@@ -22,7 +22,7 @@ use super::{
 pub use super::local_teletext::{
     SourceTeletextAvOriginEvidence, SourceTeletextAvOriginWitness,
     SourceTeletextContinuousClockEvidence, SourceTeletextDecodeWindowEvidence,
-    SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
+    SourceTeletextNativeClockEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,
 };
 
 #[path = "teletext_decode_demux.rs"]

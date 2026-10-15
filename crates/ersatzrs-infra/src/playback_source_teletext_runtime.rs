@@ -33,7 +33,7 @@ const MAX_CONCURRENT_SETTING: &str = "teletext.work.max_concurrent";
 
 #[path = "playback_source_teletext_interval.rs"]
 mod interval;
-pub use interval::SourceTeletextPlaybackInterval;
+pub use interval::{SourceTeletextEffectiveInterval, SourceTeletextPlaybackInterval};
 
 /// Persisted source identity plus the actual resolved playback locator.
 /// Transient/external inputs have no durable identity and remain inapplicable.

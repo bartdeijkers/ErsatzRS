@@ -25,6 +25,7 @@ fn parse(value: &Value) -> Result<NativeSourceOrigin, NativeSourceOriginError> {
 #[test]
 fn native_origin_preserves_every_av_track_exact_identity_start_and_decimal_precision() {
     let origin = parse(&fixture()).unwrap();
+    assert_eq!(origin.format_name(), Some("mpegts"));
     let format = origin.format_start().unwrap();
     assert_eq!(
         (format.units(), format.scale(), format.quantum()),
@@ -74,6 +75,31 @@ fn native_origin_preserves_every_av_track_exact_identity_start_and_decimal_preci
         format.contains_rational_within_quantum(129_600, 90_000),
         Some(false)
     );
+}
+
+#[test]
+fn native_format_identity_is_observed_optional_and_bounded() {
+    for unknown in [Value::Null, json!("N/A")] {
+        let mut value = fixture();
+        value["format"]["format_name"] = unknown;
+        assert_eq!(parse(&value).unwrap().format_name(), None);
+    }
+    let mut value = fixture();
+    value["format"]
+        .as_object_mut()
+        .unwrap()
+        .remove("format_name");
+    assert_eq!(parse(&value).unwrap().format_name(), None);
+    for invalid in [
+        json!(""),
+        json!("x".repeat(65)),
+        json!("mpegts\n"),
+        json!(true),
+    ] {
+        let mut value = fixture();
+        value["format"]["format_name"] = invalid;
+        assert_eq!(parse(&value), Err(NativeSourceOriginError::Metadata));
+    }
 }
 
 #[test]

@@ -116,14 +116,41 @@ async fn observe(
             .await,
         Err(SourceTeletextPageDecodeError::NoCleanupScope)
     ));
-    scope
+    let trace = scope
         .scope(source.extractor.observe_prepared_local_demux_trace(
             prepared,
             Instant::now() + Duration::from_secs(15),
             work.hold_work(),
         ))
         .await
-        .unwrap()
+        .unwrap();
+    let clock = scope.scope(source.extractor.observe_prepared_local_native_clock(
+        prepared, Instant::now() + Duration::from_secs(15), work.hold_work(),
+    )).await.unwrap().expect("clean first-global AV plus held PSI/raw/native witnesses qualifies default-probe epoch");
+    assert_eq!(clock.first_packet(), trace.packets()[0]);
+    assert_eq!(clock.first_packet().is_corrupt(), Some(false));
+    assert_eq!(
+        clock.first_header().source_pusi_packet,
+        clock.first_packet().source_packet().unwrap()
+    );
+    let bytes = std::fs::read(&prepared.resolved).unwrap();
+    assert_eq!(
+        clock.av_origin().clock().source_sha256(),
+        <[u8; 32]>::from(Sha256::digest(&bytes))
+    );
+    assert_eq!(
+        clock.av_origin().clock().clock().packets_seen,
+        u64::try_from(bytes.len() / PACKET_BYTES).unwrap()
+    );
+    assert_eq!(
+        clock.epoch(),
+        SourceNativeEpoch::from_first_demux_timestamps(
+            trace.packets()[0].pts(),
+            trace.packets()[0].dts()
+        )
+    );
+    eprintln!("held default-probe epoch: first_raw_header={:?}, epoch={:?}, PCR_first={}, PCR_last={}, source_sha256={}; cue/actual-consumer input policy still unqualified", clock.first_header(), clock.epoch(), clock.first_pcr_ticks(), clock.last_pcr_ticks(), hex_text(&clock.av_origin().clock().source_sha256()));
+    trace
 }
 
 #[tokio::test]

@@ -149,7 +149,7 @@ mod unix {
             let directory = tempfile::tempdir().unwrap();
             let program = directory.path().join("probe");
             let script = format!(
-                "#!/bin/sh\nauxiliary=false\nnative=false\nfor arg in \"$@\"; do\n  if [ \"$arg\" = -data_dump_format ]; then auxiliary=true; fi\n  case \"$arg\" in format=start_time:*) native=true ;; esac\ndone\nif $native; then\n{native}\nelif $auxiliary; then\ncat <<'AUXILIARY_JSON'\n{AUXILIARY}\nAUXILIARY_JSON\nelse\ncat <<'PRIMARY_JSON'\n{PRIMARY}\nPRIMARY_JSON\nfi\n"
+                "#!/bin/sh\nauxiliary=false\nnative=false\nfor arg in \"$@\"; do\n  if [ \"$arg\" = -data_dump_format ]; then auxiliary=true; fi\n  case \"$arg\" in format=start_time*) native=true ;; esac\ndone\nif $native; then\n{native}\nelif $auxiliary; then\ncat <<'AUXILIARY_JSON'\n{AUXILIARY}\nAUXILIARY_JSON\nelse\ncat <<'PRIMARY_JSON'\n{PRIMARY}\nPRIMARY_JSON\nfi\n"
             );
             std::fs::write(&program, script).unwrap();
             std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();

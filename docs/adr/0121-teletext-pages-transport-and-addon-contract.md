@@ -125,8 +125,9 @@ The source-associated native demux trace therefore retains all stream identities
 program order/memberships and bounded native packet order, signed PTS/DTS and
 optional physical positions. It starts without a seek or stream filter and uses
 `-nofind_stream_info`, `noparse+nofillin` and explicit overflow correction through
-the existing retained process owner. The independent ordinary native format-origin
-probe remains unchanged. Disable stream-info only for this explicit trace: the
+the existing retained process owner. The independent native format-origin
+probe retains ordinary stream-info behavior, with explicit positive probe size
+and overflow correction. Disable stream-info only for this explicit trace: the
 normal duration estimator can flush its queue, seek near EOF and initialize wrap
 state there before seeking back. A clean trace must not silently certify the
 normal consumer's initialization. Missing positions or timestamps stay unknown.
@@ -144,6 +145,33 @@ and [duration estimation](https://github.com/FFmpeg/FFmpeg/blob/n9.0/libavformat
 Installed n9.0-20260805 receipts corroborate tested behavior; its version string
 alone does not identify an exact custom-build source commit. Full cue qualification
 and ordinary playback behavior still require independent proof.
+
+The owned raw reader can now construct opaque default-probe epoch evidence for
+the corroborated single-program/AV-first case. Require the first GLOBAL native
+packet, clean explicitly observed packet flags, exact global/program/native AV
+inventories, current stable PSI before its raw PES start, matching raw PTS/DTS,
+all signed native AV starts, and continuous selected PCR coordinates with retained
+extensions. Native format identity must be observed as MPEG-TS. Unknown flags,
+first non-AV/untimed packets, partial inventories or contradictory witnesses grant
+no epoch. This branch is implementation progress; other initialization cases
+remain required acceptance work rather than permanent product exclusions.
+The MPEG-TS `AVFMTCTX_NOHEADER`/positive-probe and demux FIFO path initializes the
+first accepted packet's program before duration-tail probing. Ordinary generated
+inputs also use `genpts+discardcorrupt+igndts`: corruption can drop that first PES
+before wrap initialization, so a corrupt clean-trace initializer cannot certify
+those consumer flags. Discard disposition is conservatively unknown here; no
+claim is made that ordinary wrap initialization skips discard packets.
+The primary paths are [initial stream-info packet consumption](https://github.com/FFmpeg/FFmpeg/blob/n9.0/libavformat/demux.c#L2563)
+and [packet corruption and initialization ordering](https://github.com/FFmpeg/FFmpeg/blob/n9.0/libavformat/demux.c#L533).
+This default-probe evidence still grants no arbitrary consumer policy, immutable
+source certificate, native media zero or cue admission. Qualify actual consumer
+options and format-origin bounds separately. Preserve exact requested time and
+separately parsed effective `-ss`/`-t` microseconds: floor seek and original
+duration independently, then add them, rather than flooring the requested end.
+Empty effective durations and signed-range overflow remain unknown. Native
+origin enclosure, bounded PCR gaps, effective cue bookends, current page headers
+and the exact decoder-byte association remain required before later-cue admission.
+
 Do not weaken global scan-header qualification to bypass the remaining exact-
 source candidate path; connect descriptor-only discovery only with independently
 qualified current cue-window headers and the existing selection checks.

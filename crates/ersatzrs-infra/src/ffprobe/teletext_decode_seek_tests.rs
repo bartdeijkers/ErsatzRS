@@ -22,6 +22,8 @@ const SELECTED_PID: u16 = 258;
 
 #[path = "teletext_decode_demux_native_tests.rs"]
 mod demux;
+#[path = "teletext_decode_epoch_native_tests.rs"]
+mod epoch;
 #[path = "teletext_decode_origin_native_tests.rs"]
 mod origin;
 #[path = "teletext_decode_prepared_native_tests.rs"]

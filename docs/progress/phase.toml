@@ -62,22 +62,19 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-P9A-04 now retains bounded original-source native demux order, all program/stream
-identities and signed timestamps/positions through the prepared source owner.
-Twenty-six focused cases, the extended path regression and genuine original/wrap
-native proof pass: each trace matches all 1,852 returned AV PES packets to actual
-raw headers. Explicit candidate wrap policy preserves PCR extension and continuous
-elapsed coordinates; no nearest-PCR or first-AV origin is invented. Ordinary
-metadata/playback remain unchanged. Next build private ordinary-wrap equivalence
-from the actual first global timestamped PES plus held raw witness, explicit
-native input policy and stable selected PSI. The n9.0 NOHEADER/positive-probe/FIFO
-path supplies the next proof hypothesis before hidden tail initialization; it is
-not yet a runtime certificate or permanent single-program restriction. General
-shared/non-AV initialization remains open. Join qualified state to the owned raw
-walk and requested effective cue bookends with bounded gaps. Current trace candidates grant no cue admission.
-Exact-file descriptor-only discovery still needs qualified cue headers; do not
-weaken scan-header readiness. Reuse valid ordinary/editor/client evidence. Full
-engine criteria stay open; no content addon, push or publication occurs.
+P9A-04 now binds the actual clean first GLOBAL native packet to its held raw
+PES header and stable selected PSI, corroborating signed native AV starts and
+PCR coordinates for the tested default-probe epoch. Genuine original/wrapped
+sources pass; a deliberately corrupt first PES stays unknown instead of gaining
+an epoch from a later AV packet. Exact caller intent and effective native
+microsecond seek/duration remain separate. This is not cue or arbitrary-consumer
+admission. Next qualify the generated consumer input policy and native format-
+origin enclosure, then join effective cue bookends and bounded PCR gaps to the
+same owned raw walk. Prove current cue-window headers before exact-file candidate
+selection; do not weaken scan-header readiness. General shared/non-AV/late native
+initializers remain open, not accepted product restrictions. Reuse applicable
+ordinary/editor/client evidence. Full engine criteria stay open; no production
+content addon, push or publication occurs.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.

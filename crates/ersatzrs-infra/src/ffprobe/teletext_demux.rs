@@ -76,6 +76,7 @@ pub struct NativeSourceDemuxPacket {
     pts: Option<i64>,
     dts: Option<i64>,
     position: Option<u64>,
+    flags: Option<u8>,
 }
 
 impl NativeSourceDemuxPacket {
@@ -94,6 +95,16 @@ impl NativeSourceDemuxPacket {
     #[must_use]
     pub const fn position(self) -> Option<u64> {
         self.position
+    }
+    /// Explicit native corrupt disposition; absence never means clean.
+    #[must_use]
+    pub fn is_corrupt(self) -> Option<bool> {
+        self.flags.map(|flags| flags & 4 != 0)
+    }
+    /// Native discard disposition, distinct from pre-wrap corrupt rejection.
+    #[must_use]
+    pub fn is_discard(self) -> Option<bool> {
+        self.flags.map(|flags| flags & 2 != 0)
     }
     /// A physical TS188 candidate only; raw PUSI/header association is required.
     #[must_use]
@@ -184,6 +195,7 @@ struct Packet {
     pts: Option<Value>,
     dts: Option<Value>,
     pos: Option<Value>,
+    flags: Option<String>,
 }
 
 fn bounded<'de, D: Deserializer<'de>, T: Deserialize<'de>, const LIMIT: usize>(
@@ -238,6 +250,22 @@ fn position(value: Option<Value>) -> Result<Option<u64>, NativeSourceDemuxError>
         }
         _ => Err(NativeSourceDemuxError::Timestamp),
     }
+}
+
+fn packet_flags(value: Option<&str>) -> Option<u8> {
+    let bytes = value?.as_bytes();
+    if bytes.len() != 3
+        || !matches!(bytes[0], b'K' | b'_')
+        || !matches!(bytes[1], b'D' | b'_')
+        || !matches!(bytes[2], b'C' | b'_')
+    {
+        return None;
+    }
+    Some(
+        u8::from(bytes[0] == b'K')
+            | (u8::from(bytes[1] == b'D') << 1)
+            | (u8::from(bytes[2] == b'C') << 2),
+    )
 }
 
 pub(super) fn parse_source_demux(
@@ -325,6 +353,7 @@ pub(super) fn parse_source_demux(
             pts: timestamp(packet.pts)?,
             dts: timestamp(packet.dts)?,
             position: position(packet.pos)?,
+            flags: packet_flags(packet.flags.as_deref()),
         });
     }
     Ok(NativeSourceDemuxTrace {

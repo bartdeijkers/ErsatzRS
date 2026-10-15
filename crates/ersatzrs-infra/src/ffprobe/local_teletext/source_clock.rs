@@ -14,11 +14,49 @@ use tokio::time::Instant;
 use super::{
     headers,
     source_av_origin::{AvOriginCollector, SourceTeletextAvOriginEvidence},
+    source_native_clock::{NativeClockCollector, SourceTeletextNativeClockEvidence},
     source_window, LocalTeletextSourceGuard, SourceTeletextDecodeWindowEvidence,
     SourceTeletextPacketSpan,
 };
-use crate::ffprobe::teletext_origin::NativeSourceOrigin;
-use crate::ffprobe::{FfprobeError, Result};
+use crate::ffprobe::{
+    teletext_decode::SourceTeletextPageDecodeRequest, teletext_demux::NativeSourceDemuxTrace,
+    teletext_origin::NativeSourceOrigin, FfprobeError, Result,
+};
+
+#[derive(Clone, Copy)]
+pub(super) struct SourceSelection {
+    pub(super) pid: u16,
+    pub(super) program: u16,
+    pub(super) pmt: u16,
+    pub(super) pcr: u16,
+}
+
+struct SourceWalkRequest {
+    selection: SourceSelection,
+    expected: Option<SourceTeletextDecodeWindowEvidence>,
+    origin: Option<NativeSourceOrigin>,
+    native_clock: Option<NativeClockCollector>,
+}
+
+impl SourceWalkRequest {
+    fn decoded(
+        pid: u16,
+        expected: SourceTeletextDecodeWindowEvidence,
+        origin: Option<NativeSourceOrigin>,
+    ) -> Self {
+        Self {
+            selection: SourceSelection {
+                pid,
+                program: expected.program_number,
+                pmt: expected.pmt_pid,
+                pcr: expected.pcr_pid,
+            },
+            expected: Some(expected),
+            origin,
+            native_clock: None,
+        }
+    }
+}
 
 /// Raw clock/PSI evidence from every physical packet of one held source.
 ///
@@ -61,9 +99,15 @@ pub(crate) async fn observe_owned(
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<SourceTeletextContinuousClockEvidence> {
-    walk_owned(guard, paths, pid, expected, None, deadline, hold)
-        .await
-        .map(|observed| observed.clock)
+    walk_owned(
+        guard,
+        paths,
+        SourceWalkRequest::decoded(pid, expected, None),
+        deadline,
+        hold,
+    )
+    .await
+    .map(|observed| observed.clock)
 }
 
 pub(crate) async fn observe_av_origin_owned(
@@ -75,30 +119,61 @@ pub(crate) async fn observe_av_origin_owned(
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<SourceTeletextAvOriginEvidence> {
-    walk_owned(guard, paths, pid, expected, Some(origin), deadline, hold)
-        .await?
-        .av
-        .ok_or_else(invalid)
+    walk_owned(
+        guard,
+        paths,
+        SourceWalkRequest::decoded(pid, expected, Some(origin)),
+        deadline,
+        hold,
+    )
+    .await?
+    .av
+    .ok_or_else(invalid)
+}
+
+pub(crate) async fn observe_native_clock_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    paths: (PathBuf, PathBuf),
+    observed: (
+        SourceTeletextPageDecodeRequest,
+        NativeSourceOrigin,
+        NativeSourceDemuxTrace,
+    ),
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<Option<SourceTeletextNativeClockEvidence>> {
+    let (request, origin, trace) = observed;
+    let Some(native_clock) = NativeClockCollector::new(&request, &origin, trace) else {
+        return Ok(None);
+    };
+    let request = SourceWalkRequest {
+        selection: native_clock.selection(),
+        expected: None,
+        origin: Some(origin),
+        native_clock: Some(native_clock),
+    };
+    walk_owned(guard, paths, request, deadline, hold)
+        .await
+        .map(|observed| observed.native_clock)
 }
 
 struct SourceWalkEvidence {
     clock: SourceTeletextContinuousClockEvidence,
     av: Option<SourceTeletextAvOriginEvidence>,
+    native_clock: Option<SourceTeletextNativeClockEvidence>,
 }
 
 async fn walk_owned(
     guard: Arc<LocalTeletextSourceGuard>,
     paths: (PathBuf, PathBuf),
-    pid: u16,
-    expected: SourceTeletextDecodeWindowEvidence,
-    origin: Option<NativeSourceOrigin>,
+    request: SourceWalkRequest,
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<SourceWalkEvidence> {
     headers::run_source_guard_owned(deadline, hold, move |stop| {
         stop.check_source_guard()?;
         super::check_source_guard_paths(&guard, &paths.0, &paths.1)?;
-        let evidence = observe(&guard, pid, expected, origin, stop)?;
+        let evidence = observe(&guard, request, stop)?;
         stop.check_source_guard()?;
         super::check_source_guard_paths(&guard, &paths.0, &paths.1)?;
         stop.check_source_guard()?;
@@ -110,33 +185,26 @@ async fn walk_owned(
 
 fn observe<T>(
     guard: &LocalTeletextSourceGuard,
-    pid: u16,
-    expected: SourceTeletextDecodeWindowEvidence,
-    origin: Option<NativeSourceOrigin>,
+    request: SourceWalkRequest,
     stop: &headers::ReadStop<'_, T>,
 ) -> Result<SourceWalkEvidence> {
+    let SourceWalkRequest {
+        selection,
+        expected,
+        origin,
+        mut native_clock,
+    } = request;
     let len = guard.guard.len;
     if len == 0 || !len.is_multiple_of(188) {
         return Err(invalid());
     }
-    let mut psi = SourceTeletextPsiObserver::new(pid).map_err(|_| invalid())?;
-    let mut clock = SourceTeletextClockObserver::new_source_epoch(expected.pcr_pid, 0)
-        .map_err(|_| invalid())?;
+    let mut psi = SourceTeletextPsiObserver::new(selection.pid).map_err(|_| invalid())?;
+    let mut clock =
+        SourceTeletextClockObserver::new_source_epoch(selection.pcr, 0).map_err(|_| invalid())?;
     let mut digest = Sha256::new();
-    let span = SourceTeletextPacketSpan::new(expected.first_source_packet, expected.source_packets)
-        .map_err(|_| invalid())?;
-    if span.byte_end_exclusive() > len
-        || u64::from(expected.decoder_packets)
-            + u64::from(expected.skipped_selected_prefix_packets)
-            + u64::from(expected.trimmed_source_tail_packets)
-            != u64::from(expected.source_packets)
-    {
-        return Err(invalid());
-    }
-    let retained_end = span
-        .end_packet_exclusive()
-        .checked_sub(u64::from(expected.trimmed_source_tail_packets))
-        .ok_or_else(invalid)?;
+    let span = expected
+        .map(|expected| decoded_span(expected, len))
+        .transpose()?;
     let mut decoder_digest = Sha256::new();
     let mut skipped_prefix = 0_u32;
     let mut retained_packets = 0_u32;
@@ -159,62 +227,98 @@ fn observe<T>(
         if let Some(av) = &mut av {
             av.push(&raw)?;
         }
+        if let Some(native_clock) = &mut native_clock {
+            native_clock.push(&raw)?;
+        }
         digest.update(raw);
-        if ordinal >= span.first_packet() && ordinal < retained_end {
-            let raw_pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
-            if raw_pid == pid && skipped_prefix < expected.skipped_selected_prefix_packets {
-                skipped_prefix += 1;
-            } else {
-                decoder_digest.update(raw);
-                retained_packets += 1;
+        if let Some((expected, span, retained_end)) = span {
+            if ordinal >= span.first_packet() && ordinal < retained_end {
+                let raw_pid = (u16::from(raw[1] & 31) << 8) | u16::from(raw[2]);
+                if raw_pid == selection.pid
+                    && skipped_prefix < expected.skipped_selected_prefix_packets
+                {
+                    skipped_prefix += 1;
+                } else {
+                    decoder_digest.update(raw);
+                    retained_packets += 1;
+                }
             }
         }
         if first_current_psi_packet.is_none() && psi.has_complete_current_tables() {
-            validate_program(&psi, expected)?;
+            validate_program(&psi, selection)?;
             first_current_psi_packet = Some(ordinal);
         }
     }
     stop.check_source_guard()?;
-    validate_program(&psi, expected)?;
+    validate_program(&psi, selection)?;
     let observed = psi.observation().map_err(|_| invalid())?;
-    if observed.current_tables_changed
-        || headers::fingerprint(&observed) != expected.psi_fingerprint
-    {
+    if observed.current_tables_changed {
         return Err(invalid());
     }
-    let decoder_sha256: [u8; 32] = decoder_digest.finalize().into();
-    if retained_packets != expected.decoder_packets
-        || skipped_prefix != expected.skipped_selected_prefix_packets
-        || decoder_sha256 != expected.decoder_sha256
-    {
-        return Err(invalid());
+    if let Some((expected, _, _)) = span {
+        let decoder_sha256: [u8; 32] = decoder_digest.finalize().into();
+        if headers::fingerprint(&observed) != expected.psi_fingerprint
+            || retained_packets != expected.decoder_packets
+            || skipped_prefix != expected.skipped_selected_prefix_packets
+            || decoder_sha256 != expected.decoder_sha256
+        {
+            return Err(invalid());
+        }
     }
     let clock = SourceTeletextContinuousClockEvidence {
         clock: clock.report().map_err(|_| invalid())?,
         source_sha256: digest.finalize().into(),
         first_current_psi_packet: first_current_psi_packet.ok_or_else(invalid)?,
     };
+    let mut av = av
+        .map(|collector| collector.finish(clock, &observed))
+        .transpose()?;
+    let native_clock = native_clock
+        .map(|collector| collector.finish(av.take().ok_or_else(invalid)?, &observed))
+        .transpose()?
+        .flatten();
     Ok(SourceWalkEvidence {
         clock,
-        av: av
-            .map(|collector| collector.finish(clock, &observed))
-            .transpose()?,
+        av,
+        native_clock,
     })
 }
 
-fn validate_program(
-    psi: &SourceTeletextPsiObserver,
+fn decoded_span(
     expected: SourceTeletextDecodeWindowEvidence,
-) -> Result<()> {
+    source_len: u64,
+) -> Result<(
+    SourceTeletextDecodeWindowEvidence,
+    SourceTeletextPacketSpan,
+    u64,
+)> {
+    let span = SourceTeletextPacketSpan::new(expected.first_source_packet, expected.source_packets)
+        .map_err(|_| invalid())?;
+    if span.byte_end_exclusive() > source_len
+        || u64::from(expected.decoder_packets)
+            + u64::from(expected.skipped_selected_prefix_packets)
+            + u64::from(expected.trimmed_source_tail_packets)
+            != u64::from(expected.source_packets)
+    {
+        return Err(invalid());
+    }
+    let retained_end = span
+        .end_packet_exclusive()
+        .checked_sub(u64::from(expected.trimmed_source_tail_packets))
+        .ok_or_else(invalid)?;
+    Ok((expected, span, retained_end))
+}
+
+fn validate_program(psi: &SourceTeletextPsiObserver, selection: SourceSelection) -> Result<()> {
     let observed = psi.observation().map_err(|_| invalid())?;
     let mut selected = observed
         .memberships()
-        .filter(|(program, _)| program.program_number == expected.program_number);
+        .filter(|(program, _)| program.program_number == selection.program);
     let (program, stream) = selected.next().ok_or_else(invalid)?;
     if selected.next().is_some()
         || stream.stream_type != 6
-        || program.pmt_pid != expected.pmt_pid
-        || program.pcr_pid != expected.pcr_pid
+        || program.pmt_pid != selection.pmt
+        || program.pcr_pid != selection.pcr
     {
         return Err(invalid());
     }
