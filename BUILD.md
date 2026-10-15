@@ -283,6 +283,26 @@ the duplicate-run check. It is scoped test evidence, not full CI acceptance.
 When deliberately preserving earlier checks, `[skip ci]` on the repair commit
 prevents the automatic full PR run; the manual dispatch still checks that commit.
 
+### Rerun only Next engine checks after a fixture repair
+
+For a correction confined to the Next engine gate, dispatch its existing job:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f next_engine_only=true
+```
+
+The run is titled `CI (Next engine only)`. It runs the unchanged Next runtime
+staging, regression tests and playback checks, while skipping unrelated jobs.
+Its concurrency group is separate from normal CI, so it cannot cancel a full
+run still executing on the same branch. Do not combine `next_engine_only` with
+`test_only`: that dispatch fails before checkout or compilation.
+
+A job rerun checks its original SHA; this dispatch checks the selected branch's
+new SHA. Record both revisions when retaining unaffected earlier evidence, and
+repeat any checks invalidated by the correction. This focused run cannot suppress
+a later full run through Preflight and does not establish full green CI or
+satisfy the exact-candidate release gate above.
+
 ## Inner-loop strategy (don't recompile the source 5×)
 
 A single task often runs five *different* compilation graphs — and because Cargo

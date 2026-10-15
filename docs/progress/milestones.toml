@@ -22731,6 +22731,31 @@ same commit. A demonstrated correction requires affected verification, without
 routinely rerunning the whole pipeline. Application release remains separate.
 """
 evidence = """
+CI recovery (2026-10-15): authorized full run38654305604 tests exact c41601ba.
+Its Next job116160433921 reports416/417 passing and one retained-caption
+fixture failure. The fixture incorrectly requires cue ends inside each HLS
+segment; released022 repeats full cue intervals under RFC8216 section3.5.
+The correction keeps all decoded video, selected Dutch audio, seek/cut exclusion
+and producer-registration assertions. It additionally checks exactly two
+retained cut pieces, the full8s following cue, contiguous mapped intervals,
+join bounds and identical full timestamps across repeated segment copies.
+Only the failed actual parent case is rerun:1 pass7.47s, nextest
+58f70e0d-95b4-4069-b5ab-4799e44c95e4, with exact published022/FF206; receipt
+ucu11-ci-retained-cue-focused.log. Production code/packages are unchanged.
+
+GitHub job reruns retain their original SHA, and the existing Test-only dispatch
+cannot execute Next. Extend the existing CI workflow with next_engine_only,
+without changing its runtime/test/smoke steps or pins. The focused concurrency
+group cannot cancel ongoing full CI; its distinct title is excluded from
+successful-full-run recognition. Conflicting focused inputs fail before checkout.
+Actionlint, eight hosted/self-hosted routing combinations, cancellation/duplicate
+and preflight-filter guards pass; unchanged Next steps are compared directly.
+Strict infra all-targets Clippy passes3m10s; receipt ucu11-retained-cue-clippy.log.
+The corrective-SHA Next-only dispatch remains pending.
+Preserve all passing unaffected original jobs; this focused mode is scoped proof,
+not a new full green exact-commit run or an application-release gate waiver.
+The full run's other jobs continue; no full rerun or application release occurs.
+
 Local acceptance complete (2026-10-15), integrated source a258df5d plus the
 published022 manifest and documentation closeout. Rows233–236 are accepted in
 order; all236 ledger SHA/subject pairs match the fixed v26.11.3 release.
