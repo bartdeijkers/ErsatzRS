@@ -385,10 +385,15 @@ Windows file-index limitations and native acceptance remain open. Symlinks and
 non-lossless command locators conservatively have no auxiliary association,
 without changing ordinary probing; complete safe alias support is still due.
 The durable application/web/CLI path forwards the actual acquired claim to the
-Local configuration. This does not grant write authority by itself or enable
-source-page selection. Scanner leaf transactions must still attach reports to
-actual parents and recheck the source and claim through commit, rolling back
-all ordinary replacements after lease loss. P9A-03 owns verification and gaps.
+Local configuration. Local video leaf writers now attach descriptor reports to
+fresh exact stream/file/version parents inside the ordinary media transaction.
+The actual LibraryPath/library/lease binding and existing parent-aware claim gate
+are checked before ordinary mutation and immediately before commit. Publication
+child scans reuse the real parent lease; no second lease is invented. A lost
+claim or post-report source association requires whole-leaf rollback, including
+ordinary stream replacements. Before any report write, auxiliary failure or a
+lost source association preserves ordinary metadata without an auxiliary report.
+This does not enable source-page selection. P9A-03 owns verification and gaps.
 A preparatory report-only source model and additive SQLite storage now retain
 independent binding, provenance, PID, program and descriptor states. Exact
 stream/file/version parents remain distinct; repeated descriptor addresses and
@@ -402,9 +407,12 @@ errors require rollback and the caller retains ownership through commit. Missing
 records never prove absent pages. Stream/file deletion cascades remove reports;
 narrow actual-change triggers also clear them before existing file upserts or
 in-place stream identity updates, preserving no-op writes and ordinary tracks.
-This does not enable scanner/provider acquisition or source-page selection.
-A separate pure parser now checks one explicitly supplied 46-byte DVB unit and
-reports protected header identity, correction counts and raw C4–C14 bits.
+The Local scanner now activates descriptor acquisition through those existing
+writer transactions; supported remote acquisition and actual source-page/body/
+charset observations remain open. Descriptors never confer page readiness or
+source-page selection. A separate pure parser now checks one explicitly supplied
+46-byte DVB unit and reports protected header identity, correction counts and raw
+C4–C14 bits.
 Non-header units and FF termination stay distinct from page headers; the null
 FF:3F7F address is rejected. Hamming 8/4 corrects one-bit errors and rejects
 detected double errors; larger corruptions can alias accepted codewords. Neither

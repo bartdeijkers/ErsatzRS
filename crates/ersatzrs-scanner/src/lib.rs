@@ -32,8 +32,11 @@ use sqlx::{Row, Transaction};
 use thiserror::Error;
 use tracing::{debug, warn};
 
+use local_teletext::LocalScanProbe;
+
 mod folder_etag;
 mod library_folder;
+mod local_teletext;
 pub mod local_television;
 pub mod nfo;
 pub mod remote_stream_playlist;
@@ -352,7 +355,12 @@ async fn scan_local_library_with_progress_once(
                         LocalScanWork::ExtraVideo { path, extra } => {
                             let parent_media_item_id =
                                 resolve_movie_extra_parent(pool, &library_path, &extra).await?;
-                            let probed = extractor.extract(&path).await?;
+                            let probed = local_teletext::acquire(
+                                &extractor,
+                                &path,
+                                config.managed_claim.as_ref(),
+                            )
+                            .await?;
                             retry_sqlite_busy(|| {
                                 let probed = probed.clone();
                                 async {
@@ -370,7 +378,12 @@ async fn scan_local_library_with_progress_once(
                             .await?;
                         }
                         LocalScanWork::MoviePrimary { path } | LocalScanWork::Generic { path } => {
-                            let probed = extractor.extract(&path).await?;
+                            let probed = local_teletext::acquire(
+                                &extractor,
+                                &path,
+                                config.managed_claim.as_ref(),
+                            )
+                            .await?;
                             retry_sqlite_busy(|| {
                                 let probed = probed.clone();
                                 async {
@@ -388,7 +401,12 @@ async fn scan_local_library_with_progress_once(
                             })
                             .await?;
                             let artist_dir = Path::new(&library_path.path).join(&artist_folder);
-                            let probed = extractor.extract(&file_path).await?;
+                            let probed = local_teletext::acquire(
+                                &extractor,
+                                &file_path,
+                                config.managed_claim.as_ref(),
+                            )
+                            .await?;
                             retry_sqlite_busy(|| {
                                 let probed = probed.clone();
                                 async {
@@ -530,6 +548,7 @@ async fn scan_local_library_with_progress_once(
                     pool,
                     &library_path,
                     &extractor,
+                    config.managed_claim.as_ref(),
                     config.deep_scan,
                     |count| {
                         local_processed += count;
@@ -1098,7 +1117,20 @@ fn is_scannable_for_kind(path: &Path, media_kind: LibraryMediaKind) -> bool {
             LibraryMediaKind::Movies
                 | LibraryMediaKind::OtherVideos
                 | LibraryMediaKind::MusicVideos,
-            Some("mp4" | "mkv" | "avi" | "mov" | "m4v" | "webm")
+            Some(
+                "mp4"
+                    | "mkv"
+                    | "avi"
+                    | "mov"
+                    | "m4v"
+                    | "webm"
+                    | "ts"
+                    | "mts"
+                    | "m2ts"
+                    | "m2t"
+                    | "mpeg"
+                    | "mpg"
+            )
         ) | (
             LibraryMediaKind::Songs,
             Some("mp3" | "flac" | "m4a" | "aac" | "ogg" | "opus" | "wav")
@@ -1365,8 +1397,12 @@ async fn upsert_local_music_video(
     artist_id: i64,
     artist_folder: &Path,
     path: &Path,
-    probed: FfprobeMediaVersion,
+    probed: impl Into<LocalScanProbe>,
 ) -> Result<()> {
+    let LocalScanProbe {
+        media: probed,
+        mut teletext,
+    } = probed.into();
     let nfo_path = locate_music_video_nfo(path);
     let parsed_nfo = nfo_path
         .as_ref()
@@ -1412,6 +1448,7 @@ async fn upsert_local_music_video(
     let content_rating = (!content_ratings.is_empty()).then(|| content_ratings.join("/"));
 
     let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
+    teletext.check_claim(&mut tx, library_path.id).await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
     let now = encode_datetime(Utc::now());
@@ -1632,6 +1669,10 @@ async fn upsert_local_music_video(
     )
     .await?;
 
+    teletext
+        .persist(&mut tx, library_path.id, version_id, path)
+        .await?;
+    teletext.check_claim(&mut tx, library_path.id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -2932,9 +2973,14 @@ async fn upsert_local_file(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     path: &Path,
-    probed: FfprobeMediaVersion,
+    probed: impl Into<LocalScanProbe>,
 ) -> Result<()> {
+    let LocalScanProbe {
+        media: probed,
+        mut teletext,
+    } = probed.into();
     let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
+    teletext.check_claim(&mut tx, library_path.id).await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
 
@@ -3014,6 +3060,10 @@ async fn upsert_local_file(
         | LibraryMediaKind::RemoteStreams => {}
     }
 
+    teletext
+        .persist(&mut tx, library_path.id, version_id, path)
+        .await?;
+    teletext.check_claim(&mut tx, library_path.id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -3023,11 +3073,16 @@ pub(crate) async fn upsert_local_extra_video(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     path: &Path,
-    probed: FfprobeMediaVersion,
+    probed: impl Into<LocalScanProbe>,
     sub_kind: &str,
     parent_media_item_id: Option<i64>,
 ) -> Result<i64> {
+    let LocalScanProbe {
+        media: probed,
+        mut teletext,
+    } = probed.into();
     let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
+    teletext.check_claim(&mut tx, library_path.id).await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
 
@@ -3110,6 +3165,10 @@ pub(crate) async fn upsert_local_extra_video(
     }
     enrich_other_video_metadata(&mut tx, item_id, library_path, path, &probed).await?;
 
+    teletext
+        .persist(&mut tx, library_path.id, version_id, path)
+        .await?;
+    teletext.check_claim(&mut tx, library_path.id).await?;
     tx.commit().await?;
     Ok(item_id)
 }
@@ -4618,6 +4677,34 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn local_teletext_transport_discovery_keeps_video_and_nonvideo_filters_separate() {
+        use ersatzrs_domain::LibraryMediaKind;
+        use std::path::Path;
+
+        for suffix in ["ts", "TS", "mts", "m2ts", "m2t", "mpeg", "mpg"] {
+            let name = format!("Synthetic.{suffix}");
+            for kind in [
+                LibraryMediaKind::Movies,
+                LibraryMediaKind::OtherVideos,
+                LibraryMediaKind::MusicVideos,
+            ] {
+                assert!(super::is_scannable_for_kind(Path::new(&name), kind));
+                assert!(!super::is_scannable_for_kind(
+                    Path::new(&format!("._{name}")),
+                    kind
+                ));
+                assert!(!super::is_scannable_for_kind(
+                    Path::new("Synthetic.srt"),
+                    kind
+                ));
+            }
+            for kind in [LibraryMediaKind::Songs, LibraryMediaKind::Images] {
+                assert!(!super::is_scannable_for_kind(Path::new(&name), kind));
+            }
+        }
+    }
+
     use super::{
         is_scannable_for_kind, load_movie_nfo, local_metadata_kind, locate_movie_nfos,
         locate_music_video_artwork, membership_refresh_reason, path_hash, remote_stream_playlist,

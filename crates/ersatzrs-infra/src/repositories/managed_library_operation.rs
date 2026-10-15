@@ -2930,7 +2930,14 @@ fn decode_operation_row_with_id(
     })
 }
 
-pub(crate) async fn claim_is_current(
+/// Check the existing parent-aware lease inside the caller's transaction.
+///
+/// This checks tokens and expiry without extending or releasing the lease.
+/// Callers must separately bind their rows to the claim's actual library and
+/// recheck authority immediately before committing subsequent writes.
+/// # Errors
+/// Returns a repository error if the lease cannot be queried.
+pub async fn claim_is_current(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     claim: &ManagedLibraryOperationClaim,
 ) -> Result<bool> {

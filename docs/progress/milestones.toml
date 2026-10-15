@@ -2383,6 +2383,59 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-15 Local transactional descriptor checkpoint (component, not acceptance):
+The existing Local scanner now uses guarded acquisition for other videos, films,
+music videos, TV episodes and movie/show/season extras. Original managed claims
+reach each leaf transaction. The actual leaf library must match the actual lease,
+then the existing parent-aware claim gate checks tokens/owner/expiry before the
+first ordinary mutation and immediately before commit. Publication child scans
+reuse their actual parent lease. Reports bind the newly established exact source,
+file, media-version and subtitle-stream rows. No new schema or lease mechanism
+is added. Lost authority after ordinary writes requires whole-leaf rollback;
+a failed report replacement cannot become a successful skipped annotation.
+Held-source checks continue through commit. Source loss before any report skips
+only auxiliary reporting; after a report write it rolls back the entire leaf.
+Unmanaged callers and confirmed auxiliary failure retain ordinary media writes.
+All report pages remain ObservedPagesNotAcquired: descriptors do not certify
+page bytes, complete inventory, charset, readiness or selectable subtitles.
+
+Nine focused SQLite/owned-process tests prove genuine repository-acquired claims,
+wrong/forged library rejection, reclaimed ownership, in-transaction expiry rollback,
+actual publication-child parent authority, unmanaged/failed-auxiliary ordinary
+commits, pre/post-report source replacement and rescan parent replacement without
+stale reports. The first actual scan exposed an existing MPEG/TS discovery gap:
+its .ts input was skipped. The video-kind suffix list now includes ts/mts/m2ts/
+m2t/mpeg/mpg, with a regression retaining Songs/Images/sidecar/resource-fork filters.
+Actual pinned FFprobe n9.0-20261006 (first-party 2.0.6 Linux x64 artifact) public
+scans pass all four video families and seven physical files, including both TV
+extra levels and a movie trailer. Initial scan, unchanged deep rescan and one
+same-size/mtime file replacement preserve English/Dutch audio facts, ordinary SRT
+rows and media-file/version identities. Index3/PID0x103 reports retain200/type1
+and888/type2 without duplicates; unchanged revisions remain equal and only the
+replaced file receives a new revision. Nextest
+25284adb-df0d-4fef-a9e4-6f748476b2d3 passes the final native test (2.484s).
+
+Scanner unit run75139da1-9698-4e1f-a26a-3d7971681713 passes149/153; four HTTP
+mock tests fail only at sandbox loopback bind (EPERM). With loopback access,
+5e5588a0-c636-4b10-b293-78cb5b2122cc passes14 targeted tests (2.921s), including
+those four, all new helpers, discovery and the final additional managed auxiliary-
+failure case. Together these prove154 unique scanner units; no single full-green
+suite or full CI is claimed. Final strict all-target Clippy passes infra/scanner/
+web; formatting and architecture-lint pass. The native test pins only its outer
+scan future to resolve the propagated large-future lint without changing assertions.
+Prior unchanged acquisition-owner/app/ordinary-output evidence remains applicable.
+No admin or output-command behavior changed; no new browser/transport proof is
+claimed. Source hashes, pinned runtime/input digests, exact commands and historical
+failed trials are in tmp/phase9-source-storage/identity.json (SHA256
+7c20f1cc635d38a1d0f9c7f82e98dd44b6d59c7ebe7d5ad49683ebf15932b1ec).
+
+Next acquire real source-page/header/body/charset observations, then join the
+existing source-bound PlaybackSubtitle/cache identity and prove selected888 on
+the ordinary stream route. Supported remotes, missing-file/version selection,
+Windows/alias identity, full source inventory and all P9A-04 engine/editor/client/
+platform gates remain open. Milestone statuses/dependencies/acceptance are intact;
+report persistence and one representative native flow do not accept the engine.
+
 2026-10-15 guarded optional local-acquisition checkpoint:
 The separate FfprobeExtractor::extract_local_with_teletext API preserves the
 ordinary command, projection and no-total-timeout policy. Only explicit MPEG-TS

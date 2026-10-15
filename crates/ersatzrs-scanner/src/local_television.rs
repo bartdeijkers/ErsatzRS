@@ -25,6 +25,7 @@ use chrono::Utc;
 use ersatzrs_core::metadata_facets::{
     normalize_content_ratings, normalize_language_codes, preferred_facet_values, union_facet_values,
 };
+use ersatzrs_core::repositories::ManagedLibraryOperationClaim;
 use ersatzrs_domain::ExtraVideoClassification;
 use ersatzrs_infra::db::{Db, DbPool};
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, FfprobeMediaVersion};
@@ -36,6 +37,7 @@ use sqlx::{Row, Transaction};
 use tracing::{info, warn};
 
 use crate::library_folder;
+use crate::local_teletext::{self, LocalTeletextWrite};
 use crate::nfo::{self, EpisodeNfo, NfoActor, NfoGuid, TvShowNfo};
 use crate::{
     audio_stream_languages, encode_datetime, insert_media_item, insert_media_version_with_owner,
@@ -112,6 +114,7 @@ struct ExtraVideoWork {
 struct LocalEpisodeScan {
     metadata_complete: bool,
     probed: FfprobeMediaVersion,
+    teletext: LocalTeletextWrite,
     path_text: String,
     hash: String,
     title: String,
@@ -1220,6 +1223,7 @@ pub(crate) async fn sync_local_show_library(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     extractor: &FfprobeExtractor,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
     deep_scan: bool,
     mut on_episode: impl FnMut(usize),
 ) -> Result<usize> {
@@ -1288,7 +1292,9 @@ pub(crate) async fn sync_local_show_library(
         };
 
         for extra in &show.extra_files {
-            match sync_extra_video(pool, library_path, show_id, extra, extractor).await {
+            match sync_extra_video(pool, library_path, show_id, extra, extractor, managed_claim)
+                .await
+            {
                 Ok(()) => {
                     episode_count += 1;
                     on_episode(1);
@@ -1357,7 +1363,16 @@ pub(crate) async fn sync_local_show_library(
 
             let mut complete = true;
             for extra in &season.extra_files {
-                match sync_extra_video(pool, library_path, season_id, extra, extractor).await {
+                match sync_extra_video(
+                    pool,
+                    library_path,
+                    season_id,
+                    extra,
+                    extractor,
+                    managed_claim,
+                )
+                .await
+                {
                     Ok(()) => {
                         episode_count += 1;
                         on_episode(1);
@@ -1389,7 +1404,7 @@ pub(crate) async fn sync_local_show_library(
                     season.season_number,
                     season_folder.id,
                     episode_path,
-                    extractor,
+                    (extractor, managed_claim),
                 )
                 .await
                 {
@@ -1466,8 +1481,9 @@ async fn sync_extra_video(
     parent_media_item_id: i64,
     extra: &ExtraVideoWork,
     extractor: &FfprobeExtractor,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
 ) -> Result<()> {
-    let probed = extractor.extract(&extra.path).await?;
+    let probed = local_teletext::acquire(extractor, &extra.path, managed_claim).await?;
     upsert_local_extra_video(
         pool,
         library_path,
@@ -1860,9 +1876,9 @@ async fn sync_local_episode(
     season_number: i32,
     library_folder_id: i64,
     video_path: &Path,
-    extractor: &FfprobeExtractor,
+    probe: (&FfprobeExtractor, Option<&ManagedLibraryOperationClaim>),
 ) -> Result<bool> {
-    let scan = probe_local_episode(video_path, extractor).await?;
+    let scan = probe_local_episode(video_path, probe.0, probe.1).await?;
 
     for (attempt, delay_ms) in SQLITE_LOCK_RETRY_DELAYS_MS.iter().copied().enumerate() {
         match sync_local_episode_once(
@@ -1907,8 +1923,10 @@ async fn sync_local_episode(
 async fn probe_local_episode(
     video_path: &Path,
     extractor: &FfprobeExtractor,
+    managed_claim: Option<&ManagedLibraryOperationClaim>,
 ) -> Result<LocalEpisodeScan> {
-    let probed = extractor.extract(video_path).await?;
+    let acquired = local_teletext::acquire(extractor, video_path, managed_claim).await?;
+    let probed = acquired.media;
     let nfo_path = locate_episode_nfo(video_path);
     let nfo = nfo_path
         .as_ref()
@@ -1974,6 +1992,7 @@ async fn probe_local_episode(
     Ok(LocalEpisodeScan {
         metadata_complete: nfo_path.is_none() || nfo.is_some(),
         probed,
+        teletext: acquired.teletext,
         path_text,
         hash,
         title,
@@ -2038,7 +2057,11 @@ async fn sync_local_episode_once(
     video_path: &Path,
     scan: &LocalEpisodeScan,
 ) -> Result<()> {
+    // Each SQLite retry owns a fresh pre-write context. A failed transaction's
+    // report-written state must not leak into a later attempt.
+    let mut teletext = scan.teletext.clone();
     let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
+    teletext.check_claim(&mut tx, library_path.id).await?;
     let now = encode_datetime(Utc::now());
 
     let existing = find_existing_local_episode(
@@ -2102,6 +2125,9 @@ async fn sync_local_episode_once(
     update_media_version(&mut tx, version_id, &scan.probed).await?;
     replace_streams(&mut tx, version_id, &scan.probed.streams).await?;
     replace_chapters(&mut tx, version_id, &scan.probed.chapters).await?;
+    teletext
+        .persist(&mut tx, library_path.id, version_id, video_path)
+        .await?;
 
     let metadata_id = upsert_episode_metadata(
         &mut tx,
@@ -2216,6 +2242,7 @@ async fn sync_local_episode_once(
     )
     .await?;
 
+    teletext.check_claim(&mut tx, library_path.id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -2351,6 +2378,7 @@ mod tests {
         let scan = LocalEpisodeScan {
             metadata_complete: true,
             probed,
+            teletext: LocalTeletextWrite::default(),
             path_text: String::new(),
             hash: String::new(),
             title: String::new(),

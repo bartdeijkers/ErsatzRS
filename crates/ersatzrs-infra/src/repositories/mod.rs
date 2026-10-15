@@ -49,7 +49,7 @@ pub(crate) use ffmpeg_profile::{decode_hdr_content_light, decode_hdr_mastering_d
 pub use filler::SqliteFillerRepository;
 pub use graphics::SqliteGraphicsRepository;
 pub use library::SqliteLibraryRepository;
-pub use managed_library_operation::SqliteManagedLibraryOperationRepository;
+pub use managed_library_operation::{claim_is_current, SqliteManagedLibraryOperationRepository};
 pub use media_item::SqliteMediaItemRepository;
 pub use media_source::SqliteMediaSourceRepository;
 pub use metadata::SqliteMetadataRepository;

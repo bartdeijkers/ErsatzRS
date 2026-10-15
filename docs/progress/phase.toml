@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-03/P9A-04: guarded local acquisition and claim forwarding; connect transactional reports and exact-page normal-route selection; full engine acceptance open'
+current_focus = 'P9A-03/P9A-04: local claim-fenced descriptor persistence proven; connect actual source-page observations and exact-page normal-route selection; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -107,12 +107,16 @@ on the first shared physical input, matching the filter's first bitmap selection
 Independent888/200/plain pixel comparisons at a common media time, retained440Hz
 audio, targeted regressions, reviewed argv snapshots, strict Clippy and consumer
 checks pass. P9A-04 owns exact receipts and the corrected frame-ordinal oracle.
-P9A-03 now owns the guarded optional acquisition and original-claim forwarding
-checkpoint. Next connect its report-only observations to existing leaf writer
-transactions, retaining the held source and rechecking actual claim ownership;
-then join PlaybackSubtitle/cache identity and prove selected888 on normal routes.
-Report-only descriptors cannot become selected pages. Ordinary tracks and cleanup
-must survive auxiliary failure; path hashes/scan-write timestamps cannot invent revisions.
+P9A-03 owns the guarded acquisition and now-proven Local transactional attachment.
+Actual managed claims fence all video leaf writers, including television/extras;
+lease or post-write source loss rolls back the whole leaf. Native public scans
+prove two audio languages/SRT, exact parents, unchanged rescan and isolated
+same-size/mtime replacement. Nine helper tests plus discovery and combined154
+scanner units pass; the milestone owns receipts and corrected sandbox failures.
+Next acquire actual source-page/header/body/charset observations, join the existing
+PlaybackSubtitle/cache identity and prove selected888 on normal routes.
+Descriptors stay NotAcquired and cannot become selected pages. Supported remotes,
+missing-file/version selection and native Windows/alias acceptance remain open.
 Default/custom-script eligibility and slate clocks remain open.
 Preserve normal-route captions/alternate audio and transport-clock acceptance;
 prior slate clock gaps remain open. No general audit extension.
