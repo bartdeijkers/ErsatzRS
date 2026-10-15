@@ -584,8 +584,8 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-13): `f75abe5322f2a05099579df9e95acb675949c780`
-  — prep for release v26.11.3.
+- Latest fetched target (`origin/main`, 2026-10-15): `7a919e503a4004e9c81c7aa509b9fe6a67d7de61`
+  — perf: canvas region (#3093).
 - Ledger: **210 commits**, **2 post-v26.11.1 pending**; UCU-09 has **0 pending**.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
@@ -655,6 +655,9 @@ remain. See `post-publication-cleanup.json`.
   Maintainer decision (2026-10-14): each window ends at an upstream release, so
   UCU-10 runs to row 232 (v26.11.2) and UCU-11 covers rows 233-236, ending at
   row 236 (v26.11.3). Rows fetched after that belong to the next window.
+  The 2026-10-15 refresh opens UCU-12 under that rule: row 236 closed UCU-11, so
+  the canvas region commit starts the new window as pending row 237. All 236
+  existing SHA/subject pairs remain an exact prefix.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows 209-213 carry the
   `ucu-10` prefix; the matching milestone still has to be added to the tracker.
@@ -5838,3 +5841,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 234 | `388ab6a0` | chore: update next (#3091) | | | | ucu-11; provisional: Adapt, folded into the row 214/231 pin decision. Upstream leaves the released v0.2.1 again for `v0.2.2-3b93b660-develop` one day later, which is worth noting for the rebase choice: their pin follows develop between releases, so ours should track a release tag rather than chase each snapshot. Claude 2026-10-13 triage. |
 | 235 | `8c3636c1` | fix: mpegts initial burst (#3092) | | | | ucu-11; provisional: Covered in the pipeline, Port in the shipped scripts. Upstream adds `-readrate_initial_burst 6` after `-readrate 1.0` so clients like Plex fill their buffer and start sooner, in both the generated command and its embedded MPEG-TS script. ErsatzRS already emits the flag from the pipeline with a burst of 8 (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:3427`), but neither shipped script carries it (`assets/Scripts/MpegTs/run.sh:3`, `assets/Scripts/MpegTs/run.bat:3`), so a channel using the script path starts without the burst. The audit should align the scripts and decide whether 8 or upstream's 6 is the value we keep. Claude 2026-10-13 triage. |
 | 236 | `f75abe53` | prep for release v26.11.3 | | | | ucu-11; provisional: N/A (upstream CHANGELOG heading, date and compare links for v26.11.3, plus the pin moving from the `v0.2.2` develop snapshot to the released `v0.2.2` tag), like rows 203, 208 and 232. Two things are worth carrying forward: upstream released v26.11.1, v26.11.2 and v26.11.3 within a day, and it pins a develop snapshot between releases and the release tag at each one — which is the pattern the row 214/231 pin decision should follow rather than chasing snapshots. Claude 2026-10-13 triage. |
+| 237 | `7a919e50` | perf: canvas region (#3093) | | | | ucu-12; first row of the window opened after v26.11.3. Provisional: Port, with a scope question. Watermark-only canvases now render just the rectangle the watermarks cover instead of the whole frame, which cuts CPU and GPU upload for animated or opacity-expression watermarks; the region travels signed from the playout so a changed channel cannot widen it, and remote/URL watermarks still get the full frame. The pin also moves to `v0.2.3-498e4555-develop`. ErsatzRS already bypasses the canvas entirely for plain watermarks (row 173, direct layers), so the gain here only applies to the cases we still send through the canvas: animated and opacity-expression watermarks (`crates/ersatzrs-infra/src/next_engine/graphics.rs:69`, `next_engine/canvas_render.rs`). The audit should measure whether a region is worth it for those, and keep the signed-placement property if it is. Claude 2026-10-15 triage. |
