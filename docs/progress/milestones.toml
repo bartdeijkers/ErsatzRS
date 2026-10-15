@@ -3034,6 +3034,85 @@ Fetched remote main61d1786c contains UCU11; original CI38654305604 has matching
 successful unaffected jobs, with Next recovery38657883005 and both-browser
 recovery38666094421 terminal success. This is composed CI, not a new full green
 exact-source run. Integrate remote after the route checkpoint; no push occurs.
+After99d93228, diagnostic trial3 d27cd9c4-99c9-4022-95f6-bdebcde2b190
+fails the same EOF7.270s and retains1,734,488bytes of partial transport. Its
+media1.6s RGB differs from independent888 by228 byte-values versus829525 for
+200 and497142 for plain AV. Selected888 burn is present in the failed prefix;
+this is not successful route or timing acceptance. TSDuck finds no sync/transport/
+continuity/PTS/PCR errors before truncation, with genuine eng audio and authored
+PID512 at4,953,600bit/s. A separate finite12s FFmpeg diagnostic completes11.59s
+with7,153,776bytes and maximum inter-arrival gap341ms; sparse caption updates
+alone do not reproduce the routed failure. An initial diagnostic without a
+finite output interval exceeds22s and is killed/reaped; it proves no route claim.
+Next expose the actual typed forwarding error (the former log mislabels every
+pump error as writer failure), then run the routed trial with the same strict
+pixel/audio/transport/capture criteria. The separate legacy typed ordinary-caption
+recovery correction is implemented, awaiting focused/runtime verification. Both
+initial and hardware retries build ordinary fallback through the existing typed
+builder, retaining cursor/profile/capabilities; rejection chooses the actual
+command before output/graph seals. Three helper cases and an actual receipt with
+post-preparation source-mtime change are added. Diagnostic routed trial4 plus
+those cases is now running; poll the current handle in active-check.json before
+any restart. trial3-result.json retains the terminal prior result. No trial4
+success is claimed. Strict web Clippy currently needs its final rerun after one
+nonsemantic diagnostic-test closure correction; earlier constructor argument
+ordering in two new test markers is corrected. No pacing/policy limits change.
+web-route-3.log and sparse-caption-probe.json own the existing diagnostic proof.
+Trial4 run6add18d0-621e-4bf4-97fb-4e18fdc366e9 proves all3 helper cases and
+the actual post-preparation changed-source receipt rejection, then fails the same
+route7.780s. Accurate logging identifies TeletextOutput delivery Deadline, not
+an invalid source page or malformed prefix. Capture/transport/late bounds remain.
+The accepted UCU11/c41601ba six-second HLS remux burst is adopted verbatim with
+its script/Next snapshots. This does not affect the actual legacy concat lane;
+its counterpart now uses the same bounded6s start acquisition followed by1x
+read pacing. FFmpeg concat snapshot dab35f93-e3a5-4aea-8489-a413bd13b704 passes;
+only the initial burst changes, with mapping, timestamps, muxrate and PCR intact.
+The current environment lacks cargo-insta despite the repository note; the
+single generated concat snapshot is reviewed byte-exactly, accepted manually
+and rerun. Existing segmenter snapshots pass2 cases. This is component adoption,
+not the complete remote merge or route acceptance. Trial5 run65b60677-588f-4c86-
+bcdf-897ec126dfec passes the affected script snapshot but still fails the same
+route Delivery Deadline7.244s. The experimental concatburst and its snapshot are
+reverted: no correction is claimed for that failed hypothesis. Accepted UCU11
+HLS/script adoption remains. Next test the producer, not another wrapper burst:
+only a paced selected exact-page bitmap source should reuse the existing bounded
+8s native startup burst, preserving explicit bursts/unpaced inputs and all clock/
+output limits. All14 experimental command cases pass, but actual strict route6
+8640e7bd-7214-4c38-91b0-497c9ce2e1cd still fails Delivery Deadline5.172s.
+The producer burst and its3 new tests are reverted; their passing argv results
+are not evidence of a current correction. The same run independently passes the
+actual Next segmenter-wrapper snapshot. No clock or buffer limits change.
+Next distinguish source-read, complete-window preparation and sink-write deadline
+failures using existing bounded timing data. The same real source/scanner/
+publication/capture fixture is parameterized for an additional Hybrid case,
+covering the actual native HLS producer plus final authored wrapper; it is not
+yet run. Raw HLS segment authored-page carriage remains separately unproved.
+Trial7 dc26343b-abee-439f-85e6-977b18516346 passes all3 recovery helpers and
+both Next/script snapshots. The actual Off-nld baseline now passes all pixel,
+660Hz audio, authoredPID512/page200, TSDuck and default2slot/release oracles
+(11,156 packets). The subsequent Burn-eng still fails before the required2MiB.
+Bounded stage logs identify source-read timeout at packet9489/elapsed6.311734s,
+with deadline6.310639s; prior prepared windows are written on time. This narrows
+the defect to the encoded-source supply on the caption lane, not ordinary AV or
+an observed slow sink. It does not yet prove caption-lane recovery or acceptance.
+Trial8 35ee1b6a-cb3f-425b-ab28-37f6b89f78c9 uses a temporary same-PID exec
+observer for actual synthetic argv/progress: Off-nld passes again; Burn again
+fails source-read, at packet11004. The actual caption producer runs around
+0.55-0.67x mid-programme while ordinary AV runs around1.1x. Exact standalone
+producer replay reaches2MiB only after6.626s; a single filter thread (7.274s)
+and correctly grouped subtitle-duration/heartbeat options (6.369s) do not fix it.
+The initial heartbeat diagnostic had an input/output option-position error;
+its corrected replay is the only meaningful result. No such flags enter Rust.
+The packaged FFmpeg already contains its sparse-readrate patch; switching to
+the byte-identical acceptance-build executable is not a new hypothesis.
+A diagnostic replay removing only producer input readrate completes0.326s and
+reaches2MiB at0.102s, with the SAME7,107,528-byte transport SHA2563967353e46d84659
+3389bbcabbddf566cb70914ab3fc24f1a6bf17785a3ea22f. This isolates pacing interaction
+without proving routed safety. No production pacing change is accepted from
+that standalone result. Next locate a typed internal-producer seam which retains
+ordinary final-wrapper clock/backpressure/bounds, then prove actual legacy and
+Hybrid playback. General source/seek windows and remaining engine gates stay open.
+active-check.json records current checks; remaining captions/Hybrid are unproved.
 Canonical receipts: tmp/phase9-native-source-route/. No milestone closes.
 
 2026-10-15 exact-file caption candidate/selection checkpoint (not route/engine acceptance):

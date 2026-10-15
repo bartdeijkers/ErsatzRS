@@ -6196,10 +6196,10 @@ async fn supervise_stream_process_with_retry_context(
         }
         result = pump => {
             let empty_output = matches!(&result, Err(TeletextPumpError::EmptyOutput));
-            if result.is_err() && !empty_output {
-                // The body side is gone; stop the process instead of letting
-                // it block on a pipe nobody drains.
-                tracing::debug!(channel_number = %channel_number, "channel stream body writer failed; killing ffmpeg");
+            if let Some(error) = result.as_ref().err().filter(|_| !empty_output) {
+                // Forwarding failed; stop the process instead of letting it
+                // block on an output nobody drains.
+                tracing::debug!(channel_number = %channel_number, %error, "channel stream output forwarding failed; killing ffmpeg");
                 let _ = child.start_kill();
             }
             let wrote_media = !empty_output && result.as_ref().map_or(true, |bytes| *bytes > 0);

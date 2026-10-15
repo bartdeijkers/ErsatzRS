@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect exact-file qualified caption selection to ordinary route seek/cue and native child ownership; full engine acceptance open'
+current_focus = 'P9A-04: correct caption-producer pacing in the ordinary routed flow; Off AV/audio/page200 baseline verified, full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,12 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Current concrete blocker: the real Local caption producer supplies encoded bytes
+below real time, causing source-read deadlines in the final teletext output. The
+same12s source passes Off AV/alternate-audio/page200 and default-capacity checks.
+P9A-04 owns actual argv/progress and byte-identical unpaced diagnostic evidence;
+next correct the typed producer/final-clock interaction and rerun strict legacy
+and Hybrid captures. No deadline/buffer waiver or full engine acceptance is made.
 2026-10-15 actual-worker integration checkpoint underway: P9A-04 owns passing
 shared admission/real-child ownership and genuine Local-scan/runtime receipts.
 Legacy/HLS wiring now retains exact file identity and binds sources to each

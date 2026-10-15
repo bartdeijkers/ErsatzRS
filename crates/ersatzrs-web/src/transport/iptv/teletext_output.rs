@@ -284,10 +284,14 @@ async fn forward_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
                 prefetch.source.read(&mut prefetch.scratch[..available]),
             )
             .await
+            .inspect_err(|error| {
+                tracing::debug!(stage = "source-read", first_packet = progress.emitted, elapsed = ?epoch.elapsed(), deadline = ?deadline.saturating_duration_since(epoch), %error, "teletext output forwarding stage failed");
+            })
             .map_err(|_| source_deadline_error(started))?
             .map_err(|error| TeletextPumpError::Read(error.kind()))?
         };
         if Instant::now() >= deadline {
+            tracing::debug!(stage = "after-source-read", first_packet = progress.emitted, elapsed = ?epoch.elapsed(), deadline = ?deadline.saturating_duration_since(epoch), "teletext output forwarding deadline exceeded");
             return Err(source_deadline_error(started));
         }
         if read == 0 {
@@ -396,7 +400,9 @@ impl ForwardProgress {
             )
             .map_err(|_| TeletextOutputError::Arithmetic)?;
             if count <= gate.retained_packets()? {
-                if gate.prepare_window(count, epoch.elapsed())? {
+                if gate.prepare_window(count, epoch.elapsed()).inspect_err(|error| {
+                    tracing::debug!(stage = "prepare-window", first_packet = self.emitted, packet_count = count, elapsed = ?epoch.elapsed(), %error, "teletext output forwarding stage failed");
+                })? {
                     let schedule = gate.pending_schedule()?;
                     if let Some(control) = &self.control {
                         control.trace_window_prepared(gate, &schedule, epoch.elapsed());
@@ -452,6 +458,7 @@ async fn write_window<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     prefetch: &mut SourcePrefetch<'_, R>,
     control: Option<&PumpControl>,
 ) -> Result<(), TeletextPumpError> {
+    tracing::debug!(first_packet = schedule.first_packet(), packet_count = schedule.packet_count(), elapsed = ?epoch.elapsed(), first_due = ?schedule.first_due(), last_due = ?schedule.last_due(), "teletext output starting window");
     for index in 0..schedule.packet_count() {
         let packet = gate.pending_packets(epoch.elapsed())?[index];
         let due = schedule.packet_due(index)?;
@@ -470,7 +477,10 @@ async fn write_window<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
                     .map_err(|_| TeletextOutputError::Deadline)?
                     .map_err(|error| TeletextPumpError::Write(error.kind()))
             })
-            .await?;
+            .await
+            .inspect_err(|error| {
+                tracing::debug!(stage = "packet-delivery", first_packet = schedule.first_packet(), index, elapsed = ?epoch.elapsed(), due = ?due.saturating_duration_since(epoch), deadline = ?deadline.saturating_duration_since(epoch), %error, "teletext output forwarding stage failed");
+            })?;
         if index == 0 {
             if let Some(control) = control {
                 control.trace_first_packet_written(

@@ -566,6 +566,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Distinguish teletext source-read, window-preparation and packet-delivery
+  failures in bounded DEBUG diagnostics, retaining the actual forwarding error
+  when a stream is stopped. Delivery, buffering and cleanup rules are unchanged.
 - Restore selected accepted teletext on generated native legacy and hybrid MPEG-TS
   wrappers without rerunning addons. Missing or invalid policies and unavailable
   profiles preserve ordinary playback, selected audio language and explicit
