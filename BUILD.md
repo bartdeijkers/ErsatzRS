@@ -303,6 +303,29 @@ repeat any checks invalidated by the correction. This focused run cannot suppres
 a later full run through Preflight and does not establish full green CI or
 satisfy the exact-candidate release gate above.
 
+### Retry the failed browser fixtures on a corrected revision
+
+Use the bounded recovery mode to run one browser's Block preview, teletext static
+authoring (JavaScript enabled, light then dark) and editor (JavaScript enabled,
+light) cases. The authoring predecessor is included to reproduce retained
+history before the failed dark-mode case.
+
+```bash
+gh workflow run ci.yml --ref <branch> -f runner=self-hosted -f browser_only=chromium
+# Use browser_only=firefox for the same four cases in Firefox.
+```
+
+This runs one browser job with the existing matched Leptos build, pinned runtime
+staging and isolated application runner. Normal CI still runs both full browser
+suites. The `CI (Browser recovery)` title identifies partial evidence and cannot
+suppress full CI through Preflight. Its browser-specific concurrency group
+preserves other running gates. Combining this mode with `test_only` or
+`next_engine_only` fails before checkout or building.
+
+Record the repaired SHA and the earlier full run when reusing unaffected
+results. This four-case recovery is scoped evidence; it does not establish full
+green CI or satisfy the exact-candidate release gate.
+
 ## Inner-loop strategy (don't recompile the source 5×)
 
 A single task often runs five *different* compilation graphs — and because Cargo

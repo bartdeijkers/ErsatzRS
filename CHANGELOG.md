@@ -278,8 +278,9 @@ release section when tagging a release.
 
 ### Changed
 
-- Allow manually dispatched Next-only CI for corrective commits without cancelling
-  a running full check. Focused runs remain distinct from complete CI evidence.
+- Allow manually dispatched Next-only and bounded browser recovery CI for
+  corrective commits without cancelling a running full check. Focused runs
+  remain distinct from complete CI evidence.
 
 - Start HLS-to-MPEG-TS playback with a six-second read burst in the generated
   wrapper and bundled Unix/Windows scripts, then resume realtime pacing.
@@ -550,6 +551,9 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Keep browser fixtures isolated from retained teletext revision/publication
+  identities, and verify valid midnight overlaps in real Block preview tests.
 
 - Allow callers to omit Next's HLS-only subtitle rendition with `subtitles=false`
   and advertise it only for Convert, without marking it as the default track.

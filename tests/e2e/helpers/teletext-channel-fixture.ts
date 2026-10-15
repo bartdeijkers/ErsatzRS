@@ -135,14 +135,19 @@ export class TeletextChannelFixture {
     if (!profile) throw new Error('Disposable E2E database lacks an FFmpeg profile.');
     this.database.exec('BEGIN IMMEDIATE;');
     try {
-      // Playback histories intentionally retain channels. Reserve above existing
-      // IDs/numbers, including the tables sharing these IDs in playback fixtures.
+      // Immutable designs/publication histories outlive deleted fixture channels.
+      // Reserve their identities as well as existing IDs/numbers and shared tables.
       const tables = ['Channel', ...(this.playback ? ['Resolution', 'FFmpegProfile',
         'MediaSource', 'PlexMediaSource', 'Library', 'PlexLibrary', 'LibraryPath', 'Playout'] : [])];
       const maxima = tables.map(table => `SELECT MAX("Id") AS id FROM "${table}"`);
       const { base } = this.database.prepare(`SELECT MAX(id) + 1 AS base FROM (
         SELECT 599999 AS id UNION ALL ${maxima.join(' UNION ALL ')}
         UNION ALL SELECT MAX(CAST("Number" AS INTEGER)) FROM "Channel"
+        UNION ALL SELECT MAX(CASE "DocumentVersion"
+          WHEN 1 THEN json_extract(CAST("Document" AS TEXT),'$.selection.channel_id')
+          WHEN 2 THEN json_extract(CAST("Document" AS TEXT),'$.effective_selection.channel_id')
+        END) FROM "TeletextDesignRevision"
+        UNION ALL SELECT MAX("ChannelId") FROM "TeletextPublicationRequest"
       )`).get() as { base: number };
       this.channels = [base, base + 1];
       for (const [index, id] of this.channels.entries()) {

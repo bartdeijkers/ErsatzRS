@@ -73,12 +73,19 @@ Focused startup/pacing captures pass with five periodic samples and no low
 intervals; Native starts4s and Next Convert2s. All236 ledger rows are accepted;
 the baseline table advances with them. Native, stored choices, international
 tracks and approved explicitly unverified hardware/platform debt remain.
-Full CI38654305604 is running on pushed c41601ba. Its Next job passes416/417;
-one retained-caption assertion still assumes per-segment clipping. The corrected
-actual case passes1/1 while preserving full mapped cues, cuts, audio and video.
-Affected strict infra lint passes. Push the corrective slice and dispatch only Next through
-the guarded existing-workflow focused mode. Preserve the original unaffected
-jobs and do not claim a focused success as full green exact-commit CI.
+Original full CI38654305604 on c41601ba has passed every non-browser job
+except its one retained-caption assertion, corrected on033bd29f. Focused Next
+run38657883005 is terminal success:417 regressions and both real-host smoke
+checks pass, with exact source/runtime/JUnit evidence retained. It schedules
+only Next and leaves the original run uncancelled. Original Chromium finishes
+361 passed,5 skipped,3 failed: valid midnight Block overlap and retained
+teletext fixture identities require test-only corrections. All four affected/
+predecessor headed Chromium cases now pass on one fresh DB with the retained
+matched bundle. Dispatch only their bounded browser recovery on the corrected
+revision; finish original Firefox acceptance, record combined evidence and close out the
+application checkout/cache cleanup. Do not claim this focused success as a new
+complete green exact-commit CI run. The completed Next source-candidate local
+worktree/branch are already removed with their remote commit/evidence retained.
 Application release remains separate.
 Maintainer-authorized UCU-10 cleanup removed both completed worktrees/local
 branches and unused Linux/Windows caches; evidence remains under

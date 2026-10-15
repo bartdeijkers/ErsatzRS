@@ -170,6 +170,28 @@ function blockNameInput(page: Page): Locator {
   return page.getByText('Block Name', { exact: true }).locator('..').locator('input');
 }
 
+function expectedPreviewCounts(start: number, finish: number): number[] {
+  const day = 24 * 60 * 60 * 1_000;
+  const blockDuration = 30 * 60 * 1_000;
+  expect(Number.isFinite(start)).toBe(true);
+  expect(Number.isFinite(finish)).toBe(true);
+  expect(finish).toBeGreaterThanOrEqual(start);
+
+  // The one-day preview includes today's midnight block while it overlaps
+  // the request, plus tomorrow's block. HTTP Date has one-second precision.
+  const samples = [start, finish];
+  for (let midnight = Math.floor(start / day) * day; midnight <= finish; midnight += day) {
+    for (const offset of [0, 1, blockDuration, blockDuration + 1]) {
+      const boundary = midnight + offset;
+      if (boundary >= start && boundary <= finish) samples.push(boundary);
+    }
+  }
+  return [...new Set(samples.map((time) => {
+    const sinceMidnight = time % day;
+    return sinceMidnight > 0 && sinceMidnight <= blockDuration ? 2 : 1;
+  }))];
+}
+
 async function assertPreviewGeometry(page: Page): Promise<void> {
   const metrics = await page.locator('main').evaluate((main) => {
     const preview = main.querySelector('[data-block-preview]');
@@ -244,18 +266,39 @@ async function exerciseDraftPreview(
     }
     await route.continue();
   });
+  const clockBefore = await page.request.get('/healthz');
+  expect(clockBefore.ok()).toBe(true);
+  const previewResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname.startsWith('/admin-api/preview_block_playout'),
+  );
   await page.getByRole('button', { name: /preview block playout/i }).click();
   await expect(preview).toHaveAttribute('data-state', 'loading');
   await expect(page.locator('[data-preview-loading]')).toBeVisible();
   await expect(preview).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
   await expect(page.locator('[data-preview-ready]')).toBeVisible();
-  await expect(page.locator('[data-preview-ready] tbody tr')).toHaveCount(1);
-  await expect(page.locator('[data-preview-ready] tbody tr').first()).toContainText(
-    seed.mediaTitle,
+  const response = await previewResponse;
+  expect(response.ok()).toBe(true);
+  const rows = await response.json();
+  expect(Array.isArray(rows)).toBe(true);
+  const allowedCounts = expectedPreviewCounts(
+    Date.parse(clockBefore.headers()['date']),
+    Date.parse(response.headers()['date']) + 999,
   );
-  await expect(page.locator('[data-preview-ready] tbody tr').first()).toContainText(
-    '00:05:00',
-  );
+  expect(allowedCounts).toContain(rows.length);
+  expect(rows).toEqual(Array.from({ length: rows.length }, () => ({
+    start: '00:00:00',
+    finish: '00:05:00',
+    title: seed.mediaTitle,
+    duration: '00:05:00',
+  })));
+  const renderedRows = page.locator('[data-preview-ready] tbody tr');
+  await expect(renderedRows).toHaveCount(rows.length);
+  for (let index = 0; index < rows.length; index += 1) {
+    await expect(renderedRows.nth(index).locator('td')).toHaveText([
+      '00:00:00', '00:05:00', seed.mediaTitle, '00:05:00',
+    ]);
+  }
   await assertPreviewGeometry(page);
   await page.screenshot({
     path: screenshotPath(testInfo, `block-preview-${viewportName}`),

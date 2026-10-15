@@ -22731,6 +22731,46 @@ same commit. A demonstrated correction requires affected verification, without
 routinely rerunning the whole pipeline. Application release remains separate.
 """
 evidence = """
+Browser fixture recovery (2026-10-15): original Chromium job116160434131
+finishes361 passed,5 skipped,3 failed. The real Block preview response correctly
+includes two daily blocks during the first30 minutes after midnight; its test
+now derives the exact permissible count from server-clock bounds and verifies
+every complete API/rendered row. Two teletext assertions expose reused channel
+IDs whose immutable design/publication histories survive fixture disposal.
+The existing transactional allocator now reserves those retained version1/2
+owners, including tombstones, without deleting history or weakening assertions.
+All four affected/predecessor headed Chromium cases pass in2.6m on one fresh DB
+with the retained matched production bundle; original scheduling/hydration code
+is unchanged. Evidence: tmp/ucu11-runtime-audit/browser-recovery-matched/.
+An initial attempt with the later default-SSR binary exposes a real build-mode
+hydration mismatch and is stopped; structural asset200 checks alone do not
+establish functional hydration. The retained matched bundle passes unchanged.
+Existing-workflow bounded browser recovery selects exactly these four cases,
+one browser, with separate concurrency and partial titles; actionlint and32
+routing combinations pass. Original Firefox continues; affected browser CI
+on the corrective revision remains required, reusing all unaffected gates.
+
+Focused CI recovery accepted (2026-10-15): run38657883005 is terminal success
+on exact033bd29faaaa57244f6320d19533ddb968c2e709. Only Next runs; all unrelated
+jobs are skipped and original full CI38654305604 remains uncancelled. All417
+Next regressions pass in330.100s, including the corrected retained-caption
+case7.471s; both actual Next Burn/HLS lifecycle/preview and Convert host smokes
+pass. Retained JUnit, source SHA, pinned Linux payload SHA and smoke diagnostics
+are independently checked under tmp/ucu11-runtime-audit/ci-next-only-38657883005/;
+ucu11-next-only-ci-result.json records the exact revision and job scope. The
+Linux runtime payload matches the published manifest. This supersedes the
+pending recovery below; the original one-test failure remains history, and the
+focused success is not represented as a complete green exact-commit CI run.
+Original c41601ba Format, dependency audit, Rust Test, Clippy, Commit lint and
+documentation jobs pass. Chromium/Firefox acceptance remains pending.
+
+Completed source-candidate cleanup: the clean local ucu11-next022-ci worktree
+and build/ucu11-next022-candidate branch are removed after verifying remote
+100f2d35615584f6429d047484d67081442d3bb3 and no process users. Only its Python
+bytecode cache is discarded; canonical macOS/source/package proof remains in
+the owning audit and remote history. Active application caches/evidence remain
+until browser CI and delivery closeout finish.
+
 CI recovery (2026-10-15): authorized full run38654305604 tests exact c41601ba.
 Its Next job116160433921 reports416/417 passing and one retained-caption
 fixture failure. The fixture incorrectly requires cue ends inside each HLS

@@ -1,5 +1,5 @@
 name: CI
-run-name: ${{ inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
+run-name: ${{ inputs.browser_only && inputs.browser_only != 'none' && 'CI (Browser recovery)' || inputs.next_engine_only && 'CI (Next engine only)' || inputs.test_only && 'CI (Test only)' || 'CI' }}
 
 on:
   pull_request:
@@ -58,6 +58,15 @@ on:
         type: boolean
         required: false
         default: false
+      browser_only:
+        description: Run the four failed-fixture recovery cases in one browser (partial CI; incompatible with other focused modes)
+        type: choice
+        required: false
+        default: none
+        options:
+          - none
+          - chromium
+          - firefox
       reset_target_dir:
         description: Wipe the self-hosted runner's persistent CARGO_TARGET_DIR before building (use if a build looks stale/corrupted)
         type: boolean
@@ -69,10 +78,10 @@ on:
 # cycles nobody waits for, so cancel superseded runs per ref (PR branches and
 # main) within each runner pool. Keeping the pools independent also lets the
 # on-demand hosted fallback proceed if a self-hosted runner is unavailable,
-# and vice versa. Next-only repairs use a separate group so they cannot cancel
+# and vice versa. Focused repairs use separate groups so they cannot cancel
 # a still-running full gate whose unaffected evidence must be preserved.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.next_engine_only && '-next-engine-only' || '' }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}-${{ inputs.runner == 'github-hosted' && 'github-hosted' || 'self-hosted' }}${{ inputs.browser_only && inputs.browser_only != 'none' && format('-browser-{0}', inputs.browser_only) || inputs.next_engine_only && '-next-engine-only' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -107,7 +116,7 @@ jobs:
   # queue time to save a duplicate that is comparatively rare.
   preflight:
     name: Preflight
-    if: ${{ !inputs.test_only && !inputs.next_engine_only }}
+    if: ${{ !inputs.test_only && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -136,7 +145,8 @@ jobs:
             const proven = runs.filter(
               (run) => run.id !== context.runId && run.conclusion === 'success'
                 && run.display_title !== 'CI (Test only)'
-                && run.display_title !== 'CI (Next engine only)',
+                && run.display_title !== 'CI (Next engine only)'
+                && run.display_title !== 'CI (Browser recovery)',
             );
             core.setOutput('skip', proven.length > 0 ? 'true' : 'false');
             if (proven.length > 0) {
@@ -201,7 +211,7 @@ jobs:
 
   test:
     name: Test
-    if: ${{ always() && !cancelled() && !inputs.next_engine_only && inputs.runner != 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
+    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner != 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # test build on the serial self-hosted runner.
@@ -270,7 +280,7 @@ jobs:
 
   test_hosted:
     name: Test (${{ matrix.shard }})
-    if: ${{ always() && !cancelled() && !inputs.next_engine_only && inputs.runner == 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
+    if: ${{ always() && !cancelled() && !inputs.next_engine_only && (!inputs.browser_only || inputs.browser_only == 'none') && inputs.runner == 'github-hosted' && (inputs.test_only || needs.fmt.result == 'success') }}
     runs-on: ubuntu-24.04
     # Keep cold workspace linking within the hosted job lifetime by splitting
     # the large web crate's library and binary test targets. Preserve native
@@ -333,7 +343,7 @@ jobs:
         shell: bash
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
     needs: fmt
-    if: ${{ always() && !cancelled() && (inputs.next_engine_only || (!inputs.test_only && needs.fmt.result == 'success')) }}
+    if: ${{ always() && !cancelled() && (!inputs.browser_only || inputs.browser_only == 'none') && (inputs.next_engine_only || (!inputs.test_only && needs.fmt.result == 'success')) }}
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: ${{ inputs.runner == 'github-hosted' && '8' || '2' }}
@@ -422,6 +432,7 @@ jobs:
     # Gate on the fast fmt job so formatting failures do not burn a browser
     # E2E build.
     needs: fmt
+    if: ${{ always() && !cancelled() && ((inputs.browser_only && inputs.browser_only != 'none') || (!inputs.test_only && !inputs.next_engine_only && needs.fmt.result == 'success')) }}
     # One job per Playwright project. The suite runs on a single worker because
     # it mutates shared application state in its test database (TEST.md): each
     # job runs scripts/e2e/playwright-e2e.sh separately, and that script
@@ -442,12 +453,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 1
-      matrix:
-        include:
-          - project: chromium
-            port: "18409"
-          - project: firefox
-            port: "18410"
+      matrix: ${{ fromJSON(inputs.browser_only == 'chromium' && '{"include":[{"project":"chromium","port":"18409"}]}' || inputs.browser_only == 'firefox' && '{"include":[{"project":"firefox","port":"18410"}]}' || '{"include":[{"project":"chromium","port":"18409"},{"project":"firefox","port":"18410"}]}') }}
     env:
       # Keep CI independent from the maintainer's live admin server on 8409.
       ERSATZRS_E2E_PORT: ${{ matrix.port }}
@@ -456,6 +462,11 @@ jobs:
       ERSATZRS_E2E_RESULT_DIR: test-results/${{ matrix.project }}
       ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.6
     steps:
+      - name: Validate dispatch mode
+        if: ${{ inputs.browser_only && inputs.browser_only != 'none' && (inputs.test_only || inputs.next_engine_only) }}
+        run: |
+          echo "::error::browser_only, test_only and next_engine_only are mutually exclusive; select one focused gate."
+          exit 1
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
@@ -505,13 +516,21 @@ jobs:
           cargo run --locked -p ersatzrs-ffmpeg --example provision_runtime -- "$runtime_tmp/ffmpeg" "$GITHUB_ENV"
           echo "ETV_NEXT_FOLDER=$runtime_tmp/next" >> "$GITHUB_ENV"
           echo "ERSATZRS_FFMPEG_DIR=$runtime_tmp/ffmpeg" >> "$GITHUB_ENV"
-      - name: Full Playwright E2E suite
+      - name: Playwright E2E suite or bounded fixture recovery
+        env:
+          BROWSER_ONLY: ${{ inputs.browser_only }}
+          BROWSER_PROJECT: ${{ matrix.project }}
         run: |
           export ErsatzRS_FFMPEG__PATH="$FFMPEG_PATH"
           export ErsatzRS_FFPROBE__PATH="$FFPROBE_PATH"
           ffmpeg_bin_dir="$(dirname "$FFMPEG_PATH")"
           export PATH="$ffmpeg_bin_dir:$PATH"
-          scripts/e2e/playwright-e2e.sh --project=${{ matrix.project }}
+          playwright_args=(--project="$BROWSER_PROJECT")
+          if [[ -n "$BROWSER_ONLY" && "$BROWSER_ONLY" != 'none' ]]; then
+            playwright_args+=(block-preview.spec.ts teletext-authoring-flow.spec.ts teletext-editor-flow.spec.ts
+              --grep 'previews unsaved draft state through the real scheduler in responsive layouts$|teletext static authoring flow \(JavaScript true, dark (false|true)\)$|teletext editor file flow \(JavaScript true, dark false\)$')
+          fi
+          scripts/e2e/playwright-e2e.sh "${playwright_args[@]}"
       - name: Upload Playwright diagnostics
         if: always()
         uses: actions/upload-artifact@v7
