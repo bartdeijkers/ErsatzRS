@@ -70,6 +70,7 @@ pub(super) async fn prepare(
 /// Returns an owned replacement only when the optional caption was rejected.
 /// The caller seals output/graph identity after choosing this actual command.
 pub(super) async fn before_open(
+    command: &FfmpegCommand,
     context: &mut StreamDenialRetry,
     reservation: Option<&ActiveTranscodeReservation>,
     deadline: tokio::time::Instant,
@@ -82,7 +83,7 @@ pub(super) async fn before_open(
     let checked = tokio::select! {
         biased;
         () = cancelled_open(cancel, lifetime) => return Err(cancelled()),
-        checked = source.before_open(reservation, deadline) => checked,
+        checked = source.before_open(command, reservation, deadline) => checked,
     };
     if lifetime.is_some_and(LegacyStreamLifetime::item_cancelled) {
         return Err(cancelled());
@@ -108,7 +109,7 @@ pub(super) async fn before_retry(
         cancel_stream_retry_attempt(attempt).await?;
         return Err(cancelled());
     }
-    let source_unavailable = if let Some(source) = context.source_caption.as_ref() {
+    let source_unavailable = if let Some(source) = context.source_caption.as_mut() {
         if producer.is_some() || attempt.prepared.is_some() {
             cancel_stream_retry_attempt(attempt).await?;
             return Err(StreamSpawnError::Spawn(
@@ -121,7 +122,7 @@ pub(super) async fn before_retry(
                 cancel_stream_retry_attempt(attempt).await?;
                 return Err(cancelled());
             },
-            checked = source.before_retry() => checked,
+            checked = source.before_retry(&attempt.command, attempt.source_caption_plan.take()) => checked,
         };
         if item.is_some_and(LegacyWrapperItemCancellation::is_cancelled) {
             cancel_stream_retry_attempt(attempt).await?;
@@ -135,6 +136,7 @@ pub(super) async fn before_retry(
     };
     if source_unavailable {
         attempt.command = ordinary_command(attempt.ordinary_caption_fallback.take())?;
+        attempt.source_caption_plan = None;
         context.source_caption = None;
         tracing::warn!("source caption unavailable before retry; retaining ordinary playback");
     }
@@ -215,6 +217,7 @@ mod tests {
         let mut context = context();
         context.pool.close().await;
         let attempt = StreamRetryAttempt {
+            source_caption_plan: None,
             command: command("fresh-source-primary"),
             ordinary_caption_fallback: Some(command("fresh-ordinary-hardware-fallback")),
             source_stream: None,
@@ -237,6 +240,7 @@ mod tests {
         let mut context = context();
         context.pool.close().await;
         let attempt = StreamRetryAttempt {
+            source_caption_plan: None,
             command: command("ordinary-primary"),
             ordinary_caption_fallback: None,
             source_stream: None,

@@ -199,70 +199,16 @@ impl CommandGenerator {
         pipeline_steps: &[PipelineStep],
         is_intel_vaapi_or_qsv: bool,
     ) -> Vec<String> {
-        let mut arguments = Vec::new();
-
-        for step in pipeline_steps {
-            arguments.extend(step.global_options().iter().cloned());
-        }
-
-        for step in pipeline_steps {
-            if let PipelineStep::StreamSeek { position } = step {
-                arguments.extend(["-ss".to_owned(), format_time_limit(*position)]);
-            }
-        }
-
-        let mut included_sources = Vec::new();
-        let same_audio_and_video = same_audio_and_video(inputs);
-
-        for kind in [
-            InputKind::Video,
-            InputKind::Audio,
-            InputKind::Watermark,
-            InputKind::GraphicsImage,
-            InputKind::Concat,
-            InputKind::Graphics,
-            InputKind::Subtitle,
-        ] {
-            for input in inputs.iter().filter(|input| input.kind == kind) {
-                if kind == InputKind::Subtitle && !input.is_image_based_subtitle {
-                    continue;
-                }
-
-                let should_include = match kind {
-                    InputKind::Audio => {
-                        !included_sources.contains(&input.source_key()) || is_intel_vaapi_or_qsv
-                    }
-                    InputKind::Watermark | InputKind::GraphicsImage | InputKind::Subtitle => {
-                        !included_sources.contains(&input.source_key())
-                    }
-                    InputKind::Video | InputKind::Concat | InputKind::Graphics => true,
-                };
-
-                if should_include {
-                    // Match ComplexFilter's first physical owner. Decoder
-                    // options must survive logical subtitle deduplication, but
-                    // must not follow an Intel audio-only duplicate/reopen.
-                    let first_source_owner = !included_sources.contains(&input.source_key());
-                    included_sources.push(input.source_key());
-                    if kind == InputKind::Video && same_audio_and_video && !is_intel_vaapi_or_qsv {
-                        for audio_input in inputs.iter().filter(|audio_input| {
-                            audio_input.kind == InputKind::Audio
-                                && audio_input.source_key() == input.source_key()
-                                && !audio_input.input_options.is_empty()
-                        }) {
-                            arguments.extend(shared_video_audio_input_options(audio_input));
-                        }
-                    }
-                    arguments.extend(input.input_options.iter().cloned());
-                    if first_source_owner {
-                        arguments.extend(source_teletext_caption_input_options(inputs, input));
-                    }
-                    arguments.extend(["-i".to_owned(), input.path.clone()]);
-                } else if same_audio_and_video && kind == InputKind::Audio && is_intel_vaapi_or_qsv
-                {
-                    arguments.extend(input.input_options.iter().cloned());
-                }
-            }
+        let mut arguments = input_prefix_options(pipeline_steps);
+        let owners = crate::physical_inputs::physical_inputs(inputs, is_intel_vaapi_or_qsv);
+        for (index, input) in owners.iter().enumerate() {
+            arguments.extend(physical_input_options(
+                inputs,
+                &owners,
+                index,
+                is_intel_vaapi_or_qsv,
+            ));
+            arguments.extend(["-i".to_owned(), input.path.clone()]);
         }
 
         for step in pipeline_steps {
@@ -307,14 +253,59 @@ impl CommandGenerator {
     }
 }
 
-fn source_teletext_caption_input_options(inputs: &[InputFile], owner: &InputFile) -> Vec<String> {
-    // ComplexFilter uses one selected bitmap Burn input and its first stream.
-    // An unused later logical input must never override that decoder's page.
-    let Some(subtitle) = inputs.iter().find(|subtitle| {
+pub(crate) fn input_prefix_options(steps: &[PipelineStep]) -> Vec<String> {
+    let mut options = steps
+        .iter()
+        .flat_map(PipelineStep::global_options)
+        .cloned()
+        .collect::<Vec<_>>();
+    for step in steps {
+        if let PipelineStep::StreamSeek { position } = step {
+            options.extend(["-ss".to_owned(), format_time_limit(*position)]);
+        }
+    }
+    options
+}
+
+pub(crate) fn physical_input_options(
+    inputs: &[InputFile],
+    owners: &[&InputFile],
+    index: usize,
+    intel: bool,
+) -> Vec<String> {
+    let input = owners[index];
+    let mut options = Vec::new();
+    if input.kind == InputKind::Video && same_audio_and_video(inputs) && !intel {
+        for audio in inputs.iter().filter(|audio| {
+            audio.kind == InputKind::Audio
+                && audio.source_key() == input.source_key()
+                && !audio.input_options.is_empty()
+        }) {
+            options.extend(shared_video_audio_input_options(audio));
+        }
+    }
+    options.extend(input.input_options.iter().cloned());
+    if !owners[..index]
+        .iter()
+        .any(|owner| owner.source_key() == input.source_key())
+    {
+        options.extend(source_teletext_caption_input_options(inputs, input));
+    }
+    options
+}
+
+pub(crate) fn selected_bitmap_burn_input(inputs: &[InputFile]) -> Option<&InputFile> {
+    inputs.iter().find(|subtitle| {
         subtitle.kind == InputKind::Subtitle
             && subtitle.is_image_based_subtitle
             && subtitle.subtitle_method == Some(crate::SubtitleMethod::Burn)
-    }) else {
+    })
+}
+
+fn source_teletext_caption_input_options(inputs: &[InputFile], owner: &InputFile) -> Vec<String> {
+    // ComplexFilter uses one selected bitmap Burn input and its first stream.
+    // An unused later logical input must never override that decoder's page.
+    let Some(subtitle) = selected_bitmap_burn_input(inputs) else {
         return Vec::new();
     };
     if subtitle.source_key() != owner.source_key() {

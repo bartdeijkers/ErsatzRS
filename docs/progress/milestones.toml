@@ -2968,6 +2968,89 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 generated physical-input/consumer fence checkpoint (partial):
+Criterion: bind selected source captions to the actual normalized command and
+physical video/audio/subtitle owners before ordinary native playback opens or
+retries. A companion SourceTeletextInputPlan is captured only for the first
+selected bitmap Burn with an explicit page, after all source index, decoder,
+realtime and hardware normalization and final executable override. Existing
+FfmpegCommand fields and public plain-command builders stay unchanged. The
+opaque companion compares the complete executable/environment/argv/output-hints
+value; it records consistency, not unforgeable provenance or source readiness.
+The seal covers canonical FfmpegCommand before existing ADR0003 graph-file
+transport, which may rewrite filter transport without changing input options.
+
+One existing-rule physical input enumerator now serves CommandGenerator and
+ComplexFilter, preserving kind order, instances, deduplication and Intel audio
+reopening. The plan uses the same typed prefix/per-input option assembly, not
+raw argv inference. Video/subtitle choose the first physical owner; audio uses
+the last. Only selected AV indices on the caption physical input join the
+caption's observed enabled subset. Other logical mappings remain outside this
+observation. Actual source inventory, native policy equivalence, first-packet/
+seek/decoder timing and complete page context still require independent proof.
+
+Web startup retains the companion in its existing source Consumer. Both actual
+open boundaries compare the passed command before the existing source recheck.
+Each of three hardware retry paths supplies its freshly rebuilt companion;
+missing/mismatched plans cannot borrow an initial/previous retry plan. Rejection
+uses the existing freshly built ordinary-caption command and graph/executable
+updates. The pure source/page/path/instance/stream check lives on PlaybackSource
+and is shared with native HLS. HLS carries each new plan in existing capacity
+ownership to its actual local spawn boundary; refusal uses the existing same-
+occurrence ordinary-caption retry. Existing pacing, cancellation, held-source,
+admission, process attachment, confirmed cleanup and quarantine stay intact.
+
+Nine new portable plan tests cover normalized/default-versus-first audio,
+explicit alternate selection, VAAPI/QSV reopen topology, missing/unused/text
+captions, distinct instances, duplicate owners, custom-option observation,
+full-command mutations, fresh hardware fallback and disabled audio. A native
+HLS regression covers final video7/audio5/caption9 ownership, retained HLS
+readrate, changed-seek retry seals and the absent ordinary companion. Genuine
+source fixture checks valid initial/fresh retry, missing initial/retry plans,
+changed executable/environment/argv and a separately sealed wrong page before
+its existing changed-mtime rejection; none of these marker commands is spawned.
+Actual ordinary stream captures separately prove resulting AV/caption behavior.
+
+All 234 regular pipeline argv/filter snapshots pass unchanged, Nextest
+f3dca21f-d4e0-43ba-8b5d-6b5196cc0026 (five opt-in cases skipped, not accepted).
+Final focused FFmpeg/infra/web selection: 301 passed, Nextest
+ce67f765-d928-4944-b6a7-e38f67e57e0d. Genuine ordinary legacy and Hybrid Local
+source-caption routes both pass, final legacy
+3c689bcb-5042-49c3-8da6-139056e99179 and reused Hybrid
+cec85e2b-8548-402a-afea-6a340a9a15e6. Each proves Off-Dutch, Burn-English,
+Burn-Dutch and stale-source-English fallback with selected AV, accepted authored
+page200, TSDuck, original PID512, default capacity2 and actual owner drain.
+The added valid-command test reaches the existing changed-mtime source recheck;
+command-plan refusals retain the exact ordinary-caption command before spawn.
+Strict affected FFmpeg/infra/web all-target Clippy, formatting and architecture
+checks pass. The final legacy rerun exercises the unchanged test-context
+construction extracted for Clippy; no lint exemption was added. Production Rust
+is unchanged from the focused, Hybrid and snapshot receipts above.
+The actual-host cargo xtask smoke passes both ordinary MPEG-TS modes, the
+segmenter variant and session HLS playlists, plus public internal-callback 404
+checks. Final progress validation passes. This is focused checkpoint evidence,
+not complete playback/client acceptance or full CI.
+Evidence: tmp/phase9-consumer-plan-checkpoint, including frozen-source hashes,
+scoped commit and foreign-worktree/unchanged-contract checks. Reuse applicable
+unchanged editor/client/headed-admin and other-platform evidence without
+claiming newly executed full CI or engine acceptance.
+
+Next join the actual generated physical-input subset/options to the same-source
+native origin and actual seek/first-packet/decoder observations. Concrete seam:
+PlaybackSource holds a decoded receipt, but the existing consumer-origin helper
+accepts only the prepared-source owner and uses its own fixed unseeked policy.
+Bridge the same decoded guard and generated enabled subset into that retained
+probe; bind actual native policy separately before timing/admission. Do not
+prepare a second source association or blindly replay input seek into the origin
+probe. This new seal alone cannot admit descriptor requests, normalize a missing
+PTS to zero, infer an arbitrary/custom consumer policy or prove inherited
+resources/charset.
+Shared/non-AV/late epoch initializers, wrap ambiguity, large/multiwindow and all
+full authored Level2.5/fallback, TTI/QTeletextMaker metadata/templates/zones,
+themes, Lua, restart, localized admin, suitable-client and playback/platform
+criteria remain required. All milestone acceptance/status/dependency fields
+stay unchanged. No production TV-guide addon, remote push or publication.
+
 2026-10-15 explicit native consumer-origin checkpoint (partial):
 Criterion: connect source-window timing to actual enabled-stream selection
 without confusing native input seeking with later presentation correction.

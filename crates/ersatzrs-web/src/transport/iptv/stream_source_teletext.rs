@@ -51,13 +51,18 @@ pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selec
 #[derive(Clone)]
 pub(super) struct Consumer {
     source: Arc<PlaybackSource>,
+    plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
     reservation: Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
 }
 
 impl Consumer {
-    pub(super) fn new(source: Arc<PlaybackSource>) -> Self {
+    pub(super) fn new(
+        source: Arc<PlaybackSource>,
+        plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    ) -> Self {
         Self {
             source,
+            plan,
             reservation: None,
         }
     }
@@ -68,17 +73,32 @@ impl Consumer {
 
     pub(super) async fn before_open(
         &mut self,
+        command: &ersatzrs_ffmpeg::FfmpegCommand,
         reservation: Option<&ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
         deadline: Instant,
     ) -> Result<()> {
+        self.check_command(command)?;
         self.reservation = Some(reservation.ok_or_else(unavailable)?.clone());
         self.source.recheck(deadline).await
     }
 
-    pub(super) async fn before_retry(&self) -> Result<()> {
+    pub(super) async fn before_retry(
+        &mut self,
+        command: &ersatzrs_ffmpeg::FfmpegCommand,
+        plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    ) -> Result<()> {
+        // A changed hardware topology needs this attempt's own generated plan.
+        // Never let an absent or mismatched retry borrow the initial seal.
+        self.plan = plan;
+        self.check_command(command)?;
         self.source
             .recheck(Instant::now() + Duration::from_secs(15))
             .await
+    }
+
+    fn check_command(&self, command: &ersatzrs_ffmpeg::FfmpegCommand) -> Result<()> {
+        self.source
+            .check_consumer_command(command, self.plan.as_ref())
     }
 
     pub(super) fn attach(

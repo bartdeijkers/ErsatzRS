@@ -65,36 +65,14 @@ impl ComplexFilter {
 
 struct ComplexFilterBuilder<'a> {
     inputs: &'a [InputFile],
-    distinct_sources: Vec<(&'a str, usize)>,
+    physical_inputs: Vec<&'a InputFile>,
 }
 
 impl<'a> ComplexFilterBuilder<'a> {
     fn new(inputs: &'a [InputFile], is_intel_vaapi_or_qsv: bool) -> Self {
-        let mut distinct_sources = Vec::new();
-        for kind in input_kind_order() {
-            for input in inputs.iter().filter(|input| input.kind == kind) {
-                match input.kind {
-                    InputKind::Audio
-                        if distinct_sources.contains(&input.source_key())
-                            && is_intel_vaapi_or_qsv =>
-                    {
-                        distinct_sources.push(input.source_key());
-                    }
-                    InputKind::Subtitle if !input.is_image_based_subtitle => {}
-                    InputKind::Video | InputKind::Concat | InputKind::Graphics => {
-                        distinct_sources.push(input.source_key());
-                    }
-                    _ if !distinct_sources.contains(&input.source_key()) => {
-                        distinct_sources.push(input.source_key());
-                    }
-                    _ => {}
-                }
-            }
-        }
-
         Self {
             inputs,
-            distinct_sources,
+            physical_inputs: crate::physical_inputs::physical_inputs(inputs, is_intel_vaapi_or_qsv),
         }
     }
 
@@ -175,11 +153,7 @@ impl<'a> ComplexFilterBuilder<'a> {
             }
         }
 
-        if let Some(subtitle) = self.inputs.iter().find(|input| {
-            input.kind == InputKind::Subtitle
-                && input.is_image_based_subtitle
-                && input.subtitle_method == Some(SubtitleMethod::Burn)
-        }) {
+        if let Some(subtitle) = crate::command::selected_bitmap_burn_input(self.inputs) {
             let input_index = self.input_index(subtitle, false);
             if let Some(stream) = subtitle.streams.first() {
                 let label = format!("{input_index}:{}", stream.index);
@@ -316,17 +290,8 @@ impl<'a> ComplexFilterBuilder<'a> {
     }
 
     fn input_index(&self, input: &InputFile, last: bool) -> usize {
-        if last {
-            self.distinct_sources
-                .iter()
-                .rposition(|source| *source == input.source_key())
-                .unwrap_or_default()
-        } else {
-            self.distinct_sources
-                .iter()
-                .position(|source| *source == input.source_key())
-                .unwrap_or_default()
-        }
+        crate::physical_inputs::physical_input_index(&self.physical_inputs, input, last)
+            .unwrap_or_default()
     }
 }
 
@@ -344,16 +309,4 @@ fn proper_label(label: &str) -> String {
     } else {
         format!("[{label}]")
     }
-}
-
-fn input_kind_order() -> [InputKind; 7] {
-    [
-        InputKind::Video,
-        InputKind::Audio,
-        InputKind::Watermark,
-        InputKind::GraphicsImage,
-        InputKind::Concat,
-        InputKind::Graphics,
-        InputKind::Subtitle,
-    ]
 }

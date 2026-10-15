@@ -93,6 +93,38 @@ impl PlaybackSource {
         self.receipt.native_burn_input()
     }
 
+    /// Match the generated final consumer command and its exact caption input.
+    ///
+    /// This pure fence grants no delayed-cue, timing or source readiness. The
+    /// caller must still run the existing source recheck and retain this owner
+    /// with actual playback admission through consuming-child cleanup.
+    ///
+    /// # Errors
+    /// Returns a static unavailable error for missing/stale command plans or a
+    /// caption path, instance, method, stream or selected-page mismatch.
+    pub fn check_consumer_command(
+        &self,
+        command: &ersatzrs_ffmpeg::FfmpegCommand,
+        plan: Option<&ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    ) -> Result<()> {
+        let plan = plan.ok_or_else(unavailable)?;
+        if !plan.matches_command(command) {
+            return Err(unavailable());
+        }
+        let actual = plan.caption_input();
+        let expected = self.input();
+        if actual.path != expected.path
+            || actual.input_instance != expected.input_instance
+            || actual.kind != expected.kind
+            || actual.subtitle_method != expected.subtitle_method
+            || actual.is_image_based_subtitle != expected.is_image_based_subtitle
+            || actual.streams.first() != expected.streams.first()
+        {
+            return Err(unavailable());
+        }
+        Ok(())
+    }
+
     /// Original startup budget, never restarted during initial preparation.
     #[must_use]
     pub const fn initial_deadline(&self) -> Instant {

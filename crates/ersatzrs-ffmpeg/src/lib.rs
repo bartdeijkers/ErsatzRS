@@ -16,8 +16,10 @@ pub mod graphics;
 pub mod input;
 pub mod locator;
 pub mod options;
+mod physical_inputs;
 pub mod pipeline;
 pub mod runtime;
+mod source_teletext_input_plan;
 pub mod teletext;
 pub mod teletext_probe;
 pub mod version;
@@ -38,6 +40,7 @@ pub use locator::*;
 pub use options::*;
 pub use pipeline::*;
 pub use runtime::*;
+pub use source_teletext_input_plan::SourceTeletextInputPlan;
 pub use teletext_probe::*;
 pub use version::*;
 

@@ -335,6 +335,7 @@ struct HlsProcessCapacity<'a> {
     source_caption: Option<(
         Arc<crate::playback::source_teletext::runtime::PlaybackSource>,
         crate::transcode_capacity::ActiveTranscodeReservation,
+        Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
     )>,
 }
 
@@ -2188,7 +2189,7 @@ impl HlsSessionWorker {
             );
             let retained_failure = Arc::new(std::sync::Mutex::new(RetainedHlsFailure::default()));
             let (outcome, selected_graph_for_denial) = match command {
-                Ok(command) => {
+                Ok((command, source_caption_plan)) => {
                     // Attributed from the command that actually ran, so a
                     // runtime failure cannot be blamed on a graph this spawn
                     // did not use.
@@ -2233,7 +2234,11 @@ impl HlsSessionWorker {
                                 delivery_pool: is_live_remote.then_some(&pool),
                                 delivery_recovery,
                                 source_caption: source_caption.as_ref().map(|source| {
-                                    (Arc::clone(source), active_transcode_reservation.clone())
+                                    (
+                                        Arc::clone(source),
+                                        active_transcode_reservation.clone(),
+                                        source_caption_plan,
+                                    )
                                 }),
                             },
                         )
@@ -2858,7 +2863,7 @@ impl HlsSessionWorker {
             .as_ref()
             .map(|retained| Arc::clone(&retained.failure));
         let mut reserve_interval = tokio::time::interval(Duration::from_millis(250));
-        if let Some((source, _)) = &capacity.source_caption {
+        if let Some((source, _, plan)) = &capacity.source_caption {
             if producer.is_some() || retained.is_some() {
                 if let Some(retained) = retained {
                     let _ = retained.prepared.cancel().await;
@@ -2866,6 +2871,12 @@ impl HlsSessionWorker {
                 return HlsProcessOutcome::Failed(
                     "local source captions cannot use a remote HLS producer".into(),
                 );
+            }
+            if source
+                .check_consumer_command(&command, plan.as_ref())
+                .is_err()
+            {
+                return HlsProcessOutcome::SourceCaptionUnavailable;
             }
             if source
                 .recheck(self.source_caption_check_deadline(source.initial_deadline()))
@@ -2917,7 +2928,7 @@ impl HlsSessionWorker {
         // No await separates a local consumer spawn from transfer of its exact
         // receipt and actual transcode admission. The child adapter, including
         // its uncertainty Drop, owns them independently of the requesting UI.
-        if let Some((source, reservation)) = &capacity.source_caption {
+        if let Some((source, reservation, _)) = &capacity.source_caption {
             if let Err(error) =
                 child.attach_local_teletext_source(source.receipt(), reservation.clone())
             {
@@ -4067,6 +4078,7 @@ fn build_hls_command_with_explicit_discontinuity(
         HlsInputTimeline::Original,
         song,
     )
+    .map(|(command, _)| command)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -4099,7 +4111,13 @@ fn build_hls_command_with_input_explicit_discontinuity(
     opacity_clock: Option<WatermarkOpacityClock>,
     input_timeline: HlsInputTimeline,
     song: Option<&crate::song_background::NativeSongBackground>,
-) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
+) -> Result<
+    (
+        FfmpegCommand,
+        Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    ),
+    ersatzrs_ffmpeg::UnsupportedSource,
+> {
     let seek_after_input = input.seek_after_input;
     let mut desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
@@ -4190,7 +4208,10 @@ fn build_hls_command_with_input_explicit_discontinuity(
         }
         song.apply(&mut request);
     }
-    ersatzrs_ffmpeg::build_pipeline_command(playback_profile.profile.hardware_acceleration, request)
+    ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+        playback_profile.profile.hardware_acceleration,
+        request,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -6940,6 +6961,83 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
+    fn source_caption_plan_tracks_final_hls_input_and_fresh_retry() {
+        let mut profile = playback_profile();
+        profile.profile.hardware_acceleration = HardwareAccelerationKind::None;
+        let build = |page: Option<u16>, start| {
+            build_hls_command_with_input_explicit_discontinuity(
+                InputFile::video("synthetic-source.ts"),
+                OutputFormat::Hls,
+                true,
+                false,
+                true,
+                start,
+                Some(Duration::from_secs(12)),
+                None,
+                &profile,
+                None,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                Some(SourceVideoStream::new(SourceVideoCodec::H264).with_index(7)),
+                vec![
+                    SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1),
+                    SourceAudioStream::new(SourceAudioCodec::Aac).with_index(5),
+                ],
+                PlaybackAudioSelection::Exact(5),
+                page.map(|page| {
+                    InputFile::teletext_subtitle(
+                        "synthetic-source.ts",
+                        9,
+                        ersatzrs_domain::TeletextPageNumber::new(page).unwrap(),
+                    )
+                }),
+                Vec::new(),
+                Vec::new(),
+                HlsDiscontinuity::Absent,
+                None,
+                HlsInputTimeline::Original,
+                None,
+            )
+            .unwrap()
+        };
+        let (primary, plan) = build(Some(888), Duration::from_secs(40));
+        let plan = plan.expect("actual HLS source caption has its generated plan");
+        assert!(plan.matches_command(&primary));
+        assert_eq!(plan.caption_physical_input_index(), 0);
+        assert_eq!(plan.video_stream(), Some((0, 7)));
+        assert_eq!(plan.audio_stream(), Some((0, 5)));
+        assert_eq!(plan.enabled_caption_input_streams(), [7, 5, 9]);
+        assert_eq!(plan.caption_input().path, "synthetic-source.ts");
+        assert_eq!(
+            plan.caption_input().streams[0].source_teletext_page,
+            ersatzrs_domain::TeletextPageNumber::new(888).ok()
+        );
+        assert_eq!(
+            primary.arguments.iter().filter(|arg| *arg == "-i").count(),
+            1
+        );
+        assert!(plan
+            .physical_input_options()
+            .windows(2)
+            .any(|pair| pair == ["-readrate", "1.05"]));
+
+        // A rebuilt command must carry its new seal, even for the same page.
+        let (retry, retry_plan) = build(Some(888), Duration::from_secs(41));
+        let retry_plan = retry_plan.unwrap();
+        assert!(retry_plan.matches_command(&retry));
+        assert!(!plan.matches_command(&retry));
+        assert!(!retry_plan.matches_command(&primary));
+        let (ordinary, ordinary_plan) = build(None, Duration::from_secs(40));
+        assert!(ordinary_plan.is_none());
+        assert!(!plan.matches_command(&ordinary));
+        assert!(!ordinary.arguments.iter().any(|arg| arg == "-txt_page:9"));
+        assert!(ordinary
+            .arguments
+            .windows(2)
+            .any(|pair| pair == ["-readrate", "1.05"]));
+    }
+
+    #[test]
     fn retained_hls_default_audio_language_matches_actual_selected_track() {
         let mut japanese = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(0);
         japanese.language = Some("jpn".into());
@@ -7056,7 +7154,7 @@ mod tests {
         let video = InputFile::video("pipe:0")
             .with_stream_index(7)
             .with_input_options(["-f", "nut"]);
-        let command = build_hls_command_with_input_explicit_discontinuity(
+        let (command, _) = build_hls_command_with_input_explicit_discontinuity(
             video,
             OutputFormat::Hls,
             true,
@@ -7374,7 +7472,7 @@ mod tests {
             let mut profile = playback_profile();
             profile.profile.video_format = FFmpegProfileVideoFormat::Copy;
             profile.profile.audio_format = FFmpegProfileAudioFormat::Copy;
-            let command = build_hls_command_with_input_explicit_discontinuity(
+            let (command, _) = build_hls_command_with_input_explicit_discontinuity(
                 video,
                 OutputFormat::Hls,
                 true,
@@ -9830,7 +9928,7 @@ mod tests {
                 "-readrate_initial_burst".to_owned(),
                 HLS_REMOTE_INITIAL_BURST_SECONDS.to_string(),
             ]);
-        let command = build_hls_command_with_input_explicit_discontinuity(
+        let (command, _) = build_hls_command_with_input_explicit_discontinuity(
             input,
             OutputFormat::Hls,
             true,

@@ -2293,6 +2293,29 @@ pub fn build_pipeline_command(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
 ) -> Result<FfmpegCommand, UnsupportedSource> {
+    build_pipeline_command_with_optional_source_plan(acceleration, request, false)
+        .map(|(command, _)| command)
+}
+
+/// Build a playback command and its final generated source-caption input plan.
+///
+/// The optional plan describes the first actually selected bitmap Burn input
+/// only when it carries an explicit source teletext page. It grants no source,
+/// consumer-policy, decoder timing or playback admission by itself.
+/// # Errors
+/// Returns the same unsupported-source refusal as [`build_pipeline_command`].
+pub fn build_pipeline_command_with_source_teletext_plan(
+    acceleration: HardwareAccelerationKind,
+    request: PipelineRequest,
+) -> Result<(FfmpegCommand, Option<crate::SourceTeletextInputPlan>), UnsupportedSource> {
+    build_pipeline_command_with_optional_source_plan(acceleration, request, true)
+}
+
+fn build_pipeline_command_with_optional_source_plan(
+    acceleration: HardwareAccelerationKind,
+    request: PipelineRequest,
+    capture_plan: bool,
+) -> Result<(FfmpegCommand, Option<crate::SourceTeletextInputPlan>), UnsupportedSource> {
     if let Some(reason) = unsupported_source_reason_for_acceleration(Some(acceleration), &request) {
         return Err(UnsupportedSource { reason });
     }
@@ -2303,7 +2326,22 @@ pub fn build_pipeline_command(
     if let Some(executable) = executable {
         command.executable = executable;
     }
-    Ok(command)
+    let plan = capture_plan
+        .then(|| {
+            let effective_inputs = if pipeline.inputs.is_empty() {
+                &inputs
+            } else {
+                &pipeline.inputs
+            };
+            crate::SourceTeletextInputPlan::from_generated(
+                &command,
+                effective_inputs,
+                &pipeline.steps,
+                pipeline.is_intel_vaapi_or_qsv,
+            )
+        })
+        .flatten();
+    Ok((command, plan))
 }
 
 /// Why a source cannot be played, when ErsatzRS refuses rather than guessing.

@@ -466,24 +466,15 @@ async fn late_source_rejection_uses_actual_receipt(
         Vec::new(),
         vec!["-f".into(), "null".into(), "-".into()],
     );
-    let mut context = super::super::StreamDenialRetry {
-        source_caption: Some(super::super::source_teletext::Consumer::new(receipt)),
-        ordinary_caption_fallback: Some(ordinary.clone()),
-        song: None,
-        pool: state.pool.clone(),
-        shared_ffmpeg_runtime: std::sync::Arc::clone(&state.ffmpeg_runtime),
-        runtime_capabilities: ersatzrs_ffmpeg::FfmpegCapabilityReport::default(),
-        acceleration: ersatzrs_domain::HardwareAccelerationKind::None,
-        source_stream: None,
-        graph_operation: None,
-        ffmpeg_path: "synthetic-caption-command-not-spawned".into(),
-        rebuild: None,
-    };
+    let (consumer, primary) =
+        assert_consumer_plan_fences(state, receipt, &reservation, deadline).await;
+    let mut context = source_caption_denial_context(state, consumer, ordinary.clone());
     let modified = source.metadata().unwrap().modified().unwrap();
     let file = std::fs::File::options().write(true).open(source).unwrap();
     file.set_times(std::fs::FileTimes::new().set_modified(modified + Duration::from_secs(1)))
         .unwrap();
     let selected = super::super::source_caption_recovery::before_open(
+        &primary,
         &mut context,
         Some(&reservation),
         deadline,
@@ -517,6 +508,128 @@ async fn late_source_rejection_uses_actual_receipt(
         0
     );
     println!("actual source receipt rejected changed filesystem mtime before open; exact ordinary command selected, no child spawn claimed");
+}
+
+fn source_caption_denial_context(
+    state: &AppState,
+    consumer: super::super::source_teletext::Consumer,
+    ordinary: ersatzrs_ffmpeg::FfmpegCommand,
+) -> super::super::StreamDenialRetry {
+    super::super::StreamDenialRetry {
+        source_caption: Some(consumer),
+        ordinary_caption_fallback: Some(ordinary),
+        song: None,
+        pool: state.pool.clone(),
+        shared_ffmpeg_runtime: std::sync::Arc::clone(&state.ffmpeg_runtime),
+        runtime_capabilities: ersatzrs_ffmpeg::FfmpegCapabilityReport::default(),
+        acceleration: ersatzrs_domain::HardwareAccelerationKind::None,
+        source_stream: None,
+        graph_operation: None,
+        ffmpeg_path: "synthetic-caption-command-not-spawned".into(),
+        rebuild: None,
+    }
+}
+
+async fn assert_consumer_plan_fences(
+    state: &AppState,
+    receipt: std::sync::Arc<ersatzrs_infra::playback::source_teletext::runtime::PlaybackSource>,
+    reservation: &ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation,
+    deadline: tokio::time::Instant,
+) -> (
+    super::super::source_teletext::Consumer,
+    ersatzrs_ffmpeg::FfmpegCommand,
+) {
+    let profile = ersatzrs_infra::playback::load_playback_profile(&state.pool, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    let caption = receipt.input();
+    let desired = ersatzrs_ffmpeg::DesiredVideoState::from_profile(
+        &profile.profile,
+        &profile.resolution,
+        None,
+        None,
+        StreamingMode::TransportStream,
+    );
+    let mut request = ersatzrs_ffmpeg::PipelineRequest::new(
+        ersatzrs_ffmpeg::InputFile::video(&caption.path),
+        desired,
+    );
+    request.inputs.push(caption.clone());
+    request.ffmpeg_executable = Some("synthetic-caption-command-not-spawned".into());
+    let (primary, plan) = ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+        ersatzrs_domain::HardwareAccelerationKind::None,
+        request.clone(),
+    )
+    .unwrap();
+    let plan = plan.expect("actual generated source-caption plan");
+    assert!(plan.matches_command(&primary));
+    let mut consumer =
+        super::super::source_teletext::Consumer::new(receipt.clone(), Some(plan.clone()));
+    consumer
+        .before_open(&primary, Some(reservation), deadline)
+        .await
+        .unwrap();
+    let mut changed = primary.clone();
+    changed.executable.push_str("-changed");
+    assert!(consumer
+        .clone()
+        .before_open(&changed, Some(reservation), deadline)
+        .await
+        .is_err());
+    let mut changed = primary.clone();
+    changed
+        .environment
+        .push(ersatzrs_ffmpeg::EnvironmentVariable::new(
+            "SYNTHETIC_PLAN",
+            "changed",
+        ));
+    assert!(consumer
+        .clone()
+        .before_open(&changed, Some(reservation), deadline)
+        .await
+        .is_err());
+    let mut changed = primary.clone();
+    changed.arguments.push("-nostats".into());
+    assert!(consumer
+        .clone()
+        .before_open(&changed, Some(reservation), deadline)
+        .await
+        .is_err());
+    let mut missing = super::super::source_teletext::Consumer::new(receipt.clone(), None);
+    assert!(missing
+        .before_open(&primary, Some(reservation), deadline)
+        .await
+        .is_err());
+    assert!(consumer.clone().before_retry(&primary, None).await.is_err());
+    let mut retried = consumer.clone();
+    retried.before_retry(&primary, Some(plan)).await.unwrap();
+    assert!(
+        retried.before_retry(&primary, None).await.is_err(),
+        "retry cannot borrow its previous plan"
+    );
+    let stream = request
+        .inputs
+        .last_mut()
+        .unwrap()
+        .streams
+        .first_mut()
+        .unwrap();
+    stream.source_teletext_page = Some(ersatzrs_domain::TeletextPageNumber::new(200).unwrap());
+    let (wrong_page, wrong_plan) =
+        ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(
+            ersatzrs_domain::HardwareAccelerationKind::None,
+            request,
+        )
+        .unwrap();
+    assert!(
+        super::super::source_teletext::Consumer::new(receipt, wrong_plan)
+            .before_open(&wrong_page, Some(reservation), deadline)
+            .await
+            .is_err()
+    );
+    println!("generated consumer fences: valid initial/fresh retry accepted; changed executable/argv, missing or reused retry plan and independently sealed wrong page rejected before spawn");
+    (consumer, primary)
 }
 
 async fn finish_hybrid_case(state: &AppState, mode: StreamingMode) {

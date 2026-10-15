@@ -71,6 +71,9 @@ release section when tagging a release.
   starts and distinguish the input seek origin from later presentation correction,
   using the existing source/process owner and native builder format flags.
   Missing post-seek timestamps remain unknown even if muxing emits zero.
+  Final source-caption commands now carry an optional normalized physical-input
+  plan through native opening and retries, sharing ownership rules with filter
+  labels. Command/page mismatches retain the existing ordinary playback fallback.
   Final consumer-policy binding, complete inherited page context and general
   source/seek semantics remain unqualified; route acceptance stays open.
 - Add a representative two-channel teletext acceptance flow through ordinary

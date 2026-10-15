@@ -2163,10 +2163,10 @@ async fn serve_channel_stream_admitted_inner(
                     )
                 })
                 .transpose()
-                .map(|fallback| (command, fallback))
+                .map(|fallback| (command, fallback.map(|(command, _)| command)))
         },
     );
-    let (command, ordinary_caption_fallback) = match commands {
+    let ((command, source_caption_plan), ordinary_caption_fallback) = match commands {
         Ok(command) => command,
         Err(error) => {
             // ADR 0064: refuse rather than transcode a source whose colour
@@ -2195,7 +2195,8 @@ async fn serve_channel_stream_admitted_inner(
     let retry_preferred_audio_title = preferred_audio_title.map(str::to_owned);
     let retry_preferred_audio_language = preferred_audio_language.clone();
     let retry = StreamDenialRetry {
-        source_caption: source_caption_owner.map(source_teletext::Consumer::new),
+        source_caption: source_caption_owner
+            .map(|source| source_teletext::Consumer::new(source, source_caption_plan)),
         ordinary_caption_fallback,
         song: song.clone(),
         pool: state.pool.clone(),
@@ -2355,6 +2356,7 @@ async fn serve_channel_stream_admitted_inner(
                                 retained_stream,
                                 song.as_deref(),
                             )
+                            .map(|(command, _)| command)
                         })
                         .transpose();
                     let primary_input = if wrapper_paces_source_caption && !retained_stream {
@@ -2382,7 +2384,7 @@ async fn serve_channel_stream_admitted_inner(
                         retained_stream,
                         song.as_deref(),
                     );
-                    let (Ok(command), Ok(ordinary_caption_fallback)) =
+                    let (Ok((command, source_caption_plan)), Ok(ordinary_caption_fallback)) =
                         (command, ordinary_caption_fallback)
                     else {
                         if let Some(fresh) = fresh.take() {
@@ -2406,6 +2408,7 @@ async fn serve_channel_stream_admitted_inner(
                     }
                     Ok(Some(StreamRetryAttempt {
                         command,
+                        source_caption_plan,
                         ordinary_caption_fallback,
                         source_stream,
                         prepared: fresh.map(|fresh| fresh.prepared),
@@ -4354,6 +4357,7 @@ fn build_stream_command_with_input_and_opacity_clock(
         false,
         None,
     )
+    .map(|(command, _)| command)
 }
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
@@ -4376,7 +4380,13 @@ fn build_stream_command_with_retained_inputs(
     opacity_clock: Option<WatermarkOpacityClock>,
     retained_stream: bool,
     song: Option<&ersatzrs_infra::song_background::NativeSongBackground>,
-) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
+) -> Result<
+    (
+        FfmpegCommand,
+        Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
+    ),
+    ersatzrs_ffmpeg::UnsupportedSource,
+> {
     let seek_after_input = input.seek_after_input;
     let needs_hls_direct_mpegts_transcode = hls_direct_mpegts_needs_transcode(
         output_format,
@@ -4476,7 +4486,7 @@ fn build_stream_command_with_retained_inputs(
     } else {
         playback_profile.profile.hardware_acceleration
     };
-    ersatzrs_ffmpeg::build_pipeline_command(acceleration, request)
+    ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(acceleration, request)
 }
 
 fn native_generated_audio_duration(
@@ -4863,6 +4873,7 @@ struct StreamDenialRetry {
 
 struct StreamRetryAttempt {
     command: FfmpegCommand,
+    source_caption_plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
     ordinary_caption_fallback: Option<FfmpegCommand>,
     source_stream: Option<SourceVideoStream>,
     prepared: Option<PreparedRemoteStreamInput>,
@@ -4960,6 +4971,7 @@ fn immediate_stream_retry(
         Box::pin(async move {
             Ok(build(mode).map(|command| StreamRetryAttempt {
                 command,
+                source_caption_plan: None,
                 ordinary_caption_fallback: None,
                 source_stream: None,
                 prepared: None,
@@ -5412,6 +5424,7 @@ async fn spawn_stream_body_with_lifetime(
             .map(source_teletext::Consumer::initial_deadline);
         if let Some(deadline) = deadline {
             match source_caption_recovery::before_open(
+                command,
                 context,
                 capacity_reservation.as_ref(),
                 deadline,
@@ -5715,6 +5728,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 };
                 if let Some(context) = retry.as_mut() {
                     match source_caption_recovery::before_open(
+                        &command,
                         context,
                         Some(&capacity_guard),
                         tokio::time::Instant::now() + Duration::from_secs(15),
@@ -6886,6 +6900,7 @@ mod tests {
         assert!(!called.load(Ordering::Acquire));
         let result = spawn_stream_retry(
             StreamRetryAttempt {
+                source_caption_plan: None,
                 command: FfmpegCommand {
                     mpegts_output: None,
                     executable: "must-not-spawn".into(),
@@ -7288,7 +7303,8 @@ mod tests {
             true,
             None,
         )
-        .expect("fresh retained video-only retry");
+        .expect("fresh retained video-only retry")
+        .0;
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("anullsrc="), "{arguments}");
         assert!(arguments.contains("-t 00:00:05.0000000"), "{arguments}");
@@ -7354,6 +7370,7 @@ mod tests {
             None,
         )
         .expect("native known source command")
+        .0
     }
 
     #[test]
@@ -7383,7 +7400,8 @@ mod tests {
             true,
             None,
         )
-        .unwrap();
+        .unwrap()
+        .0;
         let argv = command.arguments.join(" ");
         assert!(!argv.contains("concatdec_select"));
         assert!(argv.contains("0:7"));
