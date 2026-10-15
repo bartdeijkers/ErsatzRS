@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: qualify actual source/seek windows after verified UCU11 integration; full engine acceptance open'
+current_focus = 'P9A-04: authored Level2.5/editor userflow after source-caption closeout; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Caption checkpoint closeout now has terminal strict three-crate/xtask lint and
+clean-container software smoke proof; P9A-04 owns exact receipts and failures.
+Native WSL startup remains blocked by a witnessed driver-library loader SIGSEGV;
+no system repair or GPU acceptance is claimed. The software smoke fixture now
+uses a matching explicit software preset, preserving deterministic ordinary-route
+coverage. Continue the authored/editor seam below; complete engine acceptance
+and all platform/native requirements remain open.
+
 P9A-04 now connects the source-bound independent caption initializer to ordinary
 native opening and fresh retries, including HLS. Exact completed requests and
 generated AV owners determine the native clock correction; opaque policies gain
@@ -70,10 +78,15 @@ staggered source at seek0.5s, both audio tracks with/without VBV preserve all24
 sampled888 masks from PTS0 and complete decoded Off audio/absolute clocks.
 Both actual legacy/Hybrid routes retain888, audio preferences, Off/stale and
 wrong-role fallback, authored200, TSDuck and cleanup. P9A-04 owns exact receipts.
-Next connect the synthetic user flow: profile selection, validation, preview,
-explicit publication, ordinary stream route and suitable-client navigation. Reuse
-valid channel/theme/playback evidence, then prioritize full authored Level2.5
-and the actual QTeletextMaker editor roundtrip. Sought HTTP proof stays open.
+The representative synthetic profile -> validation -> preview -> publication ->
+ordinary stream -> suitable-client flow already has a retained QTM/admin/TCP/
+decoder/TSDuck/VLC-replay receipt. Separate actual live-URL trials keep their
+own scope. The single criterion map in P9A-04 now identifies current proof,
+missing evidence, concrete blockers and next actions without replaying old gates.
+Next extend authenticated editor concepts to existing local X26 colour/attribute
+operands through the full model/compiler and protected-effect checks. Resource/
+panel/set editing and full authored Level2.5/fallback remain open; no base-row-only
+restriction is accepted. Sought HTTP source-caption proof remains open.
 General source-window/charset/resource/wrap, unknown policies and large sources
 remain concrete acceptance gaps; no product restriction is accepted.
 All authored Level2.5/fallback, editor/metadata/templates/themes/zones, Lua/restart,

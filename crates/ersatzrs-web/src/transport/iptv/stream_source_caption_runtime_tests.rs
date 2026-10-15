@@ -652,32 +652,7 @@ async fn assert_consumer_plan_fences(
         .before_open(&primary, Some(reservation), deadline)
         .await
         .unwrap();
-    let mut changed = primary.clone();
-    changed.executable.push_str("-changed");
-    assert!(consumer
-        .clone()
-        .before_open(&changed, Some(reservation), deadline)
-        .await
-        .is_err());
-    let mut changed = primary.clone();
-    changed
-        .environment
-        .push(ersatzrs_ffmpeg::EnvironmentVariable::new(
-            "SYNTHETIC_PLAN",
-            "changed",
-        ));
-    assert!(consumer
-        .clone()
-        .before_open(&changed, Some(reservation), deadline)
-        .await
-        .is_err());
-    let mut changed = primary.clone();
-    changed.arguments.push("-nostats".into());
-    assert!(consumer
-        .clone()
-        .before_open(&changed, Some(reservation), deadline)
-        .await
-        .is_err());
+    assert_consumer_command_fences(&consumer, &primary, reservation, deadline).await;
     let mut missing = super::super::source_teletext::Consumer::new(
         receipt.clone(),
         None,
@@ -737,6 +712,40 @@ async fn assert_consumer_plan_fences(
     );
     println!("generated consumer fences: matching nonzero initial/fresh retry and native-equivalent timing accepted; changed seek/duration, executable/argv, missing request, missing or reused retry plan and independently sealed wrong page rejected before spawn; unknown duration/independent caption clock not inferred");
     (consumer, primary)
+}
+
+async fn assert_consumer_command_fences(
+    consumer: &super::super::source_teletext::Consumer,
+    primary: &ersatzrs_ffmpeg::FfmpegCommand,
+    reservation: &ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation,
+    deadline: tokio::time::Instant,
+) {
+    let mut changed = primary.clone();
+    changed.executable.push_str("-changed");
+    assert!(consumer
+        .clone()
+        .before_open(&changed, Some(reservation), deadline)
+        .await
+        .is_err());
+    let mut changed = primary.clone();
+    changed
+        .environment
+        .push(ersatzrs_ffmpeg::EnvironmentVariable::new(
+            "SYNTHETIC_PLAN",
+            "changed",
+        ));
+    assert!(consumer
+        .clone()
+        .before_open(&changed, Some(reservation), deadline)
+        .await
+        .is_err());
+    let mut changed = primary.clone();
+    changed.arguments.push("-nostats".into());
+    assert!(consumer
+        .clone()
+        .before_open(&changed, Some(reservation), deadline)
+        .await
+        .is_err());
 }
 
 async fn assert_consumer_request_fences(

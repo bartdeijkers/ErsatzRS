@@ -771,6 +771,14 @@ fn seed_streaming_fixture_inner(input: SeedFixture<'_>) -> Result<()> {
         segmenter_timeout_seconds,
         media_seconds,
     } = input;
+    // This small software-playback fixture must not inherit a hardware preset
+    // selected during startup on the machine running the gate.
+    conn.execute(
+        r#"UPDATE "FFmpegProfile" SET "HardwareAcceleration"=0,
+           "VideoPreset"='veryfast', "VideoTune"=NULL
+           WHERE "Id"=(SELECT "FFmpegProfileId" FROM "Channel" WHERE "Id"=?)"#,
+        [channel_id],
+    )?;
     conn.execute(r#"DELETE FROM "PlayoutItem""#, [])?;
     conn.execute(r#"DELETE FROM "Playout""#, [])?;
     conn.execute(r#"DELETE FROM "MediaStream""#, [])?;

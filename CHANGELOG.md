@@ -657,6 +657,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep the basic playback smoke fixture on explicit software encoding with a
+  matching preset instead of inheriting a startup-selected GPU preset.
 - Distinguish teletext source-read, window-preparation and packet-delivery
   failures in bounded DEBUG diagnostics, retaining the actual forwarding error
   when a stream is stopped. Delivery, buffering and cleanup rules are unchanged.

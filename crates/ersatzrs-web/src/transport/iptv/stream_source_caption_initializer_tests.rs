@@ -237,16 +237,13 @@ async fn capture_command(
         )
     })
     .await;
-    let (output, stderr, status) = match captured {
-        Ok(Ok(captured)) => captured,
-        _ => {
-            let _ = child.start_kill();
-            tokio::time::timeout(Duration::from_secs(5), child.wait())
-                .await
-                .expect("bounded consumer cleanup deadline")
-                .expect("bounded consumer cleanup");
-            panic!("synthetic caption consumer failed or exceeded a bound");
-        }
+    let Ok(Ok((output, stderr, status))) = captured else {
+        let _ = child.start_kill();
+        tokio::time::timeout(Duration::from_secs(5), child.wait())
+            .await
+            .expect("bounded consumer cleanup deadline")
+            .expect("bounded consumer cleanup");
+        panic!("synthetic caption consumer failed or exceeded a bound");
     };
     std::fs::write(evidence.with_extension("stderr"), stderr).unwrap();
     std::fs::write(evidence.with_extension("ts"), &output).unwrap();
