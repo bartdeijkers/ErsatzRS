@@ -67,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
 
     if args.dry_run {
         match args.provider {
-            Provider::Local => scan_local(&pool, &args).await?,
+            Provider::Local => scan_local(&pool, &args, None).await?,
             Provider::Jellyfin => scan_jellyfin(&pool, &args).await?,
             Provider::Plex => scan_plex(&pool, &args).await?,
             Provider::Emby => scan_emby(&pool, &args).await?,
@@ -136,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
 
     let scan = async {
         match args.provider {
-            Provider::Local => scan_local(&pool, &args).await,
+            Provider::Local => scan_local(&pool, &args, Some(&claim)).await,
             Provider::Jellyfin => scan_jellyfin(&pool, &args).await,
             Provider::Plex => scan_plex(&pool, &args).await,
             Provider::Emby => scan_emby(&pool, &args).await,
@@ -234,7 +234,11 @@ async fn init_logging(pool: &DbPool) {
         .init();
 }
 
-async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
+async fn scan_local(
+    pool: &DbPool,
+    args: &Args,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> anyhow::Result<()> {
     if args.dry_run {
         info!(library_id = args.library_id, provider = "local", "dry run");
         return Ok(());
@@ -245,6 +249,7 @@ async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
             deep_scan: args.deep_scan,
             library_id: args.library_id,
             ffprobe_path: resolve_ffprobe_path(pool, args).await?,
+            managed_claim: managed_claim.cloned(),
         },
     )
     .await?;

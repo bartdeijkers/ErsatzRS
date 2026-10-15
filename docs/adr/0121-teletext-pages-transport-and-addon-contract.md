@@ -361,11 +361,10 @@ The n9.0 acquisition audit rules out adding a global data dump to the ordinary
 probe: `show_data` formats extradata for every selected stream, including large
 attachments, before output-key filtering. `select_streams` filters both root
 and program stream rows, so subtitle-only selection would erase ordinary audio
-and video from that probe. A future optional second subtitle acquisition can
-reuse bounded managed capture, with root `show_streams` and separately restricted
+and video from that probe. The separate optional subtitle acquisition reuses
+bounded managed capture, with root `show_streams` and separately restricted
 `program`/`program_stream` entries; it must preserve ordinary metadata on auxiliary
-failure while retaining cleanup uncertainty as fatal. No additional probe flags
-are enabled. Before attachment or persistence, prove source revision across both
+failure while retaining cleanup uncertainty as fatal. Ordinary probe flags remain unchanged. Before attachment or persistence, prove source revision across both
 opens and fence the corresponding media-version write with current scan
 ownership. A path hash or scan-write timestamp cannot establish that revision.
 FFprobe field aliases merge entries, and common side-data can repeat in program
@@ -373,6 +372,23 @@ rows; output selection alone is not a child memory bound. Primary evidence:
 [n9.0 stream/program output](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffprobe.c#L1888),
 [section-entry selection](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffprobe.c#L2717)
 and [data formatting](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/textformat/avtextformat.c#L526).
+A separate optional local-acquisition API now reuses that bounded process owner.
+Its subtitle-only base64 capture has an internally owned ten-second deadline;
+ordinary capture arguments and no-total-timeout policy are unchanged. Confirmed
+auxiliary failure preserves ordinary metadata, while cancellation and uncertain
+cleanup remain fatal. Primary and auxiliary global-index/PID sets must agree.
+A held original regular-file handle plus observed size/filesystem-mtime bookends
+provides a report association across both opens and a later caller recheck. It
+is not an immutable-byte certificate or proof against restored in-place changes.
+The safe same-file 1.0.6 handle dependency was already locked transitively; its
+Windows file-index limitations and native acceptance remain open. Symlinks and
+non-lossless command locators conservatively have no auxiliary association,
+without changing ordinary probing; complete safe alias support is still due.
+The durable application/web/CLI path forwards the actual acquired claim to the
+Local configuration. This does not grant write authority by itself or enable
+source-page selection. Scanner leaf transactions must still attach reports to
+actual parents and recheck the source and claim through commit, rolling back
+all ordinary replacements after lease loss. P9A-03 owns verification and gaps.
 A preparatory report-only source model and additive SQLite storage now retain
 independent binding, provenance, PID, program and descriptor states. Exact
 stream/file/version parents remain distinct; repeated descriptor addresses and

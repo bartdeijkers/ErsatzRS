@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: exact-page bitmap command proven; connect source acquisition/selection, opaque scripts and slate clocks; full engine acceptance open'
+current_focus = 'P9A-03/P9A-04: guarded local acquisition and claim forwarding; connect transactional reports and exact-page normal-route selection; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -107,8 +107,9 @@ on the first shared physical input, matching the filter's first bitmap selection
 Independent888/200/plain pixel comparisons at a common media time, retained440Hz
 audio, targeted regressions, reviewed argv snapshots, strict Clippy and consumer
 checks pass. P9A-04 owns exact receipts and the corrected frame-ordinal oracle.
-Next connect P9A-03 bounded secondary probe acquisition, genuine source revision
-and actual managed scan claim to existing stream/file/version report storage;
+P9A-03 now owns the guarded optional acquisition and original-claim forwarding
+checkpoint. Next connect its report-only observations to existing leaf writer
+transactions, retaining the held source and rechecking actual claim ownership;
 then join PlaybackSubtitle/cache identity and prove selected888 on normal routes.
 Report-only descriptors cannot become selected pages. Ordinary tracks and cleanup
 must survive auxiliary failure; path hashes/scan-write timestamps cannot invent revisions.

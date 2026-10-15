@@ -395,6 +395,7 @@ async fn scan_and_rescan(tools: &Tools, root: &Path, pool: &SqlitePool) -> [Scan
     let library = root.join("library");
     seed_local_library(pool, &library, 4).await;
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: tools.ffprobe.to_str().unwrap().to_owned(),
@@ -1065,17 +1066,20 @@ async fn local_scanned_content_duration_bounds_native_and_next_handoff() {
     let tools = Tools::load();
     let root = tempfile::tempdir().unwrap();
     let pool = test_db().await;
-    let proof = AssertUnwindSafe(async {
-        generate(&tools, &root.path().join("library")).await;
-        prove_conflict(&tools, root.path(), true).await;
-        let scanned = scan_and_rescan(&tools, root.path(), &pool).await;
-        seed_schedule(&pool, root.path(), &scanned).await;
-        let locker = EntityLocker::new();
-        native(&pool, &locker, &tools, root.path(), &scanned).await;
-        next(&pool, &locker, &tools, root.path(), &scanned).await;
-        export(root.path()).await;
-    })
-    .catch_unwind()
+    // Keep the composed native/Next proof off the caller's polling stack.
+    let proof = Box::pin(
+        AssertUnwindSafe(async {
+            generate(&tools, &root.path().join("library")).await;
+            prove_conflict(&tools, root.path(), true).await;
+            let scanned = scan_and_rescan(&tools, root.path(), &pool).await;
+            seed_schedule(&pool, root.path(), &scanned).await;
+            let locker = EntityLocker::new();
+            native(&pool, &locker, &tools, root.path(), &scanned).await;
+            next(&pool, &locker, &tools, root.path(), &scanned).await;
+            export(root.path()).await;
+        })
+        .catch_unwind(),
+    )
     .await;
     pool.close().await;
     if let Err(panic) = proof {

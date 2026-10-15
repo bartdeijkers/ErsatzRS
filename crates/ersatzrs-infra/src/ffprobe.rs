@@ -6,8 +6,10 @@ pub mod teletext_probe;
 
 mod local;
 mod local_cleanup_scope;
+mod local_teletext;
 
 pub use local_cleanup_scope::{LocalProbeCleanupError, LocalProbeCleanupScope};
+pub use local_teletext::{LocalMediaProbe, LocalTeletextAcquisition};
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -122,6 +124,22 @@ impl FfprobeExtractor {
     pub async fn extract(&self, path: impl AsRef<Path>) -> Result<FfprobeMediaVersion> {
         let path = path.as_ref().to_owned();
         local::extract(self.command_for(&path), path).await
+    }
+
+    /// Acquire ordinary local metadata and an optional report-only teletext
+    /// observation under a held filesystem revision. Existing ordinary probe
+    /// arguments and its no-total-timeout policy remain unchanged.
+    ///
+    /// Auxiliary failure preserves ordinary metadata, except cancellation and
+    /// unconfirmed process cleanup. A retained association certifies neither
+    /// immutable source bytes nor selectable/actually transmitted pages.
+    /// # Errors
+    /// Returns ordinary probe failures, cancellation or uncertain cleanup.
+    pub async fn extract_local_with_teletext(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> Result<LocalMediaProbe> {
+        local_teletext::extract(self, path.as_ref()).await
     }
 
     /// Probe a persisted Remote Stream URL or media-producing add-on.

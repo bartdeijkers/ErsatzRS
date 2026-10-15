@@ -50,11 +50,13 @@ impl NativeScanRuntime {
         library_id: EntityId,
         deep_scan: bool,
         progress: &dyn ScanProgressSink,
+        managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
     ) -> Result<ersatzrs_scanner::LocalScanReport, ScanRuntimeError> {
         let config = ersatzrs_scanner::LocalScanConfig {
             library_id,
             ffprobe_path: ersatzrs_ffmpeg::ffprobe_path(),
             deep_scan,
+            managed_claim: managed_claim.cloned(),
         };
         ersatzrs_scanner::scan_local_library_with_progress(&self.pool, &config, Some(progress))
             .await
@@ -168,6 +170,7 @@ impl ScanRuntime for NativeScanRuntime {
         library_id: EntityId,
         deep_scan: bool,
         progress: &dyn ScanProgressSink,
+        managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
     ) -> Result<ScanRuntimeReport, ScanRuntimeError> {
         match provider {
             MediaSourceKind::Plex => ersatzrs_infra::plex::sync_library_by_id_with_progress(
@@ -209,7 +212,7 @@ impl ScanRuntime for NativeScanRuntime {
                         .map(|resolution| resolution.generation);
                 let result = async {
                     let mut report = self
-                        .scan_local_library_report(library_id, deep_scan, progress)
+                        .scan_local_library_report(library_id, deep_scan, progress, managed_claim)
                         .await?;
                     if self.confirm_cleanup().await == ScanCleanupConfirmation::Unconfirmed {
                         return Err(ScanRuntimeError::new(
@@ -822,7 +825,7 @@ mod tests {
         assert_eq!(libraries, [1]);
         assert!(report.playout_refreshes.is_empty());
         LocalProbeCleanupScope::new()
-            .scope(runtime.scan_library(MediaSourceKind::Local, 1, true, &()))
+            .scope(runtime.scan_library(MediaSourceKind::Local, 1, true, &(), None))
             .await
             .expect("run admitted startup replay");
         let state: i64 = sqlx::query_scalar(
@@ -873,7 +876,7 @@ mod tests {
         assert_eq!(libraries, [1]);
         assert!(report.playout_refreshes.is_empty());
         LocalProbeCleanupScope::new()
-            .scope(runtime.scan_library(MediaSourceKind::Local, 1, true, &()))
+            .scope(runtime.scan_library(MediaSourceKind::Local, 1, true, &(), None))
             .await
             .expect_err("malformed managed input must fail replay");
         let state: i64 = sqlx::query_scalar(

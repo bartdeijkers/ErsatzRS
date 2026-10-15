@@ -82,6 +82,7 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
     let report = scan_local_library(
         &pool,
         &LocalScanConfig {
+            managed_claim: None,
             deep_scan: false,
             library_id: 1,
             ffprobe_path: ffprobe,
@@ -214,6 +215,7 @@ async fn rescan_repairs_same_title_original_and_reboot_collision() {
     let pool = test_db().await;
     seed_local_library(&pool, &library, 2).await;
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
@@ -315,7 +317,12 @@ async fn local_deep_scan_refreshes_unchanged_season_without_duplicate_streams() 
             std::fs::metadata(path).unwrap().modified().unwrap(),
         ));
         seed_local_library(&pool, &temp.path().join("library"), 2).await;
-        let mut config = LocalScanConfig { library_id: 1, ffprobe_path: ffprobe, deep_scan: false };
+        let mut config = LocalScanConfig {
+            managed_claim: None,
+            library_id: 1,
+            ffprobe_path: ffprobe,
+            deep_scan: false,
+        };
         assert_eq!(scan_local_library(&pool, &config).await.unwrap().scanned_files, 1);
         let baseline = deep_scan_projection(&pool).await;
         assert_eq!(baseline.duration, "00:00:01");
@@ -693,6 +700,7 @@ async fn second_scan_skips_unchanged_season_via_etag() {
     seed_local_library(&pool, temp.path().join("library").as_path(), 2).await;
 
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
@@ -784,6 +792,7 @@ async fn failed_episode_scan_does_not_publish_season_etag() {
             .unwrap();
         }
         let config = LocalScanConfig {
+            managed_claim: None,
             deep_scan: false,
             library_id: 1,
             ffprobe_path: ffprobe.clone(),
@@ -869,6 +878,7 @@ async fn episode_probe_output_overflow_preserves_metadata_and_invalidates_season
     let pool = test_db().await;
     seed_local_library(&pool, &library, 2).await;
     let mut config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: probe.to_string_lossy().into_owned(),
@@ -1085,6 +1095,7 @@ async fn hdr_metadata_upgrade_reenters_unchanged_local_scan() {
     .unwrap();
     seed_local_library(&pool, &temp.path().join("library"), 2).await;
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
@@ -1227,6 +1238,7 @@ async fn subtitle_collision_upgrade_reenters_scan_and_restores_language_selectio
     .unwrap();
     seed_local_library(&pool, &temp.path().join("library"), 2).await;
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
@@ -1352,6 +1364,7 @@ async fn trashed_episode_disables_etag_skip_and_restores_normal() {
     let pool = test_db().await;
     seed_local_library(&pool, temp.path().join("library").as_path(), 2).await;
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
@@ -1426,6 +1439,7 @@ async fn stale_library_folders_cleaned_after_scan() {
     let pool = test_db().await;
     seed_local_library(&pool, library_dir.as_path(), 2).await;
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,
@@ -1490,6 +1504,7 @@ async fn television_discovery_mpeg_transport_rescan_preserves_tracks_and_identit
     let pool = test_db().await;
     seed_local_library(&pool, temp.path(), 2).await;
     let config = LocalScanConfig {
+        managed_claim: None,
         deep_scan: false,
         library_id: 1,
         ffprobe_path: ffprobe,

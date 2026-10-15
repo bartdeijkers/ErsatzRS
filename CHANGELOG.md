@@ -306,6 +306,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Add an optional, bounded local teletext descriptor acquisition API that keeps
+  ordinary scan metadata, holds and rechecks the actual file association, and
+  confirms process cleanup before reporting auxiliary failure. Forward original
+  managed scan claims to Local scanner adapters. Ordinary scans and source-page
+  selection remain unchanged until transactional attachment is connected.
 - Expand Phase 9 to authored EN 300 706 Level 2.5 with correct base fallback and
   QTeletextMaker TTI import/export, versioned template/theme/zone metadata and
   separate drafts and explicit publication. Require independent decoding,

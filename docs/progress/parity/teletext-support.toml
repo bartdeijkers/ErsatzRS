@@ -53,8 +53,8 @@ Clock-gap proof passes; slate/X27/full acceptance open.
 
 SQLite retains tracks/owners/data/leases. Missing reports prove no bytes/absence;
 pages stay NotAcquired. PID flags/subcodes/PTS prove no identity/readiness/inventory.
-JSON caps do not bound child RSS; acquisition/selection remain open. Auxiliary
-failure preserves metadata, uncertain cleanup is fatal. P9A-03 owns proof.
+P9A-03: guarded acquisition/claim seam pass; writers/selection open.
+JSON caps exclude RSS; auxiliary failure preserves tracks; cleanup uncertainty is fatal.
 
 Carousel/PSI/PCR preserve AV/EOF. ACK/cycle ends fence proposals;
 changed PMT precedes PES; withdrawal retains clock/counters;

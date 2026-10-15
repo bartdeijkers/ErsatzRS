@@ -257,7 +257,7 @@ async fn scan_with_cleanup_scope(
 ) -> Result<ersatzrs_app::ScanRuntimeReport, ersatzrs_app::ScanRuntimeError> {
     let scope = LocalProbeCleanupScope::new();
     let result = scope
-        .scope(runtime.scan_library(MediaSourceKind::Local, library_id, true, &()))
+        .scope(runtime.scan_library(MediaSourceKind::Local, library_id, true, &(), None))
         .await;
     scope.close();
     scope

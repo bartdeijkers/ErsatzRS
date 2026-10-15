@@ -1,9 +1,10 @@
-//! Local probe ownership without changing probe arguments or scan deadlines.
+//! Local probe ownership without changing ordinary arguments or scan deadlines.
 //!
 //! The independent worker owns the managed process tree and both readers until
 //! completion. Caller loss requests cancellation through response-channel
-//! closure. Normal scans have no total timeout; only cleanup and pipe shutdown
-//! have fresh bounded budgets. Operation scopes track these workers for managed
+//! closure. Ordinary probes have no total timeout; optional auxiliary probes
+//! may supply an absolute deadline. Cleanup and pipe shutdown always have fresh
+//! bounded budgets. Operation scopes track these workers for managed
 //! coordinator draining; this module owns no scanner lease itself.
 //! Managed process groups/jobs do not contain deliberately detached processes,
 //! and runtime teardown cannot await an asynchronous drop fallback.
@@ -18,6 +19,7 @@ use tokio::io::{AsyncRead, AsyncReadExt as _};
 use tokio::process::Command;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
 
 use super::local_cleanup_scope::{self, AdmissionError, OwnerGuard};
 use super::{parse_ffprobe_json, FfprobeCommand, FfprobeError, FfprobeMediaVersion};
@@ -57,6 +59,8 @@ enum LocalProbeProblem {
     PipeUnavailable,
     #[error("local ffprobe caller cancelled")]
     Cancelled,
+    #[error("local ffprobe operation deadline expired")]
+    Timeout,
 }
 
 impl LocalProbeProblem {
@@ -65,6 +69,7 @@ impl LocalProbeProblem {
             Self::OutputTooLarge => FfprobeError::OutputTooLarge { path },
             Self::CleanupUnconfirmed => FfprobeError::CleanupUnconfirmed { path },
             Self::Cancelled => FfprobeError::Cancelled { path },
+            Self::Timeout => FfprobeError::Timeout { path },
             _ => FfprobeError::Spawn {
                 path,
                 source: io::Error::other(self),
@@ -77,6 +82,18 @@ pub(super) async fn extract(
     command: FfprobeCommand,
     path: PathBuf,
 ) -> super::Result<FfprobeMediaVersion> {
+    let stdout = capture(command, path.clone(), None).await?;
+    parse_ffprobe_json(&path, &stdout).map_err(|source| FfprobeError::Json {
+        path: path.display().to_string(),
+        source,
+    })
+}
+
+pub(super) async fn capture(
+    command: FfprobeCommand,
+    path: PathBuf,
+    deadline: Option<Instant>,
+) -> super::Result<Vec<u8>> {
     let label = path.display().to_string();
     let owner = local_cleanup_scope::register_current().map_err(|problem| match problem {
         AdmissionError::Closed => FfprobeError::Cancelled {
@@ -95,7 +112,14 @@ pub(super) async fn extract(
     // This worker intentionally outlives an abandoned caller only to perform
     // cleanup. No metadata publication or database write occurs in the worker.
     tokio::spawn(async move {
-        let result = run_owned_scoped(command, &owner_label, &mut response, owner.as_ref()).await;
+        let result = run_owned_scoped(
+            command,
+            &owner_label,
+            &mut response,
+            owner.as_ref(),
+            deadline,
+        )
+        .await;
         let confirmed = !matches!(result, Err(FfprobeError::CleanupUnconfirmed { .. }));
         if let Some(owner) = owner {
             owner.complete(confirmed);
@@ -117,10 +141,7 @@ pub(super) async fn extract(
             stderr: output.stderr,
         });
     }
-    parse_ffprobe_json(&path, &output.stdout).map_err(|source| FfprobeError::Json {
-        path: label,
-        source,
-    })
+    Ok(output.stdout)
 }
 
 #[cfg(test)]
@@ -129,7 +150,7 @@ async fn run_owned(
     label: &str,
     response: &mut Response,
 ) -> super::Result<LocalProbeOutput> {
-    run_owned_scoped(command, label, response, None).await
+    run_owned_scoped(command, label, response, None, None).await
 }
 
 async fn run_owned_scoped(
@@ -137,11 +158,15 @@ async fn run_owned_scoped(
     label: &str,
     response: &mut Response,
     owner: Option<&OwnerGuard>,
+    deadline: Option<Instant>,
 ) -> super::Result<LocalProbeOutput> {
     // Channel closure is level triggered, including caller loss before the
     // task's first poll; no cancellation notification registration gap exists.
     if response.is_closed() || owner.is_some_and(OwnerGuard::cancellation_requested) {
         return Err(LocalProbeProblem::Cancelled.into_error(label.to_owned()));
+    }
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        return Err(LocalProbeProblem::Timeout.into_error(label.to_owned()));
     }
     let mut command_builder = Command::new(command.program);
     command_builder
@@ -163,9 +188,15 @@ async fn run_owned_scoped(
         };
         return Err(problem.into_error(label.to_owned()));
     };
-    run_process(child, ProbeReaders::spawn(stdout, stderr), response, owner)
-        .await
-        .map_err(|problem| problem.into_error(label.to_owned()))
+    run_process(
+        child,
+        ProbeReaders::spawn(stdout, stderr),
+        response,
+        owner,
+        deadline,
+    )
+    .await
+    .map_err(|problem| problem.into_error(label.to_owned()))
 }
 
 async fn run_process(
@@ -173,12 +204,14 @@ async fn run_process(
     mut readers: ProbeReaders,
     response: &mut Response,
     owner: Option<&OwnerGuard>,
+    deadline: Option<Instant>,
 ) -> Result<LocalProbeOutput, LocalProbeProblem> {
     let process_result = loop {
         tokio::select! {
             biased;
             () = response.closed() => break Err(LocalProbeProblem::Cancelled),
             () = scope_cancelled(owner) => break Err(LocalProbeProblem::Cancelled),
+            () = operation_expired(deadline) => break Err(LocalProbeProblem::Timeout),
             result = await_reader(&mut readers.stdout_task), if readers.stdout_task.is_some() => {
                 if let Err(problem) = readers.accept_stdout(result) {
                     break Err(problem);
@@ -203,11 +236,21 @@ async fn run_process(
     cleanup_result?;
     let status = process_result?;
     let (stdout, stderr) = reader_result?;
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        return Err(LocalProbeProblem::Timeout);
+    }
     Ok(LocalProbeOutput {
         status,
         stdout,
         stderr,
     })
+}
+
+async fn operation_expired(deadline: Option<Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
+    }
 }
 
 async fn scope_cancelled(owner: Option<&OwnerGuard>) {

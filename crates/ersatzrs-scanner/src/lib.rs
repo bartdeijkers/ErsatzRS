@@ -174,6 +174,9 @@ pub struct LocalScanConfig {
     pub ffprobe_path: String,
     /// Refresh unchanged local content, including television season caches.
     pub deep_scan: bool,
+    /// Exact acquired durable scan claim. Unmanaged callers cannot persist
+    /// managed source observations by reconstructing operation identity.
+    pub managed_claim: Option<ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -5511,6 +5514,7 @@ mod tests {
         };
         seed_local_library(&pool, &library_path, "Remote Streams", 7).await;
         let config = super::LocalScanConfig {
+            managed_claim: None,
             deep_scan: false,
             library_id: 1,
             ffprobe_path: "unused-definition-scan-probe".into(),
@@ -5635,6 +5639,7 @@ broadcasters: [Current Network]
         let report = super::scan_local_library(
             &pool,
             &super::LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "ffprobe-unused-for-definition-scan".to_owned(),
@@ -5784,6 +5789,7 @@ broadcasters: [Current Network]
         let second_report = super::scan_local_library(
             &pool,
             &super::LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "ffprobe-unused-for-definition-scan".to_owned(),
@@ -6023,6 +6029,7 @@ create_playlist: true
         let failed = super::scan_local_library(
             &pool,
             &super::LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "unused-ffprobe".to_owned(),
@@ -6053,6 +6060,7 @@ create_playlist: true
         let replayed = super::scan_local_library(
             &pool,
             &super::LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "unused-ffprobe".to_owned(),
@@ -6112,6 +6120,7 @@ create_playlist: true
         let baseline = super::scan_local_library(
             &pool,
             &super::LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "unused-ffprobe".to_owned(),
@@ -6311,6 +6320,7 @@ create_playlist: true
         .await
         .expect("second published item");
         let config = super::LocalScanConfig {
+            managed_claim: None,
             deep_scan: false,
             library_id: 1,
             ffprobe_path: "unused-ffprobe".to_owned(),
@@ -6381,6 +6391,7 @@ create_playlist: true
         let first = super::scan_local_library(
             &pool,
             &super::LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "unused-ffprobe".to_owned(),
@@ -6434,6 +6445,7 @@ create_playlist: true
         let rescanned = super::scan_local_library(
             &pool,
             &super::LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "unused-ffprobe".to_owned(),
@@ -7448,6 +7460,7 @@ defaults:
         let report = scan_local_library(
             &pool,
             &LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "unused-ffprobe".to_owned(),
@@ -7564,6 +7577,7 @@ defaults:
             let override_scan = scan_local_library(
                 &pool,
                 &LocalScanConfig {
+                    managed_claim: None,
                     deep_scan: false,
                     library_id: 1,
                     ffprobe_path: "unused-ffprobe".to_owned(),
@@ -7653,6 +7667,7 @@ defaults:
         let rescan = scan_local_library(
             &pool,
             &LocalScanConfig {
+                managed_claim: None,
                 deep_scan: false,
                 library_id: 1,
                 ffprobe_path: "unused-ffprobe".to_owned(),

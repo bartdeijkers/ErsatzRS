@@ -4615,12 +4615,17 @@ async fn execute_durable_scan(
         .operations
         .scan_activity()
         .observe_persisted(operation_id, request);
-    let outcome = application
-        .execute_scan_work(commands::ScanWorkRequest {
+    let outcome = execute_scan_work_with_runtime_and_claim(
+        commands::ScanWorkRequest {
             operation_id,
             request,
-        })
-        .await;
+        },
+        application.ports.scan_runtime(),
+        application.ports.playout_builds(),
+        &application.operations,
+        Some(claim),
+    )
+    .await;
     let operations = application.ports.managed_library_operations();
     finish_durable_scan(
         outcome,
@@ -4709,6 +4714,16 @@ async fn execute_scan_work_with_runtime(
     playout_builds: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> commands::ExecuteScanOutcome {
+    execute_scan_work_with_runtime_and_claim(work, runtime, playout_builds, operations, None).await
+}
+
+async fn execute_scan_work_with_runtime_and_claim(
+    work: commands::ScanWorkRequest,
+    runtime: &dyn ScanRuntime,
+    playout_builds: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+    managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
+) -> commands::ExecuteScanOutcome {
     let registry = operations.scan_activity();
     let Some(guard) = registry.start_guard(work.operation_id) else {
         return commands::ExecuteScanOutcome::Missing;
@@ -4724,7 +4739,7 @@ async fn execute_scan_work_with_runtime(
             deep_scan,
         } => {
             runtime
-                .scan_library(provider, library_id, deep_scan, &progress)
+                .scan_library(provider, library_id, deep_scan, &progress, managed_claim)
                 .await
         }
         commands::ScanRequest::Show {
@@ -4843,6 +4858,7 @@ mod scan_execution_tests {
     #[derive(Default)]
     struct FakeRuntime {
         calls: Mutex<Vec<String>>,
+        claims: Mutex<Vec<Option<ersatzrs_core::repositories::ManagedLibraryOperationClaim>>>,
         fail_scan: bool,
         report: ScanRuntimeReport,
     }
@@ -4851,6 +4867,7 @@ mod scan_execution_tests {
         fn failing() -> Self {
             Self {
                 calls: Mutex::default(),
+                claims: Mutex::default(),
                 fail_scan: true,
                 report: ScanRuntimeReport::default(),
             }
@@ -4859,6 +4876,7 @@ mod scan_execution_tests {
         fn reporting(playout_refreshes: Vec<ScanPlayoutRefresh>) -> Self {
             Self {
                 calls: Mutex::default(),
+                claims: Mutex::default(),
                 fail_scan: false,
                 report: ScanRuntimeReport { playout_refreshes },
             }
@@ -4873,7 +4891,12 @@ mod scan_execution_tests {
             library_id: EntityId,
             deep_scan: bool,
             progress: &dyn ScanProgressSink,
+            managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
         ) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+            self.claims
+                .lock()
+                .expect("claims")
+                .push(managed_claim.cloned());
             self.calls
                 .lock()
                 .expect("calls")
@@ -4941,9 +4964,10 @@ mod scan_execution_tests {
             library_id: EntityId,
             deep_scan: bool,
             progress: &dyn ScanProgressSink,
+            managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
         ) -> Result<ScanRuntimeReport, ScanRuntimeError> {
             self.inner
-                .scan_library(provider, library_id, deep_scan, progress)
+                .scan_library(provider, library_id, deep_scan, progress, managed_claim)
                 .await
         }
 
@@ -5007,6 +5031,68 @@ mod scan_execution_tests {
             })
             .expect("accepted");
         work.expect("queue token")
+    }
+
+    #[tokio::test]
+    async fn managed_scan_runtime_receives_exact_claim_and_unmanaged_scan_has_none() {
+        use ersatzrs_core::repositories::{
+            ManagedLibraryOperation, ManagedLibraryOperationClaim, ManagedLibraryScanSpec,
+        };
+        use ersatzrs_domain::{ManagedLibraryOperationKind, ManagedLibraryOperationState};
+
+        let claim = ManagedLibraryOperationClaim {
+            operation: ManagedLibraryOperation {
+                id: 731,
+                library_id: 71,
+                parent_operation_id: Some(700),
+                owner_token: "original-operation-owner".to_owned(),
+                kind: ManagedLibraryOperationKind::PublicationChildScan,
+                state: ManagedLibraryOperationState::Running,
+                scan: Some(ManagedLibraryScanSpec {
+                    provider: MediaSourceKind::Local,
+                    show_id: None,
+                    deep_scan: true,
+                }),
+                attempt_count: 4,
+                next_eligible_at: None,
+            },
+            lease_owner: "actual-acquired-lease-owner".to_owned(),
+        };
+        let unchanged = claim.clone();
+        let runtime = FakeRuntime::default();
+        let queue = RecordingPlayoutQueue::default();
+        for managed in [true, false] {
+            let operations = coordinator();
+            let work = admitted(
+                &operations,
+                ScanRequest::Library {
+                    provider: MediaSourceKind::Local,
+                    library_id: 71,
+                    deep_scan: true,
+                },
+            );
+            let outcome = if managed {
+                super::execute_scan_work_with_runtime_and_claim(
+                    work,
+                    &runtime,
+                    &queue,
+                    &operations,
+                    Some(&claim),
+                )
+                .await
+            } else {
+                execute_scan_work_with_runtime(work, &runtime, &queue, &operations).await
+            };
+            assert_eq!(outcome, ExecuteScanOutcome::Completed);
+        }
+        assert_eq!(
+            *runtime.claims.lock().expect("claims"),
+            vec![Some(unchanged.clone()), None]
+        );
+        assert_eq!(
+            claim, unchanged,
+            "execution must not reconstruct or mutate acquired authority"
+        );
     }
 
     async fn recorded_terminal_result(

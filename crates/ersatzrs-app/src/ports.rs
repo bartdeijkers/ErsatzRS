@@ -295,13 +295,15 @@ pub trait ScanRuntime: Send + Sync {
         Ok(ScanRuntimeReport::default())
     }
 
-    /// Execute one full library scan.
+    /// Execute one full library scan. Managed callers forward the exact acquired
+    /// claim; absent claims grant no managed metadata write authority.
     async fn scan_library(
         &self,
         provider: MediaSourceKind,
         library_id: EntityId,
         deep_scan: bool,
         progress: &dyn ScanProgressSink,
+        managed_claim: Option<&ersatzrs_core::repositories::ManagedLibraryOperationClaim>,
     ) -> Result<ScanRuntimeReport, ScanRuntimeError>;
 
     /// Execute one provider-specific targeted show scan.

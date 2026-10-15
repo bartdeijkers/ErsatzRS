@@ -2383,6 +2383,73 @@ rescan invalidate stale page state without losing provider track identity or
 ordinary subtitle/alternate-audio metadata.
 '''
 evidence = '''
+2026-10-15 guarded optional local-acquisition checkpoint:
+The separate FfprobeExtractor::extract_local_with_teletext API preserves the
+ordinary command, projection and no-total-timeout policy. Only explicit MPEG-TS
+DVB teletext can launch a second subtitle-only base64 descriptor probe. The
+existing process/reader owner retains the eight-MiB output bound, gives that
+capture a ten-second operation deadline and confirms fresh-budget cleanup before
+returning optional failure. Cancellation and cleanup uncertainty remain fatal.
+The original regular file handle is held before the ordinary open and through
+caller checks. Held/fresh identity, size and actual filesystem mtime bookend both
+probes; primary/auxiliary global-index/PID sets must agree. A versioned digest
+records that observed association, never a path hash or scan-write timestamp.
+The already-locked same-file 1.0.6 dependency is promoted for safe Unix/Windows
+handle identity; no additional package resolution is introduced. This is report-
+only association, not immutable-byte certification, ABA resistance, complete
+wire descriptors or observed/selectable pages. Symlinks and non-lossless Unicode
+command locators receive no auxiliary association; ordinary probing is preserved.
+Windows file-index limitations/native identity proof and safe alias acquisition
+remain open implementation gaps, not accepted permanent product restrictions.
+Actual durable scan claims now pass unchanged through the application port and
+web Local/standalone CLI adapters into LocalScanConfig. Unmanaged callers pass
+None. This transports authority; it does not manufacture or validate a lease,
+activate the optional API in ordinary scans, or authorize metadata persistence.
+The native synthetic AV/200/888 fixture passes Nextest
+b773dc34-ff03-4efb-823d-4be896da29c0 (one test, 0.120s) with pinned FFprobe
+n9.0-20261006 (first-party 2.0.6 Linux x64 artifact). Ordinary media metadata is
+identical after normalizing fresh scan dates; original video, English audio and
+eng,eng subtitle rows survive. Index2/PID0x102/program1 and English descriptor
+200/type1 plus888/type2 are retained. Repeated unchanged acquisition has the same
+revision; replacing the file with identical size/mtime invalidates the still-held
+original association. The scope confirms full cleanup. Direct CLI capture also
+confirms program_stream aliases repeat subtitle extradata; selected output keys
+are not a child RSS bound. The application scan-execution selection passes all12
+regressions in b68d84dc-4be6-4058-b87f-bd44261d84f2, including exact complete
+claim identity, unmanaged None and existing cleanup/terminal-write fencing.
+All81 selected FFprobe units pass in Nextest
+d93d5a89-667b-441d-9e03-971a57c890d4 (0.742s), including11 new acquisition
+regressions and existing capture/reader/scope/remote/parser regressions. Actual
+Unix fixtures prove optional process failure, malformed/oversized/mismatched
+output, deadline reaping before return and fatal scope cancellation. A non-UTF8
+path plus a different lossy alias cannot gain an auxiliary association. Portable
+guard tests cover mutation and same-size/mtime replacement. Strict application
+Clippy, formatting and architecture-lint pass. Final strict all-target Clippy
+passes for infra/scanner/web (clippy-6); the normal native dependency graph also
+checks the scheduler consumer. Final acquisition/native selection passes all12
+in 3ab94e30-dffe-438c-ad16-38d6ea8ce8b7 (0.540s), validating the final bytewise
+revision formatting and opt-in fixture helper. Unchanged ordinary-owner/parser
+results from the81-test run are reused. The existing aggregate native/Next test
+future is heap-pinned without changing assertions or execution; the same16,408-
+byte lint was reproduced with HEAD ordinary-probe sources, and sharing the claim
+had no effect, so that experimental representation was reverted. One item-scoped
+lint exception permits environment input only in the native test helper.
+These are scoped Linux working-tree checks, not full CI or native six-platform
+acceptance. Existing unrelated changes remain outside this checkpoint. Receipts are retained under
+tmp/phase9-source-acquisition/identity.json (SHA256
+d267b109afe32e12dab79ddf5f9bf7a8699b98890dca2382a3c22e8ef4720cde);
+the first consumer/native compile exposed the
+sha2 0.11 digest's missing LowerHex implementation, corrected with bytewise hex.
+Next connect the optional acquisition and original claim to each existing Local
+leaf writer, including television/extras. Recheck source association and current
+claim inside the same ordinary media-version transaction; lease loss requires
+whole-leaf rollback, not a skipped report after streams were replaced. Then join
+source-bound PlaybackSubtitle/cache identity and prove selected888 on normal
+routes. Supported remotes, actual page/body/charset observation, immutable source
+readiness, missing/rescan/version behavior and native Windows remain open.
+P9A-04 retains the engine/output/editor/platform acceptance. All milestone
+contracts, statuses and dependencies remain unchanged; no milestone is accepted.
+
 2026-10-10 preparatory supplied-transport assembly checkpoint:
 The pure source_assembly::SuppliedTeletextAssembler accepts complete supplied
 TS188 packets on one caller-selected strict elementary PID. It reuses the
