@@ -74,6 +74,11 @@ pub fn build_mpegts_segmenter_wrapper_command(
             .extend(["-c:a".to_owned(), "aac_latm".to_owned()]);
     }
     input.add_readrate("1.0");
+    // Match the six-second HLS remux burst in upstream v26.11.3; keep it
+    // below the Next producer's twelve-second lookahead, then resume pacing.
+    input
+        .input_options
+        .extend(["-readrate_initial_burst".to_owned(), "6".to_owned()]);
 
     let mut steps = vec![
         no_standard_input(),
@@ -543,7 +548,7 @@ mod tests {
 
         let arguments = command.arguments.join(" ");
         assert!(
-            arguments.contains("-c:a aac_latm -readrate 1.0 -i"),
+            arguments.contains("-c:a aac_latm -readrate 1.0 -readrate_initial_burst 6 -i"),
             "{arguments}"
         );
     }

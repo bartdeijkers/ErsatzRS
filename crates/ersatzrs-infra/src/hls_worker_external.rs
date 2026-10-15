@@ -141,10 +141,12 @@ pub(super) async fn load(
         }
     };
     Ok(Some(ActiveHlsItem {
+        original_media_path: path.clone(),
         media_path: path,
         playout_item_id: 0,
         media_item_id: 0,
         media_version_id: 0,
+        media_file_id: None,
         content_duration: resolved.probe.version.duration.to_std().ok(),
         in_point: Duration::ZERO,
         program_duration: (resolved.occurrence.finish - resolved.occurrence.start)

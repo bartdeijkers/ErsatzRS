@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: correct caption-producer pacing in the ordinary routed flow; Off AV/audio/page200 baseline verified, full engine acceptance open'
+current_focus = 'P9A-04: integrate UCU11 and extend verified native caption flow to general source/seek windows; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,38 +62,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current concrete blocker: the real Local caption producer supplies encoded bytes
-below real time, causing source-read deadlines in the final teletext output. The
-same12s source passes Off AV/alternate-audio/page200 and default-capacity checks.
-P9A-04 owns actual argv/progress and byte-identical unpaced diagnostic evidence;
-next correct the typed producer/final-clock interaction and rerun strict legacy
-and Hybrid captures. No deadline/buffer waiver or full engine acceptance is made.
-2026-10-15 actual-worker integration checkpoint underway: P9A-04 owns passing
-shared admission/real-child ownership and genuine Local-scan/runtime receipts.
-Legacy/HLS wiring now retains exact file identity and binds sources to each
-actual consumer; routed888/Off/stale-source pixels, selected audio and transport
-proof are next. Full-source/seek coverage and legacy pre-open rejection recovery
-remain concrete open gaps, with HLS same-occurrence fallback awaiting proof.
-UCU11 is now on fetched remote main61d1786c with composed original/Next/browser
-CI successes verified; integrate it after the coherent local checkpoint. No push.
-2026-10-15 exact-file caption-selection checkpoint: P9A-04 owns the criterion,
-verification and remaining gap map. Raw descriptor candidates and bounded native
-decode receipts now join shared subtitle preference ranking without losing page
-language, role, service or work ownership. Next retain MediaFile identity in the
-ordinary route, qualify actual seek/cue reads and retain the source in each actual
-native child/retry before proving888/Off/other-page with selected alternate audio.
-This component does not enable a route or close engine/source/editor/client gates.
-2026-10-15 same-byte decoder-window checkpoint: P9A-04 owns exact hashes,
-receipts and the remaining criterion map. The source consumer now validates the
-actual private TS188 bytes sent to FFprobe, including late PSI change fencing,
-complete selected PES and explicit prefix/tail omissions. Final decoder metadata
-alone no longer supplies service authority. The input stays with the actual
-process owner through cleanup, with existing cancellation/admission safety.
-Next join exact database file/version/page selection, actual playback seek/cue
-coverage and native worker lifetime to ordinary wrappers; prove888/Off/other-page
-with selected alternate audio. A bounded initial decoder window does not prove
-those later opens or seeks. Full source/charset/platform, uncertain-file restart
-cleanup and authored/editor/client acceptance stay open; no milestone closes.
+The finite genuine Local-source flow now passes native legacy AND Hybrid:
+qualified888 bitmap Burn, both audio preferences, Off/stale-source ordinary AV,
+accepted authored200, TSDuck and independent default2lease cleanup. P9A-04 owns
+exact receipts and the paired final-argv proof of the internal-producer pacing
+correction. Focused loader/strict Clippy/progress checks pass. Next integrate
+fetched UCU11 origin/main while preserving unrelated work and extend this
+representative verified flow to general source/seek windows. Current qualification's
+whole-bounded-EOF requirement is an implementation gap, not a product restriction.
+Full Level2.5/editor/client/Lua/restart/platform criteria and engine-first delivery
+remain unchanged; no full milestone completion or push is claimed.
+The earlier exact-file selection, same-byte window and shared native ownership
+checkpoints are retained in P9A-04 evidence. General seek-window/charset/restart
+uncertainty and actual late-recheck race recovery remain acceptance work; the
+finite successes above do not replace those requirements.
 2026-10-15 source-page decode checkpoint: P9A-04 owns final exact-source/native
 receipts and the prior fixture-dispatch correction. The existing owned probe now
 retains source and admitted work through actual process/pipe cleanup; held-source

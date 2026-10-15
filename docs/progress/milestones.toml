@@ -3112,7 +3112,56 @@ without proving routed safety. No production pacing change is accepted from
 that standalone result. Next locate a typed internal-producer seam which retains
 ordinary final-wrapper clock/backpressure/bounds, then prove actual legacy and
 Hybrid playback. General source/seek windows and remaining engine gates stay open.
-active-check.json records current checks; remaining captions/Hybrid are unproved.
+After diagnostic checkpoint d7f38087, a proposed correction reuses existing
+InputFile::without_readrate only for the exact qualified caption primary owned
+by a real legacy InternalItem guard. The final wrapper retains pacing and bounded
+backpressure; ordinary fallback, direct output, retained inputs and HLS retain
+existing pacing. Hardware retries reapply the same scope. This is implemented in
+the working tree, not yet accepted or committed. Strict actual route9
+bec1abae-cebc-4561-913d-0e06279bdea5 passes3 recovery helpers and the full Off
+baseline. Burn now reaches the required capture without the previous deadline,
+then fails the helper's active==2 expectation (observed1, peak remains bounded).
+No Burn pixel/audio/transport success is claimed: that assertion precedes those
+oracles. Next check actual producer EOF/reaping and the capacity contract; the
+helper must distinguish concurrent peak admission from a completed encoder,
+without relaxing any accepted ownership, output or playback requirement. Then
+finish all four oracles, add generated-command regression evidence and prove the
+independent Hybrid route. Captions/Hybrid and full source/engine/editor/client
+acceptance remain open. ADR0121 explicitly requires independent release of the
+wrapper and encoder leases. The unchanged actual-child adapter confirms reaping
+before release or quarantines uncertain cleanup; prior native ownership evidence
+remains valid. The capture oracle now requires peak==2 (stronger than prior<=2)
+and1..=2 current leases while the final wrapper is active, allowing a completed
+encoder to release independently. Capture bounds, output deadlines, default2limit
+and zero-after-drop checks are unchanged; all127 milestone contracts are preserved.
+Actual strict route10 run8baba97f-2771-472a-a01d-82c28829057a passes all4 cases:
+Off-nld, Burn-eng, Burn-nld and stale-eng. Each independently verifies media1.6s
+pixels, selected440/660Hz audio, accepted originalPID512/page200, TSDuck transport,
+unchanged addon calls/publication identity, peak2 and zero-after-drop capacity.
+The known caption supply deadline is resolved on this actual finite legacy flow;
+this does not qualify long sources, seek/cue or full engine acceptance. Paired final-argv snapshots and10 related exact-source/segmenter cases pass
+in runaff5a830-5172-4f1c-b87c-36a77571487e. Paced versus wrapper-paced production
+pipeline requests differ only by-readrate1.05; page888, scoped decoding, shared
+physical input, codecs/maps/output clocks remain the same.
+Actual Hybrid run91081454-90ce-4b0a-b4f0-cc30f6225755 passes the SAME4 cases through
+the actual native HLS item worker and ordinary final wrapper, with all pixel,
+audio, authored200, TSDuck, immutable-publication and cleanup oracles. The first
+Hybrid trial39619570-2719-4244-8313-ca323cf808fd stopped after capture because the
+fixture checked registration immediately after an asynchronous Stop. It now
+waits up to5s for owner-driven unregistering; no manual removal or media/timing
+relaxation is used. The passing trial supersedes that fixture-only race.
+No new browser/client/platform or full source-window acceptance follows from
+these finite Linux x64 routes. Final focused runs b3e183e8-556a-4ff1-820c-
+be5ab2285855 and7e7f1689-94b3-49f2-9a21-e409c2cf12ee pass6 HLS startup-deadline,
+exact-file loader and delayed-mirror regressions. Strict all-target Clippy across
+web/infra/FFmpeg passes3m40s; formatting, architecture-lint and progress validation
+pass. No full closeout, generic smoke, native Windows/ARM host, new client/editor
+or complete engine acceptance is claimed. The coherent local checkpoint includes
+these route adapters, exact identity propagation, typed ordinary fallback and
+owned consumer wiring with their actual runtime/argv evidence. Next integrate
+UCU11 from fetched origin/main61d1786c while preserving unrelated work, then extend
+the flow to the still-open general source/seek windows. Full acceptance remains
+open; no milestone closes and no push/publication occurs.
 Canonical receipts: tmp/phase9-native-source-route/. No milestone closes.
 
 2026-10-15 exact-file caption candidate/selection checkpoint (not route/engine acceptance):

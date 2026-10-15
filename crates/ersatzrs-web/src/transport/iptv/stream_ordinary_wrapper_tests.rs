@@ -52,6 +52,9 @@ const MAX_CAPTURE: usize = 8 * 1024 * 1024;
 const VIDEO_KBPS: i32 = 4000;
 const AUDIO_KBPS: i32 = 128;
 
+#[path = "stream_source_caption_runtime_tests.rs"]
+mod source_caption_runtime_tests;
+
 #[expect(
     clippy::disallowed_methods,
     reason = "Requires an explicit new isolated native-test app-data root, never production configuration"
@@ -506,6 +509,10 @@ async fn capacity_zero() {
 }
 
 async fn capture(public: &Server) -> Vec<u8> {
+    capture_recorded(public, None).await
+}
+
+async fn capture_recorded(public: &Server, evidence: Option<&Path>) -> Vec<u8> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .build()
@@ -526,9 +533,13 @@ async fn capture(public: &Server) -> Vec<u8> {
     let mut bytes = Vec::new();
     tokio::time::timeout(Duration::from_secs(20), async {
         while bytes.len() < 2 * 1024 * 1024 || bytes.len() % 188 != 0 {
-            let chunk = body
-                .next()
-                .await
+            let received = body.next().await;
+            if received.as_ref().is_none_or(std::result::Result::is_err) {
+                if let Some(path) = evidence {
+                    tokio::fs::write(path, &bytes).await.unwrap();
+                }
+            }
+            let chunk = received
                 .expect("ordinary wrapper ended before source prefix")
                 .unwrap();
             assert!(bytes.len() + chunk.len() <= MAX_CAPTURE);
@@ -538,11 +549,14 @@ async fn capture(public: &Server) -> Vec<u8> {
     .await
     .expect("ordinary wrapper did not deliver bounded source prefix");
     let active = active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
-    assert_eq!(
-        active.active, 2,
-        "normal routed wrapper must fit the default two slots"
+    // ADR 0121 allows the finite encoder to finish/reap before the final
+    // paced wrapper drains its bytes. Prove the admitted pair and its bound,
+    // rather than requiring an already completed encoder to retain a slot.
+    assert_eq!(active.peak, 2, "normal routed output must admit the pair");
+    assert!(
+        (1..=2).contains(&active.active),
+        "the final wrapper must remain active within the default two slots"
     );
-    assert!(active.peak <= 2);
     drop(body);
     drop(client);
     capacity_zero().await;

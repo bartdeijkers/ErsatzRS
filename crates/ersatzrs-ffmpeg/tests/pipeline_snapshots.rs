@@ -1432,6 +1432,50 @@ fn software_pipeline_overlays_exact_source_teletext_caption_snapshot() {
 }
 
 #[test]
+fn software_pipeline_wrapper_paced_exact_source_teletext_caption_snapshot() {
+    // ADR 0121: exact-page bitmap Burn keeps one shared physical source.
+    // The owned legacy producer can delegate pacing to its final wrapper.
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.realtime_mode = RealtimeMode::On;
+    let command_for = |video| {
+        let mut request = PipelineRequest::new(video, desired.clone())
+            .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::H264));
+        request.inputs.push(InputFile::teletext_subtitle(
+            "/media/movie.mkv",
+            2,
+            ersatzrs_domain::TeletextPageNumber::new(888).unwrap(),
+        ));
+        let pipeline = SoftwarePipelineBuilder.build(request.clone());
+        pipeline.command(&request.inputs).arguments
+    };
+    let paced = command_for(InputFile::video("/media/movie.mkv"));
+    let wrapper_paced = command_for(InputFile::video("/media/movie.mkv").without_readrate());
+
+    for args in [&paced, &wrapper_paced] {
+        assert_eq!(args.iter().filter(|arg| *arg == "-i").count(), 1);
+        let input_position = args.iter().position(|arg| arg == "-i").unwrap();
+        let page_position = args.iter().position(|arg| arg == "-txt_page:2").unwrap();
+        assert!(page_position < input_position);
+        assert_eq!(args[page_position + 1], "888");
+    }
+    let readrate_position = paced.iter().position(|arg| arg == "-readrate").unwrap();
+    assert_eq!(paced[readrate_position + 1], "1.05");
+    assert!(!wrapper_paced.iter().any(|arg| arg == "-readrate"));
+    let mut without_pacing = paced.clone();
+    without_pacing.drain(readrate_position..readrate_position + 2);
+    assert_eq!(without_pacing, wrapper_paced);
+
+    insta::assert_snapshot!(
+        "software_pipeline_exact_source_teletext_caption_paced_producer",
+        paced.join(" ")
+    );
+    insta::assert_snapshot!(
+        "software_pipeline_exact_source_teletext_caption_wrapper_paced_producer",
+        wrapper_paced.join(" ")
+    );
+}
+
+#[test]
 fn software_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let mut request = h264_request(desired);

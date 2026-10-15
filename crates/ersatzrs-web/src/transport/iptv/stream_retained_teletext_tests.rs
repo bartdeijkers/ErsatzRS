@@ -392,6 +392,8 @@ async fn uncertain_cleanup_retry(branch: u8, invoked: Arc<AtomicBool>) -> Stream
         .await
         .unwrap();
     StreamDenialRetry {
+        source_caption: None,
+        ordinary_caption_fallback: None,
         song: None,
         pool,
         shared_ffmpeg_runtime: Arc::new(RwLock::new(FfmpegRuntimeReport::for_tests())),

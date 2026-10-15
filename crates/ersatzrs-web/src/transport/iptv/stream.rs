@@ -1,6 +1,12 @@
 #[path = "stream_external.rs"]
 mod external;
 
+#[path = "stream_source_teletext.rs"]
+mod source_teletext;
+
+#[path = "stream_source_caption_recovery.rs"]
+mod source_caption_recovery;
+
 #[path = "stream_ordinary_teletext.rs"]
 mod ordinary_teletext;
 
@@ -86,11 +92,11 @@ use ersatzrs_infra::playback::{
     apply_automatic_null_audio, enrich_source_video_stream_for_playback,
     load_channel_playback_profile, load_channel_target_frame_rate, load_source_audio_streams,
     load_source_video_stream_by_index, render_playback_graphics_overlays,
-    select_channel_playback_subtitle, select_custom_playback_streams,
-    select_pinned_playback_subtitle, select_playback_audio_stream_index, select_playback_graphics,
-    select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_inputs_for_stream, CustomStreamSelection, PlaybackAudioSelection,
-    PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+    select_custom_playback_streams, select_pinned_playback_subtitle,
+    select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
+    subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::published_interval_source::IntervalPlaybackContext;
 use ersatzrs_infra::remote_stream::{
@@ -1191,6 +1197,7 @@ async fn serve_channel_stream_admitted_inner(
     let mut retained_playback = None;
     let mut retained_cancellation = None;
     let mut external_subtitle_owner = None;
+    let mut source_caption_owner = None;
     let previous_audio_streams = source_audio_streams.clone();
     // Fence each source-opening stage after awaiting earlier managed work.
     // Cancellation retains reservations until prepared producers are reaped.
@@ -1577,17 +1584,35 @@ async fn serve_channel_stream_admitted_inner(
                     )
                     .await
             } else {
-                select_channel_playback_subtitle(
-                    &state.pool,
-                    active.media_item_id,
-                    &preferred_subtitle_languages,
-                    subtitle_mode,
-                    effective_streaming_mode,
-                    &channel,
-                    &playback_profile.resolution,
-                    start_seconds,
-                )
-                .await
+                if let Some(credits) = ersatzrs_infra::music_video_credits::generate_music_video_credits_subtitle(
+                    &state.pool, active.media_item_id, &channel,
+                    &playback_profile.resolution, start_seconds,
+                ).await? {
+                    return Ok(Some(credits));
+                }
+                let selected = source_teletext::select(source_teletext::SelectionContext {
+                    state, active: &active, resolved: &resolved,
+                    languages: &preferred_subtitle_languages, subtitle_mode,
+                    streaming_mode: effective_streaming_mode, deadline: startup_deadline,
+                }).await;
+                match selected {
+                    Ok(Some(selected)) => {
+                        source_caption_owner = selected.source;
+                        Ok(selected.subtitle)
+                    }
+                    Ok(None) => ersatzrs_infra::playback::select_playback_subtitle(
+                        &state.pool, active.media_item_id, &preferred_subtitle_languages,
+                        subtitle_mode, effective_streaming_mode,
+                    ).await,
+                    Err(_) => {
+                        tracing::warn!(media_item_id=active.media_item_id,
+                            "source teletext selection unavailable; retaining ordinary subtitle candidates");
+                        ersatzrs_infra::playback::source_teletext::select_native_playback_subtitle_for_version(
+                            &state.pool, active.media_item_id, active.media_version_id,
+                            &preferred_subtitle_languages, subtitle_mode, effective_streaming_mode, &[],
+                        ).await.map(|selected| selected.map(|selected| selected.into_parts().0))
+                    }
+                }
             }
         }
         .await
@@ -1722,13 +1747,28 @@ async fn serve_channel_stream_admitted_inner(
         subtitle.as_ref(),
         audio_selection,
     );
-    let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
-        if active.external.is_some() {
-            external::subtitle_input(subtitle, &resolved, output_format, effective_streaming_mode)
-        } else {
-            subtitle_input_for_stream(subtitle, &resolved, output_format, effective_streaming_mode)
-        }
-    });
+    let subtitle_input = source_caption_owner
+        .as_ref()
+        .map(|source: &Arc<source_teletext::PlaybackSource>| source.input())
+        .or_else(|| {
+            subtitle.as_ref().and_then(|subtitle| {
+                if active.external.is_some() {
+                    external::subtitle_input(
+                        subtitle,
+                        &resolved,
+                        output_format,
+                        effective_streaming_mode,
+                    )
+                } else {
+                    subtitle_input_for_stream(
+                        subtitle,
+                        &resolved,
+                        output_format,
+                        effective_streaming_mode,
+                    )
+                }
+            })
+        });
     if active.subtitle_stream_index.is_some() && subtitle_input.is_none() {
         tracing::error!(
             channel_id = channel.id,
@@ -2031,26 +2071,94 @@ async fn serve_channel_stream_admitted_inner(
     };
     let remote_stream = active.remote_stream.clone();
     let retained_stream = retained_playback.is_some();
-    let command = match build_stream_command_with_retained_inputs(
-        media_input.clone(),
-        output_format,
-        start_position,
-        stream_duration,
-        &playback_profile,
-        target_frame_rate,
-        effective_streaming_mode,
-        metadata.clone(),
-        runtime_capabilities.clone(),
-        source_stream.clone(),
-        source_audio_streams.clone(),
-        audio_selection,
-        subtitle_input.clone(),
-        watermark_inputs.clone(),
-        graphics_overlays.clone(),
-        Some(opacity_clock),
-        retained_stream,
-        song.as_deref(),
-    ) {
+    let ordinary_caption = if source_caption_owner.is_some() {
+        match source_caption_recovery::prepare(
+            source_teletext::SelectionContext {
+                state,
+                active: &active,
+                resolved: &resolved,
+                languages: &preferred_subtitle_languages,
+                subtitle_mode,
+                streaming_mode: effective_streaming_mode,
+                deadline: startup_deadline,
+            },
+            output_format,
+            start_seconds,
+            metadata.clone(),
+        )
+        .await
+        {
+            Ok(caption) => Some(caption),
+            Err(error) => {
+                tracing::error!(channel_id = channel.id, %error, "ordinary caption fallback selection failed");
+                cancel_retained_startup(
+                    retained_playback.take().map(|playback| playback.prepared),
+                    interval_reservation.as_ref(),
+                    Some(&mut external_subtitle_owner),
+                    &graphics_cleanup_dirs,
+                    Some(&mut dynamic_text_controllers),
+                )
+                .await;
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    } else {
+        None
+    };
+    // The owned legacy wrapper paces its final output. Keep this exact-page
+    // producer bounded by that consumer's backpressure instead of applying a
+    // second readrate clock to its sparse bitmap-subtitle decoder.
+    let wrapper_paces_source_caption = output.role() == TeletextOutputRole::InternalItem
+        && legacy_item.is_some()
+        && output_format == OutputFormat::MpegTs
+        && effective_streaming_mode == StreamingMode::TransportStream
+        && !retained_stream
+        && source_caption_owner
+            .as_ref()
+            .is_some_and(|source| subtitle_input.as_ref() == Some(&source.input()));
+    let primary_input = if wrapper_paces_source_caption {
+        media_input.clone().without_readrate()
+    } else {
+        media_input.clone()
+    };
+    let build_command = |input, metadata, subtitle_input| {
+        build_stream_command_with_retained_inputs(
+            input,
+            output_format,
+            start_position,
+            stream_duration,
+            &playback_profile,
+            target_frame_rate,
+            effective_streaming_mode,
+            metadata,
+            runtime_capabilities.clone(),
+            source_stream.clone(),
+            source_audio_streams.clone(),
+            audio_selection,
+            subtitle_input,
+            watermark_inputs.clone(),
+            graphics_overlays.clone(),
+            Some(opacity_clock),
+            retained_stream,
+            song.as_deref(),
+        )
+    };
+    let commands = build_command(primary_input, metadata.clone(), subtitle_input.clone()).and_then(
+        |command| {
+            ordinary_caption
+                .as_ref()
+                .map(|caption| {
+                    build_command(
+                        media_input.clone(),
+                        caption.metadata.clone(),
+                        caption.input.clone(),
+                    )
+                })
+                .transpose()
+                .map(|fallback| (command, fallback))
+        },
+    );
+    let (command, ordinary_caption_fallback) = match commands {
         Ok(command) => command,
         Err(error) => {
             // ADR 0064: refuse rather than transcode a source whose colour
@@ -2079,6 +2187,8 @@ async fn serve_channel_stream_admitted_inner(
     let retry_preferred_audio_title = preferred_audio_title.map(str::to_owned);
     let retry_preferred_audio_language = preferred_audio_language.clone();
     let retry = StreamDenialRetry {
+        source_caption: source_caption_owner.map(source_teletext::Consumer::new),
+        ordinary_caption_fallback,
         song: song.clone(),
         pool: state.pool.clone(),
         shared_ffmpeg_runtime: Arc::clone(&state.ffmpeg_runtime),
@@ -2214,8 +2324,38 @@ async fn serve_channel_stream_admitted_inner(
                         force_software_encode,
                         "rebuilding channel stream command after runtime hardware rejection"
                     );
+                    let ordinary_caption_fallback = ordinary_caption
+                        .as_ref()
+                        .map(|caption| {
+                            build_stream_command_with_retained_inputs(
+                                media_input.clone(),
+                                output_format,
+                                start_position,
+                                stream_duration,
+                                &playback_profile,
+                                target_frame_rate,
+                                effective_streaming_mode,
+                                caption.metadata.clone(),
+                                capabilities.clone(),
+                                source_stream.clone(),
+                                source_audio_streams.clone(),
+                                audio_selection,
+                                caption.input.clone(),
+                                watermark_inputs.clone(),
+                                graphics_overlays.clone(),
+                                Some(opacity_clock),
+                                retained_stream,
+                                song.as_deref(),
+                            )
+                        })
+                        .transpose();
+                    let primary_input = if wrapper_paces_source_caption && !retained_stream {
+                        media_input.without_readrate()
+                    } else {
+                        media_input
+                    };
                     let command = build_stream_command_with_retained_inputs(
-                        media_input,
+                        primary_input,
                         output_format,
                         start_position,
                         stream_duration,
@@ -2234,7 +2374,9 @@ async fn serve_channel_stream_admitted_inner(
                         retained_stream,
                         song.as_deref(),
                     );
-                    let Ok(command) = command else {
+                    let (Ok(command), Ok(ordinary_caption_fallback)) =
+                        (command, ordinary_caption_fallback)
+                    else {
                         if let Some(fresh) = fresh.take() {
                             fresh
                                 .prepared
@@ -2256,6 +2398,7 @@ async fn serve_channel_stream_admitted_inner(
                     }
                     Ok(Some(StreamRetryAttempt {
                         command,
+                        ordinary_caption_fallback,
                         source_stream,
                         prepared: fresh.map(|fresh| fresh.prepared),
                     }))
@@ -3694,6 +3837,7 @@ pub(crate) struct ActivePlayoutItem {
     pub(crate) media_path: String,
     pub(crate) media_item_id: i64,
     pub(crate) media_version_id: i64,
+    pub(crate) media_file_id: Option<i64>,
     pub(crate) content_duration: Option<Duration>,
     pub(crate) in_point: Duration,
     pub(crate) out_point: Duration,
@@ -3759,6 +3903,7 @@ pub(crate) async fn load_active_media_path(
     let now_text = encode_sql_datetime(source_now);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
+                  mf."Id" AS "MediaFileId",
                   pi."Id" AS "PlayoutItemId",
                   pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
@@ -3910,6 +4055,7 @@ pub(crate) async fn load_active_media_path(
         media_path,
         media_item_id: decode_active_item_column(&row, "MediaItemId")?,
         media_version_id: decode_active_item_column(&row, "MediaVersionId")?,
+        media_file_id: Some(decode_active_item_column(&row, "MediaFileId")?),
         content_duration: Some(content_duration),
         in_point: parse_duration_text(&in_point_text)?,
         out_point: parse_duration_text(&out_point_text)?,
@@ -4685,6 +4831,8 @@ fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
 /// command. Decode denials persist a negative capability row; encoder-open
 /// failures force software encoding for this stream.
 struct StreamDenialRetry {
+    source_caption: Option<source_teletext::Consumer>,
+    ordinary_caption_fallback: Option<FfmpegCommand>,
     song: Option<Arc<ersatzrs_infra::song_background::NativeSongBackground>>,
     pool: DbPool,
     /// Process-wide runtime state used by future direct and HLS sessions.
@@ -4707,6 +4855,7 @@ struct StreamDenialRetry {
 
 struct StreamRetryAttempt {
     command: FfmpegCommand,
+    ordinary_caption_fallback: Option<FfmpegCommand>,
     source_stream: Option<SourceVideoStream>,
     prepared: Option<PreparedRemoteStreamInput>,
 }
@@ -4803,6 +4952,7 @@ fn immediate_stream_retry(
         Box::pin(async move {
             Ok(build(mode).map(|command| StreamRetryAttempt {
                 command,
+                ordinary_caption_fallback: None,
                 source_stream: None,
                 prepared: None,
             }))
@@ -4815,12 +4965,20 @@ async fn spawn_stream_retry(
     producer: Option<&RemoteStreamCommand>,
     channel_number: &str,
     item: Option<&LegacyWrapperItemCancellation>,
+    source_caption: Option<&source_teletext::Consumer>,
+    _cancel: &Arc<Notify>,
 ) -> Result<RemoteStreamProcess, StreamSpawnError> {
     if item.is_some_and(LegacyWrapperItemCancellation::is_cancelled) {
         cancel_stream_retry_attempt(attempt).await?;
         return Err(StreamSpawnError::Spawn("legacy retry cancelled".into()));
     }
-    match attempt.prepared {
+    if source_caption.is_some() && (producer.is_some() || attempt.prepared.is_some()) {
+        cancel_stream_retry_attempt(attempt).await?;
+        return Err(StreamSpawnError::Spawn(
+            "source teletext retry cannot use a remote producer".into(),
+        ));
+    }
+    let mut child = match attempt.prepared {
         Some(prepared) => spawn_ffmpeg_with_prepared_remote_input(
             &attempt.command,
             None,
@@ -4830,7 +4988,19 @@ async fn spawn_stream_retry(
         .await
         .map_err(|error| StreamSpawnError::prepared(&error)),
         None => spawn_stream_process(&attempt.command, producer, channel_number),
+    }?;
+    if let Some(source) = source_caption {
+        if source.attach(&mut child).is_err() {
+            return Err(if reap_stream_process(&mut child).await.is_ok() {
+                StreamSpawnError::Spawn("source teletext retry attachment refused".into())
+            } else {
+                StreamSpawnError::CleanupUnconfirmed(
+                    "source teletext retry attachment cleanup unconfirmed".into(),
+                )
+            });
+        }
     }
+    Ok(child)
 }
 
 // The three variants share a prefix because they are three flavours of the same
@@ -5133,7 +5303,7 @@ async fn spawn_stream_body_with_lifetime(
     channel_number: String,
     session_registry: Arc<dyn HlsSessionRegistry>,
     capacity_reservation: Option<ActiveTranscodeReservation>,
-    retry: Option<StreamDenialRetry>,
+    mut retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
     mut prepared: Option<PreparedRemoteStreamInput>,
     mut subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
@@ -5227,6 +5397,47 @@ async fn spawn_stream_body_with_lifetime(
             StreamSpawnError::CleanupUnconfirmed("legacy item startup cleanup unconfirmed".into())
         });
     }
+    let recovered_command = if let Some(context) = retry.as_mut() {
+        let deadline = context
+            .source_caption
+            .as_ref()
+            .map(source_teletext::Consumer::initial_deadline);
+        if let Some(deadline) = deadline {
+            match source_caption_recovery::before_open(
+                context,
+                capacity_reservation.as_ref(),
+                deadline,
+                None,
+                lifetime.as_ref(),
+            )
+            .await
+            {
+                Ok(command) => command,
+                Err(error) => {
+                    let confirmed = cancel_retained_startup(
+                        prepared.take(),
+                        capacity_reservation.as_ref(),
+                        Some(&mut subtitle_owner),
+                        &cleanup_paths,
+                        Some(&mut dynamic_text_controllers),
+                    )
+                    .await;
+                    return Err(if confirmed {
+                        error
+                    } else {
+                        StreamSpawnError::CleanupUnconfirmed(
+                            "source teletext startup cleanup unconfirmed".into(),
+                        )
+                    });
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let command = recovered_command.as_ref().unwrap_or(command);
     let song = retry.as_ref().and_then(|retry| retry.song.as_ref());
     if let Some(song) = song {
         song.mark_in_use();
@@ -5264,6 +5475,20 @@ async fn spawn_stream_body_with_lifetime(
             return Err(error);
         }
     };
+    if let Some(source) = retry
+        .as_ref()
+        .and_then(|retry| retry.source_caption.as_ref())
+    {
+        if source.attach(&mut child).is_err() {
+            return Err(if reap_stream_process(&mut child).await.is_ok() {
+                StreamSpawnError::Spawn("source teletext attachment refused".into())
+            } else {
+                StreamSpawnError::CleanupUnconfirmed(
+                    "source teletext attachment cleanup unconfirmed".into(),
+                )
+            });
+        }
+    }
     // The immutable snapshot is the command that created this exact child.
     // Plain/fixed callers retain no new argv copy or application context.
     let output = output.with_command(command);
@@ -5430,6 +5655,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     tokio::spawn(async move {
         session_registry.register_direct(handle.clone()).await;
         let mut retry = retry;
+        let mut command = command;
         let staged_song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
         let mut output_result = Err("encoded output ended before producer startup");
         let mut cleanup_unconfirmed = false;
@@ -5479,9 +5705,40 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 } else {
                     output.clone()
                 };
+                if let Some(context) = retry.as_mut() {
+                    match source_caption_recovery::before_open(
+                        context,
+                        Some(&capacity_guard),
+                        tokio::time::Instant::now() + Duration::from_secs(15),
+                        Some(&cancel),
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(Some(fallback)) => command = fallback,
+                        Ok(None) => {}
+                        Err(error) => {
+                            tracing::warn!(%error, channel_number, "source caption capacity-wait startup cancelled");
+                            break;
+                        }
+                    }
+                }
                 let selected = selected.with_command(&command);
                 match spawn_stream_process(&command, producer, &channel_number) {
-                    Ok(child) => {
+                    Ok(mut child) => {
+                        if let Some(source) = retry
+                            .as_ref()
+                            .and_then(|retry| retry.source_caption.as_ref())
+                        {
+                            if source.attach(&mut child).is_err() {
+                                cleanup_unconfirmed =
+                                    reap_stream_process(&mut child).await.is_err();
+                                if cleanup_unconfirmed {
+                                    capacity_guard.retain_until_restart();
+                                }
+                                break;
+                            }
+                        }
                         let song_owner = retry.as_ref().and_then(|retry| retry.song.clone());
                         let outcome = supervise_stream_command_with_retry(
                             child,
@@ -5751,6 +6008,18 @@ async fn supervise_stream_command_with_retry_cancellable(
                     return failed_stream_spawn_outcome(&error);
                 }
             };
+            let retry_command = match source_caption_recovery::before_retry(
+                retry_command,
+                &mut context,
+                remote_stream.and_then(remote_stream_producer),
+                cancel,
+                item,
+            )
+            .await
+            {
+                Ok(attempt) => attempt,
+                Err(error) => return failed_stream_spawn_outcome(&error),
+            };
             let next_graph_operation =
                 ersatzrs_ffmpeg::selected_hardware_graph(&retry_command.command);
             let next_ffmpeg_path = retry_command.command.executable.clone();
@@ -5768,6 +6037,8 @@ async fn supervise_stream_command_with_retry_cancellable(
                 remote_stream.and_then(remote_stream_producer),
                 channel_number,
                 item,
+                context.source_caption.as_ref(),
+                cancel,
             )
             .await
             {
@@ -5846,6 +6117,18 @@ async fn supervise_stream_command_with_retry_cancellable(
                     return failed_stream_spawn_outcome(&error);
                 }
             };
+            let retry_command = match source_caption_recovery::before_retry(
+                retry_command,
+                &mut context,
+                remote_stream.and_then(remote_stream_producer),
+                cancel,
+                item,
+            )
+            .await
+            {
+                Ok(attempt) => attempt,
+                Err(error) => return failed_stream_spawn_outcome(&error),
+            };
             let next_graph_operation =
                 ersatzrs_ffmpeg::selected_hardware_graph(&retry_command.command);
             let next_ffmpeg_path = retry_command.command.executable.clone();
@@ -5863,6 +6146,8 @@ async fn supervise_stream_command_with_retry_cancellable(
                 remote_stream.and_then(remote_stream_producer),
                 channel_number,
                 item,
+                context.source_caption.as_ref(),
+                cancel,
             )
             .await
             {
@@ -5910,7 +6195,7 @@ async fn supervise_stream_command_with_retry_cancellable(
         );
         let retry_command = match build_retry_command
             .build(
-                StreamRetryMode::HardwareEncodeDenied(context.runtime_capabilities),
+                StreamRetryMode::HardwareEncodeDenied(context.runtime_capabilities.clone()),
                 cancel,
                 item,
             )
@@ -5931,6 +6216,18 @@ async fn supervise_stream_command_with_retry_cancellable(
                 return failed_stream_spawn_outcome(&error);
             }
         };
+        let retry_command = match source_caption_recovery::before_retry(
+            retry_command,
+            &mut context,
+            remote_stream.and_then(remote_stream_producer),
+            cancel,
+            item,
+        )
+        .await
+        {
+            Ok(attempt) => attempt,
+            Err(error) => return failed_stream_spawn_outcome(&error),
+        };
         if let Some(song) = &song {
             song.mark_in_use();
         }
@@ -5940,6 +6237,8 @@ async fn supervise_stream_command_with_retry_cancellable(
             remote_stream.and_then(remote_stream_producer),
             channel_number,
             item,
+            context.source_caption.as_ref(),
+            cancel,
         )
         .await
         {
@@ -6585,12 +6884,15 @@ mod tests {
                     arguments: Vec::new(),
                     environment: Vec::new(),
                 },
+                ordinary_caption_fallback: None,
                 source_stream: None,
                 prepared: None,
             },
             None,
             "retry-fence",
             Some(&cancellation),
+            None,
+            &Arc::new(Notify::new()),
         )
         .await;
         assert!(
@@ -7156,6 +7458,7 @@ mod tests {
             .expect("load pinned active playback item")
             .expect("active playback item");
         assert!(active.has_pinned_stream_selection);
+        assert_eq!(active.media_file_id, Some(1));
         assert_eq!(active.audio_stream_index, None);
         assert_eq!(active.subtitle_stream_index, None);
 
@@ -7197,6 +7500,7 @@ mod tests {
             .await
             .expect("load active remote stream")
             .expect("active remote stream");
+        assert_eq!(active.media_file_id, Some(2));
         let remote = active.remote_stream.expect("resolved remote stream");
         assert!(remote.is_live);
         assert!(matches!(
@@ -7232,6 +7536,7 @@ mod tests {
             .expect("active mirror item");
 
         assert_eq!(active.playout_item_id, 12);
+        assert_eq!(active.media_file_id, Some(1));
         assert_eq!(active.playout_start, "2026-06-08 12:59:00");
         assert_eq!(active.playout_finish, "2026-06-08 13:01:00");
         assert_eq!(
@@ -7304,6 +7609,7 @@ mod tests {
                 "ImageId" INTEGER NULL
             )"#,
             r#"CREATE TABLE "MediaFile" (
+                "Id" INTEGER PRIMARY KEY,
                 "MediaVersionId" INTEGER NOT NULL,
                 "Path" TEXT NULL
             )"#,
@@ -7918,6 +8224,7 @@ mod tests {
             media_path: "/media/calibration-1.mp4".to_owned(),
             media_item_id: 10,
             media_version_id: 20,
+            media_file_id: None,
             content_duration: Some(Duration::from_secs(15)),
             in_point,
             out_point,
@@ -8465,6 +8772,7 @@ mod tests {
             assert!(rendered.contains("ETV_HLS_URL"));
             assert!(rendered.contains("ETV_FFMPEG_PATH"));
             assert!(rendered.contains("-muxrate 9830400 -pcr_period 20"));
+            assert!(rendered.contains("-readrate 1.0 -readrate_initial_burst 6 -i"));
             insta::assert_snapshot!(
                 format!("mpegts_builtin_{}", name.replace('.', "_")),
                 rendered
@@ -9957,6 +10265,8 @@ mod tests {
         let command =
             FfmpegCommand::new_with_executable(ffmpeg.to_string_lossy(), Vec::new(), Vec::new());
         let mut retry = Some(StreamDenialRetry {
+            source_caption: None,
+            ordinary_caption_fallback: None,
             song: None,
             pool: pool.clone(),
             shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
@@ -10062,6 +10372,8 @@ mod tests {
             FfmpegCommand::new_with_executable(primary.to_string_lossy(), Vec::new(), Vec::new());
         let fallback_path = fallback.to_string_lossy().into_owned();
         let mut retry = Some(StreamDenialRetry {
+            source_caption: None,
+            ordinary_caption_fallback: None,
             song: None,
             pool: pool.clone(),
             shared_ffmpeg_runtime: Arc::clone(&shared_runtime),
@@ -10177,6 +10489,8 @@ mod tests {
             FfmpegCommand::new_with_executable(primary.to_string_lossy(), Vec::new(), Vec::new());
         let fallback_path = fallback.to_string_lossy().into_owned();
         let mut retry = Some(StreamDenialRetry {
+            source_caption: None,
+            ordinary_caption_fallback: None,
             song: None,
             pool: pool.clone(),
             shared_ffmpeg_runtime: Arc::clone(&shared_runtime),

@@ -26,7 +26,11 @@ release section when tagging a release.
   without changing ordinary metadata. Shared native preparation releases its
   short work permit before playback; actual consumers retain exact-source
   receipts and playback admission through confirmed cleanup or quarantine.
-  Full source-page semantics and complete stream-route acceptance remain open.
+  Qualified source captions now reach ordinary native legacy and Hybrid routes;
+  finite Local-source proof preserves both audio preferences, Off/stale fallback,
+  authored pages and default-capacity cleanup. Owned legacy caption producers use
+  the existing pacing opt-out while the final wrapper retains its clock and bounds.
+  General source/seek semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible
   client navigation with isolated themes and edits. Independent transport,

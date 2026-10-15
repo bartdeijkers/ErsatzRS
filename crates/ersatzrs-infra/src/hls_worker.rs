@@ -2,6 +2,8 @@ mod output_status;
 
 #[path = "hls_worker_external.rs"]
 mod external;
+#[path = "hls_worker_source_caption.rs"]
+mod source_caption;
 
 use crate::repositories::SqlxResultExt as _;
 use std::collections::{HashMap, HashSet};
@@ -199,6 +201,7 @@ enum HlsProcessOutcome {
     Success,
     Failed(String),
     Cancelled,
+    SourceCaptionUnavailable,
     Reclaimed,
     DeliverySoftwareFallback {
         detected_at: DateTime<Utc>,
@@ -329,6 +332,10 @@ struct HlsProcessCapacity<'a> {
     work_ahead_reservation: Option<&'a mut Option<WorkAheadReservation>>,
     delivery_pool: Option<&'a DbPool>,
     delivery_recovery: Option<HlsDeliveryRecovery>,
+    source_caption: Option<(
+        Arc<crate::playback::source_teletext::runtime::PlaybackSource>,
+        crate::transcode_capacity::ActiveTranscodeReservation,
+    )>,
 }
 
 #[derive(Default)]
@@ -464,6 +471,7 @@ pub struct HlsSessionWorker {
     path_replacements: Vec<PathReplacement>,
     ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     media_relay: std::sync::OnceLock<Arc<crate::next_engine::media::MediaRelay>>,
+    source_teletext_locker: std::sync::OnceLock<ersatzrs_core::locking::EntityLocker>,
     output_status: std::sync::Mutex<output_status::SegmentOutputs>,
     output_error: std::sync::Mutex<Option<String>>,
     startup: std::sync::Mutex<HlsStartupReadiness>,
@@ -526,6 +534,7 @@ impl HlsSessionWorker {
             path_replacements,
             ffmpeg_runtime,
             media_relay: std::sync::OnceLock::new(),
+            source_teletext_locker: std::sync::OnceLock::new(),
             output_status: std::sync::Mutex::default(),
             output_error: std::sync::Mutex::default(),
             startup: std::sync::Mutex::new(HlsStartupReadiness::Legacy),
@@ -700,6 +709,7 @@ impl HlsSessionWorker {
         // ADR 0014 allows exactly one graph retry per session, mirroring the
         // decode-denial bound above.
         let mut learned_graph_retry_used = false;
+        let mut source_caption_fallback = None::<source_caption::CaptionOccurrence>;
         let mut interval_startup: Option<(i64, tokio::time::Instant)> = None;
         let mut startup_classified = false;
         let mut startup_attempt_started_at = match self.startup_readiness() {
@@ -996,6 +1006,7 @@ impl HlsSessionWorker {
                     }
                     HlsProcessOutcome::Cancelled => break,
                     HlsProcessOutcome::Reclaimed
+                    | HlsProcessOutcome::SourceCaptionUnavailable
                     | HlsProcessOutcome::DeliverySoftwareFallback { .. }
                     | HlsProcessOutcome::DeliveryFallback { .. } => {}
                     HlsProcessOutcome::Failed(error) => {
@@ -1124,6 +1135,7 @@ impl HlsSessionWorker {
                         continue;
                     }
                     HlsProcessOutcome::Failed(_)
+                    | HlsProcessOutcome::SourceCaptionUnavailable
                     | HlsProcessOutcome::Cancelled
                     | HlsProcessOutcome::DeliverySoftwareFallback { .. }
                     | HlsProcessOutcome::DeliveryFallback { .. } => {}
@@ -1626,6 +1638,7 @@ impl HlsSessionWorker {
             {
                 audio_selection = audio_selection.with_complete_source_audio(&source_audio_streams);
             }
+            let mut source_caption = None;
             let subtitle = if active.has_pinned_stream_selection {
                 if let Some(stream_index) = active.subtitle_stream_index {
                     match self
@@ -1662,18 +1675,28 @@ impl HlsSessionWorker {
                 selection.subtitle
             } else {
                 match self
-                    .startup_read(external::subtitle(
+                    .startup_read(self.automatic_source_caption(
                         &pool,
-                        &active,
-                        &preferred_subtitle_languages,
-                        subtitle_mode,
-                        &channel_for_streams,
-                        &playback_profile.resolution,
-                        start_seconds,
+                        source_caption::AutomaticCaptionRequest {
+                            active: &active,
+                            languages: &preferred_subtitle_languages,
+                            mode: subtitle_mode,
+                            channel: &channel_for_streams,
+                            resolution: &playback_profile.resolution,
+                            start: start_seconds,
+                            ordinary_only: source_caption_fallback.take().is_some_and(
+                                |occurrence| {
+                                    occurrence == source_caption::CaptionOccurrence::from(&active)
+                                },
+                            ),
+                        },
                     ))
                     .await
                 {
-                    Ok(subtitle) => subtitle,
+                    Ok(selection) => {
+                        source_caption = selection.source;
+                        selection.subtitle
+                    }
                     Err(error) => {
                         tracing::error!(
                             %error,
@@ -1750,19 +1773,24 @@ impl HlsSessionWorker {
                 }
                 break;
             }
-            let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
-                let input = if active.external.is_some() {
-                    crate::external_json::native::subtitle_input
-                } else {
-                    subtitle_input_for_stream
-                };
-                input(
-                    subtitle,
-                    &active.media_path,
-                    self.output_format,
-                    StreamingMode::HttpLiveStreamingSegmenter,
-                )
-            });
+            let subtitle_input = source_caption
+                .as_ref()
+                .map(|source| source.input())
+                .or_else(|| {
+                    subtitle.as_ref().and_then(|subtitle| {
+                        let input = if active.external.is_some() {
+                            crate::external_json::native::subtitle_input
+                        } else {
+                            subtitle_input_for_stream
+                        };
+                        input(
+                            subtitle,
+                            &active.media_path,
+                            self.output_format,
+                            StreamingMode::HttpLiveStreamingSegmenter,
+                        )
+                    })
+                });
             if active.subtitle_stream_index.is_some() && subtitle_input.is_none() {
                 tracing::error!(
                     channel_id = self.channel_id,
@@ -2198,6 +2226,9 @@ impl HlsSessionWorker {
                                     .then_some(&mut work_ahead_reservation),
                                 delivery_pool: is_live_remote.then_some(&pool),
                                 delivery_recovery,
+                                source_caption: source_caption.as_ref().map(|source| {
+                                    (Arc::clone(source), active_transcode_reservation.clone())
+                                }),
                             },
                         )
                         .await;
@@ -2239,6 +2270,14 @@ impl HlsSessionWorker {
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
             }
+            if outcome == HlsProcessOutcome::SourceCaptionUnavailable {
+                // No consumer was spawned and no media was published. Retry
+                // this exact occurrence/cursor once with ordinary captions;
+                // the next successful chunk may qualify source captions anew.
+                source_caption_fallback = Some(source_caption::CaptionOccurrence::from(&active));
+                self.set_admission_status(HlsAdmissionStatus::Waiting);
+                continue;
+            }
             if let Err(error) =
                 update_on_demand_checkpoint(&pool, self.channel_id, Utc::now()).await
             {
@@ -2268,6 +2307,10 @@ impl HlsSessionWorker {
                         );
                         last_playout_item_id = Some((active.playout_item_id, active.playout_start));
                     }
+                }
+                HlsProcessOutcome::SourceCaptionUnavailable => {
+                    // Handled before checkpoint/cursor mutation above.
+                    continue;
                 }
                 HlsProcessOutcome::Failed(error_message) => {
                     if retained_failure
@@ -2447,6 +2490,7 @@ impl HlsSessionWorker {
                             continue;
                         }
                         HlsProcessOutcome::Failed(_)
+                        | HlsProcessOutcome::SourceCaptionUnavailable
                         | HlsProcessOutcome::Cancelled
                         | HlsProcessOutcome::DeliverySoftwareFallback { .. }
                         | HlsProcessOutcome::DeliveryFallback { .. } => {
@@ -2628,6 +2672,7 @@ impl HlsSessionWorker {
                 work_ahead_reservation: None,
                 delivery_pool: None,
                 delivery_recovery: None,
+                source_caption: None,
             },
         )
         .await
@@ -2807,6 +2852,23 @@ impl HlsSessionWorker {
             .as_ref()
             .map(|retained| Arc::clone(&retained.failure));
         let mut reserve_interval = tokio::time::interval(Duration::from_millis(250));
+        if let Some((source, _)) = &capacity.source_caption {
+            if producer.is_some() || retained.is_some() {
+                if let Some(retained) = retained {
+                    let _ = retained.prepared.cancel().await;
+                }
+                return HlsProcessOutcome::Failed(
+                    "local source captions cannot use a remote HLS producer".into(),
+                );
+            }
+            if source
+                .recheck(self.source_caption_check_deadline(source.initial_deadline()))
+                .await
+                .is_err()
+            {
+                return HlsProcessOutcome::SourceCaptionUnavailable;
+            }
+        }
         if let Some(song) = capacity.song {
             song.mark_in_use();
         }
@@ -2846,6 +2908,24 @@ impl HlsSessionWorker {
             }
             return HlsProcessOutcome::Failed("failed to spawn ffmpeg hls segmenter".to_owned());
         };
+        // No await separates a local consumer spawn from transfer of its exact
+        // receipt and actual transcode admission. The child adapter, including
+        // its uncertainty Drop, owns them independently of the requesting UI.
+        if let Some((source, reservation)) = &capacity.source_caption {
+            if let Err(error) =
+                child.attach_local_teletext_source(source.receipt(), reservation.clone())
+            {
+                if self
+                    .terminate_hls_child(&mut child, None, "source caption attachment failed")
+                    .await
+                {
+                    if let Some(song) = capacity.song {
+                        song.confirm_reaped();
+                    }
+                }
+                return HlsProcessOutcome::Failed(error.to_string());
+            }
+        }
         let stderr_remote_stream = remote_stream.clone();
         let mut stderr_task = child.stderr.take().map(|stderr| {
             tokio::spawn(async move {
@@ -5767,6 +5847,7 @@ async fn load_active_hls_item_with_artifact_root(
     let now_text = encode_datetime(playout_context.source_time(now)?);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
+                  mf."Id" AS "MediaFileId",
                   pi."Id" AS "PlayoutItemId",
                   pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
@@ -5892,7 +5973,7 @@ async fn load_active_hls_item_with_artifact_root(
         None
     };
     let resolved = if remote_stream.is_some() || path_replacements.is_empty() {
-        media_path
+        media_path.clone()
     } else {
         replace_path(path_replacements, &media_path, PathPlatform::Unix)
     };
@@ -5969,10 +6050,12 @@ async fn load_active_hls_item_with_artifact_root(
         })?;
 
     Ok(Some(ActiveHlsItem {
+        original_media_path: media_path,
         media_path: resolved,
         playout_item_id: decode_hls_column(&row, "PlayoutItemId")?,
         media_item_id: decode_hls_column(&row, "MediaItemId")?,
         media_version_id: decode_hls_column(&row, "MediaVersionId")?,
+        media_file_id: Some(decode_hls_column(&row, "MediaFileId")?),
         content_duration: Some(content_duration),
         in_point,
         program_duration: Some(program_duration),
@@ -6072,10 +6155,12 @@ fn decode_hls_bool(row: &crate::db::DbRow, column: &'static str) -> RepositoryRe
 
 #[derive(Clone)]
 struct ActiveHlsItem {
+    original_media_path: String,
     media_path: String,
     playout_item_id: i64,
     media_item_id: i64,
     media_version_id: i64,
+    media_file_id: Option<i64>,
     content_duration: Option<Duration>,
     in_point: Duration,
     program_duration: Option<Duration>,
@@ -8776,6 +8861,8 @@ mod tests {
             .expect("load pinned HLS item")
             .expect("active HLS item");
         assert!(active.has_pinned_stream_selection);
+        assert_eq!(active.media_file_id, Some(1));
+        assert_eq!(active.original_media_path, "/media/test.mkv");
         assert_eq!(active.audio_stream_index, None);
         assert_eq!(active.subtitle_stream_index, None);
 
@@ -8965,12 +9052,20 @@ mod tests {
             .expect("timestamp")
             .with_timezone(&Utc);
 
-        let active = load_active_hls_item(&pool, 8, &[], mirror_now)
+        let replacements = [PathReplacement {
+            source_path: "/media/".to_owned(),
+            replacement_path: "/replacement/".to_owned(),
+            source_platform: PathPlatform::Unix,
+        }];
+        let active = load_active_hls_item(&pool, 8, &replacements, mirror_now)
             .await
             .expect("load mirror HLS item")
             .expect("active mirror HLS item");
 
         assert_eq!(active.playout_item_id, 12);
+        assert_eq!(active.media_file_id, Some(1));
+        assert_eq!(active.original_media_path, "/media/test.mkv");
+        assert_eq!(active.media_path, "/replacement/test.mkv");
         assert_eq!(active.channel_name, "Delayed Eight");
         assert_eq!(
             active.playout_start,
@@ -9045,6 +9140,7 @@ mod tests {
                 "ImageId" INTEGER NULL
             )"#,
             r#"CREATE TABLE "MediaFile" (
+                "Id" INTEGER PRIMARY KEY,
                 "MediaVersionId" INTEGER NOT NULL,
                 "Path" TEXT NULL
             )"#,
@@ -11467,10 +11563,12 @@ mod tests {
         playout_finish: DateTime<Utc>,
     ) -> ActiveHlsItem {
         ActiveHlsItem {
+            original_media_path: "/media/test.mkv".to_owned(),
             media_path: "/media/test.mkv".to_owned(),
             playout_item_id: 1,
             media_item_id: 1,
             media_version_id: 1,
+            media_file_id: None,
             content_duration: (playout_finish - playout_start).to_std().ok(),
             in_point: Duration::ZERO,
             program_duration: (playout_finish - playout_start).to_std().ok(),

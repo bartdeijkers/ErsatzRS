@@ -79,6 +79,7 @@ pub(super) async fn load(
         playout_item_id: 0,
         media_item_id: 0,
         media_version_id: 0,
+        media_file_id: None,
         media_path: path,
         content_duration: media.probe.version.duration.to_std().ok(),
         in_point: Duration::ZERO,

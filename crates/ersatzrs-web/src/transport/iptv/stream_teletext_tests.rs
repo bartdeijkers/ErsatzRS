@@ -53,6 +53,8 @@ async fn wait_for_drain_marker(directory: &Path) {
 
 fn hardware_retry(rebuild: StreamRetryBuilder) -> StreamDenialRetry {
     StreamDenialRetry {
+        source_caption: None,
+        ordinary_caption_fallback: None,
         song: None,
         pool: sqlx::sqlite::SqlitePoolOptions::new()
             .connect_lazy("sqlite::memory:")

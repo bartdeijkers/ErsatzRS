@@ -171,6 +171,12 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
         return;
     };
     if worker
+        .configure_source_teletext_locker(state.application.operations().entity_locker())
+        .is_err()
+    {
+        return;
+    }
+    if worker
         .configure_media_relay(Arc::clone(&state.next_engine.media))
         .is_err()
     {
@@ -552,6 +558,12 @@ async fn ensure_preview_worker_running(
     else {
         return;
     };
+    if worker
+        .configure_source_teletext_locker(state.application.operations().entity_locker())
+        .is_err()
+    {
+        return;
+    }
     if worker
         .configure_media_relay(Arc::clone(&state.next_engine.media))
         .is_err()
