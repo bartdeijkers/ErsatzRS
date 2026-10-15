@@ -40,3 +40,6 @@ pub use pipeline::*;
 pub use runtime::*;
 pub use teletext_probe::*;
 pub use version::*;
+
+#[cfg(test)]
+mod teletext_caption_runtime_tests;

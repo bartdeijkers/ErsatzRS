@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: representative scoped two-theme legacy client flow proven; selected source captions, opaque scripts, slate clocks and full engine acceptance remain open'
+current_focus = 'P9A-04: exact-page bitmap command proven; connect source acquisition/selection, opaque scripts and slate clocks; full engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -102,8 +102,17 @@ The private same-database handoff closes the integration-test privacy gap withou
 widening host APIs. Four disposable slots permit both wrapper clients; prior
 product-default2 proof remains. Separate post-client cold captures do not prove
 original-response transport, natural EOF, warm continuity or full engine acceptance.
-Next add explicit selected source-page identity and owned decoder options before
-the real caption matrix; default/custom-script eligibility and slate clocks remain.
+An exact-page bitmap command component now preserves selected stream/page options
+on the first shared physical input, matching the filter's first bitmap selection.
+Independent888/200/plain pixel comparisons at a common media time, retained440Hz
+audio, targeted regressions, reviewed argv snapshots, strict Clippy and consumer
+checks pass. P9A-04 owns exact receipts and the corrected frame-ordinal oracle.
+Next connect P9A-03 bounded secondary probe acquisition, genuine source revision
+and actual managed scan claim to existing stream/file/version report storage;
+then join PlaybackSubtitle/cache identity and prove selected888 on normal routes.
+Report-only descriptors cannot become selected pages. Ordinary tracks and cleanup
+must survive auxiliary failure; path hashes/scan-write timestamps cannot invent revisions.
+Default/custom-script eligibility and slate clocks remain open.
 Preserve normal-route captions/alternate audio and transport-clock acceptance;
 prior slate clock gaps remain open. No general audit extension.
 Reuse valid editor/all-culture headed admin/warm evidence for unchanged inputs.

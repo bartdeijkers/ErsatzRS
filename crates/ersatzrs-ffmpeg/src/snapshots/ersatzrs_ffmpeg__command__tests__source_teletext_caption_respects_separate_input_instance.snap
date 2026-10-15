@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/src/command.rs
+expression: "args.join(\" \")"
+---
+-i same.ts -txt_page:2 888 -txt_format:2 bitmap -txt_default_region:2 -1 -i same.ts

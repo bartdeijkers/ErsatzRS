@@ -234,6 +234,10 @@ impl CommandGenerator {
                 };
 
                 if should_include {
+                    // Match ComplexFilter's first physical owner. Decoder
+                    // options must survive logical subtitle deduplication, but
+                    // must not follow an Intel audio-only duplicate/reopen.
+                    let first_source_owner = !included_sources.contains(&input.source_key());
                     included_sources.push(input.source_key());
                     if kind == InputKind::Video && same_audio_and_video && !is_intel_vaapi_or_qsv {
                         for audio_input in inputs.iter().filter(|audio_input| {
@@ -245,6 +249,9 @@ impl CommandGenerator {
                         }
                     }
                     arguments.extend(input.input_options.iter().cloned());
+                    if first_source_owner {
+                        arguments.extend(source_teletext_caption_input_options(inputs, input));
+                    }
                     arguments.extend(["-i".to_owned(), input.path.clone()]);
                 } else if same_audio_and_video && kind == InputKind::Audio && is_intel_vaapi_or_qsv
                 {
@@ -295,6 +302,37 @@ impl CommandGenerator {
     }
 }
 
+fn source_teletext_caption_input_options(inputs: &[InputFile], owner: &InputFile) -> Vec<String> {
+    // ComplexFilter uses one selected bitmap Burn input and its first stream.
+    // An unused later logical input must never override that decoder's page.
+    let Some(subtitle) = inputs.iter().find(|subtitle| {
+        subtitle.kind == InputKind::Subtitle
+            && subtitle.is_image_based_subtitle
+            && subtitle.subtitle_method == Some(crate::SubtitleMethod::Burn)
+    }) else {
+        return Vec::new();
+    };
+    if subtitle.source_key() != owner.source_key() {
+        return Vec::new();
+    }
+    let Some(stream) = subtitle.streams.first() else {
+        return Vec::new();
+    };
+    let Some(page) = stream.source_teletext_page else {
+        return Vec::new();
+    };
+    // Absolute source stream index, not subtitle ordinal or PID.
+    // Unknown charset provenance uses the decoder's automatic region.
+    vec![
+        format!("-txt_page:{}", stream.index),
+        page.get().to_string(),
+        format!("-txt_format:{}", stream.index),
+        "bitmap".to_owned(),
+        format!("-txt_default_region:{}", stream.index),
+        "-1".to_owned(),
+    ]
+}
+
 fn same_audio_and_video(inputs: &[InputFile]) -> bool {
     let video_path = inputs
         .iter()
@@ -327,6 +365,129 @@ fn shared_video_audio_input_options(input: &InputFile) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn teletext_caption(path: &str) -> InputFile {
+        InputFile::teletext_subtitle(
+            path,
+            2,
+            ersatzrs_domain::TeletextPageNumber::new(888).unwrap(),
+        )
+    }
+
+    #[test]
+    fn source_teletext_caption_keeps_one_shared_pipe_and_stream_scoped_options() {
+        let inputs = [
+            InputFile::video("pipe:0").with_input_options(["-f", "mpegts"]),
+            InputFile::audio("pipe:0").with_input_options(["-c:a", "aac_latm"]),
+            teletext_caption("pipe:0"),
+        ];
+        let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+        insta::assert_snapshot!(args.join(" "));
+        assert_eq!(args.iter().filter(|arg| *arg == "-i").count(), 1);
+        let input_position = args.iter().position(|arg| arg == "-i").unwrap();
+        for key in ["-txt_page:2", "-txt_format:2", "-txt_default_region:2"] {
+            assert!(args.iter().position(|arg| arg == key).unwrap() < input_position);
+        }
+        let filter = crate::ComplexFilter::build(&inputs, crate::FilterChain::default(), false);
+        assert_eq!(filter.video_label, "0:0");
+        assert_eq!(filter.audio_label, "0:1");
+    }
+
+    #[test]
+    fn source_teletext_caption_uses_first_owner_with_intel_audio_reopen() {
+        let inputs = [
+            InputFile::video("pipe:0"),
+            InputFile::audio("pipe:0"),
+            teletext_caption("pipe:0"),
+        ];
+        let args = CommandGenerator::generate_arguments(&inputs, &[], true);
+        insta::assert_snapshot!(args.join(" "));
+        assert_eq!(args.iter().filter(|arg| *arg == "-i").count(), 2);
+        assert_eq!(args.iter().filter(|arg| *arg == "-txt_page:2").count(), 1);
+        assert!(
+            args.iter().position(|arg| arg == "-txt_page:2").unwrap()
+                < args.iter().position(|arg| arg == "-i").unwrap()
+        );
+    }
+
+    #[test]
+    fn source_teletext_caption_respects_separate_input_instance() {
+        let mut subtitle = teletext_caption("same.ts");
+        subtitle.input_instance = 1;
+        let inputs = [InputFile::video("same.ts"), subtitle];
+        let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+        insta::assert_snapshot!(args.join(" "));
+        assert_eq!(&args[..2], ["-i", "same.ts"]);
+        assert_eq!(args.iter().filter(|arg| *arg == "-i").count(), 2);
+    }
+
+    #[test]
+    fn source_teletext_caption_does_not_modify_an_unrelated_source() {
+        let inputs = [
+            InputFile::video("other.ts"),
+            teletext_caption("captions.ts"),
+        ];
+        let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+        insta::assert_snapshot!(args.join(" "));
+        assert_eq!(&args[..2], ["-i", "other.ts"]);
+    }
+
+    #[test]
+    fn source_teletext_caption_flags_follow_the_current_stream_index() {
+        let inputs = [teletext_caption("caption.ts").with_stream_index(4)];
+        let args = CommandGenerator::generate_arguments(&inputs, &[], false);
+        assert_eq!(args[0], "-txt_page:4");
+        assert!(!args.iter().any(|arg| arg.ends_with(":2")));
+        assert_eq!(inputs[0].subtitle_method, Some(crate::SubtitleMethod::Burn));
+        assert!(inputs[0].is_image_based_subtitle);
+    }
+
+    #[test]
+    fn source_teletext_caption_leaves_ordinary_bitmap_and_text_inputs_unchanged() {
+        for subtitle in [
+            InputFile::image_subtitle("pipe:0", crate::SubtitleMethod::Burn),
+            InputFile::text_subtitle("sidecar.srt", crate::SubtitleMethod::Burn),
+        ] {
+            let inputs = [InputFile::video("pipe:0"), subtitle];
+            assert_eq!(
+                CommandGenerator::generate_arguments(&inputs, &[], false),
+                ["-i", "pipe:0"]
+            );
+        }
+    }
+
+    #[test]
+    fn source_teletext_caption_matches_the_first_selected_bitmap_and_stream() {
+        let first = teletext_caption("pipe:0");
+        let mut unused = InputFile::teletext_subtitle(
+            "pipe:0",
+            2,
+            ersatzrs_domain::TeletextPageNumber::new(200).unwrap(),
+        );
+        unused.streams.push(crate::MediaStream::new(4));
+        let inputs = [InputFile::video("pipe:0"), first.clone(), unused];
+        assert_eq!(
+            CommandGenerator::generate_arguments(&inputs, &[], false),
+            CommandGenerator::generate_arguments(&inputs[..2], &[], false)
+        );
+        let mut first = first;
+        first.streams.push(crate::MediaStream::new(3));
+        let args = CommandGenerator::generate_arguments(&[first], &[], false);
+        assert!(!args.iter().any(|arg| arg.starts_with("-txt_page:3")));
+    }
+
+    #[test]
+    fn source_teletext_caption_does_not_enable_an_unselected_later_caption() {
+        let inputs = [
+            InputFile::video("pipe:0"),
+            InputFile::image_subtitle("pipe:0", crate::SubtitleMethod::Burn).with_stream_index(3),
+            teletext_caption("pipe:0"),
+        ];
+        assert_eq!(
+            CommandGenerator::generate_arguments(&inputs, &[], false),
+            ["-i", "pipe:0"]
+        );
+    }
 
     #[test]
     fn canvas_input_identity_preserves_single_open_for_native_audio_video() {

@@ -26,12 +26,18 @@ pub enum SubtitleTextFormat {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaStream {
     pub index: usize,
+    /// Exact source page for bitmap caption decoding. The acquisition and
+    /// freshness binding belongs to the caller, not the command generator.
+    pub source_teletext_page: Option<ersatzrs_domain::TeletextPageNumber>,
 }
 
 impl MediaStream {
     #[must_use]
     pub const fn new(index: usize) -> Self {
-        Self { index }
+        Self {
+            index,
+            source_teletext_page: None,
+        }
     }
 }
 
@@ -206,6 +212,22 @@ impl InputFile {
         input
     }
 
+    /// Decode one already-selected source teletext page as a bitmap for Burn.
+    /// The command attaches decoder options to the existing physical source,
+    /// including when video/audio share a one-shot input. This constructor does
+    /// not select or certify a page, enable captions, or promise video-copy burn.
+    #[must_use]
+    pub fn teletext_subtitle(
+        path: impl Into<String>,
+        stream_index: usize,
+        page: ersatzrs_domain::TeletextPageNumber,
+    ) -> Self {
+        let mut input =
+            Self::image_subtitle(path, SubtitleMethod::Burn).with_stream_index(stream_index);
+        input.streams[0].source_teletext_page = Some(page);
+        input
+    }
+
     #[must_use]
     pub fn text_subtitle(path: impl Into<String>, method: SubtitleMethod) -> Self {
         let mut input = Self::new(InputKind::Subtitle, path, 0);
@@ -236,7 +258,14 @@ impl InputFile {
 
     #[must_use]
     pub fn with_stream_index(mut self, index: usize) -> Self {
-        self.streams = vec![MediaStream::new(index)];
+        let source_teletext_page = self
+            .streams
+            .first()
+            .and_then(|stream| stream.source_teletext_page);
+        self.streams = vec![MediaStream {
+            index,
+            source_teletext_page,
+        }];
         self
     }
 

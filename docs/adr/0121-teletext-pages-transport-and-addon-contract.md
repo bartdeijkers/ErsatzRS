@@ -167,6 +167,14 @@ generation authority. The interchange reference and P9A-04 own API details, proo
 and remaining integration gaps. Stored metadata is historical data, not an
 invocation receipt, editor permission or generation-activation authority.
 
+The native command component now carries one explicit source page on its selected
+logical stream and applies bitmap decoder options to the first matching physical
+input, preserving a shared one-shot AV read. It follows the existing single
+bitmap-caption selection; unused later inputs cannot replace the chosen page.
+This does not promote report-only source descriptors into playback selections.
+P9A-04 owns package proof; scanner revision/lease binding and routed selection
+remain prerequisites. The accepted output matrix below is unchanged.
+
 The selected-runtime capability report now runs bounded decoder-option,
 exact-page text and colour bitmap probes against an independent synthetic DVB
 fixture. Decoder outcomes have localized Health guidance and runtime-bound

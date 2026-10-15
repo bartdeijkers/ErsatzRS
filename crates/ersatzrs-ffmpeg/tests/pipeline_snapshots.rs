@@ -1417,6 +1417,21 @@ fn software_pipeline_overlays_image_subtitle_from_source_stream() {
 }
 
 #[test]
+fn software_pipeline_overlays_exact_source_teletext_caption_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::teletext_subtitle(
+        "/media/movie.mkv",
+        2,
+        ersatzrs_domain::TeletextPageNumber::new(888).unwrap(),
+    ));
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments;
+    assert_eq!(args.iter().filter(|arg| *arg == "-i").count(), 1);
+    assert!(args.iter().any(|arg| arg == "-txt_page:2"));
+    insta::assert_snapshot!(args.join(" "));
+}
+
+#[test]
 fn software_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let mut request = h264_request(desired);

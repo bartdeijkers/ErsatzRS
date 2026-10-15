@@ -2724,6 +2724,58 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 exact source-caption bitmap component checkpoint:
+Criterion: an explicitly selected source page must reach the actual native
+bitmap Burn decoder without reopening a shared one-shot AV source or selecting
+another page. InputFile::teletext_subtitle carries a checked TeletextPageNumber
+on the exact logical MediaStream. Command generation emits txt_page, bitmap
+format and automatic-region options scoped to that global source stream index,
+before its first physical source_key(path,instance) input. It follows the same
+first bitmap-Burn/first-stream choice as ComplexFilter; an unused later caption
+cannot override it. Ordinary decoder/input options remain untouched. The existing
+Intel audio reopen remains separate; this does not claim general Intel one-shot
+safety. Page ownership stays with the selected stream, avoiding unrelated graphics
+indirection or a broader InputFile layout change.
+Pinned FFmpeg n9.0-20261006 native0732addc-908f-47dc-8f1a-c9ef305ae2b0 passes0.381s.
+One software-pipeline process consumes one shared pipe containing actual video,
+English440Hz AAC and independently generated main200/caption888. Source-index2
+bitmap888 is compared with independently decoded888,200 and plain video on a
+common media-relative1.6s window. Caption text contains888 and excludes main200;
+position/error comparisons distinguish the correct caption from main200 and
+missing captions. Both source/output retain440Hz audio. This proves the package
+component, not route selection, complete AV timing, source discovery or Level2.5.
+Canonical tmp/phase9-source-caption/identity.json binds final source-identity-5,
+raw check receipts and retained negative/discriminator images. Final focused
+0c2ad6d8-c8ac-40d9-b5bc-e97e0b91422c passes11; five new argv snapshots are reviewed
+and no pending snapshots remain. The prior245 command/pipeline passes are reused
+for unchanged ordinary paths. Strict affected all-target Clippy, infrastructure
+consumer check, formatting and structured progress pass. Existing ordinary-route
+smoke/default2, headed two-theme/editor/all-culture and runtime capability evidence
+remain valid for unchanged default inputs; no admin, package or output-policy
+activation occurs. cargo-insta is unavailable in this environment; only the five
+new baselines were explicitly inspected/accepted, then tested successfully.
+Native1/2 failed a frame-ordinal oracle: matching25fps still does not align frames
+when source video starts after the container and CFR adds leading frames. The
+retained native2 actual output has captions from frame34, not frame25. A direct
+common-time discriminator gives650 foreground pixels and zero mask disagreement
+against888; main200 has1015. The final test samples the common presentation window;
+production clock behavior is unchanged. Both failed actual run logs and native2 raw
+frames remain retained. Final stream-owned metadata also removes the prototype's
+large-enum Clippy failure without boxing unrelated graphics. The first-caption
+review counterexample is covered by two targeted regressions.
+Concrete next prerequisite is P9A-03 acquisition/binding: existing packed probe
+and teletext_source report tables are not production scanner callers. Add optional
+bounded secondary acquisition without erasing ordinary metadata, retain managed
+cleanup uncertainty, carry the actual scan claim through writer transactions and
+bind genuine source revision across opens before attachment/selection. Path hashes
+or scan-write timestamps are insufficient. Then join exact page identity to
+PlaybackSubtitle, prepared-cache identity and the ordinary selected888 matrix.
+Report-only descriptors are not selectable pages. Video-copy carriage/sidecars,
+Next/finite extraction, opaque default/custom scripts, slate clocks, full authored
+Level2.5/fallback, complete QTM/metadata/zones, Lua/restart/admin/client and all-six-
+platform acceptance remain open as previously recorded. All agreed criteria,
+statuses and dependencies remain unchanged; the production guide addon still waits.
+
 2026-10-15 generated-legacy two-channel client checkpoint (representative only):
 Criterion: existing channel/profile Lua selection, validation, native preview and
 cumulative Q/R concept edits followed by explicit publication/reopen reach the

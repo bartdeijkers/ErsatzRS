@@ -4,7 +4,7 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124']
 summary    = '''
-Legacy flow proven; P9A-04 before NOS200–299.
+Legacy/bitmap proof: P9A-04 before NOS200–299.
 ADR0123: authored Level2.5/fallback, pinned QTM TTI/sidecar,
 TSDuck/independent decoding, actual client display/navigation; Kodi optional.
 
