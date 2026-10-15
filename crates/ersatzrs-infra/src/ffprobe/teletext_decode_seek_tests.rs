@@ -22,6 +22,8 @@ const SELECTED_PID: u16 = 258;
 
 #[path = "teletext_decode_origin_native_tests.rs"]
 mod origin;
+#[path = "teletext_decode_prepared_native_tests.rs"]
+mod prepared;
 
 fn hex_text(bytes: &[u8]) -> String {
     let mut text = String::new();
@@ -508,6 +510,7 @@ async fn native_later_packet_span_decodes_exact_pages_without_prefix_or_temporal
     let source = LaterSource::new(&scope).await;
     let locker = EntityLocker::new();
     let work = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    source.assert_prepared_source(&scope, &work).await;
     let prefix = scope
         .scope(source.extractor.decode_local_teletext_page(
             source.request.clone(),

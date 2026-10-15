@@ -107,10 +107,23 @@ Actual PSI must advertise each native AV PID. Exact native-start rescaling/modul
 matches retain their source header positions, without certifying unwrapped epochs.
 Selected-program AV/PCR epoch agreement, bounded gaps, requested cue coverage and
 current cue-window page headers remain required before automatic admission.
-The current decoded-receipt adapter is preparatory: the automatic later-cue path
-must acquire native timing under held ownership before selecting/decoding its
-cue window, without requiring prefix page observations or an earlier bitmap.
-Do not weaken global scan-header qualification to bypass that missing path.
+A prepared-source owner now acquires native timing before any page/window
+bitmap decode, retaining the original held association independently of prefix
+page observations. Explicit later-window decoding reuses that same owner and
+requires the requested page's actual protected header in the exact decoder bytes
+before starting the bitmap process. Header completion positions are relative to
+that filtered/trimmed snapshot, not media-relative cue positions. Preparation
+retains no short work admission after actual preparation cleanup; active workers
+retain admission and source ownership after requester loss. Native command paths
+must be representable without lossy substitution, matching the held association.
+This is a preparation/window seam, not automatic temporal admission: the native
+program wrap interpretation, selected-program AV/PCR epoch, bounded clock gaps
+and requested cue bookends still require qualification. A nearest modular
+AV/PCR match alone cannot resolve a common whole-period ambiguity. Neither
+printed native decimal precision nor raw subtitle PTS supplies that proof.
+Do not weaken global scan-header qualification to bypass the remaining exact-
+source candidate path; connect descriptor-only discovery only with independently
+qualified current cue-window headers and the existing selection checks.
 This bounded byte window does not prove later playback
 seek/cue coverage, whole-source inventory, current database ownership or future
 source opens. Source bookends remain observed associations, not immutable-byte or

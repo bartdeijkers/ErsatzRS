@@ -1,14 +1,16 @@
 //! Optional native AV origin, using the existing retained source/process owner.
 
+use std::{path::PathBuf, sync::Arc};
+
 use ersatzrs_core::locking::TeletextWorkHold;
 use tokio::time::Instant;
 
 use super::{
     check_deadline, local, local_teletext, probe_error, DecodedLocalTeletextPage, FfprobeCommand,
-    FfprobeExtractor, LocalProbeCleanupScope, SourceTeletextAvOriginEvidence,
-    SourceTeletextPageDecodeError,
+    FfprobeExtractor, LocalProbeCleanupScope, LocalTeletextSourceGuard,
+    SourceTeletextAvOriginEvidence, SourceTeletextPageDecodeError,
 };
-use crate::ffprobe::teletext_origin::parse_source_origin;
+use crate::ffprobe::teletext_origin::{parse_source_origin, NativeSourceOrigin};
 
 impl FfprobeExtractor {
     /// Preserve native format/AV start observations from the original source and
@@ -30,25 +32,14 @@ impl FfprobeExtractor {
         deadline: Instant,
         hold: TeletextWorkHold,
     ) -> Result<SourceTeletextAvOriginEvidence, SourceTeletextPageDecodeError> {
-        check_deadline(deadline)?;
-        if LocalProbeCleanupScope::current().is_none() {
-            return Err(SourceTeletextPageDecodeError::NoCleanupScope);
-        }
-        decoded.check_source(deadline, hold.clone()).await?;
-        let output = local::capture_retained(
-            self.source_origin_command(&decoded.resolved),
-            "source teletext native AV origin".into(),
-            Some(deadline),
-            Some(local::ProbeRetention::new(
-                hold.clone(),
+        let origin = self
+            .capture_local_teletext_native_origin(
                 decoded.guard.clone(),
-            )),
-        )
-        .await
-        .map_err(probe_error)?;
-        let origin = parse_source_origin(&output)
-            .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)?;
-        decoded.check_source(deadline, hold.clone()).await?;
+                (decoded.original.clone(), decoded.resolved.clone()),
+                deadline,
+                hold.clone(),
+            )
+            .await?;
         local_teletext::observe_source_av_origin_owned(
             decoded.guard.clone(),
             (decoded.original.clone(), decoded.resolved.clone()),
@@ -62,8 +53,53 @@ impl FfprobeExtractor {
         .map_err(probe_error)
     }
 
-    fn source_origin_command(&self, source: &std::path::Path) -> FfprobeCommand {
-        FfprobeCommand {
+    /// The same native source capture is available before bitmap decoding.
+    /// Only the existing source association and actual process owner are used.
+    pub(super) async fn capture_local_teletext_native_origin(
+        &self,
+        guard: Arc<LocalTeletextSourceGuard>,
+        paths: (PathBuf, PathBuf),
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<NativeSourceOrigin, SourceTeletextPageDecodeError> {
+        check_deadline(deadline)?;
+        if LocalProbeCleanupScope::current().is_none() {
+            return Err(SourceTeletextPageDecodeError::NoCleanupScope);
+        }
+        local_teletext::check_source_guard_owned(
+            guard.clone(),
+            paths.0.clone(),
+            paths.1.clone(),
+            deadline,
+            hold.clone(),
+        )
+        .await
+        .map_err(probe_error)?;
+        let output = local::capture_retained(
+            self.source_origin_command(&paths.1)?,
+            "source teletext native AV origin".into(),
+            Some(deadline),
+            Some(local::ProbeRetention::new(hold.clone(), guard.clone())),
+        )
+        .await
+        .map_err(probe_error)?;
+        let origin = parse_source_origin(&output)
+            .map_err(|_| SourceTeletextPageDecodeError::InvalidOutput)?;
+        check_deadline(deadline)?;
+        local_teletext::check_source_guard_owned(guard, paths.0, paths.1, deadline, hold)
+            .await
+            .map_err(probe_error)?;
+        Ok(origin)
+    }
+
+    pub(super) fn source_origin_command(
+        &self,
+        source: &std::path::Path,
+    ) -> Result<FfprobeCommand, SourceTeletextPageDecodeError> {
+        let path = source
+            .to_str()
+            .ok_or(SourceTeletextPageDecodeError::SourceChanged)?;
+        Ok(FfprobeCommand {
             program: self.ffprobe_path.clone(),
             args: [
                 "-v",
@@ -78,8 +114,8 @@ impl FfprobeExtractor {
             ]
             .into_iter()
             .map(str::to_owned)
-            .chain(std::iter::once(source.to_string_lossy().into_owned()))
+            .chain(std::iter::once(path.to_owned()))
             .collect(),
-        }
+        })
     }
 }

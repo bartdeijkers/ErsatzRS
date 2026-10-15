@@ -52,6 +52,10 @@ release section when tagging a release.
   Native format and all AV start times now retain exact signed decimal/rational
   precision and their raw PES-header witnesses under that same ownership,
   without choosing a first-track origin or enabling unqualified later cues.
+  Native source preparation now precedes bitmap decoding; later explicit windows
+  reuse the same held source and require the requested page's actual header in
+  the exact decoder bytes. Missing headers reject before launching the decoder,
+  and native probe paths cannot silently substitute a different lossy filename.
   General source/seek semantics and complete stream-route acceptance remain open.
 - Add a representative two-channel teletext acceptance flow through ordinary
   legacy MPEG-TS routes, from Lua profiles and explicit publication to visible

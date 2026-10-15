@@ -9,6 +9,7 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_domain::{MediaSourceKind, SourceTeletextBindingIdentity, TeletextPageNumber};
+use ersatzrs_ffmpeg::teletext::source_observation::SuppliedTeletextHeaderWindow;
 use ersatzrs_ffmpeg::InputFile;
 use serde::Deserialize;
 use tokio::time::Instant;
@@ -26,6 +27,9 @@ pub use super::local_teletext::{
 
 #[path = "teletext_decode_origin.rs"]
 mod origin;
+#[path = "teletext_decode_prepared.rs"]
+mod prepared;
+pub use prepared::PreparedLocalTeletextSource;
 
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_FRAMES: usize = 4096;
@@ -80,6 +84,8 @@ pub enum SourceTeletextPageDecodeError {
     StreamChanged,
     #[error("source teletext decode window has invalid or changing transport associations")]
     InvalidTransportWindow,
+    #[error("source teletext page header was not observed in the bounded decode window")]
+    UnobservedPage,
     #[error("source teletext page produced no bitmap in the bounded decode window")]
     NoBitmap,
 }
@@ -107,6 +113,7 @@ pub struct DecodedLocalTeletextPage {
     guard: Arc<LocalTeletextSourceGuard>,
     events: SourceTeletextBitmapEvents,
     window: SourceTeletextDecodeWindowEvidence,
+    headers: Option<SuppliedTeletextHeaderWindow>,
     input: InputFile,
 }
 
@@ -171,6 +178,16 @@ impl DecodedLocalTeletextPage {
     #[must_use]
     pub fn window(&self) -> &SourceTeletextDecodeWindowEvidence {
         &self.window
+    }
+
+    /// Actual headers retained by prepared-source decoding from the same bytes
+    /// supplied to the bitmap decoder. Completion ordinals are relative to the
+    /// decoder snapshot, including its unrelated packets, after prefix omission
+    /// and tail trimming. They do not establish playback-time coverage, charset
+    /// provenance, complete inventory or readiness of every observed page.
+    #[must_use]
+    pub fn headers(&self) -> Option<&SuppliedTeletextHeaderWindow> {
+        self.headers.as_ref()
     }
 
     /// Construct the already decoded exact page on its associated physical input.
@@ -266,6 +283,36 @@ impl FfprobeExtractor {
             .await
     }
 
+    /// Decode an explicitly positioned window using the already prepared held
+    /// source. This does not reopen a new source association or require a page
+    /// in the initial scan prefix. The window must contain its own stable PSI,
+    /// complete selected PES and actual requested-page header before the bitmap
+    /// process can start. Native observations remain separate from decoder
+    /// timestamps; neither this span nor a successful bitmap grants cue coverage.
+    /// # Errors
+    /// Rejects stale association, missing ownership/header, invalid transport,
+    /// absent bitmaps, deadlines and uncertain actual-worker cleanup.
+    pub async fn decode_prepared_local_teletext_page(
+        &self,
+        source: &PreparedLocalTeletextSource,
+        span: SourceTeletextPacketSpan,
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        self.decode_held_local_teletext_window(
+            source.request.clone(),
+            (
+                source.original.clone(),
+                source.resolved.clone(),
+                source.guard.clone(),
+            ),
+            (Some(span), true),
+            deadline,
+            hold,
+        )
+        .await
+    }
+
     async fn decode_local_teletext_window(
         &self,
         request: SourceTeletextPageDecodeRequest,
@@ -289,18 +336,54 @@ impl FfprobeExtractor {
         )
         .await
         .map_err(probe_error)?;
+        self.decode_held_local_teletext_window(
+            request,
+            (original, resolved, guard),
+            (span, false),
+            deadline,
+            hold,
+        )
+        .await
+    }
+
+    async fn decode_held_local_teletext_window(
+        &self,
+        request: SourceTeletextPageDecodeRequest,
+        source: (PathBuf, PathBuf, Arc<LocalTeletextSourceGuard>),
+        window: (Option<SourceTeletextPacketSpan>, bool),
+        deadline: Instant,
+        hold: TeletextWorkHold,
+    ) -> Result<DecodedLocalTeletextPage, SourceTeletextPageDecodeError> {
+        let (original, resolved, guard) = source;
+        let (span, observe_headers) = window;
         check_deadline(deadline)?;
+        if LocalProbeCleanupScope::current().is_none() {
+            return Err(SourceTeletextPageDecodeError::NoCleanupScope);
+        }
         let captured = if let Some(span) = span {
-            local_teletext::capture_source_packet_span_owned(
-                guard.clone(),
-                (original.clone(), resolved.clone()),
-                request.pid,
-                request.program_number,
-                span,
-                deadline,
-                hold.clone(),
-            )
-            .await
+            if observe_headers {
+                local_teletext::capture_observed_source_packet_span_owned(
+                    guard.clone(),
+                    (original.clone(), resolved.clone()),
+                    request.pid,
+                    request.program_number,
+                    span,
+                    deadline,
+                    hold.clone(),
+                )
+                .await
+            } else {
+                local_teletext::capture_source_packet_span_owned(
+                    guard.clone(),
+                    (original.clone(), resolved.clone()),
+                    request.pid,
+                    request.program_number,
+                    span,
+                    deadline,
+                    hold.clone(),
+                )
+                .await
+            }
         } else {
             local_teletext::capture_source_window_owned(
                 guard.clone(),
@@ -313,8 +396,21 @@ impl FfprobeExtractor {
             )
             .await
         };
-        let local_teletext::LocalTeletextSourceWindow { snapshot, evidence } =
-            captured.map_err(probe_error)?;
+        let local_teletext::LocalTeletextSourceWindow {
+            snapshot,
+            evidence,
+            headers,
+        } = captured.map_err(probe_error)?;
+        if observe_headers
+            && !headers.as_ref().is_some_and(|window| {
+                window
+                    .headers()
+                    .iter()
+                    .any(|occurrence| occurrence.header.display_page() == Some(request.page))
+            })
+        {
+            return Err(SourceTeletextPageDecodeError::UnobservedPage);
+        }
         check_deadline(deadline)?;
         let command = self.teletext_page_decode_command(&request, snapshot.path())?;
         let output = local::capture_retained(
@@ -339,6 +435,7 @@ impl FfprobeExtractor {
             guard,
             events,
             window: evidence,
+            headers,
             input,
         };
         decoded.check_source(deadline, hold).await?;
@@ -490,3 +587,7 @@ mod tests;
 #[cfg(test)]
 #[path = "teletext_decode_seek_tests.rs"]
 mod seek_tests;
+
+#[cfg(test)]
+#[path = "teletext_decode_prepared_tests.rs"]
+mod prepared_tests;

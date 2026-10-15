@@ -2968,6 +2968,67 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-15 pre-decode source/window connection (engineering checkpoint):
+Criterion: acquire native timing before choosing/decoding a later source window,
+without requiring an initial scan-prefix page or a prior bitmap. The new prepared
+owner uses the existing guarded source, bounded native runner, work admission
+and absolute deadline. Prepared explicit-span decoding retains that same guard,
+requires the span's own stable current PSI and complete selected PES, and observes
+protected headers from the exact filtered/trimmed bytes supplied to the decoder.
+Missing requested-page headers reject before bitmap process launch. Completion
+ordinals are relative to the decoder snapshot, not playback-time coordinates.
+Native source paths reject lossy substitution rather than probing a different
+filename. Short preparation work is released after actual preparation settles;
+actual workers retain the source and admission after requester cancellation.
+
+Focused run 5e40481c-d491-455c-ab26-e31e7bf84ccf passes all 38 source-window
+and decode cases, including six new preparation boundaries: missing cleanup scope,
+invalid provider, expired/oversized deadline, redacted held-source ownership with
+same-size/mtime path replacement, actual native-probe caller cancellation and
+non-UTF8 filename rejection. The actual process is reaped and admission returns
+to zero; the prepared owner itself retains no short work permit.
+
+Native run 0dc15e26-eaff-46e0-a60c-f5707067a323 passes in 1.904 s with the
+previously pinned n9.0-20260805 tools and unchanged delayed synthetic source.
+Before any page decode it acquires native format 1.418667 plus all three AV starts,
+despite zero selected-PID packets in the first 32,768 packets. The later span
+reuses the exact same guard, observes 32 actual protected headers including 888
+and 200, and produces eight 888 bitmaps. Its decoder hash remains
+1b6d0b87e52f1f65a5475b9231950de158dbab4164777ade842ce58751ce8b9c.
+Missing777 and wrong-program requests are prepared successfully but rejected
+before an intentionally unavailable bitmap executable could start. Missing scope
+and stale source reject too. Existing continuous source/decoder hashes, restored-
+mtime payload/discontinuity negatives, non-EOF AV/PCR tail retention, old exact
+888/200/777 behavior and final zero-capacity cleanup survive in the same run.
+These are source/window observations, not qualified coverage of media 40..52.
+
+Commands and logs live in local tmp/phase9-source-cue-checkpoint/. Initial
+compilation caught async-function-item type and test-module visibility errors;
+these were corrected before the successful runs. The first strict lint found
+a similar local binding name and a duration-unit readability issue. Equivalent
+rename and from_mins(1) preserve algorithms, inputs and receipts; valid focused
+and native proof is reused. Earlier unchanged
+ordinary legacy/Hybrid/TSDuck, editor and headed client evidence remains applicable
+to its tested inputs, not a new full-CI claim.
+Final affected all-target strict Clippy (clippy-2.log), owned Rust formatting,
+architecture/progress validation, scoped lint policy, commitlint and independent
+read-only association/ownership review pass. All 129 milestone acceptance,
+status and dependency records are unchanged; foreign worktree deltas are isolated.
+
+Next criterion: qualify the native selected-program wrap/epoch interpretation,
+bounded successive-PCR gaps and actual PCR bookends for the effective command
+interval, retaining caller intent separately from FFmpeg's microsecond parsing.
+A nearest modular AV/PCR offset leaves a shared whole-period ambiguity; agreeing
+tracks or decimal precision alone do not resolve it. Automatic admission stays
+closed until that mapping and requested cue coverage are established. Then join
+exact-file descriptor-only candidates to current cue-window headers through the
+existing selection checks; do not globally weaken scan-header readiness.
+This closes a preparation-order gap, not full source/seek acceptance. All agreed
+authored Level2.5/fallback, QTM/editor/metadata/zones, localized admin, Lua/restart,
+client, ordinary playback and six-platform gates remain. No milestone is marked
+complete, no restriction is accepted, and production content still waits for
+independent generic engine acceptance. No remote push or publication occurs.
+
 2026-10-15 native AV start/source-header checkpoint (partial):
 Criterion: bind actual native media-start observations to the held source before
 qualifying a requested later cue. Separate bounded native projection preserves

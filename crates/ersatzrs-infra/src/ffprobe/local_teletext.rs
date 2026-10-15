@@ -36,7 +36,8 @@ pub(crate) use source_clock::observe_owned as observe_source_clock_owned;
 pub use source_clock::SourceTeletextContinuousClockEvidence;
 
 pub(crate) use source_window::{
-    capture_source_packet_span_owned, capture_source_window_owned, LocalTeletextSourceWindow,
+    capture_observed_source_packet_span_owned, capture_source_packet_span_owned,
+    capture_source_window_owned, LocalTeletextSourceWindow,
 };
 pub use source_window::{
     SourceTeletextDecodeWindowEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,

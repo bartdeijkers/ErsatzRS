@@ -5,7 +5,10 @@ use std::{io::Write as _, path::PathBuf, sync::Arc};
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_ffmpeg::teletext::{
     source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyError, TeletextAssemblyEvent},
-    source_observation::MAX_SOURCE_OBSERVATION_PACKETS,
+    source_observation::{
+        SuppliedTeletextHeaderObserver, SuppliedTeletextHeaderWindow,
+        MAX_SOURCE_OBSERVATION_PACKETS,
+    },
     source_psi::{ObservedSourcePsi, SourceTeletextPsiObserver},
 };
 use sha2::{Digest as _, Sha256};
@@ -138,6 +141,7 @@ impl SourceTeletextDecodeWindowEvidence {
 pub(crate) struct LocalTeletextSourceWindow {
     pub(crate) snapshot: tempfile::NamedTempFile,
     pub(crate) evidence: SourceTeletextDecodeWindowEvidence,
+    pub(crate) headers: Option<SuppliedTeletextHeaderWindow>,
 }
 
 impl std::fmt::Debug for LocalTeletextSourceWindow {
@@ -164,7 +168,7 @@ pub(crate) async fn capture_source_window_owned(
         (original, resolved),
         pid,
         program,
-        None,
+        (None, false),
         deadline,
         hold,
     )
@@ -183,7 +187,38 @@ pub(crate) async fn capture_source_packet_span_owned(
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<LocalTeletextSourceWindow> {
-    capture_owned(guard, paths, pid, program, Some(span), deadline, hold).await
+    capture_owned(
+        guard,
+        paths,
+        pid,
+        program,
+        (Some(span), false),
+        deadline,
+        hold,
+    )
+    .await
+}
+
+/// Retain actual headers from the exact decoder bytes, before any bitmap work.
+pub(crate) async fn capture_observed_source_packet_span_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    paths: (PathBuf, PathBuf),
+    pid: u16,
+    program: u16,
+    span: SourceTeletextPacketSpan,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<LocalTeletextSourceWindow> {
+    capture_owned(
+        guard,
+        paths,
+        pid,
+        program,
+        (Some(span), true),
+        deadline,
+        hold,
+    )
+    .await
 }
 
 async fn capture_owned(
@@ -191,7 +226,7 @@ async fn capture_owned(
     paths: (PathBuf, PathBuf),
     pid: u16,
     program: u16,
-    span: Option<SourceTeletextPacketSpan>,
+    window: (Option<SourceTeletextPacketSpan>, bool),
     deadline: Instant,
     hold: TeletextWorkHold,
 ) -> Result<LocalTeletextSourceWindow> {
@@ -199,8 +234,8 @@ async fn capture_owned(
         stop.check_source_guard()?;
         let (original, resolved) = paths;
         super::check_source_guard_paths(&guard, &original, &resolved)?;
-        let span = checked_span(guard.guard.len, span)?;
-        let captured = capture(&guard, pid, program, span, stop)?;
+        let span = checked_span(guard.guard.len, window.0)?;
+        let captured = capture(&guard, pid, program, span, window.1, stop)?;
         stop.check_source_guard()?;
         super::check_source_guard_paths(&guard, &original, &resolved)?;
         stop.check_source_guard()?;
@@ -234,6 +269,7 @@ fn capture<T>(
     pid: u16,
     program_number: u16,
     span: SourceTeletextPacketSpan,
+    observe_headers: bool,
     stop: &headers::ReadStop<'_, T>,
 ) -> Result<LocalTeletextSourceWindow> {
     let ended_at_eof = span.byte_end_exclusive() == guard.guard.len;
@@ -307,7 +343,21 @@ fn capture<T>(
         pmt_pid: selected.pmt_pid,
         pcr_pid: selected.pcr_pid,
     };
-    write_snapshot(&bytes, evidence, stop)
+    let headers = if observe_headers {
+        let mut collector = SuppliedTeletextHeaderObserver::new(pid).map_err(|_| invalid())?;
+        for packet in bytes.chunks_exact(PACKET_BYTES) {
+            stop.check_source_guard()?;
+            collector
+                .push(packet.try_into().map_err(|_| invalid())?)
+                .map_err(|_| invalid())?;
+        }
+        Some(collector.finish().map_err(|_| invalid())?)
+    } else {
+        None
+    };
+    let mut captured = write_snapshot(&bytes, evidence, stop)?;
+    captured.headers = headers;
+    Ok(captured)
 }
 
 fn write_snapshot<T>(
@@ -327,6 +377,7 @@ fn write_snapshot<T>(
     Ok(LocalTeletextSourceWindow {
         snapshot: file,
         evidence,
+        headers: None,
     })
 }
 
