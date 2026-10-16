@@ -692,6 +692,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Realize assigned national glyphs through a free DRCS subpage when both resource
+  links are occupied, preserving authored banks, fallback and link identities.
+  Indexed TTI banks keep authored and compiler editing permissions separate.
 - Prevent teletext stream-task panics when authored DRCS banks coexist with
   compiler-generated banks; acquisition orders the actual encoded resource headers.
 - Rebuild generated teletext repaint packets after authorized Base-cell edits,

@@ -428,14 +428,11 @@ fn occupied_normal_role_uses_unused_global_without_aliasing_authored_resources()
 }
 
 #[test]
-fn occupied_normal_and_global_roles_leave_the_conversion_explicitly_rejected() {
-    let input = declared(occupied_seed(true));
-    let error = encode_teletext_authored_service(
-        input.clone(),
-        &authored::transmissions(&input),
-        &service_budget(),
-    )
-    .unwrap_err();
+fn exhausted_normal_and_global_subpages_leave_the_conversion_explicitly_rejected() {
+    let (input, budget) = occupied_matrix::exhausted();
+    let error =
+        encode_teletext_authored_service(input.clone(), &authored::transmissions(&input), &budget)
+            .unwrap_err();
     assert!(
         matches!(
             error.reason,
@@ -443,8 +440,8 @@ fn occupied_normal_and_global_roles_leave_the_conversion_explicitly_rejected() {
         ),
         "{error:?}"
     );
-    assert_eq!(input.semantic().drcs().subtables().len(), 2);
-    assert_eq!(input.resource_inventory().len(), 2);
+    assert_eq!(input.semantic().drcs().subtables().len(), 32);
+    assert_eq!(input.resource_inventory().len(), 32);
 }
 
 #[test]
@@ -725,3 +722,9 @@ fn unselected_authored_x27_target_reserves_its_raw_address_without_a_resource_bo
         unselected
     );
 }
+
+#[path = "compiler_polish/occupied.rs"]
+mod occupied;
+
+#[path = "compiler_polish/occupied_matrix.rs"]
+mod occupied_matrix;

@@ -528,6 +528,21 @@ provenance. Their allocation is deterministic from the complete original owner
 namespace, independent of page traversal and the current consumer subset. Existing
 authored links and definitions cannot be repurposed to make a carrier fit.
 
+A compatible occupied DRCS role may instead acquire a separate compiler-owned
+logical S1 on its already selected raw page. The fresh-page derivation API keeps
+its original unused-role contract; the explicit linked-subpage derivation checks
+free physical identity, matching kind and resolved plus Level 2.5 X27 selection.
+It preserves every authored definition and original declaration. Only the
+effective selected link gains the additional requirement bit; its target,
+validity and the other roles remain exact. The complete declared inventory fences
+MOT, object and display ownership, which the semantic-only domain API cannot see
+in full. The factory prefers its established unused-role allocation, then a free
+Normal S1 and finally a free Global S1, with consumers grouped by exact target.
+This does not authorize editing a generated subpage inside an indexed TTI set;
+its group remains compiler-owned beside separately authorized authored groups.
+The current two-added-bank/eight-glyph internal ceiling is not a Level 2.5
+capacity restriction: broader multi-linked-page demands remain acceptance work.
+
 Table 36 Polish 5/B and Turkish 2/3 are established original identities for this
 resource-backed path. Turkish 2/3 is the single TL symbol assigned by Table 36
 note 1, absent from Tables 35/37; neither a modern currency symbol, separate T/L

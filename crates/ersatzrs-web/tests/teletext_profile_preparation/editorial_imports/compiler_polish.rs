@@ -609,3 +609,6 @@ async fn actual_qtm_no_bank_polish_edit_previews_publishes_and_reopens() {
         "limitations":"GUI provenance and images remain external evidence; no headed admin, hydration, ordinary stream, warm transition, independent decoder, suitable-client or full-engine/platform acceptance claim"}),
     );
 }
+
+#[path = "compiler_polish/linked_subpages.rs"]
+mod linked_subpages;

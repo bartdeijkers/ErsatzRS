@@ -7,6 +7,9 @@ use ersatzrs_ffmpeg::teletext::{
     project_encoded_teletext_drcs,
 };
 
+#[path = "compiler_resources/mixed_bank.rs"]
+mod mixed_bank;
+
 fn attributes(column: u8, wide: bool, high: bool) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::AtColumn {
         column,

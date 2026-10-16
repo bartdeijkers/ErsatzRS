@@ -2,6 +2,9 @@
 use super::*;
 use crate::teletext::*;
 
+#[path = "drcs_extension/subpages_tests.rs"]
+mod subpages;
+
 fn address(page: u16) -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(page).unwrap(),

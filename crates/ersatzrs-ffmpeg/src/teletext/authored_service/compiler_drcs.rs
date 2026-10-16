@@ -11,7 +11,8 @@ use ersatzrs_domain::{
     TeletextDeclaredService, TeletextDefaultObjectSelection, TeletextDrcsBitmap,
     TeletextDrcsExtensionBudget, TeletextDrcsGlyphDefinition, TeletextDrcsGlyphSlot,
     TeletextDrcsPageExtension, TeletextDrcsSubtable, TeletextDrcsTableScope, TeletextPageAddress,
-    TeletextSemanticService, TeletextX27Level25Links, TeletextX27LinkRole, TeletextX27LinkTarget,
+    TeletextResourceIdentity, TeletextSemanticService, TeletextX27Level25Links,
+    TeletextX27LinkRole, TeletextX27LinkTarget,
 };
 use std::collections::BTreeMap;
 
@@ -59,7 +60,10 @@ struct Demand {
     bitmaps: Bitmaps,
     consumers: Vec<TeletextPageAddress>,
 }
-type Demands = BTreeMap<TeletextDrcsTableScope, Demand>;
+// A linked-page supplement owns a separate S1; a fresh scope retains its old
+// deterministic whole-page allocation and consumer grouping.
+type Target = (TeletextDrcsTableScope, Option<TeletextResourceIdentity>);
+type Demands = BTreeMap<Target, Demand>;
 
 pub(super) fn prepare(
     declared: &TeletextDeclaredService,
@@ -84,8 +88,8 @@ pub(super) fn prepare(
         .map_err(normalization_error)?;
         let bitmaps = missing_bitmaps(service, &original, budget, context)?;
         if bitmaps.iter().any(Option::is_some) {
-            if let Some(scope) = unused_scope(service, page.address) {
-                let demand = demands.entry(scope).or_default();
+            if let Some(target) = target(declared, page.address) {
+                let demand = demands.entry(target).or_default();
                 for (existing, bitmap) in demand.bitmaps.iter_mut().zip(bitmaps) {
                     if let Some(bitmap) = bitmap {
                         if existing.is_some_and(|existing| existing != bitmap) {
@@ -130,12 +134,15 @@ fn derive(
     bounded("pages", count, budget.max_pages)?;
     let mut tables = Vec::with_capacity(demands.len());
     let mut extensions = Vec::new();
-    for (&scope, demand) in &demands {
-        let resource = super::resource_namespace::allocate(declared, scope)?;
-        if tables
-            .iter()
-            .any(|table: &TeletextDrcsSubtable| table.identity().page() == resource.page())
-        {
+    for (&(scope, linked), demand) in &demands {
+        let resource = match linked {
+            Some(resource) => resource,
+            None => super::resource_namespace::allocate(declared, scope)?,
+        };
+        if tables.iter().any(|table: &TeletextDrcsSubtable| {
+            table.identity().page() == resource.page()
+                && table.identity().logical_subpage() == resource.logical_subpage()
+        }) {
             return Err(error(Failure::Budget {
                 category: "compiler DRCS free resource owners",
                 count: 2,
@@ -158,7 +165,7 @@ fn derive(
         );
     }
     let effective = service
-        .derive_with_drcs_resources(
+        .derive_with_drcs_subpages(
             &tables,
             &extensions,
             TeletextDrcsExtensionBudget {
@@ -344,3 +351,8 @@ fn normalization_error(reason: super::super::TeletextNormalizedMainProgramError)
         )))
     }
 }
+
+#[path = "compiler_drcs/linked.rs"]
+mod linked;
+
+use linked::target;

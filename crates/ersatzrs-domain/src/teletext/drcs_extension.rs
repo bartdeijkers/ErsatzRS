@@ -24,7 +24,9 @@ pub struct TeletextDrcsExtensionBudget {
     pub max_page_extensions: usize,
 }
 
-/// Supplement one unused resolved DRCS scope and its physical X27 role.
+/// Supplement one effective DRCS scope and its physical X27 role.
+/// The chosen derivation API checks whether its role must be unused or may
+/// retain an explicit existing page while adding a free logical subpage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextDrcsPageExtension {
     pub display: TeletextPageAddress,
@@ -83,6 +85,15 @@ pub enum TeletextDrcsExtensionError {
 
 type Result<T> = std::result::Result<T, TeletextDrcsExtensionError>;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExtensionMode {
+    FreshPages,
+    FreeSubpages,
+}
+
+#[path = "drcs_extension/subpages.rs"]
+mod subpages;
+
 fn bounded(category: &'static str, count: usize, maximum: usize) -> Result<()> {
     if count > maximum {
         return Err(TeletextDrcsExtensionError::Budget {
@@ -113,7 +124,34 @@ impl TeletextSemanticService {
         pages: &[TeletextDrcsPageExtension],
         budget: TeletextDrcsExtensionBudget,
     ) -> Result<Self> {
-        let structure = self.preflight_drcs_extension(resources, pages, budget)?;
+        self.derive_drcs(resources, pages, budget, ExtensionMode::FreshPages)
+    }
+
+    /// Derive an effective service with fresh banks or free linked DRCS subpages.
+    /// Existing definitions and the original service remain unchanged. A shared
+    /// raw page requires a free logical S1 and an explicit, matching resolved
+    /// and X27 Level 2.5 link. Only its required-subpage mask is supplemented;
+    /// its target, validity and every other role remain exact.
+    /// # Errors
+    /// Rejects collisions, missing or incompatible linked consumers, and all
+    /// count, inventory, collected-reference and fresh-bank derivation failures.
+    pub fn derive_with_drcs_subpages(
+        &self,
+        resources: &[TeletextDrcsSubtable],
+        pages: &[TeletextDrcsPageExtension],
+        budget: TeletextDrcsExtensionBudget,
+    ) -> Result<Self> {
+        self.derive_drcs(resources, pages, budget, ExtensionMode::FreeSubpages)
+    }
+
+    fn derive_drcs(
+        &self,
+        resources: &[TeletextDrcsSubtable],
+        pages: &[TeletextDrcsPageExtension],
+        budget: TeletextDrcsExtensionBudget,
+        mode: ExtensionMode,
+    ) -> Result<Self> {
+        let structure = self.preflight_drcs_extension(resources, pages, budget, mode)?;
         let mut tables = self.drcs.subtables().to_vec();
         tables.extend_from_slice(resources);
         let catalog = TeletextDrcsCatalog::new(tables)?;
@@ -137,7 +175,7 @@ impl TeletextSemanticService {
                     },
                 },
             );
-            supplement_page(&mut enhancement, supplement, resources)?;
+            supplement_page(&mut enhancement, supplement, resources, mode)?;
             derived.pages.insert(supplement.display, enhancement);
         }
         let inventory = check_resource_records(
@@ -169,10 +207,11 @@ impl TeletextSemanticService {
         resources: &[TeletextDrcsSubtable],
         pages: &[TeletextDrcsPageExtension],
         budget: TeletextDrcsExtensionBudget,
+        mode: ExtensionMode,
     ) -> Result<usize> {
         let glyphs = self.bound_drcs_extension(resources, pages, budget)?;
-        self.validate_drcs_extension_resources(resources)?;
-        self.validate_drcs_extension_pages(resources, pages)?;
+        self.validate_drcs_extension_resources(resources, pages, mode)?;
+        self.validate_drcs_extension_pages(resources, pages, mode)?;
         self.drcs_extension_structure(resources, pages, glyphs)
     }
 
@@ -231,7 +270,12 @@ impl TeletextSemanticService {
         Ok(glyphs)
     }
 
-    fn validate_drcs_extension_resources(&self, resources: &[TeletextDrcsSubtable]) -> Result<()> {
+    fn validate_drcs_extension_resources(
+        &self,
+        resources: &[TeletextDrcsSubtable],
+        pages: &[TeletextDrcsPageExtension],
+        mode: ExtensionMode,
+    ) -> Result<()> {
         for (index, table) in resources.iter().enumerate() {
             let resource = table.identity();
             if resources[..index].iter().any(|previous| {
@@ -244,14 +288,9 @@ impl TeletextSemanticService {
                 page.address.page.magazine() == resource.page().magazine()
                     && page.address.page.wire_page() == resource.page().page()
             }) || self
-                .drcs
-                .subtables()
+                .object_companions
                 .iter()
-                .any(|table| table.identity().page() == resource.page())
-                || self
-                    .object_companions
-                    .iter()
-                    .any(|identity| identity.page() == resource.page())
+                .any(|identity| identity.page() == resource.page())
                 || self.objects.definitions().iter().any(|definition| {
                     definition
                         .identity
@@ -261,6 +300,12 @@ impl TeletextSemanticService {
             {
                 return Err(TeletextDrcsExtensionError::OccupiedResourcePage { resource });
             }
+            if subpages::existing_page(self, resource) {
+                if mode == ExtensionMode::FreshPages {
+                    return Err(TeletextDrcsExtensionError::OccupiedResourcePage { resource });
+                }
+                subpages::validate_resource(self, resource, pages)?;
+            }
         }
         Ok(())
     }
@@ -269,6 +314,7 @@ impl TeletextSemanticService {
         &self,
         resources: &[TeletextDrcsSubtable],
         pages: &[TeletextDrcsPageExtension],
+        mode: ExtensionMode,
     ) -> Result<()> {
         for (index, extension) in pages.iter().enumerate() {
             let display = extension.display;
@@ -300,6 +346,12 @@ impl TeletextSemanticService {
                     table: extension.table,
                     resource: extension.resource,
                 });
+            }
+            if mode == ExtensionMode::FreeSubpages
+                && subpages::existing_page(self, extension.resource)
+            {
+                subpages::validate_page(self, extension)?;
+                continue;
             }
             if let Some(page) = self.pages.get(&display) {
                 if page.resources.drcs.page(extension.table).is_some()
@@ -369,6 +421,7 @@ fn supplement_page(
     page: &mut TeletextResolvedPageEnhancementDraft,
     extension: &TeletextDrcsPageExtension,
     resources: &[TeletextDrcsSubtable],
+    mode: ExtensionMode,
 ) -> Result<()> {
     let unused = TeletextX27LinkDeclaration::new(
         TeletextX27LinkTarget::Unspecified {
@@ -390,13 +443,24 @@ fn supplement_page(
         .fold(0_u16, |mask, table| {
             mask | (1 << table.identity().logical_subpage().get())
         });
-    links[usize::from(role(extension.table).wire_code())] = TeletextX27LinkDeclaration::new(
-        TeletextX27LinkTarget::Page {
-            page: extension.resource.page(),
-        },
-        TeletextX27LinkValidity::Level25Only,
-        TeletextSubpageRequirementMask::new(mask),
-    )?;
+    let index = usize::from(role(extension.table).wire_code());
+    links[index] = if mode == ExtensionMode::FreeSubpages
+        && page.resources.drcs.page(extension.table) == Some(extension.resource.page())
+    {
+        TeletextX27LinkDeclaration::new(
+            links[index].target(),
+            links[index].validity(),
+            TeletextSubpageRequirementMask::new(links[index].required_subpages().get() | mask),
+        )?
+    } else {
+        TeletextX27LinkDeclaration::new(
+            TeletextX27LinkTarget::Page {
+                page: extension.resource.page(),
+            },
+            TeletextX27LinkValidity::Level25Only,
+            TeletextSubpageRequirementMask::new(mask),
+        )?
+    };
     page.compositional_links = Some(TeletextX27Level25Links::new(
         links[0], links[1], links[2], links[3],
     )?);
