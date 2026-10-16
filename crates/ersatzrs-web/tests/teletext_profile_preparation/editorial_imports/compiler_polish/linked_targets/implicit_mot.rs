@@ -69,7 +69,7 @@ fn mot() -> TeletextMotLevel25Declaration {
     .unwrap()
 }
 
-fn response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = input::response(theme, page, subcode);
     for page in value["service"]["page_enhancements"]
         .as_array_mut()
@@ -93,7 +93,7 @@ fn response(theme: &str, page: u16, subcode: u16) -> Value {
     value
 }
 
-fn encoding(
+pub(super) fn encoding(
 ) -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy {
     let mut policy = input::encoding();
     assert_eq!(policy.transmissions.len(), 4);
@@ -108,7 +108,7 @@ fn encoding(
     policy
 }
 
-fn assert_originals(flow: &Flow) {
+pub(super) fn assert_originals(flow: &Flow) {
     for accepted in &flow.accepted {
         let service = accepted.service();
         let declared = service.declared();
@@ -194,7 +194,7 @@ fn assert_originals(flow: &Flow) {
     }
 }
 
-fn assert_effective(flow: &Flow, service: &EncodedTeletextAuthoredService) {
+pub(super) fn assert_effective(flow: &Flow, service: &EncodedTeletextAuthoredService) {
     // The existing oracle includes ALL original resource pages, including MOT,
     // in its exact-byte check and retains the complete original declaration.
     oracle::assert_service(flow, service);
@@ -267,7 +267,7 @@ fn assert_effective(flow: &Flow, service: &EncodedTeletextAuthoredService) {
     }
 }
 
-fn mot_file(exported: &ExportedOriginalTeletextDesign) -> &str {
+pub(super) fn mot_file(exported: &ExportedOriginalTeletextDesign) -> &str {
     exported.sidecar().project.assets.iter().find(|asset|matches!(&asset.scope,
         TeletextExportAssetScope::Resource {identity,..}
             if identity.kind == TeletextResourceKindWire::Mot
