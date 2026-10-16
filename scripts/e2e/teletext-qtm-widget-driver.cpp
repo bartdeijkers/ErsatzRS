@@ -61,6 +61,10 @@ struct DriverContext {
     int rightPanelColumns;
     bool panelProof = false;
     bool panelNight = false;
+    bool editLocalGlyph = false;
+    int glyphMode = 0;
+    int fromGlyph = 0;
+    int toGlyph = 0;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -98,6 +102,22 @@ static DriverContext driverContext() {
     const QByteArray input = qgetenv("ERSATZRS_QTM_INPUT_BASENAME");
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
     const bool foreground = mode == "single-page-foreground";
+    const bool localGlyph = mode == "single-page-local-glyph";
+    const bool suppliedGlyph = qEnvironmentVariableIsSet("ERSATZRS_QTM_GLYPH_MODE")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_GLYPH")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH");
+    if (!localGlyph && suppliedGlyph)
+        qFatal("Glyph operands require explicit single-page-local-glyph mode");
+    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", 9) : 0;
+    const int fromGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_FROM_GLYPH", 127) : 0;
+    const int toGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH", 127) : 0;
+    if (localGlyph && (glyphMode != 9 && glyphMode != 1))
+        qFatal("Fixed local glyph mode must retain raw G0 mode9 or G1 mode1");
+    if (localGlyph && fromGlyph == toGlyph)
+        qFatal("Local glyph trial requires a changed glyph");
+    if (localGlyph && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
+        || (glyphMode == 1 && (fromGlyph != 33 || toGlyph != 34))))
+        qFatal("Fixed local glyph trial requires G0 A-to-B or G1 0x21-to-0x22");
     const bool panelDay = mode == "single-page-panel-zone-q";
     const bool panelNight = mode == "single-page-panel-save";
     const bool panelProof = panelDay || panelNight;
@@ -105,14 +125,14 @@ static DriverContext driverContext() {
     if ((!panelProof && qEnvironmentVariableIsSet("ERSATZRS_QTM_PANEL_THEME"))
         || (panelDay && panelTheme != "day") || (panelNight && panelTheme != "night"))
         qFatal("Panel theme requires the exact fixed Day-edit or Night-save mode");
-    const bool suppliedForeground = qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_INDEX")
-        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_COLUMN")
-        || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_COLOUR")
+    const bool suppliedTarget = qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_INDEX")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_COLUMN");
+    const bool suppliedForeground = qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_COLOUR")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_COLOUR");
-    if (!foreground && suppliedForeground)
+    if (!foreground && (suppliedForeground || (!localGlyph && suppliedTarget)))
         qFatal("Foreground operands require explicit single-page-foreground mode");
-    const int triplet = foreground ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
-    const int column = foreground ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", 39) : 0;
+    const int triplet = (foreground || localGlyph) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
+    const int column = (foreground || localGlyph) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", 39) : 0;
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
     if (foreground && from == to) qFatal("Foreground trial requires a changed colour");
@@ -129,7 +149,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -152,8 +172,10 @@ static DriverContext driverContext() {
         qFatal("Edited DRCS verification requires the synthetic S1=0 companion");
     if (panelProof && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed panel proof requires left4/right12 and actual Normal S1=0 companion");
+    if (localGlyph && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
+        qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -253,7 +275,30 @@ static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
         context.drcsSubpage, context.verifyEditedDrcs);
     std::printf("QTM actual Normal DRCS Load file complete: %s\n", context.drcsName.constData());
 }
+// Captures actual painted widgets; native import remains the edit authority.
+static void captureLocalGlyphWidget(const DriverContext &context, const char *stage) {
+    auto main = window();
+    auto view = editor();
+    if (!context.editLocalGlyph || !main || !view || !main->isVisible()
+        || !main->windowHandle() || !main->windowHandle()->isExposed()
+        || !view->isVisible() || view->size() != QSize(672, 250))
+        qFatal("Actual local glyph widget must be exposed at672x250");
+    const QImage painted = view->grab().toImage();
+    if (painted.size() != QSize(672, 250)
+        || !painted.save(QString("/work/") + context.captureName(
+            (QByteArray("local-glyph-") + stage + "-widget").constData())))
+        qFatal("Actual local glyph widget capture failed");
+}
 static void editForeground(QMainWindow *main, const DriverContext &context) {
+    const int expectedMode = context.editLocalGlyph ? context.glyphMode : 0;
+    const int expectedFrom = context.editLocalGlyph ? context.fromGlyph : context.fromColour;
+    const int expectedTo = context.editLocalGlyph ? context.toGlyph : context.toColour;
+    const int offset = context.editLocalGlyph ? 32 : 0;
+    const int comboSize = context.editLocalGlyph ? 96 : 32;
+    const auto operandCapture = [context](const char *stage) {
+        return context.captureName(((context.editLocalGlyph ? QByteArray("local-glyph-")
+            : QByteArray("foreground-")) + stage).constData());
+    };
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || dock->windowTitle() != "X/26 triplets")
         qFatal("Pinned X/26 triplets dock absent");
@@ -277,7 +322,7 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
         if (!valid) qFatal("Actual X/26 raw operand absent");
         return value;
     };
-    if (raw(0) != context.tripletColumn || raw(1) != 0 || raw(2) != context.fromColour)
+    if (raw(0) != context.tripletColumn || raw(1) != expectedMode || raw(2) != expectedFrom)
         qFatal("Actual X/26 row does not match native foreground tuple");
     const QModelIndex target = model->index(context.tripletIndex, 0);
     table->scrollTo(target, QAbstractItemView::PositionAtCenter);
@@ -290,35 +335,36 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
         qFatal("Actual X/26 row selection failed");
     QComboBox *colour = nullptr;
     for (QComboBox *candidate : dock->findChildren<QComboBox *>()) {
-        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != 32) continue;
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != comboSize) continue;
         if (colour) qFatal("Ambiguous visible X/26 colour selector");
         colour = candidate;
     }
-    if (!colour || colour->currentIndex() != context.fromColour || main->isWindowModified())
+    if (!colour || colour->currentIndex() != expectedFrom - offset || main->isWindowModified())
         qFatal("Actual foreground colour selector/current document state differs from native baseline");
-    if (!dock->grab().save(QString("/work/") + context.captureName("foreground-before")))
+    if (!dock->grab().save(QString("/work/") + operandCapture("before")))
         qFatal("Actual foreground dock baseline capture failed");
+    if (context.editLocalGlyph) captureLocalGlyphWidget(context, "before");
     QTest::mouseClick(colour, Qt::LeftButton, Qt::NoModifier, colour->rect().center());
     auto popup = colour->view();
     if (!QTest::qWaitFor([popup] { return popup->isVisible(); }, 3000))
         qFatal("Actual colour popup did not open");
-    const QModelIndex choice = popup->model()->index(context.toColour, colour->modelColumn(), colour->rootModelIndex());
+    const QModelIndex choice = popup->model()->index(expectedTo - offset, colour->modelColumn(), colour->rootModelIndex());
     popup->scrollTo(choice, QAbstractItemView::PositionAtCenter);
-    const auto observeFailure = [popup, table, colour, dock, main, context, raw](const char *stage) {
+    const auto observeFailure = [popup, table, colour, dock, main, context, raw, expectedTo, operandCapture](const char *stage) {
         auto focus = QApplication::focusWidget();
         std::fprintf(stderr,
             "QTM foreground failure stage=%s target=%d table_row=%d raw=%d/%d/%d combo=%d expected=%d popup_visible=%d popup_current=%d focus=%s active_popup=%s\n",
             stage, context.tripletIndex, table->currentIndex().row(), raw(0), raw(1), raw(2),
-            colour->currentIndex(), context.toColour, popup->isVisible(), popup->currentIndex().row(),
+            colour->currentIndex(), expectedTo, popup->isVisible(), popup->currentIndex().row(),
             focus ? focus->metaObject()->className() : "none",
             QApplication::activePopupWidget() ? QApplication::activePopupWidget()->metaObject()->className() : "none");
         std::fprintf(stderr, "QTM foreground failure modified=%d title=%s\n", main->isWindowModified(),
             main->windowTitle().toUtf8().constData());
-        if (!dock->grab().save(QString("/work/") + context.captureName("foreground-failed-dock")))
+        if (!dock->grab().save(QString("/work/") + operandCapture("failed-dock")))
             qFatal("Foreground failure dock capture failed");
-        capture(context.captureName("foreground-failed-main").toUtf8().constData());
+        capture(operandCapture("failed-main").toUtf8().constData());
         if (popup->isVisible()
-            && !popup->window()->grab().save(QString("/work/") + context.captureName("foreground-failed-popup")))
+            && !popup->window()->grab().save(QString("/work/") + operandCapture("failed-popup")))
             qFatal("Foreground failure popup capture failed");
         std::fflush(stderr);
     };
@@ -341,19 +387,23 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
         observeFailure("choice-hover");
         qFatal("Actual replacement colour item did not receive mouse hover");
     }
-    if (!popup->window()->grab().save(QString("/work/") + context.captureName("foreground-popup")))
+    if (!popup->window()->grab().save(QString("/work/") + operandCapture("popup")))
         qFatal("Actual foreground popup capture failed");
     QTest::mouseClick(popup->viewport(), Qt::LeftButton, Qt::NoModifier, point);
-    if (!QTest::qWaitFor([colour, main, context, raw] {
-        return colour->currentIndex() == context.toColour && main->isWindowModified()
-            && raw(0) == context.tripletColumn && raw(1) == 0 && raw(2) == context.toColour;
+    if (!QTest::qWaitFor([colour, main, context, raw, expectedMode, expectedTo, offset] {
+        return colour->currentIndex() == expectedTo - offset && main->isWindowModified()
+            && raw(0) == context.tripletColumn && raw(1) == expectedMode && raw(2) == expectedTo;
     }, 3000)) {
         observeFailure("activation");
         qFatal("Actual foreground widget edit did not update the expected X/26 tuple");
     }
-    if (!dock->grab().save(QString("/work/") + context.captureName("foreground-edited")))
+    if (!dock->grab().save(QString("/work/") + operandCapture("edited")))
         qFatal("Actual foreground dock edited capture failed");
-    std::printf("QTM actual foreground popup edit: triplet=%d column=%d mode=0 from=%d to=%d\n",
+    if (context.editLocalGlyph) {
+        captureLocalGlyphWidget(context, "edited");
+        std::printf("QTM actual local glyph popup edit: triplet=%d column=%d mode=%d from=%d to=%d\n",
+            context.tripletIndex, context.tripletColumn, expectedMode, expectedFrom, expectedTo);
+    } else std::printf("QTM actual foreground popup edit: triplet=%d column=%d mode=0 from=%d to=%d\n",
         context.tripletIndex, context.tripletColumn, context.fromColour, context.toColour);
 }
 static void saveAs(QMainWindow *main, const DriverContext &context) {
@@ -481,7 +531,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -523,7 +573,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
                 qFatal("Actual widget geometry disagrees with the native Level 2.5 panel counts");
             std::printf("QTM actual widget geometry: width=%d height=%d left=%d right=%d\n",
                 view->width(), view->height(), context.leftPanelColumns, context.rightPanelColumns);
-            if (context.editForeground) editForeground(main, context);
+            if (context.editForeground || context.editLocalGlyph) editForeground(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));

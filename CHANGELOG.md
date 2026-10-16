@@ -29,8 +29,9 @@ release section when tagging a release.
   Local-object teletext commands into versioned concepts. Exact original command
   provenance, immutable object/invocation structure and permissions for every
   shared panel consumer protect generated content. Repeated imports and undo
-  preserve originals and remain separate from explicit publication. Actual
-  external-editor panel editing and full Level 2.5 acceptance remain open.
+  preserve originals and remain separate from explicit publication. Actual pinned
+  QTeletextMaker G0/G1 panel glyph saves now pass concept import, shared preview
+  and reopen; full object/editor and Level 2.5 acceptance remain open.
 - Import existing local teletext colour/attribute edits into versioned concepts,
   with exact command correspondence, complete native validation and protected-zone
   checks. Repeated edits, previews and reload preserve original documents and
