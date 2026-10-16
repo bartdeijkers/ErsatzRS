@@ -143,6 +143,7 @@ pub use physical_inventory::{
     TeletextPhysicalPageInventoryRecord,
 };
 pub use pmt_install::{TeletextPmtInstallError, TeletextPmtInstallReport, TeletextPmtInstaller};
+pub use presentation::encode_teletext_presentation_words;
 pub use psi::{TeletextProgramSelection, TeletextPsiDiscovery, TeletextPsiError};
 pub use psi_monitor::TeletextPsiMonitor;
 pub use resource_lifecycle::{

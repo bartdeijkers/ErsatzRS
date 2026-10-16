@@ -413,7 +413,10 @@ fn extend_root_export(
             project,
             tti,
             deadline,
-            TeletextEditorCarrier::V4,
+            super::super::teletext_export_project::editor_presentation::carrier(
+                root.original.view(),
+                Some(&owners),
+            ),
         )
         .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
         root.body = body.clone();

@@ -34,11 +34,17 @@ pub(super) fn western_latin_v1_presentation(
     })
 }
 
-/// Encode a checked display declaration as a pre-bit-reversal packet body.
+/// Encode thirteen 18-bit X28/0 or M29/0 presentation words.
 ///
-/// Designation is zero. The first seven bits select basic display/odd parity
-/// for X28/0, or packet function zero for M29/0; the remaining coding is identical.
-pub(super) fn encode_presentation(defaults: &TeletextLevel25PresentationDefaults) -> [u8; 40] {
+/// Encodes only the explicit supplied values, without Hamming coding. This does
+/// not create or authenticate an authored declaration, establish provenance,
+/// validate a service or grant publication authority. Callers must resolve the
+/// applicable declaration policy, especially `DecoderDependent` secondary
+/// selection, before constructing the supplied values.
+#[must_use]
+pub fn encode_teletext_presentation_words(
+    defaults: &TeletextLevel25PresentationDefaults,
+) -> [u32; 13] {
     let mut words = [0_u32; 13];
     let mut offset = 0;
     write_bits(&mut words, &mut offset, 0, 7);
@@ -106,6 +112,15 @@ pub(super) fn encode_presentation(defaults: &TeletextLevel25PresentationDefaults
         TeletextColourRemapping::FgClut2BgClut3 => 7,
     };
     write_bits(&mut words, &mut offset, remapping, 3);
+    words
+}
+
+/// Encode a checked display declaration as a pre-bit-reversal packet body.
+///
+/// Designation is zero. The first seven bits select basic display/odd parity
+/// for X28/0, or packet function zero for M29/0; the remaining coding is identical.
+pub(super) fn encode_presentation(defaults: &TeletextLevel25PresentationDefaults) -> [u8; 40] {
+    let words = encode_teletext_presentation_words(defaults);
     let mut body = [0_u8; 40];
     body[0] = hamming_8_4(0);
     for (target, word) in body[1..].chunks_exact_mut(3).zip(words) {

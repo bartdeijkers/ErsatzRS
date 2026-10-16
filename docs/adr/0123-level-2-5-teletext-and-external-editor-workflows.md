@@ -399,6 +399,20 @@ declaration. Do not silently materialize it as the Table33 sentinel. Trusted
 policy and independent client/decoder evidence remain required before that
 materialization can establish equivalent mixed-producer output. No permanent
 authoring restriction or acceptance waiver follows from this open gap.
+
+For standalone editing, carrier V5 may supply a separately identified QTM 1.0
+view of original POP-fallback presentation when native X28/M29 are absent.
+The optional versioned `editor_presentation` mapping binds the original national
+option and POP flags to the sealed export receipt. Pinned QTM 1.0 represents its
+absent secondary selection and the X28 sentinel identically (region F/NOS 7);
+this explicit editor-only policy preserves its primary selection and exposes
+the original panels/background substitution. It does not establish equivalent
+native or mixed-producer output for other clients. Historical exports recreate
+their stored carrier unchanged. Import reconstructs the editor-only packet from
+the original receipt, protects all its words, and retains native absence, POP
+provenance and `DecoderDependent` secondary selection in the concept. Uploaded
+metadata cannot declare presentation, change policy or authorize publication.
+
 Stopping magazine declarations is not proof of safe replacement in a warm
 receiver. Preserve producer-local defaults without relying on a fresh decoder;
 prove removal/replacement of M29 and MOT state with consecutive generations in

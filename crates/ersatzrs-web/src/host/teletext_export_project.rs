@@ -41,6 +41,7 @@ use sha2::{Digest, Sha256};
 use super::teletext_stored_designs::OriginalDesignView;
 
 mod drcs_sets;
+pub(super) mod editor_presentation;
 
 /// Located failures without original text, settings or file bodies.
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +92,7 @@ pub(super) enum TeletextEditorCarrier {
     V2,
     V3,
     V4,
+    V5,
 }
 impl TeletextEditorCarrier {
     pub(super) fn from_profile(profile: &str) -> Option<Self> {
@@ -99,6 +101,7 @@ impl TeletextEditorCarrier {
             "qteletextmaker-1.0-carrier-v2" => Some(Self::V2),
             "qteletextmaker-1.0-carrier-v3" => Some(Self::V3),
             "qteletextmaker-1.0-carrier-v4" => Some(Self::V4),
+            "qteletextmaker-1.0-carrier-v5" => Some(Self::V5),
             _ => None,
         }
     }
@@ -108,6 +111,7 @@ impl TeletextEditorCarrier {
             Self::V2 => "qteletextmaker-1.0-carrier-v2",
             Self::V3 => "qteletextmaker-1.0-carrier-v3",
             Self::V4 => "qteletextmaker-1.0-carrier-v4",
+            Self::V5 => "qteletextmaker-1.0-carrier-v5",
         }
     }
     /// Keep native flags separate from QTM's single effective primary NOS.
@@ -122,7 +126,7 @@ impl TeletextEditorCarrier {
             // Its C12 means numeric NOS bit 0, unlike compact native bit 8.
             // Use the resolved X28/M29/header primary; retain native flags in
             // the mapping, including an independently authored fallback NOS.
-            Self::V2 | Self::V3 | Self::V4 => {
+            Self::V2 | Self::V3 | Self::V4 | Self::V5 => {
                 let primary = u16::from(effective_primary);
                 ((primary & 1) << 9) | ((primary & 2) << 7) | ((primary & 4) << 5)
             }
@@ -344,7 +348,10 @@ fn selected_inventory<'a>(
             )
         })
         .ok_or(NativeTeletextExportProjectError::Budget)?;
-    let asset_count = if carrier == TeletextEditorCarrier::V4 {
+    let asset_count = if matches!(
+        carrier,
+        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5
+    ) {
         asset_count
             .checked_add(drcs_sets::count_banks(encoded, deadline)?)
             .ok_or(NativeTeletextExportProjectError::Budget)?
@@ -745,13 +752,28 @@ fn append_display(
                 .find(|m| m.magazine == projection.address.page.magazine())
         })
         .flatten();
-    let records = display_records(
+    let editor_projection = editor_presentation::projection(
+        presentation,
+        files.carrier,
+        has_x28 || materialized.is_some(),
+    )?;
+    let mut records = display_records(
         &projection,
         source_page,
         presentation.effective_defaults().primary.get(),
         materialized,
         files.carrier,
     );
+    let editor_presentation = if let Some((mapping, words)) = editor_projection {
+        records.push(TeletextTtiRecord::Packet {
+            row: 28,
+            designation: 0,
+            words,
+        });
+        Some(mapping)
+    } else {
+        None
+    };
     let file_budget = TeletextTtiBudget {
         max_bytes: tti_budget
             .max_bytes
@@ -776,6 +798,7 @@ fn append_display(
         header_controls: projection.header.controls.raw(),
         navigation: navigation(source_page),
         materialized_magazine: materialized.map(|m| m.magazine),
+        editor_presentation,
         tti_bytes: bytes.len(),
         tti_sha256: sha256(&bytes),
     };
@@ -857,7 +880,10 @@ fn assemble_files(
             }
         }
     }
-    if carrier == TeletextEditorCarrier::V4 {
+    if matches!(
+        carrier,
+        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5
+    ) {
         drcs_sets::append_sets(encoded, &mut assets, &mut files, tti_budget, deadline)?;
     }
     for (magazine, unit) in magazines.iter().zip(encoded.magazine_units()) {
@@ -990,13 +1016,14 @@ mod tests {
             TeletextEditorCarrier::V2,
             TeletextEditorCarrier::V3,
             TeletextEditorCarrier::V4,
+            TeletextEditorCarrier::V5,
         ] {
             assert_eq!(
                 TeletextEditorCarrier::from_profile(carrier.profile()),
                 Some(carrier)
             );
         }
-        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v5"] {
+        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v6"] {
             assert_eq!(TeletextEditorCarrier::from_profile(profile), None);
         }
     }

@@ -27,6 +27,9 @@ use serde_json::json;
 use sha2::{Digest as _, Sha256};
 use std::fmt::Write as _;
 
+#[path = "native_exports/pop_fallback.rs"]
+mod pop_fallback;
+
 fn policy() -> NativeTeletextExportPolicy {
     NativeTeletextExportPolicy {
         document: designs::budget(),

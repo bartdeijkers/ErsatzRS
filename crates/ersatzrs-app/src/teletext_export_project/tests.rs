@@ -1,6 +1,8 @@
 use super::*;
 use serde_json::{json, Value};
 
+#[path = "editor_presentation_tests.rs"]
+mod editor_presentation_tests;
 #[path = "effective_tests.rs"]
 mod effective_tests;
 
@@ -65,6 +67,7 @@ fn project() -> TeletextExportProject {
             materialized_magazine: None,
             tti_bytes: 0,
             tti_sha256: digest,
+            editor_presentation: None,
         }],
         assets: Vec::new(),
         effective_scope: None,
@@ -145,7 +148,7 @@ fn v2_editor_profile_round_trips_without_changing_receipt_schema_or_raw_controls
 }
 #[test]
 fn unknown_editor_carrier_profiles_are_rejected() {
-    for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v5"] {
+    for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v6"] {
         let mut value = valid_project();
         value.editor_profile = profile.into();
         assert_eq!(

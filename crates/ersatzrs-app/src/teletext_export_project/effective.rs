@@ -114,13 +114,16 @@ pub(super) fn validate_schema(project: &TeletextExportProject) -> Result<()> {
                     | "qteletextmaker-1.0-carrier-v2"
                     | "qteletextmaker-1.0-carrier-v3"
                     | "qteletextmaker-1.0-carrier-v4"
+                    | "qteletextmaker-1.0-carrier-v5"
             ) && project.effective_scope.is_none() =>
         {
             Ok(())
         }
         (2, 2)
-            if project.editor_profile == "qteletextmaker-1.0-carrier-v4"
-                && project.effective_scope.is_some() =>
+            if matches!(
+                project.editor_profile.as_str(),
+                "qteletextmaker-1.0-carrier-v4" | "qteletextmaker-1.0-carrier-v5"
+            ) && project.effective_scope.is_some() =>
         {
             Ok(())
         }

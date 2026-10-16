@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: faithful POP-fallback standalone editor presentation'
+current_focus = 'P9A-04: direct panel editing within captured zones'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -296,9 +296,14 @@ fabricated X28, automatic acquisition or client rendering is claimed. P9A-04 own
 all source/positive/negative/provenance identities. Actual QTM panel/Main-edit
 interchange now passes eb5ca8f5 with two genuine GUI exits,24captures, exact
 palette/masks/geometry, fresh concept/preview/separate publication/reopens and
-ordinary AV/TSDuck/model proof. P9A-04 owns failures and evidence reuse. Next fix
-the separate POP-fallback standalone presentation gap (no actualM29), preserving
-native absence/DecoderDependent policy; repeat only affected editor boundaries.
+ordinary AV/TSDuck/model proof. P9A-04 owns failures and evidence reuse.
+CarrierV5 now preserves original POP8+8/BBS presentation in pinned QTM through an
+explicit editor-only receipt mapping. Actual fresh export/edit/save/concept/shared
+preview/reopen and protected X28/metadata negatives pass, with unchanged native
+absence/POP provenance/DecoderDependent and no publication. P9A-04 owns exact
+source/tool/check receipts. Next qualify direct panel text edits against captured
+zones; pin the concrete user blocker before the smallest necessary correction,
+and reuse unaffected editor/publication/stream/client evidence.
 Suitable-client/full engine proof remains open. Earlier proof
 retains its scope. Required suitable enlarged client/navigation stays
 open; this gap does not block independent authored work. Full aliases/lifecycle/

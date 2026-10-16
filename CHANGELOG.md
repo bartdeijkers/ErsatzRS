@@ -692,6 +692,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve original POP-fallback side panels and background substitution in
+  standalone QTeletextMaker exports through an explicit versioned editor view.
+  Receipt-bound import protects that presentation while keeping native X28/M29
+  absence, decoder-dependent secondary selection and historical exports intact.
 - Honor captured editable left- and right-panel teletext zones during bitmap imports.
   Shared glyph edits still require permission for every changed consumer; generated
   zones, Main header bytes and the original panel geometry remain protected.

@@ -202,8 +202,53 @@ object! {
         #[serde(deserialize_with="navigation")] pub navigation: Vec<TeletextNavigationLinkWire>,
         #[serde(deserialize_with="nullable")] pub materialized_magazine: Option<u8>,
         pub tti_bytes: usize, pub tti_sha256: String,
+        #[serde(default, skip_serializing_if="Option::is_none", deserialize_with="effective::optional_object")]
+        pub editor_presentation: Option<TeletextExportEditorPresentation>,
     }
 }
+/// Descriptive editor-only projection, never native presentation authority.
+#[derive(Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TeletextExportEditorPresentation {
+    /// The immutable original retains decoder-dependent secondary selection.
+    /// Only this pinned QTM 1.0 editor projection uses its absent-X28 policy
+    /// (secondary sentinel 0x7f); this claims no cross-client/native equivalence.
+    Qtm10OriginalPopFallbackV1 { national_option: u8, pop_flags: u8 },
+}
+impl fmt::Debug for TeletextExportEditorPresentation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("TeletextExportEditorPresentation(<redacted>)")
+    }
+}
+impl<'de> Deserialize<'de> for TeletextExportEditorPresentation {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+        enum Fields {
+            Qtm10OriginalPopFallbackV1 { national_option: u8, pop_flags: u8 },
+        }
+        Ok(match map_only(deserializer)? {
+            Fields::Qtm10OriginalPopFallbackV1 {
+                national_option,
+                pop_flags,
+            } => Self::Qtm10OriginalPopFallbackV1 {
+                national_option,
+                pop_flags,
+            },
+        })
+    }
+}
+impl TeletextExportEditorPresentation {
+    fn valid(&self) -> bool {
+        match self {
+            Self::Qtm10OriginalPopFallbackV1 {
+                national_option,
+                pop_flags,
+            } => *national_option <= 6 && *pop_flags <= 15,
+        }
+    }
+}
+
 object! {
     /// Protected raw units or a versioned DRCS TTI companion, outside editable pages.
     pub struct TeletextExportAssetMapping { pub name: String, pub scope: TeletextExportAssetScope, pub unit_count: usize, pub bytes: usize, pub sha256: String }
@@ -453,6 +498,9 @@ fn validate_pages(project: &TeletextExportProject, b: TeletextExportProjectBudge
             || !hash(&p.tti_sha256)
             || p.materialized_magazine
                 .is_some_and(|m| !(1..=8).contains(&m) || u16::from(m) != p.page.page / 100)
+            || p.editor_presentation.as_ref().is_some_and(|presentation| {
+                project.editor_profile != "qteletextmaker-1.0-carrier-v5" || !presentation.valid()
+            })
         {
             return Err(indexed(K::Mapping, i));
         }
@@ -595,7 +643,11 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
                 format!("d:{resource_name}")
             }
             TeletextExportAssetScope::DrcsTtiSet { resource_names } => {
-                if project.editor_profile != "qteletextmaker-1.0-carrier-v4" || a.unit_count != 0 {
+                if !matches!(
+                    project.editor_profile.as_str(),
+                    "qteletextmaker-1.0-carrier-v4" | "qteletextmaker-1.0-carrier-v5"
+                ) || a.unit_count != 0
+                {
                     return Err(indexed(K::Mapping, i));
                 }
                 let bank = linked_drcs_set_bank(project, resource_names)

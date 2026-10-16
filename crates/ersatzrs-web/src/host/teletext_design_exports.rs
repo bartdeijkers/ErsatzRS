@@ -31,7 +31,7 @@ pub use super::teletext_export_project::NativeTeletextExportProjectError;
 use super::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
     teletext_designs::NativeTeletextDesignError,
-    teletext_export_project::{build_native_teletext_export_project, TeletextEditorCarrier},
+    teletext_export_project::build_native_teletext_export_project,
 };
 
 /// Explicit historical revision and live-head fence; absence selects all displays.
@@ -320,7 +320,10 @@ pub async fn export_original_teletext_design(
                 project_budget,
                 policy.tti,
                 deadline,
-                TeletextEditorCarrier::V4,
+                super::teletext_export_project::editor_presentation::carrier(
+                    original.view(),
+                    request.pages.as_deref(),
+                ),
             )
             .map_err(|error| NativeTeletextExportError::Mapping(Box::new(error)))?;
             let receipt = write_teletext_export_receipt_body(&body, project_budget)?;

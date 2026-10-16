@@ -38,6 +38,7 @@ fn mapping() -> TeletextExportPageMapping {
             },
         }],
         materialized_magazine: Some(2),
+        editor_presentation: None,
         tti_bytes: 0,
         tti_sha256: "a".repeat(64),
     }

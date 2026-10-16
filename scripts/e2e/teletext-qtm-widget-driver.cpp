@@ -419,6 +419,11 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
                     focusFailure("native-pointer-exit");
                     qFatal("Actual X11 filename pointer input failed");
                 }
+                // WSLg can deliver the native click to the file tree after a
+                // modal reposition. Use the dialog's normal File name mnemonic
+                // as a bounded fallback, retaining the observed-focus guard.
+                if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000))
+                    QTest::keyClick(dialog, Qt::Key_N, Qt::AltModifier);
                 if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000)) {
                     focusFailure("filename-click");
                     qFatal("Actual Save As filename input did not receive focus");
