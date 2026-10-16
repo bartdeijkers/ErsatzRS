@@ -15,9 +15,9 @@ const CAPTURE_MAXIMUM: usize = 8 * 1024 * 1024;
 const CAPTURE_TARGET: usize = 40_000 * 188;
 
 pub(super) struct Tools {
-    ffmpeg: String,
-    ffprobe: String,
-    tsanalyze: String,
+    pub(super) ffmpeg: String,
+    pub(super) ffprobe: String,
+    pub(super) tsanalyze: String,
 }
 
 impl Tools {
@@ -144,7 +144,7 @@ pub(super) async fn capture_tcp(url: String) -> Vec<u8> {
     .expect("ordinary TCP capture exceeded its deadline")
 }
 
-fn captured_units(bytes: &[u8]) -> Vec<Vec<u8>> {
+pub(super) fn captured_units(bytes: &[u8]) -> Vec<Vec<u8>> {
     let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
     let mut units = Vec::new();
     for packet in bytes.chunks_exact(188) {

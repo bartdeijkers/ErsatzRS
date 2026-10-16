@@ -7400,6 +7400,38 @@ argv, transport or admin changes. Receipt: tmp/phase9-editorial-import/identity.
 and receipt-sha256.txt, SHA256b2e3ec1e5a5691a09eab216b3376a42090fa2014ea004c6ed0c878ae5b8cb73d. It binds final source/logs and
 excludes mutable progress prose; unchanged prerequisite receipts remain valid.
 
+Emergency preservation checkpoint — ordinary G1 later-spacing investigation:
+The new Linux-x64 manual fixture publishes the existing D5=0/later0x1A vector
+on two ordinary channel URLs, pages124/125/subcode32. Exact row1/2/X26 bodies
+match the regenerated pinned reference (SHA256
+8621d2e1f401e4ce82311a30d114f64d77b7131771f8c71581f39cb63ca26ef9);
+headers/navigation intentionally retain native identities. Reference regeneration
+run37f62975-3028-47cf-8991-2353797b5778 passes all four existing cases.
+Both profiles use white/black calibration; this adds no distinct-theme claim.
+
+Run e55906ec-5aef-4fac-ab94-b82e3c677204 reaches both actual ordinary TCP captures,
+TSDuck/sourceAV/emitted-model checks and unchanged native separated col20/21.
+Each retained496-unit prefix independently passes pinned teletextimager0.2.0
+across nine acquisitions of each page at both fallback/enhanced levels.
+Exact stock libzvbi0.2.42 identity is checked and its known later-spacing failure
+is reproduced without weakening the normative expectation. This diagnostic
+success is explicitly not stock Level2.5 conformance.
+The first native run a8f37803-f923-4607-997c-e551d95cffe2 rejects inherited
+LD_LIBRARY_PATH; only the independent Python child now gets an empty override
+via the existing bounded probe mechanism. Its library/hash guard stays intact.
+
+The actual headed stock trial loses an owned X11 window during its first
+capture (xprop exit1), after both decoders activate but before navigation images.
+The native run consequently FAILS at its180-second completion deadline.
+No actual G1 display/navigation, retained-state/reopen or complete end-to-end
+success is claimed. Preserve this failure; diagnose window lifetime/client exit
+before another client trial, then address the exact independent decoder/client
+spacing discrepancy if required. Do not change native compiler/raster goldens.
+Six new pure oracle tests, strict web all-target Clippy, formatting and
+architecture-lint pass. Logs/captures remain under tmp/phase9-g1-live/.
+This emergency checkpoint preserves incomplete investigation, not acceptance;
+all existing Level2.5/editor/Lua/restart/admin/playback/platform gates remain open.
+
 Current criterion-to-next-step map (updated during response-owned lifecycle correction; historical receipts retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |

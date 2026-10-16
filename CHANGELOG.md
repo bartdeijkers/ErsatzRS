@@ -51,6 +51,9 @@ release section when tagging a release.
   localized admin import/preview/explicit publication to ordinary streams,
   independent pixels/fallback and two-theme navigation with that candidate.
   Complete Level 2.5 and editor acceptance remain open.
+  Ordinary-stream G1 calibration now retains independent fallback/enhanced
+  decoding and the known stock-decoder discrepancy; actual G1 client navigation
+  remains unproven after a window-lifetime failure.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source

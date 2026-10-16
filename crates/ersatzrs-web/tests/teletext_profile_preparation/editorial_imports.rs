@@ -57,6 +57,11 @@ mod http_routes;
 pub(super) mod live_client;
 #[path = "editorial_imports/live_updates.rs"]
 pub(super) mod live_updates;
+#[path = "editorial_imports/mosaic_live.rs"]
+// Intentional Linux-x64 manual decoder/client diagnostic; other platform
+// acceptance remains separate from this /proc and calibrated-library probe.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod mosaic_live;
 #[path = "editorial_imports/qtm_carrier.rs"]
 mod qtm_carrier;
 #[path = "editorial_imports/resource_bank_admin.rs"]
