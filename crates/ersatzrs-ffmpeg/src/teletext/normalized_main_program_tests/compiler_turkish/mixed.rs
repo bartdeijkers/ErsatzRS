@@ -192,3 +192,6 @@ fn mixed_polish_turkish_slots_remain_stable_across_consumer_order_and_removal() 
         super::variants::assert_ptu(&encoded);
     }
 }
+
+#[path = "mixed/both_scopes.rs"]
+mod both_scopes;

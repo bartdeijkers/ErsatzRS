@@ -164,7 +164,8 @@ fn derive(
             TeletextDrcsExtensionBudget {
                 max_records: budget.max_pages,
                 max_added_resources: 2,
-                max_added_glyphs: 4,
+                // Each of the two scopes can need all supported fixed slots.
+                max_added_glyphs: national_drcs_carrier::COMPILER_GLYPH_SLOTS * 2,
                 max_page_extensions: budget.max_pages,
             },
         )

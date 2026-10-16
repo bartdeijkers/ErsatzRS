@@ -703,8 +703,9 @@ release section when tagging a release.
 - Realize the Turkish national Base `0x23` TL symbol through enlarged-page repaint
   with exact plain or underlined DRCS, retaining its original identity and
   fallback under both primary designations. Mixed Polish/Turkish pages keep
-  stable compiler slots within existing resource limits, and native editorial
-  validation retains zone and resource ownership. A recorded QTeletextMaker edit
+  stable compiler slots, and native editorial validation retains zone and
+  resource ownership. Both resource scopes can carry all four variants together
+  while retaining caller page, output and work limits. A recorded QTeletextMaker edit
   reaches receipt-bound concepts, shared preview, explicit publication and two
   ordinary streams with transport and independent bitmap checks. Localized
   headed Chromium and Firefox now prove receipt-bound import, exact preview,

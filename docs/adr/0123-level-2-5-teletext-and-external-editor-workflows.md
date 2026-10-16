@@ -543,10 +543,14 @@ paired correspondence; public detached comparisons remain strict. Original
 identity, fallback, geometry and every other painted attribute stay unchanged.
 Both known painted variants may coexist in one generated bank with stable Polish
 slots 0 (plain)/1 (underlined) and Turkish slots 2/3, independent of discovery/
-removal. Their definitions remain engine-owned and use the existing shared bounds
-(including the total four-added-glyph and two-added-resource caps); no glyph alias
-or extra capacity is added. Existing authored matching definitions retain their
-own slots, links and ownership instead of receiving these compiler slot numbers.
+removal. Their definitions remain engine-owned. Each of the two resource scopes
+may require all four fixed slots: the derived internal glyph bound is therefore
+eight across at most two added banks. This prevents valid Normal and Global
+consumers from competing for a single bank's glyph allowance. Caller page,
+encoded-unit and assembly-work bounds still apply to the complete service;
+neither an identity alias nor unbounded resource capacity is permitted. Existing
+authored matching definitions retain their own slots, links and ownership instead
+of receiving these compiler slot numbers.
 A known original spacing-mosaic latch does not change this assigned G0 paint
 (Table 26 notes 11/12). Keep the original latch and fallback byte exactly; the
 existing physical Adaptive D5=0 cancels that latch for the enhanced carrier.
