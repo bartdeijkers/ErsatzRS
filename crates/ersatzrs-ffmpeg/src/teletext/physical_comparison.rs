@@ -13,6 +13,7 @@ use super::raster::{
     comparison_original_glyph, comparison_physical_glyph, fragment_position, ComparisonGlyph,
     TeletextRasterCellFailure,
 };
+use super::EncodedTeletextAugmentedOriginProgram;
 
 /// Trusted aggregate record, cell, diagnostic and actual operation limits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -206,6 +207,36 @@ pub fn compare_teletext_physical_display_with_usage<'a>(
     Result<TeletextPhysicalComparison<'a>, TeletextPhysicalComparisonError>,
     usize,
 ) {
+    compare_with_usage(original, physical, budget, None)
+}
+
+/// Private paired producer proof. Public detached comparisons retain literal
+/// family diagnostics. Only a checked national-to-DRCS carrier with both effects
+/// disabled can preserve the original alphanumeric semantics through DRCS.
+pub(super) fn compare_augmented_physical_with_usage<'a>(
+    compiled: &'a EncodedTeletextAugmentedOriginProgram<'_>,
+    budget: TeletextPhysicalComparisonBudget,
+) -> (
+    Result<TeletextPhysicalComparison<'a>, TeletextPhysicalComparisonError>,
+    usize,
+) {
+    compare_with_usage(
+        compiled.augmented().placement().plan().composition(),
+        compiled.physical().replay(),
+        budget,
+        Some(compiled),
+    )
+}
+
+fn compare_with_usage<'a>(
+    original: &'a TeletextMainComposition,
+    physical: &'a TeletextPhysicalDisplayReplay,
+    budget: TeletextPhysicalComparisonBudget,
+    compiled: Option<&'a EncodedTeletextAugmentedOriginProgram<'a>>,
+) -> (
+    Result<TeletextPhysicalComparison<'a>, TeletextPhysicalComparisonError>,
+    usize,
+) {
     let mut builder = Builder {
         result: TeletextPhysicalComparison {
             original,
@@ -215,6 +246,7 @@ pub fn compare_teletext_physical_display_with_usage<'a>(
         },
         budget,
         remaining: budget.max_updates,
+        compiled,
     };
     let outcome = (|| {
         builder.preflight()?;
@@ -246,6 +278,7 @@ struct Builder<'a> {
     result: TeletextPhysicalComparison<'a>,
     budget: TeletextPhysicalComparisonBudget,
     remaining: usize,
+    compiled: Option<&'a EncodedTeletextAugmentedOriginProgram<'a>>,
 }
 impl Builder<'_> {
     fn error(
@@ -597,13 +630,106 @@ impl Builder<'_> {
             }
             return Ok(());
         };
-        if first_glyph.effects != second_glyph.effects {
+        if first_glyph.effects != second_glyph.effects
+            && !self.neutral_national_drcs_effects(
+                position,
+                first,
+                second,
+                *first_glyph,
+                *second_glyph,
+            )?
+        {
             self.difference(position, Field::GlyphEffects)?;
         }
         if first_glyph.mask != second_glyph.mask {
             self.difference(position, Field::GlyphMask)?;
         }
         self.colours(row, column, first, *first_glyph, second, *second_glyph)
+    }
+    fn neutral_national_drcs_effects(
+        &mut self,
+        position: Option<(u8, u8)>,
+        first: TeletextDisplayCell<'_>,
+        second: TeletextDisplayCell<'_>,
+        original_glyph: ComparisonGlyph,
+        actual_glyph: ComparisonGlyph,
+    ) -> Result<bool, Error> {
+        use super::raster::TeletextComparisonGlyphEffects as Effects;
+        use super::{TeletextAugmentedOriginSource, TeletextOriginCarrierCommandRole};
+        use ersatzrs_domain::TeletextGlyphIdentity;
+        if !matches!(
+            original_glyph.effects,
+            Effects::Alphanumeric { underlined: false }
+        ) || !matches!(
+            actual_glyph.effects,
+            Effects::Undefined {
+                d5: false,
+                spacing_separated: false
+            }
+        ) || first.attributes().spacing_separated().value() != Some(false)
+        {
+            return Ok(false);
+        }
+        let Some(compiled) = self.compiled else {
+            return Ok(false);
+        };
+        let augmented = compiled.augmented();
+        self.charge_many(
+            augmented.carriers().len()
+                + augmented.placement().catalog().definitions().len()
+                + self.result.physical.drcs_execution().records().len()
+                + 1,
+            position,
+        )?;
+        let (Some(old_origin), Some(new_origin)) = (first.origin(), second.origin()) else {
+            return Ok(false);
+        };
+        let old_candidate =
+            self.result.original.display_resolution().origins()[old_origin].candidate_index();
+        let new_candidate =
+            self.result.physical.display_resolution().origins()[new_origin].candidate_index();
+        let expected = &self.result.original.glyph_intent().records()[old_candidate];
+        let actual = &self.result.physical.glyph_intent().records()[new_candidate];
+        let Some(source) = actual.context().candidate().source() else {
+            return Ok(false);
+        };
+        let Some(TeletextAugmentedOriginSource::CarrierBody {
+            carrier,
+            role: TeletextOriginCarrierCommandRole::Glyph,
+        }) = augmented.emitter_source(source)
+        else {
+            return Ok(false);
+        };
+        let mapped = &augmented.carriers()[carrier];
+        let Some(binding) = mapped.national_drcs() else {
+            return Ok(false);
+        };
+        if mapped.original_origin_index() != old_origin
+            || expected.context().candidate().base().is_none()
+            || expected.disposition() != TeletextGlyphDisposition::Assigned
+            || actual.disposition() != TeletextGlyphDisposition::Assigned
+            || expected.glyph() != Some(binding.original())
+            || actual.glyph()
+                != Some(TeletextGlyphIdentity::Drcs {
+                    reference: binding.reference(),
+                })
+            || compiled.actual_for_carrier(carrier).is_none()
+            || compiled.actual_for_carrier(carrier) != actual.context().candidate().invocation()
+        {
+            return Ok(false);
+        }
+        Ok(self
+            .result
+            .physical
+            .drcs_execution()
+            .records()
+            .iter()
+            .any(|record| {
+                record.candidate_index() == new_candidate
+                    && record.reference() == binding.reference()
+                    && record.resource() == binding.resource()
+                    && record.bitmap() == binding.bitmap()
+            }))
     }
     fn origins(
         &mut self,

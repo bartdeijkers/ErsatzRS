@@ -30,6 +30,7 @@ mod lift;
 mod local_object_program;
 mod main_composition;
 mod mot;
+mod national_drcs_carrier;
 mod native_default_page;
 mod normalized_main_program;
 mod object_allocation;

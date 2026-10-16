@@ -229,7 +229,7 @@ fn compile_physical_with_context(
         })?;
     check_deadline(owner, context.deadline)?;
     let augmented = context
-        .assembly(&placement, budget.assembly)
+        .assembly(&placement, service, budget.assembly)
         .map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::Assembly(Box::new(
                 error,
@@ -291,11 +291,7 @@ fn check_candidate(
         )));
     }
     let display = context
-        .compare_display(
-            original,
-            compiled.physical().replay(),
-            budget.display_comparison,
-        )
+        .compare_display(compiled, budget.display_comparison)
         .map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::DisplayComparison(
                 Box::new(error),

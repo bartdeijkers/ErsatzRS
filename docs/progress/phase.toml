@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: preserve the pending Polish national glyph on wire'
+current_focus = 'P9A-04: join the resource-backed Polish glyph to the editor flow'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -86,9 +86,13 @@ X28/bank update without reset/reconnect. TSDuck/AV and persistent independent
 bitmap/fallback plus file-backed reopen pass. Actual retained VLC/decoder
 instances now show both stages and124/125/124 with18 verified mapped-library
 barriers; P9A-04 owns all12 inspected images and cleanup/reopen proof.
-Next resolve the recorded Polish national Base0x5B UnsupportedIdentity carrier
-failure using the primary table and existing checked resource lowering, retaining
-fallback and original glyph identity. No guessed alias or page restriction. Full authored/
+Polish Base5B now has a private exact-origin realization through an existing
+linked authored DRCS mask, with neutral effects, unchanged fallback/resource bytes
+and complete service encoding. P9A-04 owns positive, negative and budget evidence.
+Next join this exact case to fresh export/actual pinned QTM/concept/preview/
+explicit publication/ordinary-route/independent/client proof. Automatic no-bank
+resources, non-neutral effects and resource-choice coverage remain open;
+no guessed alias or page restriction is accepted. Full authored/
 editor/resources/panels/Lua/restart/hydrated admin/default-capacity/playback/
 platform acceptance remains open; production guide waits for generic acceptance.
 

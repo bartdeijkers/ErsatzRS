@@ -459,6 +459,12 @@ impl Builder<'_> {
         {
             return Ok(());
         }
+        if let Some(matches) = self.carrier_national_drcs(first, second, position)? {
+            if !matches {
+                self.push(position, original_source, actual_source, Finding::Drcs)?;
+            }
+            return Ok(());
+        }
         if identity != found.glyph() {
             return self.push(
                 position,
@@ -487,6 +493,60 @@ impl Builder<'_> {
             }
         }
         Ok(())
+    }
+    fn carrier_national_drcs(
+        &mut self,
+        first: (usize, &TeletextExecutedGlyphIntent),
+        second: (usize, &TeletextExecutedGlyphIntent),
+        position: (u8, u8),
+    ) -> Result<Option<bool>, Error> {
+        let (oi, expected) = first;
+        let (ai, found) = second;
+        if expected.context().candidate().base().is_none() {
+            return Ok(None);
+        }
+        let Some(location) = found.context().candidate().source() else {
+            return Ok(None);
+        };
+        let compiled = self.result.compiled;
+        let augmented = compiled.augmented();
+        self.charge(
+            augmented.carriers().len() + augmented.placement().catalog().definitions().len() + 1,
+            position,
+        )?;
+        let Some(TeletextAugmentedOriginSource::CarrierBody {
+            carrier,
+            role: TeletextOriginCarrierCommandRole::Glyph,
+        }) = augmented.emitter_source(location)
+        else {
+            return Ok(None);
+        };
+        let carrier = &augmented.carriers()[carrier];
+        let Some(binding) = carrier.national_drcs() else {
+            return Ok(None);
+        };
+        // `corresponds` has already checked the exact invocation. The sealed
+        // witness applies only to this original origin and its literal identity;
+        // an equal bitmap elsewhere cannot establish a national glyph alias.
+        if carrier.original_origin_index() != oi || Some(binding.original()) != expected.glyph() {
+            return Ok(None);
+        }
+        let actual = compiled.physical().replay();
+        self.charge(actual.drcs_execution().records().len(), position)?;
+        let execution = actual.drcs_execution().records().iter().find(|record| {
+            record.candidate_index() == actual.display_resolution().origins()[ai].candidate_index()
+        });
+        Ok(Some(
+            found.glyph()
+                == Some(TeletextGlyphIdentity::Drcs {
+                    reference: binding.reference(),
+                })
+                && execution.is_some_and(|record| {
+                    record.reference() == binding.reference()
+                        && record.resource() == binding.resource()
+                        && record.bitmap() == binding.bitmap()
+                }),
+        ))
     }
     fn carrier_national_identity(
         &mut self,

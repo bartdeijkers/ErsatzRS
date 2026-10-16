@@ -2,17 +2,19 @@
 //! Original commands and object bodies are retained. Generated calls are ordered
 //! only within their placement component; packing and whole-display comparison
 //! (including original pending and actual invocation ancestry) remain required.
+use super::national_drcs_carrier::{self, NationalDrcsCarrier};
+use super::origin_carrier::build_with_national_drcs_and_usage;
 use super::{
-    build_teletext_origin_carrier_with_usage, TeletextMainCompositionSource,
-    TeletextOriginCarrierBudget, TeletextOriginCarrierCommandRole, TeletextOriginCarrierError,
-    TeletextOriginCarrierPlacement, TeletextOriginCarrierPlacementPending,
+    TeletextMainCompositionSource, TeletextOriginCarrierBudget, TeletextOriginCarrierCommandRole,
+    TeletextOriginCarrierError, TeletextOriginCarrierPlacement,
+    TeletextOriginCarrierPlacementPending,
 };
 use ersatzrs_domain::{
     TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
     TeletextEnhancementObjectDefinition, TeletextEnhancementProgram,
     TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextGlyphCandidate,
     TeletextObjectCatalogError, TeletextObjectIdentity, TeletextObjectType, TeletextPageAddress,
-    TeletextSpatialInvocationId, TeletextSpatialRootSource,
+    TeletextSemanticService, TeletextSpatialInvocationId, TeletextSpatialRootSource,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +65,7 @@ pub struct TeletextAugmentedOriginCarrier {
     location: Option<TeletextEnhancementSource>,
     root_source: Option<TeletextSpatialRootSource>,
     invocation: Option<TeletextSpatialInvocationId>,
+    national_drcs: Option<NationalDrcsCarrier>,
 }
 impl TeletextAugmentedOriginCarrier {
     #[must_use]
@@ -101,6 +104,9 @@ impl TeletextAugmentedOriginCarrier {
     #[must_use]
     pub const fn original_invocation(&self) -> Option<TeletextSpatialInvocationId> {
         self.invocation
+    }
+    pub(super) const fn national_drcs(&self) -> Option<NationalDrcsCarrier> {
+        self.national_drcs
     }
 }
 /// Exact borrowed original placement plus owned candidate. The source map is
@@ -251,8 +257,31 @@ pub fn build_teletext_augmented_origin_program_with_work_usage<'a>(
     Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
     TeletextAugmentedOriginProgramUsage,
 ) {
+    build_with_optional_service_and_work_usage(placement, None, budget)
+}
+
+pub(super) fn build_augmented_with_service_and_work_usage<'a>(
+    placement: &'a TeletextOriginCarrierPlacement<'a>,
+    service: &TeletextSemanticService,
+    budget: TeletextAugmentedOriginProgramBudget,
+) -> (
+    Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
+    TeletextAugmentedOriginProgramUsage,
+) {
+    build_with_optional_service_and_work_usage(placement, Some(service), budget)
+}
+
+fn build_with_optional_service_and_work_usage<'a>(
+    placement: &'a TeletextOriginCarrierPlacement<'a>,
+    service: Option<&TeletextSemanticService>,
+    budget: TeletextAugmentedOriginProgramBudget,
+) -> (
+    Result<TeletextAugmentedOriginProgram<'a>, TeletextAugmentedOriginProgramError>,
+    TeletextAugmentedOriginProgramUsage,
+) {
     let mut builder = Builder {
         placement,
+        service,
         budget,
         work: budget.max_work,
         ids: budget.max_identity_checks,
@@ -297,13 +326,14 @@ pub fn build_teletext_augmented_origin_program_with_work_usage<'a>(
 }
 type Failure = TeletextAugmentedOriginProgramFailure;
 type Error = TeletextAugmentedOriginProgramError;
-struct Builder<'a> {
+struct Builder<'a, 's> {
     placement: &'a TeletextOriginCarrierPlacement<'a>,
+    service: Option<&'s TeletextSemanticService>,
     budget: TeletextAugmentedOriginProgramBudget,
     work: usize,
     ids: usize,
 }
-impl<'a> Builder<'a> {
+impl<'a> Builder<'a, '_> {
     fn emit_catalog(
         &mut self,
         count: usize,
@@ -339,6 +369,7 @@ impl<'a> Builder<'a> {
                     location: recipe.location(),
                     root_source: recipe.root_source(),
                     invocation: recipe.invocation(),
+                    national_drcs: recipe.national_drcs(),
                 };
                 drop(recipe);
                 let previous = self.catalog_commands(&catalog, Some(origin))?;
@@ -507,11 +538,23 @@ impl<'a> Builder<'a> {
         self.catalog_work(catalog.definitions().len(), commands, 1, Some(origin))?;
         let mut budget = self.budget.recipe;
         budget.max_id_checks = budget.max_id_checks.min(self.ids);
-        let (result, admitted) = build_teletext_origin_carrier_with_usage(
+        let national_drcs = if let Some(service) = self.service.filter(|_| {
+            national_drcs_carrier::needs_binding(self.placement.plan().composition(), origin)
+        }) {
+            self.charge(service.drcs().subtables().len(), Some(origin))?;
+            let work = national_drcs_carrier::scan_work(service)
+                .ok_or_else(|| self.error(Some(origin), Failure::AllocationSize))?;
+            self.charge(work, Some(origin))?;
+            national_drcs_carrier::resolve(service, self.placement.plan().composition(), origin)
+        } else {
+            None
+        };
+        let (result, admitted) = build_with_national_drcs_and_usage(
             self.placement.plan().composition(),
             origin,
             catalog,
             budget,
+            national_drcs,
         );
         self.ids = self
             .ids

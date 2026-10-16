@@ -23,12 +23,12 @@ use ersatzrs_domain::{
 };
 
 use super::augmented_origin_compilation::compile_augmented_with_context_and_usage;
+use super::augmented_origin_program::build_augmented_with_service_and_work_usage;
 use super::origin_carrier_placement::plan_teletext_origin_carrier_placement_with_context_and_usage;
+use super::physical_comparison::compare_augmented_physical_with_usage;
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
-    build_teletext_augmented_origin_program_with_work_usage,
     compare_teletext_augmented_origin_glyphs, compare_teletext_augmented_origin_glyphs_with_usage,
-    compare_teletext_physical_display, compare_teletext_physical_display_with_usage,
     plan_teletext_base_compatibility_realization_with_usage, EncodedTeletextAugmentedOriginProgram,
     TeletextAugmentedGlyphComparison, TeletextAugmentedGlyphComparisonBudget,
     TeletextAugmentedGlyphComparisonError, TeletextAugmentedGlyphComparisonFailure,
@@ -42,8 +42,7 @@ use super::{
     TeletextOriginCarrierPlacement, TeletextOriginCarrierPlacementBudget,
     TeletextOriginCarrierPlacementError, TeletextOriginCarrierPlacementFailure,
     TeletextPhysicalComparison, TeletextPhysicalComparisonBudget, TeletextPhysicalComparisonError,
-    TeletextPhysicalComparisonFailure, TeletextPhysicalDisplayReplay,
-    TeletextResourceObjectAllocations,
+    TeletextPhysicalComparisonFailure, TeletextResourceObjectAllocations,
 };
 
 pub(super) struct TeletextCompileContext<'a, 'service> {
@@ -417,12 +416,13 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
     pub(super) fn assembly<'b>(
         &mut self,
         placement: &'b TeletextOriginCarrierPlacement<'b>,
+        service: &TeletextSemanticService,
         mut budget: TeletextAugmentedOriginProgramBudget,
     ) -> Result<TeletextAugmentedOriginProgram<'b>, TeletextAugmentedOriginProgramError> {
         budget.max_work = self.assembly.cap(budget.max_work);
         budget.max_identity_checks = self.identity_checks.cap(budget.max_identity_checks);
         let (result, admitted) =
-            build_teletext_augmented_origin_program_with_work_usage(placement, budget);
+            build_augmented_with_service_and_work_usage(placement, service, budget);
         let assembly_ok = self.assembly.debit(admitted.work);
         let identity_ok = self.identity_checks.debit(admitted.identity_checks);
         if !assembly_ok || !identity_ok {
@@ -500,24 +500,29 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
 
     pub(super) fn compare_display<'b>(
         &mut self,
-        original: &'b TeletextMainComposition,
-        physical: &'b TeletextPhysicalDisplayReplay,
+        compiled: &'b EncodedTeletextAugmentedOriginProgram<'_>,
         mut budget: TeletextPhysicalComparisonBudget,
     ) -> Result<TeletextPhysicalComparison<'b>, TeletextPhysicalComparisonError> {
-        let Some(remaining) = self.remaining_display_comparison_updates else {
-            return compare_teletext_physical_display(original, physical, budget);
-        };
-        budget.max_updates = budget.max_updates.min(remaining);
-        let (result, admitted) =
-            compare_teletext_physical_display_with_usage(original, physical, budget);
-        let next = remaining
-            .checked_sub(admitted)
-            .ok_or(TeletextPhysicalComparisonError {
-                owner: original.owner(),
-                position: None,
-                reason: TeletextPhysicalComparisonFailure::AllocationSize,
-            })?;
-        self.remaining_display_comparison_updates = Some(next);
+        if let Some(remaining) = self.remaining_display_comparison_updates {
+            budget.max_updates = budget.max_updates.min(remaining);
+        }
+        let (result, admitted) = compare_augmented_physical_with_usage(compiled, budget);
+        if let Some(remaining) = self.remaining_display_comparison_updates {
+            self.remaining_display_comparison_updates = Some(
+                remaining
+                    .checked_sub(admitted)
+                    .ok_or(TeletextPhysicalComparisonError {
+                        owner: compiled
+                            .augmented()
+                            .placement()
+                            .plan()
+                            .composition()
+                            .owner(),
+                        position: None,
+                        reason: TeletextPhysicalComparisonFailure::AllocationSize,
+                    })?,
+            );
+        }
         result
     }
 

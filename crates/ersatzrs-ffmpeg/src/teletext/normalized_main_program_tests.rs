@@ -751,3 +751,6 @@ fn foreign_mot_default_is_not_cloned_or_exempted_from_selected_link_lowering() {
     );
     assert_eq!(service, before);
 }
+
+#[path = "normalized_main_program_tests/polish_carrier.rs"]
+mod polish_carrier;

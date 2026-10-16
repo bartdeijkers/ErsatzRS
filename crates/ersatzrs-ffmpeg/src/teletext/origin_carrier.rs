@@ -4,6 +4,7 @@
 //! original composition. No glyph is selected by equal font masks. Placement,
 //! component order, final packing and whole-plane equivalence remain separate.
 
+use super::national_drcs_carrier::NationalDrcsCarrier;
 use super::TeletextMainComposition;
 use ersatzrs_domain::{
     resolve_teletext_national_conversion, TeletextCharsetSelection, TeletextColourCompositionError,
@@ -47,6 +48,7 @@ pub struct TeletextOriginCarrier<'a> {
     candidate: TeletextGlyphCandidate,
     definition: TeletextEnhancementObjectDefinition,
     roles: Vec<TeletextOriginCarrierCommandRole>,
+    national_drcs: Option<NationalDrcsCarrier>,
 }
 impl TeletextOriginCarrier<'_> {
     #[must_use]
@@ -80,6 +82,9 @@ impl TeletextOriginCarrier<'_> {
     #[must_use]
     pub fn command_roles(&self) -> &[TeletextOriginCarrierCommandRole] {
         &self.roles
+    }
+    pub(super) const fn national_drcs(&self) -> Option<NationalDrcsCarrier> {
+        self.national_drcs
     }
     #[must_use]
     pub fn location(&self) -> Option<TeletextEnhancementSource> {
@@ -175,11 +180,24 @@ pub fn build_teletext_origin_carrier_with_usage<'a>(
     Result<TeletextOriginCarrier<'a>, TeletextOriginCarrierError>,
     usize,
 ) {
+    build_with_national_drcs_and_usage(composition, origin_index, catalog, budget, None)
+}
+
+pub(super) fn build_with_national_drcs_and_usage<'a>(
+    composition: &'a TeletextMainComposition,
+    origin_index: usize,
+    catalog: &'a TeletextEnhancementObjectCatalog,
+    budget: TeletextOriginCarrierBudget,
+    national_drcs: Option<NationalDrcsCarrier>,
+) -> (
+    Result<TeletextOriginCarrier<'a>, TeletextOriginCarrierError>,
+    usize,
+) {
     let mut admitted = 0;
     let result = (|| {
         let fail = |reason| located(composition, origin_index, reason);
         preflight(composition, catalog, budget).map_err(fail)?;
-        let recipe = derive_recipe(composition, origin_index).map_err(fail)?;
+        let recipe = derive_recipe(composition, origin_index, national_drcs).map_err(fail)?;
         let count = 5 + usize::from(recipe.charset.is_some());
         bound("output commands", count, budget.max_output_commands).map_err(fail)?;
         let identity = free_identity(
@@ -222,6 +240,7 @@ pub fn build_teletext_origin_carrier_with_usage<'a>(
             candidate: recipe.candidate,
             definition,
             roles,
+            national_drcs,
         })
     })();
     (result, admitted)
@@ -261,6 +280,7 @@ fn located(
 fn derive_recipe(
     composition: &TeletextMainComposition,
     origin_index: usize,
+    national_drcs: Option<NationalDrcsCarrier>,
 ) -> Result<Recipe, Failure> {
     let display = composition.display_resolution();
     let origin = display
@@ -291,7 +311,7 @@ fn derive_recipe(
         .get(origin.candidate_index())
         .filter(|record| *record.context().candidate() == candidate)
         .ok_or(Failure::Correspondence)?;
-    let (glyph, charset) = glyph_recipe(composition, intent)?;
+    let (glyph, charset) = glyph_recipe(composition, intent, national_drcs)?;
     let separation = if candidate.base().is_some()
         && matches!(intent.glyph(), Some(TeletextGlyphIdentity::G1Mosaic { .. }))
     {
@@ -474,6 +494,7 @@ fn free_identity(
 fn glyph_recipe(
     composition: &TeletextMainComposition,
     intent: &TeletextExecutedGlyphIntent,
+    national_drcs: Option<NationalDrcsCarrier>,
 ) -> Result<
     (
         TeletextColumnOperation,
@@ -482,6 +503,23 @@ fn glyph_recipe(
     Failure,
 > {
     let candidate = intent.context().candidate();
+    if let Some(binding) = national_drcs {
+        let base = candidate.base().ok_or(Failure::Correspondence)?;
+        if intent.disposition() != TeletextGlyphDisposition::Assigned
+            || intent.glyph() != Some(binding.original())
+            || composition
+                .base_replacement(base.position().row(), base.position().column())
+                .is_some()
+        {
+            return Err(Failure::Correspondence);
+        }
+        return Ok((
+            TeletextColumnOperation::Drcs {
+                reference: binding.reference(),
+            },
+            None,
+        ));
+    }
     if let Some(base) = candidate.base() {
         if let Some(operation) =
             composition.base_replacement(base.position().row(), base.position().column())
