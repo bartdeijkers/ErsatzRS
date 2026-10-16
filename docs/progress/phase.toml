@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: join safe presentation replacement to the editor and ordinary stream'
+current_focus = 'P9A-04: prove retained-client presentation handover'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -80,10 +80,12 @@ POP uncertainty, later unsafe consumers and MOT retirement remain fenced.
 Cold explicit-page X28 now joins exact genuine QTM bank input/save to headed
 nine-culture SSR import/preview/Publish, ordinary TCP/TSDuck/AV/independent
 fallback and two-theme stock VLC navigation; P9A-04 owns exact receipts.
-Next keep an existing M29 viewer while preparing a separate immutable X28
-original and genuine bank concept, then explicitly publish it. Bitmap concepts
-cannot change protected original presentation; existing warm singleton protocol
-needs a bounded separate-design/bank extension. Cold proof is not warm proof. Full authored/
+Three existing ordinary responses now retain old M29 through separate X28
+original/export/genuine bank concept/request, then emit the explicitly published
+X28/bank update without reset/reconnect. TSDuck/AV and persistent independent
+bitmap/fallback plus file-backed reopen pass. Next adapt only the bounded warm
+client identity protocol for separate bank originals, then inspect retained
+headed clients/navigation across publication. Native warm is not headed proof. Full authored/
 editor/resources/panels/Lua/restart/hydrated admin/default-capacity/playback/
 platform acceptance remains open; production guide waits for generic acceptance.
 

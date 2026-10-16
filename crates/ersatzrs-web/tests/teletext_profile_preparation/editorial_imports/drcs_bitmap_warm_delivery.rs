@@ -21,6 +21,8 @@ type Pattern = Vec<Vec<Unit>>;
 
 #[path = "drcs_bitmap_warm_delivery/headed.rs"]
 mod headed;
+#[path = "drcs_bitmap_warm_delivery/page_presentation.rs"]
+mod page_presentation;
 
 struct Tools {
     ffmpeg: String,
@@ -40,6 +42,21 @@ impl Tools {
 }
 
 async fn source_fixture(tools: &Tools, directory: &Path) -> (Fixture, Flow, Vec<u8>) {
+    source_fixture_with_response(
+        tools,
+        directory,
+        drcs_bitmap::response,
+        drcs_companion::encoding_policy,
+    )
+    .await
+}
+
+async fn source_fixture_with_response(
+    tools: &Tools,
+    directory: &Path,
+    response: fn(&str, u16, u16) -> Value,
+    encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+) -> (Fixture, Flow, Vec<u8>) {
     let fixture = Fixture::new_persistent().await;
     let source =
         client_capture::generate_source_with_duration(&tools.ffmpeg, fixture.root.path(), 60).await;
@@ -68,12 +85,7 @@ async fn source_fixture(tools: &Tools, directory: &Path) -> (Fixture, Flow, Vec<
     ] {
         ordinary_stream_flow::setting(&fixture, key, &value).await;
     }
-    let (fixture, flow) = Box::pin(setup_with_fixture_policy(
-        drcs_bitmap::response,
-        fixture,
-        drcs_companion::encoding_policy,
-    ))
-    .await;
+    let (fixture, flow) = Box::pin(setup_with_fixture_policy(response, fixture, encoding)).await;
     // Exactly one source reset precedes all requests. Publication below neither
     // reopens a viewer nor starts another source epoch.
     ordinary_stream_flow::reset_source_start(&fixture).await;
@@ -324,6 +336,25 @@ async fn verify(
     source: &[u8],
     origin: &live_tcp::Origin,
 ) -> Vec<Value> {
+    verify_with_decoder(
+        directory,
+        tools,
+        source,
+        origin,
+        "teletext-editor-drcs-decoder.py",
+        "singleton-warm-edited",
+    )
+    .await
+}
+
+async fn verify_with_decoder(
+    directory: &Path,
+    tools: &Tools,
+    source: &[u8],
+    origin: &live_tcp::Origin,
+    script_name: &str,
+    mode: &str,
+) -> Vec<Value> {
     let mut receipts = Vec::new();
     for (index, capture) in origin.captures().iter().enumerate() {
         let mut bytes = capture.bytes();
@@ -344,7 +375,8 @@ async fn verify(
         let prefix = directory.join(format!("viewer-{index}-original-units.json"));
         let suffix = directory.join(format!("viewer-{index}-updated-units.json"));
         let script = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../scripts/e2e/teletext-editor-drcs-decoder.py");
+            .join("../../scripts/e2e")
+            .join(script_name);
         let theme = if index == 2 { "night" } else { "day" };
         let decoded = client_capture::probe(
             "python3",
@@ -352,7 +384,7 @@ async fn verify(
                 script.to_str().unwrap(),
                 prefix.to_str().unwrap(),
                 theme,
-                "singleton-warm-edited",
+                mode,
                 suffix.to_str().unwrap(),
             ],
             &[],
