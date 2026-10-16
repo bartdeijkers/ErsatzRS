@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect actual DRCS edits to ordinary delivery; full acceptance open'
+current_focus = 'P9A-04: actual DRCS cold flow proven; warm lifecycle and full editor acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -111,10 +111,15 @@ Retained actual QTM output passes fresh V4 native publication/reopen/isolation.
 Imports protect every shared display consumer, including unexported/panel users.
 A dense two-subpage actual QTM edit/save/navigation trial passes byte/visual checks;
 its whole-bank PN/SC indices shift0/1->1/2. Authenticated multi-group/padded-bank
-mapping remains open. Next connect the actual singleton to ordinary transport and
-client proof, reproduce the concrete warm same-counter rejection, and derive
-publication lifecycle without mutating immutable originals. P9A-04 owns exact
-verification, the decimal-resource error-mapping defect and missing headed proof.
+mapping remains open. The actual singleton now passes ordinary two-channel TCP,
+source AV/TSDuck, independent120pixel oracles and inspected actual VLC124/125/124
+navigation with distinct profiles/themes. Resource errors retain typed raw1C0/S1
+through native/API and36 localized headed no-JS Chromium/Firefox views. P9A-04
+owns exact receipts and preserved failed attempts; these are partial acceptance.
+Two native warm-boundary variants reproduce changed bytes retaining counter1
+when completed history requires2. Next resolve per-response lifecycle planning
+and immutable accepted-artifact identity, including skipped generations, before
+ordinary warm AV/client proof. Do not retag accepted bytes or weaken history.
 The additional legacy SaveAs focus failure remains explicit: real X11 input
 succeeds for the dense bank but still fails its legacy focus guard.
 Keep the resource/panel/set/geometry, wider operand browser and remaining authored
@@ -127,7 +132,8 @@ remain concrete acceptance gaps; no product restriction is accepted.
 All authored Level2.5/fallback, editor/metadata/templates/themes/zones, Lua/restart,
 localized admin, actual suitable client and platform requirements are unchanged.
 Engine-first delivery, no milestone completion or production addon/publication.
-The latest emergency instruction authorizes a checkpoint push without CI.
+The prior emergency checkpoint throughc76dc30c is already pushed without CI.
+This checkpoint remains local; pushes require a fully achieved Phase9 milestone.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.

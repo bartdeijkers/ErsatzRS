@@ -30,7 +30,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_mins(3);
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ClientComplete {
+pub(super) struct ClientComplete {
     probe_version: u8,
     client_name: String,
     client_version: String,
@@ -83,7 +83,7 @@ pub(in super::super) fn read_bounded(path: &Path, maximum: usize) -> io::Result<
     Ok(bytes)
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(super) fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write as _;
     std::fs::OpenOptions::new()
         .write(true)
@@ -92,7 +92,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
         .write_all(bytes)
 }
 
-async fn wait_for_client(directory: &Path) -> io::Result<ClientComplete> {
+pub(super) async fn wait_for_client(directory: &Path) -> io::Result<ClientComplete> {
     tokio::time::timeout(CLIENT_TIMEOUT, async {
         loop {
             let path = directory.join("client-complete.json");

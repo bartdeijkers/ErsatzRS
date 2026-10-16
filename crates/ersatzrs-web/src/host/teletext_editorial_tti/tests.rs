@@ -196,6 +196,7 @@ fn editorial_tti_header_identity_is_reserved_but_header_text_can_change() {
     assert_eq!(error.column, Some(7));
     assert_eq!(error.page, 200);
     assert_eq!(error.subcode, 16);
+    assert_eq!(error.resource, None);
 }
 
 #[test]

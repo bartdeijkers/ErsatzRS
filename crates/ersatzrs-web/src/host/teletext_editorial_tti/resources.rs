@@ -32,6 +32,7 @@ impl DrcsTtiContext {
             page: (u16::from(self.identity.page().magazine()) << 8)
                 | u16::from(self.identity.page().page()),
             subcode: u16::from(self.identity.logical_subpage().get()),
+            resource: Some(self.identity),
         }
     }
 }
@@ -59,6 +60,7 @@ pub(in crate::host) fn mapping(
         Location {
             page: 0,
             subcode: 0,
+            resource: None,
         }
         .error(Failure::Mapping)
     };
@@ -320,4 +322,54 @@ pub(in crate::host) fn reconcile(
     }
     location.check_deadline(deadline)?;
     Ok(changes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ersatzrs_domain::{TeletextRawDataPageNumber, TeletextResourceSubpageIndex};
+    use std::time::Duration;
+
+    #[test]
+    fn resource_packet_and_syntax_errors_retain_exact_raw_identity() {
+        let identity = TeletextResourceIdentity::new(
+            TeletextResourceKind::Drcs,
+            TeletextRawDataPageNumber::new(1, 0xc0).unwrap(),
+            TeletextResourceSubpageIndex::new(1).unwrap(),
+        )
+        .unwrap();
+        let context = DrcsTtiContext {
+            identity,
+            physical_subcode: 0x0111,
+        };
+        let location = context.location();
+        let words = [0; 13];
+        let mut edited_words = words;
+        edited_words[5] = 1;
+        let mut before = [[None; 16]; 4];
+        let mut after = before;
+        before[2][3] = Some(&words);
+        after[2][3] = Some(&edited_words);
+        let error = compare_packets(&before, &after, location).unwrap_err();
+        assert_eq!(error.resource, Some(identity));
+        assert_eq!((error.page, error.subcode), (0x1c0, 1));
+        assert_eq!(
+            (error.row, error.column, error.designation),
+            (Some(28), Some(5), Some(3))
+        );
+        let syntax = location
+            .parse(
+                b"PN,1C000\nSC,0000\nOL,1,\x1b\n",
+                TeletextTtiBudget {
+                    max_bytes: 1024,
+                    max_records: 32,
+                },
+                Instant::now() + Duration::from_secs(5),
+            )
+            .unwrap_err();
+        assert_eq!(syntax.failure, Failure::Syntax);
+        assert_eq!(syntax.resource, Some(identity));
+        assert_eq!((syntax.page, syntax.subcode), (0x1c0, 1));
+        assert_eq!(syntax.cause.unwrap().line, 3);
+    }
 }

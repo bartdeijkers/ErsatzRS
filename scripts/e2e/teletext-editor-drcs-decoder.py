@@ -28,7 +28,7 @@ exec(compile(body, str(path), "exec"), base.__dict__)
 require = base.require
 
 
-def check_page(lib, decoder, number, theme, subpage):
+def check_page(lib, decoder, number, theme, subpage, edited=False):
     page, fetched = base.Page(), False
     try:
         fetched = bool(lib.vbi_fetch_vt_page(decoder, C.byref(page), number, 0x20, 2, 25, 0))
@@ -38,7 +38,8 @@ def check_page(lib, decoder, number, theme, subpage):
         bank, unicode = 16 + subpage, 0xF400 + subpage * 64
         require(cell.bits2 >> 16 == unicode and bool(page.drcs[bank]), "Normal indexed DRCS/slot0 missing")
         packed = C.string_at(C.cast(page.drcs[bank], C.c_void_p).value, 60)
-        expected = [(row >> (11 - x)) & 1 for row in PATTERNS[subpage] for x in range(12)]
+        pattern = (0x803, *PATTERNS[0][1:]) if edited else PATTERNS[subpage]
+        expected = [(row >> (11 - x)) & 1 for row in pattern for x in range(12)]
         require([(packed[x // 2] >> (4 * (x % 2))) & 15 for x in range(120)] == expected,
                 "Independent decoded DRCS bitmap differs from literal")
         foreground, background = cell.bits1 >> 24, cell.bits2 & 255
@@ -59,9 +60,9 @@ def check_page(lib, decoder, number, theme, subpage):
 
 
 def main():
-    require(len(sys.argv) in (3, 4) and sys.argv[2] in ("day", "night"), "Expected units file, day/night and optional indexed/sparse mode")
+    require(len(sys.argv) in (3, 4) and sys.argv[2] in ("day", "night"), "Expected units file, day/night and optional singleton-edited/indexed/sparse mode")
     mode = sys.argv[3] if len(sys.argv) == 4 else "singleton"
-    require(mode in ("singleton", "indexed", "sparse"), "Unknown synthetic bitmap oracle")
+    require(mode in ("singleton", "singleton-edited", "indexed", "sparse"), "Unknown synthetic bitmap oracle")
     file = Path(sys.argv[1])
     require(file.is_file() and not file.is_symlink(), "Expected regular captured units file")
     with file.open("rb") as stream:
@@ -85,7 +86,8 @@ def main():
             sliced.data[:42] = bytes(base.BIT_REVERSE[v] for v in unit[4:])
             lib.vbi_decode(decoder, C.byref(sliced), 1, 1.0 + index * .04)
         pages = [check_page(lib, decoder, number, sys.argv[2],
-                            1 if mode == "sparse" or (mode == "indexed" and number == 0x125) else 0)
+                            1 if mode == "sparse" or (mode == "indexed" and number == 0x125) else 0,
+                            mode == "singleton-edited" and sys.argv[2] == "day")
                  for number in (0x124, 0x125)]
         print(json.dumps({"decoder_version": version, "units_sha256": hashlib.sha256(raw).hexdigest(),
                           "theme": sys.argv[2], "mode": mode, "pages": pages, "panels_proven": False}, sort_keys=True))

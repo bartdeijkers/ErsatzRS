@@ -33,8 +33,8 @@ use ersatzrs_app::{
 };
 use ersatzrs_core::repositories::{TeletextDesignMutation, TeletextDesignRejection};
 use ersatzrs_domain::{
-    TeletextDesignRevision, TeletextPageAddress, TeletextPageNumber, TeletextSubcode,
-    MAX_TELETEXT_DESIGN_NAME_BYTES, TELETEXT_DESIGN_DOCUMENT_VERSION,
+    TeletextDesignRevision, TeletextPageAddress, TeletextPageNumber, TeletextResourceIdentity,
+    TeletextSubcode, MAX_TELETEXT_DESIGN_NAME_BYTES, TELETEXT_DESIGN_DOCUMENT_VERSION,
     TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
 use std::{
@@ -69,6 +69,20 @@ impl Failure {
     }
     fn position(mut self, page: u16, subcode: u16, row: Option<u8>, column: Option<usize>) -> Self {
         self.location = format!("&error_page={page}&error_subcode={subcode:04x}");
+        self.grid_position(row, column)
+    }
+    fn resource_position(
+        mut self,
+        resource: TeletextResourceIdentity,
+        row: Option<u8>,
+        column: Option<usize>,
+    ) -> Self {
+        if let Ok(raw) = serde_json::to_string(&resource) {
+            self.location = format!("&error_resource={}", urlencoding::encode(&raw));
+        }
+        self.grid_position(row, column)
+    }
+    fn grid_position(mut self, row: Option<u8>, column: Option<usize>) -> Self {
         if let Some(row) = row {
             let _ = write!(self.location, "&error_row={row}");
         }
@@ -618,21 +632,20 @@ fn import_error(error: NativeTeletextEditorialImportError) -> Failure {
         NativeTeletextEditorialImportError::NoChanges => Failure::new("editorial-no-changes"),
         NativeTeletextEditorialImportError::Design(error) => authoring(&design_error(*error)),
         NativeTeletextEditorialImportError::Tti(error) => {
-            let mut result = Failure::new(
+            let result = Failure::new(
                 if error.failure == NativeTeletextEditorialTtiFailure::Syntax {
                     "editorial-syntax"
                 } else {
                     "editorial-protected"
                 },
-            )
-            .position(
-                error.page,
-                error.subcode,
-                error.row,
-                error
-                    .column
-                    .or(error.cause.as_ref().and_then(|cause| cause.column)),
             );
+            let column = error
+                .column
+                .or(error.cause.as_ref().and_then(|cause| cause.column));
+            let mut result = match error.resource {
+                Some(resource) => result.resource_position(resource, error.row, column),
+                None => result.position(error.page, error.subcode, error.row, column),
+            };
             if let Some(cause) = error.cause {
                 let _ = write!(result.location, "&error_line={}", cause.line);
             }
@@ -651,5 +664,93 @@ fn import_error(error: NativeTeletextEditorialImportError) -> Failure {
             None => Failure::new("editorial-protected"),
         },
         _ => Failure::new("editorial-mismatch"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::host::teletext_editorial_designs::NativeTeletextEditorialTtiError;
+    use ersatzrs_app::teletext_tti::{TeletextTtiError, TeletextTtiErrorKind};
+    use ersatzrs_domain::{
+        TeletextRawDataPageNumber, TeletextResourceKind, TeletextResourceSubpageIndex,
+    };
+
+    fn query(error: NativeTeletextEditorialTtiError) -> BTreeMap<String, String> {
+        let response = respond(
+            7,
+            &import_error(NativeTeletextEditorialImportError::Tti(error)),
+        );
+        let location = response.headers()[header::LOCATION].to_str().unwrap();
+        let (path, query) = location.split_once('?').unwrap();
+        assert_eq!(path, "/channels/7/teletext");
+        serde_urlencoded::from_str(query).unwrap()
+    }
+    fn located(resource: Option<TeletextResourceIdentity>) -> NativeTeletextEditorialTtiError {
+        NativeTeletextEditorialTtiError {
+            failure: NativeTeletextEditorialTtiFailure::Packet,
+            resource,
+            page: resource.map_or(200, |_| 0x1c0),
+            subcode: resource.map_or(16, |identity| u16::from(identity.logical_subpage().get())),
+            row: Some(28),
+            column: Some(5),
+            designation: Some(3),
+            cause: None,
+        }
+    }
+
+    #[test]
+    fn display_editor_diagnostic_retains_decimal_page_and_subcode() {
+        let values = query(located(None));
+        assert_eq!(values["error"], "editorial-protected");
+        assert_eq!(values["error_page"], "200");
+        assert_eq!(values["error_subcode"], "0010");
+        assert_eq!(values["error_row"], "28");
+        assert_eq!(values["error_column"], "5");
+        assert_eq!(values["error_designation"], "3");
+        assert!(!values.contains_key("error_resource"));
+    }
+
+    #[test]
+    fn resource_editor_diagnostic_preserves_kind_raw_page_and_native_s1() {
+        for kind in [TeletextResourceKind::Drcs, TeletextResourceKind::Gdrcs] {
+            let resource = TeletextResourceIdentity::new(
+                kind,
+                TeletextRawDataPageNumber::new(1, 0xc0).unwrap(),
+                TeletextResourceSubpageIndex::new(1).unwrap(),
+            )
+            .unwrap();
+            let values = query(located(Some(resource)));
+            let decoded: TeletextResourceIdentity =
+                serde_json::from_str(&values["error_resource"]).unwrap();
+            assert_eq!(decoded, resource);
+            assert_eq!(values["error_row"], "28");
+            assert_eq!(values["error_column"], "5");
+            assert_eq!(values["error_designation"], "3");
+            assert!(!values.contains_key("error_page"));
+            assert!(!values.contains_key("error_subcode"));
+            assert!(!values.values().any(|value| value == "448"));
+
+            let mut syntax = located(Some(resource));
+            syntax.failure = NativeTeletextEditorialTtiFailure::Syntax;
+            syntax.column = None;
+            syntax.cause = Some(TeletextTtiError {
+                kind: TeletextTtiErrorKind::InvalidPacket,
+                line: 9,
+                row: Some(28),
+                column: Some(17),
+            });
+            let values = query(syntax);
+            assert_eq!(values["error"], "editorial-syntax");
+            assert_eq!(values["error_line"], "9");
+            assert_eq!(values["error_column"], "17");
+            assert_eq!(values["error_designation"], "3");
+            assert_eq!(
+                serde_json::from_str::<TeletextResourceIdentity>(&values["error_resource"])
+                    .unwrap(),
+                resource
+            );
+            assert!(!values.contains_key("error_page"));
+        }
     }
 }

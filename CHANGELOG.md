@@ -670,6 +670,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve imported teletext resource kind, raw hexadecimal page and logical
+  subpage in validation diagnostics, using the existing localized admin display.
+  Actual singleton QTeletextMaker bitmap edits now have ordinary-stream,
+  independent-pixel and two-theme live-client navigation proof. Warm resource
+  updates and complete Level 2.5/editor acceptance remain open.
+
 - Keep the basic playback smoke fixture on explicit software encoding with a
   matching preset instead of inheriting a startup-selected GPU preset.
 - Distinguish teletext source-read, window-preparation and packet-delivery

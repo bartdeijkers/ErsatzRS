@@ -112,10 +112,23 @@ boundaries. Multi-group/padded banks still require explicit reconciliation of
 QTM's observed whole-bank PN/SC ordinal renumbering; actual dense-bank editor
 editing/navigation/save is calibration evidence only. No resource editing
 restriction or full resource-editor/client acceptance is accepted.
+Retained genuine singleton editor output now also reaches native shared preview,
+explicit publication/reopen, ordinary two-channel TCP and actual cold-client
+navigation with distinct profile themes. Independent bitmap/rendered pixels and
+TSDuck retain separate proof scopes. Native/API resource diagnostics carry typed
+raw page/S1 through the existing localized SSR renderer; no decimal display owner
+is invented. This does not establish the complete resource-upload admin journey,
+warm updates or full editor/Level2.5 acceptance. P9A-04 owns the exact receipts.
 Import retains immutable resource transmission metadata. Correct warm publication
 still requires explicit lifecycle planning that respects actual completed history
 and the accepted artifact's identity; retagging encoded bytes after acceptance or
-relaxing receiver checks is not a solution. P9A-04 owns the concrete gap and proof.
+relaxing receiver checks is not a solution. Two native boundary variants now
+reproduce the counter mismatch. Accepted-state coalescing can skip intermediate
+generations, and different responses can have different completed histories;
+planning only from the last accepted counter is insufficient. Artifact-v1 binds
+exact resource headers. The bounded lifecycle-plan/artifact contract must be
+resolved explicitly before wiring warm updates. P9A-04 owns the concrete gap and
+proof; no update limitation is accepted.
 Full enhancement, resource, geometry, panel and actual editor coverage remains
 required; this slice introduces no accepted product restriction. P9A-04 owns
 verification and the concrete next integration step.

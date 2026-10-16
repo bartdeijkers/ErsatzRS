@@ -3107,6 +3107,34 @@ retained actual GUI evidence; it does not launch a fresh editor or establish new
 ordinary-route, independent-decoder, admin or broadcast-client acceptance.
 QTeletextMaker alone cannot establish the full enhanced broadcast-client gate.
 
+The separate opt-in
+`actual_qtm_singleton_bitmap_serves_two_ordinary_tcp_channels_and_cold_clients`
+connects those retained editor files through shared preview/explicit publication,
+file-backed reopen and two actual ordinary TCP channels. Set the same calibration
+directory plus a create-new `ERSATZRS_TELETEXT_DRCS_DELIVERY_DIR`, explicit
+`ERSATZRS_TELETEXT_TEST_FFMPEG`, `FFPROBE_PATH` and
+`ERSATZRS_TELETEXT_TEST_TSANALYZE`. Serve the existing admin stylesheet through
+`LEPTOS_SITE_ROOT` only for a separate no-JS diagnostic browser trial. Once
+`ready.json` exists, immediately run
+`scripts/e2e/teletext-live-client-trial.py <ready.json> <new-client-directory>`.
+Inspect all six actual windows and retain their hashes before writing the exact
+`expected_completion` from ready to its create-new `client-complete.json`.
+The marker only synchronizes teardown; it is not rendering evidence. The bound
+is180seconds, the source60seconds. The disposable schedule resets before ready;
+transport captures and client attachments are distinct cold requests.
+
+`scripts/e2e/teletext-editor-drcs-decoder.py <ordered-units.json> day singleton-edited`
+checks the fixed edited bitmap; `night singleton-edited` checks the unchanged
+night bitmap. This Linux-x64-only oracle reuses its pinned ABI helper and checks
+120 packed and120 rendered MAIN-cell pixels on each page. It is not general
+Level2.5 conformance or a substitute for actual suitable-client navigation.
+The companion ignored `retained_actual_qtm_resource_warm_boundary_diagnostic`
+uses the same directories to reproduce the known counter mismatch with simulated
+carousel completion. It does not prove HTTP/sink/AV behavior. P9A-04 owns current
+results and the outstanding lifecycle/artifact contract; never silently rewrite
+accepted headers to turn this diagnostic green.
+
+
 ### Actual synthetic edit/save calibration
 
 The pinned source was built unchanged with native GCC 15.2.0, CMake 4.2.3 and

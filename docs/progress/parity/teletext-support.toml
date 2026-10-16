@@ -10,8 +10,7 @@ TSDuck/independent decoding, actual client display/navigation; Kodi optional.
 v1 retains bytes/resources/pointers/metadata/fresh state/local X26.
 Replay/raster keep fallback; encoding keeps IDs/lineage/ancestry.
 AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
-X27 pass; client open.
-X26/metadata dual decoding pass.
+X27 and X26/metadata decoding pass; full client open.
 C2 keeps per-instance final words; differing charset aliases remain pending.
 G1 mode/fallback and Latin decoder gaps survive.
 165 national recipes; 4 pending. Hebrew private-charset decoder gap remains.
@@ -32,7 +31,7 @@ empty owners and one MOT/magazine.
 Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/nested pass.
-DRCS singleton concepts/actual native pass; banks/warm/client open.
+DRCS actual singleton cold TCP/VLC124/125, pixels and typed errors pass; banks/warm open.
 
 v2 stays pinned; Base refuses v2. Encoding retains
 defaults, secondary uncertainty and channel/model/deadline fences.
@@ -60,8 +59,8 @@ Off/stale fallback, AV/authored200 and default2 cleanup. P9A-04 owns generated
 command/physical-owner fences, same-held native stream/PID checks and known
 seek/duration mismatch refusal before open/retry. Source-bound initialization
 opens an independent caption decoder aligned to measured selected AV clocks.
-Both tracks/VBV policies retain initial888/exactOff audio at seek0.5s;
-ordinary routes retain AV/authored200/fallback. Sought HTTP/general cues stay open.
+Both tracks/VBV retain initial888/exactOff audio at seek0.5s;
+Routes retain AV/authored200/fallback; sought HTTP/general cues stay open.
 Linux x64/Windows interop/QEMU ARM proof is partial; native Windows/ARM, provider/
 Next and general source/seek/charset/resource behavior remain open.
 P9A-02 retains decoder Health/six-RID licensing. P9A-03/04 retain persistence,
@@ -75,15 +74,15 @@ id          = 'teletext-editorial-resource-diagnostic-identity'
 adr         = '0123'
 description = 'Preserve resource kind/raw hexadecimal page/S1 in imported-resource admin diagnostics. Reuse the existing localized error_resource projection and prove its headed display; do not map raw resource1C0 to ordinary display page448.'
 discovered  = '2026-10-16'
-evidence    = 'P9A-04 owns the source trace: native resource reconciliation provides raw1C0/S1 and exact row/designation/word, while api/teletext_editorial.rs imports that address through Failure::position as a decimal display owner. Existing authoring_error_location and localized resource rendering provide the corrective seam. Native located rejection tests pass; resource-admin identity acceptance remains open.'
-resolved    = false
+evidence    = 'P9A-04 records the typed resource native/API correction,19 focused unit cases,2 native rejection cases and headed Chromium/Firefox nine-culture light/dark SSR projection (36 views). Exact DRCS/GDRCS kind/raw page/S1 survive the redirect; raw1C0 is never display448. Existing localized rendering is reused without DOM/island changes; complete resource-upload/hydrated admin acceptance remains open.'
+resolved    = true
 
 [[debt]]
 id          = 'teletext-editorial-resource-warm-publication-lifecycle'
 adr         = '0123'
 description = 'Connect edited resource concepts to ordinary cold/warm delivery with correct resource lifecycle and accepted-artifact identity. Derive publication transmissions from actual accepted/completed state without mutating immutable originals, weakening receiver history or assuming every viewer saw every intermediate generation.'
 discovered  = '2026-10-16'
-evidence    = 'P9A-04 owns the concrete source trace and next ordinary-route experiment: after a completed resource cycle, imported changed bitmap bytes retain the original counter/lifecycle and ResourceUpdateHistory rejects warm replacement; the monitor safely withdraws teletext while AV continues. Cold requests have separate empty history. Current actual singleton native import/publication/reopen proof is not warm-output proof. No permanent update limitation is accepted.'
+evidence    = 'P9A-04 owns actual singleton cold TCP/AV/independent-pixel/VLC success and two exercised native warm-boundary variants: changed DRCS1C0/S1=0 retains counter1 but completed history requires2; old page bodies survive atomic rejection. Completion is simulated, not HTTP/sink/AV proof. Artifact-v1 binds exact headers; per-response histories and skipped accepted generations prevent a universal previous-accepted+1 fix. Next resolve the bounded lifecycle-plan/artifact contract and prove ordinary warm AV/client safety. No permanent limitation is accepted.'
 resolved    = false
 
 [[debt]]

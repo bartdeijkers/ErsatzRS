@@ -15,7 +15,7 @@ use ersatzrs_infra::repositories::SqliteTeletextDesignRepository;
 use serde_json::{json, Value};
 use sha2::{Digest as _, Sha256};
 
-fn response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = drcs_companion::response(theme, page, subcode);
     // Both pages share slot zero. A resource edit is allowed only if both
     // rendered effects fall inside independently declared free regions.
@@ -194,7 +194,7 @@ async fn restored(
     .unwrap()
 }
 
-fn assert_only_glyph_pixels(
+pub(super) fn assert_only_glyph_pixels(
     original: &EncodedTeletextAuthoredService,
     edited: &EncodedTeletextAuthoredService,
 ) {
@@ -412,7 +412,7 @@ fn read_retained_editor_file(path: &Path) -> Vec<u8> {
     bytes
 }
 
-fn actual_editor_request(
+pub(super) fn actual_editor_request(
     receipt: &TeletextDesignExportReceipt,
     directory: &Path,
 ) -> NativeTeletextEditorialImportRequest {
@@ -657,6 +657,17 @@ fn assert_located_metadata_error(
             panic!("resource metadata error must retain TTI coordinates")
         };
         assert_eq!((error.page, error.subcode), (0x1c0, 0));
+        assert_eq!(
+            error.resource,
+            Some(
+                TeletextResourceIdentity::new(
+                    TeletextResourceKind::Drcs,
+                    TeletextRawDataPageNumber::new(1, 0xc0).unwrap(),
+                    TeletextResourceSubpageIndex::ZERO,
+                )
+                .unwrap()
+            )
+        );
         if tamper == 1 {
             assert_eq!(
                 (error.row, error.column, error.designation),

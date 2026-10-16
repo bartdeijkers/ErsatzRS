@@ -13,7 +13,8 @@ use ersatzrs_app::{
 };
 use ersatzrs_domain::{
     TeletextDrcsBitmapOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
-    TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextSubcode,
+    TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
+    TeletextResourceIdentity, TeletextSubcode,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
@@ -46,12 +47,15 @@ pub enum NativeTeletextEditorialTtiFailure {
     ProtectedRow,
     Structure,
 }
-/// Exact display location. Physical grid columns are zero-based; a nested syntax
-/// cause retains the TTI parser's one-based file/payload location independently.
+/// Exact display or resource location. Physical grid columns are zero-based; a
+/// nested syntax cause retains the TTI parser's one-based location independently.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("teletext editor {failure:?} at page {page}, subcode {subcode}, row {row:?}, column {column:?}, designation {designation:?}")]
+#[error("teletext editor {failure:?} at resource {resource:?}, page code {page}, subcode {subcode}, row {row:?}, column {column:?}, designation {designation:?}")]
 pub struct NativeTeletextEditorialTtiError {
     pub failure: NativeTeletextEditorialTtiFailure,
+    /// Native resource identity; absence identifies the ordinary display path.
+    pub resource: Option<TeletextResourceIdentity>,
+    /// Decimal display page, or raw hexadecimal address when `resource` is set.
     pub page: u16,
     pub subcode: u16,
     pub row: Option<u8>,
@@ -65,11 +69,13 @@ type Result<T> = std::result::Result<T, NativeTeletextEditorialTtiError>;
 struct Location {
     page: u16,
     subcode: u16,
+    resource: Option<TeletextResourceIdentity>,
 }
 impl Location {
     fn error(self, failure: NativeTeletextEditorialTtiFailure) -> NativeTeletextEditorialTtiError {
         NativeTeletextEditorialTtiError {
             failure,
+            resource: self.resource,
             page: self.page,
             subcode: self.subcode,
             row: None,
@@ -357,6 +363,7 @@ fn reconcile_changes(
     let location = Location {
         page: mapping.page.page,
         subcode: mapping.page.subcode,
+        resource: None,
     };
     location.check_deadline(deadline)?;
     let owner = owner(mapping, location)?;
@@ -423,6 +430,7 @@ pub(super) fn validate_teletext_editorial_tti_encoding(
     let location = Location {
         page: mapping.page.page,
         subcode: mapping.page.subcode,
+        resource: None,
     };
     let owner = owner(mapping, location)?;
     let document = location.parse(edited_bytes, budget, deadline)?;

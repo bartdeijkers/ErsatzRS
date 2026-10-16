@@ -41,6 +41,10 @@ use ersatzrs_web::host::{
 
 #[path = "editorial_imports/drcs_bitmap.rs"]
 mod drcs_bitmap;
+#[path = "editorial_imports/drcs_bitmap_delivery.rs"]
+mod drcs_bitmap_delivery;
+#[path = "editorial_imports/drcs_bitmap_warm.rs"]
+mod drcs_bitmap_warm;
 #[path = "editorial_imports/drcs_companion.rs"]
 mod drcs_companion;
 #[path = "editorial_http.rs"]
