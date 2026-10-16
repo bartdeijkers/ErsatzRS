@@ -726,9 +726,9 @@ remain. See `post-publication-cleanup.json`.
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-10-15): `083033353661d5d5e208bc7f0eafa908402afcc0`
-  — build: work around runner stapling issue.
-- Ledger: **239 observed commits**, **236 accepted**, **3 pending outside the accepted boundary**.
+- Latest fetched target (`origin/main`, 2026-10-16): `fb2473508031d554bca285e8a5b7c588e81ca125`
+  — chore: update next (#3095).
+- Ledger: **240 observed commits**, **236 accepted**, **4 pending outside the accepted boundary**.
 - Accepted release baseline: **236 commits**, **0 pending** through fixed
   v26.11.3; row 237 belongs to UCU-12 and does not reopen UCU-11.
   The original plan covered 152 through
@@ -807,6 +807,8 @@ remain. See `post-publication-cleanup.json`.
   A further 2026-10-15 observation appends the macOS notarisation workaround as
   pending row 239, also in UCU-12; all 238 existing SHA/subject pairs remain an
   exact prefix.
+  The 2026-10-16 observation appends the next pin bump as pending row 240, also
+  in UCU-12; all 239 existing SHA/subject pairs remain an exact prefix.
   Maintainer decision (2026-10-09): UCU-09 ends at row 208, the v26.11.1 release,
   and everything fetched after it belongs to a new window. Rows209–232 now belong to the maintainer-authorized UCU-10 milestone.
   The 2026-10-06 Codex audit corrected reversed pending rows 193/194 to
@@ -5994,3 +5996,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 237 | `7a919e50` | perf: canvas region (#3093) | | | | ucu-12; first row of the window opened after v26.11.3. Provisional: Port, with a scope question. Watermark-only canvases now render just the rectangle the watermarks cover instead of the whole frame, which cuts CPU and GPU upload for animated or opacity-expression watermarks; the region travels signed from the playout so a changed channel cannot widen it, and remote/URL watermarks still get the full frame. The pin also moves to `v0.2.3-498e4555-develop`. ErsatzRS already bypasses the canvas entirely for plain watermarks (row 173, direct layers), so the gain here only applies to the cases we still send through the canvas: animated and opacity-expression watermarks (`crates/ersatzrs-infra/src/next_engine/graphics.rs:69`, `next_engine/canvas_render.rs`). The audit should measure whether a region is worth it for those, and keep the signed-placement property if it is. Claude 2026-10-15 triage. |
 | 238 | `8bea6fd9` | chore: update next (#3094) | | | | ucu-12; provisional: Adapt, same pin decision as rows 214/231. Pin moves to `v0.2.3-48e66c31-develop`, and the changelog names what that build fixes: active channels fell behind schedule when their playout was updated. That failure mode matters to us independently of the pin, because ErsatzRS updates playouts under its own scheduler; the audit should check that a live channel keeps its place when its playout is rebuilt (`crates/ersatzrs-infra/src/next_engine/host.rs`, playout sync path) rather than only comparing tags. Claude 2026-10-15 triage. |
 | 239 | `08303335` | build: work around runner stapling issue | | | | ucu-12; provisional: N/A (upstream-only CI workaround). Their macOS notarisation stapler uses HTTP/3, which drops on GitHub-hosted runners, so the publish job blocks outbound UDP 443 with pfctl to force TCP. ErsatzRS neither notarises on hosted macOS runners nor staples, and its release CI is its own, as rows 191, 192, 202, 211-223 recorded. Worth remembering only if ErsatzRS ever notarises a macOS build. Claude 2026-10-15 triage. |
+| 240 | `fb247350` | chore: update next (#3095) | | | | ucu-12; provisional: Adapt for the pin, with one behaviour to check. Pin moves to `v0.2.3-28632bc8-develop`; the build fixes image subtitles (PGS and friends) going missing or landing in the wrong place under hardware acceleration when the subtitle picture is a different size from the video, for example on cropped sources. ErsatzRS scales image subtitles to the desired frame size in its own pipeline (`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs:1641`, with the NPP and VAAPI variants beside it) and burns them for Next through `next_engine/burn_subtitles.rs`, so the audit should prove placement on a cropped source under each accelerator rather than assume the scale filter covers it. Claude 2026-10-16 triage. |
