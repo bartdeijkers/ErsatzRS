@@ -60,7 +60,7 @@ pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     value
 }
 
-fn composition(service: &EncodedTeletextAuthoredService) -> &TeletextMainComposition {
+pub(super) fn composition(service: &EncodedTeletextAuthoredService) -> &TeletextMainComposition {
     service
         .pages()
         .iter()
@@ -75,7 +75,7 @@ fn composition(service: &EncodedTeletextAuthoredService) -> &TeletextMainComposi
         .unwrap()
 }
 
-fn assert_base(composition: &TeletextMainComposition, expected_code: u8) {
+pub(super) fn assert_base(composition: &TeletextMainComposition, expected_code: u8) {
     assert_eq!(composition.base_display().primary().get(), 0x08);
     let column = composition.display_geometry().left_width() + 7;
     let display = composition.display_resolution();
@@ -179,7 +179,7 @@ async fn actual_qtm_polish_base_edit_imports_previews_publishes_and_reopens() {
     run_polish_flow(Some(std::path::Path::new(&directory))).await;
 }
 
-fn genuine_polish_request(
+pub(super) fn genuine_polish_request(
     flow: &Flow,
     directory: &std::path::Path,
 ) -> NativeTeletextEditorialImportRequest {

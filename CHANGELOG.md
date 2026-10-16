@@ -696,8 +696,9 @@ release section when tagging a release.
   retaining exact authored operands and protected zones. A pinned QTeletextMaker
   national-cell save now reaches native concept import, shared preview, explicit
   publication and database reopen without changing installed packages or the
-  other channel. Headed admin and ordinary-stream client proof for this case
-  remain open.
+  other channel. Ordinary delivery now passes source audio/video, transport and
+  independent glyph, fragment and theme checks. Headed admin and actual client
+  proof for this case remain open.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
   when an existing linked DRCS definition provides its exact glyph and neutral
   effects. Keep fallback, resource bytes and lifecycle intact; missing or changed

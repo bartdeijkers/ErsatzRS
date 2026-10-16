@@ -2968,6 +2968,67 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 genuine Polish concept ordinary-route checkpoint:
+Criterion: connect the existing-resource Polish Base5B editor concept to actual
+ordinary delivery and independent representative decoding. No production code,
+external decoder or normative glyph oracle changed in this checkpoint.
+The opt-in actual_qtm_polish_concept_serves_two_ordinary_channels reuses the
+existing application TCP origin, capture/transport/AV/cleanup helpers and the
+exact genuine QTM saved file from the preceding checkpoint. Fresh original files
+remain byte-equal to all actual editor inputs; publication remains explicit.
+
+Run64437eea-957d-451a-b7d8-6a0fe96d35af passes in19.203s. Channel1 serves accepted
+concept revision2 and channel2 retains original revision1, using the same addon
+and distinct profiles. Both real /iptv/hls-direct/{channel}.ts responses retain
+exact7,517,932-byte prefixes ending at complete authored PES. Native emitted
+models match completely; source AV and TSDuck3.44-4676 transport checks pass with
+zero qualified authored-PTS gaps. FFmpeg/ffprobe n9.0-20261006 identities are
+retained in the receipt. Shared concept/publication rasters match; page125's
+literal two-consumer bitmap checks240 pixels/channel in redDay and blueNight.
+Profiles, bindings, immutable originals/receipts/package/config, genuine input
+files and the other channel remain unchanged. Origin closure, owned capacity
+release, no playout refresh and database reopen are verified. This is cold TCP
+capture with the existing limit4 fixture, not default-limit/warm/whole-host proof.
+The initial b0d73e5d run rejected the test environment before playback because
+inherited FFMPEG_PATH selected8.1 while the supplied tool selected9; explicitly
+aligning both to the pinned9 runtime fixes that precondition without code changes.
+
+Independent decoding reuses the unchanged eight-source-pinned teletextimager
+0.2.0/2b0125b778c45ffdfa2df0b196870c093361f317 loader. The existing main-composition
+oracle deliberately rejects DRCS; a small fixed-vector wrapper adds precisely
+this missing resource/fragment oracle, not a new decoder or generic framework.
+The actual chronological first512 units from each capture yield11 complete
+124/125 acquisitions; an EOF acquisition is excluded without appending a header.
+Both captures pass literal Polish12x10 slot5/S1=0 normal-bank masks, left/right
+width fragments3/4, neutral attributes and retained B. Unchanged Night retains
+A; page125 retains normal S1=1/slot0 with the literal mirrored bitmap and actual
+red/blue palette colours. Levels1/1.5 independently retain the original raw Base
+codes and normal fragments under receiver default region0. This is NOT a claim
+of Polish font rendering in a regional Level1 client. Full fallback acceptance
+remains required. Actual received DRCS banks are explicitly supplied to the
+independent decoder: automatic X27/MOT cache routing, rasterized font pixels,
+actual headed display/navigation and full client conformance are not proved.
+
+The initial collector incorrectly required packet3 on BOTH banks, excluding the
+valid S1=1 bank whose only defined slot is0 in packet1. Requiring each bank's
+actual packet1 fixes collection; all wire bytes, decoder code and literal glyph
+expectations remain unchanged. A separate parity-preserving one-pixel mutation
+in every test-only slot5 acquisition rejects at1,7 as literal DRCS mask differs;
+using the Day capture as Night rejects as original code differs. Original TS,
+unit files and genuine editor inputs stay unchanged. New helper:
+ scripts/e2e/teletext-polish-carrier-decoder.py. Exact source/tool/capture hashes,
+negative diagnostics and owning logs are retained in the canonical receipt
+ tmp/phase9-polish-delivery/identity.json
+SHA256c57eb9353525ce4956a902f1e0d89818145eb75bb646495b06a3a090e0213a8b.
+Strict web all-target Clippy passes5.20s; reuse the prior61-case editorial/native
+suite because production and those test bodies are unchanged. This is not new
+complete CI or a full milestone. No external decoder repairs, installation,
+new client qualification, push or publication occurred.
+Next prove this exact accepted glyph through headed localized admin preview/
+publication; preserve the suitable enlarged-DRCS client gate and implement
+no-bank resource ownership/lifecycle/editor protection independently. Full
+P9A-04/engine acceptance and the production NOS200-299 addon remain gated.
+
 2026-10-16 existing-resource Polish national carrier checkpoint:
 Criterion: the matrix's authoritative repertoire/physical-lowering clause for
 assigned Latin/Polish Base5B inside an enlarged Adaptive repaint. This is a
@@ -7823,7 +7884,7 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Authored warm magazine-to-page presentation | Bounded complete-X28/history plus representative cold and retained-client warm bank publication proven; full warm matrix open |72 output tests, real AV/TSDuck/persistent Cyrillic-to-Greek decoding, cold editor/admin flow and same-client/decoder two-theme124/125/124 with18 actual library-map barriers above | Complete lower-level/resource/Header/POP/MOT/page-retirement, broader palette/context and client/platform matrix remain required | Reuse this fixed handover; address a specific remaining lifecycle clause when it blocks its accepted feature rather than expanding decoder maintenance |
-| Polish Base5B physical repertoire | Existing linked authored-DRCS neutral carrier, complete encoding and receipt-bound actual editor/native concept flow implemented; no-bank/non-neutral cases open | Latest carrier receipt and native run2889f294: genuine pinned QTM Save As, fresh exact inputs, shared preview, explicit Request/Accept, database reopen/isolation and negative protection tests | Exact glyph headed admin/ordinary-route/independent/client proof is missing. Qualified libzvbi lacks Local Passive; bounded Kodi21.3 source assessment does not establish enlarged DRCS suitability. Automatic no-bank resource ownership/protection is unimplemented | Connect the exact accepted glyph to headed admin/independent ordinary-route proof; retain the client gate and implement missing resource provision without accepting a page restriction |
+| Polish Base5B physical repertoire | Existing linked authored-DRCS neutral encoding and genuine QTM/native/ordinary-route flow implemented; no-bank/non-neutral cases open | Carrier and editor receipts plus64437eea: shared preview, explicit publication, actual two-profile TCP/TSDuck/AV/model equality, independent fixed bitmap/fragments/colours, reopen/isolation and negatives | Exact glyph headed admin and suitable-client display/navigation remain missing. Independent banks are explicitly supplied and fallback uses receiver region0. Qualified libzvbi lacks Local Passive; Kodi21.3 source does not establish enlarged suitability. Automatic no-bank resource ownership/protection is unimplemented | Join this exact accepted glyph to headed localized admin; retain the client gate and implement missing resource provision without accepting a page restriction |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
 Concrete next authored action: join the existing-resource Polish Base5B
@@ -7831,8 +7892,11 @@ carrier to the retained real editor/preview/publication/ordinary-route/client
 flow using a fresh immutable original and exact resource-bound receipt. The
 native positive, whole-service encoder and genuine QTM Save As/concept/preview/
 explicit publication/database reopen now pass without a guessed alias; the latest
-checkpoint owns exact proof and negatives. The next missing proof is this exact
-glyph's headed admin/independent ordinary-route behavior and suitable-client gate. Automatic no-bank
+checkpoint owns exact proof and negatives. Actual two-profile ordinary TCP,
+TSDuck/AV/model equality and fixed independent glyph/fragment/theme decoding now
+pass64437eea plus the pinned imager oracle. The next missing proof is this exact
+glyph's headed localized admin and suitable-client display/navigation. Preserve
+the explicit-bank and receiver-region0 limits of this independent proof. Automatic no-bank
 resource provision, non-neutral effects and complete resource-choice/bounds
 coverage still need implementation/evidence. Preserve literal original identity,
 fallback, ownership and protected effects; do not accept a page restriction.

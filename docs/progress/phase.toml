@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect the accepted Polish editor concept to ordinary delivery'
+current_focus = 'P9A-04: join the delivered Polish concept to headed admin and client acceptance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -94,9 +94,12 @@ at124/0020 despite unchanged uploaded words; P9A-04 owns both exact failures.
 Actual pinned headed QTM Save As is now complete with a sole raw OL1/7 A-to-5B
 edit and unchanged original inputs. Baseline-authenticated X26 recompilation,
 genuine-byte concept/shared preview/explicit publication/database reopen and
-isolation now pass61 native checks. Next join this exact accepted glyph to headed
-admin/ordinary-route/independent proof; suitable-client display/navigation remains
-open. The bounded Kodi21.3
+isolation now pass61 native checks. Exact two-profile ordinary TCP delivery now
+passes64437eea with TSDuck/AV/model equality, independent literal DRCS masks,
+fragments/theme colours and database reopen/cleanup. P9A-04 owns scope/negatives:
+independent banks are explicitly supplied; fallback uses receiver region0.
+Next join this exact accepted glyph to headed localized admin; suitable-client
+display/navigation remains open. The bounded Kodi21.3
 source assessment does not establish enlarged DRCS suitability; client acceptance
 stays open without a decoder maintenance program. Automatic no-bank
 resources, non-neutral effects and resource-choice coverage remain open;
