@@ -15,7 +15,31 @@ use futures_util::FutureExt as _;
 use serde_json::{json, Value};
 use std::{io, panic::AssertUnwindSafe, path::PathBuf};
 
-fn browser_ready(origin: &live_client::LiveOrigin, flow: &Flow, actual: &Path) -> Value {
+struct Trial<'a> {
+    compiler_owned: bool,
+    retained: &'a Retained,
+    actual: &'a Path,
+    directory: &'a Path,
+    input_hashes: Vec<(String, String)>,
+}
+
+impl Trial<'_> {
+    fn assert_inputs(&self, flow: &Flow) {
+        if self.compiler_owned {
+            assert_eq!(
+                compiler_polish::actual_input_hashes(flow, self.actual),
+                self.input_hashes
+            );
+        }
+    }
+}
+
+fn browser_ready(
+    origin: &live_client::LiveOrigin,
+    flow: &Flow,
+    actual: &Path,
+    compiler_owned: bool,
+) -> Value {
     let channels: Vec<_> = flow.accepted.iter().enumerate().map(|(index,candidate)| {
         let channel = index + 1;
         let binding = &candidate.selection().bindings[0];
@@ -30,13 +54,16 @@ fn browser_ready(origin: &live_client::LiveOrigin, flow: &Flow, actual: &Path) -
     }).collect();
     let name = &flow.exported[0].sidecar().project.pages[0].name;
     assert_eq!(name, "page-124-0020.tti");
-    let ready = json!({"probe_version":1,"base_url":origin.base_url(),"channels":channels,
+    let mut ready = json!({"probe_version":1,"base_url":origin.base_url(),"channels":channels,
         "editor":{"name":name,"original_path":actual.join("native-original-1").join(name),
             "edited_path":actual.join("editor-1/edited.tti"),
             "original_sha256":"a1cb39545a3ed73c13ff7cafc14b999b4a677ef39d1604b434aabee3453e9e3a",
             "edited_sha256":"962254bbb0427b5e9d1ff4d25f24d59fb5354203f61c3f1c4db2ae63b59f00fe"},
         "completion_file":"browser-complete.json","timeout_seconds":600,
         "markers":{"concept":"browser-concept-ready.json","publication":"publication-ready.json","complete":"browser-complete.json"}});
+    if compiler_owned {
+        ready["fixture"] = json!("compiler-owned");
+    }
     assert!(serde_json::to_vec(&ready).unwrap().len() <= 64 * 1024);
     ready
 }
@@ -113,6 +140,7 @@ async fn verified_concept(
     fixture: &Fixture,
     flow: &Flow,
     concept: &BrowserConcept,
+    compiler_owned: bool,
 ) -> TeletextDesignExportReceipt {
     assert_eq!(concept.probe_version, 1);
     assert_eq!(concept.design_id, flow.saved[0].head().id);
@@ -135,7 +163,7 @@ async fn verified_concept(
     )
     .await;
     let restored = restore_concept(fixture, concept).await;
-    assert_polish_effect(flow, &restored);
+    assert_polish_effect(flow, &restored, compiler_owned);
     assert_original_pointers(fixture, flow).await;
     receipt
 }
@@ -157,13 +185,35 @@ async fn restore_concept(
     .unwrap()
 }
 
-fn assert_polish_effect(flow: &Flow, restored: &RestoredOriginalTeletextDesign) {
+fn assert_polish_effect(
+    flow: &Flow,
+    restored: &RestoredOriginalTeletextDesign,
+    compiler_owned: bool,
+) {
     assert_eq!(restored.selection(), flow.saved[0].candidate().selection());
     assert_eq!(
         restored.transmissions(),
         flow.saved[0].candidate().transmissions()
     );
     let service = restored.encoded().unwrap();
+    if compiler_owned {
+        compiler_polish::assert_concept(flow, service, 0x5b);
+        assert_eq!(restored.metadata(), flow.saved[0].candidate().metadata());
+        assert_eq!(
+            restored.sources().len(),
+            flow.saved[0].candidate().sources().len()
+        );
+        for (before, after) in flow.saved[0]
+            .candidate()
+            .sources()
+            .iter()
+            .zip(restored.sources())
+        {
+            assert_eq!(before.bytes(), after.bytes());
+            assert_eq!(before.authoring(), after.authoring());
+        }
+        return;
+    }
     polish_carrier::assert_base(polish_carrier::composition(service), 0x5b);
     assert_eq!(
         service.pages().len(),
@@ -194,6 +244,7 @@ async fn published(
     concept: &BrowserConcept,
     complete: &BrowserComplete,
     directory: &Path,
+    compiler_owned: bool,
 ) -> [AcceptedTeletextOutputCandidate; 2] {
     assert_eq!(complete.probe_version, 1);
     assert_eq!(complete.design_id, concept.design_id);
@@ -228,34 +279,54 @@ async fn published(
         Some(flow.pending[1].clone())
     );
     let restored = restore_concept(fixture, concept).await;
-    assert_polish_effect(flow, &restored);
+    assert_polish_effect(flow, &restored, compiler_owned);
     polish_carrier::assert_base(polish_carrier::composition(accepted[0].service()), 0x5b);
-    polish_delivery::assert_published_previews(directory, restored.encoded().unwrap(), &accepted);
+    if compiler_owned {
+        compiler_polish::assert_concept(flow, accepted[0].service(), 0x5b);
+        compiler_polish_delivery::assert_generated_owner(&accepted);
+        compiler_polish_delivery::assert_previews(directory, &restored, &accepted);
+    } else {
+        polish_delivery::assert_published_previews(
+            directory,
+            restored.encoded().unwrap(),
+            &accepted,
+        );
+    }
     accepted
 }
 
 async fn browser_publication(
     fixture: &mut Fixture,
     flow: &Flow,
-    retained: &Retained,
-    actual: &Path,
-    directory: &Path,
+    trial: &Trial<'_>,
 ) -> io::Result<(
     [AcceptedTeletextOutputCandidate; 2],
     TeletextDesignExportReceipt,
 )> {
     tokio::time::timeout(Duration::from_mins(10), async {
-        let concept: BrowserConcept = marker(directory, "browser-concept-ready.json").await?;
-        let receipt = verified_concept(fixture, flow, &concept).await;
-        retained
-            .assert_unchanged(fixture, flow, &flow.accepted, actual)
+        let concept: BrowserConcept = marker(trial.directory, "browser-concept-ready.json").await?;
+        let receipt = verified_concept(fixture, flow, &concept, trial.compiler_owned).await;
+        trial
+            .retained
+            .assert_unchanged(fixture, flow, &flow.accepted, trial.actual)
             .await;
-        polish_delivery::write_json(directory, "publication-ready.json", &concept);
-        let complete: BrowserComplete = marker(directory, "browser-complete.json").await?;
-        let accepted = published(fixture, flow, &concept, &complete, directory).await;
-        retained
-            .assert_unchanged(fixture, flow, &accepted, actual)
+        trial.assert_inputs(flow);
+        polish_delivery::write_json(trial.directory, "publication-ready.json", &concept);
+        let complete: BrowserComplete = marker(trial.directory, "browser-complete.json").await?;
+        let accepted = published(
+            fixture,
+            flow,
+            &concept,
+            &complete,
+            trial.directory,
+            trial.compiler_owned,
+        )
+        .await;
+        trial
+            .retained
+            .assert_unchanged(fixture, flow, &accepted, trial.actual)
             .await;
+        trial.assert_inputs(flow);
         Ok((accepted, receipt))
     })
     .await
@@ -265,10 +336,13 @@ async fn browser_publication(
 async fn prepare(
     directory: &Path,
     tools: &drcs_bitmap_delivery::Tools,
+    compiler_owned: bool,
 ) -> (Fixture, Flow, Vec<u8>, PathBuf) {
-    let actual = std::fs::canonicalize(client_capture::selected(
-        "ERSATZRS_QTM_POLISH_CALIBRATION_DIR",
-    ))
+    let actual = std::fs::canonicalize(client_capture::selected(if compiler_owned {
+        "ERSATZRS_QTM_COMPILER_POLISH_DIR"
+    } else {
+        "ERSATZRS_QTM_POLISH_CALIBRATION_DIR"
+    }))
     .unwrap();
     let (fixture, source) = drcs_bitmap_delivery::playback_fixture(tools, directory).await;
     ordinary_stream_flow::setting(
@@ -278,14 +352,23 @@ async fn prepare(
     )
     .await;
     http_routes::configure_authoring_policy(&fixture).await;
-    let (fixture, flow) = Box::pin(setup_with_fixture_policy(
-        polish_carrier::response,
-        fixture,
-        drcs_companion::dense_encoding_policy,
-    ))
-    .await;
+    let response = if compiler_owned {
+        compiler_polish::response as fn(&str, u16, u16) -> Value
+    } else {
+        polish_carrier::response
+    };
+    let encoding = if compiler_owned {
+        channel_documents::policy as fn() -> _
+    } else {
+        drcs_companion::dense_encoding_policy
+    };
+    let (fixture, flow) = Box::pin(setup_with_fixture_policy(response, fixture, encoding)).await;
     // Authenticate every fresh input and genuine saved output without importing.
-    let request = polish_carrier::genuine_polish_request(&flow, &actual);
+    let request = if compiler_owned {
+        compiler_polish::actual_request(&flow, &actual).0
+    } else {
+        polish_carrier::genuine_polish_request(&flow, &actual)
+    };
     assert_eq!(request.files.len(), flow.exported[0].files().len());
     (fixture, flow, source, actual)
 }
@@ -293,31 +376,36 @@ async fn prepare(
 async fn served_trial(
     fixture: &mut Fixture,
     flow: &Flow,
-    retained: &Retained,
-    actual: &Path,
-    directory: &Path,
+    trial: &Trial<'_>,
     origin: &live_client::LiveOrigin,
     media: (&drcs_bitmap_delivery::Tools, &[u8]),
 ) -> io::Result<(
     [AcceptedTeletextOutputCandidate; 2],
     TeletextDesignExportReceipt,
 )> {
-    let (accepted, receipt) =
-        browser_publication(fixture, flow, retained, actual, directory).await?;
+    let (accepted, receipt) = browser_publication(fixture, flow, trial).await?;
     ordinary_stream_flow::reset_source_start(fixture).await;
     let (day, night) = tokio::join!(
         drcs_bitmap_delivery::capture_tcp(origin.url(1)),
         drcs_bitmap_delivery::capture_tcp(origin.url(2))
     );
     let day =
-        polish_delivery::verify_capture(directory, media.0, media.1, 1, &day, &accepted[0]).await;
+        polish_delivery::verify_capture(trial.directory, media.0, media.1, 1, &day, &accepted[0])
+            .await;
     let night =
-        polish_delivery::verify_capture(directory, media.0, media.1, 2, &night, &accepted[1]).await;
-    retained
-        .assert_unchanged(fixture, flow, &accepted, actual)
+        polish_delivery::verify_capture(trial.directory, media.0, media.1, 2, &night, &accepted[1])
+            .await;
+    trial
+        .retained
+        .assert_unchanged(fixture, flow, &accepted, trial.actual)
         .await;
+    trial.assert_inputs(flow);
+    if trial.compiler_owned {
+        compiler_polish_delivery::assert_source(fixture, trial.directory, media.1);
+        compiler_polish::assert_pointers(fixture, &accepted[0], &accepted[1]).await;
+    }
     polish_delivery::write_json(
-        directory,
+        trial.directory,
         "stream-proof.json",
         &json!({"probe_version":1,
         "route":"/iptv/hls-direct/{channel}.ts","transport":"same ordinary TCP origin as real admin forms",
@@ -346,26 +434,49 @@ async fn assert_receipt(fixture: &Fixture, receipt: &TeletextDesignExportReceipt
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires retained actual QTM Polish edit, exact FFmpeg9/TSDuck and external headed localized SSR forms; no decoder/client claim"]
 async fn actual_polish_browser_import_preview_publication_and_ordinary_streams() {
+    Box::pin(run_trial(false)).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires retained fresh no-bank QTM edit, exact FFmpeg9/TSDuck and external headed localized SSR forms; no decoder/client claim"]
+async fn actual_qtm_no_bank_polish_headed_admin_import_preview_publication_and_ordinary_streams() {
+    Box::pin(run_trial(true)).await;
+}
+
+async fn run_trial(compiler_owned: bool) {
     let directory = PathBuf::from(client_capture::selected(
         "ERSATZRS_TELETEXT_POLISH_ADMIN_DIR",
     ));
     std::fs::create_dir(&directory).expect("Polish admin destination must be new");
     let tools = drcs_bitmap_delivery::Tools::load().await;
-    let (mut fixture, flow, source, actual) = Box::pin(prepare(&directory, &tools)).await;
+    let (mut fixture, flow, source, actual) =
+        Box::pin(prepare(&directory, &tools, compiler_owned)).await;
     let retained = Retained::capture(&fixture, &flow, &actual).await;
+    let trial = Trial {
+        compiler_owned,
+        retained: &retained,
+        actual: &actual,
+        directory: &directory,
+        input_hashes: if compiler_owned {
+            compiler_polish::actual_input_hashes(&flow, &actual)
+        } else {
+            Vec::new()
+        },
+    };
+    if compiler_owned {
+        compiler_polish_delivery::assert_source(&fixture, &directory, &source);
+    }
     let mut origin = live_client::LiveOrigin::start(&fixture).await.unwrap();
     let outcome = AssertUnwindSafe(async {
         polish_delivery::write_json(
             &directory,
             "browser-ready.json",
-            &browser_ready(&origin, &flow, &actual),
+            &browser_ready(&origin, &flow, &actual, compiler_owned),
         );
         Box::pin(served_trial(
             &mut fixture,
             &flow,
-            &retained,
-            &actual,
-            &directory,
+            &trial,
             &origin,
             (&tools, &source),
         ))
@@ -392,6 +503,12 @@ async fn actual_polish_browser_import_preview_publication_and_ordinary_streams()
     retained
         .assert_unchanged(&mut fixture, &flow, &accepted, &actual)
         .await;
+    trial.assert_inputs(&flow);
+    if compiler_owned {
+        compiler_polish::assert_concept(&flow, accepted[0].service(), 0x5b);
+        compiler_polish_delivery::assert_generated_owner(&accepted);
+        compiler_polish_delivery::assert_source(&fixture, &directory, &source);
+    }
     for (index, candidate) in accepted.iter().enumerate() {
         assert_eq!(
             fixture

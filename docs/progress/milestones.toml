@@ -2968,6 +2968,68 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 headed no-bank editor/admin-to-stream checkpoint:
+Criterion: connect the exact fresh no-bank QTM Save As to localized headed admin
+export/import/preview/explicit publication and the SAME ordinary stream origin.
+Production UI, translations, routes, dependencies and normative vectors are
+unchanged. The existing Polish admin fixture gains an explicit compiler-owned
+case; its old authored-bank mode retains the original oracles. No new browser
+harness or decoder repair. Three existing delivery helpers become visible to
+this sibling test only; their bodies invert byte-exact to31c83e96.
+Source map remains /channels/{id}/teletext -> ChannelTeletextPage blocking SSR
+loader -> TeletextDraftPreview and plain /admin-api/teletext/design/{export,
+import,request-publication,publish} forms. No shared primitive/island changed.
+
+Both independent fresh owned database/host runs pass terminally:
+- Chromium151.0.7922.34 / Playwright1.62.1 headed: browser35.3s; native
+  3f55b604-b6eb-4064-9dfb-d0387ed92dba PASS71.905s, compile50.80s.
+- Firefox153.0 / Playwright1.62.1 headed: browser37.5s; native
+  d5349792-72c2-41e3-b98e-90ced84d791d PASS133.544s. This includes awaiting
+  browser launch; it is not a performance benchmark or deadline regression.
+Each proves same-addon distinct profile/theme selection, nine cultures in light
+and dark, native ZIP export, exact two-display/no-bank inventory plus fixed
+page125 hash, genuine saved bytes as the only row1col7 edit, concept isolation,
+fixed240-pixel Polish preview and124/125/124 browser navigation. G0 A theme
+pixels use the existing literal Latin-font golden, not observed-image learning;
+prior Polish/mirrored vectors are unchanged. Preview differences remain88/0/88
+pixels; Night previews/publication remain unchanged. Accessible names and native
+form translations pass36 language/theme cases across both browsers, with no
+console/page errors. All52 original PNGs remain. Root inspected four individual
+critical full images and both18-image culture/theme overviews; exact list/hashes
+live in root-visual-review.json. This is headed SSR/no-JS proof: JavaScript is
+disabled and no matched WASM/hydration claim is made.
+
+Native barriers verify a fresh HTTP export receipt, sole permitted row overlay,
+exact immutable original documents/selection/transmissions/metadata/resources,
+concept-only state before acknowledgement, explicit Request then Publish IDs,
+accepted shared preview and the generated Normal1A0/S1=0slot0 bank. Night remains
+unmodified with no bank. Same-origin concurrent TCP responses pass source AV,
+TSDuck and complete emitted-model comparison, then origin/capacity cleanup and
+database reopen preserve receipts, profiles/bindings/config/package/source/editor
+inputs. All four512-unit sequences are byte-exact to the independently decoded
+31c83e96 captures; reuse that pinned imager mask/fragments/themes/fallback and
+pixel/channel-negative evidence. Chromium additionally decoded its same bytes;
+Firefox reuses the byte-exact receipt. No automatic resource acquisition or
+actual teletext-client display/navigation is inferred from browser preview.
+Fresh-receipt/row-overlay/restore/default-bank normative helper text stays exact
+(retained-oracles.json); common protocol is exercised here, old bank scenario
+is not claimed as rerun. No full CI, engine, six-platform or production-guide claim.
+Strict affected web all-target Clippy passes1m24s; formatting passes.
+Canonical ignored receipt: tmp/phase9-compiler-polish-admin/identity.json, SHA256
+fbc39a989eaa53a98f53ba937834e303e1b2529026e68e3b5a975d021d9d5a22.
+
+Next concrete action: complete a bounded actual suitable-client trial against
+these exact captured ordinary responses, using the retained alternative-client
+assessment to qualify Local-object/DRCS enlargement and page navigation before
+claiming suitability. Prior bounded libzvbi candidate/stock failures remain
+negative evidence; no further libzvbi maintenance program starts.
+If the alternate client cannot meet the vector, record its exact limitation and
+continue independent authored resource/effect gaps (including occupied roles and
+non-neutral effects), rather than blocking the whole engine goal. Hydration,
+complete authored/fallback/editor/templates/zones/Lua/restart/playback/platform
+acceptance all remain open. All129 milestone contracts/statuses remain unchanged;
+no push/publication or production TV-guide addon starts.
+
 2026-10-16 no-bank genuine-editor ordinary delivery checkpoint:
 Criterion: join the fresh no-bank QTM concept below to two ordinary channel
 stream URLs and independent decoding, preserving theme/profile isolation and
@@ -3014,10 +3076,9 @@ Actual captures: tmp/phase9-compiler-polish-editor/ordinary-1; original fresh
 GUI/editor provenance remains tmp/phase9-compiler-polish-editor/identity.json.
 All milestone contracts/statuses and unrelated changes remain; no push/publication.
 
-Missing proof / next action: connect this exact no-bank genuine save to existing
-localized headed admin import/preview/explicit publication, then these same ordinary
-routes. Reuse the old Polish headed harness; do not reuse its authored-bank
-request/inventory/page125 expectations. Suitable-client rendering/navigation and
+Subsequent localized headed no-bank admin/same-origin proof is recorded above.
+It preserves the distinct original-bank oracle and genuine full-set provenance.
+Suitable-client rendering/navigation and
 automatic resource acquisition remain separate: the bounded stock/candidate
 libzvbi failures and Kodi source-only assessment below do not prove suitability.
 No further libzvbi maintenance is initiated. Full authored resources/effects,

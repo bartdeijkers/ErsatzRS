@@ -15,11 +15,15 @@ import {
 const readyPath = process.env.ERSATZRS_TELETEXT_POLISH_ADMIN_READY;
 type Ready = {
   probe_version: number; base_url: string; channels: Channel[];
+  fixture?: 'authored-bank' | 'compiler-owned';
   editor: { name: string; original_path: string; edited_path: string;
     original_sha256: string; edited_sha256: string };
 };
 const polish = [0, 0x3fc, 0x18, 0x30, 0x1f8, 0xc0, 0x180, 0x3fc, 0, 0];
 const mirrored = [0x801, 0x001, 0x002, 0x004, 0x008, 0x010, 0x020, 0x040, 0x080, 0x900];
+// Existing literal Latin G0 A golden (glyph_mask_tests.rs), independent of
+// observed browser pixels. The compiler-owned fixture has no authored bank.
+const latinA = [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0];
 
 function polishGlyph(value: Raster): void {
   for (let y = 0; y < 10; y++) for (let x = 0; x < 24; x++) {
@@ -28,11 +32,12 @@ function polishGlyph(value: Raster): void {
       polish[y] & (1 << (11 - Math.floor(x / 2))) ? [255, 255, 255, 255] : [0, 0, 0, 255]);
   }
 }
-function themeGlyphs(value: Raster, theme: 'day' | 'night'): void {
+function themeGlyphs(value: Raster, theme: 'day' | 'night', compilerOwned = false): void {
   const foreground = theme === 'day' ? [255, 0, 0, 255] : [0, 0, 255, 255];
+  const rows = compilerOwned ? latinA : mirrored;
   for (const column of [8, 10]) for (let y = 0; y < 10; y++) for (let x = 0; x < 12; x++) {
     const offset = ((10 + y) * value.width + (4 + column) * 12 + x) * 4;
-    expect(value.pixels.slice(offset, offset + 4)).toEqual(mirrored[y] & (1 << (11 - x))
+    expect(value.pixels.slice(offset, offset + 4)).toEqual(rows[y] & (1 << (11 - x))
       ? foreground : [0, 0, 0, 255]);
   }
 }
@@ -57,6 +62,8 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
   const directory = dirname(resolve(readyPath!));
   const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as Ready;
   expect(ready.probe_version).toBe(1);
+  expect([undefined, 'authored-bank', 'compiler-owned']).toContain(ready.fixture);
+  const compilerOwned = ready.fixture === 'compiler-owned';
   expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   expect(ready.channels).toHaveLength(2);
   const [day, night] = ['day', 'night'].map(theme => ready.channels.find(c => c.theme === theme)!);
@@ -97,7 +104,7 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
       for (const number of [124, 125]) {
         await visit(page, preview(channel, channel.revision, number));
         const value = await raster(page, number);
-        if (number === 125) themeGlyphs(value, channel.theme);
+        if (number === 125) themeGlyphs(value, channel.theme, compilerOwned);
         before.set(`${channel.theme}-${number}`, value);
       }
     }
@@ -130,6 +137,12 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
     await (await download).saveAs(archive);
     const files = archiveFiles(archive), display = files.filter(f => f.name === ready.editor.name);
     expect(display).toHaveLength(1); expect(display[0].buffer.equals(original)).toBe(true);
+    if (compilerOwned) {
+      expect(files.map(f => f.name).sort()).toEqual([
+        'page-124-0020.tti', 'page-125-0020.tti', 'project.ersatzrs.json']);
+      expect(hash(files.find(f => f.name === 'page-125-0020.tti')!.buffer))
+        .toBe('16cf6c27038559d36c3c0d0d4c27d39392c3d43b5f0798b1852906d2244f63f4');
+    }
     const sidecar = files.filter(f => f.name === 'project.ersatzrs.json');
     expect(sidecar).toHaveLength(1);
     const project = JSON.parse(sidecar[0].buffer.toString('utf8')).project;
@@ -157,7 +170,7 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
       const changes = number === 124 ? changedPixels(before.get('day-124')!, value) : [];
       if (number === 124) polishGlyph(value);
       else {
-        themeGlyphs(value, 'day');
+        themeGlyphs(value, 'day', compilerOwned);
         expect(rasterHash(value)).toBe(rasterHash(before.get('day-125')!));
       }
       await page.getByTestId('teletext-preview-model').locator('img').scrollIntoViewIfNeeded();
@@ -189,6 +202,7 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
     expect(await publication(page)).toMatchObject({ generation_id: night.generation_id, digest: night.digest });
     expect(errors).toEqual([]);
     marker(directory, 'browser-proof.json', { probe_version: 1, browser: testInfo.project.name,
+      fixture: compilerOwned ? 'compiler-owned' : 'authored-bank',
       browser_version: browser.version(), java_script_enabled: false, hydration_proven: false,
       ready_sha256: hash(bounded(readyPath!)), original_sha256: hash(original), edited_sha256: hash(edited),
       downloaded_display_sha256: hash(display[0].buffer), archive_sha256: hash(bounded(archive, 10 * 1024 * 1024)),

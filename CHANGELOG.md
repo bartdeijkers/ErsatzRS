@@ -709,7 +709,9 @@ release section when tagging a release.
   QTeletextMaker save now reaches native concept import, shared preview, explicit
   publication and reopen without predefined banks. Two ordinary channel streams
   now preserve audio/video and separate themes, with transport and independent
-  glyph/fallback checks. Full editor/client acceptance remains open.
+  glyph/fallback checks. Headed Chromium and Firefox now connect this no-bank
+  save to localized native import/preview/publication and the same streams.
+  Hydration and full editor/client acceptance remain open.
 
 - Permit acknowledged teletext updates from magazine defaults to complete page
   declarations while retaining bounded magazine cache history. Later incomplete

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: localized headed no-bank QTM flow and suitable-client rendering/navigation'
+current_focus = 'P9A-04: bounded suitable-client proof for no-bank authored resources; full engine remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -109,9 +109,13 @@ Fresh pinned QTM edit/Save As now passes native concept/shared preview/explicit
 publication/two reopens (bed5d481); P9A-04 binds full-set provenance and negatives.
 No-bank ordinary TCP/TSDuck/AV/full-model and cleanup/reopen now pass174873cd;
 independent pinned imager proves fixed Polish mask/fragments/themes/fallback with
-separate bank inventory and negative pixel/channel probes. Next connect the exact
-no-bank save to the existing localized headed admin harness and same stream
-routes; suitable-client acquisition/rendering/navigation remains separate.
+separate bank inventory and negative pixel/channel probes. Exact no-bank headed
+Chromium3f55b604/Firefoxd5349792 now join nine-culture light/dark native forms,
+shared preview, explicit publication and the same ordinary streams/reopen; all
+four unit sequences match prior independent captures. Next bounded suitable-client
+qualification for these responses; acquisition/rendering/navigation and hydration
+remain open. Keep independent authored resource/effect work moving if client proof
+cannot proceed.
 Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source
 assessment does not establish enlarged DRCS suitability; no decoder maintenance
 program starts. Both-occupied roles, unproven absent-X27 MOT/default supplements,

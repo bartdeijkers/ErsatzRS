@@ -8,7 +8,7 @@ use futures_util::FutureExt as _;
 use serde_json::{json, Value};
 use std::{panic::AssertUnwindSafe, path::PathBuf};
 
-fn assert_source(fixture: &Fixture, directory: &Path, source: &[u8]) {
+pub(super) fn assert_source(fixture: &Fixture, directory: &Path, source: &[u8]) {
     for path in [
         directory.join("source.ts"),
         fixture.root.path().join("synthetic-client-source.ts"),
@@ -20,7 +20,7 @@ fn assert_source(fixture: &Fixture, directory: &Path, source: &[u8]) {
     }
 }
 
-fn assert_generated_owner(accepted: &[AcceptedTeletextOutputCandidate; 2]) {
+pub(super) fn assert_generated_owner(accepted: &[AcceptedTeletextOutputCandidate; 2]) {
     let resource = &accepted[0].service().compiler_drcs_resources()[0];
     assert_eq!(resource.table().identity().page().magazine(), 1);
     assert_eq!(resource.table().identity().page().page(), 0xa0);
@@ -66,7 +66,7 @@ fn theme_mask(candidate: &AcceptedTeletextOutputCandidate, foreground: [u8; 3]) 
     mask
 }
 
-fn assert_previews(
+pub(super) fn assert_previews(
     directory: &Path,
     restored: &ersatzrs_web::host::teletext_designs::RestoredOriginalTeletextDesign,
     accepted: &[AcceptedTeletextOutputCandidate; 2],
