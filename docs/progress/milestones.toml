@@ -2968,6 +2968,73 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 localized headed raw-latch admin checkpoint:
+Criterion: connect the exact preceding declarative raw-latch QTM export/save to
+localized native admin profile selection, ZIP export, concept validation/import,
+shared preview, explicit Request/Publish and the SAME ordinary stream origin.
+This is an extension of the existing harness, not new runtime infrastructure.
+Production routes/UI/translations/DOM/islands and all normative vectors stay
+unchanged. The existing source map in teletext-polish-flow.spec.ts still applies:
+ChannelTeletextPage/TeletextDraftPreview at /channels/{id}/teletext and native
+/admin-api/teletext/design forms. This proves headed SSR/no-JS, not hydration.
+
+An explicit AuthoredBank/CompilerOwned/CompilerOwnedSpacing fixture enum preserves
+old branches, old hash/slot0/pixel oracles and v1/600s/64KiB bounds. Only the new
+compiler-owned-spacing case uses the fresh f314df19/a9b6cf34 full TTI identities,
+slot1 underline and protected G1. The existing strict actual_request is unchanged.
+Five helper-visibility changes reuse existing original/mosaic/ordinary assertions.
+The new case checks actual original G0 D5true/rawtrue versus physical DRCS D5false/
+rawfalse at concept, publication and reopen; original/mosaic/fallback/metadata/
+profile/package/config/receipt/source inputs remain exact. Browser expectations
+use fixed independent LatinA/Polish masks with bottomFFF ONLY in the new case,
+plus the fixed protected G1 mask at x84. Old vectors/defaults are unchanged.
+
+Two fresh isolated native hosts run the same frozen sources, exact new genuine
+QTM save and pinned FFmpeg2.0.6/n9.0 plus TSDuck3.44-4676:
+- Chromium151.0.7922.34, Playwright1.62.1 --headed: browser35.8s PASS;
+  native e6cfa17a-7242-48b8-b494-9efd30bc09ab PASS73.187s, compile56.97s.
+- Firefox153.0, same Playwright --headed: browser37.2s PASS;
+  native1d599fdd-d3cb-40e2-a74d-bf3e5913c628 PASS72.466s. These native durations
+  include handshake/GUI/transport work; they are not performance acceptance.
+Both verify nine actual cultures en-us/nl/de-de/fr-fr/es-es/es-419/it-it/pt-br/pl,
+light/dark, native populated fields/buttons, same addon/distinct profiles, current
+selected-original preview and exact original/literal125 G0 theme pixels. A real
+full ZIP download contains the expected twoTTIs+sidecar; only124 is replaced by
+unchanged actual QTM bytes. Concept submission waits for fresh native receipt/
+CAS/state acknowledgement before Request/Publish. The preview's fixed underlined
+Polish/G1 checks,124/125/124 navigation and Night state pass; exact changed pixels
+are88/0/88 in BOTH browsers. Browser/page errors are empty;26 original PNGs/browser
+are retained. Root views four critical originals and both18-view locale overview
+sheets. The first optional montage preflight lacked base-Python PIL and guessed
+locale filenames; existing ImageMagick plus actual receipt names resolves this,
+with original screenshots unchanged and no installed dependency.
+
+After browser completion, each native host verifies the accepted publication on
+both ordinary TCP responses, source AV/TSDuck/full emitted-model equality,
+unchanged profile/input/package/config/receipt identities, capacity cleanup and
+persistent reopen. All FOUR actual512-unit sequences equal the preceding raw-latch
+ordinary captures byte-for-byte. Therefore their pinned imager15Day/16Night
+closed-display literal mask/fragments/themes/Level1-1.5 fallback evidence is reused;
+it explicitly supplies received banks and does not prove automatic acquisition or
+new independent G1 pixels. No new decoder changes or duplicate decode run.
+
+Canonical source/trial/browser/image/state/transport/identity hashes:
+ tmp/phase9-polish-spacing-admin/identity.json
+SHA256b81a6dafd163cf042de7856933ce1212891e907aef41f26871e68c8e6c1b289a.
+Final strict web lint/format/progress/architecture results are bound there. All129
+milestone contracts/statuses stay unchanged. No hydration, suitable-client
+acquisition/render/navigation, new warm transition, full-editor/full-engine or
+six-RID acceptance is claimed; production TV-guide content still waits.
+Next accepted product gap: an enlarged original Turkish Latin national Base23
+(primary16, Table36 TL) is an existing UnsupportedIdentity, independent of client
+availability. First settle its assigned identity/fallback and reproduce the located
+NationalConversion. Establish exact TL identity against Tables35/37 before any
+resource-backed realization; do not substitute modern currency, two origins or
+an equal-looking alias. The existing direct matrix165/2Unsupported/2Unproven stays
+unchanged (Polish5B has its separate resource witness; Romanian5D/7D retain mark
+ambiguity). Hebrew is not a pending direct recipe; its decoder/client gap stays
+separate. No general audit, external repair or silent scope restriction starts.
+
 2026-10-16 declarative raw-latch editor-to-ordinary checkpoint:
 Criterion: join the preceding authored raw-spacing realization to the existing
 profile/design, validation, actual editor, concept/shared preview, explicit

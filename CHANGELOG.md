@@ -714,9 +714,9 @@ release section when tagging a release.
   import, shared preview, explicit publication and reopen without predefined banks.
   Two ordinary channel streams preserve audio/video and separate themes, with
   transport and independent glyph/fallback checks. Headed Chromium and Firefox
-  connect the plain variant to localized native forms and the same streams.
-  Underlined/raw-latch headed proof, hydration and full editor/client acceptance
-  remain open.
+  connect plain and underlined raw-latch variants to localized native forms,
+  exact previews and the same streams. Hydration and full editor/client
+  acceptance remain open.
 
 - Permit acknowledged teletext updates from magazine defaults to complete page
   declarations while retaining bounded magazine cache history. Later incomplete

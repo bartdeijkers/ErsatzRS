@@ -15,8 +15,21 @@ use futures_util::FutureExt as _;
 use serde_json::{json, Value};
 use std::{io, panic::AssertUnwindSafe, path::PathBuf};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FixtureCase {
+    AuthoredBank,
+    CompilerOwned,
+    CompilerOwnedSpacing,
+}
+
+impl FixtureCase {
+    fn is_compiler_owned(self) -> bool {
+        self != Self::AuthoredBank
+    }
+}
+
 struct Trial<'a> {
-    compiler_owned: bool,
+    fixture_case: FixtureCase,
     retained: &'a Retained,
     actual: &'a Path,
     directory: &'a Path,
@@ -25,7 +38,7 @@ struct Trial<'a> {
 
 impl Trial<'_> {
     fn assert_inputs(&self, flow: &Flow) {
-        if self.compiler_owned {
+        if self.fixture_case.is_compiler_owned() {
             assert_eq!(
                 compiler_polish::actual_input_hashes(flow, self.actual),
                 self.input_hashes
@@ -38,7 +51,7 @@ fn browser_ready(
     origin: &live_client::LiveOrigin,
     flow: &Flow,
     actual: &Path,
-    compiler_owned: bool,
+    fixture_case: FixtureCase,
 ) -> Value {
     let channels: Vec<_> = flow.accepted.iter().enumerate().map(|(index,candidate)| {
         let channel = index + 1;
@@ -61,8 +74,16 @@ fn browser_ready(
             "edited_sha256":"962254bbb0427b5e9d1ff4d25f24d59fb5354203f61c3f1c4db2ae63b59f00fe"},
         "completion_file":"browser-complete.json","timeout_seconds":600,
         "markers":{"concept":"browser-concept-ready.json","publication":"publication-ready.json","complete":"browser-complete.json"}});
-    if compiler_owned {
-        ready["fixture"] = json!("compiler-owned");
+    match fixture_case {
+        FixtureCase::AuthoredBank => {}
+        FixtureCase::CompilerOwned => ready["fixture"] = json!("compiler-owned"),
+        FixtureCase::CompilerOwnedSpacing => {
+            ready["fixture"] = json!("compiler-owned-spacing");
+            ready["editor"]["original_sha256"] =
+                json!("f314df192ce7d66ede32eb3ec18d7933839844b326356c48ca11a5d41aa92939");
+            ready["editor"]["edited_sha256"] =
+                json!("a9b6cf3411b9ca992eaa243fe13135c79f24f99be513646529bca34d34b0eb60");
+        }
     }
     assert!(serde_json::to_vec(&ready).unwrap().len() <= 64 * 1024);
     ready
@@ -140,7 +161,7 @@ async fn verified_concept(
     fixture: &Fixture,
     flow: &Flow,
     concept: &BrowserConcept,
-    compiler_owned: bool,
+    fixture_case: FixtureCase,
 ) -> TeletextDesignExportReceipt {
     assert_eq!(concept.probe_version, 1);
     assert_eq!(concept.design_id, flow.saved[0].head().id);
@@ -163,7 +184,7 @@ async fn verified_concept(
     )
     .await;
     let restored = restore_concept(fixture, concept).await;
-    assert_polish_effect(flow, &restored, compiler_owned);
+    assert_polish_effect(flow, &restored, fixture_case);
     assert_original_pointers(fixture, flow).await;
     receipt
 }
@@ -185,10 +206,49 @@ async fn restore_concept(
     .unwrap()
 }
 
+fn assert_spacing_concept(
+    flow: &Flow,
+    service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+) {
+    compiler_polish_underline::assert_concept(flow, service);
+    compiler_polish_spacing::assert_mosaic(service);
+    let page = service
+        .pages()
+        .iter()
+        .find_map(|page| match page {
+            EncodedTeletextAuthoredPage::CompiledDisplay(page)
+                if page.page().address() == channel_documents::address(124, 32) =>
+            {
+                Some(page)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let original = page.normalized().original();
+    let actual = page.normalized().physical().replay();
+    let left = original.display_geometry().left_width();
+    for column in [left + 7, left + 8] {
+        let first = original
+            .display_resolution()
+            .cell(1, column)
+            .unwrap()
+            .attributes();
+        let second = actual
+            .display_resolution()
+            .cell(1, column)
+            .unwrap()
+            .attributes();
+        assert_eq!(first.spacing_separated().value(), Some(true));
+        assert_eq!(first.underline_or_separated_mosaics().value(), Some(true));
+        assert_eq!(second.spacing_separated().value(), Some(false));
+        assert_eq!(second.underline_or_separated_mosaics().value(), Some(false));
+    }
+}
+
 fn assert_polish_effect(
     flow: &Flow,
     restored: &RestoredOriginalTeletextDesign,
-    compiler_owned: bool,
+    fixture_case: FixtureCase,
 ) {
     assert_eq!(restored.selection(), flow.saved[0].candidate().selection());
     assert_eq!(
@@ -196,8 +256,12 @@ fn assert_polish_effect(
         flow.saved[0].candidate().transmissions()
     );
     let service = restored.encoded().unwrap();
-    if compiler_owned {
-        compiler_polish::assert_concept(flow, service, 0x5b);
+    if fixture_case.is_compiler_owned() {
+        if fixture_case == FixtureCase::CompilerOwnedSpacing {
+            assert_spacing_concept(flow, service);
+        } else {
+            compiler_polish::assert_concept(flow, service, 0x5b);
+        }
         assert_eq!(restored.metadata(), flow.saved[0].candidate().metadata());
         assert_eq!(
             restored.sources().len(),
@@ -244,7 +308,7 @@ async fn published(
     concept: &BrowserConcept,
     complete: &BrowserComplete,
     directory: &Path,
-    compiler_owned: bool,
+    fixture_case: FixtureCase,
 ) -> [AcceptedTeletextOutputCandidate; 2] {
     assert_eq!(complete.probe_version, 1);
     assert_eq!(complete.design_id, concept.design_id);
@@ -279,9 +343,14 @@ async fn published(
         Some(flow.pending[1].clone())
     );
     let restored = restore_concept(fixture, concept).await;
-    assert_polish_effect(flow, &restored, compiler_owned);
+    assert_polish_effect(flow, &restored, fixture_case);
     polish_carrier::assert_base(polish_carrier::composition(accepted[0].service()), 0x5b);
-    if compiler_owned {
+    if fixture_case == FixtureCase::CompilerOwnedSpacing {
+        assert_spacing_concept(flow, accepted[0].service());
+        compiler_polish_underline_delivery::assert_profiles(&accepted);
+        let preview = external_editor_probe::preview_page(restored.encoded().unwrap(), 124);
+        compiler_polish_underline_delivery::write_previews(directory, flow, &preview, &accepted);
+    } else if fixture_case == FixtureCase::CompilerOwned {
         compiler_polish::assert_concept(flow, accepted[0].service(), 0x5b);
         compiler_polish_delivery::assert_generated_owner(&accepted);
         compiler_polish_delivery::assert_previews(directory, &restored, &accepted);
@@ -305,7 +374,7 @@ async fn browser_publication(
 )> {
     tokio::time::timeout(Duration::from_mins(10), async {
         let concept: BrowserConcept = marker(trial.directory, "browser-concept-ready.json").await?;
-        let receipt = verified_concept(fixture, flow, &concept, trial.compiler_owned).await;
+        let receipt = verified_concept(fixture, flow, &concept, trial.fixture_case).await;
         trial
             .retained
             .assert_unchanged(fixture, flow, &flow.accepted, trial.actual)
@@ -319,7 +388,7 @@ async fn browser_publication(
             &concept,
             &complete,
             trial.directory,
-            trial.compiler_owned,
+            trial.fixture_case,
         )
         .await;
         trial
@@ -336,13 +405,15 @@ async fn browser_publication(
 async fn prepare(
     directory: &Path,
     tools: &drcs_bitmap_delivery::Tools,
-    compiler_owned: bool,
+    fixture_case: FixtureCase,
 ) -> (Fixture, Flow, Vec<u8>, PathBuf) {
-    let actual = std::fs::canonicalize(client_capture::selected(if compiler_owned {
-        "ERSATZRS_QTM_COMPILER_POLISH_DIR"
-    } else {
-        "ERSATZRS_QTM_POLISH_CALIBRATION_DIR"
-    }))
+    let actual = std::fs::canonicalize(client_capture::selected(
+        if fixture_case.is_compiler_owned() {
+            "ERSATZRS_QTM_COMPILER_POLISH_DIR"
+        } else {
+            "ERSATZRS_QTM_POLISH_CALIBRATION_DIR"
+        },
+    ))
     .unwrap();
     let (fixture, source) = drcs_bitmap_delivery::playback_fixture(tools, directory).await;
     ordinary_stream_flow::setting(
@@ -352,19 +423,22 @@ async fn prepare(
     )
     .await;
     http_routes::configure_authoring_policy(&fixture).await;
-    let response = if compiler_owned {
-        compiler_polish::response as fn(&str, u16, u16) -> Value
-    } else {
-        polish_carrier::response
+    let response: fn(&str, u16, u16) -> Value = match fixture_case {
+        FixtureCase::AuthoredBank => polish_carrier::response,
+        FixtureCase::CompilerOwned => compiler_polish::response,
+        FixtureCase::CompilerOwnedSpacing => compiler_polish_spacing::response,
     };
-    let encoding = if compiler_owned {
+    let encoding = if fixture_case.is_compiler_owned() {
         channel_documents::policy as fn() -> _
     } else {
         drcs_companion::dense_encoding_policy
     };
     let (fixture, flow) = Box::pin(setup_with_fixture_policy(response, fixture, encoding)).await;
+    if fixture_case == FixtureCase::CompilerOwnedSpacing {
+        compiler_polish_spacing::assert_originals(&flow);
+    }
     // Authenticate every fresh input and genuine saved output without importing.
-    let request = if compiler_owned {
+    let request = if fixture_case.is_compiler_owned() {
         compiler_polish::actual_request(&flow, &actual).0
     } else {
         polish_carrier::genuine_polish_request(&flow, &actual)
@@ -400,7 +474,7 @@ async fn served_trial(
         .assert_unchanged(fixture, flow, &accepted, trial.actual)
         .await;
     trial.assert_inputs(flow);
-    if trial.compiler_owned {
+    if trial.fixture_case.is_compiler_owned() {
         compiler_polish_delivery::assert_source(fixture, trial.directory, media.1);
         compiler_polish::assert_pointers(fixture, &accepted[0], &accepted[1]).await;
     }
@@ -434,36 +508,43 @@ async fn assert_receipt(fixture: &Fixture, receipt: &TeletextDesignExportReceipt
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires retained actual QTM Polish edit, exact FFmpeg9/TSDuck and external headed localized SSR forms; no decoder/client claim"]
 async fn actual_polish_browser_import_preview_publication_and_ordinary_streams() {
-    Box::pin(run_trial(false)).await;
+    Box::pin(run_trial(FixtureCase::AuthoredBank)).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires retained fresh no-bank QTM edit, exact FFmpeg9/TSDuck and external headed localized SSR forms; no decoder/client claim"]
 async fn actual_qtm_no_bank_polish_headed_admin_import_preview_publication_and_ordinary_streams() {
-    Box::pin(run_trial(true)).await;
+    Box::pin(run_trial(FixtureCase::CompilerOwned)).await;
 }
 
-async fn run_trial(compiler_owned: bool) {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires fresh original raw-latch QTM edit, exact FFmpeg9/TSDuck and external headed localized SSR forms; no decoder/client claim"]
+async fn actual_qtm_no_bank_polish_spacing_headed_admin_import_preview_publication_and_ordinary_streams(
+) {
+    Box::pin(run_trial(FixtureCase::CompilerOwnedSpacing)).await;
+}
+
+async fn run_trial(fixture_case: FixtureCase) {
     let directory = PathBuf::from(client_capture::selected(
         "ERSATZRS_TELETEXT_POLISH_ADMIN_DIR",
     ));
     std::fs::create_dir(&directory).expect("Polish admin destination must be new");
     let tools = drcs_bitmap_delivery::Tools::load().await;
     let (mut fixture, flow, source, actual) =
-        Box::pin(prepare(&directory, &tools, compiler_owned)).await;
+        Box::pin(prepare(&directory, &tools, fixture_case)).await;
     let retained = Retained::capture(&fixture, &flow, &actual).await;
     let trial = Trial {
-        compiler_owned,
+        fixture_case,
         retained: &retained,
         actual: &actual,
         directory: &directory,
-        input_hashes: if compiler_owned {
+        input_hashes: if fixture_case.is_compiler_owned() {
             compiler_polish::actual_input_hashes(&flow, &actual)
         } else {
             Vec::new()
         },
     };
-    if compiler_owned {
+    if fixture_case.is_compiler_owned() {
         compiler_polish_delivery::assert_source(&fixture, &directory, &source);
     }
     let mut origin = live_client::LiveOrigin::start(&fixture).await.unwrap();
@@ -471,7 +552,7 @@ async fn run_trial(compiler_owned: bool) {
         polish_delivery::write_json(
             &directory,
             "browser-ready.json",
-            &browser_ready(&origin, &flow, &actual, compiler_owned),
+            &browser_ready(&origin, &flow, &actual, fixture_case),
         );
         Box::pin(served_trial(
             &mut fixture,
@@ -504,9 +585,14 @@ async fn run_trial(compiler_owned: bool) {
         .assert_unchanged(&mut fixture, &flow, &accepted, &actual)
         .await;
     trial.assert_inputs(&flow);
-    if compiler_owned {
-        compiler_polish::assert_concept(&flow, accepted[0].service(), 0x5b);
-        compiler_polish_delivery::assert_generated_owner(&accepted);
+    if fixture_case.is_compiler_owned() {
+        if fixture_case == FixtureCase::CompilerOwnedSpacing {
+            assert_spacing_concept(&flow, accepted[0].service());
+            compiler_polish_underline_delivery::assert_profiles(&accepted);
+        } else {
+            compiler_polish::assert_concept(&flow, accepted[0].service(), 0x5b);
+            compiler_polish_delivery::assert_generated_owner(&accepted);
+        }
         compiler_polish_delivery::assert_source(&fixture, &directory, &source);
     }
     for (index, candidate) in accepted.iter().enumerate() {

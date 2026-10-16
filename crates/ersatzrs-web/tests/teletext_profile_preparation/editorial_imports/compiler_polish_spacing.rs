@@ -6,7 +6,7 @@ use super::*;
 use ersatzrs_domain::teletext::*;
 use serde_json::{json, Value};
 
-fn response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = underline::response(theme, page, subcode);
     if theme != "day" || page != 124 {
         return value;
@@ -24,7 +24,7 @@ fn response(theme: &str, page: u16, subcode: u16) -> Value {
     value
 }
 
-fn assert_originals(flow: &Flow) {
+pub(super) fn assert_originals(flow: &Flow) {
     underline::assert_originals(flow);
     assert_eq!(
         response("night", 124, 32),
@@ -69,7 +69,7 @@ fn assert_originals(flow: &Flow) {
     assert_mosaic(service);
 }
 
-fn assert_mosaic(service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService) {
+pub(super) fn assert_mosaic(service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService) {
     let composition = polish_carrier::composition(service);
     let column = composition.display_geometry().left_width() + 3;
     let cell = composition.display_resolution().cell(1, column).unwrap();

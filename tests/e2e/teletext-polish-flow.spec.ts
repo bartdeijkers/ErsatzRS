@@ -15,7 +15,7 @@ import {
 const readyPath = process.env.ERSATZRS_TELETEXT_POLISH_ADMIN_READY;
 type Ready = {
   probe_version: number; base_url: string; channels: Channel[];
-  fixture?: 'authored-bank' | 'compiler-owned';
+  fixture?: 'authored-bank' | 'compiler-owned' | 'compiler-owned-spacing';
   editor: { name: string; original_path: string; edited_path: string;
     original_sha256: string; edited_sha256: string };
 };
@@ -24,12 +24,22 @@ const mirrored = [0x801, 0x001, 0x002, 0x004, 0x008, 0x010, 0x020, 0x040, 0x080,
 // Existing literal Latin G0 A golden (glyph_mask_tests.rs), independent of
 // observed browser pixels. The compiler-owned fixture has no authored bank.
 const latinA = [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0];
+const underlinedPolish = [0, 0x3fc, 0x18, 0x30, 0x1f8, 0xc0, 0x180, 0x3fc, 0, 0xfff];
+const underlinedLatinA = [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0xfff];
+const separatedMosaic = [0, 0x79e, 0x79e, 0, 0x79e, 0x79e, 0x79e, 0, 0x79e, 0x79e];
 
-function polishGlyph(value: Raster): void {
+function polishGlyph(value: Raster, rows = polish): void {
   for (let y = 0; y < 10; y++) for (let x = 0; x < 24; x++) {
     const offset = ((10 + y) * value.width + 132 + x) * 4;
     expect(value.pixels.slice(offset, offset + 4)).toEqual(
-      polish[y] & (1 << (11 - Math.floor(x / 2))) ? [255, 255, 255, 255] : [0, 0, 0, 255]);
+      rows[y] & (1 << (11 - Math.floor(x / 2))) ? [255, 255, 255, 255] : [0, 0, 0, 255]);
+  }
+}
+function protectedMosaic(value: Raster): void {
+  for (let y = 0; y < 10; y++) for (let x = 0; x < 12; x++) {
+    const offset = ((10 + y) * value.width + 84 + x) * 4;
+    expect(value.pixels.slice(offset, offset + 4)).toEqual(separatedMosaic[y] & (1 << (11 - x))
+      ? [255, 255, 255, 255] : [0, 0, 0, 255]);
   }
 }
 function themeGlyphs(value: Raster, theme: 'day' | 'night', compilerOwned = false): void {
@@ -62,16 +72,21 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
   const directory = dirname(resolve(readyPath!));
   const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as Ready;
   expect(ready.probe_version).toBe(1);
-  expect([undefined, 'authored-bank', 'compiler-owned']).toContain(ready.fixture);
-  const compilerOwned = ready.fixture === 'compiler-owned';
+  expect([undefined, 'authored-bank', 'compiler-owned', 'compiler-owned-spacing']).toContain(ready.fixture);
+  const spacing = ready.fixture === 'compiler-owned-spacing';
+  const compilerOwned = ready.fixture === 'compiler-owned' || spacing;
   expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   expect(ready.channels).toHaveLength(2);
   const [day, night] = ['day', 'night'].map(theme => ready.channels.find(c => c.theme === theme)!);
   expect(day.addon_id).toBe(night.addon_id); expect(day.profile_id).not.toBe(night.profile_id);
   expect(ready.editor.name).toBe('page-124-0020.tti');
   const original = bounded(ready.editor.original_path), edited = bounded(ready.editor.edited_path);
-  expect(hash(original)).toBe('a1cb39545a3ed73c13ff7cafc14b999b4a677ef39d1604b434aabee3453e9e3a');
-  expect(hash(edited)).toBe('962254bbb0427b5e9d1ff4d25f24d59fb5354203f61c3f1c4db2ae63b59f00fe');
+  expect(hash(original)).toBe(spacing
+    ? 'f314df192ce7d66ede32eb3ec18d7933839844b326356c48ca11a5d41aa92939'
+    : 'a1cb39545a3ed73c13ff7cafc14b999b4a677ef39d1604b434aabee3453e9e3a');
+  expect(hash(edited)).toBe(spacing
+    ? 'a9b6cf3411b9ca992eaa243fe13135c79f24f99be513646529bca34d34b0eb60'
+    : '962254bbb0427b5e9d1ff4d25f24d59fb5354203f61c3f1c4db2ae63b59f00fe');
   expect(hash(original)).toBe(ready.editor.original_sha256);
   expect(hash(edited)).toBe(ready.editor.edited_sha256);
   const context = await browser.newContext({ baseURL: ready.base_url,
@@ -105,6 +120,10 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
         await visit(page, preview(channel, channel.revision, number));
         const value = await raster(page, number);
         if (number === 125) themeGlyphs(value, channel.theme, compilerOwned);
+        if (spacing && channel.theme === 'day' && number === 124) {
+          polishGlyph(value, underlinedLatinA);
+          protectedMosaic(value);
+        }
         before.set(`${channel.theme}-${number}`, value);
       }
     }
@@ -168,8 +187,10 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
       }
       const value = await raster(page, number);
       const changes = number === 124 ? changedPixels(before.get('day-124')!, value) : [];
-      if (number === 124) polishGlyph(value);
-      else {
+      if (number === 124) {
+        polishGlyph(value, spacing ? underlinedPolish : polish);
+        if (spacing) protectedMosaic(value);
+      } else {
         themeGlyphs(value, 'day', compilerOwned);
         expect(rasterHash(value)).toBe(rasterHash(before.get('day-125')!));
       }
@@ -202,7 +223,7 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
     expect(await publication(page)).toMatchObject({ generation_id: night.generation_id, digest: night.digest });
     expect(errors).toEqual([]);
     marker(directory, 'browser-proof.json', { probe_version: 1, browser: testInfo.project.name,
-      fixture: compilerOwned ? 'compiler-owned' : 'authored-bank',
+      fixture: ready.fixture ?? 'authored-bank',
       browser_version: browser.version(), java_script_enabled: false, hydration_proven: false,
       ready_sha256: hash(bounded(readyPath!)), original_sha256: hash(original), edited_sha256: hash(edited),
       downloaded_display_sha256: hash(display[0].buffer), archive_sha256: hash(bounded(archive, 10 * 1024 * 1024)),

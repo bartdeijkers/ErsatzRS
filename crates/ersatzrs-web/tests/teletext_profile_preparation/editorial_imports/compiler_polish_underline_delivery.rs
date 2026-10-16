@@ -8,7 +8,7 @@ use futures_util::FutureExt as _;
 use serde_json::{json, Value};
 use std::{panic::AssertUnwindSafe, path::PathBuf};
 
-fn assert_profiles(accepted: &[AcceptedTeletextOutputCandidate; 2]) {
+pub(super) fn assert_profiles(accepted: &[AcceptedTeletextOutputCandidate; 2]) {
     let day = &accepted[0].selection().bindings[0];
     let night = &accepted[1].selection().bindings[0];
     assert_eq!(day.addon_id, night.addon_id);
@@ -46,7 +46,7 @@ fn assert_theme(candidate: &AcceptedTeletextOutputCandidate, foreground: [u8; 3]
     }
 }
 
-fn write_previews(
+pub(super) fn write_previews(
     directory: &Path,
     flow: &Flow,
     preview: &TeletextRaster,
