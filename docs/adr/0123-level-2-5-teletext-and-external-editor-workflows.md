@@ -459,10 +459,15 @@ history grants no durable restart, cold receiver, publication or decoder-cache
 assurance; those remain required host and independent-client acceptance work.
 The optional output bridge now confirms the actual sink-flushed cycle boundary,
 preflights shared replacement, and acknowledges changed PMT signalling before
-new PES. Its last actually completed service survives withdrawal. Missing old
-M29/MOT magazine banks reject without mutating old output; omission is not a
-cache-clear protocol. This protective guard is not full warm reconciliation or
-an accepted authoring restriction. P9A-04 owns the transport/control receipt;
+new PES. Its last actually completed service and bounded acknowledged M29
+presence must survive withdrawal. M29 omission may proceed only when every
+preceding exact display owner remains present and every replacement consumer in
+that magazine has a complete explicit page-X28 declaration. Retain the remembered
+magazine presence for subsequent generations; neither omission nor page C4 clears
+a receiver cache. Header/POP uncertainty is not an explicit declaration. Missing
+MOT banks still require reconciliation without mutating old output. These fences
+are not full warm reconciliation or an accepted authoring restriction.
+P9A-04 owns implementation status and the transport/control receipt;
 full bank/page retirement and independent warm-client proof remain required.
 The additive original libzvbi0.2.42 warm-cache diagnostic now checks representative
 normal DRCS replacement through the complete compiler/carousel, with independent

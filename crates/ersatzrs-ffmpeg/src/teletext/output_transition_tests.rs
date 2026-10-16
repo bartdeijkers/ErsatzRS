@@ -397,6 +397,420 @@ fn retired_m29_and_mot_banks_require_reconciliation_without_damaging_existing_ou
     }
 }
 
+pub(in crate::teletext) fn warm_magazine_defaults() -> TeletextLevel25PresentationDefaults {
+    let mut defaults = crate::teletext::presentation::western_latin_v1_presentation(
+        TeletextNationalOption::new(1).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        TeletextPageCharsetDesignation::new(0x24).unwrap().pair(),
+        TeletextCharsetPair::Cyrillic2Cyrillic
+    );
+    defaults.primary = TeletextPageCharsetDesignation::new(0x24).unwrap();
+    defaults.secondary = Some(TeletextPageCharsetDesignation::new(0x37).unwrap());
+    defaults.palette.clut2[0] = TeletextRgb::new([1, 2, 3]).unwrap();
+    defaults.palette.clut2[7] = TeletextRgb::new([9, 5, 2]).unwrap();
+    defaults.screen_colour = TeletextColourReference::new(16).unwrap();
+    defaults.row_colour = TeletextColourReference::new(23).unwrap();
+    defaults.remapping = TeletextColourRemapping::FgClut2BgClut2;
+    defaults
+}
+
+pub(in crate::teletext) fn warm_magazine_service(
+    owners: &[(u16, u16, Option<TeletextLevel25PresentationDefaults>)],
+    magazine: Option<TeletextLevel25PresentationDefaults>,
+) -> Arc<EncodedTeletextAuthoredService> {
+    let pages: Vec<_> = owners
+        .iter()
+        .map(|&(page, subcode, _)| {
+            let mut page = draft(page, subcode, false);
+            page.rows[0].runs[0].content = TeletextRunContent::Text { text: "AB".into() };
+            page
+        })
+        .collect();
+    let magazine_number = pages[0].address.page.magazine();
+    let metadata = owners
+        .iter()
+        .zip(&pages)
+        .map(
+            |(&(_, _, presentation), page)| TeletextResolvedPageEnhancementDraft {
+                address: page.address,
+                presentation,
+                compositional_links: None,
+                local_program: None,
+                resources: TeletextResolvedPageResourceSelection {
+                    objects: TeletextResolvedObjectPageLinks {
+                        public: None,
+                        global: None,
+                    },
+                    drcs: TeletextDrcsPageLinks::unlinked(),
+                    defaults: [None; 4],
+                },
+            },
+        )
+        .collect();
+    let selections = pages
+        .iter()
+        .map(|page| TeletextDisplayMotSelection {
+            display: page.address,
+            mot: None,
+        })
+        .collect();
+    let semantic = TeletextSemanticService::new(
+        TeletextResolvedServiceDraft {
+            base: TeletextPageSetDraft {
+                initial_page: pages[0].address.page,
+                language: pages[0].language.clone(),
+                pages,
+            },
+            pages: metadata,
+            magazines: magazine
+                .map(|presentation| TeletextMagazinePresentationDraft {
+                    magazine: magazine_number,
+                    presentation,
+                })
+                .into_iter()
+                .collect(),
+            objects: vec![],
+            drcs: vec![],
+        },
+        authored::semantic_limits(),
+    )
+    .unwrap();
+    let declared = TeletextDeclaredService::new(
+        semantic,
+        vec![],
+        selections,
+        vec![],
+        authored::declaration_limits(),
+    )
+    .unwrap();
+    Arc::new(
+        super::super::encode_teletext_authored_service(declared, &[], &authored::limits()).unwrap(),
+    )
+}
+
+fn assert_warm_magazine_fallback_and_preview(
+    old: &EncodedTeletextAuthoredService,
+    next: &EncodedTeletextAuthoredService,
+) {
+    use crate::teletext::{
+        project_encoded_teletext_display, render_teletext_composition, EncodedTeletextAuthoredPage,
+        TeletextEncodedDisplayRecord, TeletextRasterBudget,
+    };
+    assert_eq!(
+        old.declared().semantic().base(),
+        next.declared().semantic().base()
+    );
+    for (old, next) in old.pages().iter().zip(next.pages()) {
+        let (
+            EncodedTeletextAuthoredPage::NativeDisplay(old),
+            EncodedTeletextAuthoredPage::NativeDisplay(next),
+        ) = (old, next)
+        else {
+            panic!("absent Local X26 must retain native display encoding");
+        };
+        let before = project_encoded_teletext_display(old.encoded().page(), 128).unwrap();
+        let after = project_encoded_teletext_display(next.encoded().page(), 128).unwrap();
+        assert!(!before.records.iter().any(|record| matches!(
+            record,
+            TeletextEncodedDisplayRecord::Triplets {
+                row: 28,
+                designation: 0,
+                ..
+            }
+        )));
+        assert!(after.records.iter().any(|record| matches!(
+            record,
+            TeletextEncodedDisplayRecord::Triplets {
+                row: 28,
+                designation: 0,
+                ..
+            }
+        )));
+        let fallback = |records: Vec<TeletextEncodedDisplayRecord>| {
+            records
+                .into_iter()
+                .filter(|record| {
+                    matches!(
+                        record,
+                        TeletextEncodedDisplayRecord::BaseRow { .. }
+                            | TeletextEncodedDisplayRecord::HeaderText(_)
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(fallback(before.records), fallback(after.records));
+        let options = TeletextColourPixelOptions {
+            reveal_concealed: false,
+            flash_phase: TeletextFlashPhase::Original,
+        };
+        let budget = TeletextRasterBudget {
+            max_pixels: 216_000,
+            max_diagnostics: 0,
+        };
+        assert_eq!(
+            render_teletext_composition(old.composition(), options, budget).unwrap(),
+            render_teletext_composition(next.composition(), options, budget).unwrap(),
+            "complete original and explicit page palettes/context must match"
+        );
+    }
+}
+
+fn assert_warm_m29_history_rejects_unsafe_third_generation(
+    gate: &mut TeletextOutputGate,
+    expected: &Arc<EncodedTeletextAuthoredService>,
+    defaults: TeletextLevel25PresentationDefaults,
+    receipt: &TeletextOutputAcknowledgement,
+    now: Duration,
+) {
+    // An omitted M29 still contaminates the same decoder after the latest
+    // acknowledged service itself contains only page X28. Recheck that history.
+    for owners in [
+        vec![(200, 0, Some(defaults)), (201, 0, Some(defaults))],
+        vec![
+            (200, 0, Some(defaults)),
+            (200, 16, None),
+            (201, 0, Some(defaults)),
+        ],
+        vec![
+            (200, 0, Some(defaults)),
+            (200, 16, Some(defaults)),
+            (201, 0, Some(defaults)),
+            (202, 0, None),
+        ],
+    ] {
+        let unsafe_next = warm_magazine_service(&owners, None);
+        let before = (
+            gate.source_start,
+            gate.batch_ticks,
+            gate.anchor,
+            gate.installer.as_ref().unwrap().next_continuity_counter(),
+        );
+        assert_eq!(
+            gate.replace_authored_at_acknowledged_boundary(receipt, &unsafe_next, now),
+            Err(TeletextOutputError::CacheReconciliationRequired)
+        );
+        assert_eq!(
+            (
+                gate.source_start,
+                gate.batch_ticks,
+                gate.anchor,
+                gate.installer.as_ref().unwrap().next_continuity_counter()
+            ),
+            before
+        );
+        assert!(Arc::ptr_eq(gate.warm_service.as_ref().unwrap(), expected));
+        assert!(Arc::ptr_eq(
+            gate.carousel
+                .as_ref()
+                .unwrap()
+                .authored_service_shared()
+                .unwrap(),
+            expected
+        ));
+        assert_eq!(gate.acknowledged_m29_magazines, 1 << 2);
+    }
+}
+
+#[test]
+fn warm_m29_omission_accepts_complete_explicit_page_presentations_at_acknowledged_boundary() {
+    let defaults = warm_magazine_defaults();
+    let old = warm_magazine_service(
+        &[(200, 0, None), (200, 16, None), (201, 0, None)],
+        Some(defaults),
+    );
+    let next = warm_magazine_service(
+        &[
+            (200, 0, Some(defaults)),
+            (200, 16, Some(defaults)),
+            (201, 0, Some(defaults)),
+        ],
+        None,
+    );
+    assert_warm_magazine_fallback_and_preview(&old, &next);
+    assert!(!old.magazine_units().is_empty());
+    assert!(next.magazine_units().is_empty());
+    for page in &next.declared().semantic().base().pages {
+        assert!(
+            matches!(next.declared().semantic().effective_presentation(page.address),
+            Some(TeletextEffectivePresentation::Extension { source: TeletextPresentationSource::Page, defaults: actual }) if *actual == defaults)
+        );
+    }
+    let (mut gate, source) = gate(Arc::clone(&old), 100);
+    assert_eq!(gate.acknowledged_m29_magazines, 0);
+    let (receipt, before, now) = cycle(&mut gate);
+    assert_eq!(gate.acknowledged_m29_magazines, 1 << 2);
+    let original_state = (
+        gate.source_start,
+        gate.batch_ticks,
+        gate.anchor,
+        gate.installer.as_ref().unwrap().next_continuity_counter(),
+    );
+    gate.replace_authored_at_acknowledged_boundary(&receipt, &next, now)
+        .unwrap();
+    assert!(!gate.signalling_transition_pending());
+    assert!(!gate.completed_cycle);
+    assert_eq!(
+        (
+            gate.source_start,
+            gate.batch_ticks,
+            gate.anchor,
+            gate.installer.as_ref().unwrap().next_continuity_counter()
+        ),
+        original_state
+    );
+    assert!(Arc::ptr_eq(
+        gate.carousel
+            .as_ref()
+            .unwrap()
+            .authored_service_shared()
+            .unwrap(),
+        &next
+    ));
+    assert!(Arc::ptr_eq(gate.warm_service.as_ref().unwrap(), &old));
+    let (completed, after, now) = cycle(&mut gate);
+    assert!(completed.contains_complete_cycle());
+    assert!(Arc::ptr_eq(gate.warm_service.as_ref().unwrap(), &next));
+    assert_eq!(gate.acknowledged_m29_magazines, 1 << 2);
+    assert_source_positions(&before, &source, 0);
+    assert_source_positions(&after, &source, before.len());
+    let authored: Vec<_> = before
+        .iter()
+        .chain(&after)
+        .filter(|packet| pid(packet) == 512)
+        .collect();
+    for pair in authored.windows(2) {
+        assert_eq!(pair[1][3] & 15, ((pair[0][3] & 15) + 1) & 15);
+    }
+    assert_warm_m29_history_rejects_unsafe_third_generation(
+        &mut gate, &next, defaults, &completed, now,
+    );
+    let (_, continuing, _) = cycle(&mut gate);
+    assert_source_positions(&continuing, &source, before.len() + after.len());
+    assert!(gate.failure.is_none());
+}
+
+#[test]
+fn warm_m29_omission_rejects_missing_exact_owner_or_inherited_page_context_without_mutation() {
+    let defaults = warm_magazine_defaults();
+    for owners in [
+        vec![(200, 0, Some(defaults)), (201, 0, Some(defaults))],
+        vec![
+            (200, 0, Some(defaults)),
+            (200, 17, Some(defaults)),
+            (201, 0, Some(defaults)),
+        ],
+        vec![
+            (200, 0, Some(defaults)),
+            (200, 16, None),
+            (201, 0, Some(defaults)),
+        ],
+        vec![
+            (200, 0, Some(defaults)),
+            (200, 16, Some(defaults)),
+            (201, 0, Some(defaults)),
+            (202, 0, None),
+        ],
+    ] {
+        let old = warm_magazine_service(
+            &[(200, 0, None), (200, 16, None), (201, 0, None)],
+            Some(defaults),
+        );
+        let next = warm_magazine_service(&owners, None);
+        let (mut gate, source) = gate(Arc::clone(&old), 100);
+        let (receipt, before, now) = cycle(&mut gate);
+        let original_state = (
+            gate.source_start,
+            gate.batch_ticks,
+            gate.anchor,
+            gate.installer.as_ref().unwrap().next_continuity_counter(),
+        );
+        assert_eq!(
+            gate.replace_authored_at_acknowledged_boundary(&receipt, &next, now),
+            Err(TeletextOutputError::CacheReconciliationRequired)
+        );
+        assert_eq!(
+            (
+                gate.source_start,
+                gate.batch_ticks,
+                gate.anchor,
+                gate.installer.as_ref().unwrap().next_continuity_counter()
+            ),
+            original_state
+        );
+        assert!(Arc::ptr_eq(
+            gate.carousel
+                .as_ref()
+                .unwrap()
+                .authored_service_shared()
+                .unwrap(),
+            &old
+        ));
+        assert!(Arc::ptr_eq(gate.warm_service.as_ref().unwrap(), &old));
+        assert!(gate.failure.is_none());
+        let (completed, after, _) = cycle(&mut gate);
+        assert!(completed.contains_complete_cycle());
+        assert_source_positions(&after, &source, before.len());
+    }
+}
+
+#[test]
+fn warm_m29_history_requires_complete_sink_ack_and_survives_withdrawal_including_magazine_eight() {
+    let defaults = warm_magazine_defaults();
+    for (page, bit) in [(200, 1 << 2), (800, 1)] {
+        let old = warm_magazine_service(&[(page, 0, None)], Some(defaults));
+        let next = warm_magazine_service(&[(page, 0, Some(defaults))], None);
+        let (mut gate, _) = gate(old, 100);
+        assert_eq!(gate.acknowledged_m29_magazines, 0);
+        let end = gate.window_end(1).unwrap().unwrap();
+        assert!(gate
+            .prepare_window(usize::try_from(end).unwrap(), Duration::ZERO)
+            .unwrap());
+        assert_eq!(
+            gate.acknowledged_m29_magazines, 0,
+            "preparation grants no history"
+        );
+        let schedule = gate.pending_schedule().unwrap();
+        let now = schedule.last_due();
+        assert!(!gate
+            .pending_packets(schedule.first_due())
+            .unwrap()
+            .is_empty());
+        assert_eq!(gate.acknowledged_m29_magazines, 0, "exposure grants no ACK");
+        let first = gate.acknowledge_window_with_receipt(schedule, now).unwrap();
+        assert!(!first.contains_complete_cycle());
+        assert_eq!(
+            gate.acknowledged_m29_magazines, 0,
+            "partial acquisition is not complete"
+        );
+        let (receipt, _, now) = cycle(&mut gate);
+        assert_eq!(gate.acknowledged_m29_magazines, bit);
+        gate.withdraw_at_acknowledged_boundary(&receipt, now)
+            .unwrap();
+        let (withdrawn, _, now) = deliver(&mut gate, 1);
+        assert!(!gate.authored_payload_selected());
+        assert_eq!(
+            gate.acknowledged_m29_magazines, bit,
+            "Off does not clear decoder cache"
+        );
+        gate.replace_authored_at_acknowledged_boundary(&withdrawn, &next, now)
+            .unwrap();
+        if gate.signalling_transition_pending() {
+            deliver(&mut gate, 1);
+        }
+        let (receipt, _, now) = cycle(&mut gate);
+        assert_eq!(gate.acknowledged_m29_magazines, bit);
+        let header = warm_magazine_service(&[(page, 0, None)], None);
+        assert_eq!(
+            gate.replace_authored_at_acknowledged_boundary(&receipt, &header, now),
+            Err(TeletextOutputError::CacheReconciliationRequired)
+        );
+        assert!(Arc::ptr_eq(gate.warm_service.as_ref().unwrap(), &next));
+        assert!(gate.failure.is_none());
+    }
+}
+
 #[test]
 fn pending_and_foreign_receipts_cannot_release_or_relabel_prepared_bytes() {
     let (mut first, _) = gate(simple("nld", None), 18);

@@ -687,6 +687,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Permit acknowledged teletext updates from magazine defaults to complete page
+  declarations while retaining bounded magazine cache history. Later incomplete
+  pages and Off/resume cannot silently borrow stale palette or charset defaults.
 - Keep teletext resource refresh counters aligned with each stream's completed
   output using explicitly validated header choices. Preserve immutable designs,
   page bodies and compatibility with older accepted publications. Representative

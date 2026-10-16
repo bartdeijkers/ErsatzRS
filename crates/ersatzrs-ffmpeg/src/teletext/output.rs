@@ -287,6 +287,9 @@ pub struct TeletextOutputGate {
     payload: PayloadSelection,
     last_ack: Option<Arc<()>>,
     warm_service: Option<Arc<EncodedTeletextAuthoredService>>,
+    // One bit per wire magazine (zero denotes magazine eight). Omission and
+    // withdrawal cannot prove that an attached decoder forgot earlier M29.
+    acknowledged_m29_magazines: u8,
 }
 
 impl TeletextOutputGate {
@@ -478,6 +481,7 @@ impl TeletextOutputGate {
             },
             last_ack: None,
             warm_service: None,
+            acknowledged_m29_magazines: 0,
         })
     }
 
@@ -1006,6 +1010,24 @@ impl TeletextOutputGate {
         {
             return Err(TeletextOutputError::Deadline);
         }
+        // A completed acquisition cycle ties these actual M29 units to this
+        // exposed, timely sink ACK. Candidate metadata alone grants no history.
+        let mut acknowledged_magazines = 0_u8;
+        if let Some(service) = &pending.completed_authored {
+            for unit in service.magazine_units() {
+                let super::source_header::TeletextHeaderObservation::NotHeader(address) =
+                    super::source_header::observe_dvb_teletext_header(unit)
+                        .map_err(|_| TeletextOutputError::Configuration)?
+                else {
+                    return Err(TeletextOutputError::Configuration);
+                };
+                if address.packet_number != 29 {
+                    return Err(TeletextOutputError::Configuration);
+                }
+                acknowledged_magazines |= 1 << address.wire_magazine;
+            }
+        }
+        self.acknowledged_m29_magazines |= acknowledged_magazines;
         self.completed_cycle |= pending.cycle.completes_cycle;
         let stamp = Arc::new(());
         let receipt = TeletextOutputAcknowledgement {

@@ -168,21 +168,44 @@ impl TeletextOutputGate {
         };
         let old = previous.declared();
         let new = next.declared();
-        if old
-            .semantic()
-            .magazine_presentations()
-            .keys()
-            .any(|magazine| {
-                !new.semantic()
+        let next_semantic = new.semantic();
+        let explicit_page = |address| {
+            // The checked semantic constructor requires every metadata key to
+            // name a real exact display owner. A full authored X28 declaration
+            // covers all palette/charset defaults; Header/POP policy does not.
+            next_semantic
+                .page_enhancements()
+                .get(&address)
+                .is_some_and(|page| page.presentation.is_some())
+        };
+        if (1_u8..=8).any(|magazine| {
+            if self.acknowledged_m29_magazines & (1 << (magazine & 7)) == 0
+                || next_semantic
                     .magazine_presentations()
-                    .contains_key(magazine)
-            })
-            || old.mots().iter().any(|mot| {
-                !new.mots().iter().any(|other| {
-                    mot.identity().page().magazine() == other.identity().page().magazine()
-                })
-            })
-        {
+                    .contains_key(&magazine)
+            {
+                return false;
+            }
+            // Retain every previously served exact owner and cover every new
+            // consumer too. Cached M29 persists after this replacement, so the
+            // same check is required in all later sink-acknowledged generations.
+            old.semantic()
+                .base()
+                .pages
+                .iter()
+                .filter(|page| page.address.page.magazine() == magazine)
+                .any(|page| !explicit_page(page.address))
+                || next_semantic
+                    .base()
+                    .pages
+                    .iter()
+                    .filter(|page| page.address.page.magazine() == magazine)
+                    .any(|page| !explicit_page(page.address))
+        }) || old.mots().iter().any(|mot| {
+            !new.mots()
+                .iter()
+                .any(|other| mot.identity().page().magazine() == other.identity().page().magazine())
+        }) {
             return Err(TeletextOutputError::CacheReconciliationRequired);
         }
         Ok(())

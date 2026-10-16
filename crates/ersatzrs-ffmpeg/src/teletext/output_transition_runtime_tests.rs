@@ -496,3 +496,236 @@ fn verify_initial_absence_pmt_transition(input: &[[u8; 188]], output: &[[u8; 188
     }
     assert_eq!(versions, [0, 1]);
 }
+
+fn warm_runtime_services() -> (
+    Arc<EncodedTeletextAuthoredService>,
+    Arc<EncodedTeletextAuthoredService>,
+    serde_json::Value,
+) {
+    use crate::teletext::output::transition_tests::{
+        warm_magazine_defaults, warm_magazine_service,
+    };
+    use ersatzrs_domain::{
+        TeletextEffectivePresentation, TeletextPageCharsetDesignation, TeletextPresentationSource,
+        TeletextRgb,
+    };
+    let cyrillic = warm_magazine_defaults();
+    let mut greek = cyrillic;
+    greek.primary = TeletextPageCharsetDesignation::new(0x37).unwrap();
+    greek.secondary = Some(TeletextPageCharsetDesignation::new(0x24).unwrap());
+    greek.palette.clut2[0] = TeletextRgb::new([2, 4, 6]).unwrap();
+    greek.palette.clut2[7] = TeletextRgb::new([3, 10, 14]).unwrap();
+    let old = warm_magazine_service(
+        &[(200, 0, None), (200, 16, None), (201, 0, None)],
+        Some(cyrillic),
+    );
+    let next = warm_magazine_service(
+        &[
+            (200, 0, Some(greek)),
+            (200, 16, Some(greek)),
+            (201, 0, Some(greek)),
+        ],
+        None,
+    );
+    assert_eq!(
+        old.declared().semantic().base(),
+        next.declared().semantic().base()
+    );
+    assert!(!old.magazine_units().is_empty());
+    assert!(next.magazine_units().is_empty());
+    for (service, source, defaults) in [
+        (&old, TeletextPresentationSource::Magazine, cyrillic),
+        (&next, TeletextPresentationSource::Page, greek),
+    ] {
+        for page in &service.declared().semantic().base().pages {
+            assert_eq!(
+                service
+                    .declared()
+                    .semantic()
+                    .effective_presentation(page.address),
+                Some(TeletextEffectivePresentation::Extension {
+                    source,
+                    defaults: &defaults,
+                })
+            );
+        }
+    }
+    let context = serde_json::json!({
+        "unchanged_base":old.declared().semantic().base(),
+        "old":{"presentation_source":"magazine","magazine":2,"defaults":cyrillic},
+        "replacement":{"presentation_source":"page","defaults":greek},
+        "addresses":[{"page":200,"subcode":0},{"page":200,"subcode":16},{"page":201,"subcode":0}],
+        "row":1,"columns":[1,2],"level1_text":"AB",
+        "old_expected_g0":[0x0410,0x0411],"replacement_expected_g0":[0x0391,0x0392]
+    });
+    (old, next, context)
+}
+
+fn warm_phase_units(packets: &[[u8; 188]]) -> Vec<[u8; 46]> {
+    use crate::teletext::source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyEvent};
+    let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
+    let mut units = Vec::new();
+    for packet in packets {
+        match assembler.push(packet).unwrap() {
+            TeletextAssemblyEvent::Complete(pes) => {
+                units.extend(pes.units().filter_map(|unit| unit.teletext_unit().copied()));
+                assert!(units.len() <= 512, "bounded phase exceeded its unit budget");
+            }
+            TeletextAssemblyEvent::UnobservedPrefix => {
+                panic!("acknowledged phase begins inside a selected PES");
+            }
+            _ => {}
+        }
+    }
+    // A complete acknowledged cycle must end after its real closing PES. Do
+    // not repair, filter or synthesize an acquisition boundary for the decoder.
+    assembler.finish().unwrap();
+    units
+}
+
+fn warm_runtime_phase(
+    output: &mut Forwarding<'_>,
+    expected: &mut TeletextCarousel,
+    name: &str,
+) -> (TeletextOutputAcknowledgement, serde_json::Value) {
+    let start = output.output.len();
+    output.cycle();
+    let receipt = output.cycle();
+    assert!(receipt.is_cycle_boundary() && receipt.contains_complete_cycle());
+    let end = output.output.len();
+    let actual = warm_phase_units(&output.output[start..end]);
+    let mut model = Vec::new();
+    for _ in 0..2 {
+        let mut completed = false;
+        for _ in 0..128 {
+            let batch = expected.next_batch().unwrap();
+            model.extend_from_slice(batch.data_units());
+            if batch.kind() == TeletextCarouselBatchKind::Terminator {
+                completed = true;
+                break;
+            }
+        }
+        assert!(
+            completed,
+            "bounded reference model failed to complete a cycle"
+        );
+    }
+    assert_eq!(actual, model, "entire ordered {name} phase model differs");
+    let proof = serde_json::json!({
+        "name":name,"start_packet":start,"end_packet":end,
+        "acknowledged_end_packet":receipt.end_packet(),"complete_cycles":2,
+        "sink_elapsed_ns":u64::try_from(output.now.as_nanos()).unwrap(),
+        "complete_pes_boundary":true,"complete_ordered_model_equal":true,
+        "units_sha256":warm_runtime_sha256(&actual.iter().flatten().copied().collect::<Vec<_>>()),
+        "unit_count":actual.len(),"units":actual.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>()
+    });
+    (receipt, proof)
+}
+
+fn warm_runtime_output(
+    input: &[[u8; 188]],
+    old: &Arc<EncodedTeletextAuthoredService>,
+    next: &Arc<EncodedTeletextAuthoredService>,
+) -> (Vec<[u8; 188]>, Vec<serde_json::Value>) {
+    let old_model = old.declared().clone();
+    let next_model = next.declared().clone();
+    let mut forwarding = Forwarding::new(input, Arc::clone(old));
+    let mut expected = TeletextCarousel::new_authored_shared(Arc::clone(old)).unwrap();
+    let (receipt, before) = warm_runtime_phase(&mut forwarding, &mut expected, "old");
+    let boundary = forwarding.output.len();
+    let elapsed = forwarding.now;
+    forwarding
+        .gate
+        .replace_authored_at_acknowledged_boundary(&receipt, next, elapsed)
+        .unwrap();
+    assert_eq!(forwarding.output.len(), boundary);
+    assert_eq!(forwarding.now, elapsed);
+    assert!(!forwarding.gate.signalling_transition_pending());
+    // Replacement starts its own first/repeat header sequence, while the real
+    // gate retains the source epoch, packet positions, PMT and presentation clock.
+    expected = TeletextCarousel::new_authored_shared(Arc::clone(next)).unwrap();
+    let (_, replacement) = warm_runtime_phase(&mut forwarding, &mut expected, "replacement");
+    let (_, repeated) = warm_runtime_phase(&mut forwarding, &mut expected, "repeat");
+    let output = forwarding.finish();
+    assert_eq!(old.declared(), &old_model);
+    assert_eq!(next.declared(), &next_model);
+    (output, vec![before, replacement, repeated])
+}
+
+fn warm_runtime_sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest as _, Sha256};
+    use std::fmt::Write as _;
+    let mut digest = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(digest, "{byte:02x}").unwrap();
+    }
+    digest
+}
+
+#[tokio::test]
+#[ignore = "requires exact FFmpeg 9 and TSDuck; real AV gate only, persistent decoder and live clients remain separate"]
+async fn real_runtime_warm_m29_replacement_uses_explicit_greek_page_context_without_changing_av() {
+    let directory =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_M29_RUNTIME_DIR"])
+            .expect("set a new runtime proof directory");
+    let directory = std::path::Path::new(&directory);
+    std::fs::create_dir(directory).unwrap();
+    let ffmpeg = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_FFMPEG"])
+        .expect("set the exact FFmpeg executable");
+    let tsanalyze = crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_TSANALYZE"])
+        .expect("set the TSDuck tsanalyze executable");
+    let source = crate::teletext_probe::run_probe(&ffmpeg, SOURCE_ARGS, &[], 4 * 1024 * 1024)
+        .await
+        .unwrap();
+    let input: Vec<[u8; 188]> = source
+        .chunks_exact(188)
+        .map(|packet| packet.try_into().unwrap())
+        .collect();
+    assert_eq!(input.len() * 188, source.len());
+    let (old, next, declared_context) = warm_runtime_services();
+    let (output, phases) = warm_runtime_output(&input, &old, &next);
+    assert_eq!(
+        verify_fixture_clock(&output, 256).unwrap(),
+        verify_fixture_clock(&input, 256).unwrap()
+    );
+    for (before, after) in input.iter().zip(&output) {
+        if ![8191, 4096].contains(&u16::from(Packet::new(before).pid())) {
+            assert_eq!(before, after, "original source packet moved or changed");
+        }
+    }
+    let expected = expected_pmt(&sections(&input)[0], 1, Some(b"nld"));
+    for section in sections(&output) {
+        assert_eq!(mpegts_crc::sum32(&section), 0);
+        assert_eq!(
+            section, expected,
+            "same-descriptor replacement changed the PMT"
+        );
+    }
+    let bytes: Vec<u8> = output.iter().flatten().copied().collect();
+    let (before, after) = tokio::join!(
+        crate::teletext_probe::run_probe(&ffmpeg, AV_DIGEST_ARGS, &source, 256 * 1024),
+        crate::teletext_probe::run_probe(&ffmpeg, AV_DIGEST_ARGS, &bytes, 256 * 1024)
+    );
+    assert_eq!(
+        before.unwrap(),
+        after.unwrap(),
+        "decoded AV frames/timestamps differ"
+    );
+    verify_transport(&tsanalyze, &bytes).await;
+    verify_counter_negative(&tsanalyze, &bytes).await;
+    let proof = serde_json::to_vec(&serde_json::json!({
+        "probe_version":1,"scope":"one real AV source and gate; simulated sink times",
+        "source_sha256":warm_runtime_sha256(&source),"output_sha256":warm_runtime_sha256(&bytes),
+        "packet_count":output.len(),"program":10,"pcr_pid":256,"teletext_pid":512,
+        "declared_context":declared_context,"phases":phases,
+        "same_acknowledged_boundary_replacement":true,"unchanged_source_positions":true,
+        "unchanged_clock":true,"unchanged_pmt_version":1,"decoded_av_equal":true,
+        "tsduck_transport_passed":true,"counter_negative_detected":true,
+        "persistent_decoder_proven":false,"ordinary_http_proven":false,"actual_client_proven":false
+    }))
+    .unwrap();
+    assert!(proof.len() <= 256 * 1024);
+    std::fs::write(directory.join("source.ts"), source).unwrap();
+    std::fs::write(directory.join("output.ts"), bytes).unwrap();
+    std::fs::write(directory.join("proof.json"), proof).unwrap();
+}
