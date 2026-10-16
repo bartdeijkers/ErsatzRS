@@ -673,13 +673,17 @@ release section when tagging a release.
 - Keep teletext resource refresh counters aligned with each stream's completed
   output using explicitly validated header choices. Preserve immutable designs,
   page bodies and compatibility with older accepted publications. Representative
-  ordinary-stream updates preserve source audio/video; complete warm-client and
-  authored Level 2.5 acceptance remain open.
+  ordinary-stream updates preserve source audio/video. Authorized content-only
+  replacements now retain the active decoder during bounded recovery; Off,
+  expired or changed selections and failed validation still withdraw teletext.
+  An actual singleton bitmap update retains two client decoders and page
+  navigation with different channel themes. Broader warm-client and authored
+  Level 2.5 acceptance remain open.
 
 - Preserve imported teletext resource kind, raw hexadecimal page and logical
   subpage in validation diagnostics, using the existing localized admin display.
   Actual singleton QTeletextMaker bitmap edits now have ordinary-stream,
-  independent-pixel and two-theme live-client navigation proof. Warm resource
+  independent-pixel and two-theme live-client navigation proof. Broader resource
   updates and complete Level 2.5/editor acceptance remain open.
 
 - Keep the basic playback smoke fixture on explicit software encoding with a

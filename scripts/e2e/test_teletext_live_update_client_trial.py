@@ -72,6 +72,9 @@ def stage(channels, number, previous=None):
 
 
 class WarmClientContractTests(unittest.TestCase):
+    def test_pinned_cold_helper_matches_the_actual_checked_in_source(self):
+        self.assertEqual(HELPER.digest(HELPER.HELPERS.read_bytes()), HELPER.COLD_HELPER_SHA256)
+
     def test_replacement_reselects_existing_day_decoder_without_activating_off(self):
         clients = [{"viewer": "day"}, {"viewer": "night"}]
         cases = [
@@ -244,6 +247,132 @@ class WarmClientContractTests(unittest.TestCase):
                 HELPER.main()
             start.assert_not_called()
         self.assertFalse((self.directory / "headed-warm-trial.ndjson").exists())
+
+
+
+def drcs_readiness(directory):
+    source = readiness(directory)["source"]
+    channels = []
+    for index, theme in enumerate(["day", "night"]):
+        channels.append({"channel_id":index+1,"theme":theme,
+            "url":f"http://127.0.0.1:8550/iptv/hls-direct/{index+1}.ts?teletext_test_viewer={theme}",
+            "addon_id":"org.example.teletext.client","profile_id":101+index,"profile_revision":1,
+            "theme_rgb4":[15,0,0] if theme=="day" else [0,0,15],"design_id":201+index,
+            "design_revision":1,"design_digest":("a" if index==0 else "b")*64,
+            "generation_id":301+index,"request_id":401+index})
+    return {"probe_version":3,"protocol":"warm-drcs-live-ordinary-v1","completion_timeout_seconds":55,
+        "source":source,"channels":channels,"editor_original":{"design_id":201,"revision":1,
+            "digest":"a"*64,"receipt_id":501,"receipt_digest":"c"*64},
+        "resource":{"kind":"drcs","magazine":1,"page":192,"logical_subpage":0,"slot":0,
+            "original_first_bitmap_row":2049,"edited_first_bitmap_row":2051},
+        "expected_pages":[124,125],"subcode":32,"expected_navigation":[124,125,124],
+        "stages":["original_bitmap","edited_bitmap"],
+        "stage_files":"stage-N-ready.json and stage-N-captured.json, N from 1 through 2",
+        "client_stop_file":"clients-stopped.json","limitations":"MAIN only; root review remains required"}
+
+
+def drcs_stage(channels, number):
+    day = copy.deepcopy(channels["day"])
+    if number==2:
+        day.update({"design_revision":2,"design_digest":"d"*64,"generation_id":601,"request_id":701})
+    return {"probe_version":3,"stage":number,"state":HELPER.DRCS_STATES[number-1],
+        "scope":"Actual source units observed; visual review remains pending","initial_ready_sha256":"1"*64,
+        "day":day,"night":copy.deepcopy(channels["night"]),"day_first_bitmap_row":2049 if number==1 else 2051,
+        "night_first_bitmap_row":2049,"day_s2":number,"night_s2":1,"expected_pages":[124,125],
+        "subcode":32,"expected_navigation":[124,125,124],"wire_offsets":[100*number,200*number,300*number]}
+
+
+class DrcsWarmClientContractTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary=tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.directory=Path(self.temporary.name)
+        self.ready=drcs_readiness(self.directory)
+        self.channels=HELPER.drcs_ready(self.ready,self.directory)
+        self.first=drcs_stage(self.channels,1)
+        self.second=drcs_stage(self.channels,2)
+
+    def validate(self, value, number=2, previous=None):
+        return HELPER.validate_drcs_stage(value,number,self.channels,
+            self.first if previous is None else previous,"1"*64)
+
+    def test_closed_two_stage_drcs_original_and_new_publication(self):
+        self.assertEqual(HELPER.drcs_ready(self.ready,self.directory),self.channels)
+        self.assertEqual(HELPER.validate_drcs_stage(self.first,1,self.channels,None,"1"*64),self.first)
+        self.assertEqual(self.validate(self.second),self.second)
+
+    def test_drcs_ready_rejects_wrong_modes_resources_geometry_and_deadline(self):
+        for key,value in [("probe_version",True),("protocol","warm-scoped-live-ordinary-v2"),
+                ("completion_timeout_seconds",56),("expected_navigation",[124,124,125]),("subcode",0)]:
+            with self.subTest(key=key):
+                changed=copy.deepcopy(self.ready);changed[key]=value
+                with self.assertRaises(RuntimeError):HELPER.drcs_ready(changed,self.directory)
+        for key,value in [("kind","gdrcs"),("logical_subpage",True),("slot",1),("edited_first_bitmap_row",2049)]:
+            with self.subTest(resource=key):
+                changed=copy.deepcopy(self.ready);changed["resource"][key]=value
+                with self.assertRaises(RuntimeError):HELPER.drcs_ready(changed,self.directory)
+        changed=copy.deepcopy(self.ready);changed["extra"]=True
+        with self.assertRaises(RuntimeError):HELPER.drcs_ready(changed,self.directory)
+
+    def test_drcs_ready_rejects_receipt_cross_channel_and_profile_drift(self):
+        for section,key,value in [("editor_original","design_id",202),("editor_original","digest","b"*64),
+                ("editor_original","receipt_digest","A"*64),("source","sha256","0"*64)]:
+            changed=copy.deepcopy(self.ready);changed[section][key]=value
+            with self.subTest(section=section,key=key),self.assertRaises(RuntimeError):
+                HELPER.drcs_ready(changed,self.directory)
+        for key,value in [("profile_id",102),("theme_rgb4",[0,0,15]),
+                ("url","http://127.0.0.1:8550/iptv/hls-direct/2.ts?teletext_test_viewer=day")]:
+            changed=copy.deepcopy(self.ready);changed["channels"][0][key]=value
+            with self.subTest(key=key),self.assertRaises(RuntimeError):HELPER.drcs_ready(changed,self.directory)
+
+    def test_drcs_stage_rejects_stale_epoch_counter_bitmap_and_foreign_readiness(self):
+        for key,value in [("stage",True),("state","original_bitmap"),("initial_ready_sha256","2"*64),
+                ("day_s2",1),("night_s2",2),("day_first_bitmap_row",2049),("night_first_bitmap_row",2051),
+                ("wire_offsets",self.first["wire_offsets"]),("expected_navigation",[124,125])]:
+            changed=copy.deepcopy(self.second);changed[key]=value
+            with self.subTest(key=key),self.assertRaises(RuntimeError):self.validate(changed)
+        with self.assertRaises(RuntimeError):
+            HELPER.validate_drcs_stage(self.second,2,self.channels,None,"1"*64)
+
+    def test_drcs_stage_rejects_reused_or_cross_channel_publication_and_scope(self):
+        for theme,key,value in [("day","generation_id",301),("day","request_id",401),
+                ("day","generation_id",302),("day","design_digest","a"*64),
+                ("day","profile_id",102),("day","channel_id",True),("day","theme_rgb4",[15,False,0]),
+                ("night","design_revision",2),("night","generation_id",602)]:
+            changed=copy.deepcopy(self.second);changed[theme][key]=value
+            with self.subTest(theme=theme,key=key),self.assertRaises(RuntimeError):self.validate(changed)
+        changed=copy.deepcopy(self.first);changed["day"]["design_revision"]=True
+        with self.assertRaises(RuntimeError):HELPER.validate_drcs_stage(changed,1,self.channels,None,"1"*64)
+
+    def decoder_client(self, text):
+        file=self.directory/"decoder.log";file.write_text(text)
+        process=Mock(pid=123);process.poll.return_value=None
+        log=Mock();log.name=str(file)
+        return {"process":process,"log":log},file
+
+    def test_drcs_decoder_retains_one_actual_module_identity(self):
+        line='[00007abc1234] main decoder debug: using spu decoder module "zvbi"\n'
+        client,file=self.decoder_client(line)
+        self.assertEqual(HELPER.drcs_decoder_identity(client),"00007abc1234")
+        self.assertEqual(HELPER.drcs_decoder_identity(client),"00007abc1234")
+        for suffix in [line,'[00007fffffff] main decoder debug: using spu decoder module "zvbi"\n',
+                '[00007abc1234] main decoder debug: removing module "zvbi"\n']:
+            file.write_text(line+suffix)
+            with self.subTest(suffix=suffix),self.assertRaises(RuntimeError):HELPER.drcs_decoder_identity(client)
+        file.write_text(line);client["drcs_decoder_identity"]="ffffffff"
+        with self.assertRaises(RuntimeError):HELPER.drcs_decoder_identity(client)
+        client["process"].poll.return_value=0
+        with self.assertRaises(RuntimeError):HELPER.drcs_decoder_identity(client)
+
+    def test_drcs_second_stage_never_reactivates_decoder(self):
+        clients=[Mock(),Mock()]
+        with patch.object(HELPER,"activate") as activate,patch.object(HELPER,"drcs_decoder_identity") as retained:
+            HELPER.activate_stage(clients,3,2,123)
+            activate.assert_not_called()
+            self.assertEqual(retained.call_count,2)
+        with patch.object(HELPER,"activate") as activate,patch.object(HELPER,"drcs_decoder_identity",side_effect=RuntimeError("reset")):
+            with self.assertRaises(RuntimeError):HELPER.activate_stage(clients,3,2,123)
+            activate.assert_not_called()
 
 
 if __name__ == "__main__":

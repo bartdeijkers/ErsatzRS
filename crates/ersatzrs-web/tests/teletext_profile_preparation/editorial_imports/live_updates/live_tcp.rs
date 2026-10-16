@@ -506,6 +506,44 @@ pub(in super::super::super) fn validate_images_for(
     Ok(())
 }
 
+/// Authenticate an exact bounded stage acknowledgement and retained client PIDs.
+/// Image sequences remain the caller's explicit protocol contract.
+pub(in super::super::super) fn stage_client_identities(
+    marker: &StageCaptured,
+    version: u8,
+    index: u8,
+    ready_sha256: &str,
+    previous: Option<[u32; 2]>,
+) -> io::Result<[u32; 2]> {
+    if marker.probe_version != version
+        || marker.stage != index
+        || marker.ready_sha256 != ready_sha256
+        || marker.clients.len() != 2
+    {
+        return Err(io::Error::other(
+            "warm stage capture does not bind this exact readiness",
+        ));
+    }
+    let mut identities = [0; 2];
+    for (slot, viewer) in ["day", "night"].iter().enumerate() {
+        let matches: Vec<_> = marker
+            .clients
+            .iter()
+            .filter(|client| client.viewer == *viewer)
+            .collect();
+        if matches.len() != 1 || matches[0].pid == 0 {
+            return Err(io::Error::other(
+                "warm stage lacks a unique owned client identity",
+            ));
+        }
+        identities[slot] = matches[0].pid;
+    }
+    if identities[0] == identities[1] || previous.is_some_and(|previous| previous != identities) {
+        return Err(io::Error::other("warm stage replaced a client process"));
+    }
+    Ok(identities)
+}
+
 struct Protocol<'a> {
     directory: &'a Path,
     deadline: Instant,
@@ -541,34 +579,7 @@ impl Protocol<'_> {
         .await?;
         let marker: StageCaptured = serde_json::from_slice(&raw)
             .map_err(|_| io::Error::other("invalid closed warm-stage capture marker"))?;
-        if marker.probe_version != 1
-            || marker.stage != index
-            || marker.ready_sha256 != ready_sha256
-            || marker.clients.len() != 2
-        {
-            return Err(io::Error::other(
-                "warm stage capture does not bind this exact readiness",
-            ));
-        }
-        let mut identities = [0; 2];
-        for (slot, viewer) in ["day", "night"].iter().enumerate() {
-            let matches: Vec<_> = marker
-                .clients
-                .iter()
-                .filter(|client| client.viewer == *viewer)
-                .collect();
-            if matches.len() != 1 || matches[0].pid == 0 {
-                return Err(io::Error::other(
-                    "warm stage lacks a unique owned client identity",
-                ));
-            }
-            identities[slot] = matches[0].pid;
-        }
-        if identities[0] == identities[1]
-            || self.clients.is_some_and(|previous| previous != identities)
-        {
-            return Err(io::Error::other("warm stage replaced a client process"));
-        }
+        let identities = stage_client_identities(&marker, 1, index, &ready_sha256, self.clients)?;
         validate_images(&marker)?;
         self.clients = Some(identities);
         self.receipts.push(

@@ -15,8 +15,12 @@ use std::{
 };
 
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
+use ersatzrs_core::repositories::{
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+};
 use ersatzrs_domain::TeletextAcceptedGeneration;
-use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
+use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextServiceDescriptor};
 use tokio::{sync::watch, task::JoinHandle, time::Instant};
 use tracing::Instrument;
 
@@ -204,6 +208,17 @@ trait UpdateBackend: Send + Sync + 'static {
 
     fn identity(candidate: &Self::Candidate) -> &TeletextAcceptedGeneration;
     fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>>;
+    fn original_transition(_candidate: &Self::Candidate) -> Option<Instant> {
+        None
+    }
+    async fn confirm_successor_selection(
+        &self,
+        _cached: &Self::Candidate,
+        _successor: &TeletextAcceptedGeneration,
+        _deadline: Instant,
+    ) -> Result<bool, ReadFailure> {
+        Ok(false)
+    }
     fn next_transition(&self) -> Option<Instant> {
         None
     }
@@ -235,6 +250,26 @@ impl UpdateBackend for NativeBackend {
 
     fn service(candidate: &Self::Candidate) -> Option<Arc<EncodedTeletextAuthoredService>> {
         candidate.service().map(Arc::clone)
+    }
+
+    fn original_transition(candidate: &Self::Candidate) -> Option<Instant> {
+        candidate.next_transition()
+    }
+
+    async fn confirm_successor_selection(
+        &self,
+        cached: &Self::Candidate,
+        successor: &TeletextAcceptedGeneration,
+        deadline: Instant,
+    ) -> Result<bool, ReadFailure> {
+        Ok(cached
+            .confirm_successor_selection(
+                successor,
+                &self.context.application,
+                self.context.budget.max_serialized_bytes,
+                deadline.into_std(),
+            )
+            .await)
     }
 
     fn next_transition(&self) -> Option<Instant> {
@@ -297,12 +332,16 @@ struct MonitorState<C> {
     sequence: u64,
     proposal: Option<(u64, Option<TeletextAcceptedGeneration>)>,
     rejected: Option<TeletextAcceptedGeneration>,
+    // Seeded content is already installed. Later proposals gain this witness
+    // only through Applied for their exact sequence, never cached/Waiting state.
+    handover_confirmed: bool,
 }
 
 impl<C> MonitorState<C> {
     fn new(initial: Option<C>) -> Self {
         Self {
             active: initial.is_some(),
+            handover_confirmed: initial.is_some(),
             cached: initial,
             sequence: 0,
             proposal: None,
@@ -311,6 +350,7 @@ impl<C> MonitorState<C> {
     }
 
     fn withdraw(&mut self, updates: &watch::Sender<Option<TeletextOutputUpdate>>) -> bool {
+        self.handover_confirmed = false;
         if !self.active {
             return true;
         }
@@ -352,6 +392,7 @@ impl<C> MonitorState<C> {
         };
         self.sequence = sequence;
         self.active = true;
+        self.handover_confirmed = false;
         tracing::debug!(
             target: "ersatzrs_web::transport::iptv::teletext_provenance",
             event = "monitor_proposal", sequence, action = "replace",
@@ -372,6 +413,16 @@ impl<C> MonitorState<C> {
         updates: &watch::Sender<Option<TeletextOutputUpdate>>,
         channel_id: i64,
     ) -> bool {
+        if let Some((sequence, TeletextOutputTransitionPhase::Applied)) = status {
+            if self
+                .proposal
+                .as_ref()
+                .is_some_and(|(proposed, identity)| *proposed == sequence && identity.is_some())
+            {
+                self.handover_confirmed = true;
+            }
+            return true;
+        }
         let Some((sequence, TeletextOutputTransitionPhase::Rejected(reason))) = status else {
             return true;
         };
@@ -427,7 +478,16 @@ async fn reconcile<B: UpdateBackend>(
     channel_id: i64,
     deadline: Instant,
 ) -> bool {
+    let deadline = state
+        .cached
+        .as_ref()
+        // Only retained live content carries the old authority boundary.
+        // After withdrawal, its cached bytes cannot fence a new selection.
+        .filter(|_| state.active)
+        .and_then(B::original_transition)
+        .map_or(deadline, |boundary| deadline.min(boundary));
     let Some(current) = bounded(updates, deadline, backend.current()).await else {
+        state.withdraw(updates);
         return false;
     };
     let identity = match current {
@@ -464,31 +524,105 @@ async fn reconcile<B: UpdateBackend>(
             _ => state.withdraw(updates),
         };
     }
-    // A different committed generation invalidates the old proposal before CPU
-    // recovery. Failure never renews that prior profile's output authority.
-    if !state.withdraw(updates) {
+    let retain = authorize_handover(backend, state, updates, &identity, deadline).await;
+    // All legacy, Off, changed-selection and unproven cases still withdraw
+    // before recovery. Only a fresh same-selection authorization permits the
+    // existing active service to bridge this same bounded operation.
+    if !retain && !state.withdraw(updates) {
         return false;
     }
+    recover_successor(
+        backend, state, updates, channel_id, &identity, deadline, retain,
+    )
+    .await
+}
+
+async fn authorize_handover<B: UpdateBackend>(
+    backend: &B,
+    state: &MonitorState<B::Candidate>,
+    updates: &watch::Sender<Option<TeletextOutputUpdate>>,
+    successor: &TeletextAcceptedGeneration,
+    deadline: Instant,
+) -> bool {
+    let Some(cached) = state.cached.as_ref().filter(|_| state.active) else {
+        return false;
+    };
+    if !state.handover_confirmed
+        || state
+            .proposal
+            .as_ref()
+            .is_some_and(|(_, identity)| identity.as_ref() != Some(B::identity(cached)))
+        || B::identity(cached).artifact_version != successor.artifact_version
+        || !matches!(
+            successor.artifact_version,
+            TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+                | TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+        )
+        || B::service(cached).is_none_or(|service| service.resource_lifecycle_variants().is_none())
+    {
+        return false;
+    }
+    matches!(
+        bounded(
+            updates,
+            deadline,
+            backend.confirm_successor_selection(cached, successor, deadline)
+        )
+        .await,
+        Some(Ok(true))
+    )
+}
+
+async fn recover_successor<B: UpdateBackend>(
+    backend: &B,
+    state: &mut MonitorState<B::Candidate>,
+    updates: &watch::Sender<Option<TeletextOutputUpdate>>,
+    channel_id: i64,
+    observed: &TeletextAcceptedGeneration,
+    deadline: Instant,
+    retain: bool,
+) -> bool {
     let Some(recovered) = bounded(updates, deadline, backend.recover(deadline)).await else {
+        state.withdraw(updates);
         return false;
     };
     let candidate = match recovered {
         Ok(Some(candidate)) if B::identity(&candidate).request.channel_id == channel_id => {
             candidate
         }
-        _ => return true,
+        _ => return state.withdraw(updates),
     };
-    if state.rejected.as_ref() == Some(B::identity(&candidate)) {
-        return true;
+    if state.rejected.as_ref() == Some(B::identity(&candidate))
+        || (retain && B::identity(&candidate) != observed)
+    {
+        return state.withdraw(updates);
+    }
+    // The successor authorization never carries across another identity. A
+    // descriptor change retains the pre-existing withdrawal/reannounce path;
+    // content-only replacement reaches the gate's atomic ACK/retirement checks.
+    if retain {
+        let same_descriptor = state
+            .cached
+            .as_ref()
+            .and_then(B::service)
+            .zip(B::service(&candidate))
+            .is_some_and(|(old, new)| {
+                TeletextServiceDescriptor::from_authored_service(&old)
+                    == TeletextServiceDescriptor::from_authored_service(&new)
+            });
+        if !same_descriptor && !state.withdraw(updates) {
+            return false;
+        }
     }
     let Some(confirmed) = bounded(updates, deadline, backend.confirm(&candidate, deadline)).await
     else {
+        state.withdraw(updates);
         return false;
     };
     if !matches!(confirmed, Ok(true)) {
-        return true;
+        return state.withdraw(updates);
     }
-    // No await separates exact current confirmation from this latest proposal.
+    // No await separates exact full-artifact/current confirmation from proposal.
     let replacement = match B::service(&candidate) {
         Some(service) => state.replace(updates, B::identity(&candidate), service),
         None => state.withdraw(updates),
@@ -572,6 +706,8 @@ mod tests {
         identity: TeletextAcceptedGeneration,
         service: Arc<EncodedTeletextAuthoredService>,
         service_present: bool,
+        original_transition: Option<Instant>,
+        selection_context: u8,
     }
 
     fn candidate(id: i64, channel_id: i64) -> Candidate {
@@ -589,17 +725,28 @@ mod tests {
                 artifact_digest: "b".repeat(64),
             },
             service_present: true,
+            original_transition: None,
+            selection_context: 1,
             service: Arc::new(
                 crate::transport::iptv::teletext_binding::authored_tests::authored_service_with_counter(3),
             ),
         }
     }
 
+    #[derive(Clone, Copy)]
+    enum RecoveryScenario {
+        Current,
+        Absent,
+        Unavailable,
+    }
+
     struct Store {
         accepted: Option<Candidate>,
         eligible: bool,
         read_failure: bool,
-        recovery_failure: bool,
+        recovery: RecoveryScenario,
+        handover: Result<bool, ReadFailure>,
+        after_handover: Option<Candidate>,
         read_release: Option<Arc<Notify>>,
         recovery_release: Option<Arc<Notify>>,
     }
@@ -613,6 +760,7 @@ mod tests {
         read_entered: Arc<Notify>,
         recovery_entered: Arc<Notify>,
         recovering: Arc<AtomicUsize>,
+        handover_checks: Arc<AtomicUsize>,
         transition: Arc<Mutex<Option<Instant>>>,
     }
 
@@ -623,7 +771,9 @@ mod tests {
                     accepted,
                     eligible: true,
                     read_failure: false,
-                    recovery_failure: false,
+                    recovery: RecoveryScenario::Current,
+                    handover: Ok(false),
+                    after_handover: None,
                     read_release: None,
                     recovery_release: None,
                 })),
@@ -633,6 +783,7 @@ mod tests {
                 read_entered: Arc::new(Notify::new()),
                 recovery_entered: Arc::new(Notify::new()),
                 recovering: Arc::new(AtomicUsize::new(0)),
+                handover_checks: Arc::new(AtomicUsize::new(0)),
                 transition: Arc::new(Mutex::new(None)),
             }
         }
@@ -657,6 +808,31 @@ mod tests {
                 .service_present
                 .then(|| Arc::clone(&candidate.service))
         }
+        fn original_transition(candidate: &Candidate) -> Option<Instant> {
+            candidate.original_transition
+        }
+
+        async fn confirm_successor_selection(
+            &self,
+            cached: &Candidate,
+            successor: &TeletextAcceptedGeneration,
+            _deadline: Instant,
+        ) -> Result<bool, ReadFailure> {
+            self.handover_checks.fetch_add(1, Ordering::SeqCst);
+            let mut store = self.store.lock().unwrap();
+            let confirmed = store.handover?
+                && store.accepted.as_ref().is_some_and(|candidate| {
+                    &candidate.identity == successor
+                        && candidate.selection_context == cached.selection_context
+                });
+            if confirmed {
+                if let Some(next) = store.after_handover.take() {
+                    store.accepted = Some(next);
+                }
+            }
+            Ok(confirmed)
+        }
+
         fn next_transition(&self) -> Option<Instant> {
             *self.transition.lock().unwrap()
         }
@@ -709,11 +885,15 @@ mod tests {
             self.recoveries.fetch_add(1, Ordering::SeqCst);
             self.recovering.fetch_add(1, Ordering::SeqCst);
             let _future = RecoveryFuture(Arc::clone(&self.recovering));
-            let (candidate, failure, release) = {
+            let (candidate, scenario, release) = {
                 let store = self.store.lock().unwrap();
                 (
-                    store.accepted.clone(),
-                    store.recovery_failure,
+                    if matches!(store.recovery, RecoveryScenario::Absent) {
+                        None
+                    } else {
+                        store.accepted.clone()
+                    },
+                    store.recovery,
                     store.recovery_release.clone(),
                 )
             };
@@ -721,10 +901,9 @@ mod tests {
             if let Some(release) = release {
                 release.notified().await;
             }
-            if failure {
-                Err(ReadFailure)
-            } else {
-                Ok(candidate)
+            match scenario {
+                RecoveryScenario::Unavailable => Err(ReadFailure),
+                RecoveryScenario::Current | RecoveryScenario::Absent => Ok(candidate),
             }
         }
     }
@@ -860,12 +1039,12 @@ mod tests {
             store.read_release = None;
             store.read_failure = false;
             store.accepted = Some(candidate(2, 9));
-            store.recovery_failure = true;
+            store.recovery = RecoveryScenario::Unavailable;
         }
         assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
         assert!(!state.active);
         assert_eq!(updates.borrow().as_ref().unwrap().sequence(), 1);
-        backend.store.lock().unwrap().recovery_failure = false;
+        backend.store.lock().unwrap().recovery = RecoveryScenario::Current;
         assert!(reconcile(&backend, &mut state, &updates, 9, deadline()).await);
         assert!(state.active);
         assert_eq!(state.cached.as_ref().unwrap().identity.id, 2);
@@ -1025,5 +1204,8 @@ mod tests {
         drop(observed);
         drop(control);
         owner.await.unwrap();
+    }
+    mod handover {
+        include!("tests/handover.rs");
     }
 }

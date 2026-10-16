@@ -2968,6 +2968,79 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 actual warm DRCS client handover checkpoint:
+Criterion: actual same-URL suitable-client display/navigation must exercise a warm
+resource receiver, rather than recreating a cold decoder after publication.
+A narrowly authorized same-selection handover now uses existing application
+successor/current-selection confirmation ports. Only the known initial owner or
+an exact observed Applied proposal may authorize retention; cached Waiting and
+obsolete acknowledgements cannot stand for the actual output owner. Original
+scope expiry and total recovery deadline do not renew. Off, changed selection,
+legacy exact roles, read/recovery/hash/current-confirmation failures, mismatched
+successors and rejected replacements preserve withdrawal. Inactive expired cached
+bytes cannot fence future recovery. Confirmation remains a bounded snapshot,
+not a lease or an instantaneous Off guarantee (ADR0126).
+
+All21 selected Rust cases pass on frozen sources (Nextest
+61449857-447a-4673-bc13-cd5a14e1122f):20 monitor/selection regressions and the
+actual headed ordinary-route fixture. Nine new paused cases cover direct one-Replace
+handover, changed/legacy/unqualified selection, successor races, missing/failed
+recovery/final confirmation, original expiry/total timeout, Off/closure,
+Waiting/rejected ownership and inactive-cache future/None boundaries. The exact
+command is ./run.sh test -p ersatzrs-web --lib --test teletext_profile_preparation
+--run-ignored all -E 'test(teletext_live_output::updates::tests::) |
+test(teletext_selected_output::tests::) |
+test(headed_same_ordinary_urls_keep_decoder_across_actual_qtm_drcs_edit_and_navigation)'
+--test-threads1. Twenty pure Python closed-protocol cases pass, including stale
+source pins, scope/stage/counter drift and decoder removal/restart refusal. Strict
+web all-target Clippy passes without new exemptions; workspace and explicitly
+included handover-test formatting pass. Final progress/architecture/allow policy
+and unchanged milestone contracts accompany the checkpoint.
+
+The actual v3 two-stage trial retains two VLC3.0.20 clients/libzvbi0.2.42 decoder
+instances through original->published edited bitmap on their original ordinary
+URLs. Both channels use the same installed synthetic addon with distinct profiles
+and red/blue themes. All12 actual screenshots are inspected after clients and
+paced producers close: both stages show124/0020->125/0020->124/0020. Day gains the
+intended upper-right asymmetric glyph bit on both consuming pages and retains it
+on return navigation; Night retains its original blue bitmap. The crop shows
+three added scaled red screenshot pixels, no removed ones, and exact unchanged
+Night colour masks for every visit; those screen pixels are not the native glyph
+geometry. This is not a rendered A-to-C character substitution. Each decoder
+starts once and is not removed before controlled shutdown; both clients exit0.
+The original Day client, native Day observer and Night responses also pass complete
+source AV/clock, TSDuck3.44-4676, selected original/updated/repeated units and one
+independent warm bitmap decoder per response. Day changes0x801->0x803 withS2=2;
+Night retains0x801/blue/S2=1. There is one request per viewer and no post-start
+source reset. Original documents, export receipts and installed package hash remain
+unchanged; no playout rebuild is requested. Cleanup independently confirms observer
+and origin closure plus released capacity. Reused actual QTM1.0 cac2167b files
+and FFmpeg n9.0-20261006 retain their existing identities.
+
+Failed attempts remain explicit. First6236690a never attaches clients because
+its helper pin predates8d205fc7's legacy-wrapper extension; all11 imported helper
+functions are AST-identical and a regression now pins current53c97009. Second
+890ef3b2 correctly rejects monitor-induced PMT1->2 removal ofPID512/zvbi followed
+byPMT3 reannouncement. Its six original images/wire cycles and independent cleanup
+receipt remain available; no whole-trial success is inferred. This demonstrated
+production defect motivated the bounded handover. Initial unit compile/module
+lookup and a completed-B Notify permit consumed before the C barrier were fixture
+failures; assertions were preserved. Source review corrected the expired-inactive
+cache stall. Last lint corrections are equivalent boolean spelling and explicit
+fixture recovery scenarios; the complete21-case final run includes these changes.
+
+Canonical receipt: tmp/phase9-drcs-warm-client/identity.json
+SHA256 5fe8d7ba08afee0c7967765ad468f09f5cd515399400d301bffc93986863b1ce; actual proof under
+native-3/{success,root-visual-review,clients-stopped,cleanup,wire-offsets}.json,
+all12 screenshots and original full captures. Prior lifecycle85 Rust successes
+and cold/editor/admin receipts retain their own scopes. No broader client,
+panels, numeric entry, natural EOF, full authored Level2.5/fallback, complete
+QTM interchange, Lua/restart/localized-admin/platform acceptance or full CI is
+claimed. All129 milestone contracts remain unchanged; no milestone closes,
+push or publication. Next authenticate the observed dense-bank QTM ordinal
+shift against receipt/native S1 and protected fields, preserving unsupported
+padding diagnostics, then extend actual editor/import/preview/publication proof.
+
 2026-10-16 response-owned resource lifecycle and ordinary warm transport (checkpoint):
 Criterion: correct the exercised actual-editor warm-counter mismatch without
 changing immutable original pages, weakening receiver history or assuming every
@@ -7031,7 +7104,7 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | --- | --- | --- | --- | --- |
 | Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 bitmap concepts with native replay implemented | Existing sidecar/admin receipts plus actual singleton cold MAIN delivery above | Multi-group/padded resource, panel/geometry/set editing and wider resource admin flow remain open | Reconcile complete observed writer indices with native identities, permissions and protected padding |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE carrier tests; actual equal-NOS1 and independent fallback1/enhanced0 QTM Save As/native import; nine-culture headed transfer | General charset/resource/set/subpage fidelity remains open; sparse normative S1=1 independent decoding/client is blocked by the audited decoder defect | Reuse corrected carrier receipts; extend supported authored changes and select a correct independent sparse-resource decoder/client |
-| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour and actual-singleton bitmap flows; response-owned lifecycle3/4 implemented; full acceptance open | Prior actual QTM/localized admin/replay receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37; retained GUI input -> native preview/publication/reopen -> ordinary TCP -> independent pixels/TSDuck -> actual cold two-theme VLC124/125/124; new original three-response warm AV/clock/TSDuck/single-decoder proof above | Actual warm-resource client render/navigation, full Level2.5, applied-state admin, default-capacity handoff and richer editor changes remain open; actual resource-upload headed journey is not proven | Prove actual same-response warm resource rendering/navigation with a suitable client; reuse native/transport/independent proof, then resume multi-group/padded editor interchange |
+| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour and singleton bitmap flows; response-owned lifecycle3/4 plus bounded authorized handover implemented; full acceptance open | Prior actual QTM/localized admin/replay receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37; retained GUI input -> native preview/publication/reopen -> ordinary TCP -> independent pixels/TSDuck -> actual cold and retained-decoder two-theme VLC124/125/124; newest21 Rust/20 protocol passes and12 inspected images above | Full Level2.5, applied-state admin, default-capacity handoff, richer editor and resource-upload headed journey remain open; demonstrated monitor withdrawal is corrected for the proven same-selection singleton flow | Authenticate multi-group QTM writer indices against exact receipt/native identities, then extend editor/import/preview/publication proof without treating this representative warm flow as engine acceptance |
 | Actual pinned QTM workflow | Base-row/foreground native-admin flow and actual singleton native/cold-client delivery proven; full acceptance open | Existing pinned editor/admin receipts; current retained actual singleton -> fresh V4 -> native preview/publication/reopen/TCP/independent pixels/actual VLC; dense-bank GUI calibration | Multi-group/padded-bank import, resource-upload headed admin, panel/geometry, wider live updates and legacy modal focus remain open | Authenticate complete PN/SC ordinal shift0/1->1/2 against receipt, native S1 and protected fields; retain broader editor criteria |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |

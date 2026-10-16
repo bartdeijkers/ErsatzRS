@@ -10,8 +10,12 @@ Partial — bounded native authorization, new artifact roles, compatible storage
 and per-response delivery integration are implemented. P9A-04 owns50 unique
 low-level/storage,2 fingerprint and32 native successes, plus real three-viewer
 ordinary warm transport with source AV/clock, TSDuck and one retained independent
-bitmap decoder per response. Actual warm-client rendering/navigation and complete
-engine acceptance remain required; prior cold-client proof retains its scope.
+bitmap decoder per response. An actual two-stage ordinary-URL VLC trial now
+retains each decoder through singleton DRCS publication and124/125/124 navigation,
+with inspected Day/Night pixels and unchanged source AV/clock. Twenty focused
+monitor/selection regressions and twenty closed-protocol cases also pass.
+P9A-04 owns versions, exact receipts and remaining broader resource/client,
+editor, platform and full authored-engine requirements; this is not acceptance.
 
 ## Context
 
@@ -66,6 +70,26 @@ rules. Completed history records the actually selected counter, never the
 baseline seed. No page-body or visual-model mutation is permitted. Existing
 acquisition order, timing/capacity, M29/MOT retirement protection, failure
 atomicity, source-clock and sink-acknowledgement fences remain unchanged.
+
+A checked On-to-On content replacement must not lose its receiver cache solely
+because native recovery is asynchronous. The ordinary monitor may retain the old
+checked service during one bounded recovery only after the existing application
+confirmation authenticates the observed successor as current against that cached
+whole channel selection and its exact artifact role. That cached selection must
+belong to the known initial owner or an exact proposal already observed Applied;
+a Waiting proposal is not evidence of the actual output owner. This grants no
+authority to emit an unvalidated successor. Legacy exact roles retain their policy.
+The operation keeps its original total deadline and the cached original scope
+transition/expiry; it never renews an interval. Eligibility is a bounded snapshot
+check, not a lease: scope drift during recovery is caught by final confirmation,
+the original deadline or the original transition boundary. No instantaneous Off
+response is inferred from this asynchronous monitor. A recovered identity must equal the
+authorized observed successor, pass complete native fingerprint verification and
+fresh current confirmation before the normal acknowledged replacement proposal.
+Off, changed selection, missing/rejected authority, read/recovery/hash/current-state
+failure and rejected replacement withdraw through the existing safe boundary.
+No new cache, repository port, package invocation or source reset is introduced.
+Actual client proof must retain the decoder instance, not merely its process/URL.
 
 Recovery rebuilds the same authorization and verifies its complete versioned
 fingerprint before confirming the current pointer. A compatibility migration

@@ -40,7 +40,7 @@ def unique_pairs(pairs):
 def load(path):
     raw = bounded_bytes(path, H["MAX_READY"])
     value = json.loads(raw, object_pairs_hook=unique_pairs)
-    if not isinstance(value, dict) or type(value.get("probe_version")) is not int or value["probe_version"] not in [1, 2]:
+    if not isinstance(value, dict) or type(value.get("probe_version")) is not int or value["probe_version"] not in [1, 2, 3]:
         raise RuntimeError("Unsupported closed native proof object")
     return raw, value
 
@@ -91,7 +91,8 @@ def urls(ready):
 
 
 
-COLD_HELPER_SHA256 = "37b0f6bf3e31dba6908843db595062154b9cf24ffa3335e883cf340e5c3ee2f2"
+# The legacy-wrapper extension retains the imported helper functions exactly.
+COLD_HELPER_SHA256 = "53c970091ea28f82c6070be97a91a06a69702a619e2c35d27cb7e9dac7d0e23b"
 STATES = ["q", "cumulative_qr", "lua_off"]
 CHANNEL_KEYS = {"channel_id", "theme", "url", "addon_id", "profile_id", "profile_revision", "theme_rgb4",
     "generation_id", "request_id", "design_id", "design_revision", "scoped_role", "original_design_id",
@@ -261,6 +262,130 @@ def scoped_deadline(ready, channels, started):
                  for item in channels.values()))
 
 
+DRCS_STATES = ["original_bitmap", "edited_bitmap"]
+DRCS_CHANNEL_KEYS = {"channel_id", "theme", "url", "addon_id", "profile_id", "profile_revision",
+    "theme_rgb4", "design_id", "design_revision", "design_digest", "generation_id", "request_id"}
+
+
+def drcs_ready(ready, directory):
+    closed(ready, {"probe_version", "protocol", "completion_timeout_seconds", "source", "channels",
+        "editor_original", "resource", "expected_pages", "subcode", "expected_navigation", "stages",
+        "stage_files", "client_stop_file", "limitations"}, "warm DRCS readiness")
+    if (type(ready["probe_version"]) is not int or ready["probe_version"] != 3
+            or ready["protocol"] != "warm-drcs-live-ordinary-v1"
+            or type(ready["completion_timeout_seconds"]) is not int or ready["completion_timeout_seconds"] != 55
+            or ready["stages"] != DRCS_STATES
+            or ready["stage_files"] != "stage-N-ready.json and stage-N-captured.json, N from 1 through 2"
+            or ready["client_stop_file"] != "clients-stopped.json"
+            or not H["exact_integer_list"](ready["expected_pages"], [124, 125])
+            or type(ready["subcode"]) is not int or ready["subcode"] != 32
+            or not H["exact_integer_list"](ready["expected_navigation"], [124, 125, 124])
+            or not text_value(ready["limitations"])):
+        raise RuntimeError("Unsupported warm DRCS protocol/page/deadline")
+    source_provenance(ready["source"], directory)
+    closed(ready["resource"], {"kind", "magazine", "page", "logical_subpage", "slot",
+        "original_first_bitmap_row", "edited_first_bitmap_row"}, "fixed DRCS resource")
+    resource = ready["resource"]
+    if (resource != {"kind": "drcs", "magazine": 1, "page": 192, "logical_subpage": 0,
+                    "slot": 0, "original_first_bitmap_row": 2049, "edited_first_bitmap_row": 2051}
+            or any(type(value) is not int for key, value in resource.items() if key != "kind")):
+        raise RuntimeError("Unsupported fixed DRCS resource or bitmap intent")
+    if not isinstance(ready["channels"], list) or len(ready["channels"]) != 2:
+        raise RuntimeError("Expected two isolated DRCS channels")
+    channels, ports = {}, set()
+    for index, item in enumerate(ready["channels"]):
+        closed(item, DRCS_CHANNEL_KEYS, "DRCS channel")
+        theme = ["day", "night"][index]
+        if item["theme"] != theme or item["channel_id"] != index + 1:
+            raise RuntimeError("DRCS channel/theme order mismatch")
+        for key in ["channel_id", "profile_id", "profile_revision", "design_id", "design_revision", "generation_id", "request_id"]:
+            if not H["positive_identity"](item[key]):
+                raise RuntimeError("Invalid DRCS channel identity")
+        if (item["design_revision"] != 1 or not hash_value(item["design_digest"])
+                or not isinstance(item["addon_id"], str)
+                or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*){2,}", item["addon_id"])
+                or not H["exact_integer_list"](item["theme_rgb4"], [15, 0, 0] if theme == "day" else [0, 0, 15])):
+            raise RuntimeError("Unsupported DRCS original/palette/addon")
+        ports.add(queried_url(item["url"], item["channel_id"], theme))
+        channels[theme] = item
+    if len(ports) != 1 or channels["day"]["addon_id"] != channels["night"]["addon_id"]:
+        raise RuntimeError("DRCS clients must share the owned origin and addon")
+    for key in ["channel_id", "profile_id", "design_id", "generation_id", "request_id"]:
+        if channels["day"][key] == channels["night"][key]:
+            raise RuntimeError("DRCS channels lost profile/publication isolation")
+    original = ready["editor_original"]
+    closed(original, {"design_id", "revision", "digest", "receipt_id", "receipt_digest"}, "DRCS authenticated original")
+    if (not H["positive_identity"](original["design_id"]) or type(original["revision"]) is not int
+            or original["revision"] != 1 or original["design_id"] != channels["day"]["design_id"]
+            or original["digest"] != channels["day"]["design_digest"]
+            or not H["positive_identity"](original["receipt_id"]) or not hash_value(original["receipt_digest"])):
+        raise RuntimeError("DRCS editor original/receipt association mismatch")
+    return channels
+
+
+def validate_drcs_stage(value, number, channels, previous, ready_sha256):
+    closed(value, {"probe_version", "stage", "state", "scope", "initial_ready_sha256", "day", "night",
+        "day_first_bitmap_row", "night_first_bitmap_row", "day_s2", "night_s2", "expected_pages",
+        "subcode", "expected_navigation", "wire_offsets"}, "warm DRCS stage")
+    if (type(value["probe_version"]) is not int or value["probe_version"] != 3
+            or type(value["stage"]) is not int or value["stage"] != number or number not in [1, 2]
+            or value["state"] != DRCS_STATES[number - 1] or not text_value(value["scope"])
+            or value["initial_ready_sha256"] != ready_sha256 or not hash_value(ready_sha256)
+            or not H["exact_integer_list"](value["expected_pages"], [124, 125])
+            or type(value["subcode"]) is not int or value["subcode"] != 32
+            or not H["exact_integer_list"](value["expected_navigation"], [124, 125, 124])
+            or not isinstance(value["wire_offsets"], list) or len(value["wire_offsets"]) != 3
+            or any(type(n) is not int or n < 0 for n in value["wire_offsets"])):
+        raise RuntimeError("DRCS stage/readiness/navigation mismatch")
+    for key, expected in [("day_first_bitmap_row", 2049 if number == 1 else 2051),
+                          ("night_first_bitmap_row", 2049), ("day_s2", number), ("night_s2", 1)]:
+        if type(value[key]) is not int or value[key] != expected:
+            raise RuntimeError("DRCS stage bitmap/counter mismatch")
+    if number == 2:
+        if (not isinstance(previous, dict) or previous.get("stage") != 1
+                or any(a <= b for a, b in zip(value["wire_offsets"], previous["wire_offsets"]))):
+            raise RuntimeError("DRCS update skipped its original observed stage")
+    for theme in ["day", "night"]:
+        item, initial = value[theme], channels[theme]
+        closed(item, DRCS_CHANNEL_KEYS, "DRCS stage channel")
+        if (any(not H["positive_identity"](item[key]) for key in ["channel_id", "profile_id",
+                "profile_revision", "design_id", "design_revision", "generation_id", "request_id"])
+                or not H["exact_integer_list"](item["theme_rgb4"], initial["theme_rgb4"])):
+            raise RuntimeError("Invalid typed DRCS stage identity/palette")
+        if number == 1 or theme == "night":
+            if item != initial:
+                raise RuntimeError("DRCS unchanged channel/original drifted")
+        else:
+            changed = {"design_revision", "design_digest", "generation_id", "request_id"}
+            if (any(item[key] != initial[key] for key in DRCS_CHANNEL_KEYS - changed)
+                    or type(item["design_revision"]) is not int or item["design_revision"] != 2
+                    or not hash_value(item["design_digest"]) or item["design_digest"] == initial["design_digest"]
+                    or any(not H["positive_identity"](item[key]) or item[key] == initial[key]
+                           for key in ["generation_id", "request_id"])):
+                raise RuntimeError("DRCS edit changed immutable scope or lacks new publication")
+    for key in ["generation_id", "request_id"]:
+        if value["day"][key] == value["night"][key]:
+            raise RuntimeError("DRCS stage crossed channel publications")
+    return value
+
+
+def drcs_decoder_identity(client):
+    """Require the original decoder instance; reactivation would hide cache bugs."""
+    if client["process"].poll() is not None:
+        raise RuntimeError("Owned DRCS client stopped during the live stages")
+    log = bounded_bytes(Path(client["log"].name), H["MAX_LOG"]).decode(errors="replace")
+    starts = re.findall(r'^\[([0-9a-fA-F]+)\].*using spu decoder module "zvbi"\s*$', log, re.MULTILINE)
+    stops = re.findall(r'removing module "zvbi"', log)
+    if len(starts) != 1 or stops:
+        raise RuntimeError("DRCS warm proof requires one retained active decoder instance")
+    identity = starts[0]
+    if client.get("drcs_decoder_identity", identity) != identity:
+        raise RuntimeError("DRCS client replaced its decoder instance")
+    client["drcs_decoder_identity"] = identity
+    return identity
+
+
+
 def start_client(viewer, url, directory, index, deadline, first_page=124):
     before = windows(deadline)
     env = os.environ.copy()
@@ -341,7 +466,13 @@ def activate(client, deadline):
 
 
 def activate_stage(clients, version, stage, deadline):
-    if version == 2:
+    if version == 3:
+        if stage == 1:
+            for client in clients:
+                activate(client, deadline)
+        for client in clients:
+            drcs_decoder_identity(client)
+    elif version == 2:
         if stage == 1:
             for client in clients:
                 activate(client, deadline)
@@ -383,13 +514,15 @@ def main():
     raw_ready, ready = load(ready_path)
     directory = ready_path.parent
     version = ready["probe_version"]
-    channels = scoped_ready(ready, directory) if version == 2 else None
-    if version == 2 and digest(bounded_bytes(HELPERS, H["MAX_LOG"])) != COLD_HELPER_SHA256:
+    channels = (drcs_ready(ready, directory) if version == 3
+                else scoped_ready(ready, directory) if version == 2 else None)
+    if version in [2, 3] and digest(bounded_bytes(HELPERS, H["MAX_LOG"])) != COLD_HELPER_SHA256:
         raise RuntimeError("Pinned cold helper source identity changed")
     selected_urls = {theme: item["url"] for theme, item in channels.items()} if channels else urls(ready)
-    deadline = scoped_deadline(ready, channels, started) if channels else time.monotonic() + 150
-    first_page, next_page = (200, 201) if channels else (124, 125)
-    stages = 3 if channels else 5
+    deadline = (started + ready["completion_timeout_seconds"] if version == 3
+                else scoped_deadline(ready, channels, started) if channels else time.monotonic() + 150)
+    first_page, next_page = (200, 201) if version == 2 else (124, 125)
+    stages = 2 if version == 3 else 3 if channels else 5
     previous = None
     clients = []
     with (directory / "headed-warm-trial.ndjson").open("x", encoding="utf-8") as record:
@@ -409,12 +542,14 @@ def main():
                       "window": client["window"], "url": client["url"]})
             for stage in range(1, stages + 1):
                 raw_stage, stage_ready = wait_stage(directory, stage, deadline)
-                if channels:
+                if version == 3:
+                    validate_drcs_stage(stage_ready, stage, channels, previous, digest(raw_ready))
+                elif channels:
                     validate_stage(stage_ready, stage, channels, previous)
                 emit({"event": "native_stage", "stage": stage, "ready": stage_ready})
                 activate_stage(clients, version, stage, deadline)
                 images = []
-                navigation = stage == (1 if channels else 2)
+                navigation = version == 3 or stage == (1 if channels else 2)
                 for visit, page in enumerate([first_page, next_page, first_page] if navigation else [first_page]):
                     if navigation and visit:
                         for client in clients:
@@ -424,7 +559,9 @@ def main():
                                 position["x"] + 121, position["y"] + y)
                     settle(deadline, 3)
                     for client in clients:
-                        absent = stage == 3 if channels else stage in [1, 4]
+                        if version == 3:
+                            drcs_decoder_identity(client)
+                        absent = False if version == 3 else stage == 3 if channels else stage in [1, 4]
                         requested = None if client["viewer"] == "day" and absent else page
                         image = capture(client, directory, stage, requested, visit, deadline)
                         images.append(image)
@@ -435,8 +572,10 @@ def main():
                           "screenshots": images}
                 closed_new(directory / f"stage-{stage}-captured.json", marker)
                 previous = stage_ready
+            stopped_clients = []
             for client in clients:
                 owned_window(client["window"], client["process"].pid, deadline)
+                decoder_identity = drcs_decoder_identity(client) if version == 3 else None
                 # Target the owned process directly; a global shortcut could
                 # cross WSLg focus and close a different application.
                 client["process"].terminate()
@@ -445,6 +584,13 @@ def main():
                       "stop": "owned SIGTERM after all screenshots"})
                 if status not in [0, -signal.SIGTERM]:
                     raise RuntimeError("Owned warm client failed controlled teardown")
+                if version == 3:
+                    stopped_clients.append({"viewer": client["viewer"], "pid": client["process"].pid,
+                        "exit_code": status, "decoder_identity": decoder_identity,
+                        "decoder_starts": 1, "decoder_stops_before_shutdown": 0})
+            if version == 3:
+                closed_new(directory / "clients-stopped.json", {"probe_version": 3,
+                    "ready_sha256": digest(raw_ready), "clients": stopped_clients})
             emit({"event": "captures_complete", "native_completion_released": False,
                   "rendered_navigation_proven": False,
                   "next": "Inspect all stage images before root-only native completion."})

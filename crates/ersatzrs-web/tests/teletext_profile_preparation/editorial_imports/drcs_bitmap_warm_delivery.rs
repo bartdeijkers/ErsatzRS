@@ -19,6 +19,9 @@ const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_DRCS_WARM_DELIVERY_DIR";
 type Unit = [u8; 46];
 type Pattern = Vec<Vec<Unit>>;
 
+#[path = "drcs_bitmap_warm_delivery/headed.rs"]
+mod headed;
+
 struct Tools {
     ffmpeg: String,
     ffprobe: String,

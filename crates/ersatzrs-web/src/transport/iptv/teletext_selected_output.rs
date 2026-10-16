@@ -4,7 +4,11 @@ use std::{sync::Arc, time::Instant};
 
 use chrono::{DateTime, Utc};
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
-use ersatzrs_core::repositories::{TeletextGenerationMutation, TeletextProfileMutation};
+use ersatzrs_core::repositories::{
+    TeletextGenerationMutation, TeletextProfileMutation,
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+};
 use ersatzrs_domain::{TeletextAcceptedGeneration, TeletextEffectiveBindingSnapshot};
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 
@@ -64,12 +68,56 @@ impl SelectedTeletextOutputCandidate {
         maximum: usize,
         deadline: Instant,
     ) -> bool {
+        self.confirm_selection_for(self.generation(), application, maximum, deadline)
+            .await
+    }
+
+    /// Retain already active content only while a same-role successor is
+    /// recovered under this exact still-current selection and original expiry.
+    /// This never confirms the successor's native artifact or renews old scope.
+    pub(crate) async fn confirm_successor_selection(
+        &self,
+        successor: &TeletextAcceptedGeneration,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+    ) -> bool {
+        if successor.artifact_version != self.generation().artifact_version
+            || !matches!(
+                successor.artifact_version,
+                TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+                    | TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+            )
+            || successor.request.channel_id != self.channel_id()
+            || self
+                .service()
+                .is_none_or(|service| service.resource_lifecycle_variants().is_none())
+        {
+            return false;
+        }
+        self.confirm_selection_for(successor, application, maximum, deadline)
+            .await
+    }
+
+    async fn confirm_selection_for(
+        &self,
+        generation: &TeletextAcceptedGeneration,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+    ) -> bool {
+        let deadline = self
+            .next_transition()
+            .map_or(deadline, |boundary| deadline.min(boundary.into_std()));
+        if Instant::now() >= deadline {
+            return false;
+        }
         let confirmation = async {
             match self {
                 Self::Base(candidate, _) => {
                     application
                         .confirm_current_teletext_generation(
-                            candidate.generation(),
+                            generation,
                             candidate.selection(),
                             maximum,
                         )
@@ -78,7 +126,7 @@ impl SelectedTeletextOutputCandidate {
                 Self::Effective(candidate, _) => {
                     application
                         .confirm_effective_teletext_generation(
-                            candidate.generation(),
+                            generation,
                             candidate.selection(),
                             maximum,
                             deadline,

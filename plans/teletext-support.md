@@ -437,8 +437,11 @@ original counters cannot represent every response's completed history.
 [ADR 0126](../docs/adr/0126-per-response-teletext-resource-lifecycle.md) defines
 explicit base/effective artifact3/4 header-family authorization while preserving
 strict historical1/2. Completed-history selection, compatible recovery and actual
-ordinary warm transport/independent decoding are verified; actual warm-client
-resource rendering/navigation still requires proof.
+ordinary warm transport/independent decoding are verified. A bounded
+same-selection monitor handover now also retains the actual VLC decoder through
+singleton MAIN bitmap publication and124/125/124 navigation on two ordinary URLs.
+Off, expiry, changed selection and failed recovery retain withdrawal behavior.
+Broader resource/client rendering and complete editor interchange remain open.
 P9A-04 owns the current criterion map and proof; full Level2.5 and editor
 acceptance remain unchanged.
 Independent original libzvbi 0.2.42 warm-cache DRCS decoding now passes four
