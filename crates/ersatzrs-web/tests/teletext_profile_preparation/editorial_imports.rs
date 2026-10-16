@@ -75,6 +75,8 @@ mod http_routes;
 pub(super) mod live_client;
 #[path = "editorial_imports/live_updates.rs"]
 pub(super) mod live_updates;
+#[path = "editorial_imports/local_object_glyphs.rs"]
+mod local_object_glyphs;
 #[path = "editorial_imports/mosaic_live.rs"]
 // Intentional Linux-x64 manual decoder/client diagnostic; other platform
 // acceptance remains separate from this /proc and calibrated-library probe.

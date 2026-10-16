@@ -294,11 +294,13 @@ fn mixed_bank_authored_bitmap_edit_preserves_separate_compiler_permissions() {
         TeletextEditorialEdits {
             rows: &[],
             operands: &[],
+            object_operands: &[],
             bitmaps: &changes,
         },
         TeletextEditorialEdits {
             rows: &baseline_rows,
             operands: &[],
+            object_operands: &[],
             bitmaps: &changes,
         },
         &policy().encoding,

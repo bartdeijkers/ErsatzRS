@@ -62,7 +62,7 @@ fn editable_input() -> TeletextResolvedServiceDraft {
 }
 
 #[test]
-fn local_operand_value_rejects_noop_cross_family_glyph_charset_and_invalid_column() {
+fn local_operand_value_rejects_noop_cross_family_charset_and_invalid_column() {
     let owner = address(200, 0);
     for (expected, replacement) in [
         (foreground(1), background(2)),
@@ -71,8 +71,8 @@ fn local_operand_value_rejects_noop_cross_family_glyph_charset_and_invalid_colum
             TeletextColumnOperation::G0 {
                 code: TeletextGlyphCode::new(b'A').unwrap(),
             },
-            TeletextColumnOperation::G0 {
-                code: TeletextGlyphCode::new(b'B').unwrap(),
+            TeletextColumnOperation::G1 {
+                mosaic: TeletextMosaic::new(0).unwrap(),
             },
         ),
         (

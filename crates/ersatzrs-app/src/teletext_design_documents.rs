@@ -1286,6 +1286,8 @@ enum Path {
     EditorialCells,
     EditorialOperands,
     EditorialOperand,
+    EditorialObjectOperands,
+    EditorialObjectOperand,
     EditorialBitmaps,
     EditorialBitmap,
     EditorialBitmapRows,
@@ -1296,6 +1298,7 @@ struct Scan {
     responses: usize,
     context: usize,
     editorial_items: usize,
+    editorial_operands: usize,
     editorial_bytes: usize,
     error: Option<TeletextDesignDocumentError>,
 }
@@ -1326,6 +1329,11 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 .scan
                 .check(storage::<editorial_overlay::StoredOperand>(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialObjectOperand) {
+            self.inner.scan.check(storage::<
+                editorial_overlay::object_operands::StoredObjectOperand,
+            >(self.count))?;
+        }
         if matches!(self.inner.path, Path::EditorialBitmap) {
             self.inner
                 .scan
@@ -1342,9 +1350,21 @@ impl Scan {
             Path::EditorialPage
                 | Path::EditorialRow
                 | Path::EditorialOperand
+                | Path::EditorialObjectOperand
                 | Path::EditorialBitmap
         ) {
             return Ok(());
+        }
+        if matches!(path, Path::EditorialOperand | Path::EditorialObjectOperand) {
+            self.editorial_operands = self
+                .editorial_operands
+                .checked_add(1)
+                .ok_or_else(|| E::custom("saved operand count overflow"))?;
+            self.check(limit(
+                self.editorial_operands,
+                self.budget.validation.service.max_commands,
+                "editorial operands",
+            ))?;
         }
         self.editorial_items = self
             .editorial_items
@@ -1476,6 +1496,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "pages") => Path::EditorialPages,
                 (Path::EditorialOverlay, "local_program_operands") => Path::EditorialOperands,
                 (Path::EditorialOverlay, "drcs_bitmap_overlays") => Path::EditorialBitmaps,
+                (Path::EditorialOverlay, "local_object_operands") => Path::EditorialObjectOperands,
                 (Path::EditorialBitmap, "expected" | "replacement") => Path::EditorialBitmapRows,
                 (Path::EditorialPage, "rows") => Path::EditorialRows,
                 (Path::EditorialRow, "cells") => Path::EditorialCells,
@@ -1538,6 +1559,11 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 Path::EditorialOperand,
                 "editorial operands",
             ),
+            Path::EditorialObjectOperands => (
+                self.scan.budget.validation.service.max_commands,
+                Path::EditorialObjectOperand,
+                "editorial operands",
+            ),
             Path::EditorialBitmaps => (
                 self.scan.budget.validation.service.max_structure_items,
                 Path::EditorialBitmap,
@@ -1595,6 +1621,7 @@ fn preflight_json_for_format(
         responses: 0,
         context: 0,
         editorial_items: 0,
+        editorial_operands: 0,
         editorial_bytes: 0,
         error: None,
     };

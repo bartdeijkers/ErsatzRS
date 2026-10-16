@@ -258,7 +258,7 @@ pub(super) async fn publish_with_owner(
 }
 
 async fn complete(fixture: AuthoringFixture) -> Flow {
-    complete_with_zone(fixture, true).await
+    Box::pin(complete_with_zone(fixture, true)).await
 }
 
 pub(super) async fn complete_with_zone(mut fixture: AuthoringFixture, zone: bool) -> Flow {

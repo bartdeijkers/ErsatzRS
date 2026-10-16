@@ -12,9 +12,10 @@ use ersatzrs_app::{
     },
 };
 use ersatzrs_domain::{
-    TeletextDrcsBitmapOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
-    TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
-    TeletextResourceIdentity, TeletextSubcode,
+    TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPageNumber,
+    TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextResourceIdentity,
+    TeletextSubcode,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
@@ -27,6 +28,7 @@ pub(super) mod resources;
 pub(super) struct TeletextEditorialChanges {
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
+    pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
 }
 
@@ -393,11 +395,11 @@ fn reconcile_changes(
     baseline.validate_header(location)?;
     edited.validate_header(location)?;
     protected(&baseline, &edited, location, deadline, native.1.is_some())?;
-    let operands = match native.1 {
+    let mut changes = match native.1 {
         Some(service) => {
             operands::reconcile(service, owner, &baseline, &edited, location, deadline)?
         }
-        None => Vec::new(),
+        None => TeletextEditorialChanges::default(),
     };
     let mut rows = Vec::new();
     // QTeletextMaker 1.0 LevelOnePage::setCharacter clears all-space packets;
@@ -426,11 +428,8 @@ fn reconcile_changes(
         vec![TeletextPhysicalBaseOverlay::new(owner, rows)
             .map_err(|_| location.error(NativeTeletextEditorialTtiFailure::Structure))?]
     };
-    Ok(TeletextEditorialChanges {
-        rows,
-        operands,
-        bitmaps: Vec::new(),
-    })
+    changes.rows = rows;
+    Ok(changes)
 }
 
 /// Require the complete final native X26 emission to match the edited file.
@@ -464,7 +463,10 @@ pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
     deadline: Instant,
     baseline: &EncodedTeletextAuthoredService,
     service: &EncodedTeletextAuthoredService,
-    changes: &[TeletextLocalProgramOperandOverlay],
+    changes: (
+        &[TeletextLocalProgramOperandOverlay],
+        &[TeletextLocalObjectOperandOverlay],
+    ),
 ) -> Result<()> {
     let location = Location {
         page: mapping.page.page,

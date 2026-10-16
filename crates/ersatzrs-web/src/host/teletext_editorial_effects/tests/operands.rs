@@ -114,6 +114,7 @@ fn edits(operands: &[TeletextLocalProgramOperandOverlay]) -> TeletextEditorialEd
     TeletextEditorialEdits {
         rows: &[],
         operands,
+        object_operands: &[],
         bitmaps: &[],
     }
 }
@@ -604,6 +605,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         TeletextEditorialEdits {
             rows: &changes.rows,
             operands: &changes.operands,
+            object_operands: &[],
             bitmaps: &[],
         },
         &policy().encoding,
@@ -617,7 +619,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         deadline(),
         &original,
         &candidate,
-        &changes.operands,
+        (&changes.operands, &changes.object_operands),
     )
     .unwrap();
     // A final typed command with a different replacement cannot masquerade as
@@ -629,7 +631,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         deadline(),
         &original,
         &encode(2),
-        &changes.operands,
+        (&changes.operands, &changes.object_operands),
     )
     .unwrap_err();
     assert_eq!(mismatch.failure, NativeTeletextEditorialTtiFailure::Packet);
@@ -645,7 +647,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         deadline(),
         &original,
         &candidate,
-        &changes.operands,
+        (&changes.operands, &changes.object_operands),
     )
     .unwrap_err();
     assert_eq!(
@@ -656,7 +658,86 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
 }
 
 #[test]
-fn native_tti_rejects_address_mode_reserved_geometry_glyph_position_and_trailer_edits() {
+fn native_tti_page_local_g0_edit_keeps_exact_word_and_captured_cell_permissions() {
+    let original = local_service(1, 1, 0);
+    let baseline = tti_bytes(tti_records(&original));
+    let mut records = tti_records(&original);
+    mutate_word(&mut records, native_word(&original, 4), |word| {
+        (word & 0x7ff) | (u32::from(b'Y') << 11)
+    });
+    let uploaded = tti_bytes(records);
+    let changes = reconcile_teletext_editorial_tti_with_operands(
+        &tti_mapping(),
+        &baseline,
+        &uploaded,
+        tti_budget(),
+        deadline(),
+        0x8040,
+        &original,
+    )
+    .unwrap();
+    assert!(changes.rows.is_empty() && changes.object_operands.is_empty());
+    let expected = TeletextLocalProgramOperandOverlay::new(
+        address(123),
+        4,
+        8,
+        TeletextColumnOperation::G0 {
+            code: TeletextGlyphCode::new(b'Z').unwrap(),
+        },
+        TeletextColumnOperation::G0 {
+            code: TeletextGlyphCode::new(b'Y').unwrap(),
+        },
+    )
+    .unwrap();
+    assert_eq!(changes.operands, [expected]);
+    let candidate = ersatzrs_ffmpeg::teletext::encode_teletext_authored_service_before(
+        original
+            .declared()
+            .clone()
+            .with_local_program_operand_overlays(&changes.operands, policy().validation.service)
+            .unwrap(),
+        &[],
+        &policy().encoding,
+        deadline(),
+    )
+    .unwrap();
+    validate_recompiled_teletext_editorial_tti_encoding(
+        &tti_mapping(),
+        &uploaded,
+        tti_budget(),
+        deadline(),
+        &original,
+        &candidate,
+        (&changes.operands, &changes.object_operands),
+    )
+    .unwrap();
+    validate_teletext_editorial_effects_with_operands(
+        &original,
+        &candidate,
+        &project("zone", 1, 8, 1, 1),
+        edits(&changes.operands),
+        &policy().encoding,
+        deadline(),
+    )
+    .unwrap();
+    let error = validate_teletext_editorial_effects_with_operands(
+        &original,
+        &candidate,
+        &project("zone", 1, 9, 1, 1),
+        edits(&changes.operands),
+        &policy().encoding,
+        deadline(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.reason,
+        TeletextEditorialEffectsFailure::ProtectedDisplay
+    );
+    assert_eq!(error.position, Some((1, 8)));
+}
+
+#[test]
+fn native_tti_rejects_address_mode_reserved_geometry_invalid_glyph_position_and_trailer_edits() {
     let original = local_service(1, 1, 0);
     let baseline = tti_bytes(tti_records(&original));
     let packet_words: Vec<_> = tti_records(&original)
@@ -689,7 +770,9 @@ fn native_tti_rejects_address_mode_reserved_geometry_glyph_position_and_trailer_
         }),
         (native_word(&original, 3), |word| word | (8 << 11)),
         (native_word(&original, 3), |word| word | (1 << 11)),
-        (native_word(&original, 4), |word| word ^ (1 << 11)),
+        (native_word(&original, 4), |word| {
+            (word & 0x7ff) | (31 << 11)
+        }),
         (native_word(&original, 0), |word| word ^ (1 << 11)),
         (trailer, |word| word ^ (1 << 11)),
     ];

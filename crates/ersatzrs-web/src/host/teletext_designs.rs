@@ -481,6 +481,10 @@ pub(super) fn compile_restored_parts(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.local_program_operands());
+    let object_operands = parts
+        .editorial_overlay
+        .as_ref()
+        .map_or(&[][..], |overlay| overlay.local_object_operands());
     let bitmaps = parts
         .editorial_overlay
         .as_ref()
@@ -489,7 +493,7 @@ pub(super) fn compile_restored_parts(
         &parts.selection,
         parts.entry_addon_id.as_deref(),
         parts.documents,
-        (overlays, operands, bitmaps),
+        (overlays, operands, object_operands, bitmaps),
         deadline,
         region,
         policy,

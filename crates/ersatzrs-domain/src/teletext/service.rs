@@ -28,6 +28,9 @@ use super::{
 mod drcs_extension;
 pub use drcs_extension::*;
 
+#[path = "local_object_operand_service.rs"]
+mod local_object_operands;
+
 /// Explicitly resolved public/global object links, not MOT or X27 declarations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextResolvedObjectPageLinks {
@@ -201,6 +204,14 @@ pub enum TeletextServiceError {
         address: TeletextPageAddress,
         command: usize,
         reason: super::TeletextLocalProgramOperandFailure,
+    },
+    #[error("teletext local object operand changes must not be empty")]
+    EmptyLocalObjectOperandOverlays,
+    #[error("teletext local object operand {identity:?}, command {command}: {reason}")]
+    LocalObjectOperandOverlay {
+        identity: TeletextObjectIdentity,
+        command: usize,
+        reason: super::TeletextLocalObjectOperandFailure,
     },
     #[error("teletext physical base overlay owner {address:?} is absent or repeated (duplicate={duplicate})")]
     PhysicalBaseOverlayOwner {

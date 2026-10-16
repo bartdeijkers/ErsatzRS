@@ -15,8 +15,9 @@ use ersatzrs_app::teletext_export_project::TeletextExportProject;
 use ersatzrs_domain::{
     TeletextBaseDisplayCellKind, TeletextDisplayAttribute, TeletextDisplayCell,
     TeletextDisplayFragment, TeletextDisplayGeometry, TeletextDrcsBitmapOverlay,
-    TeletextDrcsCatalog, TeletextEnhancementCommand, TeletextLocalProgramOperandOverlay,
-    TeletextPageAddress, TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
+    TeletextDrcsCatalog, TeletextEnhancementCommand, TeletextLocalObjectOperandOverlay,
+    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPhysicalBaseOverlay,
+    TeletextResolvedPageEnhancementDraft,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_drcs_page, project_encoded_teletext_display, project_teletext_comparison_glyph,
@@ -26,6 +27,7 @@ use ersatzrs_ffmpeg::teletext::{
 };
 
 mod compiler_resources;
+mod object_operands;
 #[cfg(test)]
 mod tests;
 
@@ -107,6 +109,7 @@ pub(super) fn validate_teletext_editorial_effects(
 pub(super) struct TeletextEditorialEdits<'a> {
     pub rows: &'a [TeletextPhysicalBaseOverlay],
     pub operands: &'a [TeletextLocalProgramOperandOverlay],
+    pub object_operands: &'a [TeletextLocalObjectOperandOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
 
@@ -142,11 +145,13 @@ pub(super) fn validate_teletext_editorial_transition(
         TeletextEditorialEdits {
             rows: incoming,
             operands: &[],
+            object_operands: &[],
             bitmaps: &[],
         },
         TeletextEditorialEdits {
             rows: cumulative,
             operands: &[],
+            object_operands: &[],
             bitmaps: &[],
         },
         budget,
@@ -181,7 +186,11 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         };
         let owner = old.owner();
         let overlay = incoming.rows.iter().find(|value| value.owner() == owner);
-        let operand_change = incoming.operands.iter().any(|value| value.owner() == owner);
+        let operand_change = incoming.operands.iter().any(|value| value.owner() == owner)
+            || incoming
+                .object_operands
+                .iter()
+                .any(|value| value.owner() == owner);
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
         if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() && !compiler_links {
             if before.data_units() != after.data_units() {
@@ -255,8 +264,16 @@ fn check_service(
         || original.unit_count() > budget.max_units
         || edited.unit_count() > budget.max_units
         || overlays.len() > budget.max_pages
-        || incoming.operands.len() > budget.max_commands
-        || cumulative.operands.len() > budget.max_commands
+        || incoming
+            .operands
+            .len()
+            .checked_add(incoming.object_operands.len())
+            .is_none_or(|count| count > budget.max_commands)
+        || cumulative
+            .operands
+            .len()
+            .checked_add(cumulative.object_operands.len())
+            .is_none_or(|count| count > budget.max_commands)
         || incoming.bitmaps.len() > maximum_bitmaps
         || cumulative.bitmaps.len() > maximum_bitmaps
     {
@@ -270,7 +287,6 @@ fn check_service(
     if original.magazine_units() != edited.magazine_units()
         || before.base() != after.base()
         || before.magazine_presentations() != after.magazine_presentations()
-        || before.objects() != after.objects()
         || before.object_companions() != after.object_companions()
         || old.mots() != new.mots()
         || old.selections() != new.selections()
@@ -285,6 +301,13 @@ fn check_service(
             TeletextEditorialEffectsFailure::ProtectedStructure,
         ));
     }
+    object_operands::check(
+        before.objects(),
+        after.objects(),
+        incoming.object_operands,
+        cumulative.object_operands,
+        deadline,
+    )?;
     check_bitmaps(
         before.drcs(),
         after.drcs(),

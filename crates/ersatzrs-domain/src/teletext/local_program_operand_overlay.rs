@@ -10,7 +10,7 @@ use super::{TeletextColumnOperation, TeletextPageAddress};
 pub enum TeletextLocalProgramOperandOverlayError {
     #[error("teletext local operand column {column} is outside 0..=39")]
     Column { column: u8 },
-    #[error("teletext local operand must retain its foreground, background or attributes family")]
+    #[error("teletext local operand must retain its foreground, background, attributes, G0 or G1 family")]
     Family,
     #[error("teletext local operand replacement does not change the original")]
     Unchanged,
@@ -21,7 +21,7 @@ pub enum TeletextLocalProgramOperandOverlayError {
 /// One immutable replacement of an existing local `AtColumn` operand.
 ///
 /// The exact owner, original command ordinal, column and original operation are
-/// retained. Glyphs, charset, positions, invocation/resource identities and command
+/// retained. Charset, positions, invocation/resource identities and command
 /// ordering cannot be changed through this value. This does not grant permission
 /// to modify any affected cell or to publish an edited service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,7 +34,7 @@ pub struct TeletextLocalProgramOperandOverlay {
 }
 
 impl TeletextLocalProgramOperandOverlay {
-    /// Check same-family foreground/background/attributes replacement intent.
+    /// Check same-family foreground/background/attributes/G0/G1 replacement intent.
     ///
     /// Service application must still match the exact original local command.
     /// # Errors
@@ -60,6 +60,12 @@ impl TeletextLocalProgramOperandOverlay {
             ) | (
                 TeletextColumnOperation::Attributes { .. },
                 TeletextColumnOperation::Attributes { .. }
+            ) | (
+                TeletextColumnOperation::G0 { .. },
+                TeletextColumnOperation::G0 { .. }
+            ) | (
+                TeletextColumnOperation::G1 { .. },
+                TeletextColumnOperation::G1 { .. }
             )
         ) {
             return Err(TeletextLocalProgramOperandOverlayError::Family);

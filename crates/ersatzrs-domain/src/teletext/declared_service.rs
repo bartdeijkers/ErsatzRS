@@ -214,7 +214,7 @@ impl TeletextDeclaredService {
     pub const fn semantic(&self) -> &TeletextSemanticService {
         &self.semantic
     }
-    /// Replace checked existing local colour/attribute operands, preserving the
+    /// Replace checked existing local colour/attribute/G0/G1 operands, preserving the
     /// authenticated declarations and resource selections. Hosts must still
     /// enforce captured edit permissions, recompile and publish explicitly.
     /// # Errors
@@ -227,6 +227,21 @@ impl TeletextDeclaredService {
         self.semantic = self
             .semantic
             .with_local_program_operand_overlays(overlays, budget)?;
+        Ok(self)
+    }
+    /// Replace checked G0/G1 operands in existing local object definitions.
+    /// Authenticated declarations, object identities/types and resource selections
+    /// remain unchanged. Hosts must check all protected effects before publication.
+    /// # Errors
+    /// Rejects empty, duplicate, absent or stale targets and service budget overflow.
+    pub fn with_local_object_operand_overlays(
+        mut self,
+        overlays: &[super::TeletextLocalObjectOperandOverlay],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self
+            .semantic
+            .with_local_object_operand_overlays(overlays, budget)?;
         Ok(self)
     }
     /// Replace exact existing DRCS bitmaps while preserving authenticated MOT,

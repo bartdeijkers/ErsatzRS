@@ -326,6 +326,7 @@ fn qualify_rows(
         .ok_or(NativeTeletextEditorialImportError::Association)?;
     let overlays = overlay.pages().to_vec();
     let operands = overlay.local_program_operands().to_vec();
+    let object_operands = overlay.local_object_operands().to_vec();
     let bitmaps = overlay.drcs_bitmap_overlays().to_vec();
     let encoding = policy.encoding;
     let edited = parts
@@ -345,6 +346,7 @@ fn qualify_rows(
         TeletextEditorialEdits {
             rows: &overlays,
             operands: &operands,
+            object_operands: &object_operands,
             bitmaps: &bitmaps,
         },
         &encoding,
@@ -471,6 +473,7 @@ fn reconcile_files(
     let mut changes = TeletextEditorialChanges {
         rows: Vec::new(),
         operands: Vec::new(),
+        object_operands: Vec::new(),
         bitmaps: Vec::new(),
     };
     let encoded = baseline
@@ -510,6 +513,7 @@ fn reconcile_files(
             )?;
             changes.rows.extend(incoming.rows);
             changes.operands.extend(incoming.operands);
+            changes.object_operands.extend(incoming.object_operands);
         } else if let Some(mapping) = body.project.assets.iter().find(|asset| {
             asset.name == original.name
                 && super::teletext_editorial_tti::resources::supported(asset)
@@ -530,7 +534,11 @@ fn reconcile_files(
             return Err(NativeTeletextEditorialImportError::Association);
         }
     }
-    if changes.rows.is_empty() && changes.operands.is_empty() && changes.bitmaps.is_empty() {
+    if changes.rows.is_empty()
+        && changes.operands.is_empty()
+        && changes.object_operands.is_empty()
+        && changes.bitmaps.is_empty()
+    {
         return Err(NativeTeletextEditorialImportError::NoChanges);
     }
     Ok(changes)
@@ -568,7 +576,7 @@ fn validate_reconciled_files(
                     .encoded()
                     .ok_or(NativeTeletextEditorialImportError::Association)?,
                 encoded,
-                &incoming.operands,
+                (&incoming.operands, &incoming.object_operands),
             )?;
         } else {
             validate_teletext_editorial_tti_encoding(

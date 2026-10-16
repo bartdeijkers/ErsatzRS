@@ -110,6 +110,23 @@ QTM edit/save/import, English/Dutch concept and selected-state views, explicit
 publication and two-theme ordinary TCP/client replay. It adds no production DOM
 or language keys; wider operand browser coverage, live-URL and full-editor proof
 remain required.
+Private concept version4 additionally represents same-family G0/G1 glyph changes
+in original page-local commands or original Local object definitions. Versions1–3
+retain their old meaning and serialized form; restoring an old version cannot
+silently acquire glyph-edit semantics. A Local definition intent binds its full
+owner/subcode/object identity, command ordinal, column and exact original operand.
+Native TTI reconciliation authenticates the retained compiler source, definition
+marker/type and unique final semantic word; uploaded bytes cannot create an object
+or edit a generated carrier. Identity, object type, command order, invocation
+geometry and all unselected commands remain immutable. Page/object operand counts
+share existing admission budgets before typed allocation. Recompilation and the
+panel-aware protected-effect comparison qualify every invocation, not just the
+edited command column. Repeated imports retain root-relative intent and exact
+undo; import and undo remain unpublished concepts. V4 can accompany existing rows,
+attributes and bitmap edits; it is independent of the editor carrier version.
+This engineering slice does not restrict the accepted full object/resource,
+repertoire or editor requirements. P9A-04 owns verification status and missing
+actual-editor/client evidence.
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

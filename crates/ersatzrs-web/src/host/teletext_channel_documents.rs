@@ -17,11 +17,12 @@ use ersatzrs_app::{
 use ersatzrs_core::repositories::TeletextGuideSourceFence;
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextColdProducerComposition,
-    TeletextComposedProducerPage, TeletextDrcsBitmapOverlay, TeletextLocalProgramOperandOverlay,
-    TeletextPageAddress, TeletextPhysicalBaseOverlay, TeletextProducerCompositionBudget,
-    TeletextProducerCompositionError, TeletextProducerCompositionFailure,
-    TeletextProducerCompositionMetadata, TeletextProducerPresentation,
-    TeletextProducerPresentationBudget, TeletextProducerPresentationError,
+    TeletextComposedProducerPage, TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPhysicalBaseOverlay,
+    TeletextProducerCompositionBudget, TeletextProducerCompositionError,
+    TeletextProducerCompositionFailure, TeletextProducerCompositionMetadata,
+    TeletextProducerPresentation, TeletextProducerPresentationBudget,
+    TeletextProducerPresentationError,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service_before, EncodedTeletextAuthoredService,
@@ -421,7 +422,7 @@ pub(super) fn encode_original_channel_documents_with_operands(
         selection,
         entry_addon_id,
         documents,
-        (editorial.0, editorial.1, &[]),
+        (editorial.0, editorial.1, &[], &[]),
         deadline,
         region,
         policy,
@@ -437,6 +438,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_overlays(
     editorial: (
         Vec<TeletextPhysicalBaseOverlay>,
         &[TeletextLocalProgramOperandOverlay],
+        &[TeletextLocalObjectOperandOverlay],
         &[TeletextDrcsBitmapOverlay],
     ),
     deadline: Instant,
@@ -499,7 +501,7 @@ pub(super) fn encode_original_producer_documents_with_operands(
     encode_original_producer_documents_with_editorial_overlays(
         entry_producer,
         documents,
-        (overlays, operands, &[]),
+        (overlays, operands, &[], &[]),
         deadline,
         region,
         policy,
@@ -514,17 +516,22 @@ pub(super) fn encode_original_producer_documents_with_editorial_overlays(
     editorial: (
         Vec<TeletextPhysicalBaseOverlay>,
         &[TeletextLocalProgramOperandOverlay],
+        &[TeletextLocalObjectOperandOverlay],
         &[TeletextDrcsBitmapOverlay],
     ),
     deadline: Instant,
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
-    let (overlays, operands, bitmaps) = editorial;
+    let (overlays, operands, object_operands, bitmaps) = editorial;
     check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
     if documents.is_empty() {
-        if !overlays.is_empty() || !operands.is_empty() || !bitmaps.is_empty() {
+        if !overlays.is_empty()
+            || !operands.is_empty()
+            || !object_operands.is_empty()
+            || !bitmaps.is_empty()
+        {
             return Err(ChannelTeletextDocumentEncodingError::Association);
         }
         return Ok(EncodedChannelTeletextOriginals {
@@ -558,6 +565,11 @@ pub(super) fn encode_original_producer_documents_with_editorial_overlays(
     if !operands.is_empty() {
         declared = declared
             .with_local_program_operand_overlays(operands, policy.composition.service)
+            .map_err(editorial_semantic_error)?;
+    }
+    if !object_operands.is_empty() {
+        declared = declared
+            .with_local_object_operand_overlays(object_operands, policy.composition.service)
             .map_err(editorial_semantic_error)?;
     }
     if !bitmaps.is_empty() {

@@ -979,3 +979,66 @@ fn separate_magazines_keep_independent_single_mots_and_nonzero_s1_provenance() {
     );
     assert_eq!(checked.resource_inventory().len(), 3);
 }
+
+#[test]
+fn local_object_overlay_preserves_declared_mot_inventory_defaults_and_original_selections() {
+    let mut input = draft();
+    let identity = TeletextObjectIdentity::local(owner(0), TeletextObjectId::new(65520));
+    let old = TeletextColumnOperation::G0 {
+        code: TeletextGlyphCode::new(b'A').unwrap(),
+    };
+    let new = TeletextColumnOperation::G0 {
+        code: TeletextGlyphCode::new(b'B').unwrap(),
+    };
+    input.pages[0].local_program = Some(
+        TeletextEnhancementProgram::new(vec![
+            TeletextEnhancementCommand::SetPosition {
+                position: TeletextEnhancementPosition::new(1, 8).unwrap(),
+            },
+            TeletextEnhancementCommand::InvokeObject {
+                target: identity,
+                object_type: TeletextObjectType::Passive,
+                offset: None,
+            },
+        ])
+        .unwrap(),
+    );
+    input.objects.push(TeletextEnhancementObjectDefinition {
+        identity,
+        object_type: TeletextObjectType::Passive,
+        program: TeletextEnhancementProgram::new(vec![TeletextEnhancementCommand::AtColumn {
+            column: 0,
+            operation: old,
+        }])
+        .unwrap(),
+    });
+    let original = bind(input.clone(), declaration(0, 1), vec![]).unwrap();
+    let overlay = TeletextLocalObjectOperandOverlay::new(identity, 0, 0, old, new).unwrap();
+    let changed = original
+        .clone()
+        .with_local_object_operand_overlays(
+            &[overlay],
+            TeletextServiceBudget {
+                max_records: 64,
+                max_objects: 64,
+                max_structure_items: 1024,
+                max_base_content_bytes: 1024,
+                max_commands: 1024,
+                max_collected_commands: 1024,
+                max_collected_drcs_references: 64,
+            },
+        )
+        .unwrap();
+    input.objects.last_mut().unwrap().program =
+        TeletextEnhancementProgram::new(vec![TeletextEnhancementCommand::AtColumn {
+            column: 0,
+            operation: new,
+        }])
+        .unwrap();
+    assert_eq!(changed, bind(input, declaration(0, 1), vec![]).unwrap());
+    assert_eq!(changed.mots(), original.mots());
+    assert_eq!(changed.resource_inventory(), original.resource_inventory());
+    assert_eq!(changed.resolutions(), original.resolutions());
+    assert_eq!(changed.defaults(), original.defaults());
+    assert_ne!(changed.semantic(), original.semantic());
+}

@@ -12,9 +12,9 @@ use super::{
 use crate::teletext_profile_documents::TeletextProfileDocument;
 use ersatzrs_domain::{
     EntityId, TeletextColumnOperation, TeletextDrcsBitmap, TeletextDrcsBitmapOverlay,
-    TeletextDrcsGlyphSlot, TeletextEnhancementCommand, TeletextLocalProgramOperandOverlay,
-    TeletextPageAddress, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
-    TeletextResourceIdentity,
+    TeletextDrcsGlyphSlot, TeletextEnhancementCommand, TeletextLocalObjectOperandOverlay,
+    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPhysicalBaseOverlay,
+    TeletextPhysicalBaseRow, TeletextResourceIdentity,
 };
 use serde::{
     de::{SeqAccess, Visitor},
@@ -26,6 +26,11 @@ use std::{collections::BTreeSet, fmt, io::Write};
 const OVERLAY_VERSION: u16 = 1;
 const OPERAND_OVERLAY_VERSION: u16 = 2;
 const DRCS_OVERLAY_VERSION: u16 = 3;
+const GLYPH_OVERLAY_VERSION: u16 = 4;
+
+#[path = "editorial_overlay/object_operands.rs"]
+pub(super) mod object_operands;
+use object_operands::{BorrowedObjectOperands, OptionalStoredObjectOperands};
 
 /// Structural association claims. Only the native host and repository can
 /// authenticate these references against exact immutable stored bytes.
@@ -55,6 +60,8 @@ pub struct TeletextSavedEditorialOverlay {
     pages: Vec<TeletextPhysicalBaseOverlay>,
     local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
     drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+    local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+    glyph_schema: bool,
 }
 impl TeletextSavedEditorialOverlay {
     /// Check reference shape and distinct exact owners. Original-page membership
@@ -68,7 +75,7 @@ impl TeletextSavedEditorialOverlay {
         if pages.is_empty() {
             return Err(invalid());
         }
-        Self::new_parts(provenance, pages, Vec::new(), Vec::new())
+        Self::new_parts(provenance, pages, Vec::new(), Vec::new(), Vec::new())
     }
 
     /// Capture version 2 intent, including operand-only concepts with no rows.
@@ -77,16 +84,27 @@ impl TeletextSavedEditorialOverlay {
     /// attached or restored. Character sizing and command structure are immutable;
     /// all affected protected display effects still require host validation.
     /// # Errors
-    /// Rejects invalid references, empty operand input and repeated exact targets.
+    /// Rejects invalid references, empty operand input, glyph intent and repeated targets.
+    /// Page-local G0/G1 intent requires the explicit version4 constructor.
     pub fn new_with_local_program_operands(
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
         local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        if local_program_operands.is_empty() {
+        if local_program_operands.is_empty()
+            || local_program_operands
+                .iter()
+                .any(|operand| object_operands::glyph(operand.expected()))
+        {
             return Err(invalid());
         }
-        Self::new_parts(provenance, pages, local_program_operands, Vec::new())
+        Self::new_parts(
+            provenance,
+            pages,
+            local_program_operands,
+            Vec::new(),
+            Vec::new(),
+        )
     }
 
     /// Capture version 3 intent for exact-original DRCS glyph replacements.
@@ -95,14 +113,19 @@ impl TeletextSavedEditorialOverlay {
     /// authenticates original bitmaps; permissions and protected shared effects
     /// still require native validation before saving or publishing.
     /// # Errors
-    /// Rejects invalid references, empty bitmap input and repeated exact targets.
+    /// Rejects invalid references, empty bitmap input, glyph intent and repeated targets.
+    /// Page-local G0/G1 intent requires the explicit version4 constructor.
     pub fn new_with_drcs_bitmap_overlays(
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
         local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
         drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        if drcs_bitmap_overlays.is_empty() {
+        if drcs_bitmap_overlays.is_empty()
+            || local_program_operands
+                .iter()
+                .any(|operand| object_operands::glyph(operand.expected()))
+        {
             return Err(invalid());
         }
         Self::new_parts(
@@ -110,6 +133,38 @@ impl TeletextSavedEditorialOverlay {
             pages,
             local_program_operands,
             drcs_bitmap_overlays,
+            Vec::new(),
+        )
+    }
+
+    /// Capture version 4 glyph intent in existing page-local or local-object commands.
+    ///
+    /// An empty object vector is permitted only when page-local operands include
+    /// a G0/G1 glyph change. Rows, legacy attributes and bitmaps may accompany the
+    /// new glyph intent, without granting edit or publication authority.
+    /// # Errors
+    /// Rejects invalid references, repeated exact targets, or input containing
+    /// neither a local-object operand nor a page-local glyph operand.
+    pub fn new_with_local_object_operands(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if local_object_operands.is_empty()
+            && !local_program_operands
+                .iter()
+                .any(|operand| object_operands::glyph(operand.expected()))
+        {
+            return Err(invalid());
+        }
+        Self::new_parts(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
         )
     }
 
@@ -118,6 +173,7 @@ impl TeletextSavedEditorialOverlay {
         pages: Vec<TeletextPhysicalBaseOverlay>,
         local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
         drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
         validate_provenance(&provenance)?;
         for (ordinal, page) in pages.iter().enumerate() {
@@ -140,16 +196,25 @@ impl TeletextSavedEditorialOverlay {
                 return Err(invalid());
             }
         }
+        object_operands::distinct(&local_object_operands)?;
+        let glyph_schema = !local_object_operands.is_empty()
+            || local_program_operands
+                .iter()
+                .any(|operand| object_operands::glyph(operand.expected()));
         Ok(Self {
             provenance,
             pages,
             local_program_operands,
             drcs_bitmap_overlays,
+            local_object_operands,
+            glyph_schema,
         })
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        if !self.drcs_bitmap_overlays.is_empty() {
+        if self.glyph_schema {
+            GLYPH_OVERLAY_VERSION
+        } else if !self.drcs_bitmap_overlays.is_empty() {
             DRCS_OVERLAY_VERSION
         } else if self.local_program_operands.is_empty() {
             OVERLAY_VERSION
@@ -170,6 +235,11 @@ impl TeletextSavedEditorialOverlay {
     pub fn local_program_operands(&self) -> &[TeletextLocalProgramOperandOverlay] {
         &self.local_program_operands
     }
+    /// Exact-original local-object glyph changes; no edit/publication authority.
+    #[must_use]
+    pub fn local_object_operands(&self) -> &[TeletextLocalObjectOperandOverlay] {
+        &self.local_object_operands
+    }
     /// Exact-original resource bitmap changes; no edit/publication authority.
     #[must_use]
     pub fn drcs_bitmap_overlays(&self) -> &[TeletextDrcsBitmapOverlay] {
@@ -184,6 +254,7 @@ impl fmt::Debug for TeletextSavedEditorialOverlay {
             .field("pages", &self.pages.len())
             .field("local_program_operands", &self.local_program_operands.len())
             .field("drcs_bitmap_overlays", &self.drcs_bitmap_overlays.len())
+            .field("local_object_operands", &self.local_object_operands.len())
             .finish_non_exhaustive()
     }
 }
@@ -250,6 +321,8 @@ closed_map!(StoredOverlay {
     local_program_operands: OptionalStoredOperands,
     #[serde(default, skip_serializing_if = "OptionalStoredBitmaps::is_absent")]
     drcs_bitmap_overlays: OptionalStoredBitmaps,
+    #[serde(default, skip_serializing_if = "OptionalStoredObjectOperands::is_absent")]
+    local_object_operands: OptionalStoredObjectOperands,
 });
 closed_map!(StoredPage { owner: super::Entry, rows: Vec<StoredRow> });
 closed_map!(StoredRow {
@@ -351,11 +424,16 @@ impl StoredOverlay {
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         let operands = self.local_program_operands.0;
         let bitmaps = self.drcs_bitmap_overlays.0;
-        match (self.schema_version, &operands, &bitmaps) {
-            (OVERLAY_VERSION, None, None) => {}
-            (OPERAND_OVERLAY_VERSION, Some(operands), None) if !operands.is_empty() => {}
-            (DRCS_OVERLAY_VERSION, operands, Some(bitmaps))
+        let objects = self.local_object_operands.0;
+        match (self.schema_version, &operands, &bitmaps, &objects) {
+            (OVERLAY_VERSION, None, None, None) => {}
+            (OPERAND_OVERLAY_VERSION, Some(operands), None, None) if !operands.is_empty() => {}
+            (DRCS_OVERLAY_VERSION, operands, Some(bitmaps), None)
                 if !bitmaps.is_empty() && operands.as_ref().is_none_or(|v| !v.is_empty()) => {}
+            (GLYPH_OVERLAY_VERSION, operands, bitmaps, objects)
+                if operands.as_ref().is_none_or(|v| !v.is_empty())
+                    && bitmaps.as_ref().is_none_or(|v| !v.is_empty())
+                    && objects.as_ref().is_none_or(|v| !v.is_empty()) => {}
             _ => return Err(invalid()),
         }
         let provenance = TeletextSavedEditorialProvenance {
@@ -418,7 +496,11 @@ impl StoredOverlay {
                 .map_err(|_| invalid())
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let objects = object_operands::restore(objects.unwrap_or_default())?;
         let value = match self.schema_version {
+            GLYPH_OVERLAY_VERSION => TeletextSavedEditorialOverlay::new_with_local_object_operands(
+                provenance, pages, operands, objects, bitmaps,
+            )?,
             DRCS_OVERLAY_VERSION => TeletextSavedEditorialOverlay::new_with_drcs_bitmap_overlays(
                 provenance, pages, operands, bitmaps,
             )?,
@@ -471,12 +553,17 @@ pub(super) fn validate_association(
         unique_original_owner(page.owner(), documents)?;
     }
     limit(
-        overlay.local_program_operands.len(),
+        overlay
+            .local_program_operands
+            .len()
+            .checked_add(overlay.local_object_operands.len())
+            .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?,
         budget.validation.service.max_commands,
         "editorial operands",
     )?;
     items = items
         .checked_add(overlay.local_program_operands.len())
+        .and_then(|count| count.checked_add(overlay.local_object_operands.len()))
         .ok_or_else(|| failure(TeletextDesignDocumentFailure::Storage))?;
     limit(
         items,
@@ -492,6 +579,7 @@ pub(super) fn validate_association(
         "editorial structure items",
     )?;
     validate_bitmap_association(&overlay.drcs_bitmap_overlays, documents)?;
+    object_operands::validate_association(&overlay.local_object_operands, documents)?;
     for operand in &overlay.local_program_operands {
         let TeletextProfileDocument::Authored(service) =
             unique_original_owner(operand.owner(), documents)?
@@ -583,6 +671,8 @@ struct BorrowedOverlay<'a> {
     local_program_operands: Option<BorrowedOperands<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     drcs_bitmap_overlays: Option<BorrowedBitmaps<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_object_operands: Option<BorrowedObjectOperands<'a>>,
 }
 struct BorrowedBitmaps<'a>(&'a [TeletextDrcsBitmapOverlay]);
 impl Serialize for BorrowedBitmaps<'_> {
@@ -760,6 +850,8 @@ fn write_appended(
                 .then_some(BorrowedOperands(&overlay.local_program_operands)),
             drcs_bitmap_overlays: (!overlay.drcs_bitmap_overlays.is_empty())
                 .then_some(BorrowedBitmaps(&overlay.drcs_bitmap_overlays)),
+            local_object_operands: (!overlay.local_object_operands.is_empty())
+                .then_some(BorrowedObjectOperands(&overlay.local_object_operands)),
         },
     )?;
     writer
@@ -774,3 +866,7 @@ mod tests;
 #[cfg(test)]
 #[path = "editorial_overlay/drcs_tests.rs"]
 mod drcs_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/glyph_tests.rs"]
+mod glyph_tests;

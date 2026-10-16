@@ -588,6 +588,10 @@ pub(super) fn compile_effective_restored_parts(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.local_program_operands());
+    let object_operands = parts
+        .editorial_overlay
+        .as_ref()
+        .map_or(&[][..], |overlay| overlay.local_object_operands());
     let bitmaps = parts
         .editorial_overlay
         .as_ref()
@@ -595,7 +599,7 @@ pub(super) fn compile_effective_restored_parts(
     let originals = encode_original_producer_documents_with_editorial_overlays(
         entry,
         parts.documents,
-        (overlays, operands, bitmaps),
+        (overlays, operands, object_operands, bitmaps),
         deadline,
         region,
         policy,

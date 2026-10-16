@@ -424,7 +424,7 @@ async fn verify_stage_text(
 
 #[tokio::test]
 async fn warm_scoped_native_transitions_preserve_cumulative_root_and_publish_real_absence() {
-    let flow = cold::complete_with_zone(cold::fixture().await, false).await;
+    let flow = Box::pin(cold::complete_with_zone(cold::fixture().await, false)).await;
     let before = immutable_state(&flow).await;
     let calls = flow.fixture.calls();
     assert_eq!(flow.accepted[0].generation().request.revision, 2);
@@ -467,7 +467,7 @@ async fn source_flow(ffmpeg: &str, directory: &Path) -> (Flow, PathBuf, Vec<u8>)
     cold::configure_source(&fixture.fixture, &source_path).await;
     let source = shared::read_bounded(&source_path, MAX_SOURCE).unwrap();
     shared::write_new(&directory.join("source.ts"), &source).unwrap();
-    let flow = cold::complete_with_zone(fixture, false).await;
+    let flow = Box::pin(cold::complete_with_zone(fixture, false)).await;
     (flow, source_path, source)
 }
 

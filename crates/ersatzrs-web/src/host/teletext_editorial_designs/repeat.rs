@@ -16,10 +16,13 @@ use super::{
 };
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_domain::{
-    TeletextDrcsBitmapOverlay, TeletextLocalProgramOperandOverlay, TeletextPhysicalBaseRow,
-    TeletextServiceBudget,
+    TeletextColumnOperation, TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextLocalProgramOperandOverlay, TeletextPhysicalBaseRow, TeletextServiceBudget,
 };
 use std::collections::{BTreeMap, BTreeSet};
+
+#[path = "repeat/object_operands.rs"]
+mod object_operands;
 
 struct PreparedImport {
     root: QualifiedBaseline,
@@ -122,6 +125,7 @@ fn qualify_latest(
     let previous = TeletextEditorialChanges {
         rows: overlay.pages().to_vec(),
         operands: overlay.local_program_operands().to_vec(),
+        object_operands: overlay.local_object_operands().to_vec(),
         bitmaps: overlay.drcs_bitmap_overlays().to_vec(),
     };
     let original_document = latest.original.document.clone();
@@ -392,6 +396,7 @@ fn extend_root_export(
         .iter()
         .map(TeletextPhysicalBaseOverlay::owner)
         .chain(cumulative.operands.iter().map(|operand| operand.owner()))
+        .chain(cumulative.object_operands.iter().map(|operand| operand.owner()))
         // Preserve every actual resource consumer without exporting unrelated
         // pages or widening the incoming receipt's editable surface.
         .chain(resource_owners)
@@ -425,6 +430,21 @@ fn extend_root_export(
     Ok(exported)
 }
 
+fn check_operand_budget(
+    changes: &TeletextEditorialChanges,
+    budget: TeletextServiceBudget,
+) -> Result<()> {
+    if changes
+        .operands
+        .len()
+        .checked_add(changes.object_operands.len())
+        .is_none_or(|count| count > budget.max_commands || count > budget.max_structure_items)
+    {
+        return Err(NativeTeletextEditorialImportError::Budget);
+    }
+    Ok(())
+}
+
 fn prepare(
     request: NativeTeletextEditorialImportRequest,
     latest: EditorialBaseline,
@@ -455,6 +475,7 @@ fn prepare(
                 TeletextEditorialChanges {
                     rows: Vec::new(),
                     operands: Vec::new(),
+                    object_operands: Vec::new(),
                     bitmaps: Vec::new(),
                 },
                 provenance,
@@ -480,11 +501,20 @@ fn prepare(
     }
     // NoChanges compares latest files, before cumulative merge/root effects.
     let incoming = reconcile_files(baseline, &request.files, tti, deadline)?;
+    for changes in [&previous, &incoming] {
+        check_operand_budget(changes, policy.document.validation.service)?;
+    }
     let cumulative = TeletextEditorialChanges {
         rows: merge_rows(&previous.rows, &incoming.rows, &policy, deadline)?,
         operands: merge_operands(
             &previous.operands,
             &incoming.operands,
+            policy.document.validation.service,
+            deadline,
+        )?,
+        object_operands: object_operands::merge(
+            &previous.object_operands,
+            &incoming.object_operands,
             policy.document.validation.service,
             deadline,
         )?,
@@ -495,6 +525,7 @@ fn prepare(
             deadline,
         )?,
     };
+    check_operand_budget(&cumulative, policy.document.validation.service)?;
     let root_export = extend_root_export(
         &mut root,
         &cumulative,
@@ -525,6 +556,7 @@ fn prepare(
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
     let document = if prepared.cumulative.rows.is_empty()
         && prepared.cumulative.operands.is_empty()
+        && prepared.cumulative.object_operands.is_empty()
         && prepared.cumulative.bitmaps.is_empty()
     {
         // An explicit edit back to the immutable root is still a new concept
@@ -549,7 +581,21 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
             _ => return Err(NativeTeletextEditorialImportError::Association),
         }
     } else {
-        let overlay = if !prepared.cumulative.bitmaps.is_empty() {
+        let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
+            matches!(
+                operand.expected(),
+                TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. }
+            )
+        });
+        let overlay = if !prepared.cumulative.object_operands.is_empty() || has_glyphs {
+            TeletextSavedEditorialOverlay::new_with_local_object_operands(
+                prepared.provenance.clone(),
+                prepared.cumulative.rows.clone(),
+                prepared.cumulative.operands.clone(),
+                prepared.cumulative.object_operands.clone(),
+                prepared.cumulative.bitmaps.clone(),
+            )?
+        } else if !prepared.cumulative.bitmaps.is_empty() {
             TeletextSavedEditorialOverlay::new_with_drcs_bitmap_overlays(
                 prepared.provenance.clone(),
                 prepared.cumulative.rows.clone(),
@@ -626,11 +672,13 @@ fn make_document(
         TeletextEditorialEdits {
             rows: &prepared.incoming.rows,
             operands: &prepared.incoming.operands,
+            object_operands: &prepared.incoming.object_operands,
             bitmaps: &prepared.incoming.bitmaps,
         },
         TeletextEditorialEdits {
             rows: &prepared.cumulative.rows,
             operands: &prepared.cumulative.operands,
+            object_operands: &prepared.cumulative.object_operands,
             bitmaps: &prepared.cumulative.bitmaps,
         },
         &prepared.policy.encoding.encoding,
