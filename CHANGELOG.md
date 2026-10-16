@@ -697,8 +697,9 @@ release section when tagging a release.
   national-cell save now reaches native concept import, shared preview, explicit
   publication and database reopen without changing installed packages or the
   other channel. Ordinary delivery now passes source audio/video, transport and
-  independent glyph, fragment and theme checks. Headed admin and actual client
-  proof for this case remain open.
+  independent glyph, fragment and theme checks. Headed localized Chromium and
+  Firefox trials connect the actual editor save to native forms and the same
+  ordinary streams. Hydration and actual teletext-client proof remain open.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
   when an existing linked DRCS definition provides its exact glyph and neutral
   effects. Keep fallback, resource bytes and lifecycle intact; missing or changed

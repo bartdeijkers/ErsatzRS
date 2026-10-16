@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: join the delivered Polish concept to headed admin and client acceptance'
+current_focus = 'P9A-04: implement compiler-owned DRCS realization for no-bank Polish pages'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -98,8 +98,13 @@ isolation now pass61 native checks. Exact two-profile ordinary TCP delivery now
 passes64437eea with TSDuck/AV/model equality, independent literal DRCS masks,
 fragments/theme colours and database reopen/cleanup. P9A-04 owns scope/negatives:
 independent banks are explicitly supplied; fallback uses receiver region0.
-Next join this exact accepted glyph to headed localized admin; suitable-client
-display/navigation remains open. The bounded Kodi21.3
+Exact headed9-culture light/dark SSR/no-JS admin export/import/preview/Request/
+Publish now passes Chromium47695d2f and Firefox3cadfa41, with same-origin streams,
+immutable pointers/profiles/input and database reopen/cleanup. Hydration and
+suitable-client display/navigation remain open. Next implement deterministic,
+bounded compiler-owned resource/slot/link/lifecycle derivation and generated-slot
+editor protection for no-bank Polish pages; the complete-service boundary lacks
+that ownership plan. Preserve authored declarations and all acceptance gates. The bounded Kodi21.3
 source assessment does not establish enlarged DRCS suitability; client acceptance
 stays open without a decoder maintenance program. Automatic no-bank
 resources, non-neutral effects and resource-choice coverage remain open;

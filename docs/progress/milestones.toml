@@ -2968,6 +2968,88 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 headed Polish editor/admin-to-stream checkpoint:
+Criterion: join this exact existing-resource Polish Base5B genuine QTM Save As
+to localized headed admin export/import/preview/explicit publication and the
+same ordinary stream origin. The product UI, translations and production code
+are unchanged; the existing SSR form/application boundary is exercised.
+Source map: /channels/{id}/teletext -> ChannelTeletextPage's blocking SSR loader
+and TeletextDraftPreview. Plain forms use /admin-api/teletext/design/ export,
+import, request-publication and publish. Existing application services own
+receipt authentication, concept storage and acceptance. No island or shared
+product primitive changed. This proof disables JavaScript and does not establish
+matched SSR/WASM assets, hydration or interactive shell acceptance.
+
+Both fresh owned native hosts pass terminally:
+- Chromium browser151.0.7922.34/PW1.62.1: headed spec passes34.4s; native
+  47695d2f-538b-4729-a305-396c4ce63cf5 passes97.722s including browser barriers,
+  ordinary captures, TSDuck/AV/model and database reopen/cleanup.
+- Firefox153.0/PW1.62.1: headed spec passes36.3s; native
+  3cadfa41-2db9-47ff-a946-51f11e17e9dc passes64.987s with the same checks.
+Slow notices include the bounded external browser wait; both checks are PASS.
+There is no failing approach or changed normative expectation in these runs.
+
+Each browser verifies all9 cultures in light/dark, selected distinct channel
+profiles/themes, a fresh complete ZIP download and byte-exact genuine editor
+input. Only actual saved display124 TTI bytes962254bb replace its original
+file; all companions and uploaded sidecar remain from that same fresh export.
+The native barrier proves the newly stored revision2 contains only the exact
+raw row1/column7 A-to-5B overlay, no bitmap/operand changes and the unchanged
+original document. Its newly downloaded receipt is distinct from the fixture's
+old receipt and retains exactly the authoritative project/files. Original,
+pending and accepted pointers remain unchanged before explicit Request/Publish.
+
+The actual browser-decoded preview checks the unchanged literal12x10 Polish
+mask, doubled horizontally at main1,7 over two cells: x132..155,y10..19 with the
+existing4-column left panel. Exactly88 changed raster pixels stay inside that
+permitted footprint; all others remain equal. Navigation124/125/124 retains the
+same124 raster, unchanged Day125 and complete unchanged Night rasters. Literal
+page125 mirrored bitmap pixels retain redDay/blueNight. Browser Request retains
+old accepted generation; Publish selects exactly the verified concept. Native
+CAS/pointers/preview and same-host ordinary output independently bind that exact
+generation, with other-channel isolation, immutable package/profile/receipt/input
+retention, no refresh, owned capacity release and database reopen.
+
+Both headed trials retain26 original screenshots each. Root inspected both
+18-locale contact sheets plus full Chromium edited preview/publication and full
+Firefox Polish-dark import/edited preview originals. No concrete clipping or
+unexpected raster change was found within that scope; native file-picker labels
+are browser-owned. Browser error lists are empty. Root visual receipt:
+ tmp/phase9-polish-admin/root-visual-review.json. The shared browser helper only
+extracts existing bounded transfer mechanics; the old resource-bank test body
+and its literal glyph/change oracles remain byte-exact (helper-extraction.json).
+A discovery check parses both specs; no new bank runtime acceptance is claimed.
+
+All four actual browser-flow512-unit captures are byte-identical to the prior
+ordinary Polish corpus. The unchanged pinned imager oracle passes again for
+11 closed124/125 acquisitions per channel. Its explicit received-bank/default-
+region0 fallback scope and the prior pixel/channel negatives remain unchanged;
+this does not prove automatic X27/MOT cache routing, regional font pixels or an
+actual suitable teletext client's display/navigation. Strict web all-target
+Clippy passes1m23s. Canonical source/tool/browser/transport receipt:
+ tmp/phase9-polish-admin/identity.json
+SHA256b84e680d59afd6c1a3845a9eb8071b45e1551c069c5edee65c7d4d52d426d253.
+Formatting, architecture, progress, new-allow policy, staged diff and commitlint
+pass. Final formatting only orders adjacent test-module declarations and trims
+one EOF blank line; assertions/test bodies and product code are unchanged.
+Reuse the unchanged61-case editorial/negative suite and
+prior115+1 compiler checks; no new full-CI, warm/default-capacity, whole-host
+restart, platform, hydration, suitable-client or full-engine claim follows.
+
+Next concrete product criterion: provision the exact assigned Polish Base5B
+carrier when the addon supplies NO matching authored DRCS bank. Current encoding
+still rejects that case. At authored_service::encode_owned_service, resources
+and transmission context precede normalization; there is no private generated-
+resource ownership plan yet. Implement deterministic bounded compiler-owned
+resource/slot/link/lifecycle derivation while retaining authored declarations,
+full composed-service collision checks, existing two-subtable/24-glyph limits,
+receipt reproducibility and explicit generated-slot edit protection in export/
+import. Appending a body or exempting inventory/X27 wholesale is insufficient.
+This named authored requirement drives the next foundation work. Do not accept
+a no-bank page restriction. Suitable-client and full fallback/hydration gates
+stay visible while independent product work proceeds. All milestone acceptance
+and statuses remain unchanged; engine-first production guide delivery stays gated.
+
 2026-10-16 genuine Polish concept ordinary-route checkpoint:
 Criterion: connect the existing-resource Polish Base5B editor concept to actual
 ordinary delivery and independent representative decoding. No production code,
@@ -7884,24 +7966,22 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Authored warm magazine-to-page presentation | Bounded complete-X28/history plus representative cold and retained-client warm bank publication proven; full warm matrix open |72 output tests, real AV/TSDuck/persistent Cyrillic-to-Greek decoding, cold editor/admin flow and same-client/decoder two-theme124/125/124 with18 actual library-map barriers above | Complete lower-level/resource/Header/POP/MOT/page-retirement, broader palette/context and client/platform matrix remain required | Reuse this fixed handover; address a specific remaining lifecycle clause when it blocks its accepted feature rather than expanding decoder maintenance |
-| Polish Base5B physical repertoire | Existing linked authored-DRCS neutral encoding and genuine QTM/native/ordinary-route flow implemented; no-bank/non-neutral cases open | Carrier and editor receipts plus64437eea: shared preview, explicit publication, actual two-profile TCP/TSDuck/AV/model equality, independent fixed bitmap/fragments/colours, reopen/isolation and negatives | Exact glyph headed admin and suitable-client display/navigation remain missing. Independent banks are explicitly supplied and fallback uses receiver region0. Qualified libzvbi lacks Local Passive; Kodi21.3 source does not establish enlarged suitability. Automatic no-bank resource ownership/protection is unimplemented | Join this exact accepted glyph to headed localized admin; retain the client gate and implement missing resource provision without accepting a page restriction |
+| Polish Base5B physical repertoire | Existing linked authored-DRCS neutral encoding, genuine QTM and localized SSR/no-JS admin-to-stream flow implemented; no-bank/non-neutral cases open | Carrier/editor/ordinary receipts plus47695d2f/3cadfa41: headed Chromium/Firefox9 cultures×2themes, fresh ZIP/genuine Save As upload, literal preview, explicit publication, same-origin TCP/TSDuck/AV/independent bytes, reopen/isolation | Hydration and suitable-client display/navigation remain missing. Independent banks are explicit and fallback uses receiver region0. Qualified libzvbi lacks Local Passive; Kodi21.3 source does not establish enlarged suitability. No-bank compiler-resource ownership/protection is unimplemented | Implement exact plan-bound automatic resource/slot/link/lifecycle ownership and editor protection for no-bank pages; preserve all client/fallback/hydration gates and authored ownership |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next authored action: join the existing-resource Polish Base5B
-carrier to the retained real editor/preview/publication/ordinary-route/client
-flow using a fresh immutable original and exact resource-bound receipt. The
-native positive, whole-service encoder and genuine QTM Save As/concept/preview/
-explicit publication/database reopen now pass without a guessed alias; the latest
-checkpoint owns exact proof and negatives. Actual two-profile ordinary TCP,
-TSDuck/AV/model equality and fixed independent glyph/fragment/theme decoding now
-pass64437eea plus the pinned imager oracle. The next missing proof is this exact
-glyph's headed localized admin and suitable-client display/navigation. Preserve
-the explicit-bank and receiver-region0 limits of this independent proof. Automatic no-bank
-resource provision, non-neutral effects and complete resource-choice/bounds
-coverage still need implementation/evidence. Preserve literal original identity,
-fallback, ownership and protected effects; do not accept a page restriction.
-This is one known repertoire clause, not a new general audit. Reuse prior
-M29/X28/G1/client evidence unchanged. All other acceptance criteria remain.
+Concrete next authored action: implement compiler-owned DRCS resource/slot/link/
+lifecycle derivation and generated-slot editor protection for assigned Polish
+Base5B when no matching authored bank exists. The complete-service boundary has
+no ownership plan for this yet. Preserve literal original identity, fallback,
+authored declarations, receipt reproducibility, collision/budget limits and exact
+protected effects; do not accept a no-bank page restriction. Non-neutral effects
+and complete resource-choice/bounds coverage also remain open.
+The existing-resource case now connects genuine QTM Save As to localized headed
+SSR/no-JS preview/publication and actual ordinary streams, as the latest owning
+receipts prove. Preserve explicit-bank/default-region0 independent-decoder scope
+and open hydration/suitable-client gates. This is one named repertoire gap, not
+a new general audit. Reuse existing M29/X28/G1/client evidence within its original
+scope; all other acceptance criteria remain.
 G1's fixed vector remains qualified; no external repair expansion starts. The actual padded sparse save now
 passes the joined admin/publication/ordinary route, strict edited-S1=1/fallback
 and qualified-client flow above. Independent and actual sparse client proof is

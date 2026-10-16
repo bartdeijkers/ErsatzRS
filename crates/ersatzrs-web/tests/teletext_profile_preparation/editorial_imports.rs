@@ -62,6 +62,8 @@ pub(super) mod live_updates;
 // acceptance remains separate from this /proc and calibrated-library probe.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod mosaic_live;
+#[path = "editorial_imports/polish_admin.rs"]
+mod polish_admin;
 #[path = "editorial_imports/polish_carrier.rs"]
 mod polish_carrier;
 #[path = "editorial_imports/polish_delivery.rs"]

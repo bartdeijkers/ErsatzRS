@@ -51,22 +51,22 @@ fn actual_hashes(sparse: bool) -> (&'static str, &'static str) {
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct BrowserConcept {
-    probe_version: u8,
-    design_id: i64,
-    revision: i64,
-    digest: String,
+pub(super) struct BrowserConcept {
+    pub(super) probe_version: u8,
+    pub(super) design_id: i64,
+    pub(super) revision: i64,
+    pub(super) digest: String,
 }
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct BrowserComplete {
-    probe_version: u8,
-    design_id: i64,
-    revision: i64,
-    digest: String,
-    generation_id: i64,
-    request_id: i64,
+pub(super) struct BrowserComplete {
+    pub(super) probe_version: u8,
+    pub(super) design_id: i64,
+    pub(super) revision: i64,
+    pub(super) digest: String,
+    pub(super) generation_id: i64,
+    pub(super) request_id: i64,
 }
 
 struct Retained {
@@ -143,7 +143,7 @@ fn write_json(directory: &Path, filename: &str, value: &impl Serialize) -> io::R
     )
 }
 
-async fn marker<T: DeserializeOwned>(directory: &Path, filename: &str) -> io::Result<T> {
+pub(super) async fn marker<T: DeserializeOwned>(directory: &Path, filename: &str) -> io::Result<T> {
     loop {
         let path = directory.join(filename);
         if tokio::fs::try_exists(&path).await? {

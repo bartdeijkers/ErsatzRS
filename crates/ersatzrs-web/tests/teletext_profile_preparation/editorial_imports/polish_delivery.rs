@@ -10,7 +10,7 @@ use futures_util::FutureExt as _;
 use serde_json::{json, Value};
 use std::{panic::AssertUnwindSafe, path::PathBuf};
 
-struct Retained {
+pub(super) struct Retained {
     package: String,
     profiles: Vec<TeletextProfileRead>,
     bindings: [Vec<ChannelTeletextBindingRead>; 2],
@@ -18,7 +18,7 @@ struct Retained {
 }
 
 impl Retained {
-    async fn capture(fixture: &Fixture, flow: &Flow, actual: &Path) -> Self {
+    pub(super) async fn capture(fixture: &Fixture, flow: &Flow, actual: &Path) -> Self {
         let mut names: Vec<_> = flow.exported[0]
             .files()
             .iter()
@@ -59,7 +59,7 @@ impl Retained {
         }
     }
 
-    async fn assert_unchanged(
+    pub(super) async fn assert_unchanged(
         &self,
         fixture: &mut Fixture,
         flow: &Flow,
@@ -109,7 +109,7 @@ impl Retained {
     }
 }
 
-fn write_json(directory: &Path, name: &str, value: &impl serde::Serialize) {
+pub(super) fn write_json(directory: &Path, name: &str, value: &impl serde::Serialize) {
     let bytes = serde_json::to_vec(value).unwrap();
     assert!(bytes.len() <= 128 * 1024);
     live_client::write_new(&directory.join(name), &bytes).unwrap();
@@ -176,7 +176,7 @@ fn assert_theme_preview(service: &EncodedTeletextAuthoredService, foreground: [u
         "background_rgb4":[0,0,0],"exact_bitmap_pixels_checked":240,"preview":preview_summary(&raster)})
 }
 
-fn assert_published_previews(
+pub(super) fn assert_published_previews(
     directory: &Path,
     service: &EncodedTeletextAuthoredService,
     accepted: &[AcceptedTeletextOutputCandidate; 2],
@@ -266,7 +266,7 @@ async fn publish_genuine(
     accepted
 }
 
-async fn verify_capture(
+pub(super) async fn verify_capture(
     directory: &Path,
     tools: &drcs_bitmap_delivery::Tools,
     source: &[u8],
