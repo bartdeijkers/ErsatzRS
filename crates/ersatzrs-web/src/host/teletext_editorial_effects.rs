@@ -14,9 +14,9 @@ use ersatzrs_addon_contract::{TeletextAuthoringRegionAreaWire, TeletextAuthoring
 use ersatzrs_app::teletext_export_project::TeletextExportProject;
 use ersatzrs_domain::{
     TeletextBaseDisplayCellKind, TeletextDisplayAttribute, TeletextDisplayCell,
-    TeletextDisplayFragment, TeletextDrcsBitmapOverlay, TeletextDrcsCatalog,
-    TeletextEnhancementCommand, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
-    TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
+    TeletextDisplayFragment, TeletextDisplayGeometry, TeletextDrcsBitmapOverlay,
+    TeletextDrcsCatalog, TeletextEnhancementCommand, TeletextLocalProgramOperandOverlay,
+    TeletextPageAddress, TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_drcs_page, project_encoded_teletext_display, project_teletext_comparison_glyph,
@@ -193,7 +193,7 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             }
             continue;
         }
-        let allowed = permission_mask(project, owner, budget.max_pages)?;
+        let allowed = permission_mask(project, old.display_geometry(), budget.max_pages)?;
         check_packets(
             old_page,
             new_page,
@@ -571,12 +571,22 @@ fn local_command(
         .copied()
 }
 
-type PermissionMask = [[bool; 40]; 25];
+// Level 2.5 has forty Main columns and at most sixteen selected panel columns.
+struct PermissionMask {
+    main_start: usize,
+    visual: [[bool; 56]; 25],
+}
+impl PermissionMask {
+    fn allows_main(&self, row: u8, column: u8) -> bool {
+        self.visual[usize::from(row)][self.main_start + usize::from(column)]
+    }
+}
 fn permission_mask(
     project: &TeletextExportProject,
-    owner: TeletextPageAddress,
+    geometry: &TeletextDisplayGeometry,
     max_pages: usize,
 ) -> Result<PermissionMask> {
+    let owner = geometry.owner();
     if project.pages.len() > max_pages || project.producers.len() > max_pages {
         return Err(error(
             Some(owner),
@@ -600,23 +610,41 @@ fn permission_mask(
                 page.page.page == owner.page.get() && page.page.subcode == owner.subcode.get()
             })
         });
-    let mut result = [[false; 40]; 25];
+    let left = usize::from(geometry.left_width());
+    if usize::from(geometry.total_width()) > 56 {
+        return Err(error(
+            Some(owner),
+            None,
+            TeletextEditorialEffectsFailure::Association,
+        ));
+    }
+    let mut result = PermissionMask {
+        main_start: left,
+        visual: [[false; 56]; 25],
+    };
     let Some(metadata) = metadata else {
         return Ok(result);
     };
     for region in &metadata.regions {
-        if region.area != TeletextAuthoringRegionAreaWire::Main
-            || region.kind == TeletextAuthoringRegionKindWire::Generated
-        {
+        if region.kind == TeletextAuthoringRegionKindWire::Generated {
             continue;
         }
+        let (offset, columns) = match region.area {
+            TeletextAuthoringRegionAreaWire::Main => (left, 40),
+            TeletextAuthoringRegionAreaWire::LeftPanel => (0, left),
+            TeletextAuthoringRegionAreaWire::RightPanel => {
+                (left + 40, usize::from(geometry.right_width()))
+            }
+        };
         let end_row = usize::from(region.row) + usize::from(region.height);
         let end_column = usize::from(region.column) + usize::from(region.width);
         if region.height == 0
             || region.width == 0
             || end_row > 25
-            || end_column > 40
-            || (region.row == 0 && region.column < 8)
+            || end_column > columns
+            || (region.area == TeletextAuthoringRegionAreaWire::Main
+                && region.row == 0
+                && region.column < 8)
         {
             return Err(error(
                 Some(owner),
@@ -624,8 +652,8 @@ fn permission_mask(
                 TeletextEditorialEffectsFailure::Association,
             ));
         }
-        for row in &mut result[usize::from(region.row)..end_row] {
-            row[usize::from(region.column)..end_column].fill(true);
+        for row in &mut result.visual[usize::from(region.row)..end_row] {
+            row[offset + usize::from(region.column)..offset + end_column].fill(true);
         }
     }
     Ok(result)
@@ -800,7 +828,7 @@ fn check_row_bytes(
     allowed: &PermissionMask,
 ) -> Result<()> {
     for ((old, new), column) in old.iter().zip(new).zip(start..) {
-        if old != new && !allowed[usize::from(row)][usize::from(column)] {
+        if old != new && !allowed.allows_main(row, column) {
             return Err(error(
                 Some(owner),
                 Some((row, column)),
@@ -864,15 +892,12 @@ fn compare_protected(
     for row in 0_u8..25 {
         check_deadline(deadline)?;
         for column in 0_u8..40 {
-            if !allowed[usize::from(row)][usize::from(column)] {
+            if !allowed.allows_main(row, column) {
                 compare_base(old, new, row, column)?;
             }
         }
         for column in 0_u8..width {
-            let main_column = column
-                .checked_sub(before.left_width())
-                .filter(|&value| value < 40);
-            if main_column.is_none_or(|main| !allowed[usize::from(row)][usize::from(main)]) {
+            if !allowed.visual[usize::from(row)][usize::from(column)] {
                 compare_cell(old, new, row, column)?;
             }
         }

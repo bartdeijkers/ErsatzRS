@@ -97,6 +97,13 @@ fn add_panel_consumer(
     page: &mut TeletextResolvedPageEnhancementDraft,
     commands: &mut Vec<TeletextEnhancementCommand>,
 ) -> TeletextEnhancementObjectDefinition {
+    add_panel_consumer_at(page, commands, 32)
+}
+fn add_panel_consumer_at(
+    page: &mut TeletextResolvedPageEnhancementDraft,
+    commands: &mut Vec<TeletextEnhancementCommand>,
+    offset: u8,
+) -> TeletextEnhancementObjectDefinition {
     page.presentation.as_mut().unwrap().panels = TeletextSidePanels {
         left: true,
         right: true,
@@ -107,8 +114,8 @@ fn add_panel_consumer(
     commands.push(TeletextEnhancementCommand::InvokeObject {
         target,
         object_type: TeletextObjectType::Passive,
-        // Original active column 8 plus offset 32 selects the right panel.
-        offset: Some(TeletextObjectOffset::new(0, 32).unwrap()),
+        // Original active column 8 plus offset selects the raw panel address.
+        offset: Some(TeletextObjectOffset::new(0, offset).unwrap()),
     });
     let TeletextEnhancementCommand::AtColumn { operation, .. } = drcs_command() else {
         unreachable!()
@@ -124,6 +131,13 @@ fn add_panel_consumer(
     }
 }
 fn declared(value: u16, other: u16, panel: bool) -> TeletextDeclaredService {
+    declared_with_panel_offset(value, other, panel.then_some(32))
+}
+fn declared_with_panel_offset(
+    value: u16,
+    other: u16,
+    panel_offset: Option<u8>,
+) -> TeletextDeclaredService {
     let policy = policy();
     let lifted = lift_teletext_v1_page_set(
         draft("ASCII"),
@@ -141,8 +155,12 @@ fn declared(value: u16, other: u16, panel: bool) -> TeletextDeclaredService {
             },
             drcs_command(),
         ];
-        if panel && page.address == address(124) {
-            objects.push(add_panel_consumer(page, &mut commands));
+        if let Some(offset) = panel_offset.filter(|_| page.address == address(124)) {
+            objects.push(if offset == 32 {
+                add_panel_consumer(page, &mut commands)
+            } else {
+                add_panel_consumer_at(page, &mut commands, offset)
+            });
         }
         page.local_program = Some(TeletextEnhancementProgram::new(commands).unwrap());
     }
@@ -356,6 +374,150 @@ fn shared_panel_consumer_is_protected_even_when_both_main_cells_are_editable() {
     );
     assert_eq!(failure.page, Some(address(124)));
     assert_eq!(failure.position, Some((1, 44)));
+}
+
+fn assert_captured_panel_bitmap_zone(
+    offset: u8,
+    area: TeletextAuthoringRegionAreaWire,
+    raw_column: u8,
+    visual_column: u8,
+) {
+    let before = compile_declared(declared_with_panel_offset(0x801, 0x123, Some(offset)), 1);
+    let after = compile_declared(declared_with_panel_offset(0x803, 0x123, Some(offset)), 1);
+    assert_eq!(
+        before.declared().semantic().base(),
+        after.declared().semantic().base()
+    );
+    for (old, new) in before.pages().iter().zip(after.pages()) {
+        if let (Some((old_page, old)), Some((new_page, new))) = (display(old), display(new)) {
+            // The changed resource never rewrites either display's fallback,
+            // header, native X26 or selected presentation packets.
+            assert_eq!(old_page.data_units(), new_page.data_units());
+            assert_eq!(old.display_geometry(), new.display_geometry());
+        }
+    }
+    for (page, column) in [(0, 8), (1, 12), (1, visual_column)] {
+        for (service, expected) in [(&before, 0x801), (&after, 0x803)] {
+            let composition = display(&service.pages()[page]).unwrap().1;
+            let cell = composition.display_resolution().cell(1, column).unwrap();
+            assert_eq!(
+                project_teletext_comparison_glyph(composition, cell)
+                    .unwrap()
+                    .mask
+                    .unwrap()
+                    .rows(),
+                [expected; 10]
+            );
+        }
+    }
+    let composition = display(&before.pages()[1]).unwrap().1;
+    let geometry = composition.display_geometry();
+    assert_eq!(
+        (
+            geometry.left_width(),
+            geometry.right_width(),
+            geometry.total_width()
+        ),
+        (4, 12, 56)
+    );
+    assert!(geometry.records().iter().any(|record| {
+        record.candidate().position() == (1, u16::from(raw_column))
+            && record.area()
+                == match area {
+                    TeletextAuthoringRegionAreaWire::LeftPanel => TeletextRawDisplayArea::LeftPanel,
+                    TeletextAuthoringRegionAreaWire::RightPanel => {
+                        TeletextRawDisplayArea::RightPanel
+                    }
+                    TeletextAuthoringRegionAreaWire::Main => unreachable!(),
+                }
+            && record.placement()
+                == TeletextCandidatePlacement::Placed {
+                    row: 1,
+                    column: visual_column,
+                }
+    }));
+    let mut project = permissions(true);
+    let page = &mut project.producers[0].authoring.as_mut().unwrap().pages[1];
+    let mut zone = page.regions[0].clone();
+    zone.id = "panel-edit".into();
+    zone.area = area;
+    zone.column = 0;
+    page.regions.push(zone);
+    let changes = [change(0x801, 0x803)];
+    validate_change(&before, &after, &project, &changes, &changes).unwrap();
+
+    assert_captured_panel_controls(&before, &after, &project, area, visual_column, &changes);
+}
+
+fn assert_captured_panel_controls(
+    before: &EncodedTeletextAuthoredService,
+    after: &EncodedTeletextAuthoredService,
+    project: &TeletextExportProject,
+    area: TeletextAuthoringRegionAreaWire,
+    visual_column: u8,
+    changes: &[TeletextDrcsBitmapOverlay],
+) {
+    // A permission in another panel cannot authorize this consumer.
+    let other_area = match area {
+        TeletextAuthoringRegionAreaWire::LeftPanel => TeletextAuthoringRegionAreaWire::RightPanel,
+        TeletextAuthoringRegionAreaWire::RightPanel => TeletextAuthoringRegionAreaWire::LeftPanel,
+        TeletextAuthoringRegionAreaWire::Main => unreachable!(),
+    };
+    for (kind, column, region_area) in [
+        (TeletextAuthoringRegionKindWire::Generated, 0, area),
+        (TeletextAuthoringRegionKindWire::Zone, 1, area),
+        (TeletextAuthoringRegionKindWire::Zone, 0, other_area),
+    ] {
+        let mut denied = project.clone();
+        let zone = &mut denied.producers[0].authoring.as_mut().unwrap().pages[1].regions[1];
+        zone.kind = kind;
+        zone.column = column;
+        zone.area = region_area;
+        let failure = validate_change(before, after, &denied, changes, changes).unwrap_err();
+        assert_eq!(
+            failure.reason,
+            TeletextEditorialEffectsFailure::ProtectedDisplay
+        );
+        assert_eq!(failure.page, Some(address(124)));
+        assert_eq!(failure.position, Some((1, visual_column)));
+    }
+    for page in 0..2 {
+        let mut denied = project.clone();
+        denied.producers[0].authoring.as_mut().unwrap().pages[page]
+            .regions
+            .remove(0);
+        let failure = validate_change(before, after, &denied, changes, changes).unwrap_err();
+        assert_eq!(
+            failure.reason,
+            TeletextEditorialEffectsFailure::ProtectedDisplay
+        );
+        assert_eq!(
+            failure.page,
+            Some(address(if page == 0 { 123 } else { 124 }))
+        );
+        assert_eq!(failure.position, Some((1, if page == 0 { 8 } else { 12 })));
+    }
+
+    let mut overflow = project.clone();
+    overflow.producers[0].authoring.as_mut().unwrap().pages[1].regions[1].width =
+        if area == TeletextAuthoringRegionAreaWire::RightPanel {
+            13
+        } else {
+            5
+        };
+    let failure = validate_change(before, after, &overflow, changes, changes).unwrap_err();
+    assert_eq!(failure.reason, TeletextEditorialEffectsFailure::Association);
+    assert_eq!(failure.page, Some(address(124)));
+}
+
+#[test]
+fn shared_panel_bitmap_change_uses_captured_right_panel_zone() {
+    assert_captured_panel_bitmap_zone(32, TeletextAuthoringRegionAreaWire::RightPanel, 40, 44);
+}
+
+#[test]
+fn shared_panel_bitmap_change_uses_captured_left_panel_zone() {
+    assert_captured_panel_bitmap_zone(60, TeletextAuthoringRegionAreaWire::LeftPanel, 68, 0);
 }
 
 #[test]

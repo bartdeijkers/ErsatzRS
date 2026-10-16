@@ -2968,6 +2968,59 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 authenticated side-panel editing checkpoint:
+Criterion: honor the already captured Main/LeftPanel/RightPanel edit rectangles
+for indirect shared DRCS bitmap changes, without widening any protected area.
+Actual RED698fbce0-7421-4ffd-8ee4-5fac598398fe rejects the valid right-panel zone
+at display124/S16, visual1/44 in0.158s after literal bitmap, fallback/display bytes,
+raw40-to-visual44 and complete4-left/12-right/56-column premises pass. The old
+Main-only25x40 mask ignored this captured permission. Two fixture-only compile
+corrections (domain imports/u16 position comparison) are retained separately from
+that product RED; original identities/masks/geometry/rejection expectations stay.
+
+The existing validator now projects captured rectangles through the ORIGINAL
+validated display geometry into one fixed25x56 mask. Main byte/base checks keep
+the explicit left offset; visual checks use actual visual coordinates. Editable
+rectangles must fit their actual selected area; Generated grants nothing and
+Main header8 remains protected. Geometry, authored commands, packet/receipt
+checks, deadlines and existing budgets remain unchanged. No uploaded metadata,
+new model, package mutation, helper authority or permanent restriction is added.
+Unit GREENae8753c9-e375-42f9-a2a0-1fa56e6eda44 passes all39 effects tests in0.700s.
+Both right raw40->visual44 and left raw68->visual0 pass; omitted/generated/
+adjacent/opposite-panel and either missing Main-consumer permissions reject.
+Right13/left5 exceed actual12/4 and reject Association. The original panel-negative
+function remains byte-identical; old header/footprint/operand/resource fences pass.
+
+Public native566787ec-19be-48ca-b301-3dd51abe622a passes all6 cases in12.023s:
+new permitted-panel and original-no-panel-zone cases, old V3/freshV4 shared-bitmap
+flows and both English00/10 flows. The new fixed MainAndRight fixture retains
+both source pages at4/12/56 geometry, four actual Normal1C0/S0/slot0 consumers
+and source/authoring/metadata. Prepared V4 TTI import changes only exact Day
+Main/panel pixels154/538 at y10 on both pages, preserves all display/M29/header
+packets and shared previews, then separately publishes. Fresh receipts, indexed
+reexport, repeated edit, undo, database reopens, installed package/config and
+other-channel profile/output remain protected. Without the ORIGINAL captured
+panel zone, the public importer rejects124/S32 visual1/44 and preserves state
+through reopen. This is prepared native workflow proof, not actual editor,
+ordinary-route, independent decoding, client or whole-host restart acceptance.
+Old shared_flow defaults remain MainOnly;23 other helper/test bodies stay exact.
+Strict affected web all-target Clippy passes164s after a test-only ref_option
+correction. Exact inverse signature/as_ref substitutions reproduce both tested
+native files; Some/None bodies and assertions stay unchanged, so native results
+are reused. Final formatting, architecture/progress and scoped review pass.
+Canonical source/RED/GREEN/native/review/check identities:
+tmp/phase9-panel-zone/identity.json SHA256 c547fb466711de0f98d3d848700d17ec963860aff570e56d32c2a411a3d1e045.
+
+Next connect MainAndRight to the existing retained actual singleton QTM save.
+Keep actual_editor_request's exact fresh-bank-to-old-original byte gate; construct
+all other files, sidecar and authority from the NEW receipt. Old display files or
+permissions must never be copied. Exact equality permits reuse of the proven
+bank edit, not a fresh panel editor-trial claim; mismatch requires a new genuine
+save. Then prove two ordinary channels with existing TCP/AV/TSDuck/full-model
+helpers. Panel-specific independent decoding and suitable-client display/navigation
+remain open, alongside full editor/zone/dynamic-field/lifecycle/Lua/restart/admin/
+playback/six-platform/engine acceptance. No milestone contract changes or push.
+
 2026-10-16 raw English primary10 joined editorial-flow checkpoint:
 Criterion: raw-primary10 fidelity through the existing profile/TTI/editor/concept/
 shared-preview/explicit-publication/ordinary-stream flow, after8d1a1af3 core fix.
@@ -9898,9 +9951,9 @@ gate. Engine-first delivery remains; no milestone completion or push.
 Current criterion-to-next-step map (updated during response-owned lifecycle correction; historical receipts retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
-| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts implemented | Prior sidecar/editor receipts plus exact fresh-receipt dense bank headed import/preview/publication, package retention and reopen above | Richer zones/dynamic fields, panel/geometry/set semantics and complete resource interchange remain open | Extend the next concrete authored/editor feature while retaining template/package-version and protected effects rules |
+| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts implemented; authenticated Main/left/right-zone effects now pass unit and native panel publication | Prior sidecar/editor receipts plus exact fresh-receipt dense bank headed import/preview/publication, package retention and reopen above | Richer zones/dynamic fields, panel/geometry/set semantics and complete resource interchange remain open | Connect the new panel-zone flow to retained actual bank editing through exact fresh-bank equality and ordinary streams; retain template/package-version and protected effects rules |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE and actual dense/padded editor receipts; combined test decoder now independently qualifies unchanged sparseS1=1 MAIN pixels above | General charset/resource/set/subpage fidelity and stock sparse decoding remain open; the qualified candidate now passes actual sparse-original and edited-bank client navigation | Reuse the joined padded proof; extend remaining exact repertoire/resource/set clauses without changing native identity |
-| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Representative bank, national-original and implicit-MOT flows connected; full acceptance open | Existing headed/admin colour/bank receipts plus fresh Romanian, rendered-MOT-default and English two-pair QTM/native/ordinary TCP/AV/TSDuck/independent receipts above; same addon, distinct profiles/themes, unchanged Night | Romanian hydration and suitable enlarged Local-Passive client/navigation remain open; independent banks are explicit | Reuse joined00/10 receipts and retained failed Kodi20.5 display. Connect the existing side-panel/editor geometry clause; suitable-client acceptance remains blocked for the enlarged vector, without decoder repair expansion |
+| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Representative bank, national-original and implicit-MOT flows connected; full acceptance open | Existing headed/admin colour/bank receipts plus fresh Romanian, rendered-MOT-default and English two-pair QTM/native/ordinary TCP/AV/TSDuck/independent receipts above; same addon, distinct profiles/themes, unchanged Night | Romanian hydration and suitable enlarged Local-Passive client/navigation remain open; independent banks are explicit | Reuse joined00/10 receipts and retained failed Kodi20.5 display. Reuse native panel-zone proof; connect retained actual bank save only through exact fresh-bank equality and then both ordinary streams. Panel decoding/client proof stays open without decoder repair expansion |
 | Actual pinned QTM workflow | Base/colour/local-X26 and representative singleton/dense/padded/multiple-target/national-original interchange connected | Existing pinned saves and fresh same-live four-Romanian Save As/exit/concept/preview/publication/ordinary proof above; generated-slot rejection and immutable package/sidecar/reopen | Complete authored editor/zone/dynamic-field/panel/geometry/set and suitable-client coverage remain open | Extend only a named remaining authored/resource clause through the same actual editor flow |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
@@ -9908,15 +9961,16 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | Assigned national G0 physical realization | Exact original Polish5B, Turkish23, Romanian5D/7D and pair-pressured English7C use sealed resource-backed normalization; fixed slots0..9 and linked-S1 ownership | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | English primary00 and10 core/native/actual-QTM/ordinary/closed-independent proof passes, including raw10 source/X28 identity. Suitable-client/acquisition remain open; actual Kodi20.5 lacks the required00 glyph. Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT core/native/actual QTM/ordinary/independent bank and encoded-MOT proof pass. Rendered MOT defaults now have whole-service/native/actual-QTM/ordinary-TCP/TSDuck and scoped independent bodies/cells/fallback proof; automatic resource/default acquisition, suitable-client and broader matrix remain open | Reuse joined raw10 proof; next connect the existing side-panel/editor geometry clause while retaining full client/repertoire acceptance |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: reproduce the Main-only permission-mask rejection for a
-valid editable side-panel zone, then correct that existing importer boundary and
-connect it to concept/shared-preview/explicit publication.
-Reuse exact raw00/10 editor/ordinary/independent receipts. Suitable enlarged
-client rendering/navigation remains required; the retained Kodi20.5 failure
-blocks only dependent acceptance. No repeated client trial, decoder repair,
-general audit or measurement expansion follows. Keep full metadata/zones,
-lifecycle/Lua/restart/admin/playback/platform clauses open until separately proven;
-no permanent limitation is silently accepted.
+Concrete next action: connect MainAndRight panel-zone publication to the existing
+actual singleton QTM save ONLY after exact fresh-bank/original-byte equality.
+Keep the new receipt/sidecar/displays authoritative; never import old permissions.
+Then join existing two-channel TCP/AV/TSDuck/full-model helpers. Reuse actual
+editor evidence within that exact bank scope; otherwise make a fresh genuine save.
+Panel-specific independent decoding and suitable-client display/navigation remain
+required; retained Kodi20.5 failure blocks only its dependent acceptance. No
+repeated client trial, decoder repair, general audit or measurement program follows.
+Full metadata/zones/lifecycle/Lua/restart/admin/playback/platform acceptance stays
+open; no permanent limitation is silently accepted.
 Production TV-guide content still waits for full independent generic acceptance.
 G1's fixed vector remains qualified; no external repair expansion starts. The actual padded sparse save now
 passes the joined admin/publication/ordinary route, strict edited-S1=1/fallback

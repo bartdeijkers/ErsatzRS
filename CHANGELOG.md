@@ -692,6 +692,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Honor captured editable left- and right-panel teletext zones during bitmap imports.
+  Shared glyph edits still require permission for every changed consumer; generated
+  zones, Main header bytes and the original panel geometry remain protected.
 - Preserve MOT-inherited teletext resource links when deriving exact national
   glyphs, including a free subpage behind an occupied bank. The physical page
   retains every original role and subpage requirement without rewriting authored

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: side-panel geometry through the existing editorial flow'
+current_focus = 'P9A-04: panel-zone resource edit joins actual editor and ordinary streams'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -277,10 +277,17 @@ raw source/X28 identity, two ordinary streams AV/TSDuck/model/reopen/cleanup.
 Unchanged independent adapter checks25 closed displays/53 banks; two profile
 swaps and six valid-parity pixel negatives reject. P9A-04 owns exact hashes and
 limits. Next connect the existing side-panel authored/TTI geometry clause through
-the same protected-metadata/concept flow. Its concrete blocker is the existing
-25x40 Main-only import permission mask: even declared editable panel cells are
-protected. Reproduce and fix that boundary with generated/geometry protections.
-Earlier proof retains its scope. Required suitable enlarged client/navigation stays
+the same protected-metadata/concept flow. The Main-only permission-mask defect is now
+fixed after RED698fbce0: captured zones project through immutable original
+geometry;39 effects tests ae8753c9 pass, including left/right and all denial fences.
+Public native566787ec passes6 cases with exact Main/panel pixels, freshV4 concept/
+preview/separate publication/reexport/repeat/undo/reopen and no-zone rejection;
+oldMainOnly and English00/10 flows stay green. P9A-04 owns exact hashes/scope.
+Next reuse the actual singleton QTM save ONLY if its original bank equals the
+new export byte-for-byte; fresh receipt/sidecar/displays remain authoritative.
+Connect the same MainAndRight case to ordinary two-channel TCP/AV/TSDuck/model
+proof. Panel-specific independent/client proof remains open. Earlier proof
+retains its scope. Required suitable enlarged client/navigation stays
 open; this gap does not block independent authored work. Full aliases/lifecycle/
 admin/platform and engine acceptance remain required; no milestone or restriction.
 Hebrew and the rest of the full matrix remain required, not accepted restrictions.

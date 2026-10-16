@@ -445,12 +445,22 @@ pub(super) fn actual_editor_request(
 }
 
 async fn shared_flow(legacy: bool, actual_directory: Option<&Path>) {
+    Box::pin(shared_case(
+        legacy,
+        actual_directory,
+        panels::Case::MainOnly,
+    ))
+    .await;
+}
+
+async fn shared_case(legacy: bool, actual_directory: Option<&Path>, case: panels::Case) {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
-        response,
+        case.response(),
         Fixture::new_persistent().await,
         drcs_companion::encoding_policy,
     ))
     .await;
+    let retained = case.originals_and_retained(&fixture, &flow).await;
     let receipt = if legacy {
         drcs_companion::seed_receipt(&fixture, &flow, drcs_companion::v3_body(&flow)).await
     } else {
@@ -466,16 +476,18 @@ async fn shared_flow(legacy: bool, actual_directory: Option<&Path>) {
     assert_eq!(concept.head().revision, 2);
     assert_overlay(&fixture, &flow, &concept, 3).await;
     let current = restored(&fixture, &concept).await;
-    assert_only_glyph_pixels(flow.accepted[0].service(), current.encoded().unwrap());
+    case.assert_pixels(flow.accepted[0].service(), current.encoded().unwrap());
     assert_original_pointers(&fixture, &flow).await;
+    panels::assert_retained(retained.as_ref(), &fixture, &flow).await;
     fixture = fixture.reopen().await;
     assert_overlay(&fixture, &flow, &concept, 3).await;
-    assert_only_glyph_pixels(
+    case.assert_pixels(
         flow.accepted[0].service(),
         restored(&fixture, &concept).await.encoded().unwrap(),
     );
+    panels::assert_retained(retained.as_ref(), &fixture, &flow).await;
     let accepted = publish_and_accept(&fixture, &flow, &concept).await;
-    assert_only_glyph_pixels(flow.accepted[0].service(), accepted.service());
+    case.assert_pixels(flow.accepted[0].service(), accepted.service());
     fixture = fixture.reopen().await;
     generations::assert_same_output(&recover(&fixture, 1).await, &accepted);
     generations::assert_same_output(&recover(&fixture, 2).await, &flow.accepted[1]);
@@ -507,6 +519,7 @@ async fn shared_flow(legacy: bool, actual_directory: Option<&Path>) {
     generations::assert_same_output(&recover(&fixture, 1).await, &accepted);
     generations::assert_same_output(&recover(&fixture, 2).await, &flow.accepted[1]);
     assert_retained_storage(&fixture, &flow).await;
+    panels::assert_retained(retained.as_ref(), &fixture, &flow).await;
     assert_eq!(
         fixture
             .state
@@ -783,3 +796,6 @@ async fn drcs_bitmap_rejects_changed_status_packet_undefined_slot_sidecar_and_ra
     }
     fixture.state.pool.close().await;
 }
+
+#[path = "drcs_bitmap/panels.rs"]
+mod panels;
