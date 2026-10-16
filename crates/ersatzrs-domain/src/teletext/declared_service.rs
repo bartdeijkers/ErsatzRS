@@ -229,6 +229,19 @@ impl TeletextDeclaredService {
             .with_local_program_operand_overlays(overlays, budget)?;
         Ok(self)
     }
+    /// Replace exact existing DRCS bitmaps while preserving authenticated MOT,
+    /// inventory, defaults and display selections. No edit or publish permission
+    /// is granted; shared effects still require full host compilation checks.
+    /// # Errors
+    /// Rejects stale, duplicate or missing glyph targets and service budget overflow.
+    pub fn with_drcs_bitmap_overlays(
+        mut self,
+        overlays: &[super::TeletextDrcsBitmapOverlay],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self.semantic.with_drcs_bitmap_overlays(overlays, budget)?;
+        Ok(self)
+    }
     /// Attach trusted physical rows while preserving the authenticated logical
     /// declarations, resource inventory, MOT selections and exact resolutions.
     /// # Errors

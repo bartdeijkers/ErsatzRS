@@ -182,6 +182,14 @@ pub enum TeletextEffectiveProgramSource {
 /// Located semantic failure. No programme text or partial candidate is returned.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextServiceError {
+    #[error("teletext DRCS bitmap changes must not be empty")]
+    EmptyDrcsBitmapOverlays,
+    #[error("teletext DRCS bitmap {identity:?}, slot {slot:?}: {reason}")]
+    DrcsBitmapOverlay {
+        identity: super::TeletextResourceIdentity,
+        slot: super::TeletextDrcsGlyphSlot,
+        reason: super::TeletextDrcsBitmapFailure,
+    },
     #[error("teletext local operand changes must not be empty")]
     EmptyLocalProgramOperandOverlays,
     #[error("teletext local operand {address:?}, command {command}: {reason}")]
@@ -516,6 +524,111 @@ impl TeletextSemanticService {
         .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)
     }
 
+    /// Replace existing DRCS glyph bitmaps under exact original expectations.
+    ///
+    /// Resource identities, glyph order, local programs, selections and physical
+    /// overlays remain unchanged. The complete semantic service is revalidated.
+    /// Shared glyph effects, editor permissions and publication are not authorized
+    /// here; hosts must check those after compiling the complete candidate.
+    /// # Errors
+    /// Rejects empty/repeated changes, missing resources or glyphs, stale bitmaps
+    /// and service budgets before cloning resource contents or allocating indexes.
+    pub fn with_drcs_bitmap_overlays(
+        self,
+        overlays: &[super::TeletextDrcsBitmapOverlay],
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextServiceError> {
+        let mut changes = budget.max_structure_items;
+        charge(
+            &mut changes,
+            overlays.len(),
+            "structure item",
+            budget.max_structure_items,
+        )?;
+        self.check_existing_service_budgets(budget)?;
+        if overlays.is_empty() {
+            return Err(TeletextServiceError::EmptyDrcsBitmapOverlays);
+        }
+        let indexed = self.validate_drcs_bitmap_overlays(overlays)?;
+        let mut subtables = Vec::with_capacity(self.drcs.subtables().len());
+        for table in self.drcs.subtables() {
+            let mut glyphs = table.glyphs().to_vec();
+            for glyph in &mut glyphs {
+                if let Some(overlay) = indexed.get(&(table.identity(), glyph.slot)) {
+                    glyph.bitmap = overlay.replacement();
+                }
+            }
+            subtables.push(TeletextDrcsSubtable::new(table.identity(), glyphs)?);
+        }
+        let draft = TeletextResolvedServiceDraft {
+            base: self.base,
+            pages: self.pages.into_values().collect(),
+            magazines: self
+                .magazines
+                .into_iter()
+                .map(
+                    |(magazine, presentation)| TeletextMagazinePresentationDraft {
+                        magazine,
+                        presentation,
+                    },
+                )
+                .collect(),
+            objects: self.objects.definitions().to_vec(),
+            drcs: subtables,
+        };
+        Self::new_with_resolved_mot_fallbacks(
+            draft,
+            self.object_companions,
+            self.mot_fallbacks,
+            budget,
+        )?
+        .with_physical_base_overlays(self.physical_base_overlays.into_values().collect(), budget)
+    }
+
+    fn validate_drcs_bitmap_overlays<'a>(
+        &self,
+        overlays: &'a [super::TeletextDrcsBitmapOverlay],
+    ) -> Result<
+        BTreeMap<
+            (
+                super::TeletextResourceIdentity,
+                super::TeletextDrcsGlyphSlot,
+            ),
+            &'a super::TeletextDrcsBitmapOverlay,
+        >,
+        TeletextServiceError,
+    > {
+        let mut indexed = BTreeMap::new();
+        for overlay in overlays {
+            let failure = |reason| TeletextServiceError::DrcsBitmapOverlay {
+                identity: overlay.identity(),
+                slot: overlay.slot(),
+                reason,
+            };
+            if indexed
+                .insert((overlay.identity(), overlay.slot()), overlay)
+                .is_some()
+            {
+                return Err(failure(super::TeletextDrcsBitmapFailure::Duplicate));
+            }
+            let table = self
+                .drcs
+                .subtables()
+                .iter()
+                .find(|table| table.identity() == overlay.identity())
+                .ok_or_else(|| failure(super::TeletextDrcsBitmapFailure::MissingResource))?;
+            let glyph = table
+                .glyphs()
+                .iter()
+                .find(|glyph| glyph.slot == overlay.slot())
+                .ok_or_else(|| failure(super::TeletextDrcsBitmapFailure::MissingGlyph))?;
+            if glyph.bitmap != overlay.expected() {
+                return Err(failure(super::TeletextDrcsBitmapFailure::BitmapMismatch));
+            }
+        }
+        Ok(indexed)
+    }
+
     fn validate_local_operand_overlays<'a>(
         &self,
         overlays: &'a [super::TeletextLocalProgramOperandOverlay],
@@ -572,6 +685,13 @@ impl TeletextSemanticService {
             "authored command",
             budget.max_commands,
         )?;
+        self.check_existing_service_budgets(budget)
+    }
+
+    fn check_existing_service_budgets(
+        &self,
+        budget: TeletextServiceBudget,
+    ) -> Result<(), TeletextServiceError> {
         check_borrowed_input_budgets(
             &self.base,
             self.pages.values(),

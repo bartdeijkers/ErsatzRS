@@ -2968,6 +2968,50 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 checked DRCS bitmap replay through the complete encoder (partial):
+Criterion: remove the concrete missing typed transformation that blocks import of
+the actual pinned-editor DRCS bitmap change, retaining shared native validation.
+TeletextDrcsBitmapOverlay now retains exact resource kind/page/S1, existing glyph
+slot, expected and replacement checked bitmaps. No-op/non-DRCS intents reject;
+semantic application rejects empty/duplicate/missing/undefined/stale targets.
+Existing service/physical/collected bounds and the incoming structure-item count
+are checked before resource cloning/index allocation. Immutable reconstruction
+revalidates the complete semantic service and preserves glyph order, all other
+bitmaps, local edits, physical rows, objects/companions and original MOT fallbacks.
+The declared wrapper retains MOT, defaults, resource inventory and selections.
+This pure primitive grants no editor, persistence or publication authority.
+
+Six new domain regressions and two complete-encoder cases pass. The first focused
+run passes9 cases (including one existing bitmap mask case); the combined related
+service/declared/local-operand/DRCS regression run passes72 cases, Nextest
+b9c32451-b046-4a39-8655-252ec0407fc8. Strict domain/FFmpeg all-target Clippy and
+workspace formatting pass. Independent focused source review has no actionable
+findings. No lint exemptions, dependencies, schema, serialization or platform
+assumptions are added. Existing local-operand budget accounting is extracted
+unchanged into a shared preflight and its related regressions remain green.
+
+Both Normal/Global encoder cases prove exactly one parity-correct resource OL1
+byte A-to-C, with all headers/X28/modes/other glyphs preserved, matching the real
+editor calibration's0x801-to0x803 intent. Two display consumers keep byte-identical
+fallback/X26/X27 packets while BOTH resolved bitmap masks change; their sibling
+Z remains unchanged. Exact inverse intention restores the full root service and
+every original output unit. These are complete native compiler/wire/mask oracles,
+not new independent decoding, live transport/client or native import acceptance.
+Exact source/log identities: tmp/phase9-drcs-bitmap-native/identity.json
+(SHA256c041c2aeb96c66fd4230a53fbce613435a0e0b8e903afd2a2343668dd585cb77).
+
+Next persist these checked intentions in the existing independently versioned
+private concept, with bounded preflight, exact original resource authentication
+and unchanged V1/V2 bytes. Legitimately identical resources shared across original
+producers must remain supported; conflicting original definitions reject. Then
+connect receipt-qualified companion TTI reconciliation, complete native replay
+and protection of EVERY shared display consumer before explicit publication.
+Existing runtime import still rejects all changed resource assets, so no partial
+storage/read path silently drops edits. Resource update/cache, full Level2.5,
+editor/browser/client/Lua/restart/platform and recorded legacy-modal focus gates
+remain open. No milestone closes, production content/addon, remote push or external
+publication; the generic engine-first order is unchanged.
+
 2026-10-16 actual DRCS bitmap editor calibration (partial):
 Criterion: prove genuine external-editor resource editing rather than dependency
 loading, as the next missing step in the complete QTM authoring workflow.
@@ -6735,22 +6779,24 @@ argv, transport or admin changes. Receipt: tmp/phase9-editorial-import/identity.
 and receipt-sha256.txt, SHA256b2e3ec1e5a5691a09eab216b3376a42090fa2014ea004c6ed0c878ae5b8cb73d. It binds final source/logs and
 excludes mutable progress prose; unchanged prerequisite receipts remain valid.
 
-Current criterion-to-next-step map (updated after actual DRCS editor calibration; historical receipts below retain their original scope):
+Current criterion-to-next-step map (updated after checked native DRCS bitmap replay; historical receipts below retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
-| Original addon templates/themes/zones | Captured metadata, immutable originals, base rows and qualified local-X26 concepts implemented | V3 capture/reload, authenticated sidecars,83 compiler/54 document/85+2 native cases; actual native and EN/NL admin foreground publication/preview with protected-cell client proof | Full resource/panel/geometry/set editing and wider operand browser proof remain absent | Connect the proven singleton DRCS editor change through qualified bitmap intents and shared-consumer effects without package mutation |
+| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 concepts and checked native bitmap transformations implemented | V3 capture/reload, authenticated sidecars,83 compiler/54 document/85+2 native cases; actual native and EN/NL admin foreground publication/preview with protected-cell client proof | Full resource/panel/geometry/set editing and wider operand browser proof remain absent | Persist checked bitmap intents and connect receipt-bound reconciliation plus all shared-consumer effects without package mutation |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE carrier tests; actual equal-NOS1 and independent fallback1/enhanced0 QTM Save As/native import; nine-culture headed transfer | General charset/resource/set/subpage fidelity remains open; sparse normative S1=1 independent decoding/client is blocked by the audited decoder defect | Reuse corrected carrier receipts; extend supported authored changes and select a correct independent sparse-resource decoder/client |
 | Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative flow; full acceptance open | Exact tmp/phase9-effective-editor-browser/flow-identity.json receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37: actual QTM, localized headed admin, two-theme TCP captures, independent decoding/TSDuck and VLC200->201->200 captured-byte replay; separate real-URL scoped/warm receipts | The GUI-editor/admin receipt uses captured replay; live-URL trials use fixture-generated edits. Full Level2.5, applied-state admin, default-capacity handoff and complete live-client updates remain unproven | Reuse each exact receipt without claiming one combined live-GUI run; extend the editor/Level2.5 step that blocks richer authored pages |
-| Actual pinned QTM workflow | Base-row and representative actual foreground native/admin flow proven; full acceptance open | Exact fresh QTM popup/Save As to headed Chromium EN/NL concept/selected views, schema2/root isolation, explicit Lua-scoped publication, selected TCP/TSDuck/imager and inspected two-theme VLC200/201/200 replay above | Actual singleton mode0 DRCS edit/reload proven above; native resource import/publication, panel/set/geometry, wider browser/live-URL and reliable legacy modal focus remain open | Implement receipt-bound bitmap concepts/reconciliation and protect every shared consumer; preserve the recorded GUI focus failure |
+| Actual pinned QTM workflow | Base-row and representative actual foreground native/admin flow proven; full acceptance open | Exact fresh QTM popup/Save As to headed Chromium EN/NL concept/selected views, schema2/root isolation, explicit Lua-scoped publication, selected TCP/TSDuck/imager and inspected two-theme VLC200/201/200 replay above | Actual singleton mode0 DRCS edit/reload proven above; native resource import/publication, panel/set/geometry, wider browser/live-URL and reliable legacy modal focus remain open | Reuse the proven typed transformation; persist/authenticate bitmap concepts, reconcile exact TTI and protect every shared consumer; preserve the GUI focus failure |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: connect the now-proven actual singleton DRCS bitmap edit/save
-to missing qualified resource import through receipt-bound typed bitmap intents,
-original replay, shared preview and explicit publication. Check every shared
-consumer even when its own display packets are unchanged. Current concepts only
-represent rows/local operands; current non-display equality grants no edit rights.
+Concrete next action: persist the now-checked bitmap intents in the existing
+independently versioned private concept, preserving exact V1/V2 bytes, streaming
+preflight and original shared-resource authentication. Connect receipt-qualified
+resource reconciliation and replay to the same preview and explicit publication.
+Check every shared consumer even when its own display packets are unchanged, as
+the new native regressions demonstrate. Current persisted concepts still contain
+only rows/local operands; current non-display equality grants no edit rights.
 The separately observed legacy SaveAs modal focus failure remains open; one failed
 hover hypothesis is retained and reverted, without blocking this independent
 necessary native-resource work. The representative colour

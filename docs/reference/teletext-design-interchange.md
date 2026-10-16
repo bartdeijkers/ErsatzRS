@@ -3064,8 +3064,12 @@ overwrite input; the actual pinned-editor trial preserves its resource identity,
 S1, status and X28/3. The writer lowercases hexadecimal PN/PS and adds normal-editor
 `RE,0`/`CT,20,T`. The calibration helper verifies this exact recorded case, including
 all ten bitmap rows and untouched bytes; it does not define general compatibility
-or grant native import authority. P9A-04 owns the evidence and missing native
-resource-concept/preview/publication connection. Resource-page classification and
+or grant native import authority. `TeletextDrcsBitmapOverlay` and semantic/declared
+`with_drcs_bitmap_overlays` retain exact expected bitmap, resource identity and slot
+while revalidating a complete candidate. Shared consumers can change rendered
+pixels without any change to their own packets; host permissions must compare
+all of them. P9A-04 owns the evidence and missing native resource-concept/preview/
+publication connection. Resource-page classification and
 unsupported editor transformations must be checked explicitly.
 QTeletextMaker alone cannot establish the full enhanced broadcast-client gate.
 

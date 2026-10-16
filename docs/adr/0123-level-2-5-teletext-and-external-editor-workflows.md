@@ -100,9 +100,12 @@ remain required.
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.
-This singleton mode-0 result grants no resource import/publication authority:
-receipt-qualified bitmap intents, complete replay and protection of every shared
-display consumer remain missing. No resource editing restriction is accepted.
+Checked exact-original Normal/Global bitmap intents now rebuild and revalidate
+the complete semantic service and encode the recorded byte change without altering
+fallback or resource identities. This grants no resource import/publication
+authority: private persistence, receipt-qualified reconciliation and protection of
+every shared display consumer remain missing. No resource editing restriction is
+accepted.
 Full enhancement, resource, geometry, panel and actual editor coverage remains
 required; this slice introduces no accepted product restriction. P9A-04 owns
 verification and the concrete next integration step.

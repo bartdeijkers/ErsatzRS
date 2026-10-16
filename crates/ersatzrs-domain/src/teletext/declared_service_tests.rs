@@ -1,6 +1,51 @@
 //! Actual declaration correspondence, not encoding or client acceptance.
 use super::*;
 
+#[test]
+fn drcs_bitmap_overlay_preserves_authenticated_mot_selections_defaults_and_inventory() {
+    let resource = identity(TeletextResourceKind::Drcs, 0xc0, 1);
+    let slot = TeletextDrcsGlyphSlot::new(0).unwrap();
+    let old = TeletextDrcsBitmap::new([0x801; 10]).unwrap();
+    let new = TeletextDrcsBitmap::new([0x803; 10]).unwrap();
+    let mut input = draft();
+    input.drcs.push(
+        TeletextDrcsSubtable::new(
+            resource,
+            vec![TeletextDrcsGlyphDefinition { slot, bitmap: old }],
+        )
+        .unwrap(),
+    );
+    let original = bind(input.clone(), declaration(0, 1), vec![]).unwrap();
+    let before = original.clone();
+    let change = TeletextDrcsBitmapOverlay::new(resource, slot, old, new).unwrap();
+    let limits = TeletextServiceBudget {
+        max_records: 64,
+        max_objects: 64,
+        max_structure_items: 1024,
+        max_base_content_bytes: 1024,
+        max_commands: 1024,
+        max_collected_commands: 1024,
+        max_collected_drcs_references: 64,
+    };
+    let changed = original
+        .clone()
+        .with_drcs_bitmap_overlays(&[change], limits)
+        .unwrap();
+    input.drcs[0] = TeletextDrcsSubtable::new(
+        resource,
+        vec![TeletextDrcsGlyphDefinition { slot, bitmap: new }],
+    )
+    .unwrap();
+    let expected = bind(input, declaration(0, 1), vec![]).unwrap();
+    assert_eq!(changed, expected);
+    assert_eq!(original, before);
+    assert_ne!(changed.semantic(), original.semantic());
+    assert!(!changed.defaults().is_empty());
+    assert!(!changed.resolutions().is_empty());
+    assert_eq!(changed.mots(), original.mots());
+    assert_eq!(changed.resource_inventory(), original.resource_inventory());
+}
+
 fn owner(subcode: u16) -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(200).unwrap(),
