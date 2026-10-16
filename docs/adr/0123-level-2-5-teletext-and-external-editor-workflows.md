@@ -540,8 +540,14 @@ in full. The factory prefers its established unused-role allocation, then a free
 Normal S1 and finally a free Global S1, with consumers grouped by exact target.
 This does not authorize editing a generated subpage inside an indexed TTI set;
 its group remains compiler-owned beside separately authorized authored groups.
-The current two-added-bank/eight-glyph internal ceiling is not a Level 2.5
-capacity restriction: broader multi-linked-page demands remain acceptance work.
+Distinct linked targets may require more than two compiler-owned banks in one
+service. Admit their complete display/original-resource/added-bank count against
+the caller's page budget before allocating them; derive the internal added-resource
+bound from that admitted demand count and its glyph bound with checked arithmetic.
+The fixed slots per bank, complete encoded-unit/work/deadline bounds and per-display
+two-subtable/24-distinct-glyph validation remain enforced. A service-wide two-bank
+eight-glyph limit is not a standard restriction and must not reject legal independent
+consumers.
 
 Table 36 Polish 5/B and Turkish 2/3 are established original identities for this
 resource-backed path. Turkish 2/3 is the single TL symbol assigned by Table 36
@@ -558,11 +564,11 @@ paired correspondence; public detached comparisons remain strict. Original
 identity, fallback, geometry and every other painted attribute stay unchanged.
 Both known painted variants may coexist in one generated bank with stable Polish
 slots 0 (plain)/1 (underlined) and Turkish slots 2/3, independent of discovery/
-removal. Their definitions remain engine-owned. Each of the two resource scopes
-may require all four fixed slots: the derived internal glyph bound is therefore
-eight across at most two added banks. This prevents valid Normal and Global
-consumers from competing for a single bank's glyph allowance. Caller page,
-encoded-unit and assembly-work bounds still apply to the complete service;
+removal. Their definitions remain engine-owned. Each admitted target bank in
+either scope may require all four fixed slots; its checked internal glyph bound
+therefore follows the admitted bank count. This prevents independent Normal,
+Global or already-linked targets from competing for another bank's allowance.
+Caller page, encoded-unit and assembly-work bounds still apply to the complete service;
 neither an identity alias nor unbounded resource capacity is permitted. Existing
 authored matching definitions retain their own slots, links and ownership instead
 of receiving these compiler slot numbers.

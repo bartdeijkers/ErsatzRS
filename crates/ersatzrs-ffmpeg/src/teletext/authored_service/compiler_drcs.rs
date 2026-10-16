@@ -132,6 +132,17 @@ fn derive(
             })
         })?;
     bounded("pages", count, budget.max_pages)?;
+    // Distinct occupied targets can need separate banks in the same scope.
+    // Their complete page count is admitted above; each bank has only the fixed
+    // supported slots. Per-display two-subtable/24-glyph checks remain separate.
+    let max_added_glyphs = demands
+        .len()
+        .checked_mul(national_drcs_carrier::COMPILER_GLYPH_SLOTS)
+        .ok_or_else(|| {
+            error(Failure::Size {
+                category: "compiler DRCS glyphs",
+            })
+        })?;
     let mut tables = Vec::with_capacity(demands.len());
     let mut extensions = Vec::new();
     for (&(scope, linked), demand) in &demands {
@@ -170,9 +181,8 @@ fn derive(
             &extensions,
             TeletextDrcsExtensionBudget {
                 max_records: budget.max_pages,
-                max_added_resources: 2,
-                // Each of the two scopes can need all supported fixed slots.
-                max_added_glyphs: national_drcs_carrier::COMPILER_GLYPH_SLOTS * 2,
+                max_added_resources: demands.len(),
+                max_added_glyphs,
                 max_page_extensions: budget.max_pages,
             },
         )

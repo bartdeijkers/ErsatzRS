@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: remove the compiler-added bank ceiling across distinct linked targets'
+current_focus = 'P9A-04: connect distinct linked DRCS targets to native editorial publication'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -184,17 +184,25 @@ authoredS0 zero and generatedS1 Polish masks, fragments/themes/literal fallback;
 two profile swaps and both valid-parity bank-pixel negatives reject. P9A-04 owns
 canonical hashes, scope and immutable input proof. Actual automatic resource
 routing/client display/navigation and hydrated admin are still missing here.
-Next address the internal two-added-bank ceiling across distinct linked targets:
-legal independent displays can require more banks even while each display obeys
-the two-subtable/24-glyph rule. Start with one exact reproducer under existing
-caller budgets, then the smallest production correction; no new proof framework.
+The same twelve-display/three-linked-target fixture now fails85d6e690 exactly
+at addedresources3>2, then passes69d43f41 with unchanged positive source/oracles.
+The factory admits complete page count first and derives checked internal bank/
+fixed-slot bounds from that admitted demand. Thirty-four Polish/Turkish cases
+105daeef pass, including per-display third-subtable rejection; exact/minus-one
+page/unit limits1bb44832 pass. Original links/banks/fallback remain immutable.
+P9A-04 owns canonical evidence; no caller quota or normative limit is relaxed.
+Next connect distinct linked targets to receipt-bound native export/concept/
+shared preview/explicit publication, verifying indexed-bank permissions and
+profile isolation. The new three-target service has no actual editor, ordinary
+stream, independent receiver or client acceptance yet; prior linked-S1 and
+simultaneous-theme evidence stays valid for its exact inputs.
 Romanian/Hebrew and the rest of the full matrix remain open requirements, not
 accepted restrictions. No general audit or external-decoder repair starts.
 Existing165direct/2Unsupported/2Unproven expectations stay unchanged.
 Client acquisition/rendering/navigation and hydration remain open.
 Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source
 assessment does not establish enlarged DRCS suitability; no decoder maintenance
-program starts. Both-occupied roles, unproven absent-X27 MOT/default supplements,
+program starts. Broader linked-target editorial delivery, unproven absent-X27 MOT/default supplements,
 unproved raw-state/effect interactions, authored-bitmap transitions needing a bank and
 remaining national recipes stay open. No guessed alias or page restriction is
 accepted. Full authored/

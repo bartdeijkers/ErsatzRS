@@ -694,6 +694,8 @@ release section when tagging a release.
 
 - Realize assigned national glyphs through a free DRCS subpage when both resource
   links are occupied, preserving authored banks, fallback and link identities.
+  Independent linked targets can each receive a bank within the existing caller
+  budgets, preserving per-page DRCS limits instead of imposing a two-bank service cap.
   Indexed TTI banks keep authored and compiler editing permissions separate.
   A pinned actual QTeletextMaker save now reaches receipt-bound concept import,
   shared preview, explicit publication and two ordinary streams with independent
