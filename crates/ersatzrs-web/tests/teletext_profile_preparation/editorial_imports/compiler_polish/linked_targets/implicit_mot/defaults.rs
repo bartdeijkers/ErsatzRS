@@ -31,7 +31,10 @@ fn protected_file(
         .unwrap()
 }
 
-fn assert_protected_reexport(flow: &Flow, exported: &ExportedOriginalTeletextDesign) {
+pub(in super::super) fn assert_protected_reexport(
+    flow: &Flow,
+    exported: &ExportedOriginalTeletextDesign,
+) {
     let original = &flow.exported[0];
     let mut names = vec![(mot_file(original), mot_file(exported))];
     for (kind, raw) in [
@@ -245,4 +248,21 @@ async fn implicit_mot_rendered_defaults_previews_publishes_protects_resources_an
     );
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
+}
+
+pub(in super::super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
+    seed::response(theme, page, subcode)
+}
+
+pub(in super::super) fn encoding(
+) -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy {
+    seed::encoding()
+}
+
+pub(in super::super) fn assert_originals(flow: &Flow) {
+    checks::assert_originals(flow);
+}
+
+pub(in super::super) fn assert_effective(flow: &Flow, service: &EncodedTeletextAuthoredService) {
+    checks::assert_effective(flow, service);
 }

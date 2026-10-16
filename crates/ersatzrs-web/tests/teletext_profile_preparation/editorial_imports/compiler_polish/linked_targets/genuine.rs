@@ -12,6 +12,7 @@ mod inputs;
 enum Case {
     ExplicitLinks,
     ImplicitMot,
+    RenderedDefaults,
 }
 
 impl Case {
@@ -19,6 +20,7 @@ impl Case {
         match self {
             Self::ExplicitLinks => oracle::assert_originals(flow),
             Self::ImplicitMot => implicit_mot::assert_originals(flow),
+            Self::RenderedDefaults => implicit_mot::defaults::assert_originals(flow),
         }
     }
 
@@ -26,6 +28,7 @@ impl Case {
         match self {
             Self::ExplicitLinks => oracle::assert_service(flow, service),
             Self::ImplicitMot => implicit_mot::assert_effective(flow, service),
+            Self::RenderedDefaults => implicit_mot::defaults::assert_effective(flow, service),
         }
     }
 
@@ -37,6 +40,26 @@ impl Case {
             proof["original_mot_and_resolved_roles_defaults_preserved"] = json!(true);
             if let Some(resources) = proof.get_mut("authored_resources") {
                 resources.as_array_mut().unwrap().push(json!("1FE/S9"));
+            }
+        }
+        if matches!(self, Self::RenderedDefaults) {
+            proof["fixture"] = json!("implicit-mot-rendered-defaults-three-linked-targets");
+            proof["original_mot"] = json!("1FE/S9");
+            proof["original_resource_inventory_count"] = json!(7);
+            proof["actual_default_slots"] = json!([0, 2, 3]);
+            proof["default_objects"] = json!([
+                {"slot":0,"resource":"2D0/S0","object_id":20,"type":"active"},
+                {"slot":2,"resource":"2C0/S0","object_id":22,"type":"adaptive"},
+                {"slot":3,"resource":"2C0/S0","object_id":21,"type":"passive"}]);
+            proof["visible_passive_p_green_4_1_checked"] = json!(true);
+            proof["original_mot_and_resolved_roles_defaults_preserved"] = json!(true);
+            proof["original_mot_pop_gpop_raw_assets_byte_exact"] = json!(true);
+            if let Some(resources) = proof.get_mut("authored_resources") {
+                resources.as_array_mut().unwrap().extend([
+                    json!("1FE/S9"),
+                    json!("2D0/S0"),
+                    json!("2C0/S0"),
+                ]);
             }
         }
     }
@@ -62,6 +85,15 @@ async fn setup_case(case: Case, fixture: Fixture) -> (Fixture, Flow) {
             ))
             .await
         }
+        Case::RenderedDefaults => {
+            Box::pin(setup_with_fixture_policy_and_writer(
+                implicit_mot::defaults::response,
+                fixture,
+                implicit_mot::defaults::encoding,
+                authoring_metadata::write_compact,
+            ))
+            .await
+        }
     }
 }
 
@@ -72,7 +104,7 @@ async fn assert_case_restored(
     concept: &SavedEditorialTeletextDesign,
 ) -> Vec<TeletextRaster> {
     let previews = Box::pin(assert_restored(fixture, flow, concept)).await;
-    if matches!(case, Case::ImplicitMot) {
+    if matches!(case, Case::ImplicitMot | Case::RenderedDefaults) {
         let restored = drcs_bitmap::restored(fixture, concept).await;
         case.assert_service(flow, restored.encoded().unwrap());
     }
@@ -130,6 +162,9 @@ async fn publish_actual(
             .find(|file| file.name == implicit_mot::mot_file(&exported))
             .unwrap();
         assert_eq!(exported_mot.bytes, original_mot.bytes);
+    }
+    if matches!(case, Case::RenderedDefaults) {
+        implicit_mot::defaults::assert_protected_reexport(flow, &exported);
     }
     fixture = fixture.reopen().await;
     case.assert_service(flow, recover(&fixture, 1).await.service());
@@ -250,4 +285,14 @@ async fn actual_qtm_implicit_mot_three_linked_targets_concept_serves_two_ordinar
         "ERSATZRS_TELETEXT_IMPLICIT_MOT_DIR",
     ));
     Box::pin(run(Case::ImplicitMot, directory)).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires three actual pinned QTM saves from this live rendered-defaults MOT export and FFmpeg9/ffprobe/TSDuck; bounded1200s; no independent/client acceptance"]
+async fn actual_qtm_mot_rendered_defaults_three_linked_targets_concept_serves_two_ordinary_channels(
+) {
+    let directory = PathBuf::from(client_capture::selected(
+        "ERSATZRS_TELETEXT_MOT_DEFAULTS_DIR",
+    ));
+    Box::pin(run(Case::RenderedDefaults, directory)).await;
 }

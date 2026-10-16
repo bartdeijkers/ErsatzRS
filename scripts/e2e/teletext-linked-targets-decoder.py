@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fixed three-linked-target oracle using the unchanged pinned imager decoder.
 
-Usage: teletext-linked-targets-decoder.py UNITS.json day|night [--implicit-mot],
+Usage: teletext-linked-targets-decoder.py UNITS.json day|night [--implicit-mot|--rendered-defaults],
 with the existing ERSATZRS_TELETEXT_TEST_IMAGER_DIR checkout. Inspect only chronological CLOSED
 acquisitions from the actual <=512-unit prefix; never synthesize an EOF header.
 Owners124/125/126 explicitly receive Normal2A0/2A2/2A3 respectively, preserving
@@ -12,6 +12,11 @@ routing, font pixels, actual client navigation or complete Level2.5 acceptance.
 Level1/1.5 checks use receiver region0 and literal codes, not national fonts.
 The explicit implicit-MOT mode additionally checks fixed encoded MOT bodies,
 not semantic MOT resolution, automatic acquisition or lifecycle conformance.
+The rendered-defaults mode additionally supplies actual received POP2C0 and
+GPOP2D0 bodies to the unchanged decoder. A second bounded reader pass uses
+explicit coding2 for those bodies and preserves the identical chronological
+closed-acquisition identities. This checks fixed received object bodies and
+resulting cells, not automatic MOT/default selection or font rendering.
 
 Bounded negatives: both wrong-profile swaps must reject the fixed inventory.
 For each FULL Normal page+S1 identity, separately toggle a valid-parity PTU0
@@ -22,6 +27,7 @@ retain each derived negative independently; do not patch the external decoder.
 
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import sys
@@ -76,6 +82,143 @@ def implicit_mot_pages(pages):
     for page in mot_pages:
         check_implicit_mot(page)
     return [page for page in pages if page.get("number") != 0x1FE], len(mot_pages)
+
+
+def closed_object_pages(reader_type, units, original_pages):
+    # Same captured bytes and frozen EOF policy as fixed.closed_pages. Coding2
+    # is passed on EVERY call; no header, packet or closing acquisition is added.
+    packets = bytes(imager.resource.BIT_REVERSE[b] for unit in units for b in unit[4:])
+    stream, reader, pages = io.BytesIO(packets), reader_type(), []
+    for _ in range(512):
+        current = reader.read(stream, page_coding=2)
+        if current is not None:
+            require(type(current) is list and len(current) == 1, "Unexpected acquisition count")
+        if current is None or stream.tell() == len(packets):
+            require([(page.get("number"), page.get("subcode")) for page in pages]
+                    == [(page.get("number"), page.get("subcode")) for page in original_pages],
+                    "Coding2 pass changed chronological closed-acquisition identities")
+            return pages
+        if current[0]:
+            pages.append(current[0])
+    raise imager.resource.CalibrationError("Acquisition bound exceeded")
+
+
+def check_rendered_defaults_mot(page):
+    require(page.get("number") == 0x1FE and page.get("subcode") & 15 == 9,
+            "Fixed rendered-defaults MOT1FE logical S1=9 required")
+    require(set(page) == {"number", "subcode", "control", 0, (28, 0), *MOT_ROWS},
+            "Closed rendered-defaults MOT must contain exactly seventeen body rows and X28/0")
+    require(page[0] == b" " * 40, "Original MOT1FE header text differs")
+    require(page[(28, 0)] == [0xFFB6] + [0] * 12,
+            "MOT1FE X28/0 function6/coding3 or reserved fields differ")
+    # EN300706 V1.2.1 Figure20 and Tables20-23, printed52-55:
+    # https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf
+    # Each owner selects GPOP+POP1 (9), plus its original GDRCS+DRCS link.
+    expected = {row: [0] * 40 for row in MOT_ROWS}
+    expected[2][8:14] = [9, 9, 9, 10, 9, 11]
+    unused = [9, 15, 15, 0, 0, 0, 13, 4, 13, 4]
+    # Default types occupy two bits each: Active1, Adaptive2, Passive3.
+    # Allocation is per (resource,type): all three first typed selectors are0.
+    # Adaptive22 and Passive21 do not share a typed pool; Passive is NOT16.
+    expected[19] = ([2, 13, 0, 0, 0, 1, 0, 0, 13, 4]
+                    + [2, 12, 0, 0, 0, 14, 0, 0, 0, 0] + unused * 2)
+    expected[20] = unused * 4
+    expected[21] = ([1, 10, 1, 0, 2, 10, 0, 0, 2, 10, 2, 0, 2, 10, 3, 0]
+                    + [9, 15, 15, 0] * 4 + [0] * 8)
+    for row in MOT_ROWS:
+        encoded = [HAMMING_8_4[nibble] & 0x7F for nibble in expected[row]]
+        require(list(page[row]) == encoded,
+                f"Rendered-defaults MOT1FE/S9 row{row}: encoded body differs")
+
+
+def check_received_object(page):
+    number = page.get("number")
+    require(number in (0x2C0, 0x2D0) and page.get("subcode") & 15 == 0,
+            "Only fixed POP2C0/S0 and GPOP2D0/S0 object pages are supported")
+    # The fixed definitions fit in X3: pointer packets X1/X2 and body X3.
+    # Resource header nn is in S4/S3, distinct from counterS2 and logicalS1.
+    require(page["subcode"] >> 8 == 3, "Fixed object header nn must declare X3")
+    require(set(page) == {"number", "subcode", "control", 0, (28, 0), 1, 2, 3},
+            "Closed object must contain exactly all declared pointer/body rows and X28/0")
+    require(page[0] == b" " * 40, "Original object header text differs")
+    function = 3 if number == 0x2C0 else 2
+    require(page[(28, 0)] == [0xFF80 | (2 << 4) | function] + [0] * 12,
+            "Object X28/0 function/coding2 or reserved fields differ")
+    for row in (1, 2, 3):
+        require(type(page[row]) is list and len(page[row]) == 14
+                and all(type(word) is int and 0 <= word <= 0x3FFFF
+                        for word in page[row][:13])
+                and page[row][13] == (1 if row < 3 else 0),
+                f"Object {number:X} row{row}: invalid triplet or pointer/body designation")
+    # EN30070610.5.1.2/Table21: one lower-half first pointer per TYPE.
+    # Public Adaptive begins at absolute0; Passive follows its five words at5.
+    pointers = [0] + [0x3FFFF] * 12
+    if number == 0x2C0:
+        pointers[2], pointers[3] = 0x3FE00, 0x3FE05
+    else:
+        pointers[1] = 0x3FE00
+    require(page[1][:13] == pointers
+            and page[2][:13] == [0] + [0x3FFFF] * 12,
+            f"Object {number:X}: fixed typed pointer table differs")
+    # Literal Table25 object definitions/commands, not semantic host IDs.
+    # Markers retain selector0; fresh AP/attributes apply to each definition.
+    def word(address, mode, data):
+        return address | (mode << 6) | (data << 11)
+    terminate = word(63, 31, 3)
+    if number == 0x2C0:
+        body = [word(40, 22, 0), word(41, 4, 7), word(7, 12, 64),
+                word(9, 12, 0), word(9, 9, 88),
+                word(40, 23, 0), word(44, 4, 1), word(1, 12, 0),
+                word(1, 0, 2), word(1, 3, 0), word(1, 9, 80)]
+    else:
+        body = [word(40, 21, 0), word(41, 4, 8), word(8, 12, 65),
+                word(8, 9, 65), word(10, 12, 0)]
+    require(page[3][:13] == body + [terminate] * (13 - len(body)),
+            f"Object {number:X}: fixed complete definitions/termination differ")
+
+
+def rendered_defaults_pages(pages, object_pages):
+    mots = [page for page in pages if page.get("number") == 0x1FE]
+    require(bool(mots), "At least one complete closed rendered-defaults MOT required")
+    for page in mots:
+        check_rendered_defaults_mot(page)
+    banks, counts = {}, {0x2C0: 0, 0x2D0: 0}
+    for page in object_pages:
+        number = page.get("number")
+        if number in counts:
+            check_received_object(page)
+            banks.setdefault(number, page)
+            counts[number] += 1
+    require(set(banks) == set(counts), "Both complete received POP and GPOP are required")
+    return ([page for page in pages if page.get("number") not in (0x1FE, 0x2C0, 0x2D0)],
+            len(mots), [banks[0x2C0]], [banks[0x2D0]], counts)
+
+
+def check_rendered_defaults_display(decoder_type, page, normal, glob, pop, gpop, theme):
+    code = 0x5B if theme == "day" else 65
+    for level in ("1", "1.5", "2.5"):
+        decoder = decoder_type()
+        decoder.decode(page, level=level, ndrcs_page=normal, gdrcs_page=glob,
+                       pop_page=pop, gpop_page=gpop)
+        try:
+            if level == "2.5":
+                glyph = (1, 0, fixed.POLISH) if theme == "day" else None
+                fixed.cell(decoder, 1, 7, code, 3, glyph)
+                fixed.cell(decoder, 1, 8, code, 4, glyph)
+                fixed.cell(decoder, 4, 1, 80, 0, foreground=(0, 255, 0))
+                fixed.cell(decoder, 1, 9, 88, 0)
+                # Pinned Frag.DS_BOTTOMRIGHTQUARTER is8, from actual Active A.
+                fixed.cell(decoder, 2, 9, 65, 8)
+            else:
+                fixed.cell(decoder, 1, 7, code, 0)
+                fixed.cell(decoder, 1, 8, 32, 0)
+                fixed.cell(decoder, 2, 8, 101, 0)
+                for row, column in ((4, 1), (1, 9), (2, 9)):
+                    fixed.cell(decoder, row, column, 32, 0)
+            fixed.cell(decoder, 3, 1, 66, 0)
+        except imager.resource.CalibrationError as error:
+            raise imager.resource.CalibrationError(
+                f"Rendered-defaults display {page['number']:X}/S32 Level{level}: {error}") from error
 
 
 def check_bank(decoder_type, page, identity):
@@ -141,9 +284,10 @@ def check_display(decoder_type, page, normal, glob, theme):
 
 def main():
     require(len(sys.argv) in (3, 4) and sys.argv[2] in ("day", "night")
-            and (len(sys.argv) == 3 or sys.argv[3] == "--implicit-mot"),
-            "Expected captured units file and fixed day/night profile [--implicit-mot]")
-    implicit_mot = len(sys.argv) == 4
+            and (len(sys.argv) == 3 or sys.argv[3] in ("--implicit-mot", "--rendered-defaults")),
+            "Expected captured units file and fixed day/night profile [--implicit-mot|--rendered-defaults]")
+    implicit_mot = len(sys.argv) == 4 and sys.argv[3] == "--implicit-mot"
+    rendered_defaults = len(sys.argv) == 4 and sys.argv[3] == "--rendered-defaults"
     source = Path(sys.argv[1])
     require(source.is_file() and not source.is_symlink(),
             "Expected regular captured units file")
@@ -161,6 +305,9 @@ def main():
     pages = fixed.closed_pages(reader_type, units)
     if implicit_mot:
         pages, mot_count = implicit_mot_pages(pages)
+    elif rendered_defaults:
+        object_pages = closed_object_pages(reader_type, units, pages)
+        pages, mot_count, pop, gpop, object_counts = rendered_defaults_pages(pages, object_pages)
     normals, glob, bank_counts = received_banks(pages, sys.argv[2])
     displays = [page for page in pages if page.get("number") in NORMAL_BY_DISPLAY
                 and page.get("subcode") == 32 and 1 in page and (26, 0) in page]
@@ -168,7 +315,11 @@ def main():
             "All three complete received displays are required")
     counts = {number: 0 for number in NORMAL_BY_DISPLAY}
     for page in displays:
-        check_display(decoder_type, page, normals[page["number"]], glob, sys.argv[2])
+        if rendered_defaults:
+            check_rendered_defaults_display(decoder_type, page, normals[page["number"]], glob,
+                                            pop, gpop, sys.argv[2])
+        else:
+            check_display(decoder_type, page, normals[page["number"]], glob, sys.argv[2])
         counts[page["number"]] += 1
     report = {
         "decoder": "teletextimager", "version": imager.VERSION, "commit": imager.COMMIT,
@@ -200,6 +351,24 @@ def main():
             "encoded_mot_body_correspondence": True,
             "semantic_mot_resolution_proven": False,
             "mot_lifecycle_independently_proven": False,
+        })
+    elif rendered_defaults:
+        report.update({
+            "fixture": "implicit-mot-rendered-defaults-three-linked-targets",
+            "closed_mots_checked": mot_count, "mot_page": "1FE", "mot_logical_s1": 9,
+            "encoded_mot_body_correspondence": True,
+            "semantic_mot_resolution_proven": False,
+            "mot_lifecycle_independently_proven": False,
+            "object_reader_coding": 2, "object_reader_ordered_identities_match": True,
+            "complete_closed_objects_checked": [
+                {"page": f"{number:X}", "s1": 0, "count": object_counts[number]}
+                for number in sorted(object_counts)],
+            "fixed_object_pointer_and_definition_bodies_checked": True,
+            "fixture_original_default_slots": [0, 2, 3],
+            "supplied_received_object_pages": {"pop": "2C0/S0", "gpop": "2D0/S0"},
+            "received_object_bodies_and_cells_checked": True,
+            "passive_p_green_adaptive_x_active_a_bottomright_checked": True,
+            "automatic_default_selection_proven": False,
         })
     print(json.dumps(report, sort_keys=True))
 
