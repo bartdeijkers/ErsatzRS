@@ -25,6 +25,7 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextResourceFullUpdate,
 };
 
+mod compiler_resources;
 #[cfg(test)]
 mod tests;
 
@@ -169,7 +170,9 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
 ) -> Result<()> {
     check_deadline(deadline)?;
     check_service(original, edited, incoming, cumulative, budget, deadline)?;
-    for (before, after) in original.pages().iter().zip(edited.pages()) {
+    for (before, after) in
+        compiler_resources::authored_pages(original).zip(compiler_resources::authored_pages(edited))
+    {
         check_deadline(deadline)?;
         let (Some((old_page, old)), Some((new_page, new))) = (display(before), display(after))
         else {
@@ -179,7 +182,8 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         let owner = old.owner();
         let overlay = incoming.rows.iter().find(|value| value.owner() == owner);
         let operand_change = incoming.operands.iter().any(|value| value.owner() == owner);
-        if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() {
+        let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
+        if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() && !compiler_links {
             if before.data_units() != after.data_units() {
                 return Err(error(
                     Some(owner),
@@ -197,6 +201,7 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             operand_change,
             overlay.is_some(),
             budget.max_units,
+            compiler_links,
         )?;
         if let Some(overlay) = overlay {
             check_overlay(old, new, overlay)?;
@@ -261,8 +266,8 @@ fn check_service(
     let new = edited.declared();
     let before = old.semantic();
     let after = new.semantic();
-    if original.inventory() != edited.inventory()
-        || original.magazine_units() != edited.magazine_units()
+    compiler_resources::check(original, edited, incoming.rows, deadline)?;
+    if original.magazine_units() != edited.magazine_units()
         || before.base() != after.base()
         || before.magazine_presentations() != after.magazine_presentations()
         || before.objects() != after.objects()
@@ -273,7 +278,6 @@ fn check_service(
         || old.resolutions() != new.resolutions()
         || old.resource_inventory() != new.resource_inventory()
         || old.defaults() != new.defaults()
-        || original.pages().len() != edited.pages().len()
     {
         return Err(error(
             None,
@@ -634,6 +638,7 @@ fn check_packets(
     operand_change: bool,
     row_change: bool,
     max_units: usize,
+    compiler_links: bool,
 ) -> Result<()> {
     let owner = old.address();
     let before = project_encoded_teletext_display(old, max_units).map_err(|_| {
@@ -667,12 +672,10 @@ fn check_packets(
     // though uploaded X26 and every authored command remain unchanged. Compare
     // all other completed packets exactly; protected cells are checked below.
     // An uploaded X26 edit still needs the original TTI/operand reconciliation.
+    // Generated X27/4 changes have separately matched exact private compiler
+    // link descriptors; uploaded X27 stays immutable against its old receipt.
     let protected = |record: &&TeletextEncodedDisplayRecord| {
-        !(row_change
-            && matches!(
-                record,
-                TeletextEncodedDisplayRecord::Triplets { row: 26, .. }
-            ))
+        protected_packet(record, row_change, compiler_links)
     };
     let old_records = before.records.iter().filter(protected);
     let new_records = after.records.iter().filter(protected);
@@ -745,6 +748,27 @@ fn check_packets(
     }
     Ok(())
 }
+fn protected_packet(
+    record: &TeletextEncodedDisplayRecord,
+    row_change: bool,
+    compiler_links: bool,
+) -> bool {
+    !((compiler_links
+        && matches!(
+            record,
+            TeletextEncodedDisplayRecord::Triplets {
+                row: 27,
+                designation: 4,
+                ..
+            }
+        ))
+        || (row_change
+            && matches!(
+                record,
+                TeletextEncodedDisplayRecord::Triplets { row: 26, .. }
+            )))
+}
+
 fn changed_page_cells(
     old: &TeletextEncodedDisplayRecord,
     new: &TeletextEncodedDisplayRecord,

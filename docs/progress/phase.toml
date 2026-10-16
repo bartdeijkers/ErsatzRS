@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: implement compiler-owned DRCS realization for no-bank Polish pages'
+current_focus = 'P9A-04: genuine QTM edit and ordinary delivery for compiler-owned no-bank DRCS'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -101,14 +101,18 @@ independent banks are explicitly supplied; fallback uses receiver region0.
 Exact headed9-culture light/dark SSR/no-JS admin export/import/preview/Request/
 Publish now passes Chromium47695d2f and Firefox3cadfa41, with same-origin streams,
 immutable pointers/profiles/input and database reopen/cleanup. Hydration and
-suitable-client display/navigation remain open. Next implement deterministic,
-bounded compiler-owned resource/slot/link/lifecycle derivation and generated-slot
-editor protection for no-bank Polish pages; the complete-service boundary lacks
-that ownership plan. Preserve authored declarations and all acceptance gates. The bounded Kodi21.3
-source assessment does not establish enlarged DRCS suitability; client acceptance
-stays open without a decoder maintenance program. Automatic no-bank
-resources, non-neutral effects and resource-choice coverage remain open;
-no guessed alias or page restriction is accepted. Full authored/
+suitable-client display/navigation remain open. Compiler-owned no-bank DRCS now
+preserves exact original intent, deterministic resources/links, shared bounds and
+lifecycle. Native concept/export/preview/explicit publication/reopen/revert and
+generated-slot/X27 protection pass (ad64fecd); P9A-04 owns all scope/failure receipts.
+Next perform fresh genuine QTM editing for this different export, then ordinary
+TCP/TSDuck/independent decoding and suitable-client navigation. Existing-bank
+proof cannot be relabelled as new no-bank proof. The bounded Kodi21.3 source
+assessment does not establish enlarged DRCS suitability; no decoder maintenance
+program starts. Both-occupied roles, unproven absent-X27 MOT/default supplements,
+non-neutral effects, authored-bitmap transitions needing a new generated bank and
+remaining national recipes stay open. No guessed alias or page restriction is
+accepted. Full authored/
 editor/resources/panels/Lua/restart/hydrated admin/default-capacity/playback/
 platform acceptance remains open; production guide waits for generic acceptance.
 

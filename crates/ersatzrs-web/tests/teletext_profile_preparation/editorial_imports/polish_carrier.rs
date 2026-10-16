@@ -169,14 +169,14 @@ fn native_polish_request(flow: &Flow) -> NativeTeletextEditorialImportRequest {
 
 #[tokio::test]
 async fn raw_polish_base_edit_rebuilds_generated_carrier_then_previews_publishes_and_reopens() {
-    run_polish_flow(None).await;
+    Box::pin(run_polish_flow(None)).await;
 }
 
 #[tokio::test]
 #[ignore = "requires retained actual QTeletextMaker 1.0 Polish Base Save As artifacts"]
 async fn actual_qtm_polish_base_edit_imports_previews_publishes_and_reopens() {
     let directory = client_capture::selected("ERSATZRS_QTM_POLISH_CALIBRATION_DIR");
-    run_polish_flow(Some(std::path::Path::new(&directory))).await;
+    Box::pin(run_polish_flow(Some(std::path::Path::new(&directory)))).await;
 }
 
 pub(super) fn genuine_polish_request(

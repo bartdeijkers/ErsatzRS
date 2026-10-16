@@ -69,14 +69,14 @@ pub(super) struct BrowserComplete {
     pub(super) request_id: i64,
 }
 
-struct Retained {
+pub(super) struct Retained {
     package: String,
     profiles: Vec<TeletextProfileRead>,
     bindings: [Vec<ChannelTeletextBindingRead>; 2],
 }
 
 impl Retained {
-    async fn capture(fixture: &Fixture) -> Self {
+    pub(super) async fn capture(fixture: &Fixture) -> Self {
         Self {
             package: calculate_addon_content_sha256(&fixture.root.path().join("package"))
                 .await
@@ -104,7 +104,7 @@ impl Retained {
         }
     }
 
-    async fn assert_unchanged(&self, fixture: &Fixture, flow: &Flow) {
+    pub(super) async fn assert_unchanged(&self, fixture: &Fixture, flow: &Flow) {
         assert_retained_storage(fixture, flow).await;
         assert_eq!(
             calculate_addon_content_sha256(&fixture.root.path().join("package"))

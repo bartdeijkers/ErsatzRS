@@ -517,6 +517,30 @@ mapped generated carrier glyph; retained Base identity remains literal. Equal fo
 masks or Unicode guesses cannot authorize conversion. Charset-pair/DRCS budgets and
 whole-page visual comparison remain separate obligations. Unproven national operands
 and ambiguous primary-table marks remain visible gaps, not accepted authoring bans.
+
+Compiler-owned DRCS realization must remain separate from addon-authored resource
+intent. The complete service factory first settles the unchanged original target
+against actual authored resource bodies. It may then derive an additive effective
+DRCS service for a proven national identity; the original declaration, Base rows,
+presentation, object selections and provenance remain unchanged. Generated banks,
+slots, consumers and exact effective X27 links have factory-owned read-only
+provenance. Their allocation is deterministic from the complete original owner
+namespace, independent of page traversal and the current consumer subset. Existing
+authored links and definitions cannot be repurposed to make a carrier fit.
+
+Added resources share the existing page/unit, composition, reference, work and
+absolute-deadline bounds. The final actual inventory and the existing per-response
+resource lifecycle plan include them. A constant first-start counter does not
+authorize a warm update outside that lifecycle. Export receipts retain their
+physical dependencies; unchanged generated companions may round-trip, while any
+attempt to edit compiler-owned definitions rejects. Import authenticates those
+companions against their export baseline and separately validates final generated
+resources/links against compiler provenance. A permitted Base edit may create or
+retire its required physical carrier; it never grants uploaded X27 authority or
+loosens protected display effects. Occupied roles, unproven MOT supplementation,
+non-neutral glyph effects and other unrealized national identities remain explicit
+implementation gaps until resolved, not accepted product restrictions.
+
 A domain-owned bounded base-cell trace is now retained by main composition from
 the actual checked fallback rows. Coded cells, authored Unicode/mosaic intent and
 spacing-attribute sources remain distinct, with separate raw and remapped colours

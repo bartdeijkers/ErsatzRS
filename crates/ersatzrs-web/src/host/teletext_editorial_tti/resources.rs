@@ -8,7 +8,7 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::teletext::{
     project_encoded_teletext_drcs, EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService,
-    TeletextEncodedDisplayRecord,
+    TeletextCompilerDrcsResource, TeletextEncodedDisplayRecord,
 };
 use std::time::Instant;
 
@@ -236,10 +236,13 @@ fn validate_original<'a>(
 
 /// Exact final candidate/file match, allowing only the pinned editor's global
 /// multi-group ordinal offset. Native S1 always comes from the trusted bank.
-pub(in crate::host) fn validate(
+/// Compiler-owned companions retain the exact exported baseline, even when a
+/// permitted Base edit makes the newly compiled supplement unnecessary.
+pub(in crate::host) fn validate_with_baseline(
     bank: DrcsTtiBank,
     bytes: &[u8],
     service: &EncodedTeletextAuthoredService,
+    baseline: &EncodedTeletextAuthoredService,
     limits: (TeletextTtiBudget, usize),
     deadline: Instant,
 ) -> Result<()> {
@@ -248,12 +251,28 @@ pub(in crate::host) fn validate(
     for index in 0..bank.len {
         let page = groups.page(index, bank, deadline)?;
         if let Some(context) = bank.groups[index] {
-            validate_page(context, &page, service, limits.1, deadline)?;
+            let expected = if compiler_table(baseline, context.identity).is_some() {
+                baseline
+            } else {
+                service
+            };
+            validate_page(context, &page, expected, limits.1, deadline)?;
         } else {
             padding::validate(&page, bank, index, true)?;
         }
     }
     bank.location().check_deadline(deadline)
+}
+
+fn compiler_table(
+    service: &EncodedTeletextAuthoredService,
+    identity: TeletextResourceIdentity,
+) -> Option<&TeletextDrcsSubtable> {
+    service
+        .compiler_drcs_resources()
+        .iter()
+        .map(TeletextCompilerDrcsResource::table)
+        .find(|table| table.identity() == identity)
 }
 
 fn table(
@@ -267,6 +286,7 @@ fn table(
         .subtables()
         .iter()
         .find(|table| table.identity() == context.identity)
+        .or_else(|| compiler_table(service, context.identity))
         .ok_or_else(|| context.location().error(Failure::Mapping))
 }
 
@@ -335,6 +355,13 @@ fn reconcile_page(
             let new = &new[start..start + 20];
             if old == new {
                 continue;
+            }
+            if compiler_table(service, context.identity).is_some() {
+                return Err(super::NativeTeletextEditorialTtiError {
+                    row: Some(row),
+                    column: Some(start),
+                    ..location.error(Failure::Structure)
+                });
             }
             let glyph = table
                 .glyphs()

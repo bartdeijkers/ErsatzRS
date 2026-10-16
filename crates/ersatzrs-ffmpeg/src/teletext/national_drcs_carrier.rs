@@ -57,6 +57,19 @@ pub(super) fn needs_binding(composition: &TeletextMainComposition, origin: usize
     original_identity(composition, origin).is_some()
 }
 
+pub(super) fn required_bitmap(
+    composition: &TeletextMainComposition,
+    origin: usize,
+) -> Option<TeletextDrcsBitmap> {
+    let original = original_identity(composition, origin)?;
+    TeletextDrcsBitmap::new(
+        resolve_teletext_glyph_mask(original, None, false)
+            .ok()?
+            .rows(),
+    )
+    .ok()
+}
+
 fn original_identity(
     composition: &TeletextMainComposition,
     origin: usize,
@@ -105,12 +118,7 @@ pub(super) fn resolve(
     origin: usize,
 ) -> Option<NationalDrcsCarrier> {
     let original = original_identity(composition, origin)?;
-    let bitmap = TeletextDrcsBitmap::new(
-        resolve_teletext_glyph_mask(original, None, false)
-            .ok()?
-            .rows(),
-    )
-    .ok()?;
+    let bitmap = required_bitmap(composition, origin)?;
     let links = service
         .page_enhancements()
         .get(&composition.owner())?

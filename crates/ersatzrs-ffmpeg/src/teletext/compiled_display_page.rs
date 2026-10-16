@@ -11,7 +11,9 @@ use ersatzrs_domain::{
 };
 
 use super::compile_context::TeletextCompileContext;
-use super::normalized_main_program::compile_normalized_with_context;
+use super::normalized_main_program::{
+    compile_normalized_original_with_context, compile_normalized_with_context,
+};
 use super::packets::{self, PageEnhancements, PagePacketMetadata};
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
@@ -136,6 +138,20 @@ pub(super) fn encode_teletext_compiled_display_page_with_context(
     budget: &TeletextNormalizedMainProgramBudget,
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextCompiledDisplayPage, TeletextCompiledDisplayPageEncodingError> {
+    encode_with_original(service, owner, region, defaults, budget, context, None)
+}
+
+/// Only the whole-service compiler can provide the settled authored target and
+/// its checked additive effective resources. Standalone callers keep one service.
+pub(super) fn encode_with_original(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    region: TeletextEncodingRegion,
+    defaults: &[TeletextDefaultObjectSelection],
+    budget: &TeletextNormalizedMainProgramBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+    original: Option<super::TeletextMainComposition>,
+) -> Result<EncodedTeletextCompiledDisplayPage, TeletextCompiledDisplayPageEncodingError> {
     let error = |reason| TeletextCompiledDisplayPageEncodingError { owner, reason };
     check_deadline(owner, context.deadline)?;
     let page = service
@@ -145,19 +161,24 @@ pub(super) fn encode_teletext_compiled_display_page_with_context(
         .find(|page| page.address == owner)
         .ok_or_else(|| error(TeletextCompiledDisplayPageEncodingFailure::MissingPage))?;
     let TeletextEncodingRegion::WesternLatin = region;
-    let normalized = compile_normalized_with_context(service, owner, defaults, budget, context)
-        .map_err(|reason| {
-            if matches!(
-                &reason.reason,
-                TeletextNormalizedMainProgramFailure::TimedOut
-            ) {
-                error(TeletextCompiledDisplayPageEncodingFailure::TimedOut)
-            } else {
-                error(TeletextCompiledDisplayPageEncodingFailure::Normalization(
-                    Box::new(reason),
-                ))
-            }
-        })?;
+    let normalized = match original {
+        Some(original) => {
+            compile_normalized_original_with_context(service, original, defaults, budget, context)
+        }
+        None => compile_normalized_with_context(service, owner, defaults, budget, context),
+    }
+    .map_err(|reason| {
+        if matches!(
+            &reason.reason,
+            TeletextNormalizedMainProgramFailure::TimedOut
+        ) {
+            error(TeletextCompiledDisplayPageEncodingFailure::TimedOut)
+        } else {
+            error(TeletextCompiledDisplayPageEncodingFailure::Normalization(
+                Box::new(reason),
+            ))
+        }
+    })?;
     check_deadline(owner, context.deadline)?;
     let compiled = layout::compile_for_service_composition(service, page).map_err(|reason| {
         error(TeletextCompiledDisplayPageEncodingFailure::Base(Box::new(

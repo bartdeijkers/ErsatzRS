@@ -24,6 +24,10 @@ use super::{
     TeletextX27LinkTarget,
 };
 
+#[path = "drcs_extension.rs"]
+mod drcs_extension;
+pub use drcs_extension::*;
+
 /// Explicitly resolved public/global object links, not MOT or X27 declarations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextResolvedObjectPageLinks {

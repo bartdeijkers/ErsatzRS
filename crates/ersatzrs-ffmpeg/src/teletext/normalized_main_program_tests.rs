@@ -754,3 +754,6 @@ fn foreign_mot_default_is_not_cloned_or_exempted_from_selected_link_lowering() {
 
 #[path = "normalized_main_program_tests/polish_carrier.rs"]
 mod polish_carrier;
+
+#[path = "normalized_main_program_tests/compiler_polish.rs"]
+mod compiler_polish;

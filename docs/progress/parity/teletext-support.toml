@@ -13,8 +13,8 @@ AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
 X27 and X26/metadata decoding pass; full client open.
 C2 keeps per-instance final words; differing charset aliases remain pending.
 G1 mode/fallback and Latin decoder gaps survive.
-165 direct recipes;4 pending. Polish5B DRCS/QTM/SSR/TCP/imager pass;
-no-bank/effects/hydration/client open. Hebrew charset decoder gap remains.
+165 direct recipes;4 pending. Polish5B bank QTM/SSR/TCP/imager pass.
+No-bank DRCS concepts/revert pass; effects/client/hydration open. Hebrew gap stays.
 Glyph/DRCS keep original resources and loser/blank lineage; lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.

@@ -589,16 +589,22 @@ fn validate_reconciled_files(
             .iter()
             .find(|file| file.name == mapping.name)
             .ok_or(NativeTeletextEditorialImportError::Association)?;
+        let original = baseline
+            .original
+            .view()
+            .encoded()
+            .ok_or(NativeTeletextEditorialImportError::Association)?;
         let context = super::teletext_editorial_tti::resources::mapping(
             mapping,
             &baseline.body.project,
-            encoded,
+            original,
         )?;
-        super::teletext_editorial_tti::resources::validate(
+        super::teletext_editorial_tti::resources::validate_with_baseline(
             context,
             &edited.bytes,
             encoded,
-            (tti, encoded.unit_count()),
+            original,
+            (tti, encoded.unit_count().max(original.unit_count())),
             deadline,
         )?;
     }

@@ -2968,6 +2968,98 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 compiler-owned no-bank Polish resource checkpoint:
+Criterion: close the P9A-04 authored national-glyph realization gap where an
+exact neutral Polish Base5B carrier has no matching linked authored DRCS bank.
+Implementation: the complete factory settles the unchanged authored target
+against original resource C2, then derives additive effective DRCS resources
+through an unused Normal role, otherwise an unused Global role. The original
+DeclaredService remains exact. Factory-owned descriptors retain exact definitions,
+consumers and merged X27 links, with deterministic allocation from every original
+display/resource/companion and all named X27/MOT targets, even non-emitted links.
+Address parity and non-BCD preferences never become artificial capacity limits.
+Added pages/units, reference limits, shared non-renewing work and the original
+absolute deadline still apply. Actual inventory and the existing response-local
+lifecycle variants include generated banks. This adds no guessed G0/G2 alias.
+Receipt import authenticates unchanged generated companions against their export
+baseline and rejects edits to engine-owned slots or uploaded X27. Only an
+associated permitted Base edit can create/retire a descriptor-checked bank;
+authored identities/resources, protected effects and explicit publication remain
+independently fenced. ADR0123 records the original/effective ownership decision.
+
+Verified so far:
+- Domain5 tests: 1a3894ba-b4d5-4fe9-a25f-a7c717f2cb49 PASS0.007s, preserving
+  original overlays/programs/collection/MOT fallback, sparse masks and absent
+  metadata, with bounds/collision/occupied/unproven-role rejection.
+- FFmpeg152 tests: e2d06aef-52c3-4174-a54d-2424c45f58b7 PASS10.581s. Includes
+  ten compiler-Polish cases and existing normalization/service/quota/deadline,
+  lifecycle and output transitions. Literal bitmap/PTU rows and actual X27 fields,
+  exact settled original and fallback, Global fallback, named-but-untransmitted
+  ownership, two-consumer order/removal stability, quota0/exact/one-less and
+  page/unit/deadline failures all pass. Two allocator cases additionally retain
+  legal addresses beyond exhausted preferences and the final available owner.
+- Host57 tests: 2cb567e4-6028-4348-a26d-93a0443fe56a PASS0.675s, including
+  generated additions/removals, unchanged/removed-bank companion validation,
+  generated bitmap/mode/X27 rejection and existing authored operand/resource,
+  full-effect/permission and export regressions.
+- Native application2 tests: ad64fecd-75bc-4756-a3d8-75a3d0c9e6f6 PASS7.081s.
+  Same-addon Day/Night profile setup retains zero authored resources. Row-only
+  concept import keeps accepted originals; literal 24x10 Polish preview matches
+  accepted preview after explicit publication and database reopen. Fresh revision2
+  export retains generated companions; bitmap/X27/protected-fragment edits reject
+  without head/pointer/package mutation. Unchanged companions accompany a Base
+  revert into revision3 with no generated bank; accepted revision2 stays live
+  through another reopen. Profiles/bindings/config/originals/other channel remain.
+- Final-source17 tests: 8463115c-141a-45d3-850e-d076fa13c84c PASS0.220s,
+  revalidating five domain and twelve compiler/allocation cases after mechanical
+  extraction and lint fixes. The four passing active runs cover216 unique cases.
+- Strict domain/FFmpeg/web --all-targets Clippy -D warnings passes13.19s;
+  formatting and architecture checks pass. This is focused verification, not
+  full workspace CI, hydration, ordinary playback or complete Level2.5 acceptance.
+Canonical ignored receipt: tmp/phase9-compiler-drcs/identity.json, SHA256
+ae1537ff1588194441962830a8b2775552323b62f0b9d7f471ad8b6fd2e8c787.
+It binds all23 current Rust sources, exact commands/results, negative logs and
+reuse qualifications. Checks include the unchanged four unrelated dirty source/
+parity files; these changes and the other three unrelated shared-file deltas
+remain outside the checkpoint. No push or publication is authorized here.
+
+Negative history: initial compile caught an IdentityError conversion and fixed
+its typed conversion. The pre-integration exact case then reproduced original
+owner200/S1234/origin994 NationalConversion (red-2.log). The first exact-original
+assertion incorrectly compared a transmission-settled factory target to plain
+unsettled compose(); its oracle now independently settles original-only packing,
+without changing any glyph/fallback expectation. One ordinary fixture removed
+Local main but retained Local definitions; clearing those unreferenced definitions
+restores valid input. Initial host tests omitted the canonical Base-derived é
+collision seed and correctly generated no unnecessary resource; their fixture now
+retains that source and asserts the actual settled two-cell Polish origin first.
+No normative mask, glyph expectation or permission validator was weakened.
+A subsequent mechanical domain preflight extraction preserves all four statement
+blocks and their order byte-exact; inverse extraction reproduces its old source
+hash. The ignored domain-refactor-equivalence.json and lint-equivalence receipts
+qualify reuse through explicit imports/equivalent method pointer, unit-statement
+semicolons and heap-pinning the same two existing large test futures. Clippy also
+replaced singleton cloned test slices with borrowed slices. No suppressions or
+assertion weakening were added. Final-source17 revalidate the domain/compiler. A final rustdoc-only correction
+clarifies caller-authored lifecycle entries versus generated resources; its
+non-doc source is byte-exact (doc-only-source-change.json).
+
+Missing proof / next action: perform a fresh genuine QTM edit/save against this
+DIFFERENT no-bank export and connect the existing ordinary-route
+capture/independent decoding/client workflow. Prior genuine editor output contains
+different X27/resource dependencies and cannot be relabelled as this new export.
+Retain prior existing-bank QTM/SSR/TCP/TSDuck/imager evidence below where bytes and
+assumptions remain unchanged. New no-bank transport, actual client/navigation and
+headed admin proof are not established by these native unit results.
+Occupied both DRCS roles, absent-X27 with unproven other MOT/default roles,
+non-neutral effects, other pending national positions, full fallback regional
+rendering and complete editor/resource/panel/charset coverage remain explicit
+implementation/acceptance gaps, not accepted authoring bans. An authored bitmap
+edit that would newly require compiler resources still needs an explicitly proved
+transition; this checkpoint authorizes only Base-associated generated deltas.
+All Lua/restart/hydration/playback/platform obligations remain; no milestone or
+complete engine acceptance is granted and no production TV-guide addon starts.
+
 2026-10-16 headed Polish editor/admin-to-stream checkpoint:
 Criterion: join this exact existing-resource Polish Base5B genuine QTM Save As
 to localized headed admin export/import/preview/explicit publication and the

@@ -1,7 +1,8 @@
 use super::*;
 
 // Table 36 Polish 5/B, retained as twelve-bit rows without a Unicode alias.
-const POLISH_5B_MASK: [u16; 10] = [0, 0x3fc, 0x18, 0x30, 0x1f8, 0xc0, 0x180, 0x3fc, 0, 0];
+pub(super) const POLISH_5B_MASK: [u16; 10] =
+    [0, 0x3fc, 0x18, 0x30, 0x1f8, 0xc0, 0x180, 0x3fc, 0, 0];
 
 fn polish_drcs_identity() -> TeletextResourceIdentity {
     TeletextResourceIdentity::new(
@@ -18,12 +19,12 @@ fn polish_drcs_reference() -> TeletextDrcsGlyphReference {
         slot: TeletextDrcsGlyphSlot::new(5).unwrap(),
     }
 }
-fn polish_limits() -> TeletextNormalizedMainProgramBudget {
+pub(super) fn polish_limits() -> TeletextNormalizedMainProgramBudget {
     let mut result = limits();
     result.replay.max_drcs_references = 16;
     result
 }
-fn enlarged_polish_base(
+pub(super) fn enlarged_polish_base(
     authored_bank: Option<([u16; 10], bool)>,
     d5: bool,
 ) -> TeletextSemanticService {
@@ -89,7 +90,9 @@ fn enlarged_polish_base(
         )
         .unwrap()
 }
-fn polish_fallback(service: &TeletextSemanticService) -> crate::teletext::EncodedTeletextPage {
+pub(super) fn polish_fallback(
+    service: &TeletextSemanticService,
+) -> crate::teletext::EncodedTeletextPage {
     let page = &service.base().pages[0];
     let layout = crate::teletext::layout::compile_for_service_composition(service, page).unwrap();
     crate::teletext::packets::encode_compiled_page(
@@ -103,7 +106,7 @@ fn polish_fallback(service: &TeletextSemanticService) -> crate::teletext::Encode
     )
     .unwrap()
 }
-fn assert_polish_original(original: &TeletextMainComposition) -> usize {
+pub(super) fn assert_polish_original(original: &TeletextMainComposition) -> usize {
     assert_eq!(original.base_display().primary().get(), 0x08);
     let display = original.display_resolution();
     let origin = display.cell(1, 7).unwrap().origin().unwrap();

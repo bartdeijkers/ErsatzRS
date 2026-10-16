@@ -169,6 +169,19 @@ pub(super) fn compile_normalized_with_context(
     budget: &TeletextNormalizedMainProgramBudget,
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
+    let original = compose_normalization_original(service, owner, defaults, budget, context)?;
+    compile_normalized_original_with_context(service, original, defaults, budget, context)
+}
+
+/// Complete-service compilation may supplement physical DRCS resources only
+/// after settling this unchanged authored target against its actual resources.
+pub(super) fn compose_normalization_original(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    defaults: &[TeletextDefaultObjectSelection],
+    budget: &TeletextNormalizedMainProgramBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<TeletextMainComposition, TeletextNormalizedMainProgramError> {
     let fail = |reason| TeletextNormalizedMainProgramError { owner, reason };
     check_deadline(owner, context.deadline)?;
     let original_allocations = allocate_teletext_resource_objects(
@@ -197,6 +210,19 @@ pub(super) fn compile_normalized_with_context(
     })?
     .into_composition();
     check_deadline(owner, context.deadline)?;
+    Ok(original)
+}
+
+/// The caller owns the validated, additive effective service and retains the
+/// exact original composition. This private seam grants no authored authority.
+pub(super) fn compile_normalized_original_with_context(
+    service: &TeletextSemanticService,
+    original: TeletextMainComposition,
+    defaults: &[TeletextDefaultObjectSelection],
+    budget: &TeletextNormalizedMainProgramBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<EncodedTeletextNormalizedMainProgram, TeletextNormalizedMainProgramError> {
+    let owner = original.owner();
     let physical = compile_physical_with_context(service, &original, defaults, budget, context)?;
     check_deadline(owner, context.deadline)?;
     Ok(EncodedTeletextNormalizedMainProgram { original, physical })

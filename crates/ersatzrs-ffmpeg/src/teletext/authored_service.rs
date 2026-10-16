@@ -1,10 +1,15 @@
 //! Atomic encoding of one owned, declaration-authenticated authored service.
 //!
-//! Full-page lifecycle values remain caller supplied. This is a bounded owned
-//! candidate, not lifecycle-history, carousel, publication or client acceptance.
+//! Authored lifecycle values remain caller supplied. Generated DRCS baselines
+//! are compiler-owned and share the checked per-response lifecycle authorization.
+//! This candidate is not carousel, publication or client acceptance.
 
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::time::Instant;
+
+mod compiler_drcs;
+mod resource_namespace;
+pub use compiler_drcs::TeletextCompilerDrcsResource;
 
 use ersatzrs_domain::{
     TeletextDeclaredService, TeletextDefaultObjectSelection, TeletextMotDefaultObject,
@@ -14,9 +19,7 @@ use ersatzrs_domain::{
 };
 
 use super::compile_context::TeletextCompileContext;
-use super::compiled_display_page::{
-    encode_teletext_compiled_display_page_with_context, TeletextCompiledDisplayPageEncodingFailure,
-};
+use super::compiled_display_page::TeletextCompiledDisplayPageEncodingFailure;
 use super::main_composition::compose_teletext_main_program_with_context;
 use super::resource_transmission::{
     settle_native_with_context, ResourceTransmissionContext, TeletextResourceTransmissionError,
@@ -35,7 +38,7 @@ use super::{
     TeletextResourcePageEncodingError, TeletextResourceTransmissionMode,
 };
 
-/// One explicit full-page lifecycle for every resource, including empty pages.
+/// One explicit full-page lifecycle for every authored resource, including empty pages.
 /// Serial transmission is fixed to match the existing display-header C11 bit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextServiceResourceTransmission {
@@ -196,6 +199,7 @@ impl EncodedTeletextAuthoredPage {
 #[derive(Debug)]
 pub struct EncodedTeletextAuthoredService {
     declared: TeletextDeclaredService,
+    compiler_drcs_resources: Vec<TeletextCompilerDrcsResource>,
     pages: Vec<EncodedTeletextAuthoredPage>,
     magazine_units: Vec<[u8; 46]>,
     inventory: Vec<TeletextPhysicalPageInventoryRecord>,
@@ -207,7 +211,13 @@ impl EncodedTeletextAuthoredService {
     pub const fn declared(&self) -> &TeletextDeclaredService {
         &self.declared
     }
-    /// Original display order, followed by the declaration's logical resources.
+    /// Engine-owned physical resources, separate from immutable addon intent.
+    /// These definitions and their generated links confer no editor authority.
+    #[must_use]
+    pub fn compiler_drcs_resources(&self) -> &[TeletextCompilerDrcsResource] {
+        &self.compiler_drcs_resources
+    }
+    /// Original display order, followed by authored then compiler-owned resources.
     #[must_use]
     pub fn pages(&self) -> &[EncodedTeletextAuthoredPage] {
         &self.pages
@@ -302,6 +312,8 @@ pub enum TeletextAuthoredServiceEncodingFailure {
     ResourceTransmission(Box<TeletextResourceTransmissionError>),
     #[error("resource page encoding failed: {0}")]
     Resource(Box<TeletextResourcePageEncodingError>),
+    #[error("compiler DRCS derivation failed: {0}")]
+    CompilerDrcs(Box<ersatzrs_domain::TeletextDrcsExtensionError>),
     #[error("actual physical inventory failed: {0}")]
     Inventory(Box<TeletextPhysicalPageInventoryError>),
 }
@@ -357,10 +369,12 @@ impl<C: FnMut() -> Instant> EncodingClock<'_, C> {
     }
 }
 
-/// Compile every display and declared resource atomically from one owned input.
+/// Compile every display and resource atomically from one authenticated input.
 ///
-/// Exact lifecycle correspondence is checked before encoding. Global original
-/// MOT reservations drive both resource writers and display normalization. The
+/// Exact authored lifecycle correspondence is checked before encoding. Generated
+/// resources need no caller transmission entry; their baseline and checked warm
+/// alternatives remain engine-owned. Global original MOT reservations drive both
+/// resource writers and display normalization. The
 /// native path is selected only by absent Local X26 and no derived Base glyph;
 /// encoding/normalization failures never trigger fallback or owner exemptions.
 /// All output uses serial mode and preserves actual declarations and headers.
@@ -498,19 +512,8 @@ fn encode_owned_service(
     clock.check(None, None)?;
     // The same final resource bodies supply C2 evidence before either display
     // pass. Keep them private until every display and final inventory succeeds.
-    let mut resources = Vec::with_capacity(declared.resource_inventory().len());
-    for &resource in declared.resource_inventory() {
-        clock.check(None, Some(resource))?;
-        let tx = transmissions[&resource].1;
-        resources.push(encode_resource(
-            &declared,
-            resource,
-            &allocations,
-            tx,
-            budget.max_commands,
-        )?);
-        clock.check(None, Some(resource))?;
-    }
+    let resources =
+        encode_original_resources(&declared, &transmissions, &allocations, budget, clock)?;
     let resource_context = ResourceTransmissionContext::new(
         declared.semantic().objects(),
         &allocations,
@@ -524,20 +527,34 @@ fn encode_owned_service(
         ..error(Failure::ResourceTransmission(Box::new(reason)))
     })?;
     clock.check(None, None)?;
+    let mut context =
+        TeletextCompileContext::for_service(Some(&resource_context), clock.deadline, budget);
+    let prepared = compiler_drcs::prepare(&declared, &defaults, budget, &mut context);
+    *usage = context.used_work();
+    let compiler_drcs::Prepared {
+        mut originals,
+        effective,
+        resources: compiler_drcs_resources,
+    } = prepared?;
+    clock.check(None, None)?;
+    let effective = effective.as_ref().unwrap_or_else(|| declared.semantic());
+    let count = count
+        .checked_add(compiler_drcs_resources.len())
+        .ok_or_else(|| error(Failure::Size { category: "pages" }))?;
+    bounded("pages", count, budget.max_pages)?;
     let mut pages = Vec::with_capacity(count);
     let mut inventory = Vec::with_capacity(count);
     let mut units = declared.semantic().magazine_presentations().len();
-    let mut context =
-        TeletextCompileContext::for_service(Some(&resource_context), clock.deadline, budget);
     for page in &declared.semantic().base().pages {
         clock.check(Some(page.address), None)?;
         let result = encode_display(
-            &declared,
+            effective,
             page.address,
             &defaults,
             &mut context,
             budget,
             clock,
+            originals.remove(&page.address),
         );
         *usage = context.used_work();
         let encoded = result?;
@@ -553,11 +570,93 @@ fn encode_owned_service(
         append_page(encoded, &mut pages, &mut inventory, &mut units, budget)?;
         clock.check(None, resource)?;
     }
+    append_compiler_resources(
+        &compiler_drcs_resources,
+        &mut pages,
+        &mut inventory,
+        &mut units,
+        budget,
+        clock,
+    )?;
     clock.check(None, None)?;
     validate_teletext_physical_page_inventory(&inventory, budget.max_pages)
         .map_err(|reason| error(Failure::Inventory(Box::new(reason))))?;
     clock.check(None, None)?;
-    let magazine_units = declared
+    let magazine_units = encode_magazines(&declared);
+    clock.check(None, None)?;
+    Ok(EncodedTeletextAuthoredService {
+        declared,
+        compiler_drcs_resources,
+        pages,
+        magazine_units,
+        inventory,
+        unit_count: units,
+        resource_lifecycle_variants: None,
+    })
+}
+
+fn encode_original_resources(
+    declared: &TeletextDeclaredService,
+    transmissions: &BTreeMap<
+        TeletextResourceIdentity,
+        (usize, TeletextServiceResourceTransmission),
+    >,
+    allocations: &TeletextResourceObjectAllocations,
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    clock: &mut EncodingClock<'_, impl FnMut() -> Instant>,
+) -> Result<Vec<EncodedTeletextAuthoredPage>, Error> {
+    let mut resources = Vec::with_capacity(declared.resource_inventory().len());
+    for &resource in declared.resource_inventory() {
+        clock.check(None, Some(resource))?;
+        let tx = transmissions[&resource].1;
+        resources.push(encode_resource(
+            declared,
+            resource,
+            allocations,
+            tx,
+            budget.max_commands,
+        )?);
+        clock.check(None, Some(resource))?;
+    }
+    Ok(resources)
+}
+
+fn append_compiler_resources(
+    compiler_drcs_resources: &[TeletextCompilerDrcsResource],
+    pages: &mut Vec<EncodedTeletextAuthoredPage>,
+    inventory: &mut Vec<TeletextPhysicalPageInventoryRecord>,
+    units: &mut usize,
+    budget: &TeletextAuthoredServiceEncodingBudget,
+    clock: &mut EncodingClock<'_, impl FnMut() -> Instant>,
+) -> Result<(), Error> {
+    for generated in compiler_drcs_resources {
+        let resource = generated.table().identity();
+        clock.check(None, Some(resource))?;
+        let page = encode_teletext_drcs_page(
+            generated.table(),
+            TeletextResourceUpdateCounter::new(0)
+                .map_err(|_| error(Failure::MissingResourceBody))?,
+            TeletextResourceFullUpdate::Unchanged,
+            TeletextResourceTransmissionMode::Serial,
+        )
+        .map_err(|reason| Error {
+            resource: Some(resource),
+            ..error(Failure::Resource(Box::new(reason)))
+        })?;
+        append_page(
+            EncodedTeletextAuthoredPage::Resource(page),
+            pages,
+            inventory,
+            units,
+            budget,
+        )?;
+        clock.check(None, Some(resource))?;
+    }
+    Ok(())
+}
+
+fn encode_magazines(declared: &TeletextDeclaredService) -> Vec<[u8; 46]> {
+    declared
         .semantic()
         .magazine_presentations()
         .iter()
@@ -569,16 +668,7 @@ fn encode_owned_service(
                 false,
             )
         })
-        .collect();
-    clock.check(None, None)?;
-    Ok(EncodedTeletextAuthoredService {
-        declared,
-        pages,
-        magazine_units,
-        inventory,
-        unit_count: units,
-        resource_lifecycle_variants: None,
-    })
+        .collect()
 }
 
 fn preflight(
@@ -708,14 +798,14 @@ fn lifecycle_index(
 }
 
 fn encode_display(
-    declared: &TeletextDeclaredService,
+    service: &ersatzrs_domain::TeletextSemanticService,
     owner: TeletextPageAddress,
     defaults: &[TeletextDefaultObjectSelection],
     context: &mut TeletextCompileContext<'_, '_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
     clock: &mut EncodingClock<'_, impl FnMut() -> Instant>,
+    original: Option<TeletextMainComposition>,
 ) -> Result<EncodedTeletextAuthoredPage, Error> {
-    let service = declared.semantic();
     let located = |reason| Error {
         display: Some(owner),
         ..error(reason)
@@ -764,13 +854,14 @@ fn encode_display(
             },
         )))
     } else {
-        let encoded = encode_teletext_compiled_display_page_with_context(
+        let encoded = super::compiled_display_page::encode_with_original(
             service,
             owner,
             TeletextEncodingRegion::WesternLatin,
             defaults,
             &budget.normalization,
             context,
+            original,
         )
         .map_err(|reason| {
             if matches!(

@@ -413,6 +413,33 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         result
     }
 
+    /// A complete-service demand pass shares assembly credit with both physical
+    /// derivation passes. Rejected scans never run or renew the original quota.
+    pub(super) fn admit_national_drcs_scan(
+        &mut self,
+        owner: TeletextPageAddress,
+        service: &TeletextSemanticService,
+        maximum: usize,
+    ) -> Result<usize, TeletextAugmentedOriginProgramError> {
+        let reason = match super::national_drcs_carrier::scan_work(service) {
+            Some(work) if work <= self.assembly.cap(maximum) && self.assembly.debit(work) => {
+                return Ok(work)
+            }
+            Some(_) => TeletextAugmentedOriginProgramFailure::WorkBudget {
+                maximum: self.assembly.cap(maximum),
+            },
+            None => TeletextAugmentedOriginProgramFailure::AllocationSize,
+        };
+        Err(TeletextAugmentedOriginProgramError {
+            owner,
+            origin: None,
+            location: None,
+            root_source: None,
+            invocation: None,
+            reason,
+        })
+    }
+
     pub(super) fn assembly<'b>(
         &mut self,
         placement: &'b TeletextOriginCarrierPlacement<'b>,

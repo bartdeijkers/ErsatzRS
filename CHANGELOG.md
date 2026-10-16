@@ -701,10 +701,12 @@ release section when tagging a release.
   Firefox trials connect the actual editor save to native forms and the same
   ordinary streams. Hydration and actual teletext-client proof remain open.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
-  when an existing linked DRCS definition provides its exact glyph and neutral
-  effects. Keep fallback, resource bytes and lifecycle intact; missing or changed
-  resources fail validation. Automatic resource provision and full editor/client
-  acceptance for this case remain open.
+  using its exact glyph and neutral effects. Reuse matching authored definitions
+  or provision bounded compiler-owned DRCS resources through unused links, keeping
+  original declarations, fallback, existing resources and lifecycle intact.
+  Receipt-bound concepts can create or retire the generated carrier without
+  granting permission to edit its resource or X27 links. Full editor/client
+  acceptance remains open.
 
 - Permit acknowledged teletext updates from magazine defaults to complete page
   declarations while retaining bounded magazine cache history. Later incomplete
