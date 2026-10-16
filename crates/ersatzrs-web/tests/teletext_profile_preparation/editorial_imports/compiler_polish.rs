@@ -454,8 +454,15 @@ pub(super) fn assert_actual_tti_edit(original: &[u8], edited: &[u8], code: u8) {
 }
 
 fn actual_editor_proof(directory: &Path, original: &[u8], edited: &[u8]) -> Value {
-    let bytes = live_client::read_bounded(&directory.join("editor-1/editor-proof.json"), 16 * 1024)
-        .unwrap();
+    actual_editor_proof_at(
+        &directory.join("editor-1/editor-proof.json"),
+        original,
+        edited,
+    )
+}
+
+pub(super) fn actual_editor_proof_at(path: &Path, original: &[u8], edited: &[u8]) -> Value {
+    let bytes = live_client::read_bounded(path, 16 * 1024).unwrap();
     let proof: Value = serde_json::from_slice(&bytes).unwrap();
     for (field, expected) in [
         ("editor_name", "QTeletextMaker"),

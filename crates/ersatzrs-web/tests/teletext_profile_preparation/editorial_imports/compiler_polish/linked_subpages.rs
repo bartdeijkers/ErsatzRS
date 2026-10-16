@@ -204,3 +204,6 @@ async fn occupied_links_native_concept_exports_mixed_bank_previews_publishes_and
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
 }
+
+#[path = "linked_subpages/genuine.rs"]
+mod genuine;

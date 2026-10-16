@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: join linked-S1 carrier to actual editor and ordinary delivery'
+current_focus = 'P9A-04: remove the compiler-added bank ceiling across distinct linked targets'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -176,12 +176,20 @@ Both initial fixture failures and corrections stay in the owning P9A-04 evidence
 Current-source TCP/AV/TSDuck/model compatibility0d04f560 passes; byte-exact
 independent inputs reuse15+15 proof. Strict domain/FFmpeg/web all-target Clippy
 and formatting pass; no milestone closure.
-Next connect this linked-S1 variant to the existing fresh pinned-QTM export/save,
-receipt concept/preview/publication and ordinary two-channel/independent flow;
-actual editor/client proof for this variant remains missing. The current internal
->2-added-bank capacity, Romanian/Hebrew, suitable-client/hydration and full matrix
-remain open requirements, not accepted restrictions. No general audit/decoder
-repair or new proof framework starts.
+Fresh pinned QTM edit/Save As now passes the SAME live linked-S1 receipt through
+concept/shared two-page preview/explicit publication/reopen, then two ordinary
+TCP streams with sourceAV/TSDuck/full emitted-model/state/cleanup checks
+(2e707673). Unchanged pinned imager proves14 closed displays per profile,
+authoredS0 zero and generatedS1 Polish masks, fragments/themes/literal fallback;
+two profile swaps and both valid-parity bank-pixel negatives reject. P9A-04 owns
+canonical hashes, scope and immutable input proof. Actual automatic resource
+routing/client display/navigation and hydrated admin are still missing here.
+Next address the internal two-added-bank ceiling across distinct linked targets:
+legal independent displays can require more banks even while each display obeys
+the two-subtable/24-glyph rule. Start with one exact reproducer under existing
+caller budgets, then the smallest production correction; no new proof framework.
+Romanian/Hebrew and the rest of the full matrix remain open requirements, not
+accepted restrictions. No general audit or external-decoder repair starts.
 Existing165direct/2Unsupported/2Unproven expectations stay unchanged.
 Client acquisition/rendering/navigation and hydration remain open.
 Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source

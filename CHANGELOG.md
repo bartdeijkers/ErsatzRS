@@ -695,6 +695,9 @@ release section when tagging a release.
 - Realize assigned national glyphs through a free DRCS subpage when both resource
   links are occupied, preserving authored banks, fallback and link identities.
   Indexed TTI banks keep authored and compiler editing permissions separate.
+  A pinned actual QTeletextMaker save now reaches receipt-bound concept import,
+  shared preview, explicit publication and two ordinary streams with independent
+  bank/fallback decoding. Suitable-client and full engine acceptance remain open.
 - Prevent teletext stream-task panics when authored DRCS banks coexist with
   compiler-generated banks; acquisition orders the actual encoded resource headers.
 - Rebuild generated teletext repaint packets after authorized Base-cell edits,
