@@ -4,17 +4,18 @@
 //! established; it never makes arbitrary glyph identities interchangeable.
 
 use ersatzrs_domain::{
-    resolve_teletext_glyph_mask, TeletextDrcsBitmap, TeletextDrcsGlyphReference,
-    TeletextDrcsGlyphSlot, TeletextDrcsSubtableIndex, TeletextDrcsTableScope, TeletextG0Repertoire,
-    TeletextGlyphDisposition, TeletextGlyphIdentity, TeletextNationalSubset,
-    TeletextResourceIdentity, TeletextResourceKind, TeletextSemanticService,
+    resolve_teletext_glyph_mask, TeletextCharsetPair, TeletextDrcsBitmap,
+    TeletextDrcsGlyphReference, TeletextDrcsGlyphSlot, TeletextDrcsSubtableIndex,
+    TeletextDrcsTableScope, TeletextG0Repertoire, TeletextGlyphDisposition, TeletextGlyphIdentity,
+    TeletextNationalSubset, TeletextResourceIdentity, TeletextResourceKind,
+    TeletextSemanticService,
 };
 
 use super::TeletextMainComposition;
 
-// Four established identities, each with a plain and underlined response. These
+// Five established identities, each with a plain and underlined response. These
 // slots remain independent of consumer order and the variants currently present.
-pub(super) const COMPILER_GLYPH_SLOTS: usize = 8;
+pub(super) const COMPILER_GLYPH_SLOTS: usize = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct NationalDrcsCarrier {
@@ -102,6 +103,7 @@ fn identity_slot(identity: TeletextGlyphIdentity) -> Option<u8> {
         (Some(TeletextNationalSubset::Turkish), 0x23) => Some(2),
         (Some(TeletextNationalSubset::Romanian), 0x5d) => Some(4),
         (Some(TeletextNationalSubset::Romanian), 0x7d) => Some(6),
+        (Some(TeletextNationalSubset::English), 0x7c) => Some(8),
         _ => None,
     }
 }
@@ -151,11 +153,22 @@ fn original_identity(
     {
         return None;
     }
+    // English has an exact direct Hebrew recipe. Use a resource only when that
+    // recipe would add a third pair to this immutable original composition.
+    // Pages with a free pair or Hebrew already present retain their direct path.
+    let pairs = composition.collected().charset_pairs();
+    if matches!(original, TeletextGlyphIdentity::G0 {glyph}
+        if glyph.national_subset() == Some(TeletextNationalSubset::English))
+        && (pairs.len() != 2 || pairs.contains(&TeletextCharsetPair::HebrewArabic))
+    {
+        return None;
+    }
     Some(original)
 }
 
 /// Table 36 Polish 5/B, Turkish 2/3 (one TL symbol) and Romanian 5/D, 7/D
 /// are established originals here; Romanian mark aliases remain unproven.
+/// English 7/C uses a resource only under original two-pair pressure.
 /// Their national identities remain
 /// literal in the original service; no G0/G2 alias or editor metadata is trusted.
 /// The existing pinned original font policy supplies its exact 12x10 bitmap.

@@ -763,3 +763,6 @@ mod compiler_turkish;
 
 #[path = "normalized_main_program_tests/compiler_romanian.rs"]
 mod compiler_romanian;
+
+#[path = "normalized_main_program_tests/compiler_english.rs"]
+mod compiler_english;

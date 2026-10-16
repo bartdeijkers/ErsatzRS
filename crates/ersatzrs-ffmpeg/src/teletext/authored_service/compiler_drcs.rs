@@ -52,8 +52,8 @@ pub(super) struct Prepared {
     pub resources: Vec<TeletextCompilerDrcsResource>,
 }
 
-// Fixed Polish 0/1, Turkish 2/3 and Romanian 4..7 slots retain the two painted
-// responses when consumers reorder or any other variant leaves.
+// Fixed Polish 0/1, Turkish 2/3, Romanian 4..7 and English 8/9 slots retain both
+// painted responses when consumers reorder or any other variant leaves.
 type Bitmaps = [Option<TeletextDrcsBitmap>; national_drcs_carrier::COMPILER_GLYPH_SLOTS];
 #[derive(Default)]
 struct Demand {
@@ -244,7 +244,7 @@ fn may_need_carrier(
     let supported_national = service
         .effective_presentation(owner)
         .and_then(|presentation| presentation.primary_designation().ok())
-        .is_some_and(|primary| matches!(primary.get(), 0x08 | 0x16 | 0x1f | 0x36));
+        .is_some_and(|primary| matches!(primary.get(), 0x00 | 0x08 | 0x16 | 0x1f | 0x36));
     if !supported_national {
         return Ok(false);
     }

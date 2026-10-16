@@ -752,6 +752,10 @@ release section when tagging a release.
   POP/GPOP/MOT packets and fallback remain protected; scoped independent object
   and glyph checks pass. Automatic acquisition and suitable-client proof remain
   open for this default variant.
+  Enlarged English double-vertical glyphs now retain valid Latin/Greek pages
+  through exact generated resources when their direct carrier would exceed the
+  two-charset-pair limit. Plain and underlined forms preserve fallback; existing
+  direct routes remain unchanged when a pair is free or Hebrew is already used.
   Mixed plain/underlined glyphs retain stable generated slots and their painted
   attributes while keeping undefined DRCS underline bits disabled. Known Base
   spacing latches also survive the genuine editor/import/publication/stream flow,
