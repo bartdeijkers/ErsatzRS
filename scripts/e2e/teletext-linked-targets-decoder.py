@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fixed three-linked-target oracle using the unchanged pinned imager decoder.
 
-Usage: teletext-linked-targets-decoder.py UNITS.json day|night [--implicit-mot|--rendered-defaults],
+Usage: teletext-linked-targets-decoder.py UNITS.json day|night [--implicit-mot|--rendered-defaults|--english-two-pairs],
 with the existing ERSATZRS_TELETEXT_TEST_IMAGER_DIR checkout. Inspect only chronological CLOSED
 acquisitions from the actual <=512-unit prefix; never synthesize an EOF header.
 Owners124/125/126 explicitly receive Normal2A0/2A2/2A3 respectively, preserving
@@ -17,6 +17,10 @@ GPOP2D0 bodies to the unchanged decoder. A second bounded reader pass uses
 explicit coding2 for those bodies and preserves the identical chronological
 closed-acquisition identities. This checks fixed received object bodies and
 resulting cells, not automatic MOT/default selection or font rendering.
+The english-two-pairs mode checks original English7C with unrelated Greek A,
+using received Normal S1=1 slot8 on Day and original A/no generated S1 on Night.
+Its literal double-vertical mask is the unchanged original English font policy;
+the old direct-Hebrew private-charset negative remains a separate calibration.
 
 Bounded negatives: both wrong-profile swaps must reject the fixed inventory.
 For each FULL Normal page+S1 identity, separately toggle a valid-parity PTU0
@@ -43,6 +47,7 @@ spec.loader.exec_module(fixed)
 imager, require = fixed.imager, fixed.require
 NORMAL_BY_DISPLAY = {0x124: 0x2A0, 0x125: 0x2A2, 0x126: 0x2A3}
 GLOBAL = 0x1A1
+ENGLISH_7C = (0, 0x198, 0x198, 0x198, 0x198, 0x198, 0x198, 0x198, 0x198, 0)
 
 
 # EN300706 Figure20/Tables20-23 and this fixed fixture: primary identity1FE/S9,
@@ -282,12 +287,79 @@ def check_display(decoder_type, page, normal, glob, theme):
                 f"Display {page['number']:X}/S32 Level{level}: {error}") from error
 
 
+def received_english_banks(pages, theme):
+    expected = {(number, 0) for number in NORMAL_BY_DISPLAY.values()} | {(GLOBAL, 0)}
+    if theme == "day":
+        expected |= {(number, 1) for number in NORMAL_BY_DISPLAY.values()}
+    banks, counts = {}, {}
+    decoder_type = sys.modules["teletextimager.teletextdrcs"].TeletextDRCSDecode
+    for page in pages:
+        number = page.get("number")
+        require(number in NORMAL_BY_DISPLAY or number in NORMAL_BY_DISPLAY.values()
+                or number == GLOBAL, "Unexpected page in fixed English linked-target capture")
+        if number in NORMAL_BY_DISPLAY:
+            require(page.get("subcode") == 32, "Unexpected English display subcode")
+            continue
+        identity = (number, page["subcode"] & 15)
+        require(identity in expected, "Unexpected received English resource identity")
+        subpage = identity[1]
+        # Original authored slot0 occupies X1; compiler-owned slot8 occupies X5.
+        row, slot = (5, 8) if subpage == 1 else (1, 0)
+        require(set(page) == {"number", "subcode", "control", 0, (28, 3), row},
+                f"English bank {number:X}/S1={subpage}: incomplete or unexpected body")
+        function = 4 if number == GLOBAL else 5
+        require(page[(28, 3)][0] & 15 == function,
+                "Received English resource function differs")
+        decoder = decoder_type()
+        decoder.set_page([page] if subpage == 0 else [None, page])
+        expected_bitmap = fixed.bitmap(ENGLISH_7C) if subpage == 1 else [0] * 120
+        require(decoder.ptu_mode(slot, subpage) == 0
+                and list(decoder.ptu_l2p5(slot, subpage)) == expected_bitmap,
+                f"English bank {number:X}/S1={subpage} slot{slot}: mode/bitmap differs")
+        banks.setdefault(identity, page)
+        counts[identity] = counts.get(identity, 0) + 1
+    require(set(banks) == expected,
+            "Complete authored banks and exact English generated S1 inventory required")
+    normals = {owner: [banks[(target, subpage)]
+                       for subpage in range(2 if theme == "day" else 1)]
+               for owner, target in NORMAL_BY_DISPLAY.items()}
+    return normals, [banks[(GLOBAL, 0)]], counts
+
+
+def check_english_display(decoder_type, page, normal, glob, theme):
+    code = 0x7C if theme == "day" else 65
+    for level in ("1", "1.5", "2.5"):
+        decoder = decoder_type()
+        decoder.decode(page, level=level, ndrcs_page=normal, gdrcs_page=glob)
+        try:
+            if level == "2.5":
+                glyph = (1, 8, ENGLISH_7C) if theme == "day" else None
+                fixed.cell(decoder, 1, 7, code, 3, glyph)
+                fixed.cell(decoder, 1, 8, code, 4, glyph)
+                fixed.cell(decoder, 4, 12, 65, 0)
+                # Original designation37 maps to Greek set4 in the pinned decoder.
+                require(decoder.get_char_set(4, 12) == 4
+                        and decoder.get_char_diacritic(4, 12) == 0,
+                        "Unrelated original Greek A differs")
+            else:
+                fixed.cell(decoder, 1, 7, code, 0)
+                fixed.cell(decoder, 1, 8, 32, 0)
+                fixed.cell(decoder, 2, 8, 101, 0)
+                fixed.cell(decoder, 4, 12, 32, 0)
+            fixed.cell(decoder, 3, 1, 66, 0)
+        except imager.resource.CalibrationError as error:
+            raise imager.resource.CalibrationError(
+                f"English display {page['number']:X}/S32 Level{level}: {error}") from error
+
+
 def main():
     require(len(sys.argv) in (3, 4) and sys.argv[2] in ("day", "night")
-            and (len(sys.argv) == 3 or sys.argv[3] in ("--implicit-mot", "--rendered-defaults")),
-            "Expected captured units file and fixed day/night profile [--implicit-mot|--rendered-defaults]")
+            and (len(sys.argv) == 3 or sys.argv[3] in (
+                "--implicit-mot", "--rendered-defaults", "--english-two-pairs")),
+            "Expected captured units file and fixed day/night profile [--implicit-mot|--rendered-defaults|--english-two-pairs]")
     implicit_mot = len(sys.argv) == 4 and sys.argv[3] == "--implicit-mot"
     rendered_defaults = len(sys.argv) == 4 and sys.argv[3] == "--rendered-defaults"
+    english_two_pairs = len(sys.argv) == 4 and sys.argv[3] == "--english-two-pairs"
     source = Path(sys.argv[1])
     require(source.is_file() and not source.is_symlink(),
             "Expected regular captured units file")
@@ -308,7 +380,10 @@ def main():
     elif rendered_defaults:
         object_pages = closed_object_pages(reader_type, units, pages)
         pages, mot_count, pop, gpop, object_counts = rendered_defaults_pages(pages, object_pages)
-    normals, glob, bank_counts = received_banks(pages, sys.argv[2])
+    if english_two_pairs:
+        normals, glob, bank_counts = received_english_banks(pages, sys.argv[2])
+    else:
+        normals, glob, bank_counts = received_banks(pages, sys.argv[2])
     displays = [page for page in pages if page.get("number") in NORMAL_BY_DISPLAY
                 and page.get("subcode") == 32 and 1 in page and (26, 0) in page]
     require({page["number"] for page in displays} == set(NORMAL_BY_DISPLAY),
@@ -318,6 +393,8 @@ def main():
         if rendered_defaults:
             check_rendered_defaults_display(decoder_type, page, normals[page["number"]], glob,
                                             pop, gpop, sys.argv[2])
+        elif english_two_pairs:
+            check_english_display(decoder_type, page, normals[page["number"]], glob, sys.argv[2])
         else:
             check_display(decoder_type, page, normals[page["number"]], glob, sys.argv[2])
         counts[page["number"]] += 1
@@ -369,6 +446,20 @@ def main():
             "received_object_bodies_and_cells_checked": True,
             "passive_p_green_adaptive_x_active_a_bottomright_checked": True,
             "automatic_default_selection_proven": False,
+        })
+    elif english_two_pairs:
+        del report["all_three_literal_polish_s1_1_slot0_and_fragments"]
+        report.update({
+            "fixture": "english-two-original-pairs-three-distinct-linked-targets",
+            "fixture_original_charset_pairs": ["latin_latin", "greek_greek"],
+            "day_english_base_code": 0x7C,
+            "received_base_code": 0x7C if sys.argv[2] == "day" else 65,
+            "generated_normal_s1": 1 if sys.argv[2] == "day" else None,
+            "generated_slot": 8 if sys.argv[2] == "day" else None,
+            "literal_english_double_vertical_mask": list(ENGLISH_7C),
+            "all_three_literal_english_s1_1_slot8_and_fragments": sys.argv[2] == "day",
+            "unrelated_original_greek_a_code65_set4_checked": True,
+            "direct_national_recipe_proven": False,
         })
     print(json.dumps(report, sort_keys=True))
 

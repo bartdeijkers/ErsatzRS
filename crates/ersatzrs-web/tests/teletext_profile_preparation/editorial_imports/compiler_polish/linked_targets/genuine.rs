@@ -13,6 +13,7 @@ enum Case {
     ExplicitLinks,
     ImplicitMot,
     RenderedDefaults,
+    EnglishTwoPairs,
 }
 
 impl Case {
@@ -21,6 +22,7 @@ impl Case {
             Self::ExplicitLinks => oracle::assert_originals(flow),
             Self::ImplicitMot => implicit_mot::assert_originals(flow),
             Self::RenderedDefaults => implicit_mot::defaults::assert_originals(flow),
+            Self::EnglishTwoPairs => english::assert_originals(flow),
         }
     }
 
@@ -29,6 +31,23 @@ impl Case {
             Self::ExplicitLinks => oracle::assert_service(flow, service),
             Self::ImplicitMot => implicit_mot::assert_effective(flow, service),
             Self::RenderedDefaults => implicit_mot::defaults::assert_effective(flow, service),
+            Self::EnglishTwoPairs => english::assert_service(flow, service),
+        }
+    }
+
+    fn code(self) -> u8 {
+        if matches!(self, Self::EnglishTwoPairs) {
+            0x7c
+        } else {
+            0x5b
+        }
+    }
+
+    fn previews(self, service: &EncodedTeletextAuthoredService) -> Vec<TeletextRaster> {
+        if matches!(self, Self::EnglishTwoPairs) {
+            english::previews(service)
+        } else {
+            oracle::previews(service, 0x5b)
         }
     }
 
@@ -62,6 +81,16 @@ impl Case {
                 ]);
             }
         }
+        if matches!(self, Self::EnglishTwoPairs) {
+            proof["fixture"] = json!("english-two-pair-three-linked-targets");
+            proof["original_resource_inventory_count"] = json!(4);
+            proof["original_charset_pairs"] = json!(["latin_latin", "greek_greek"]);
+            proof["third_hebrew_pair_added"] = json!(false);
+            proof["unrelated_greek_4_12_preserved"] = json!(true);
+            proof["literal_original_english_7c_preserved"] = json!(true);
+            proof["slot"] = json!(8);
+            proof["mask"] = json!(english::ENGLISH_7C);
+        }
     }
 }
 
@@ -94,6 +123,15 @@ async fn setup_case(case: Case, fixture: Fixture) -> (Fixture, Flow) {
             ))
             .await
         }
+        Case::EnglishTwoPairs => {
+            Box::pin(setup_with_fixture_policy_and_writer(
+                english::response,
+                fixture,
+                input::encoding,
+                authoring_metadata::write_compact,
+            ))
+            .await
+        }
     }
 }
 
@@ -103,6 +141,9 @@ async fn assert_case_restored(
     flow: &Flow,
     concept: &SavedEditorialTeletextDesign,
 ) -> Vec<TeletextRaster> {
+    if matches!(case, Case::EnglishTwoPairs) {
+        return Box::pin(english::restored(fixture, flow, concept)).await;
+    }
     let previews = Box::pin(assert_restored(fixture, flow, concept)).await;
     if matches!(case, Case::ImplicitMot | Case::RenderedDefaults) {
         let restored = drcs_bitmap::restored(fixture, concept).await;
@@ -128,7 +169,7 @@ async fn publish_actual(
     flow: &Flow,
     directory: &Path,
 ) -> (Fixture, [AcceptedTeletextOutputCandidate; 2], Value) {
-    let (request, proofs) = inputs::request(flow, directory);
+    let (request, proofs) = inputs::request(case, flow, directory);
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
     let concept = import(&fixture, request).await;
     assert_eq!(concept.head().id, flow.saved[0].head().id);
@@ -146,7 +187,7 @@ async fn publish_actual(
     let day = publish_and_accept(&fixture, flow, &concept).await;
     let accepted = [day, recover(&fixture, 2).await];
     assert_accepted(case, flow, &accepted);
-    assert_eq!(oracle::previews(accepted[0].service(), 0x5b), previews);
+    assert_eq!(case.previews(accepted[0].service()), previews);
     let exported = drcs_bitmap::reexport(&fixture, &concept).await;
     let fresh = receipt(&fixture, &exported).await;
     oracle::assert_mapping(&exported);
@@ -169,7 +210,7 @@ async fn publish_actual(
     fixture = fixture.reopen().await;
     case.assert_service(flow, recover(&fixture, 1).await.service());
     assert_eq!(
-        oracle::previews(recover(&fixture, 1).await.service(), 0x5b),
+        case.previews(recover(&fixture, 1).await.service()),
         previews
     );
     assert_pointers(&fixture, &accepted[0], &accepted[1]).await;
@@ -216,7 +257,7 @@ async fn run(case: Case, directory: PathBuf) {
     let (fixture, flow) = Box::pin(setup_case(case, fixture)).await;
     case.assert_originals(&flow);
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
-    inputs::await_editor(&fixture, &flow, &directory).await;
+    inputs::await_editor(case, &fixture, &flow, &directory).await;
     retained.assert_unchanged(&fixture, &flow).await;
     let hashes = inputs::hashes(&flow, &directory);
     let (mut fixture, accepted, proofs) =
@@ -295,4 +336,13 @@ async fn actual_qtm_mot_rendered_defaults_three_linked_targets_concept_serves_tw
         "ERSATZRS_TELETEXT_MOT_DEFAULTS_DIR",
     ));
     Box::pin(run(Case::RenderedDefaults, directory)).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires three actual pinned QTM saves from this live English two-pair export and FFmpeg9/ffprobe/TSDuck; bounded1200s; no independent/client acceptance"]
+async fn actual_qtm_english_two_pair_three_linked_targets_concept_serves_two_ordinary_channels() {
+    let directory = PathBuf::from(client_capture::selected(
+        "ERSATZRS_TELETEXT_ENGLISH_TWO_PAIR_DIR",
+    ));
+    Box::pin(run(Case::EnglishTwoPairs, directory)).await;
 }

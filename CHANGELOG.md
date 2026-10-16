@@ -756,6 +756,9 @@ release section when tagging a release.
   through exact generated resources when their direct carrier would exceed the
   two-charset-pair limit. Plain and underlined forms preserve fallback; existing
   direct routes remain unchanged when a pair is free or Hebrew is already used.
+  Genuine editor saves now reach isolated channel publication and ordinary
+  streams with independent mask/Greek/fallback checks; generated glyph slots
+  remain protected on reimport. Suitable-client proof remains open.
   Mixed plain/underlined glyphs retain stable generated slots and their painted
   attributes while keeping undefined DRCS underline bits disabled. Known Base
   spacing latches also survive the genuine editor/import/publication/stream flow,

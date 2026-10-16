@@ -181,3 +181,6 @@ mod genuine;
 
 #[path = "linked_targets/implicit_mot.rs"]
 mod implicit_mot;
+
+#[path = "linked_targets/english.rs"]
+mod english;

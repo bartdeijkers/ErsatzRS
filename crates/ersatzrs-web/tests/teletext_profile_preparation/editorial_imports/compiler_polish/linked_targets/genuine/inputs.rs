@@ -44,7 +44,7 @@ fn assert_inputs(flow: &Flow, directory: &Path) {
     );
 }
 
-fn ready(flow: &Flow) -> Value {
+fn ready(case: Case, flow: &Flow) -> Value {
     let files: Vec<_> = flow.exported[0]
         .files()
         .iter()
@@ -57,10 +57,16 @@ fn ready(flow: &Flow) -> Value {
     let edits: Vec<_> = (124..127).map(|page| {
         let name = format!("page-{page}-0020.tti");
         let original = flow.exported[0].files().iter().find(|file|file.name == name).unwrap();
-        json!({"page":page,"subcode":32,"row":1,"column":7,"before":65,"after":91,
+        let mut edit = json!({"page":page,"subcode":32,"row":1,"column":7,"before":65,"after":91,
             "primary":8,"underlined":false,"scope":"normal","s1":1,"slot":0,
             "original_file":format!("native-original-1/{name}"),"original_sha256":live_client::hash(&original.bytes),
-            "save_as":format!("editor-1/{page}/edited.tti"),"proof":format!("editor-1/{page}/editor-proof.json")})
+            "save_as":format!("editor-1/{page}/edited.tti"),"proof":format!("editor-1/{page}/editor-proof.json")});
+        if matches!(case, Case::EnglishTwoPairs) {
+            edit["after"] = json!(124);
+            edit["primary"] = json!(0);
+            edit["slot"] = json!(8);
+        }
+        edit
     }).collect();
     json!({"probe_version":1,
         "scope":"same owned live fixture, three actual QTM saves before import/publication",
@@ -71,14 +77,14 @@ fn ready(flow: &Flow) -> Value {
         "completion_schema":{"probe_version":1,"proofs":[{"page":124,"sha256":"SHA256 of closed per-page proof; exactly124,125,126 in ascending order"}]}})
 }
 
-pub(super) async fn await_editor(fixture: &Fixture, flow: &Flow, directory: &Path) {
+pub(super) async fn await_editor(case: Case, fixture: &Fixture, flow: &Flow, directory: &Path) {
     let original = directory.join("native-original-1");
     std::fs::create_dir(&original).unwrap();
     for file in flow.exported[0].files() {
         live_client::write_new(&original.join(&file.name), &file.bytes).unwrap();
     }
     live_client::write_new(&original.join("project.ersatzrs.json"), &sidecar(flow)).unwrap();
-    polish_delivery::write_json(directory, "actual-ready.json", &ready(flow));
+    polish_delivery::write_json(directory, "actual-ready.json", &ready(case, flow));
     let marker: Completion = tokio::time::timeout(
         Duration::from_mins(20),
         resource_bank_admin::marker(directory, "editor-complete.json"),
@@ -130,6 +136,7 @@ fn editor_proof(
 }
 
 pub(super) fn request(
+    case: Case,
     flow: &Flow,
     directory: &Path,
 ) -> (NativeTeletextEditorialImportRequest, Value) {
@@ -138,7 +145,11 @@ pub(super) fn request(
     let completed: Completion = serde_json::from_slice(&bytes).unwrap();
     validate_completion(&completed);
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
-    request.name = "Actual QTM three linked-target Polish concept".into();
+    request.name = if matches!(case, Case::EnglishTwoPairs) {
+        "Actual QTM three linked-target English two-pair concept".into()
+    } else {
+        "Actual QTM three linked-target Polish concept".into()
+    };
     let mut proofs = Vec::new();
     for closed in &completed.proofs {
         let name = format!("page-{}-0020.tti", closed.page);
@@ -153,7 +164,7 @@ pub(super) fn request(
         )
         .unwrap();
         let proof = editor_proof(flow, directory, closed, &file.bytes, &edited);
-        assert_actual_tti_edit(&file.bytes, &edited, 0x5b);
+        assert_actual_tti_edit(&file.bytes, &edited, case.code());
         file.bytes = edited;
         proofs.push(json!({"page":closed.page,"proof":proof}));
     }
