@@ -1247,7 +1247,12 @@ The audited table has 165 established recipes and four explicit pending position
 English `0x7C` (double vertical) has the exact Hebrew G0 `0x7C` identity in
 [EN 300 706 Tables 34/46](https://www.etsi.org/deliver/etsi_en/300700_300799/300706/01.02.01_60/en_300706v010201p.pdf),
 using explicit designation `0x55` (Hebrew G0/Arabic G2). Polish `0x5B` (stroked
-capital Z) and Turkish `0x23` (TL) still need proven physical representations. Romanian `0x5D/0x7D`
+capital Z) and Turkish `0x23` (the single Table 36 TL symbol) have no direct
+G0/G2/diacritic operand. Their separate resource-backed path retains the exact
+original identity and requires the private origin/resource/bitmap witness in
+[ADR 0123](../adr/0123-level-2-5-teletext-and-external-editor-workflows.md).
+Physical/editor/client evidence remains scoped in P9A-04; a resource witness
+does not change these direct-table pending results. Romanian `0x5D/0x7D`
 have ambiguous breve/caron marks in the primary table's tiny glyphs and remain
 unresolved; do not choose by language expectation or a decoder's Unicode table.
 Romanian `0x5E` is the primary table's I-circumflex, not the cached decoder's

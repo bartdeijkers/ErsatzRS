@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: Turkish Base23 authored realization; raw-latch headed flow retained'
+current_focus = 'P9A-04: Turkish TL actual editor-to-stream flow; native carrier verified'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -136,10 +136,15 @@ proof correction, exact captures and scope. This raw-latch save now passes
 headed Chromium e6cfa17a and Firefox1d599fdd nine-culture light/dark native forms,
 fixed underline/G1 preview, separate Request/Publish and same-host ordinary/reopen.
 All four512-unit sequences equal prior independent captures; P9A-04 owns52PNGs,
-source/version/state/cleanup receipts. Next reproduce assigned enlarged Turkish
-G0 Base23/primary16 NationalConversion and establish the exact Table36 TL identity
-against Tables35/37 before implementing its realization, preserving fallback and
-metadata. Existing165direct/2Unsupported/2Unproven expectations stay unchanged.
+source/version/state/cleanup receipts. Assigned enlarged TurkishG0 Base23 now
+preserves exact Table36 TL identity/fallback through existing DRCS witnesses,
+primary16/36 and fixed2/3; six cases plus46normalization/84disjoint regressions
+and34host cases pass. P9A-04 owns exact red/green/negative/mixed-bank proof.
+Next join one plainDay124/primary16 actual pinned QTM A7->raw23 Save As to the
+existing profile/export/concept/shared preview/explicit publication/ordinary
+2-channel flow. Keep Night/page125/metadata/zones exact. Fresh Turkish editor/
+stream/client evidence is missing; no supported DTO/blocking mechanism identified.
+Existing165direct/2Unsupported/2Unproven expectations stay unchanged.
 Client acquisition/rendering/navigation and hydration remain open.
 Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source
 assessment does not establish enlarged DRCS suitability; no decoder maintenance

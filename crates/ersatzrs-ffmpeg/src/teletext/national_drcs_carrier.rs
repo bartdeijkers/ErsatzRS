@@ -1,4 +1,4 @@
-//! Compiler-owned realization of one exact national identity through an existing
+//! Compiler-owned realization of exact national identities through an existing
 //! authored DRCS definition. This neither allocates resources nor changes their
 //! ownership. A matching bitmap is evidence only AFTER the original identity is
 //! established; it never makes arbitrary glyph identities interchangeable.
@@ -11,6 +11,10 @@ use ersatzrs_domain::{
 };
 
 use super::TeletextMainComposition;
+
+// Two established identities, each with a plain and underlined response. These
+// slots remain independent of consumer order and the variants currently present.
+pub(super) const COMPILER_GLYPH_SLOTS: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct NationalDrcsCarrier {
@@ -75,14 +79,29 @@ pub(super) fn required_bitmap(
     TeletextDrcsBitmap::new(mask.rows()).ok()
 }
 
-/// These two fixed slots depend only on the established original glyph/effect,
+/// These fixed slots depend only on the established original glyph/effect,
 /// never on consumer discovery order or which other variant is present.
 pub(super) fn required_slot(
     composition: &TeletextMainComposition,
     origin: usize,
 ) -> Option<TeletextDrcsGlyphSlot> {
-    original_identity(composition, origin)?;
-    TeletextDrcsGlyphSlot::new(u8::from(original_underline(composition, origin)?)).ok()
+    let original = original_identity(composition, origin)?;
+    let slot = identity_slot(original)? + u8::from(original_underline(composition, origin)?);
+    TeletextDrcsGlyphSlot::new(slot).ok()
+}
+
+fn identity_slot(identity: TeletextGlyphIdentity) -> Option<u8> {
+    let TeletextGlyphIdentity::G0 { glyph } = identity else {
+        return None;
+    };
+    if glyph.repertoire() != TeletextG0Repertoire::Latin {
+        return None;
+    }
+    match (glyph.national_subset(), glyph.code()) {
+        (Some(TeletextNationalSubset::Polish), 0x5b) => Some(0),
+        (Some(TeletextNationalSubset::Turkish), 0x23) => Some(2),
+        _ => None,
+    }
 }
 
 fn original_underline(composition: &TeletextMainComposition, origin: usize) -> Option<bool> {
@@ -125,17 +144,16 @@ fn original_identity(
         return None;
     }
     let original = intent.glyph()?;
-    if !matches!(original, TeletextGlyphIdentity::G0 {glyph}
-        if glyph.repertoire() == TeletextG0Repertoire::Latin
-            && glyph.national_subset() == Some(TeletextNationalSubset::Polish)
-            && glyph.code() == 0x5b && base.code() == 0x5b)
+    if identity_slot(original).is_none()
+        || !matches!(original, TeletextGlyphIdentity::G0 {glyph} if base.code() == glyph.code())
     {
         return None;
     }
     Some(original)
 }
 
-/// Only Table 36 Polish 5/B is established here. Its national identity remains
+/// Table 36 Polish 5/B and Turkish 2/3 (one TL symbol) are established here.
+/// Their national identities remain
 /// literal in the original service; no G0/G2 alias or editor metadata is trusted.
 /// The existing pinned original font policy supplies its exact 12x10 bitmap.
 /// Missing resources/mismatched pixels preserve the located conversion failure.

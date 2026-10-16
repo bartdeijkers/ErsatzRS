@@ -51,9 +51,9 @@ pub(super) struct Prepared {
     pub resources: Vec<TeletextCompilerDrcsResource>,
 }
 
-// The one established national identity has exactly two painted responses.
-// Fixed slots 0/1 remain stable when consumers reorder or either variant leaves.
-type Bitmaps = [Option<TeletextDrcsBitmap>; 2];
+// Fixed Polish slots 0/1 and Turkish slots 2/3 retain each identity's two painted
+// responses when consumers reorder or any other variant leaves.
+type Bitmaps = [Option<TeletextDrcsBitmap>; national_drcs_carrier::COMPILER_GLYPH_SLOTS];
 #[derive(Default)]
 struct Demand {
     bitmaps: Bitmaps,
@@ -203,13 +203,16 @@ fn derive(
 }
 
 fn definitions(bitmaps: Bitmaps) -> Result<Vec<TeletextDrcsGlyphDefinition>, Error> {
-    [(0, bitmaps[0]), (1, bitmaps[1])]
+    bitmaps
         .into_iter()
+        .enumerate()
         .filter_map(|(slot, bitmap)| bitmap.map(|bitmap| (slot, bitmap)))
         .map(|(slot, bitmap)| {
             Ok(TeletextDrcsGlyphDefinition {
-                slot: TeletextDrcsGlyphSlot::new(slot)
-                    .map_err(|_| error(Failure::MissingResourceBody))?,
+                slot: u8::try_from(slot)
+                    .ok()
+                    .and_then(|slot| TeletextDrcsGlyphSlot::new(slot).ok())
+                    .ok_or_else(|| error(Failure::MissingResourceBody))?,
                 bitmap,
             })
         })
@@ -220,11 +223,11 @@ fn may_need_carrier(
     service: &TeletextSemanticService,
     owner: TeletextPageAddress,
 ) -> Result<bool, Error> {
-    let polish = service
+    let supported_national = service
         .effective_presentation(owner)
         .and_then(|presentation| presentation.primary_designation().ok())
-        .is_some_and(|primary| primary.get() == 0x08);
-    if !polish {
+        .is_some_and(|primary| matches!(primary.get(), 0x08 | 0x16 | 0x36));
+    if !supported_national {
         return Ok(false);
     }
     let local = service
@@ -250,7 +253,7 @@ fn missing_bitmaps(
     budget: &TeletextAuthoredServiceEncodingBudget,
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<Bitmaps, Error> {
-    let mut missing = [None; 2];
+    let mut missing = [None; national_drcs_carrier::COMPILER_GLYPH_SLOTS];
     if !(0..original.display_resolution().origins().len())
         .any(|origin| national_drcs_carrier::needs_binding(original, origin))
     {

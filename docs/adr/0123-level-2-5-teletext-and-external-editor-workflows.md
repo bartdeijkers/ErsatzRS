@@ -528,15 +528,25 @@ provenance. Their allocation is deterministic from the complete original owner
 namespace, independent of page traversal and the current consumer subset. Existing
 authored links and definitions cannot be repurposed to make a carrier fit.
 
-For the established Polish identity, original G0 D5 underline is realized through
+Table 36 Polish 5/B and Turkish 2/3 are established original identities for this
+resource-backed path. Turkish 2/3 is the single TL symbol assigned by Table 36
+note 1, absent from Tables 35/37; neither a modern currency symbol, separate T/L
+origins nor an equal-looking enhanced glyph establishes its identity. Both
+Table 32 Turkish primary aliases (0x16/0x36) retain their original declarations.
+This adds no direct G0/G2/diacritic recipe to the separate national table.
+
+For these established identities, original G0 D5 underline is realized through
 its exact existing font policy (`with_underline`, full bottom bitmap row), while
 physical DRCS D5 stays false because Table 29 gives it no underline response.
 Only the sealed original-origin/invocation/resource/bitmap witness permits this
 paired correspondence; public detached comparisons remain strict. Original
 identity, fallback, geometry and every other painted attribute stay unchanged.
-Both known painted variants may coexist in one generated bank with stable slots
-0 (plain) and 1 (underlined), independent of discovery/removal. Their definitions
-remain engine-owned and use the existing shared bounds; no glyph alias is added.
+Both known painted variants may coexist in one generated bank with stable Polish
+slots 0 (plain)/1 (underlined) and Turkish slots 2/3, independent of discovery/
+removal. Their definitions remain engine-owned and use the existing shared bounds
+(including the total four-added-glyph and two-added-resource caps); no glyph alias
+or extra capacity is added. Existing authored matching definitions retain their
+own slots, links and ownership instead of receiving these compiler slot numbers.
 A known original spacing-mosaic latch does not change this assigned G0 paint
 (Table 26 notes 11/12). Keep the original latch and fallback byte exactly; the
 existing physical Adaptive D5=0 cancels that latch for the enhanced carrier.

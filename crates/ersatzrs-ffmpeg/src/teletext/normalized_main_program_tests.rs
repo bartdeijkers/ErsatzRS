@@ -757,3 +757,6 @@ mod polish_carrier;
 
 #[path = "normalized_main_program_tests/compiler_polish.rs"]
 mod compiler_polish;
+
+#[path = "normalized_main_program_tests/compiler_turkish.rs"]
+mod compiler_turkish;

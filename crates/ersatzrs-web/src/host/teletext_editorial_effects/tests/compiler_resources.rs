@@ -1,4 +1,4 @@
-//! Compiler-owned no-bank Polish fallback cannot become authored editor authority.
+//! Compiler-owned national glyphs cannot become authored editor authority.
 use super::*;
 use crate::host::teletext_editorial_tti::{self, resources};
 use ersatzrs_app::{teletext_export_project::TeletextExportAssetMapping, teletext_tti::*};
@@ -39,7 +39,7 @@ fn definition(
         program: TeletextEnhancementProgram::new(commands).unwrap(),
     }
 }
-fn original() -> TeletextDeclaredService {
+fn original(primary: u8) -> TeletextDeclaredService {
     let policy = policy();
     let mut base = draft("A");
     base.pages[0].rows[0].runs[0].column = 7;
@@ -65,7 +65,7 @@ fn original() -> TeletextDeclaredService {
         .find(|page| page.address == address(123))
         .unwrap();
     page.presentation.as_mut().unwrap().primary =
-        TeletextPageCharsetDesignation::new(0x08).unwrap();
+        TeletextPageCharsetDesignation::new(primary).unwrap();
     let objects = vec![
         definition(
             0xffff,
@@ -135,7 +135,17 @@ fn compile(
     EncodedTeletextAuthoredService,
     Vec<TeletextPhysicalBaseOverlay>,
 ) {
-    let declared = original();
+    compile_at(0x08, code)
+}
+
+fn compile_at(
+    primary: u8,
+    code: u8,
+) -> (
+    EncodedTeletextAuthoredService,
+    Vec<TeletextPhysicalBaseOverlay>,
+) {
+    let declared = original(primary);
     let mut cells = [b' '; 40];
     cells[7] = code;
     let rows = vec![overlay(1, cells)];
@@ -147,7 +157,7 @@ fn compile(
             .unwrap();
     assert!(service.declared().semantic().drcs().subtables().is_empty());
     assert!(service.declared().resource_inventory().is_empty());
-    if code == 0x5b {
+    if primary == 0x08 && code == 0x5b {
         assert_enlarged_polish(&service);
     }
     (service, rows)
@@ -223,6 +233,61 @@ fn no_bank_polish_base_adds_and_removes_only_proven_compiler_resources() {
         &rows,
         &policy().encoding,
         deadline()
+    )
+    .is_err());
+    assert!(super::super::compiler_resources::check(&before, &after, &[], deadline()).is_err());
+}
+
+#[test]
+fn no_bank_turkish_base_preserves_editor_zone_and_compiler_ownership() {
+    let (before, before_rows) = compile_at(0x16, b'A');
+    let (after, rows) = compile_at(0x16, 0x23);
+    assert!(before.compiler_drcs_resources().is_empty());
+    assert_eq!(after.compiler_drcs_resources().len(), 1);
+    let generated = after.compiler_drcs_resources()[0].table();
+    assert_eq!(generated.glyphs().len(), 1);
+    assert_eq!(generated.glyphs()[0].slot.get(), 2);
+    assert_eq!(
+        generated.glyphs()[0].bitmap.get(),
+        [0, 0, 0x3f0, 0xc0, 0xd8, 0xd8, 0xd8, 0xde, 0, 0]
+    );
+    let composition = after
+        .pages()
+        .iter()
+        .find_map(|page| display(page).filter(|(_, c)| c.owner() == address(123)))
+        .unwrap()
+        .1;
+    assert_eq!(composition.base_display().primary().get(), 0x16);
+    let resolved = composition.display_resolution();
+    let origin = resolved.cell(1, 7).unwrap().origin().unwrap();
+    assert_eq!(resolved.cell(1, 8).unwrap().origin(), Some(origin));
+    let index = resolved.origins()[origin].candidate_index();
+    assert!(
+        matches!(composition.glyph_intent().records()[index].glyph(),
+        Some(TeletextGlyphIdentity::G0 {glyph}) if glyph.code() == 0x23
+        && glyph.national_subset() == Some(TeletextNationalSubset::Turkish))
+    );
+    for (original, edited, edits) in [
+        (&before, &after, rows.as_slice()),
+        (&after, &before, before_rows.as_slice()),
+    ] {
+        validate_teletext_editorial_effects(
+            original,
+            edited,
+            &project("free", 1, 7, 2, 1),
+            edits,
+            &policy().encoding,
+            deadline(),
+        )
+        .unwrap();
+    }
+    assert!(validate_teletext_editorial_effects(
+        &before,
+        &after,
+        &project("zone", 1, 9, 1, 1),
+        &rows,
+        &policy().encoding,
+        deadline(),
     )
     .is_err());
     assert!(super::super::compiler_resources::check(&before, &after, &[], deadline()).is_err());

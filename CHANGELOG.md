@@ -700,6 +700,12 @@ release section when tagging a release.
   independent glyph, fragment and theme checks. Headed localized Chromium and
   Firefox trials connect the actual editor save to native forms and the same
   ordinary streams. Hydration and actual teletext-client proof remain open.
+- Realize the Turkish national Base `0x23` TL symbol through enlarged-page repaint
+  with exact plain or underlined DRCS, retaining its original identity and
+  fallback under both primary designations. Mixed Polish/Turkish pages keep
+  stable compiler slots within existing resource limits, and native editorial
+  validation retains zone and resource ownership. The actual Turkish editor,
+  stream and client workflow still requires acceptance.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
   using its exact plain or underlined glyph. Reuse matching authored definitions
   or provision bounded compiler-owned DRCS resources through unused links, keeping
