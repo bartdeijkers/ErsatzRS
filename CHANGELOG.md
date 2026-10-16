@@ -747,6 +747,8 @@ release section when tagging a release.
   Three actual QTeletextMaker saves now reach both ordinary streams with
   transport and independent glyph/fallback and encoded-MOT checks; automatic
   resource acquisition and suitable-client navigation remain open.
+  MOT-selected default glyphs also survive whole-service normalization with
+  original resource packets and fallback retained; their editor flow remains open.
   Mixed plain/underlined glyphs retain stable generated slots and their painted
   attributes while keeping undefined DRCS underline bits disabled. Known Base
   spacing latches also survive the genuine editor/import/publication/stream flow,

@@ -447,3 +447,6 @@ fn selected_mot_without_x27_preserves_authored_roles_and_uses_free_linked_subpag
 
 #[path = "implicit_mot/fresh.rs"]
 mod fresh;
+
+#[path = "implicit_mot/passive_default.rs"]
+mod passive_default;
