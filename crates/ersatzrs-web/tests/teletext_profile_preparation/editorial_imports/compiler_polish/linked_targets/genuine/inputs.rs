@@ -61,10 +61,13 @@ fn ready(case: Case, flow: &Flow) -> Value {
             "primary":8,"underlined":false,"scope":"normal","s1":1,"slot":0,
             "original_file":format!("native-original-1/{name}"),"original_sha256":live_client::hash(&original.bytes),
             "save_as":format!("editor-1/{page}/edited.tti"),"proof":format!("editor-1/{page}/editor-proof.json")});
-        if matches!(case, Case::EnglishTwoPairs) {
+        if matches!(case, Case::EnglishTwoPairs | Case::EnglishAlias) {
             edit["after"] = json!(124);
             edit["primary"] = json!(0);
             edit["slot"] = json!(8);
+        }
+        if matches!(case, Case::EnglishAlias) {
+            edit["primary"] = json!(0x10);
         }
         edit
     }).collect();
@@ -145,7 +148,9 @@ pub(super) fn request(
     let completed: Completion = serde_json::from_slice(&bytes).unwrap();
     validate_completion(&completed);
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
-    request.name = if matches!(case, Case::EnglishTwoPairs) {
+    request.name = if matches!(case, Case::EnglishAlias) {
+        "Actual QTM three linked-target English raw-primary10 alias concept".into()
+    } else if matches!(case, Case::EnglishTwoPairs) {
         "Actual QTM three linked-target English two-pair concept".into()
     } else {
         "Actual QTM three linked-target Polish concept".into()

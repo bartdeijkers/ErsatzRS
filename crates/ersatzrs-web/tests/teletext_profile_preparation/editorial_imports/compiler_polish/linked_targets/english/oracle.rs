@@ -30,9 +30,42 @@ fn pairs() -> BTreeSet<TeletextCharsetPair> {
     ])
 }
 
-fn assert_identity(service: &EncodedTeletextAuthoredService, page: u16, code: u8) {
+fn assert_identity(service: &EncodedTeletextAuthoredService, page: u16, code: u8, primary: u8) {
     let original = display(service, page).normalized().original();
-    assert_eq!(original.base_display().primary().get(), 0);
+    assert!(matches!(primary, 0 | 0x10));
+    assert_eq!(original.base_display().primary().get(), primary);
+    if primary == 0x10 {
+        let metadata = &service.declared().semantic().page_enhancements()[&address(page)];
+        assert_eq!(
+            metadata.presentation.as_ref().unwrap().primary.get(),
+            primary
+        );
+        assert_eq!(
+            display(service, page)
+                .normalized()
+                .physical()
+                .replay()
+                .charset_execution()
+                .primary()
+                .get(),
+            primary
+        );
+        let projection =
+            project_encoded_teletext_display(display(service, page).page(), 128).unwrap();
+        let words = projection
+            .records
+            .iter()
+            .find_map(|record| match record {
+                TeletextEncodedDisplayRecord::Triplets {
+                    row: 28,
+                    designation: 0,
+                    words,
+                } => Some(words),
+                _ => None,
+            })
+            .expect("raw alias10 must be emitted in the actual X28/0");
+        assert_eq!((words[0] >> 7) & 0x7f, u32::from(primary));
+    }
     assert_eq!(original.collected().charset_pairs(), &pairs());
     let view = original.display_resolution();
     let left = original.display_geometry().left_width();
@@ -97,9 +130,17 @@ fn assert_pixels(
 }
 
 pub(super) fn previews(service: &EncodedTeletextAuthoredService, code: u8) -> Vec<TeletextRaster> {
+    previews_with_primary(service, code, 0)
+}
+
+pub(super) fn previews_with_primary(
+    service: &EncodedTeletextAuthoredService,
+    code: u8,
+    primary: u8,
+) -> Vec<TeletextRaster> {
     (124..127)
         .map(|page| {
-            assert_identity(service, page, code);
+            assert_identity(service, page, code, primary);
             let raster = external_editor_probe::preview_page(service, page);
             let left = usize::from(
                 display(service, page)
@@ -123,6 +164,10 @@ pub(super) fn previews(service: &EncodedTeletextAuthoredService, code: u8) -> Ve
 }
 
 pub(super) fn assert_originals(flow: &Flow) {
+    assert_originals_with_primary(flow, 0);
+}
+
+pub(super) fn assert_originals_with_primary(flow: &Flow, primary: u8) {
     for accepted in &flow.accepted {
         let service = accepted.service();
         let declared = service.declared();
@@ -163,7 +208,7 @@ pub(super) fn assert_originals(flow: &Flow) {
                 );
             }
         }
-        previews(service, b'A');
+        previews_with_primary(service, b'A', primary);
     }
     let day = &flow.accepted[0].selection().bindings[0];
     let night = &flow.accepted[1].selection().bindings[0];
@@ -302,6 +347,14 @@ fn assert_generated(service: &EncodedTeletextAuthoredService, page: u16) {
 }
 
 pub(super) fn assert_service(flow: &Flow, service: &EncodedTeletextAuthoredService) {
+    assert_service_with_primary(flow, service, 0);
+}
+
+pub(super) fn assert_service_with_primary(
+    flow: &Flow,
+    service: &EncodedTeletextAuthoredService,
+    primary: u8,
+) {
     let expected = flow.accepted[0]
         .service()
         .declared()
@@ -329,5 +382,5 @@ pub(super) fn assert_service(flow: &Flow, service: &EncodedTeletextAuthoredServi
         assert_eq!(base_rows(service, page), expected);
     }
     assert_original_resources(flow, service);
-    previews(service, 0x7c);
+    previews_with_primary(service, 0x7c, primary);
 }

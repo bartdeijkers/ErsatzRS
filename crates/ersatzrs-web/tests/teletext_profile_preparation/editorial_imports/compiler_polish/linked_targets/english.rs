@@ -10,6 +10,15 @@ pub(super) const ENGLISH_7C: [u16; 10] =
     [0, 0x198, 0x198, 0x198, 0x198, 0x198, 0x198, 0x198, 0x198, 0];
 
 pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
+    response_with_primary(theme, page, subcode, 0)
+}
+
+pub(super) fn alias_response(theme: &str, page: u16, subcode: u16) -> Value {
+    response_with_primary(theme, page, subcode, 0x10)
+}
+
+fn response_with_primary(theme: &str, page: u16, subcode: u16, primary: u8) -> Value {
+    assert!(matches!(primary, 0 | 0x10));
     let mut value = input::response(theme, page, subcode);
     for page in value["service"]["pages"].as_array_mut().unwrap() {
         page["national_option"] = json!(0);
@@ -18,7 +27,7 @@ pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
         .as_array_mut()
         .unwrap()
     {
-        metadata["presentation"]["primary"] = json!(0);
+        metadata["presentation"]["primary"] = json!(primary);
         metadata["local_program"]["commands"].as_array_mut().unwrap().extend(
             json!([
                 {"kind":"set_position","position":{"row":4,"column":12}},
@@ -86,6 +95,15 @@ pub(super) async fn restored(
     flow: &Flow,
     concept: &SavedEditorialTeletextDesign,
 ) -> Vec<TeletextRaster> {
+    Box::pin(restored_with_primary(fixture, flow, concept, 0)).await
+}
+
+pub(super) async fn restored_with_primary(
+    fixture: &Fixture,
+    flow: &Flow,
+    concept: &SavedEditorialTeletextDesign,
+    primary: u8,
+) -> Vec<TeletextRaster> {
     let restored = drcs_bitmap::restored(fixture, concept).await;
     let original = flow.saved[0].candidate();
     assert_eq!(restored.selection(), original.selection());
@@ -96,8 +114,8 @@ pub(super) async fn restored(
         assert_eq!(before.bytes(), after.bytes());
         assert_eq!(before.authoring(), after.authoring());
     }
-    checks::assert_service(flow, restored.encoded().unwrap());
-    checks::previews(restored.encoded().unwrap(), 0x7c)
+    checks::assert_service_with_primary(flow, restored.encoded().unwrap(), primary);
+    checks::previews_with_primary(restored.encoded().unwrap(), 0x7c, primary)
 }
 
 fn changed_generated(
@@ -190,6 +208,7 @@ async fn assert_state(
     concept: &SavedEditorialTeletextDesign,
     day: &AcceptedTeletextOutputCandidate,
     fresh: &TeletextDesignExportReceipt,
+    primary: u8,
 ) {
     assert_eq!(
         fixture
@@ -207,12 +226,21 @@ async fn assert_state(
         qtm_carrier::stored_receipt(fixture, fresh.metadata.id).await,
         *fresh
     );
-    checks::assert_service(flow, recover(fixture, 1).await.service());
-    Box::pin(restored(fixture, flow, concept)).await;
+    checks::assert_service_with_primary(flow, recover(fixture, 1).await.service(), primary);
+    Box::pin(restored_with_primary(fixture, flow, concept, primary)).await;
 }
 
 #[tokio::test]
 async fn english_two_pair_concept_previews_publishes_protects_slot8_and_reopens() {
+    Box::pin(prepared_with_primary(response, 0)).await;
+}
+
+#[tokio::test]
+async fn english_primary10_alias_concept_previews_publishes_protects_slot8_and_reopens() {
+    Box::pin(prepared_with_primary(alias_response, 0x10)).await;
+}
+
+async fn prepared_with_primary(response: fn(&str, u16, u16) -> Value, primary: u8) {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
         response,
         Fixture::new_persistent().await,
@@ -220,24 +248,27 @@ async fn english_two_pair_concept_previews_publishes_protects_slot8_and_reopens(
         authoring_metadata::write_compact,
     ))
     .await;
-    checks::assert_originals(&flow);
+    assert_originals_with_primary(&flow, primary);
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
     let concept = import(&fixture, request(&flow)).await;
     assert_eq!(concept.head().id, flow.saved[0].head().id);
     assert_eq!(concept.head().revision, 2);
     assert_original_pointers(&fixture, &flow).await;
     retained.assert_unchanged(&fixture, &flow).await;
-    let previews = Box::pin(restored(&fixture, &flow, &concept)).await;
+    let previews = Box::pin(restored_with_primary(&fixture, &flow, &concept, primary)).await;
     fixture = fixture.reopen().await;
     assert_original_pointers(&fixture, &flow).await;
     retained.assert_unchanged(&fixture, &flow).await;
     assert_eq!(
-        Box::pin(restored(&fixture, &flow, &concept)).await,
+        Box::pin(restored_with_primary(&fixture, &flow, &concept, primary)).await,
         previews
     );
     let day = publish_and_accept(&fixture, &flow, &concept).await;
-    checks::assert_service(&flow, day.service());
-    assert_eq!(checks::previews(day.service(), 0x7c), previews);
+    checks::assert_service_with_primary(&flow, day.service(), primary);
+    assert_eq!(
+        checks::previews_with_primary(day.service(), 0x7c, primary),
+        previews
+    );
     let exported = drcs_bitmap::reexport(&fixture, &concept).await;
     let fresh = receipt(&fixture, &exported).await;
     oracle::assert_mapping(&exported);
@@ -256,21 +287,21 @@ async fn english_two_pair_concept_previews_publishes_protects_slot8_and_reopens(
     assert_eq!(error.resource, Some(normal_identity(124, 1)));
     assert_eq!((error.page, error.subcode, error.row), (0x2a0, 1, Some(5)));
     Box::pin(assert_state(
-        &fixture, &flow, &retained, &concept, &day, &fresh,
+        &fixture, &flow, &retained, &concept, &day, &fresh, primary,
     ))
     .await;
     fixture = fixture.reopen().await;
     Box::pin(assert_state(
-        &fixture, &flow, &retained, &concept, &day, &fresh,
+        &fixture, &flow, &retained, &concept, &day, &fresh, primary,
     ))
     .await;
     assert_eq!(
-        checks::previews(recover(&fixture, 1).await.service(), 0x7c),
+        checks::previews_with_primary(recover(&fixture, 1).await.service(), 0x7c, primary),
         previews
     );
     assert_eq!(
-        checks::previews(recover(&fixture, 2).await.service(), b'A'),
-        checks::previews(flow.accepted[1].service(), b'A')
+        checks::previews_with_primary(recover(&fixture, 2).await.service(), b'A', primary),
+        checks::previews_with_primary(flow.accepted[1].service(), b'A', primary)
     );
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
@@ -280,10 +311,42 @@ pub(super) fn assert_originals(flow: &Flow) {
     checks::assert_originals(flow);
 }
 
+pub(super) fn assert_originals_with_primary(flow: &Flow, primary: u8) {
+    checks::assert_originals_with_primary(flow, primary);
+    if primary == 0x10 {
+        for saved in &flow.saved {
+            assert_eq!(saved.candidate().sources().len(), 1);
+            for source in saved.candidate().sources() {
+                let value: Value = serde_json::from_slice(source.bytes()).unwrap();
+                let pages = value["service"]["page_enhancements"].as_array().unwrap();
+                assert_eq!(pages.len(), 3);
+                for metadata in pages {
+                    assert_eq!(metadata["presentation"]["primary"], json!(0x10));
+                }
+            }
+        }
+    }
+}
+
 pub(super) fn assert_service(flow: &Flow, service: &EncodedTeletextAuthoredService) {
     checks::assert_service(flow, service);
 }
 
+pub(super) fn assert_service_with_primary(
+    flow: &Flow,
+    service: &EncodedTeletextAuthoredService,
+    primary: u8,
+) {
+    checks::assert_service_with_primary(flow, service, primary);
+}
+
 pub(super) fn previews(service: &EncodedTeletextAuthoredService) -> Vec<TeletextRaster> {
     checks::previews(service, 0x7c)
+}
+
+pub(super) fn previews_with_primary(
+    service: &EncodedTeletextAuthoredService,
+    primary: u8,
+) -> Vec<TeletextRaster> {
+    checks::previews_with_primary(service, 0x7c, primary)
 }

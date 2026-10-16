@@ -2968,6 +2968,60 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 raw English primary10 joined editorial-flow checkpoint:
+Criterion: raw-primary10 fidelity through the existing profile/TTI/editor/concept/
+shared-preview/explicit-publication/ordinary-stream flow, after8d1a1af3 core fix.
+Native371ebdf9-bb9b-42ae-95c2-901e16833268 passes both new10 and existing00 cases
+in10.662s. Each case retains all three original source pages/resources, raw
+presentation, two charset pairs, exact English mask/Greek/fallback, previews,
+pre-publication reopen and separate publication. A valid generated2A0/S1=1/slot8
+row5 pixel edit rejects with located Structure while heads, receipts, profiles,
+package and Night remain intact through another reopen. Raw10 source JSON,
+declared/original/physical primary and emitted X28/0 bits are checked explicitly.
+
+Actual193b7c0d-0c96-4cf9-9a39-c48d5e3da287 passes113.544s first attempt. All three
+new raw10 display exports differ from00; three NEW pinned QTM1.0/Qt6.10.2 native
+bar+Shift/SaveAs/normal-exit0 edits are performed. Root inspects six actual cursor/
+saved images. Eleven exports plus versioned sidecar and all20 closed input
+identities remain exact. The SAME live fresh receipt reaches concept import,
+shared preview, explicit publication, indexed reexport/reopen, both ordinary
+/iptv/hls-direct/{channel}.ts routes and final database reopen/owned cleanup.
+One addon retains distinct Day/Night profiles/themes, unchanged package/config,
+original source/authoring/metadata/transmissions and isolated Night. Captures
+7519812/7517932 bytes retain source AV, complete emitted-model equality and
+TSDuck3.44-4676 transport validation. No imported edit changes running output
+before explicit publication, refreshes playout or bypasses admission.
+
+The unchanged linked-target adapter7a171795 with pinned imager0.2.0/eight source
+pins checks Day12/Night13 closed displays and34/19 actual received banks; partial
+EOF acquisitions are discarded. English7C/slot8/row5 literal masks/fragments,
+Greek A, B, authored zero bitmaps and literal Level1/1.5 fallback pass. Both
+wrong-profile swaps and six valid-parity actual-bank pixel negatives reject.
+Original captures remain immutable. Banks are explicitly supplied; automatic
+resource routing, independent raw-alias certification, font pixels and actual
+suitable-client rendering/navigation are NOT inferred. Native full-model/X28
+assertions own raw10 provenance. The prior Kodi20.5 required-glyph failure remains
+a separate primary00 client receipt; no new client or decoder repair occurs.
+
+Four fixture/oracle/runner files only; no production change after8d1a1af3.
+Existing00 wrappers retain explicit0; four old genuine cases and17 critical
+freshness/authority/publication/cleanup/oracle functions stay source-byte-exact.
+Scoped independent review finds no blocker. Native source reuse is authenticated
+by exact inverse of the sole ignored-function rustfmt line wrap; no expectation
+changed. Initial format-check failure is recorded as formatting, not product RED.
+Strict affected web all-target Clippy passes121s; formatting, architecture and
+progress checks pass. No broad CI, hydrated UI or platform acceptance is claimed.
+Canonical source/tool/editor/input/capture/negative/check identities:
+tmp/phase9-english-alias-flow/identity.json SHA256 5f4a9ab1d1712b69349551193d493f0ca36b3a1b859d158ed9df1f8046ef2a97.
+Next address the existing side-panel authored/TTI geometry clause through this
+same protected-metadata/concept flow. Concrete blocker: editorial effects uses
+a25x40 Main-only permission mask and protects every panel cell, even when valid
+authoring metadata declares editable LeftPanel/RightPanel zones. Prove and fix
+that smallest integration gap while keeping generated/header/geometry protected. Full suitable-client, remaining repertoire/
+objects/panels/templates/zones/Lua/restart/localized hydrated admin/playback and
+six-platform acceptance remain open. No whole-engine or milestone completion,
+accepted restriction, production guide addon, push or publication.
+
 2026-10-16 bounded actual-client and English primary-alias checkpoint:
 Criterion: required enlarged Local-Passive/DRCS display in an actual client;
 then the independent existing authored national-alias clause, raw primary10.
@@ -9846,25 +9900,23 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | --- | --- | --- | --- | --- |
 | Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts implemented | Prior sidecar/editor receipts plus exact fresh-receipt dense bank headed import/preview/publication, package retention and reopen above | Richer zones/dynamic fields, panel/geometry/set semantics and complete resource interchange remain open | Extend the next concrete authored/editor feature while retaining template/package-version and protected effects rules |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE and actual dense/padded editor receipts; combined test decoder now independently qualifies unchanged sparseS1=1 MAIN pixels above | General charset/resource/set/subpage fidelity and stock sparse decoding remain open; the qualified candidate now passes actual sparse-original and edited-bank client navigation | Reuse the joined padded proof; extend remaining exact repertoire/resource/set clauses without changing native identity |
-| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Representative bank, national-original and implicit-MOT flows connected; full acceptance open | Existing headed/admin colour/bank receipts plus fresh Romanian, rendered-MOT-default and English two-pair QTM/native/ordinary TCP/AV/TSDuck/independent receipts above; same addon, distinct profiles/themes, unchanged Night | Romanian hydration and suitable enlarged Local-Passive client/navigation remain open; independent banks are explicit | Reuse joined receipts and retained failed Kodi20.5 display; connect raw primary10 through the existing editor/ordinary flow. Suitable-client acceptance remains blocked for this vector; no decoder repair expansion |
+| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Representative bank, national-original and implicit-MOT flows connected; full acceptance open | Existing headed/admin colour/bank receipts plus fresh Romanian, rendered-MOT-default and English two-pair QTM/native/ordinary TCP/AV/TSDuck/independent receipts above; same addon, distinct profiles/themes, unchanged Night | Romanian hydration and suitable enlarged Local-Passive client/navigation remain open; independent banks are explicit | Reuse joined00/10 receipts and retained failed Kodi20.5 display. Connect the existing side-panel/editor geometry clause; suitable-client acceptance remains blocked for the enlarged vector, without decoder repair expansion |
 | Actual pinned QTM workflow | Base/colour/local-X26 and representative singleton/dense/padded/multiple-target/national-original interchange connected | Existing pinned saves and fresh same-live four-Romanian Save As/exit/concept/preview/publication/ordinary proof above; generated-slot rejection and immutable package/sidecar/reopen | Complete authored editor/zone/dynamic-field/panel/geometry/set and suitable-client coverage remain open | Extend only a named remaining authored/resource clause through the same actual editor flow |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Authored warm magazine-to-page presentation | Bounded complete-X28/history plus representative cold and retained-client warm bank publication proven; full warm matrix open |72 output tests, real AV/TSDuck/persistent Cyrillic-to-Greek decoding, cold editor/admin flow and same-client/decoder two-theme124/125/124 with18 actual library-map barriers above | Complete lower-level/resource/Header/POP/MOT/page-retirement, broader palette/context and client/platform matrix remain required | Reuse this fixed handover; address a specific remaining lifecycle clause when it blocks its accepted feature rather than expanding decoder maintenance |
-| Assigned national G0 physical realization | Exact original Polish5B, Turkish23, Romanian5D/7D and pair-pressured English7C use sealed resource-backed normalization; fixed slots0..9 and linked-S1 ownership | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | English primary00/two-pair core/native/actual-QTM/ordinary/closed-independent proof passes; raw primary10 core RED/GREEN and exact wire designation now pass. Alias10 joined flow and suitable-client/acquisition remain open; actual Kodi20.5 lacks the required glyph. Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT core/native/actual QTM/ordinary/independent bank and encoded-MOT proof pass. Rendered MOT defaults now have whole-service/native/actual-QTM/ordinary-TCP/TSDuck and scoped independent bodies/cells/fallback proof; automatic resource/default acquisition, suitable-client and broader matrix remain open | Connect raw primary10 to the existing exact-profile/editor/ordinary flow; retain failed-client proof and the wider matrix |
+| Assigned national G0 physical realization | Exact original Polish5B, Turkish23, Romanian5D/7D and pair-pressured English7C use sealed resource-backed normalization; fixed slots0..9 and linked-S1 ownership | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | English primary00 and10 core/native/actual-QTM/ordinary/closed-independent proof passes, including raw10 source/X28 identity. Suitable-client/acquisition remain open; actual Kodi20.5 lacks the required00 glyph. Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT core/native/actual QTM/ordinary/independent bank and encoded-MOT proof pass. Rendered MOT defaults now have whole-service/native/actual-QTM/ordinary-TCP/TSDuck and scoped independent bodies/cells/fallback proof; automatic resource/default acquisition, suitable-client and broader matrix remain open | Reuse joined raw10 proof; next connect the existing side-panel/editor geometry clause while retaining full client/repertoire acceptance |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: connect raw English primary10 to the existing exact-profile/
-export/actual-QTM/concept/preview/explicit-publication/ordinary/independent flow,
-retaining literal wire designation, two pairs, masks, fallback and channel state.
-Compare fresh inputs against any reused editor receipt; perform actual editing
-when they differ. Kodi20.5 actual required-glyph failure is retained above and
-blocks its dependent rendering/navigation acceptance only. Do not repeat the
-client trial, expand decoder repairs or start a broad client hunt. Other authored
-lifecycle/panel/zone/admin/platform clauses remain required; no general audit or
-additional measurement program follows. Reuse native/editor/ordinary receipts
-only for unchanged inputs and behavior. Full suitable-client qualification remains
-required and no permanent limitation is silently accepted.
+Concrete next action: reproduce the Main-only permission-mask rejection for a
+valid editable side-panel zone, then correct that existing importer boundary and
+connect it to concept/shared-preview/explicit publication.
+Reuse exact raw00/10 editor/ordinary/independent receipts. Suitable enlarged
+client rendering/navigation remains required; the retained Kodi20.5 failure
+blocks only dependent acceptance. No repeated client trial, decoder repair,
+general audit or measurement expansion follows. Keep full metadata/zones,
+lifecycle/Lua/restart/admin/playback/platform clauses open until separately proven;
+no permanent limitation is silently accepted.
 Production TV-guide content still waits for full independent generic acceptance.
 G1's fixed vector remains qualified; no external repair expansion starts. The actual padded sparse save now
 passes the joined admin/publication/ordinary route, strict edited-S1=1/fallback

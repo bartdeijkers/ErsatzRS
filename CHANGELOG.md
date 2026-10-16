@@ -758,6 +758,8 @@ release section when tagging a release.
   direct routes remain unchanged when a pair is free or Hebrew is already used.
   The same exact realization now supports raw English primary designation `0x10`,
   preserving its transmitted designation, fallback and original page identity.
+  Fresh editor saves retain this raw designation through concept preview, explicit
+  publication and isolated ordinary streams with independent glyph/fallback checks.
   Genuine editor saves now reach isolated channel publication and ordinary
   streams with independent mask/Greek/fallback checks; generated glyph slots
   remain protected on reimport. Suitable-client proof remains open.

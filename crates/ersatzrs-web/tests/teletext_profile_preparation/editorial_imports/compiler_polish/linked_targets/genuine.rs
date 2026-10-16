@@ -14,6 +14,7 @@ enum Case {
     ImplicitMot,
     RenderedDefaults,
     EnglishTwoPairs,
+    EnglishAlias,
 }
 
 impl Case {
@@ -23,6 +24,7 @@ impl Case {
             Self::ImplicitMot => implicit_mot::assert_originals(flow),
             Self::RenderedDefaults => implicit_mot::defaults::assert_originals(flow),
             Self::EnglishTwoPairs => english::assert_originals(flow),
+            Self::EnglishAlias => english::assert_originals_with_primary(flow, 0x10),
         }
     }
 
@@ -32,11 +34,12 @@ impl Case {
             Self::ImplicitMot => implicit_mot::assert_effective(flow, service),
             Self::RenderedDefaults => implicit_mot::defaults::assert_effective(flow, service),
             Self::EnglishTwoPairs => english::assert_service(flow, service),
+            Self::EnglishAlias => english::assert_service_with_primary(flow, service, 0x10),
         }
     }
 
     fn code(self) -> u8 {
-        if matches!(self, Self::EnglishTwoPairs) {
+        if matches!(self, Self::EnglishTwoPairs | Self::EnglishAlias) {
             0x7c
         } else {
             0x5b
@@ -44,7 +47,9 @@ impl Case {
     }
 
     fn previews(self, service: &EncodedTeletextAuthoredService) -> Vec<TeletextRaster> {
-        if matches!(self, Self::EnglishTwoPairs) {
+        if matches!(self, Self::EnglishAlias) {
+            english::previews_with_primary(service, 0x10)
+        } else if matches!(self, Self::EnglishTwoPairs) {
             english::previews(service)
         } else {
             oracle::previews(service, 0x5b)
@@ -81,7 +86,7 @@ impl Case {
                 ]);
             }
         }
-        if matches!(self, Self::EnglishTwoPairs) {
+        if matches!(self, Self::EnglishTwoPairs | Self::EnglishAlias) {
             proof["fixture"] = json!("english-two-pair-three-linked-targets");
             proof["original_resource_inventory_count"] = json!(4);
             proof["original_charset_pairs"] = json!(["latin_latin", "greek_greek"]);
@@ -90,6 +95,12 @@ impl Case {
             proof["literal_original_english_7c_preserved"] = json!(true);
             proof["slot"] = json!(8);
             proof["mask"] = json!(english::ENGLISH_7C);
+        }
+        if matches!(self, Self::EnglishAlias) {
+            proof["fixture"] = json!("english-primary10-alias-three-linked-targets");
+            proof["original_primary"] = json!(0x10);
+            proof["original_source_primary10_preserved"] = json!(true);
+            proof["actual_x28_primary10_preserved"] = json!(true);
         }
     }
 }
@@ -132,6 +143,15 @@ async fn setup_case(case: Case, fixture: Fixture) -> (Fixture, Flow) {
             ))
             .await
         }
+        Case::EnglishAlias => {
+            Box::pin(setup_with_fixture_policy_and_writer(
+                english::alias_response,
+                fixture,
+                input::encoding,
+                authoring_metadata::write_compact,
+            ))
+            .await
+        }
     }
 }
 
@@ -141,6 +161,9 @@ async fn assert_case_restored(
     flow: &Flow,
     concept: &SavedEditorialTeletextDesign,
 ) -> Vec<TeletextRaster> {
+    if matches!(case, Case::EnglishAlias) {
+        return Box::pin(english::restored_with_primary(fixture, flow, concept, 0x10)).await;
+    }
     if matches!(case, Case::EnglishTwoPairs) {
         return Box::pin(english::restored(fixture, flow, concept)).await;
     }
@@ -345,4 +368,14 @@ async fn actual_qtm_english_two_pair_three_linked_targets_concept_serves_two_ord
         "ERSATZRS_TELETEXT_ENGLISH_TWO_PAIR_DIR",
     ));
     Box::pin(run(Case::EnglishTwoPairs, directory)).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires three actual pinned QTM saves from this live raw-primary10 English alias export and FFmpeg9/ffprobe/TSDuck; bounded1200s; no independent/client acceptance"]
+async fn actual_qtm_english_primary10_alias_three_linked_targets_concept_serves_two_ordinary_channels(
+) {
+    let directory = PathBuf::from(client_capture::selected(
+        "ERSATZRS_TELETEXT_ENGLISH_ALIAS_DIR",
+    ));
+    Box::pin(run(Case::EnglishAlias, directory)).await;
 }
