@@ -375,5 +375,270 @@ class DrcsWarmClientContractTests(unittest.TestCase):
             activate.assert_not_called()
 
 
+
+def presentation_readiness(directory):
+    ready = drcs_readiness(directory)
+    ready.update(probe_version=4, protocol="warm-page-presentation-bank-v1",
+                 stages=["original_m29", "published_page_x28_bank"], bank_logical_subpages=[0, 1])
+    return ready
+
+
+def presentation_stage(channels, number):
+    value = drcs_stage(channels, number)
+    value.update(probe_version=4, state=HELPER.PAGE_PRESENTATION_STATES[number - 1],
+                 editor_original=None, day_presentation_source="magazine" if number == 1 else "page",
+                 night_presentation_source="magazine")
+    if number == 2:
+        value["day"]["design_id"] = 801
+        value["editor_original"] = {"design_id": 801, "revision": 1, "digest": "e" * 64,
+                                    "receipt_id": 901, "receipt_digest": "f" * 64}
+    return value
+
+
+class PagePresentationWarmClientTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.directory = Path(self.temporary.name)
+        self.ready = presentation_readiness(self.directory)
+        self.channels = HELPER.page_presentation_ready(self.ready, self.directory)
+        self.first = presentation_stage(self.channels, 1)
+        self.second = presentation_stage(self.channels, 2)
+
+    def validate(self, value, number=2, previous=None):
+        return HELPER.validate_page_presentation_stage(value, number, self.channels,
+            self.first if previous is None else previous, "1" * 64, self.ready["editor_original"])
+
+    def test_new_original_receipt_and_concept_publish_without_changing_night(self):
+        self.assertEqual(HELPER.page_presentation_ready(self.ready, self.directory), self.channels)
+        self.assertEqual(HELPER.validate_page_presentation_stage(self.first, 1, self.channels, None,
+            "1" * 64, self.ready["editor_original"]), self.first)
+        self.assertEqual(self.validate(self.second), self.second)
+        self.assertNotEqual(self.second["day"]["design_id"], self.first["day"]["design_id"])
+        self.assertEqual(self.second["night"], self.first["night"])
+        with self.assertRaises(RuntimeError):
+            HELPER.drcs_ready(self.ready, self.directory)
+        with self.assertRaises(RuntimeError):
+            HELPER.page_presentation_ready(drcs_readiness(self.directory), self.directory)
+
+    def test_explicit_mode_banks_resources_and_closed_ready_are_required(self):
+        changes = [("probe_version", True), ("probe_version", 4.0), ("protocol", "warm-drcs-live-ordinary-v1"),
+                   ("stages", HELPER.DRCS_STATES), ("completion_timeout_seconds", 56),
+                   ("bank_logical_subpages", [False, 1]), ("bank_logical_subpages", [0, 1.0]),
+                   ("bank_logical_subpages", [1, 0]), ("bank_logical_subpages", [0]),
+                   ("expected_navigation", [124, 124, 125])]
+        for key, value in changes:
+            changed = copy.deepcopy(self.ready); changed[key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(RuntimeError):
+                HELPER.page_presentation_ready(changed, self.directory)
+        for key, value in [("logical_subpage", True), ("page", 0x1c0), ("slot", 1), ("edited_first_bitmap_row", 0x801)]:
+            changed = copy.deepcopy(self.ready); changed["resource"][key] = value
+            with self.subTest(resource=key), self.assertRaises(RuntimeError):
+                HELPER.page_presentation_ready(changed, self.directory)
+        changed = copy.deepcopy(self.ready); changed["unexpected"] = True
+        with self.assertRaises(RuntimeError): HELPER.page_presentation_ready(changed, self.directory)
+        path = self.directory / "ready4.json"; path.write_text(json.dumps(self.ready))
+        self.assertEqual(HELPER.load(path)[1], self.ready)
+
+    def test_new_original_and_receipt_cannot_reuse_stale_or_foreign_identity(self):
+        changes = [("design_id", 201), ("design_id", 202), ("revision", True), ("revision", 2),
+                   ("digest", "a" * 64), ("digest", "b" * 64), ("digest", "d" * 64),
+                   ("digest", "E" * 64), ("receipt_id", 501), ("receipt_id", True),
+                   ("receipt_digest", "c" * 64), ("receipt_digest", "F" * 64)]
+        for key, value in changes:
+            changed = copy.deepcopy(self.second); changed["editor_original"][key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(RuntimeError): self.validate(changed)
+        changed = copy.deepcopy(self.second); changed["editor_original"]["extra"] = False
+        with self.assertRaises(RuntimeError): self.validate(changed)
+        changed = copy.deepcopy(self.first); changed["editor_original"] = self.ready["editor_original"]
+        with self.assertRaises(RuntimeError): self.validate(changed, 1)
+
+    def test_publication_palette_profile_and_every_wire_offset_remain_isolated(self):
+        changes = [("day", "design_id", 201), ("day", "design_id", 202), ("day", "design_revision", True),
+                   ("day", "generation_id", 301), ("day", "generation_id", 302), ("day", "request_id", 401),
+                   ("day", "request_id", 402), ("day", "design_digest", "a" * 64), ("day", "profile_id", 102),
+                   ("day", "url", self.channels["night"]["url"]), ("day", "theme_rgb4", [15, False, 0]),
+                   ("night", "design_id", 801), ("night", "generation_id", 902)]
+        for theme, key, value in changes:
+            changed = copy.deepcopy(self.second); changed[theme][key] = value
+            with self.subTest(theme=theme, key=key), self.assertRaises(RuntimeError): self.validate(changed)
+        for index in range(3):
+            changed = copy.deepcopy(self.second); changed["wire_offsets"][index] = self.first["wire_offsets"][index]
+            with self.subTest(offset=index), self.assertRaises(RuntimeError): self.validate(changed)
+        changed = copy.deepcopy(self.second); changed["wire_offsets"][2] = True
+        with self.assertRaises(RuntimeError): self.validate(changed)
+
+    def test_stage_presentation_epoch_and_original_capture_cannot_drift(self):
+        for key, value in [("probe_version", 3), ("stage", True), ("state", "edited_bitmap"),
+                           ("day_presentation_source", "magazine"), ("night_presentation_source", "page"),
+                           ("initial_ready_sha256", "2" * 64), ("day_s2", True), ("night_s2", 2),
+                           ("day_first_bitmap_row", 0x801), ("night_first_bitmap_row", 0x803)]:
+            changed = copy.deepcopy(self.second); changed[key] = value
+            with self.subTest(key=key), self.assertRaises(RuntimeError): self.validate(changed)
+        changed = copy.deepcopy(self.second); changed["extra"] = None
+        with self.assertRaises(RuntimeError): self.validate(changed)
+        for previous in (None, {**self.first, "stage": True}, {**self.first, "day_presentation_source": "page"}):
+            with self.subTest(previous=previous), self.assertRaises(RuntimeError):
+                HELPER.validate_page_presentation_stage(self.second, 2, self.channels, previous,
+                    "1" * 64, self.ready["editor_original"])
+
+    def test_version4_keeps_existing_one_decoder_activation_safeguards(self):
+        clients = [Mock(), Mock()]
+        for stage in (1, 2):
+            with patch.object(HELPER, "activate") as activate, patch.object(HELPER, "drcs_decoder_identity") as identity:
+                HELPER.activate_stage(clients, 4, stage, 123)
+                self.assertEqual(activate.call_count, 2 if stage == 1 else 0)
+                self.assertEqual(identity.call_count, 2)
+        with patch.object(HELPER, "activate") as activate, patch.object(HELPER, "drcs_decoder_identity", side_effect=RuntimeError("reset")):
+            with self.assertRaisesRegex(RuntimeError, "reset"): HELPER.activate_stage(clients, 4, 2, 123)
+            activate.assert_not_called()
+
+    def test_stock_mapping_uses_exact_owned_pid_and_receipted_files(self):
+        verify = Mock(return_value={"verified": True})
+        client = {"process": Mock(pid=123)}
+        self.assertEqual(HELPER.stock_decoder_mapping(client, {"verify_process": verify}), {"verified": True})
+        pid, decoder, plugin, plugin_sha = verify.call_args.args
+        self.assertEqual(pid, 123)
+        self.assertEqual(decoder, {"path": "/usr/lib/x86_64-linux-gnu/libzvbi.so.0.13.2",
+            "sha256": "134705a7ef4d982eb57bf71a9378f3eb0d95237c8dcb686d684e35471ae834b0",
+            "label": "Ubuntu libzvbi 0.2.42-2", "test_only": False})
+        self.assertEqual(str(plugin), "/usr/lib/x86_64-linux-gnu/vlc/plugins/codec/libzvbi_plugin.so")
+        self.assertEqual(plugin_sha, "b87f42fb841588fe68c0845f4cd56dd1062b287eb92faa5f9a086e5ce5fefd00")
+        verify.side_effect = RuntimeError("wrong owned mapping")
+        with self.assertRaisesRegex(RuntimeError, "wrong owned mapping"):
+            HELPER.stock_decoder_mapping(client, {"verify_process": verify})
+
+    def test_qualification_authenticates_source_before_loading(self):
+        sources = {}
+        qualification = HELPER.stock_mapping_qualification(sources)
+        self.assertIn("verify_process", qualification)
+        self.assertEqual(sources, {"scripts/e2e/teletext-client-decoder-candidate.py":
+            "f1acfc1ab867e67b2ca3e1eecb26e1289e0192c62b9f78b383adec6832a0d4ec"})
+        with patch.object(HELPER, "bounded_bytes", return_value=b"raise AssertionError('must not execute')"):
+            with self.assertRaisesRegex(RuntimeError, "helper source changed"):
+                HELPER.stock_mapping_qualification({})
+
+    def test_actual_mapper_rejects_alternate_duplicate_or_replaced_files(self):
+        verify = HELPER.stock_mapping_qualification({})["verify_process"]
+        library = self.directory / "libzvbi.so.0.13.2"
+        plugin = self.directory / "libzvbi_plugin.so"
+        alternate = self.directory / "alternate" / library.name
+        alternate.parent.mkdir()
+        library.write_bytes(b"stock library"); alternate.write_bytes(b"stock library")
+        plugin.write_bytes(b"stock plugin")
+        proc = self.directory / "proc"; (proc / "123").mkdir(parents=True)
+        def row(path):
+            stat = path.stat()
+            return f"1000-2000 r-xp 0000 {HELPER.os.major(stat.st_dev):x}:{HELPER.os.minor(stat.st_dev):x} {stat.st_ino} {path}\n"
+        expected = {"path": str(library), "sha256": HELPER.digest(library.read_bytes())}
+        plugin_sha = HELPER.digest(plugin.read_bytes())
+        good = row(library) + row(plugin)
+        maps = proc / "123" / "maps"; maps.write_text(good)
+        report = verify(123, expected, plugin, plugin_sha, proc)
+        self.assertTrue(report["exact_mapped_paths_and_file_identities_verified"])
+        self.assertEqual(report["client_pid"], 123)
+        bad_identity = good.replace(str(library.stat().st_ino), "0", 1)
+        for body in (row(alternate) + row(plugin), good + row(alternate), row(library), bad_identity):
+            maps.write_text(body)
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                verify(123, expected, plugin, plugin_sha, proc)
+        maps.write_text(good); library.write_bytes(b"replacement")
+        with self.assertRaisesRegex(ValueError, "decoder content changed"):
+            verify(123, expected, plugin, plugin_sha, proc)
+        library.write_bytes(b"stock library"); plugin.write_bytes(b"replacement")
+        with self.assertRaisesRegex(ValueError, "plugin content changed"):
+            verify(123, expected, plugin, plugin_sha, proc)
+        with self.assertRaisesRegex(ValueError, "positive client PID"):
+            verify(True, expected, plugin, plugin_sha, proc)
+
+    def test_main_rejects_bad_mapping_or_replaced_instance_before_any_capture(self):
+        for failure in ("mapping", "instance"):
+            directory = self.directory / failure; directory.mkdir()
+            ready = presentation_readiness(directory)
+            path = directory / "ready4.json"; raw = json.dumps(ready).encode(); path.write_bytes(raw)
+            channels = HELPER.page_presentation_ready(ready, directory)
+            first = presentation_stage(channels, 1); first["initial_ready_sha256"] = HELPER.digest(raw)
+            clients = []
+            def client(viewer, url, _directory, index, _deadline, first_page):
+                process = Mock(pid=100 + index); process.poll.return_value = None
+                process.terminate.side_effect = lambda: setattr(process.poll, "return_value", -HELPER.signal.SIGTERM)
+                value = {"viewer": viewer, "url": url, "window": 1000 + index, "process": process, "log": Mock()}
+                clients.append(value)
+                return value
+            with self.subTest(failure=failure), \
+                    patch.dict(HELPER.os.environ, {"DISPLAY": ":0"}), patch.dict(HELPER.H, {"RECEIPTED": {}}), \
+                    patch.object(HELPER.sys, "argv", [str(SCRIPT), str(path)]), \
+                    patch.object(HELPER, "wait_stage", return_value=(json.dumps(first).encode(), first)), \
+                    patch.object(HELPER, "start_client", side_effect=client), patch.object(HELPER, "activate"), \
+                    patch.object(HELPER, "drcs_decoder_identity", side_effect=RuntimeError("replaced instance") if failure == "instance" else None), \
+                    patch.object(HELPER, "stock_decoder_mapping", side_effect=ValueError("wrong mapping")) as mapped, \
+                    patch.object(HELPER, "capture") as capture, \
+                    patch.object(HELPER.sys, "stdout", __import__("io").StringIO()):
+                with self.assertRaisesRegex((RuntimeError, ValueError), "replaced instance|wrong mapping"):
+                    HELPER.main()
+            capture.assert_not_called()
+            self.assertEqual(mapped.call_count, 0 if failure == "instance" else 1)
+            self.assertFalse((directory / "stage-1-captured.json").exists())
+            self.assertFalse((directory / "clients-stopped.json").exists())
+            self.assertTrue(all(item["process"].terminate.call_count == 1 for item in clients))
+            self.assertTrue(all(item["log"].close.call_count == 1 for item in clients))
+
+    def test_main_version4_keeps_two_stages_navigation_and_owned_stop_markers(self):
+        path = self.directory / "ready4.json"
+        raw = json.dumps(self.ready).encode(); path.write_bytes(raw)
+        for stage in (self.first, self.second): stage["initial_ready_sha256"] = HELPER.digest(raw)
+        clients, calls = [], []
+        def client(viewer, url, _directory, index, _deadline, first_page):
+            process = Mock(pid=100 + index); process.poll.return_value = None
+            process.wait.return_value = -HELPER.signal.SIGTERM
+            def terminate():
+                self.assertEqual(calls[-1], ("mapping", viewer))
+                calls.append(("stop", viewer))
+                process.poll.return_value = -HELPER.signal.SIGTERM
+            process.terminate.side_effect = terminate
+            value = {"viewer": viewer, "url": url, "window": 1000 + index, "process": process, "log": Mock()}
+            clients.append(value)
+            return value
+        def image(client, _directory, stage, page, visit, _deadline):
+            self.assertEqual(calls[-1], ("mapping", client["viewer"]))
+            calls.append(("capture", client["viewer"]))
+            return {"viewer": client["viewer"], "page": page, "file": f"stage-{stage}-{client['viewer']}-{visit}.png", "sha256": "a" * 64}
+        def mapping(client, qualification):
+            self.assertIn("verify_process", qualification)
+            calls.append(("mapping", client["viewer"]))
+            return {"client_pid": client["process"].pid, "exact_mapped_paths_and_file_identities_verified": True}
+        stages = [(json.dumps(value).encode(), value) for value in (self.first, self.second)]
+        with patch.dict(HELPER.os.environ, {"DISPLAY": ":0"}), patch.dict(HELPER.H, {"RECEIPTED": {}}), \
+                patch.object(HELPER.sys, "argv", [str(SCRIPT), str(path)]), \
+                patch.object(HELPER, "wait_stage", side_effect=stages), patch.object(HELPER, "start_client", side_effect=client), \
+                patch.object(HELPER, "settle"), patch.object(HELPER, "activate") as activate, \
+                patch.object(HELPER, "drcs_decoder_identity", return_value="retained-decoder") as retained, \
+                patch.object(HELPER, "stock_decoder_mapping", side_effect=mapping) as mapped, \
+                patch.object(HELPER, "owned_window"), patch.object(HELPER, "origin", return_value={"x": 0, "y": 0}), \
+                patch.object(HELPER, "gui") as gui, patch.object(HELPER, "capture", side_effect=image), \
+                patch.object(HELPER.sys, "stdout", __import__("io").StringIO()):
+            HELPER.main()
+        self.assertEqual(activate.call_count, 2)
+        self.assertEqual(retained.call_count, 18)
+        self.assertEqual(mapped.call_count, 18)
+        self.assertEqual(gui.call_count, 8)
+        events = [json.loads(line) for line in (self.directory / "headed-warm-trial.ndjson").read_text().splitlines()]
+        mappings = [event for event in events if event["event"] == "decoder_mapping"]
+        self.assertEqual(len(mappings), 18)
+        self.assertEqual([event["phase"] for event in mappings].count("activated"), 4)
+        self.assertEqual([event["phase"] for event in mappings].count("before_capture"), 12)
+        self.assertEqual([event["phase"] for event in mappings].count("before_stop"), 2)
+        self.assertTrue(all(event["mapping"]["client_pid"] == (100 if event["viewer"] == "day" else 101) for event in mappings))
+        for number in (1, 2):
+            marker = json.loads((self.directory / f"stage-{number}-captured.json").read_bytes())
+            self.assertEqual(marker["probe_version"], 4)
+            self.assertTrue(all(set(image) == {"viewer", "page", "file", "sha256"} for image in marker["screenshots"]))
+            self.assertEqual([image["page"] for image in marker["screenshots"]], [124, 124, 125, 125, 124, 124])
+        stopped = json.loads((self.directory / "clients-stopped.json").read_bytes())
+        self.assertEqual(stopped["probe_version"], 4)
+        self.assertTrue(all(item["decoder_starts"] == 1 and item["decoder_stops_before_shutdown"] == 0 for item in stopped["clients"]))
+        self.assertFalse((self.directory / "client-complete.json").exists())
+        self.assertTrue(all(item["process"].terminate.call_count == 1 for item in clients))
+
 if __name__ == "__main__":
     unittest.main()

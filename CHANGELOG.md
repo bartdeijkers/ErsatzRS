@@ -52,8 +52,9 @@ release section when tagging a release.
   independent pixels/fallback and two-theme navigation with that candidate.
   Explicit page-X28 presentation now has the same genuine bank-edit,
   localized admin/publication, ordinary-stream and two-theme stock-client proof;
-  native M29-to-X28 handover now preserves existing ordinary viewers through
-  separate-design bank publication. Retained headed-client proof remains open.
+  native M29-to-X28 handover now preserves existing ordinary viewers and actual
+  VLC decoder instances through separate-design bank publication, with verified
+  loaded-library identities and before/after page navigation.
   Complete Level 2.5 and editor acceptance remain open.
   Ordinary-stream G1 calibration now proves fixed-vector fallback/enhanced
   decoding and navigation with a separate qualified test decoder, retaining the

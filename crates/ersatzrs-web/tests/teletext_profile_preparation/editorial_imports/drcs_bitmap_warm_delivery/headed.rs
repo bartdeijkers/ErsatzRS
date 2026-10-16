@@ -263,15 +263,16 @@ async fn root_review(protocol: &Protocol<'_>) -> io::Result<Value> {
     Ok(actual)
 }
 
-async fn close_observer(
+pub(super) async fn close_observer(
     origin: &mut live_tcp::Origin,
     observer: &mut live_tcp::Observer,
     directory: &Path,
+    probe_version: u8,
 ) -> io::Result<()> {
     let receiver_closed = observer.close().await;
     let closed = origin.close().await;
     let cleaned = live_tcp::wait_for_cleanup().await;
-    let receipt = json!({"probe_version":3,
+    let receipt = json!({"probe_version":probe_version,
         "observer_closed":receiver_closed.is_ok(),"origin_closed":closed.is_ok(),"capacity_released":cleaned.is_ok(),
         "observer_error":receiver_closed.as_ref().err().map(std::string::ToString::to_string),
         "origin_error":closed.as_ref().err().map(std::string::ToString::to_string),
@@ -324,7 +325,7 @@ async fn headed_same_ordinary_urls_keep_decoder_across_actual_qtm_drcs_edit_and_
     })
     .catch_unwind()
     .await;
-    let closed = close_observer(&mut origin, &mut observer, &directory).await;
+    let closed = close_observer(&mut origin, &mut observer, &directory, 3).await;
     let captures = live_tcp::save_captures(&directory, &origin);
     let (edited, stopped) = match outcome {
         Ok(Ok(value)) => value,
