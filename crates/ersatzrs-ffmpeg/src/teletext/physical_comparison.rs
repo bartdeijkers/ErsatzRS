@@ -211,8 +211,8 @@ pub fn compare_teletext_physical_display_with_usage<'a>(
 }
 
 /// Private paired producer proof. Public detached comparisons retain literal
-/// family diagnostics. Only a checked national-to-DRCS carrier with both effects
-/// disabled can preserve the original alphanumeric semantics through DRCS.
+/// family diagnostics. Only a checked national-to-DRCS carrier whose exact mask
+/// includes the original underline can use a physical DRCS with D5 disabled.
 pub(super) fn compare_augmented_physical_with_usage<'a>(
     compiled: &'a EncodedTeletextAugmentedOriginProgram<'_>,
     budget: TeletextPhysicalComparisonBudget,
@@ -631,7 +631,7 @@ impl Builder<'_> {
             return Ok(());
         };
         if first_glyph.effects != second_glyph.effects
-            && !self.neutral_national_drcs_effects(
+            && !self.bound_national_drcs_effects(
                 position,
                 first,
                 second,
@@ -646,7 +646,7 @@ impl Builder<'_> {
         }
         self.colours(row, column, first, *first_glyph, second, *second_glyph)
     }
-    fn neutral_national_drcs_effects(
+    fn bound_national_drcs_effects(
         &mut self,
         position: Option<(u8, u8)>,
         first: TeletextDisplayCell<'_>,
@@ -657,16 +657,15 @@ impl Builder<'_> {
         use super::raster::TeletextComparisonGlyphEffects as Effects;
         use super::{TeletextAugmentedOriginSource, TeletextOriginCarrierCommandRole};
         use ersatzrs_domain::TeletextGlyphIdentity;
-        if !matches!(
-            original_glyph.effects,
-            Effects::Alphanumeric { underlined: false }
-        ) || !matches!(
-            actual_glyph.effects,
-            Effects::Undefined {
-                d5: false,
-                spacing_separated: false
-            }
-        ) || first.attributes().spacing_separated().value() != Some(false)
+        if !matches!(original_glyph.effects, Effects::Alphanumeric { .. })
+            || !matches!(
+                actual_glyph.effects,
+                Effects::Undefined {
+                    d5: false,
+                    spacing_separated: false
+                }
+            )
+            || first.attributes().spacing_separated().value() != Some(false)
         {
             return Ok(false);
         }
@@ -678,7 +677,7 @@ impl Builder<'_> {
             augmented.carriers().len()
                 + augmented.placement().catalog().definitions().len()
                 + self.result.physical.drcs_execution().records().len()
-                + 1,
+                + 121, // exact original 12x10 mask lookup before binding comparison
             position,
         )?;
         let (Some(old_origin), Some(new_origin)) = (first.origin(), second.origin()) else {
@@ -704,6 +703,15 @@ impl Builder<'_> {
         let Some(binding) = mapped.national_drcs() else {
             return Ok(false);
         };
+        if original_glyph.effects
+            != (Effects::Alphanumeric {
+                underlined: binding.underlined(),
+            })
+            || super::national_drcs_carrier::required_bitmap(self.result.original, old_origin)
+                != Some(binding.bitmap())
+        {
+            return Ok(false);
+        }
         if mapped.original_origin_index() != old_origin
             || expected.context().candidate().base().is_none()
             || expected.disposition() != TeletextGlyphDisposition::Assigned

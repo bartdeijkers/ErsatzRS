@@ -5,7 +5,7 @@
 
 use ersatzrs_domain::{
     resolve_teletext_glyph_mask, TeletextDrcsBitmap, TeletextDrcsGlyphReference,
-    TeletextDrcsSubtableIndex, TeletextDrcsTableScope, TeletextG0Repertoire,
+    TeletextDrcsGlyphSlot, TeletextDrcsSubtableIndex, TeletextDrcsTableScope, TeletextG0Repertoire,
     TeletextGlyphDisposition, TeletextGlyphIdentity, TeletextNationalSubset,
     TeletextResourceIdentity, TeletextResourceKind, TeletextSemanticService,
 };
@@ -18,6 +18,7 @@ pub(super) struct NationalDrcsCarrier {
     reference: TeletextDrcsGlyphReference,
     resource: TeletextResourceIdentity,
     bitmap: TeletextDrcsBitmap,
+    underlined: bool,
 }
 
 impl NationalDrcsCarrier {
@@ -32,6 +33,9 @@ impl NationalDrcsCarrier {
     }
     pub(super) const fn bitmap(self) -> TeletextDrcsBitmap {
         self.bitmap
+    }
+    pub(super) const fn underlined(self) -> bool {
+        self.underlined
     }
 }
 
@@ -62,23 +66,45 @@ pub(super) fn required_bitmap(
     origin: usize,
 ) -> Option<TeletextDrcsBitmap> {
     let original = original_identity(composition, origin)?;
-    TeletextDrcsBitmap::new(
-        resolve_teletext_glyph_mask(original, None, false)
-            .ok()?
-            .rows(),
-    )
-    .ok()
+    let mask = resolve_teletext_glyph_mask(original, None, false).ok()?;
+    let mask = if original_underline(composition, origin)? {
+        mask.with_underline()
+    } else {
+        mask
+    };
+    TeletextDrcsBitmap::new(mask.rows()).ok()
+}
+
+/// These two fixed slots depend only on the established original glyph/effect,
+/// never on consumer discovery order or which other variant is present.
+pub(super) fn required_slot(
+    composition: &TeletextMainComposition,
+    origin: usize,
+) -> Option<TeletextDrcsGlyphSlot> {
+    original_identity(composition, origin)?;
+    TeletextDrcsGlyphSlot::new(u8::from(original_underline(composition, origin)?)).ok()
+}
+
+fn original_underline(composition: &TeletextMainComposition, origin: usize) -> Option<bool> {
+    composition
+        .display_resolution()
+        .origin_attributes(origin)?
+        .underline_or_separated_mosaics()
+        .value()
 }
 
 fn original_identity(
     composition: &TeletextMainComposition,
     origin: usize,
 ) -> Option<TeletextGlyphIdentity> {
-    // Table 29 does not assign DRCS underline/separation. Only the neutral
-    // response has a proved correspondence; non-neutral authored cases stay an
-    // explicit located implementation gap, never an accepted feature limit.
+    // Table 29 does not assign DRCS underline/separation. The original G0 D5
+    // effect is baked into the exact mask; the physical DRCS always has D5=0.
+    // Raw spacing remains a separate located implementation gap.
     let attributes = composition.display_resolution().origin_attributes(origin)?;
-    if attributes.underline_or_separated_mosaics().value() != Some(false)
+    if attributes
+        .underline_or_separated_mosaics()
+        .value()
+        .is_none()
         || attributes.spacing_separated().value() != Some(false)
     {
         return None;
@@ -152,6 +178,7 @@ pub(super) fn resolve(
                         },
                         resource,
                         bitmap,
+                        underlined: original_underline(composition, origin)?,
                     });
                 }
             }

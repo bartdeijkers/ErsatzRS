@@ -305,6 +305,9 @@ fn derive_recipe(
         .underline_or_separated_mosaics()
         .value()
         .ok_or(Failure::Attribute { field: "D5" })?;
+    if national_drcs.is_some_and(|binding| binding.underlined() != d5) {
+        return Err(Failure::Correspondence);
+    }
     let intent = composition
         .glyph_intent()
         .records()
@@ -312,7 +315,11 @@ fn derive_recipe(
         .filter(|record| *record.context().candidate() == candidate)
         .ok_or(Failure::Correspondence)?;
     let (glyph, charset) = glyph_recipe(composition, intent, national_drcs)?;
-    let separation = if candidate.base().is_some()
+    let separation = if national_drcs.is_some() {
+        // The sealed binding already includes the original alphanumeric D5
+        // response in its bitmap. DRCS D5 is undefined, so never transmit it.
+        false
+    } else if candidate.base().is_some()
         && matches!(intent.glyph(), Some(TeletextGlyphIdentity::G1Mosaic { .. }))
     {
         d5 || attrs

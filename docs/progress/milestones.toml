@@ -2968,6 +2968,122 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 authored Polish underline editor-to-ordinary checkpoint:
+Criterion: P9A-04 authoritative authored repertoire/physical-lowering and exact
+QTM interchange clauses, specifically original Polish G0 primary08/Base5B with
+D5 underline in an enlarged Local-object repaint. The old neutral-only carrier
+rejected this legal original with located NationalConversion. No identity/font
+alias, normative expectation or acceptance contract is changed.
+
+Implementation: reuse the exact existing original font mask plus with_underline
+(full bottom rowFFF), matching authored banks or bounded generated definitions.
+Original G0 D5true maps to physical DRCS D5false (Table29 undefined response) only
+through the private exact-origin/invocation/resource/executed-bitmap witness.
+Detached comparisons stay strict. Every other painted attribute, original glyph,
+fragment, fallback, resource and lifecycle remains exact. Both demands in one
+page/service are collected; fixed slots0 plain/1 underlined survive traversal,
+consumer order/removal and occupied-Normal/unused-Global fallback. Existing work,
+output, page and absolute-deadline limits bound at most two scope banks/four glyphs.
+
+Verification on final frozen sources:
+- Original red e45f80cb-fddf-468e-9e17-65572926e890 retains NationalConversion;
+  initial test-only bitmap-method typo failed compile, then was corrected without
+  changing the fixed expectations. Focus7 passes46f95e09. Final37 normalization
+  cases066267b4-f734-4c7d-9f8a-bd20992e94d4 overlap the final121 related cases
+  8992082a-eecb-4de7-a454-70814e09536f (10.778s), not158 distinct cases.
+  Negatives cover missing/partial underline, substituted pixels/attributes/binding,
+  opposite-original D5 reuse, detached proof, exact/one-less shared work/output
+  and expired deadline. All painted attributes and flash/conceal phases pass.
+-57 host effect/import/export regressions pass54a4dd6a-6275-47e4-8bf5-80e7c3028f60
+  (0.670s). New regular native flow111b5492-5367-44a2-a4c8-c08184ca27ba passes
+  (4.804s); original Day A is underlined, Night unchanged and neither owns banks.
+- Fresh genuine QTM1.0 source cac2167bac933a6160cca45a45d5d4ee95355898,
+  binary af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a,
+  Qt6.10.2+dfsg-7 in existing pinned offline6064a1cf image opens the NEW exact
+  server export. Actual owned window/PID1/hostname are verified. WSLg leaves
+  input focus0: existing XTest keys do nothing. One bounded native XSendEvent
+  key fallback edits the real Qt widget; real File-menu/Save-As-button actions
+  save edited.tti. No file/widget/decoder-state injection. Stale popup/screenshot
+  BadWindow is corrected by reinspection; its waiting screenshot process is stopped.
+  Normal editor exit0, read-only inputs exact; nine root-viewed original images.
+  Only OL1/7 A-to5B changes; all other OL records are an exact multiset and other
+  metadata changes only case/order. New124 input9d4edaf3e41dc4278ec2703d20943b3a
+  da67c3f1a156fb0504330c7888926cc4; saved7cdd96861a4bcd0099a05fcc6ef723c8c0a8
+  0312792790a170247a0d377bafac. Page125 stays16cf6c27 as in the no-bank corpus.
+- Genuine native07510e92-9636-45fc-baa6-380aaa5172d2 passes4.793s: full export
+  inventory authentication, exact original overlay, inactive concept2, shared
+  240-pixel preview, explicit publication and two reopens. Profile/binding/config/
+  package/original/receipt/Night remain unchanged; no playout refresh.
+- Ordinary334858db-9414-4466-af8b-56c3bafb9f4f passes21.754s: same addon/two
+  profiles, actual concurrent /iptv/hls-direct/{channel}.ts TCP, generated Day
+  Normal1A0/S1=0slot1 and zero Night banks, fixed red/blue page125 G0A, source
+  AV, TSDuck3.44-4676, complete emitted-model equality, cleanup/capacity and reopen.
+  FFmpeg/ffprobe runtime2.0.6/n9.0-20261006 identities reuse the pinned tool receipt.
+- Independent imager0.2.0/2b0125b778c45ffdfa2df0b196870c093361f317 decodes512
+  actual units/channel:15 Day/16 Night closed displays at1/1.5/2.5. The explicit
+  fixed underlined vector verifies exact mask, slot, D5false, wide fragments and
+  themes; banks are explicitly supplied, not automatic X27/cache/font/client proof.
+  Removing the received slot1 bottom bitmap row while preserving framing/parity
+  fails literal-mask comparison; Day-as-Night fails inventory. Original units/TS
+  remain exact. Prior neutral-as-underlined also fails the fixed reference.
+  Existing authored-bank and neutral compiler vectors remain unchanged and match
+  their prior reports. Neutral ordinary regression31a23382-7408-4e4a-84d9-bd3d4a6c6627
+  passes21.577s; both512-unit sequences equal the previous proven captures, so
+  independent evidence is reused. Earlier headed neutral admin evidence stays scoped.
+
+Canonical hashes, logs, GUI inputs/images/process receipt, actual captures and
+positive/negative independent reports: tmp/phase9-polish-underline/identity.json
+SHA256e94b4447d748927b91f5e56c66d94d98b3d7c9b586e7779f48f2ab1b6e11039a.
+Strict FFmpeg all-target Clippy passes26.50s; final web lint/structural gates are
+recorded in that receipt. No full CI, new headed/hydrated admin, automatic resource
+acquisition, new warm transition, suitable-client display/navigation, full engine
+or six-RID acceptance is claimed. Raw spacing/other unproved effects, occupied
+roles, unproven absent-X27 supplementation and remaining national recipes stay
+open implementation gaps, not accepted restrictions. Next reproduce/correct the
+raw-spacing NationalConversion against unchanged original semantics, then reuse
+the editor/publication route. Suitable-client qualification remains an independent
+blocker; no external-decoder maintenance starts and no production addon starts.
+
+2026-10-16 bounded alternative-client qualification:
+Criterion: P9A-04 actual suitable-client rendering/navigation of the exact ordinary
+no-bank Local-object/DRCS/side-panel service. Prior libzvbi and Kodi findings are
+reused, not repaired or repeated. One new candidate was assessed and stopped:
+DVB Inspector1.21.0, source d5a4af5b969482be7edbf2eeb119d7c3918bc045. Official
+release archive17,332,423bytes matches GitHub's SHA256
+ ee8a14574e36bb8393f56f9a420cae8ddd5fdb66f0e05095aa766d377e31f57d,
+including size/ZIP CRC/path validation. Exact release sources/artifacts are retained.
+Release: https://github.com/EricBerendsen/dvbinspector/releases/tag/release_1_21_0
+
+Confirmed source limitations in SubPage.java:
+-1235-1267 resolves DRCS through MOT only, ignoring stored X27 links. No MOT
+ gives null; drawDRCSChar1216-1226 can subsequently dereference that list.
+-1625-1657 handles POP/GPOP invocation sources2/3, not Local source1.
+-1658-1664 does not skip definition bodies; it logs a type mismatch and the first
+ termination exits the traversal. Accidental inline painting is not invocation.
+-1741-1744 clears DRCS enlargement flags; display-attribute mode0C is absent
+ in1597-1774 and adaptive setEffect1781-1783 is empty. Canvas949 has40columns,
+ without side panels. These are source findings, not observed rendered failures.
+
+One unmodified release GUI trial used OpenJDK21.0.12.1, the pinned offline image
+6064a1cf, a read-only JRE/client/capture and no driver injection. Root verified
+window0x800004/PID1/container hostname before native inputs. The exact7.52MB Day
+ordinary capture opened, reported188-byte packets and displayed its PID table,
+including teletext512. Native inputs selected PIDs and opened its Tree View menu;
+initial parent-window input was corrected to the verified Java content offset.
+Tree expansion/page selection was not achieved. No page124/125 preview, page
+navigation or rendered glyph comparison is proven. At the240-second bound the
+controller stopped the owned process (exit143); capture SHA remained exact and
+container was absent. A subsequent scoped stop therefore found no container.
+All six root-viewed originals, process/source/version hashes and limitations:
+ tmp/phase9-compiler-polish-client/identity.json
+SHA2561b3df52f313cca0555d2adbcccf79e9db653c33c6542efaf6b0ae249db86590e.
+This candidate is UNQUALIFIED, not accepted with silent limitations. No external
+decoder was modified. Stop this direction; client acceptance remains dependent on
+a suitable implementation. Continue independent authored product work: the exact
+Polish D5 underline family currently produces a located NationalConversion and
+requires an exact underlined bitmap, physical DRCS D5false and mixed-variant slots.
+This client gap does not block that work or waive full engine/client acceptance.
+
 2026-10-16 headed no-bank editor/admin-to-stream checkpoint:
 Criterion: connect the exact fresh no-bank QTM Save As to localized headed admin
 export/import/preview/explicit publication and the SAME ordinary stream origin.

@@ -51,7 +51,15 @@ pub(super) struct Prepared {
     pub resources: Vec<TeletextCompilerDrcsResource>,
 }
 
-type Demands = BTreeMap<TeletextDrcsTableScope, (TeletextDrcsBitmap, Vec<TeletextPageAddress>)>;
+// The one established national identity has exactly two painted responses.
+// Fixed slots 0/1 remain stable when consumers reorder or either variant leaves.
+type Bitmaps = [Option<TeletextDrcsBitmap>; 2];
+#[derive(Default)]
+struct Demand {
+    bitmaps: Bitmaps,
+    consumers: Vec<TeletextPageAddress>,
+}
+type Demands = BTreeMap<TeletextDrcsTableScope, Demand>;
 
 pub(super) fn prepare(
     declared: &TeletextDeclaredService,
@@ -74,13 +82,19 @@ pub(super) fn prepare(
             context,
         )
         .map_err(normalization_error)?;
-        if let Some(bitmap) = missing_bitmap(service, &original, budget, context)? {
+        let bitmaps = missing_bitmaps(service, &original, budget, context)?;
+        if bitmaps.iter().any(Option::is_some) {
             if let Some(scope) = unused_scope(service, page.address) {
-                demands
-                    .entry(scope)
-                    .or_insert_with(|| (bitmap, Vec::new()))
-                    .1
-                    .push(page.address);
+                let demand = demands.entry(scope).or_default();
+                for (existing, bitmap) in demand.bitmaps.iter_mut().zip(bitmaps) {
+                    if let Some(bitmap) = bitmap {
+                        if existing.is_some_and(|existing| existing != bitmap) {
+                            return Err(error(Failure::MissingResourceBody));
+                        }
+                        *existing = Some(bitmap);
+                    }
+                }
+                demand.consumers.push(page.address);
             }
         }
         originals.insert(page.address, original);
@@ -116,7 +130,7 @@ fn derive(
     bounded("pages", count, budget.max_pages)?;
     let mut tables = Vec::with_capacity(demands.len());
     let mut extensions = Vec::new();
-    for (&scope, &(bitmap, ref consumers)) in &demands {
+    for (&scope, demand) in &demands {
         let resource = super::resource_namespace::allocate(declared, scope)?;
         if tables
             .iter()
@@ -128,17 +142,20 @@ fn derive(
                 maximum: 1,
             }));
         }
-        let slot =
-            TeletextDrcsGlyphSlot::new(0).map_err(|_| error(Failure::MissingResourceBody))?;
         tables.push(
-            TeletextDrcsSubtable::new(resource, vec![TeletextDrcsGlyphDefinition { slot, bitmap }])
+            TeletextDrcsSubtable::new(resource, definitions(demand.bitmaps)?)
                 .map_err(|_| error(Failure::MissingResourceBody))?,
         );
-        extensions.extend(consumers.iter().map(|&display| TeletextDrcsPageExtension {
-            display,
-            table: scope,
-            resource,
-        }));
+        extensions.extend(
+            demand
+                .consumers
+                .iter()
+                .map(|&display| TeletextDrcsPageExtension {
+                    display,
+                    table: scope,
+                    resource,
+                }),
+        );
     }
     let effective = service
         .derive_with_drcs_resources(
@@ -147,7 +164,7 @@ fn derive(
             TeletextDrcsExtensionBudget {
                 max_records: budget.max_pages,
                 max_added_resources: 2,
-                max_added_glyphs: 2,
+                max_added_glyphs: 4,
                 max_page_extensions: budget.max_pages,
             },
         )
@@ -155,8 +172,9 @@ fn derive(
     let resources = tables
         .into_iter()
         .zip(demands.into_values())
-        .map(|(table, (_, consumers))| {
-            let links = consumers
+        .map(|(table, demand)| {
+            let links = demand
+                .consumers
                 .iter()
                 .map(|&owner| {
                     effective
@@ -172,7 +190,7 @@ fn derive(
                 .collect::<Result<BTreeMap<_, _>, Error>>()?;
             Ok(TeletextCompilerDrcsResource {
                 table,
-                consumers,
+                consumers: demand.consumers,
                 links,
             })
         })
@@ -182,6 +200,20 @@ fn derive(
         effective: Some(effective),
         resources,
     })
+}
+
+fn definitions(bitmaps: Bitmaps) -> Result<Vec<TeletextDrcsGlyphDefinition>, Error> {
+    [(0, bitmaps[0]), (1, bitmaps[1])]
+        .into_iter()
+        .filter_map(|(slot, bitmap)| bitmap.map(|bitmap| (slot, bitmap)))
+        .map(|(slot, bitmap)| {
+            Ok(TeletextDrcsGlyphDefinition {
+                slot: TeletextDrcsGlyphSlot::new(slot)
+                    .map_err(|_| error(Failure::MissingResourceBody))?,
+                bitmap,
+            })
+        })
+        .collect()
 }
 
 fn may_need_carrier(
@@ -212,16 +244,17 @@ fn may_need_carrier(
     Ok(local || !layout.base_glyphs().is_empty())
 }
 
-fn missing_bitmap(
+fn missing_bitmaps(
     service: &TeletextSemanticService,
     original: &TeletextMainComposition,
     budget: &TeletextAuthoredServiceEncodingBudget,
     context: &mut TeletextCompileContext<'_, '_>,
-) -> Result<Option<TeletextDrcsBitmap>, Error> {
+) -> Result<Bitmaps, Error> {
+    let mut missing = [None; 2];
     if !(0..original.display_resolution().origins().len())
         .any(|origin| national_drcs_carrier::needs_binding(original, origin))
     {
-        return Ok(None);
+        return Ok(missing);
     }
     let plan = context
         .realization(original, budget.normalization.realization)
@@ -251,10 +284,15 @@ fn missing_bitmap(
             })?;
         remaining_scan -= admitted;
         if national_drcs_carrier::resolve(service, original, origin.origin_index).is_none() {
-            return Ok(Some(bitmap));
+            let slot = national_drcs_carrier::required_slot(original, origin.origin_index)
+                .ok_or_else(|| error(Failure::MissingResourceBody))?;
+            let entry = missing
+                .get_mut(usize::from(slot.get()))
+                .ok_or_else(|| error(Failure::MissingResourceBody))?;
+            *entry = Some(bitmap);
         }
     }
-    Ok(None)
+    Ok(missing)
 }
 
 fn unused_scope(

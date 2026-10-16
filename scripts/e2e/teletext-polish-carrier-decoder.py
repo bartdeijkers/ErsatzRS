@@ -8,6 +8,8 @@ routing, rendered font pixels, headed client navigation or full conformance.
 Level1/1.5 checks use receiver default region0, not Polish-font client evidence.
 The explicit --compiler-owned vector expects generated Normal1A0/S1=0slot0 on
 Day and no resource bank on Night; the original authored-bank vector is unchanged.
+With --compiler-owned --underlined, Day uses slot1 and the fixed full bottom
+underline row. Its physical DRCS D5 remains false; Night stays unchanged.
 """
 import hashlib
 import importlib.util
@@ -19,6 +21,7 @@ import sys
 sys.dont_write_bytecode = True
 LOADER_SHA = "45bd284daf621915d3e718ad536d2b4ea69a55a38c2c923712fd2cf4e79c225c"
 POLISH = (0, 0x3FC, 0x18, 0x30, 0x1F8, 0xC0, 0x180, 0x3FC, 0, 0)
+POLISH_UNDERLINED = (0, 0x3FC, 0x18, 0x30, 0x1F8, 0xC0, 0x180, 0x3FC, 0, 0xFFF)
 MIRRORED = (0x801, 0x001, 0x002, 0x004, 0x008, 0x010, 0x020, 0x040, 0x080, 0x900)
 path = Path(__file__).with_name("teletext-imager-decoder.py")
 if hashlib.sha256(path.read_bytes()).hexdigest() != LOADER_SHA:
@@ -77,7 +80,7 @@ def cell(decoder, row, column, code, fragment, drcs=None, foreground=(255, 255, 
     require(actual is not None and list(actual) == bitmap(rows), f"{where}: literal DRCS mask differs")
 
 
-def check_display(decoder_type, page, banks, theme, compiler_owned=False):
+def check_display(decoder_type, page, banks, theme, compiler_owned=False, underlined=False):
     number = page["number"]
     for level in ("1", "1.5", "2.5"):
         decoder = decoder_type()
@@ -85,7 +88,9 @@ def check_display(decoder_type, page, banks, theme, compiler_owned=False):
         if number == 0x124:
             code = 0x5B if theme == "day" else 65
             if level == "2.5":
-                glyph = (0, 0 if compiler_owned else 5, POLISH) if theme == "day" else None
+                slot = (1 if underlined else 0) if compiler_owned else 5
+                rows = POLISH_UNDERLINED if underlined else POLISH
+                glyph = (0, slot, rows) if theme == "day" else None
                 cell(decoder, 1, 7, code, 3, glyph)
                 cell(decoder, 1, 8, code, 4, glyph)
             else:
@@ -121,10 +126,12 @@ def received_banks(pages, theme, compiler_owned):
 
 
 def main():
-    require(len(sys.argv) in (3, 4) and sys.argv[2] in ("day", "night")
-            and (len(sys.argv) == 3 or sys.argv[3] == "--compiler-owned"),
-            "Expected units file, fixed theme and optional --compiler-owned")
-    compiler_owned = len(sys.argv) == 4
+    require(len(sys.argv) in (3, 4, 5) and sys.argv[2] in ("day", "night")
+            and (len(sys.argv) == 3 or sys.argv[3] == "--compiler-owned")
+            and (len(sys.argv) < 5 or sys.argv[4] == "--underlined"),
+            "Expected units file, fixed theme and optional --compiler-owned [--underlined]")
+    compiler_owned = len(sys.argv) >= 4
+    underlined = len(sys.argv) == 5
     source = Path(sys.argv[1])
     require(source.is_file() and not source.is_symlink(), "Expected regular captured units file")
     with source.open("rb") as stream:
@@ -143,7 +150,7 @@ def main():
                 and page.get("subcode") == 32 and 1 in page and (26, 0) in page]
     require({p["number"] for p in displays} == {0x124, 0x125}, "Both complete displays are required")
     for page in displays:
-        check_display(decoder_type, page, banks, sys.argv[2], compiler_owned)
+        check_display(decoder_type, page, banks, sys.argv[2], compiler_owned, underlined)
     report = {"decoder": "teletextimager", "version": imager.VERSION,
                       "commit": imager.COMMIT, "input_sha256": hashlib.sha256(raw).hexdigest(),
                       "theme": sys.argv[2], "units": len(units), "closed_displays_checked": len(displays),
@@ -151,8 +158,9 @@ def main():
                       "automatic_resource_routing_proven": False, "font_pixels_or_actual_client_proven": False,
                       "fallback_receiver_region": 0}
     if compiler_owned:
-        report.update({"fixture": "compiler-owned", "normal_resource_page": "1A0",
-                       "subtable": 0, "polish_slot": 0,
+        report.update({"fixture": "compiler-owned-underline" if underlined else "compiler-owned",
+                       "normal_resource_page": "1A0",
+                       "subtable": 0, "polish_slot": 1 if underlined else 0,
                        "resource_present": sys.argv[2] == "day"})
     print(json.dumps(report, sort_keys=True))
 

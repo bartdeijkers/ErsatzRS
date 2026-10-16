@@ -60,7 +60,7 @@ async fn setup_case(response: fn(&str, u16, u16) -> Value) -> (Fixture, Flow) {
     .await
 }
 
-fn assert_authored(service: &EncodedTeletextAuthoredService) {
+pub(super) fn assert_authored(service: &EncodedTeletextAuthoredService) {
     assert!(service.declared().resource_inventory().is_empty());
     assert!(service.declared().semantic().drcs().subtables().is_empty());
     for page in service.declared().semantic().page_enhancements().values() {
@@ -106,7 +106,7 @@ pub(super) fn assert_concept(flow: &Flow, service: &EncodedTeletextAuthoredServi
     }
 }
 
-fn expected_overlay(flow: &Flow, code: u8) -> TeletextPhysicalBaseOverlay {
+pub(super) fn expected_overlay(flow: &Flow, code: u8) -> TeletextPhysicalBaseOverlay {
     let original = flow.exported[0]
         .files()
         .iter()

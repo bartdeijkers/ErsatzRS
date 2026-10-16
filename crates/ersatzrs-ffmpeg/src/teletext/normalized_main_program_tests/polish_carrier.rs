@@ -28,6 +28,25 @@ pub(super) fn enlarged_polish_base(
     authored_bank: Option<([u16; 10], bool)>,
     d5: bool,
 ) -> TeletextSemanticService {
+    let mut fixture = polish_fixture(d5);
+    if let Some((rows, linked)) = authored_bank {
+        let identity = polish_drcs_identity();
+        fixture.drcs = vec![TeletextDrcsSubtable::new(
+            identity,
+            vec![TeletextDrcsGlyphDefinition {
+                slot: polish_drcs_reference().slot,
+                bitmap: TeletextDrcsBitmap::new(rows).unwrap(),
+            }],
+        )
+        .unwrap()];
+        if linked {
+            fixture.drcs_links = TeletextDrcsPageLinks::new(Some(identity.page()), None).unwrap();
+        }
+    }
+    overlay_polish(fixture.build(), &[1])
+}
+
+fn polish_fixture(d5: bool) -> Fixture {
     let mut fixture = enlarged_national_base();
     fixture.national = 0;
     fixture.primary = Some(0x08);
@@ -50,34 +69,45 @@ pub(super) fn enlarged_polish_base(
         *underline_or_separated_mosaics = true;
         fixture.objects[1].program = program(commands);
     }
-    if let Some((rows, linked)) = authored_bank {
-        let identity = polish_drcs_identity();
-        fixture.drcs = vec![TeletextDrcsSubtable::new(
-            identity,
-            vec![TeletextDrcsGlyphDefinition {
-                slot: polish_drcs_reference().slot,
-                bitmap: TeletextDrcsBitmap::new(rows).unwrap(),
-            }],
-        )
-        .unwrap()];
-        if linked {
-            fixture.drcs_links = TeletextDrcsPageLinks::new(Some(identity.page()), None).unwrap();
-        }
-    }
-    let service = fixture.build();
+    fixture
+}
+
+pub(super) fn mixed_polish_base(first_underlined: bool) -> TeletextSemanticService {
+    let mut fixture = polish_fixture(first_underlined);
+    fixture
+        .rows
+        .extend([text(5, 7, "A"), text(6, 8, "é"), text(7, 1, "B")]);
+    let mut second = polish_fixture(!first_underlined).objects[1].clone();
+    second.identity = local(0xfffd);
+    fixture.objects.push(second);
+    fixture.main.as_mut().unwrap().extend([
+        position(5, 7),
+        TeletextEnhancementCommand::InvokeObject {
+            target: local(0xffff),
+            object_type: TeletextObjectType::Active,
+            offset: Some(TeletextObjectOffset::new(0, 1).unwrap()),
+        },
+        invoke(local(0xfffd), TeletextObjectType::Adaptive),
+    ]);
+    overlay_polish(fixture.build(), &[1, 5])
+}
+
+fn overlay_polish(service: TeletextSemanticService, rows: &[u8]) -> TeletextSemanticService {
     // The supported physical editor input supplies literal Base 5/B; its
     // national identity comes from the original page designation.
-    let mut cells = crate::teletext::layout::compile_for_composition(&service.base().pages[0])
-        .unwrap()
-        .rows[1];
-    cells[7] = 0x5b;
+    let layout =
+        crate::teletext::layout::compile_for_composition(&service.base().pages[0]).unwrap();
+    let rows = rows
+        .iter()
+        .map(|&row| {
+            let mut cells = layout.rows[usize::from(row)];
+            cells[7] = 0x5b;
+            TeletextPhysicalBaseRow::new(row, cells).unwrap()
+        })
+        .collect();
     service
         .with_physical_base_overlays(
-            vec![TeletextPhysicalBaseOverlay::new(
-                owner(),
-                vec![TeletextPhysicalBaseRow::new(1, cells).unwrap()],
-            )
-            .unwrap()],
+            vec![TeletextPhysicalBaseOverlay::new(owner(), rows).unwrap()],
             TeletextServiceBudget {
                 max_records: 64,
                 max_objects: 32,
@@ -271,16 +301,173 @@ fn enlarged_overlap_carries_polish_5b_via_linked_authored_drcs_without_changing_
 }
 
 #[test]
-fn polish_5b_authored_drcs_bridge_rejects_unlinked_inexact_and_non_neutral_effects() {
+fn polish_5b_authored_drcs_bridge_rejects_unlinked_inexact_and_missing_underline_masks() {
     let mut changed = POLISH_5B_MASK;
     changed[1] ^= 1;
+    let mut partial_underline = POLISH_5B_MASK;
+    partial_underline[9] = 0xffe;
     for (mask, linked, d5) in [
         (POLISH_5B_MASK, false, false),
         (changed, true, false),
         (POLISH_5B_MASK, true, true),
+        (partial_underline, true, true),
     ] {
         let service = enlarged_polish_base(Some((mask, linked)), d5);
         assert_polish_conversion_pending(&service, d5, false);
+    }
+}
+
+#[test]
+fn polish_underline_authored_bank_preserves_resource_lifecycle_and_strict_comparison() {
+    use crate::teletext::authored_service_tests as authored;
+    let mut mask = POLISH_5B_MASK;
+    mask[9] = 0xfff;
+    let seed = enlarged_polish_base(Some((mask, true)), true);
+    let declared = declared_polish_service(&seed);
+    let tx = authored::transmissions(&declared);
+    let mut budget = authored::limits();
+    budget.normalization = polish_limits();
+    let encoded =
+        crate::teletext::encode_teletext_authored_service(declared.clone(), &tx, &budget).unwrap();
+    assert_eq!(encoded.declared(), &declared);
+    assert!(encoded.compiler_drcs_resources().is_empty());
+    let crate::teletext::EncodedTeletextAuthoredPage::CompiledDisplay(display) =
+        &encoded.pages()[0]
+    else {
+        unreachable!()
+    };
+    let original = display.normalized().original();
+    assert_polish_original(original);
+    let actual = display.normalized().physical().replay();
+    let candidate = selected(actual.display_resolution(), 1, 7);
+    let record = actual
+        .drcs_execution()
+        .records()
+        .iter()
+        .find(|record| record.candidate_index() == candidate)
+        .unwrap();
+    assert_eq!(record.reference(), polish_drcs_reference());
+    assert_eq!(record.resource(), polish_drcs_identity());
+    assert_eq!(record.bitmap().get(), mask);
+    assert_eq!(
+        actual
+            .display_resolution()
+            .cell(1, 7)
+            .unwrap()
+            .attributes()
+            .underline_or_separated_mosaics()
+            .value(),
+        Some(false)
+    );
+    let detached = crate::teletext::compare_teletext_physical_display(
+        original,
+        actual,
+        budget.normalization.display_comparison,
+    )
+    .unwrap();
+    assert!(detached
+        .diagnostics()
+        .iter()
+        .any(|diagnostic| diagnostic.position == Some((1, 7))));
+    let expected = crate::teletext::encode_teletext_drcs_page(
+        &seed.drcs().subtables()[0],
+        tx[0].counter,
+        tx[0].update,
+        crate::teletext::TeletextResourceTransmissionMode::Serial,
+    )
+    .unwrap();
+    assert_eq!(encoded.pages()[1].data_units(), expected.data_units());
+    assert_eq!(
+        polish_fallback(&seed),
+        polish_fallback(encoded.declared().semantic())
+    );
+}
+
+#[test]
+fn polish_underline_comparisons_reject_substituted_execution_bitmap() {
+    use crate::teletext::{
+        allocate_teletext_resource_objects, compare_teletext_augmented_origin_glyphs,
+        compile_teletext_augmented_origin_program, plan_teletext_base_compatibility_realization,
+        plan_teletext_origin_carrier_placement,
+    };
+    let mut mask = POLISH_5B_MASK;
+    mask[9] = 0xfff;
+    let service = enlarged_polish_base(Some((mask, true)), true);
+    let original = compose(&service);
+    let budget = polish_limits();
+    let plan = plan_teletext_base_compatibility_realization(&original, budget.realization).unwrap();
+    let placement =
+        plan_teletext_origin_carrier_placement(&plan, service.objects(), budget.placement).unwrap();
+    let augmented =
+        crate::teletext::augmented_origin_program::build_augmented_with_service_and_work_usage(
+            &placement,
+            &service,
+            budget.assembly,
+        )
+        .0
+        .unwrap();
+    let allocations =
+        allocate_teletext_resource_objects(augmented.catalog(), &[], budget.max_resource_objects)
+            .unwrap();
+    for rows in [POLISH_5B_MASK, {
+        let mut rows = mask;
+        rows[9] ^= 1;
+        rows
+    }] {
+        // Keep the original producer-owned witness and invocation, but replay
+        // an externally substituted bank. Equality of the bare glyph is insufficient.
+        let changed = enlarged_polish_base(Some((rows, true)), true);
+        let compiled = compile_teletext_augmented_origin_program(
+            &changed,
+            &augmented,
+            &allocations,
+            budget.replay,
+            budget.packing,
+            budget.ancestry,
+        )
+        .unwrap();
+        let typed =
+            compare_teletext_augmented_origin_glyphs(&compiled, budget.glyph_comparison).unwrap();
+        assert!(!typed.diagnostics().is_empty());
+        let physical = crate::teletext::physical_comparison::compare_augmented_physical_with_usage(
+            &compiled,
+            budget.display_comparison,
+        )
+        .0
+        .unwrap();
+        assert!(physical
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.position == Some((1, 7))));
+    }
+}
+
+#[test]
+fn polish_underline_binding_cannot_be_reused_for_an_opposite_original_effect() {
+    for underlined in [false, true] {
+        let mut mask = POLISH_5B_MASK;
+        if underlined {
+            mask[9] = 0xfff;
+        }
+        let service = enlarged_polish_base(Some((mask, true)), underlined);
+        let original = compose(&service);
+        let origin = assert_polish_original(&original);
+        let binding =
+            crate::teletext::national_drcs_carrier::resolve(&service, &original, origin).unwrap();
+        let changed = enlarged_polish_base(Some((mask, true)), !underlined);
+        let changed_original = compose(&changed);
+        let changed_origin = assert_polish_original(&changed_original);
+        let (result, _) = crate::teletext::origin_carrier::build_with_national_drcs_and_usage(
+            &changed_original,
+            changed_origin,
+            changed.objects(),
+            polish_limits().assembly.recipe,
+            Some(binding),
+        );
+        assert_eq!(
+            result.unwrap_err().reason,
+            crate::teletext::TeletextOriginCarrierFailure::Correspondence
+        );
     }
 }
 

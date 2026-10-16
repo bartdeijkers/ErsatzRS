@@ -701,17 +701,19 @@ release section when tagging a release.
   Firefox trials connect the actual editor save to native forms and the same
   ordinary streams. Hydration and actual teletext-client proof remain open.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
-  using its exact glyph and neutral effects. Reuse matching authored definitions
+  using its exact plain or underlined glyph. Reuse matching authored definitions
   or provision bounded compiler-owned DRCS resources through unused links, keeping
   original declarations, fallback, existing resources and lifecycle intact.
+  Mixed plain/underlined glyphs retain stable generated slots and their painted
+  attributes while keeping undefined DRCS underline bits disabled.
   Receipt-bound concepts can create or retire the generated carrier without
-  granting permission to edit its resource or X27 links. A fresh recorded
-  QTeletextMaker save now reaches native concept import, shared preview, explicit
-  publication and reopen without predefined banks. Two ordinary channel streams
-  now preserve audio/video and separate themes, with transport and independent
-  glyph/fallback checks. Headed Chromium and Firefox now connect this no-bank
-  save to localized native import/preview/publication and the same streams.
-  Hydration and full editor/client acceptance remain open.
+  granting permission to edit its resource or X27 links. Fresh recorded
+  QTeletextMaker saves cover plain and underlined variants through native concept
+  import, shared preview, explicit publication and reopen without predefined banks.
+  Two ordinary channel streams preserve audio/video and separate themes, with
+  transport and independent glyph/fallback checks. Headed Chromium and Firefox
+  connect the plain variant to localized native forms and the same streams.
+  Underlined headed proof, hydration and full editor/client acceptance remain open.
 
 - Permit acknowledged teletext updates from magazine defaults to complete page
   declarations while retaining bounded magazine cache history. Later incomplete

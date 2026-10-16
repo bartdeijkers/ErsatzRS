@@ -528,6 +528,16 @@ provenance. Their allocation is deterministic from the complete original owner
 namespace, independent of page traversal and the current consumer subset. Existing
 authored links and definitions cannot be repurposed to make a carrier fit.
 
+For the established Polish identity, original G0 D5 underline is realized through
+its exact existing font policy (`with_underline`, full bottom bitmap row), while
+physical DRCS D5 stays false because Table 29 gives it no underline response.
+Only the sealed original-origin/invocation/resource/bitmap witness permits this
+paired correspondence; public detached comparisons remain strict. Original
+identity, fallback, geometry and every other painted attribute stay unchanged.
+Both known painted variants may coexist in one generated bank with stable slots
+0 (plain) and 1 (underlined), independent of discovery/removal. Their definitions
+remain engine-owned and use the existing shared bounds; no glyph alias is added.
+
 Added resources share the existing page/unit, composition, reference, work and
 absolute-deadline bounds. The final actual inventory and the existing per-response
 resource lifecycle plan include them. A constant first-start counter does not
@@ -538,8 +548,8 @@ companions against their export baseline and separately validates final generate
 resources/links against compiler provenance. A permitted Base edit may create or
 retire its required physical carrier; it never grants uploaded X27 authority or
 loosens protected display effects. Occupied roles, unproven MOT supplementation,
-non-neutral glyph effects and other unrealized national identities remain explicit
-implementation gaps until resolved, not accepted product restrictions.
+raw spacing and other unproved glyph effects, plus unrealized national identities,
+remain explicit implementation gaps until resolved, not accepted restrictions.
 
 A domain-owned bounded base-cell trace is now retained by main composition from
 the actual checked fallback rows. Coded cells, authored Unicode/mosaic intent and

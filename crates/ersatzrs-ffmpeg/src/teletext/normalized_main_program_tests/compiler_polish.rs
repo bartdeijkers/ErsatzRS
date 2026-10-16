@@ -46,6 +46,34 @@ fn encode(input: &TeletextDeclaredService) -> EncodedTeletextAuthoredService {
     .unwrap()
 }
 
+#[test]
+fn compiler_owned_polish_underline_resource_preserves_original_and_fallback() {
+    let seed = enlarged_polish_base(None, true);
+    let fallback = polish_fallback(&seed);
+    let input = declared(seed.clone());
+    let encoded = encode(&input);
+    assert_eq!(encoded.declared(), &input);
+    let original = display(&encoded).normalized().original();
+    let origin = assert_polish_original(original);
+    assert_eq!(
+        original
+            .display_resolution()
+            .origin_attributes(origin)
+            .unwrap()
+            .underline_or_separated_mosaics()
+            .value(),
+        Some(true)
+    );
+    let mut mask = POLISH_5B_MASK;
+    mask[9] = 0xfff;
+    let resource = &encoded.compiler_drcs_resources()[0];
+    assert_eq!(resource.table().glyphs().len(), 1);
+    assert_eq!(resource.table().glyphs()[0].slot.get(), 1);
+    assert_eq!(resource.table().glyphs()[0].bitmap.get(), mask);
+    assert_eq!(rows(display(&encoded).page()), rows(&fallback));
+    assert_eq!(encoded.declared().semantic(), &seed);
+}
+
 fn display(
     service: &EncodedTeletextAuthoredService,
 ) -> &crate::teletext::EncodedTeletextCompiledDisplayPage {
@@ -461,7 +489,15 @@ fn expired_whole_service_deadline_cannot_acquire_a_compiler_owned_resource() {
 }
 
 fn consumer_set(owners: &[TeletextPageAddress]) -> TeletextDeclaredService {
+    consumer_variants(owners, &[])
+}
+
+fn consumer_variants(
+    owners: &[TeletextPageAddress],
+    underlined: &[TeletextPageAddress],
+) -> TeletextDeclaredService {
     let seed = enlarged_polish_base(None, false);
+    let underlined_seed = enlarged_polish_base(None, true);
     let mut base = seed.base().clone();
     base.initial_page = owners[0].page;
     base.pages = owners
@@ -487,6 +523,11 @@ fn consumer_set(owners: &[TeletextPageAddress]) -> TeletextDeclaredService {
     let objects = owners
         .iter()
         .flat_map(|&address| {
+            let seed = if underlined.contains(&address) {
+                &underlined_seed
+            } else {
+                &seed
+            };
             seed.objects().definitions().iter().map(move |definition| {
                 let mut definition = definition.clone();
                 definition.identity =
@@ -523,6 +564,9 @@ fn consumer_set(owners: &[TeletextPageAddress]) -> TeletextDeclaredService {
     .unwrap();
     declared(semantic)
 }
+
+#[path = "compiler_polish/underline.rs"]
+mod underline;
 
 fn reowner(
     original: &TeletextEnhancementProgram,
