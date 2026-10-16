@@ -692,6 +692,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve MOT-inherited teletext resource links when deriving exact national
+  glyphs, including a free subpage behind an occupied bank. The physical page
+  retains every original role and subpage requirement without rewriting authored
+  MOT/resource data or granting editor access to generated glyphs.
 - Realize assigned national glyphs through a free DRCS subpage when both resource
   links are occupied, preserving authored banks, fallback and link identities.
   Independent linked targets can each receive a bank within the existing caller

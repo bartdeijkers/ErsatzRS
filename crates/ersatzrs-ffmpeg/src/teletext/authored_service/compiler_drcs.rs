@@ -175,7 +175,7 @@ fn derive(
                 }),
         );
     }
-    let effective = service
+    let effective = declared
         .derive_with_drcs_subpages(
             &tables,
             &extensions,

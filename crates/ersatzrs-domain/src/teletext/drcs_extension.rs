@@ -94,6 +94,9 @@ enum ExtensionMode {
 #[path = "drcs_extension/subpages.rs"]
 mod subpages;
 
+#[path = "drcs_extension/declared.rs"]
+mod declared;
+
 fn bounded(category: &'static str, count: usize, maximum: usize) -> Result<()> {
     if count > maximum {
         return Err(TeletextDrcsExtensionError::Budget {

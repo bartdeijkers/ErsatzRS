@@ -540,6 +540,19 @@ in full. The factory prefers its established unused-role allocation, then a free
 Normal S1 and finally a free Global S1, with consumers grouped by exact target.
 This does not authorize editing a generated subpage inside an indexed TTI set;
 its group remains compiler-owned beside separately authorized authored groups.
+Absent X27 can instead inherit occupied roles from an authenticated selected
+MOT. A declaration-aware derivation materializes all four effective Level 2.5
+roles before the existing fresh/linked-bank extension: selected targets stay
+exact and contiguous MOT extents become complete S1 masks. Other roles, defaults,
+conditional presentation, collections and authored MOT/resource bodies remain
+unchanged. Only the new physical resource's requirement is then supplemented.
+The original declaration stays immutable; derived links grant neither editorial
+permission nor publication authority. The complete declared namespace, including
+MOT and object owners, and caller record/resource/glyph/page-extension budgets
+are checked before copying. Explicit-X27 and no-MOT paths retain the existing
+semantic derivation. That service-only API still rejects unproven implicit roles;
+a caller-supplied resolved selection cannot manufacture MOT authority.
+
 Distinct linked targets may require more than two compiler-owned banks in one
 service. Admit their complete display/original-resource/added-bank count against
 the caller's page budget before allocating them; derive the internal added-resource

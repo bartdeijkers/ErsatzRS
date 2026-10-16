@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: preserve implicit selected-MOT DRCS ownership'
+current_focus = 'P9A-04: connect selected-MOT resources to the native/editor flow'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -221,10 +221,15 @@ model/reopen5a4a6f19 passes149.698s. Unchanged pinned imager independently check
 15Day/16Night closed displays and4banks; two profile swaps and4slot-pixel
 negatives reject. P9A-04 owns the15input hashes, pins, images and exact scope.
 Romanian suitable-client/hydrated-admin proof remains open; no decoder repair
-or scope restriction is accepted. Next reproduce the named implicit selected-MOT
-resource-ownership gap: both resolved DRCS roles occupied without explicit X27,
-where the current linked supplement cannot select a free S1. Preserve original
-MOT/defaults/resources and extend the same native/editor flow after a valid RED.
+or scope restriction is accepted. Implicit selected-MOT ownership now has a
+frozen whole-service REDc046edda/GREEN6ff66d03 correction: declaration-aware
+full-role X27 preserves original MOT/resource packets/defaults/fallback/raster,
+including occupiedS1 and fresh-bank cases. The54-test union passes; P9A-04 owns
+constructor/fixture corrections, typed namespace/budget negatives and exact scope.
+Next join this correction to the existing three-owner native/editor flow with
+same-magazine MOT1FE/S9, protected raw MOT .dvb, fresh receipts, shared previews,
+separate publication, indexed S0/S1 protection and reopen. Actual new MOT editor/
+ordinary/independent/client evidence is missing; do not borrow Romanian inputs.
 Hebrew and the rest of the full matrix remain required, not accepted restrictions.
 Existing165direct/2Unsupported/2Unproven expectations stay unchanged.
 Client acquisition/rendering/navigation and hydration remain open.

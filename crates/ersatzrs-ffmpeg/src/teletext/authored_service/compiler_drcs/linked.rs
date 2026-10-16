@@ -1,4 +1,4 @@
-//! Reuse a truly free logical subpage only behind an explicit compatible link.
+//! Reuse a free logical subpage behind an explicit link or an authenticated MOT.
 
 use super::{unused_scope, Target};
 use ersatzrs_domain::{
@@ -16,7 +16,18 @@ pub(super) fn target(
         return Some((scope, None));
     }
     let metadata = service.page_enhancements().get(&owner)?;
-    let links = metadata.compositional_links?;
+    let links = metadata.compositional_links;
+    // Without X27, only this declaration's exact checked MOT resolution may
+    // authorize the already selected roles. The later declaration-aware
+    // derivation materializes every inherited role before adding the new S1.
+    if links.is_none()
+        && !declared
+            .resolutions()
+            .iter()
+            .any(|resolved| resolved.display() == owner && resolved.mot().is_some())
+    {
+        return None;
+    }
     for (scope, role, kind) in [
         (
             TeletextDrcsTableScope::Normal,
@@ -32,13 +43,14 @@ pub(super) fn target(
         let Some(page) = metadata.resources.drcs.page(scope) else {
             continue;
         };
-        let link = links.link(role);
-        if link.target() != (TeletextX27LinkTarget::Page { page })
-            || link.validity() == TeletextX27LinkValidity::Level35Only
-            || declared
-                .resource_inventory()
-                .iter()
-                .any(|resource| resource.page() == page && resource.kind() != kind)
+        if links.is_some_and(|links| {
+            let link = links.link(role);
+            link.target() != (TeletextX27LinkTarget::Page { page })
+                || link.validity() == TeletextX27LinkValidity::Level35Only
+        }) || declared
+            .resource_inventory()
+            .iter()
+            .any(|resource| resource.page() == page && resource.kind() != kind)
             || service.base().pages.iter().any(|display| {
                 display.address.page.magazine() == page.magazine()
                     && display.address.page.wire_page() == page.page()
