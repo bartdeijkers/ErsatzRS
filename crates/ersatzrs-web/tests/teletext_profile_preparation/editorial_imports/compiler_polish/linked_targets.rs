@@ -175,3 +175,6 @@ async fn three_linked_targets_prepared_concept_previews_publishes_exports_and_re
 
 #[path = "linked_targets/rejections.rs"]
 mod rejections;
+
+#[path = "linked_targets/genuine.rs"]
+mod genuine;

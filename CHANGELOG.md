@@ -698,9 +698,10 @@ release section when tagging a release.
   budgets, preserving per-page DRCS limits instead of imposing a two-bank service cap.
   Indexed TTI banks retain separate authored and compiler editing permissions
   across independently linked pages through native concepts and explicit publication.
-  A pinned actual QTeletextMaker save now reaches receipt-bound concept import,
-  shared preview, explicit publication and two ordinary streams with independent
-  bank/fallback decoding. Suitable-client and full engine acceptance remain open.
+  Three pinned actual QTeletextMaker saves now reach receipt-bound concept import,
+  shared preview, explicit publication and two ordinary streams, with independent
+  decoding of each linked bank and fallback. Suitable-client and full engine
+  acceptance remain open.
 - Prevent teletext stream-task panics when authored DRCS banks coexist with
   compiler-generated banks; acquisition orders the actual encoded resource headers.
 - Rebuild generated teletext repaint packets after authorized Base-cell edits,
