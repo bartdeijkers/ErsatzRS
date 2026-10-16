@@ -59,6 +59,8 @@ struct DriverContext {
     QByteArray drcsName;
     int leftPanelColumns;
     int rightPanelColumns;
+    bool panelProof = false;
+    bool panelNight = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -96,6 +98,13 @@ static DriverContext driverContext() {
     const QByteArray input = qgetenv("ERSATZRS_QTM_INPUT_BASENAME");
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
     const bool foreground = mode == "single-page-foreground";
+    const bool panelDay = mode == "single-page-panel-zone-q";
+    const bool panelNight = mode == "single-page-panel-save";
+    const bool panelProof = panelDay || panelNight;
+    const QByteArray panelTheme = qgetenv("ERSATZRS_QTM_PANEL_THEME");
+    if ((!panelProof && qEnvironmentVariableIsSet("ERSATZRS_QTM_PANEL_THEME"))
+        || (panelDay && panelTheme != "day") || (panelNight && panelTheme != "night"))
+        qFatal("Panel theme requires the exact fixed Day-edit or Night-save mode");
     const bool suppliedForeground = qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_INDEX")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_COLUMN")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_COLOUR")
@@ -120,7 +129,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -141,8 +150,40 @@ static DriverContext driverContext() {
     }
     if (drcsVerify && (drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Edited DRCS verification requires the synthetic S1=0 companion");
-    return {true, mode == "single-page-zone-q", foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right};
+    if (panelProof && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
+        qFatal("Fixed panel proof requires left4/right12 and actual Normal S1=0 companion");
+    return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight};
+}
+// Actual Qt widget paint only; no document, decoder or model field is assigned.
+static void capturePanelPaint(const DriverContext &context, const char *stage) {
+    auto main = window();
+    auto view = editor();
+    if (!context.panelProof || !main || !view || !main->isVisible()
+        || !main->windowHandle() || !main->windowHandle()->isExposed()
+        || !view->isVisible() || view->size() != QSize(672, 250))
+        qFatal("Fixed actual panel widget must be exposed at672x250");
+    const QImage painted = view->grab().toImage();
+    if (painted.size() != QSize(672, 250))
+        qFatal("Panel widget capture must have one-to-one pixels");
+    const unsigned short rows[10] = {
+        0x801, 0x800, 0x400, 0x200, 0x100, 0x080, 0x040, 0x020, 0x010, 0x009
+    };
+    const QColor foreground = context.panelNight ? QColor(0, 0, 255) : QColor(255, 0, 0);
+    for (int column : {12, 44})
+        for (int y = 0; y < 10; ++y)
+            for (int x = 0; x < 12; ++x) {
+                const QColor expected = ((rows[y] >> (11 - x)) & 1) ? foreground : QColor(0, 0, 0);
+                if (painted.pixelColor(column * 12 + x, 10 + y) != expected)
+                    qFatal("Actual Main/RightPanel literal801 slot0/theme pixels differ");
+            }
+    const QString widgetStage = QString("panel-%1-widget").arg(QString::fromLatin1(stage));
+    if (!painted.save(QString("/work/") + context.captureName(widgetStage.toUtf8().constData())))
+        qFatal("Actual panel widget crop capture failed");
+    const QString windowStage = QString("panel-%1-window").arg(QString::fromLatin1(stage));
+    capture(context.captureName(windowStage.toUtf8().constData()).toUtf8().constData());
+    std::printf("QTM actual panel paint stage=%s theme=%s geometry672x250 visual12/44 NormalS0slot0 literal801 240RGBpixels match\n",
+        stage, context.panelNight ? "night" : "day");
 }
 static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
     if (context.drcsName.isEmpty()) return;
@@ -184,6 +225,11 @@ static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
         if (action->text() == QString("Normal DRCS: ") + QString::fromLatin1(context.drcsName)) attached = true;
     if (!attached) qFatal("Actual Normal DRCS attachment did not complete");
     capture(context.captureName("drcs-loaded").toUtf8().constData());
+    if (context.panelProof) {
+        if (main->isWindowModified()) qFatal("Actual panel document is dirty before any edit");
+        capturePanelPaint(context, "original");
+        return;
+    }
     // Fixed opt-in synthetic fixture: Normal S1=0 or S1=1/slot0 at Main(1,8),
     // asymmetric literal bitmap, day CLUT2 foreground red/background black.
     // An attachment label alone would also succeed for an empty/wrong file.
@@ -361,7 +407,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
                 // to the visible input, keeping the observed-focus guard.
                 const QPoint target = name->mapToGlobal(name->rect().center());
                 QProcess pointer;
-                pointer.start("/usr/bin/xdotool", {"mousemove", "--sync",
+                pointer.start("/usr/bin/xdotool", {"mousemove",
                     QString::number(target.x()), QString::number(target.y()), "click", "1"});
                 if (!pointer.waitForFinished(3000)) {
                     pointer.kill();
@@ -377,7 +423,16 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
                     focusFailure("filename-click");
                     qFatal("Actual Save As filename input did not receive focus");
                 }
-                name->selectAll();
+                // Consume the owned native click before selecting text: the
+                // dialog can already report focus while its click is queued.
+                QTest::qWait(100);
+                QTest::keyClick(name, Qt::Key_A, Qt::ControlModifier);
+                if (!QTest::qWaitFor([name] {
+                    return !name->text().isEmpty() && name->selectedText() == name->text();
+                }, 3000)) {
+                    focusFailure("filename-selection");
+                    qFatal("Actual Save As filename was not fully selected");
+                }
                 QTest::keyClicks(name, context.outputPath, Qt::NoModifier, 5);
                 // Commit the actual filename field before selecting Save. A
                 // directory-completion candidate can otherwise keep Open active.
@@ -418,6 +473,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             || savedFile.isSymLink() || savedFile.size() <= 0)
             qFatal("Actual Save As did not complete");
         capture(context.captureName("saved").toUtf8().constData());
+        if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
                 (context.editZone || context.editForeground || context.editDrcs), context.inputName.constData(), context.outputName.constData());
@@ -480,6 +536,11 @@ extern "C" int _ZN16QCoreApplication4execEv() {
                 std::puts("QTM actual DRCS carrier keyboard overwrite: row=1 column=1 A->C");
             }
             QTimer::singleShot(100, qApp, [main, context] {
+                if (context.panelProof) {
+                    if (main->isWindowModified() != context.editZone)
+                        qFatal("Fixed panel Day Q/Night no-edit modified state differs");
+                    capturePanelPaint(context, "edited");
+                }
                 capture(context.captureName("edited").toUtf8().constData());
                 if (context.resourceSet) {
                     auto view = editor();

@@ -1728,6 +1728,19 @@ mod external_editor_probe {
     }
 
     #[tokio::test]
+    #[ignore = "requires pinned headed QTeletextMaker Main+RightPanel display and DRCS loading, FFmpeg/ffprobe9 and TSDuck"]
+    async fn pinned_external_editor_main_and_right_panel_preserves_native_geometry() {
+        Box::pin(run_pinned_probe_policy(
+            drcs_bitmap::panels::Case::MainAndRight.response(),
+            drcs_companion::encoding_policy,
+            0x0081,
+            0xc040,
+            ProbeEdit::BaseRowQ,
+        ))
+        .await;
+    }
+
+    #[tokio::test]
     #[ignore = "requires pinned headed QTeletextMaker indexed DRCS loading, FFmpeg/ffprobe9 and TSDuck"]
     async fn pinned_external_editor_indexed_drcs_preserves_native_resources() {
         Box::pin(run_pinned_probe_policy(

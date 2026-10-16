@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: inherited panel presentation in actual QTM page editing'
+current_focus = 'P9A-04: faithful POP-fallback standalone editor presentation'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -293,10 +293,13 @@ and14MOTs with literal masks/colours/4+12 widths and Level1/1.5 fallback. Thirte
 wrong-profile/pixel/invocation/magazine-context negatives reject. The fixed adapter
 supplies ONLY actual received M29/banks to unchanged pinned imager APIs; no
 fabricated X28, automatic acquisition or client rendering is claimed. P9A-04 owns
-all source/positive/negative/provenance identities. Next prove actual QTM page
-editing preserves inherited panel geometry/theme. StandaloneTTI already carries
-materialized-X28; use its real bank through normal QTM controls and actual panel
-cells. No missing-materialization defect was found. Suitable-client proof remains open. Earlier proof
+all source/positive/negative/provenance identities. Actual QTM panel/Main-edit
+interchange now passes eb5ca8f5 with two genuine GUI exits,24captures, exact
+palette/masks/geometry, fresh concept/preview/separate publication/reopens and
+ordinary AV/TSDuck/model proof. P9A-04 owns failures and evidence reuse. Next fix
+the separate POP-fallback standalone presentation gap (no actualM29), preserving
+native absence/DecoderDependent policy; repeat only affected editor boundaries.
+Suitable-client/full engine proof remains open. Earlier proof
 retains its scope. Required suitable enlarged client/navigation stays
 open; this gap does not block independent authored work. Full aliases/lifecycle/
 admin/platform and engine acceptance remain required; no milestone or restriction.

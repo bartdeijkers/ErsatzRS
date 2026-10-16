@@ -697,7 +697,8 @@ release section when tagging a release.
   zones, Main header bytes and the original panel geometry remain protected.
   The retained genuine editor-bank flow reaches two ordinary streams with fresh
   permissions, isolated profiles and independently checked inherited presentation
-  and bitmap pixels; editor panel rendering and client acceptance remain open.
+  and bitmap pixels. Actual editor Main edits now preserve representative panel
+  geometry and themes; full editor and client acceptance remain open.
 - Preserve MOT-inherited teletext resource links when deriving exact national
   glyphs, including a free subpage behind an occupied bank. The physical page
   retains every original role and subpage requirement without rewriting authored
