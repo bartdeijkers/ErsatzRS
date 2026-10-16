@@ -65,12 +65,32 @@ async fn published_fixture(
     fixture: Fixture,
     actual_directory: &Path,
 ) -> (Fixture, Flow, [AcceptedTeletextOutputCandidate; 2]) {
+    let (fixture, flow, accepted, _) = Box::pin(published_case(
+        fixture,
+        actual_directory,
+        drcs_bitmap::panels::Case::MainOnly,
+    ))
+    .await;
+    (fixture, flow, accepted)
+}
+
+async fn published_case(
+    fixture: Fixture,
+    actual_directory: &Path,
+    case: drcs_bitmap::panels::Case,
+) -> (
+    Fixture,
+    Flow,
+    [AcceptedTeletextOutputCandidate; 2],
+    Option<resource_bank_admin::Retained>,
+) {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
-        drcs_bitmap::response,
+        case.response(),
         fixture,
         drcs_companion::encoding_policy,
     ))
     .await;
+    let retained = case.originals_and_retained(&fixture, &flow).await;
     let request = drcs_bitmap::actual_editor_request(&flow.receipts[0], actual_directory);
     let concept = import(&fixture, request).await;
     assert_original_pointers(&fixture, &flow).await;
@@ -85,9 +105,12 @@ async fn published_fixture(
     .await
     .unwrap()
     .unwrap();
-    drcs_bitmap::assert_only_glyph_pixels(flow.accepted[0].service(), restored.encoded().unwrap());
+    case.assert_pixels(flow.accepted[0].service(), restored.encoded().unwrap());
+    if let Some(retained) = &retained {
+        retained.assert_unchanged(&fixture, &flow).await;
+    }
     let day = publish_and_accept(&fixture, &flow, &concept).await;
-    drcs_bitmap::assert_only_glyph_pixels(flow.accepted[0].service(), day.service());
+    case.assert_pixels(flow.accepted[0].service(), day.service());
     fixture = fixture.reopen().await;
     let accepted = [recover(&fixture, 1).await, recover(&fixture, 2).await];
     generations::assert_same_output(&accepted[0], &day);
@@ -101,7 +124,10 @@ async fn published_fixture(
         accepted[1].selection().bindings[0].profile_id
     );
     assert_retained_storage(&fixture, &flow).await;
-    (fixture, flow, accepted)
+    if let Some(retained) = &retained {
+        retained.assert_unchanged(&fixture, &flow).await;
+    }
+    (fixture, flow, accepted, retained)
 }
 
 pub(super) async fn capture_tcp(url: String) -> Vec<u8> {
@@ -477,3 +503,6 @@ async fn actual_qtm_singleton_bitmap_serves_two_ordinary_tcp_channels_and_cold_c
         "limitations":"No warm resource-update, panel, full authoredLevel2.5, admin or platform acceptance"
     })).unwrap()).unwrap();
 }
+
+#[path = "drcs_bitmap_delivery/panels.rs"]
+mod panels;

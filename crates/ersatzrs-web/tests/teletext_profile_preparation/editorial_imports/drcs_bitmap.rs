@@ -798,4 +798,4 @@ async fn drcs_bitmap_rejects_changed_status_packet_undefined_slot_sidecar_and_ra
 }
 
 #[path = "drcs_bitmap/panels.rs"]
-mod panels;
+pub(super) mod panels;

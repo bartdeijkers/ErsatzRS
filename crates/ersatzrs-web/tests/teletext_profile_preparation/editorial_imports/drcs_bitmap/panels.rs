@@ -8,20 +8,20 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 };
 
 #[derive(Clone, Copy)]
-pub(super) enum Case {
+pub(in super::super) enum Case {
     MainOnly,
     MainAndRight,
 }
 
 impl Case {
-    pub(super) fn response(self) -> fn(&str, u16, u16) -> Value {
+    pub(in super::super) fn response(self) -> fn(&str, u16, u16) -> Value {
         match self {
             Self::MainOnly => super::response,
             Self::MainAndRight => response,
         }
     }
 
-    pub(super) fn assert_pixels(
+    pub(in super::super) fn assert_pixels(
         self,
         original: &EncodedTeletextAuthoredService,
         edited: &EncodedTeletextAuthoredService,
@@ -32,7 +32,7 @@ impl Case {
         }
     }
 
-    pub(super) async fn originals_and_retained(
+    pub(in super::super) async fn originals_and_retained(
         self,
         fixture: &Fixture,
         flow: &Flow,
@@ -275,4 +275,13 @@ async fn fresh_v4_shared_panel_bitmap_without_captured_panel_zone_is_rejected() 
     assert_original_pointers(&fixture, &flow).await;
     retained.assert_unchanged(&fixture, &flow).await;
     fixture.state.pool.close().await;
+}
+
+#[tokio::test]
+#[ignore = "requires the pinned retained actual singleton QTM bank input and Save As output"]
+async fn retained_actual_qtm_panel_bitmap_import_preview_publication_reopen_repeat_and_undo() {
+    let directory =
+        super::super::super::client_capture::selected("ERSATZRS_QTM_DRCS_CALIBRATION_DIR");
+    let directory = std::path::PathBuf::from(directory);
+    Box::pin(shared_case(false, Some(&directory), Case::MainAndRight)).await;
 }

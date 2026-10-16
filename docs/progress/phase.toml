@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: panel-zone resource edit joins actual editor and ordinary streams'
+current_focus = 'P9A-04: independently decode the joined panel ordinary-stream flow'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -283,10 +283,13 @@ geometry;39 effects tests ae8753c9 pass, including left/right and all denial fen
 Public native566787ec passes6 cases with exact Main/panel pixels, freshV4 concept/
 preview/separate publication/reexport/repeat/undo/reopen and no-zone rejection;
 oldMainOnly and English00/10 flows stay green. P9A-04 owns exact hashes/scope.
-Next reuse the actual singleton QTM save ONLY if its original bank equals the
-new export byte-for-byte; fresh receipt/sidecar/displays remain authoritative.
-Connect the same MainAndRight case to ordinary two-channel TCP/AV/TSDuck/model
-proof. Panel-specific independent/client proof remains open. Earlier proof
+That next join now passes7f646bdc: exact retained genuine QTM bank equality,
+fresh V4 receipt/sidecar/displays, native panel concept/preview/separate publication/
+repeat/undo/reopen and two ordinary TCP channels with source AV/TSDuck/fullmodel,
+state isolation, host close and capacity cleanup. No fresh editor launch or panel
+editor rendering is claimed. P9A-04 owns hashes and the corrected path invocation.
+Next independently decode the exact panel captures with existing pinned APIs and
+literal masks/positions. Panel-specific independent/client proof remains open. Earlier proof
 retains its scope. Required suitable enlarged client/navigation stays
 open; this gap does not block independent authored work. Full aliases/lifecycle/
 admin/platform and engine acceptance remain required; no milestone or restriction.
