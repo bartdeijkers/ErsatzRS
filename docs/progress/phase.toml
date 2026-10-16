@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: reconcile multi-subpage DRCS editor imports; full acceptance open'
+current_focus = 'P9A-04: connect actual DRCS edits to ordinary delivery; full acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -106,12 +106,15 @@ native service and encode one parity-correct A-to-C resource byte; both shared
 display masks change with identical fallback/page packets and undo is exact.
 All72 related regressions and strict domain/FFmpeg Clippy/formatting pass.
 Schema3 now persists receipt-bound bitmap concepts with unchanged V1/V2 bytes;
-singleton V3/fresh V4 imports replay through shared preview/explicit publication
-and protect every shared display consumer, including unexported/panel users.
+singleton V3/fresh V4 imports replay through shared preview/explicit publication.
+Retained actual QTM output passes fresh V4 native publication/reopen/isolation.
+Imports protect every shared display consumer, including unexported/panel users.
 A dense two-subpage actual QTM edit/save/navigation trial passes byte/visual checks;
-its whole-bank PN/SC indices shift0/1->1/2. Next reconcile that mapping against
-native S1 and protected padding before multi-group import. P9A-04 owns current
-focused verification and pending full resource-admin/transport/client proof.
+its whole-bank PN/SC indices shift0/1->1/2. Authenticated multi-group/padded-bank
+mapping remains open. Next connect the actual singleton to ordinary transport and
+client proof, reproduce the concrete warm same-counter rejection, and derive
+publication lifecycle without mutating immutable originals. P9A-04 owns exact
+verification, the decimal-resource error-mapping defect and missing headed proof.
 The additional legacy SaveAs focus failure remains explicit: real X11 input
 succeeds for the dense bank but still fails its legacy focus guard.
 Keep the resource/panel/set/geometry, wider operand browser and remaining authored

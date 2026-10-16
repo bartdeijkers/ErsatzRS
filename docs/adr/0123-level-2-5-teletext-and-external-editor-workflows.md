@@ -112,6 +112,10 @@ boundaries. Multi-group/padded banks still require explicit reconciliation of
 QTM's observed whole-bank PN/SC ordinal renumbering; actual dense-bank editor
 editing/navigation/save is calibration evidence only. No resource editing
 restriction or full resource-editor/client acceptance is accepted.
+Import retains immutable resource transmission metadata. Correct warm publication
+still requires explicit lifecycle planning that respects actual completed history
+and the accepted artifact's identity; retagging encoded bytes after acceptance or
+relaxing receiver checks is not a solution. P9A-04 owns the concrete gap and proof.
 Full enhancement, resource, geometry, panel and actual editor coverage remains
 required; this slice introduces no accepted product restriction. P9A-04 owns
 verification and the concrete next integration step.

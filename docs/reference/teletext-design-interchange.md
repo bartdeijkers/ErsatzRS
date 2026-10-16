@@ -3088,6 +3088,23 @@ The optional Linux/X11 widget harness uses bounded real pointer input for the
 Save As filename; it retains activation/focus/path/no-overwrite guards. Its
 successful dense-bank run does not fix the retained legacy modal-focus failure.
 Resource-page classification and unsupported transformations stay explicit.
+
+For the retained actual singleton, set `ERSATZRS_QTM_DRCS_CALIBRATION_DIR` to the
+captured directory containing `native-input.tti` and `edited.tti`, then run:
+
+```bash
+./run.sh test -p ersatzrs-web --test teletext_profile_preparation \
+  --run-ignored ignored-only \
+  -E 'test(retained_actual_qtm_drcs_save_as_import_preview_publication_reopen_repeat_and_undo)' \
+  --test-threads 1
+```
+
+The opt-in test bounds both regular files, pins their actual-editor SHA256s and
+requires the current production V4 export to match the original file exactly.
+Only the genuine saved companion replaces an input; shared native preview,
+explicit publication, reopen, channel isolation and root undo follow. This reuses
+retained actual GUI evidence; it does not launch a fresh editor or establish new
+ordinary-route, independent-decoder, admin or broadcast-client acceptance.
 QTeletextMaker alone cannot establish the full enhanced broadcast-client gate.
 
 ### Actual synthetic edit/save calibration

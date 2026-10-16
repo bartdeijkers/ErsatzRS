@@ -387,7 +387,64 @@ async fn retained_latest(
         .unwrap()
 }
 
-async fn shared_flow(legacy: bool) {
+fn read_retained_editor_file(path: &Path) -> Vec<u8> {
+    use std::io::Read as _;
+    let maximum = policy().tti.max_bytes;
+    let metadata = std::fs::symlink_metadata(path).expect("retained editor file must exist");
+    assert!(
+        metadata.file_type().is_file(),
+        "retained editor input must be a regular file"
+    );
+    assert!(
+        metadata.len() <= u64::try_from(maximum).unwrap(),
+        "retained editor input exceeds TTI budget"
+    );
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .unwrap()
+        .take(u64::try_from(maximum).unwrap() + 1)
+        .read_to_end(&mut bytes)
+        .unwrap();
+    assert!(
+        bytes.len() <= maximum,
+        "retained editor input grew beyond TTI budget"
+    );
+    bytes
+}
+
+fn actual_editor_request(
+    receipt: &TeletextDesignExportReceipt,
+    directory: &Path,
+) -> NativeTeletextEditorialImportRequest {
+    let original = read_retained_editor_file(&directory.join("native-input.tti"));
+    let edited = read_retained_editor_file(&directory.join("edited.tti"));
+    assert_eq!(
+        hash(&original),
+        "208ee7a257e7300d7de8f8b413d943ce2c4b71a36c3d565f42895bec3d1ab0cf"
+    );
+    assert_eq!(
+        hash(&edited),
+        "739c3b04d6b4afd38b4524c0da9a3a1c1bc26d6079e140321f2eda3ad6ff9880"
+    );
+    let body = parse_teletext_export_receipt_body(&receipt.receipt, policy().project).unwrap();
+    assert!(
+        matches!(&body.project.assets.iter().find(|asset| asset.name == companion(&body).0).unwrap().scope,
+        TeletextExportAssetScope::DrcsTtiSet {resource_names} if resource_names.len() == 1 && resource_names[0].is_some())
+    );
+    let mut request = from_receipt(receipt, 1);
+    let file = request
+        .files
+        .iter_mut()
+        .find(|file| file.name == companion(&body).0)
+        .unwrap();
+    // The independently retained GUI input must be exactly today's freshly
+    // exported resource. Only its genuine saved output replaces the companion.
+    assert_eq!(file.bytes, original);
+    file.bytes = edited;
+    request
+}
+
+async fn shared_flow(legacy: bool, actual_directory: Option<&Path>) {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
         response,
         Fixture::new_persistent().await,
@@ -399,7 +456,13 @@ async fn shared_flow(legacy: bool) {
     } else {
         flow.receipts[0].clone()
     };
-    let concept = import(&fixture, bitmap_request(&receipt, 1, b'C')).await;
+    let first_request = if let Some(directory) = actual_directory {
+        assert!(!legacy, "actual retained input is bound to fresh V4 export");
+        actual_editor_request(&receipt, directory)
+    } else {
+        bitmap_request(&receipt, 1, b'C')
+    };
+    let concept = import(&fixture, first_request).await;
     assert_eq!(concept.head().revision, 2);
     assert_overlay(&fixture, &flow, &concept, 3).await;
     let current = restored(&fixture, &concept).await;
@@ -464,12 +527,20 @@ async fn shared_flow(legacy: bool) {
 
 #[tokio::test]
 async fn shared_drcs_bitmap_import_preview_explicit_publication_reopen_and_repeat_undo() {
-    Box::pin(shared_flow(true)).await;
+    Box::pin(shared_flow(true, None)).await;
 }
 
 #[tokio::test]
 async fn fresh_v4_singleton_bitmap_import_preview_publication_reopen_repeat_and_undo() {
-    Box::pin(shared_flow(false)).await;
+    Box::pin(shared_flow(false, None)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires retained actual QTeletextMaker DRCS input and Save As output"]
+async fn retained_actual_qtm_drcs_save_as_import_preview_publication_reopen_repeat_and_undo() {
+    let directory = super::super::client_capture::selected("ERSATZRS_QTM_DRCS_CALIBRATION_DIR");
+    let directory = std::path::PathBuf::from(directory);
+    Box::pin(shared_flow(false, Some(&directory))).await;
 }
 
 #[tokio::test]
@@ -614,83 +685,87 @@ async fn drcs_bitmap_rejects_changed_status_packet_undefined_slot_sidecar_and_ra
     let (name, raw) = companion(&body);
     for tamper in 0..5 {
         let mut request = bitmap_request(&receipt, 1, b'C');
-        if tamper < 3 {
-            let file = request
-                .files
-                .iter_mut()
-                .find(|file| file.name == name)
+        match tamper {
+            0..=2 => {
+                let file = request
+                    .files
+                    .iter_mut()
+                    .find(|file| file.name == name)
+                    .unwrap();
+                let mut records = parse_teletext_tti(&file.bytes, policy().tti)
+                    .unwrap()
+                    .records()
+                    .to_vec();
+                match tamper {
+                    0 => {
+                        let status = records
+                            .iter_mut()
+                            .find_map(|record| match record {
+                                TeletextTtiRecord::PageStatus(status) => Some(status),
+                                _ => None,
+                            })
+                            .unwrap();
+                        *status ^= 1;
+                    }
+                    1 => {
+                        let words = records
+                            .iter_mut()
+                            .find_map(|record| match record {
+                                TeletextTtiRecord::Packet {
+                                    row: 28,
+                                    designation: 3,
+                                    words,
+                                } => Some(words),
+                                _ => None,
+                            })
+                            .unwrap();
+                        words[0] ^= 1;
+                    }
+                    2 => {
+                        let cells = records
+                            .iter_mut()
+                            .find_map(|record| match record {
+                                TeletextTtiRecord::BaseRow { row: 1, cells } => Some(cells),
+                                _ => None,
+                            })
+                            .unwrap();
+                        cells[20] = b'A';
+                    }
+                    _ => unreachable!(),
+                }
+                file.bytes = write_teletext_tti(
+                    &TeletextTtiDocument::checked_from_records(records, policy().tti).unwrap(),
+                    policy().tti,
+                )
                 .unwrap();
-            let mut records = parse_teletext_tti(&file.bytes, policy().tti)
-                .unwrap()
-                .records()
-                .to_vec();
-            match tamper {
-                0 => {
-                    let status = records
-                        .iter_mut()
-                        .find_map(|record| match record {
-                            TeletextTtiRecord::PageStatus(status) => Some(status),
-                            _ => None,
-                        })
-                        .unwrap();
-                    *status ^= 1;
-                }
-                1 => {
-                    let words = records
-                        .iter_mut()
-                        .find_map(|record| match record {
-                            TeletextTtiRecord::Packet {
-                                row: 28,
-                                designation: 3,
-                                words,
-                            } => Some(words),
-                            _ => None,
-                        })
-                        .unwrap();
-                    words[0] ^= 1;
-                }
-                2 => {
-                    let cells = records
-                        .iter_mut()
-                        .find_map(|record| match record {
-                            TeletextTtiRecord::BaseRow { row: 1, cells } => Some(cells),
-                            _ => None,
-                        })
-                        .unwrap();
-                    cells[20] = b'A';
-                }
-                _ => unreachable!(),
             }
-            file.bytes = write_teletext_tti(
-                &TeletextTtiDocument::checked_from_records(records, policy().tti).unwrap(),
-                policy().tti,
-            )
-            .unwrap();
-        } else if tamper == 3 {
-            let mut sidecar = body.project.clone();
-            sidecar
-                .assets
-                .iter_mut()
-                .find(|asset| asset.name == name)
-                .unwrap()
-                .sha256 = "0".repeat(64);
-            request.sidecar = write_teletext_export_sidecar(
-                &TeletextExportSidecar {
-                    schema_version: 1,
-                    receipt_id: receipt.metadata.id,
-                    receipt_digest: receipt.metadata.digest.clone(),
-                    project: sidecar,
-                },
-                policy().project,
-            )
-            .unwrap();
-        } else {
-            request
-                .files
-                .iter_mut()
-                .find(|file| file.name == raw)
-                .unwrap()
-                .bytes[0] ^= 1;
+            3 => {
+                let mut sidecar = body.project.clone();
+                sidecar
+                    .assets
+                    .iter_mut()
+                    .find(|asset| asset.name == name)
+                    .unwrap()
+                    .sha256 = "0".repeat(64);
+                request.sidecar = write_teletext_export_sidecar(
+                    &TeletextExportSidecar {
+                        schema_version: 1,
+                        receipt_id: receipt.metadata.id,
+                        receipt_digest: receipt.metadata.digest.clone(),
+                        project: sidecar,
+                    },
+                    policy().project,
+                )
+                .unwrap();
+            }
+            _ => {
+                request
+                    .files
+                    .iter_mut()
+                    .find(|file| file.name == raw)
+                    .unwrap()
+                    .bytes[0] ^= 1;
+            }
         }
         let error = rejected(&fixture, &flow, request).await;
         assert_located_metadata_error(error, tamper);

@@ -2990,12 +2990,37 @@ root expectations; complete undo restores the exact original document/units.
 Root export scope includes actual execution-record consumers, not unrelated pages;
 latest-receipt edit permissions remain authoritative. No package is modified.
 
-Verification is being finalized in tmp/phase9-drcs-resource-import/. The focused
-application/host/TTI run passes75 cases (Nextest269c3b01-e877-47ac-bcf9-1d301769b3a3).
+Focused verification in tmp/phase9-drcs-resource-import/: the final application/
+host/TTI run passes75 cases (Nextestfc24f9b8-6bcd-41e0-826e-f2a85acfc6cf).
+All41 related native imports pass (01a8f19b-469f-4dc3-a296-61201e711752), including
+existing row/X26, effective Lua roles, repeated imports, dense/sparse unchanged
+companions, HTTP transfer and publication/reopen/isolation. The final six-case
+DRCS run passes (8728bfad-742d-4b48-9379-6b1094976919), adding one distinct actual-
+input case to those41:42 unique native successes, not47. The opt-in case reads
+the retained actual singleton QTM SaveAs output (SHA256739c3b04d6b4afd38b4524c0da9a3a1c1bc26d6079e140321f2eda3ad6ff9880)
+and requires a fresh production V4 companion to match its retained GUI input
+exactly (SHA256208ee7a257e7300d7de8f8b413d943ce2c4b71a36c3d565f42895bec3d1ab0cf).
+Only that genuine saved resource replaces the companion; native preview, explicit
+publication, reopen and channel isolation follow. Later replacement/undo steps
+remain fixture-generated. This composes retained GUI proof with new native proof;
+it is not a fresh GUI run or a new ordinary-stream/client result.
+
 The earlier host run's five failures were invalid missing-S1=0 fixtures; required
 empty companion coverage is corrected without weakening MOT/resource validation.
 The first native build failed only on SHA256 test formatting; it is corrected.
-No pending native or strict-lint result is claimed here.
+Initial strict Clippy found one redundant closure and a missing semicolon; both
+are corrected without behavior changes. Its next pass found two test-only issues:
+opt-in environment selection now reuses the existing scoped test helper and a
+comparison chain becomes an equivalent match. The two affected native cases
+pass again (3e73876a-c91f-4bbd-9f95-9548cf6f3fc5). Final strict app/web all-target
+Clippy passes without new exemptions/dependencies. The final-source/log and actual
+input/editor/visual/negative identities are bound by
+tmp/phase9-drcs-resource-import/identity.json
+(SHA25666dd0f78d26f422fc3551d13ee0d09ff968d0bb116e7722a016d60472891c78a).
+Workspace formatting, architecture-lint, progress validation and the new-allowance
+policy pass. All129 milestone identities/statuses/dependencies/acceptance remain
+unchanged. Emergency snapshot9255ab1f is pushed with skip-ci; no CI/full-engine
+acceptance is claimed. The seven unrelated worktree deltas remain preserved.
 
 Actual pinned QTM1.0/cac2167 additionally opens/edits/navigates/saves a dense native
 S1=0/1 resource bank through actual widgets. The editor exits0, six images are
@@ -3015,6 +3040,13 @@ withdraws teletext while preserving ordinary AV); a cold request has no complete
 history and is a separate case. This is source evidence, not a newly exercised
 warm route. Next prove the rejection at the existing boundary and derive correct
 publication lifecycle from accepted history without rewriting immutable originals.
+
+Resource error UI remains a concrete connection gap: native errors now retain
+raw page1C0/S1 and row/designation/word positions, but the existing HTTP mapper
+still sends error.page through the decimal display-owner query. Reuse the existing
+localized error_resource identity rendering before claiming resource-admin error
+acceptance; do not present raw1C0 as display448. No new DOM or language key is
+required by that existing seam, but actual localized headed proof remains due.
 
 No new complete browser, ordinary-route, independent decoder or suitable-client
 DRCS-edit roundtrip is claimed. Existing caption/foreground/profile/theme/Lua
@@ -6839,16 +6871,18 @@ Current criterion-to-next-step map (updated after receipt-qualified DRCS bitmap 
 | Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 bitmap concepts with native replay implemented | Existing capture/reload/sidecar and actual foreground admin/client receipts; current resource proof above | Full resource/panel/geometry/set editing and wider bitmap browser/client proof remain open | Reconcile actual multi-group/padded DRCS writer indices while preserving native identities and shared-consumer permissions |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE carrier tests; actual equal-NOS1 and independent fallback1/enhanced0 QTM Save As/native import; nine-culture headed transfer | General charset/resource/set/subpage fidelity remains open; sparse normative S1=1 independent decoding/client is blocked by the audited decoder defect | Reuse corrected carrier receipts; extend supported authored changes and select a correct independent sparse-resource decoder/client |
 | Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative flow; full acceptance open | Exact tmp/phase9-effective-editor-browser/flow-identity.json receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37: actual QTM, localized headed admin, two-theme TCP captures, independent decoding/TSDuck and VLC200->201->200 captured-byte replay; separate real-URL scoped/warm receipts | The GUI-editor/admin receipt uses captured replay; live-URL trials use fixture-generated edits. Full Level2.5, applied-state admin, default-capacity handoff and complete live-client updates remain unproven | Reuse each exact receipt without claiming one combined live-GUI run; extend the editor/Level2.5 step that blocks richer authored pages |
-| Actual pinned QTM workflow | Base-row/foreground native-admin flow and singleton resource import implemented; full acceptance open | Existing actual QTM/admin/ordinary-client receipts; current singleton native and actual dense-bank editor evidence above | Multi-group/padded-bank native import, actual resource edit-to-admin/transport/client flow, panel/geometry, wider browser/live-URL and reliable legacy modal focus remain open | Authenticate observed whole-bank PN/SC ordinal shift, then connect the actual saved resource through admin preview/publication and ordinary-client display |
+| Actual pinned QTM workflow | Base-row/foreground native-admin flow and actual singleton native import/publication proven; full acceptance open | Existing actual QTM/admin/ordinary-client receipts; current retained actual singleton to fresh V4 native flow and dense-bank editor evidence above | Multi-group/padded-bank native import, actual resource edit-to-admin/transport/client flow, panel/geometry, wider browser/live-URL and reliable legacy modal focus remain open | Authenticate observed whole-bank PN/SC ordinal shift, then connect the actual saved resource through admin preview/publication and ordinary-client display |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: reconcile the actual saved V4 dense DRCS bank's complete
-PN/SC ordinal shift0/1->1/2 against its immutable receipt, retaining native S1 and
-protected padding/function/undefined slots. Extend the same preview/publication
-path, then connect the actual saved resource to localized admin, ordinary stream,
-independent decoding and suitable-client evidence. Singleton concepts do not
+Concrete next action: connect the actual saved singleton to ordinary cold stream,
+independent decoding and suitable-client evidence, while reproducing the warm
+same-counter ResourceUpdate rejection and correcting explicit publication planning
+without weakening receiver history or immutable artifact identity. Reuse the
+existing localized resource-error identity projection instead of decimal page448.
+Then reconcile the actual V4 dense bank's complete PN/SC ordinal shift0/1->1/2
+against its receipt, preserving native S1 and protected padding/function/slots. Singleton concepts do not
 establish multi-group fidelity or full engine/editor acceptance. The separately
 observed legacy SaveAs modal focus failure remains open; retained negative trials
 need a new precise input/focus hypothesis before repetition. The representative colour

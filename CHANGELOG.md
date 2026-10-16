@@ -34,7 +34,8 @@ release section when tagging a release.
   reload calibration preserves singleton resource identity and function. Checked
   bitmap concepts now retain authenticated original resources through native
   import, shared preview, explicit publication and undo. Singleton V3/V4 resource
-  edits protect every shared display consumer and preserve fallback packets.
+  edits protect every shared display consumer and preserve fallback packets;
+  retained actual QTeletextMaker output now passes the native publication flow.
   Multi-subpage resource editing and full external-editor/Level 2.5 acceptance
   remain open.
 - Add exact-page teletext bitmap input support to the native FFmpeg command

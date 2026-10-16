@@ -13,7 +13,8 @@ use ersatzrs_domain::{
     TeletextResourceKind,
 };
 use ersatzrs_ffmpeg::teletext::{
-    project_encoded_teletext_drcs, EncodedTeletextAuthoredService, TeletextEncodedDisplayRecord,
+    project_encoded_teletext_drcs, EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService,
+    TeletextEncodedDisplayRecord,
 };
 use std::time::Instant;
 
@@ -92,7 +93,7 @@ pub(in crate::host) fn mapping(
     let page = service
         .pages()
         .iter()
-        .filter_map(|page| page.resource_header())
+        .filter_map(EncodedTeletextAuthoredPage::resource_header)
         .find(|header| {
             let native = header.identity();
             matches!(
@@ -147,7 +148,7 @@ fn compare_native(
         match record {
             TeletextEncodedDisplayRecord::HeaderText(_) => {}
             TeletextEncodedDisplayRecord::BaseRow { row, cells } => {
-                rows[usize::from(*row)] = Some(cells)
+                rows[usize::from(*row)] = Some(cells);
             }
             TeletextEncodedDisplayRecord::Triplets {
                 row,

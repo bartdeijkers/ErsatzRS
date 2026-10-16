@@ -32,7 +32,7 @@ empty owners and one MOT/magazine.
 Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/nested pass.
-DRCS concepts replay; dense-bank editor/client proof open.
+DRCS singleton concepts/actual native pass; banks/warm/client open.
 
 v2 stays pinned; Base refuses v2. Encoding retains
 defaults, secondary uncertainty and channel/model/deadline fences.
@@ -69,6 +69,22 @@ selection, Burn/Convert/copy, carriage, HLS/browser and playback gates; full sla
 activation/publication/refresh/restart, management/client and platform acceptance
 remain open. UCU waives no gates. Content waits for p9a-04; Phase10 for p9b-02.
 '''
+
+[[debt]]
+id          = 'teletext-editorial-resource-diagnostic-identity'
+adr         = '0123'
+description = 'Preserve resource kind/raw hexadecimal page/S1 in imported-resource admin diagnostics. Reuse the existing localized error_resource projection and prove its headed display; do not map raw resource1C0 to ordinary display page448.'
+discovered  = '2026-10-16'
+evidence    = 'P9A-04 owns the source trace: native resource reconciliation provides raw1C0/S1 and exact row/designation/word, while api/teletext_editorial.rs imports that address through Failure::position as a decimal display owner. Existing authoring_error_location and localized resource rendering provide the corrective seam. Native located rejection tests pass; resource-admin identity acceptance remains open.'
+resolved    = false
+
+[[debt]]
+id          = 'teletext-editorial-resource-warm-publication-lifecycle'
+adr         = '0123'
+description = 'Connect edited resource concepts to ordinary cold/warm delivery with correct resource lifecycle and accepted-artifact identity. Derive publication transmissions from actual accepted/completed state without mutating immutable originals, weakening receiver history or assuming every viewer saw every intermediate generation.'
+discovered  = '2026-10-16'
+evidence    = 'P9A-04 owns the concrete source trace and next ordinary-route experiment: after a completed resource cycle, imported changed bitmap bytes retain the original counter/lifecycle and ResourceUpdateHistory rejects warm replacement; the monitor safely withdraws teletext while AV continues. Cold requests have separate empty history. Current actual singleton native import/publication/reopen proof is not warm-output proof. No permanent update limitation is accepted.'
+resolved    = false
 
 [[debt]]
 id          = 'teletext-scoped-expiry-sink-boundary-provenance'
