@@ -756,6 +756,8 @@ release section when tagging a release.
   through exact generated resources when their direct carrier would exceed the
   two-charset-pair limit. Plain and underlined forms preserve fallback; existing
   direct routes remain unchanged when a pair is free or Hebrew is already used.
+  The same exact realization now supports raw English primary designation `0x10`,
+  preserving its transmitted designation, fallback and original page identity.
   Genuine editor saves now reach isolated channel publication and ordinary
   streams with independent mask/Greek/fallback checks; generated glyph slots
   remain protected on reimport. Suitable-client proof remains open.

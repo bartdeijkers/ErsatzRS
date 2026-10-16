@@ -47,9 +47,13 @@ fn seed(underlined: bool) -> TeletextSemanticService {
 }
 
 fn seed_with_pair(underlined: bool, second: Option<u8>) -> TeletextSemanticService {
+    seed_with_primary(underlined, second, 0)
+}
+
+fn seed_with_primary(underlined: bool, second: Option<u8>, primary: u8) -> TeletextSemanticService {
     let mut fixture = enlarged_national_base();
     fixture.national = 0;
-    fixture.primary = Some(0);
+    fixture.primary = Some(primary);
     fixture.rows = vec![text(1, 7, "‖"), text(2, 8, "é"), text(3, 1, "B")];
     let adaptive = fixture
         .objects
@@ -97,7 +101,11 @@ fn seed_with_pair(underlined: bool, second: Option<u8>) -> TeletextSemanticServi
 }
 
 fn assert_original(original: &TeletextMainComposition, underlined: bool) {
-    assert_eq!(original.base_display().primary().get(), 0);
+    assert_original_primary(original, underlined, 0);
+}
+
+fn assert_original_primary(original: &TeletextMainComposition, underlined: bool, primary: u8) {
+    assert_eq!(original.base_display().primary().get(), primary);
     assert_eq!(original.collected().charset_pairs(), &pairs());
     assert!(original.drcs_execution().records().is_empty());
     let view = original.display_resolution();
@@ -163,7 +171,10 @@ fn rows(page: &crate::teletext::EncodedTeletextPage) -> Vec<TeletextEncodedDispl
 }
 
 fn prepare(underlined: bool) -> Case {
-    let semantic = seed(underlined);
+    prepare_seed(seed(underlined), underlined, 0)
+}
+
+fn prepare_seed(semantic: TeletextSemanticService, underlined: bool, primary: u8) -> Case {
     assert!(semantic.drcs().subtables().is_empty());
     assert!(semantic.object_companions().is_empty());
     let metadata = &semantic.page_enhancements()[&owner()];
@@ -191,7 +202,11 @@ fn prepare(underlined: bool) -> Case {
         budget.packing,
     )
     .unwrap();
-    assert_original(composed.composition(), underlined);
+    if primary == 0 {
+        assert_original(composed.composition(), underlined);
+    } else {
+        assert_original_primary(composed.composition(), underlined, primary);
+    }
     let plan = crate::teletext::plan_teletext_base_compatibility_realization(
         composed.composition(),
         budget.realization,
@@ -309,7 +324,11 @@ fn assert_output(case: &Case, encoded: &EncodedTeletextAuthoredService) {
         panic!("the enlarged assigned original needs the normalized path")
     };
     assert_eq!(display.normalized().original(), &case.original);
-    assert_original(display.normalized().original(), case.underlined);
+    assert_original_primary(
+        display.normalized().original(),
+        case.underlined,
+        case.original.base_display().primary().get(),
+    );
     assert_eq!(rows(display.page()), case.fallback);
     let physical = display.normalized().physical().replay();
     let charset = physical.charset_execution();
@@ -500,3 +519,53 @@ fn english_free_pair_or_existing_hebrew_retains_direct_primitive_packets_without
 
 #[path = "compiler_english/independent.rs"]
 mod independent;
+
+#[test]
+fn english_primary_alias10_two_original_pairs_uses_exact_resource_without_losing_raw_designation() {
+    // Settle both literal alias10 originals and their fallback before the
+    // whole-service positive expectation. Alias00 and direct cases stay exact.
+    let cases = [false, true].map(|underlined| {
+        prepare_seed(
+            seed_with_primary(underlined, Some(0x37), 0x10),
+            underlined,
+            0x10,
+        )
+    });
+    for case in cases {
+        assert_eq!(case.original.base_display().primary().get(), 0x10);
+        let metadata = &case.input.semantic().page_enhancements()[&owner()];
+        assert_eq!(metadata.presentation.as_ref().unwrap().primary.get(), 0x10);
+        assert_eq!(
+            case.input.semantic().base().pages[0].national_option.get(),
+            0
+        );
+        let before = case.input.clone();
+        let encoded = encode_teletext_authored_service(
+            case.input.clone(),
+            &authored::transmissions(&case.input),
+            &service_budget(),
+        );
+        assert_eq!(case.input, before);
+        let encoded = encoded.expect("assigned raw English primary10 with Latin+Greek must retain its exact original and use the existing resource-backed two-pair realization");
+        assert_output(&case, &encoded);
+        let EncodedTeletextAuthoredPage::CompiledDisplay(display) = &encoded.pages()[0] else {
+            panic!("the exact alias original requires normalized display packets")
+        };
+        let projected = project_encoded_teletext_display(display.page(), 128).unwrap();
+        let words = projected
+            .records
+            .iter()
+            .find_map(|record| match record {
+                TeletextEncodedDisplayRecord::Triplets {
+                    row: 28,
+                    designation: 0,
+                    words,
+                } => Some(words),
+                _ => None,
+            })
+            .unwrap();
+        // X28/0 Format1 retains the actual seven-bit primary at bits8..14.
+        assert_eq!((words[0] >> 7) & 0x7f, 0x10);
+        assert_eq!(case.input, before);
+    }
+}

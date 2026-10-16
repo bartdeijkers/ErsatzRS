@@ -244,7 +244,7 @@ fn may_need_carrier(
     let supported_national = service
         .effective_presentation(owner)
         .and_then(|presentation| presentation.primary_designation().ok())
-        .is_some_and(|primary| matches!(primary.get(), 0x00 | 0x08 | 0x16 | 0x1f | 0x36));
+        .is_some_and(|primary| matches!(primary.get(), 0x00 | 0x08 | 0x10 | 0x16 | 0x1f | 0x36));
     if !supported_national {
         return Ok(false);
     }
