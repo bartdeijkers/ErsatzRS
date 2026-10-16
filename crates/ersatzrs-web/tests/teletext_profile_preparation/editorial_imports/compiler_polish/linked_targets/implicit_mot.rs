@@ -582,3 +582,6 @@ async fn implicit_mot_three_target_concept_previews_publishes_protects_mot_and_r
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
 }
+
+#[path = "implicit_mot/defaults.rs"]
+mod defaults;

@@ -2968,6 +2968,59 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 rendered MOT-default native editorial checkpoint:
+Criterion: join actual Defaults[0,2,3] to installed-addon profile selection,
+fresh receipt/concept/shared preview/explicit publication/indexed reexport/reopen.
+This adds a prepared native fixture and exact assertions only. Production code,
+wire contracts, UI, quotas, editor input protocol and installed packages do not
+change. The SAME addon has distinct Day/Night profiles/themes and three owners
+124..126/S32, MOT1FE/S9, original Normal2A0/2A2/2A3S0 plus Global1A1S0, POP2C0S0
+and GPOP2D0S0. Explicit DTO identities retain kind/raw page/S1; no domain-to-wire
+identity shortcut is assumed. Original pages have NO Local/X27 and select global
+Active20/public Adaptive22+Passive21. Defaults[0,2,3] and a literal visible green
+P from its own DefaultSlot3/Public21 are checked on all three displays.
+
+Nextest 43e978af-0b28-4b9e-a4b3-e6d8aada9ab3 passes15.701s on the first run.
+Three prepared free Base A-to-5B edits produce concept revision2 while original
+publication pointers stay exact. Shared preview, pre-publication database reopen,
+separate explicit publication, mixed indexed S0/S1 export/fresh receipt and final
+reopen pass. Each generated Normal bank is its original target at freeS1=1/slot0.
+All four original MOT roles/candidates/default sources survive, with effective
+Normalmask3 and other masks1. Full original declarations, source bytes/authoring,
+metadata/transmissions, package/config/profile/receipt state and unchanged Night
+are retained. Base fallback changes only the authorized cell; fixed enlarged
+A/Polish masks, visible P pixels and shared three-page previews pass. Original
+MOT/POP/GPOP raw .dvb reexports are byte-exact; shared original-resource checks
+also preserve all seven original resources.
+
+Four negatives each leave concept head, accepted Day/Night pointers, fresh
+receipt and retained state exact, including restored/recovered effective output:
+valid-parity protected POP and GPOP header-text mutations -> Association;
+valid-Hamming MOT row1 payload mutation -> Association; generated Normal2A0/S1=1
+PTU pixel mutation -> located Structure raw2A0/subcode1/row1. The POP/GPOP probes
+first authenticate literal Hamming MRAG2/0 (magazine2/header row0), then change
+exactly byte14 from space to odd-parity A. Object bodies, identity/framing and all
+other files/sidecar stay exact. This proves protected RAW-header rejection, not
+semantic object-body editing or a malformed-packet rejection. The parent MOT
+probe authenticates magazine1/row1 before mutation. No playout refresh is emitted.
+
+Focused authority/oracle review is clean. Strict web all-target Clippy86s,
+formatting, architecture and progress validation pass. Canonical receipt:
+tmp/phase9-mot-default-native/identity.json SHA256 e661bc96734a8e14d3f0be04b640d0fd74a0b7b37603e74947da5251db6ae4eb.
+Whole-service41c0d148 and prior e854e39c actual NoObject captures retain their
+exact scopes. This is prepared application/native evidence with database reopen;
+no actual new QTM, ordinary/TSDuck, independent default decoding, headed admin,
+suitable-client or whole-host restart proof follows. Next add one explicitly
+named rendered-default case to the existing genuine runner, preserving both old
+cases and unchanged bounded fresh-input protocol, then perform three NEW pinned
+saves and same-live publication/ordinary captures. The existing fixed independent
+adapter excludes object pages and expects NoObject MOT: its next narrow extension
+must use the pinned reader's existing coding2 POP/GPOP mode and the actual received
+object lists, without external decoder repair or automatic-selection claims.
+All acceptance contracts, engine-first ordering and dependent client gaps remain
+open; no milestone, scope restriction or push. Remote/main was fetched and is an
+ancestor of this local checkpoint; unrelated worktree changes remain untouched.
+
 2026-10-16 rendered MOT-default whole-service checkpoint:
 Criterion: prove actual selected Passive-default execution through exact national
 lowering with occupied DRCS roles, rather than metadata reservation alone.
@@ -9562,20 +9615,21 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Authored warm magazine-to-page presentation | Bounded complete-X28/history plus representative cold and retained-client warm bank publication proven; full warm matrix open |72 output tests, real AV/TSDuck/persistent Cyrillic-to-Greek decoding, cold editor/admin flow and same-client/decoder two-theme124/125/124 with18 actual library-map barriers above | Complete lower-level/resource/Header/POP/MOT/page-retirement, broader palette/context and client/platform matrix remain required | Reuse this fixed handover; address a specific remaining lifecycle clause when it blocks its accepted feature rather than expanding decoder maintenance |
-| Assigned national G0 physical realization | Exact original Polish5B, Turkish23 and Romanian5D/7D use sealed resource-backed normalization; stable eight plain/underline slots and linked-S1 derivation | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT core/native/actual QTM/ordinary/independent bank and encoded-MOT proof pass. Rendered MOT defaults now have full whole-service core model/raster/resource/fallback proof; their application/editor/ordinary/independent/client connection plus broader effects/resources/admin remain open | Join the legal NO-Local Defaults[0,2,3] input to existing native concepts/preview/publication and protected resource reexport/reopen before new actual saves |
+| Assigned national G0 physical realization | Exact original Polish5B, Turkish23 and Romanian5D/7D use sealed resource-backed normalization; stable eight plain/underline slots and linked-S1 derivation | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT core/native/actual QTM/ordinary/independent bank and encoded-MOT proof pass. Rendered MOT defaults have whole-service core and prepared native concept/publication/resource-ownership/reopen proof; their actual editor/ordinary/independent/client connection and broader resources/admin remain open | Add the named rendered-default case to the existing genuine runner, then perform fresh saves and same-live ordinary captures |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next authored action: join the now proven rendered MOT defaults to
-application/native editorial flow. Use exact NO-Local Defaults[0,2,3] (global
-Active, public Adaptive/Passive), occupied DRCS and protected POP/GPOP/MOT;
-assert actual default execution, original/shared concept preview, explicit
-publication, resource ownership and reopen. Existing native/editor/ordinary
-fixtures still use NoObject, so their actual saves/captures cannot substitute.
-The new core test proves full model/raster/fallback/five original resource units,
-not application receipt authority, independent default acquisition or client.
-Correct only a demonstrated integration gap; reuse current bounded protocol and
-all unchanged valid proof. No Header/POP/default/client/platform restriction is
-accepted. Known Local-Passive client limits block dependent rendering only.
+Concrete next authored action: connect the proven prepared rendered-default
+native case to three NEW pinned QTM saves and two ordinary channels with the
+same live receipt/concept/preview/separate publication. Reuse the existing genuine
+runner and exact bounded input protocol; original NO-Local Defaults[0,2,3] data
+and protected POP/GPOP/MOT are different from older NoObject saves/captures.
+Then extend only the existing fixed independent adapter's object-resource gap:
+the unchanged pinned reader has a coding2 mode for actual received POP/GPOP
+triplets, and decode accepts those real resource lists. Preserve chronological
+closed acquisition/EOF limits; do not synthesize units, patch the decoder or claim
+automatic MOT/default selection. Current native proof is not suitable-client,
+headed admin, whole-host restart or full engine acceptance. All remaining
+Header/POP/default/client/platform criteria and engine-first gates stay required.
 G1's fixed vector remains qualified; no external repair expansion starts. The actual padded sparse save now
 passes the joined admin/publication/ordinary route, strict edited-S1=1/fallback
 and qualified-client flow above. Independent and actual sparse client proof is
