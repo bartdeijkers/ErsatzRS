@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: ordinary delivery and independent decoding for genuine no-bank QTM concepts'
+current_focus = 'P9A-04: localized headed no-bank QTM flow and suitable-client rendering/navigation'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -107,9 +107,12 @@ lifecycle. Native concept/export/preview/explicit publication/reopen/revert and
 generated-slot/X27 protection pass (ad64fecd); P9A-04 owns all scope/failure receipts.
 Fresh pinned QTM edit/Save As now passes native concept/shared preview/explicit
 publication/two reopens (bed5d481); P9A-04 binds full-set provenance and negatives.
-Next reuse ordinary TCP/TSDuck capture with no-bank inventory and a separate
-fixed imager case, then suitable-client navigation. Existing-bank proof stays
-scoped to its different full export set. The bounded Kodi21.3 source
+No-bank ordinary TCP/TSDuck/AV/full-model and cleanup/reopen now pass174873cd;
+independent pinned imager proves fixed Polish mask/fragments/themes/fallback with
+separate bank inventory and negative pixel/channel probes. Next connect the exact
+no-bank save to the existing localized headed admin harness and same stream
+routes; suitable-client acquisition/rendering/navigation remains separate.
+Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source
 assessment does not establish enlarged DRCS suitability; no decoder maintenance
 program starts. Both-occupied roles, unproven absent-X27 MOT/default supplements,
 non-neutral effects, authored-bitmap transitions needing a new generated bank and

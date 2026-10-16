@@ -707,8 +707,9 @@ release section when tagging a release.
   Receipt-bound concepts can create or retire the generated carrier without
   granting permission to edit its resource or X27 links. A fresh recorded
   QTeletextMaker save now reaches native concept import, shared preview, explicit
-  publication and reopen without predefined banks. Full editor/client acceptance
-  remains open.
+  publication and reopen without predefined banks. Two ordinary channel streams
+  now preserve audio/video and separate themes, with transport and independent
+  glyph/fallback checks. Full editor/client acceptance remains open.
 
 - Permit acknowledged teletext updates from magazine defaults to complete page
   declarations while retaining bounded magazine cache history. Later incomplete

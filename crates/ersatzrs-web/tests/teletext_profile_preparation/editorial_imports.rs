@@ -41,6 +41,8 @@ use ersatzrs_web::host::{
 
 #[path = "editorial_imports/compiler_polish.rs"]
 mod compiler_polish;
+#[path = "editorial_imports/compiler_polish_delivery.rs"]
+mod compiler_polish_delivery;
 #[path = "editorial_imports/drcs_bank.rs"]
 mod drcs_bank;
 #[path = "editorial_imports/drcs_bitmap.rs"]

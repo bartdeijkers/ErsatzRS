@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 const MASK: [u16; 10] = [0, 0x3fc, 0x18, 0x30, 0x1f8, 0xc0, 0x180, 0x3fc, 0, 0];
 
-fn response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = polish_carrier::response(theme, page, subcode);
     value["service"]["drcs"] = json!([]);
     value["service"]["mots"] = json!([]);
@@ -69,7 +69,7 @@ fn assert_authored(service: &EncodedTeletextAuthoredService) {
     }
 }
 
-fn assert_concept(flow: &Flow, service: &EncodedTeletextAuthoredService, code: u8) {
+pub(super) fn assert_concept(flow: &Flow, service: &EncodedTeletextAuthoredService, code: u8) {
     assert_authored(service);
     let original = flow.accepted[0].service().declared();
     let expected = original
@@ -183,7 +183,7 @@ fn assert_generated(service: &EncodedTeletextAuthoredService) {
     }
 }
 
-async fn assert_pointers(
+pub(super) async fn assert_pointers(
     fixture: &Fixture,
     day: &AcceptedTeletextOutputCandidate,
     night: &AcceptedTeletextOutputCandidate,
@@ -482,7 +482,7 @@ fn actual_editor_proof(directory: &Path, original: &[u8], edited: &[u8]) -> Valu
     proof
 }
 
-fn actual_input_hashes(flow: &Flow, directory: &Path) -> Vec<(String, String)> {
+pub(super) fn actual_input_hashes(flow: &Flow, directory: &Path) -> Vec<(String, String)> {
     let mut names: Vec<_> = flow.exported[0]
         .files()
         .iter()
@@ -501,7 +501,10 @@ fn actual_input_hashes(flow: &Flow, directory: &Path) -> Vec<(String, String)> {
         .collect()
 }
 
-fn actual_request(flow: &Flow, directory: &Path) -> (NativeTeletextEditorialImportRequest, Value) {
+pub(super) fn actual_request(
+    flow: &Flow,
+    directory: &Path,
+) -> (NativeTeletextEditorialImportRequest, Value) {
     for file in flow.exported[0].files() {
         let retained = drcs_bitmap::read_retained_editor_file(
             &directory.join("native-original-1").join(&file.name),

@@ -6,6 +6,8 @@ composition oracle, this vector requires DRCS. Received resource pages are
 explicitly supplied to the decoder; this does not prove automatic X27/MOT cache
 routing, rendered font pixels, headed client navigation or full conformance.
 Level1/1.5 checks use receiver default region0, not Polish-font client evidence.
+The explicit --compiler-owned vector expects generated Normal1A0/S1=0slot0 on
+Day and no resource bank on Night; the original authored-bank vector is unchanged.
 """
 import hashlib
 import importlib.util
@@ -75,7 +77,7 @@ def cell(decoder, row, column, code, fragment, drcs=None, foreground=(255, 255, 
     require(actual is not None and list(actual) == bitmap(rows), f"{where}: literal DRCS mask differs")
 
 
-def check_display(decoder_type, page, banks, theme):
+def check_display(decoder_type, page, banks, theme, compiler_owned=False):
     number = page["number"]
     for level in ("1", "1.5", "2.5"):
         decoder = decoder_type()
@@ -83,7 +85,7 @@ def check_display(decoder_type, page, banks, theme):
         if number == 0x124:
             code = 0x5B if theme == "day" else 65
             if level == "2.5":
-                glyph = (0, 5, POLISH) if theme == "day" else None
+                glyph = (0, 0 if compiler_owned else 5, POLISH) if theme == "day" else None
                 cell(decoder, 1, 7, code, 3, glyph)
                 cell(decoder, 1, 8, code, 4, glyph)
             else:
@@ -93,14 +95,36 @@ def check_display(decoder_type, page, banks, theme):
         elif level == "2.5":
             foreground = (255, 0, 0) if theme == "day" else (0, 0, 255)
             for column, code in ((8, 90), (10, 32)):
-                cell(decoder, 1, column, code, 0, (1, 0, MIRRORED), foreground)
+                if compiler_owned:
+                    cell(decoder, 1, column, 65, 0, None, foreground)
+                else:
+                    cell(decoder, 1, column, code, 0, (1, 0, MIRRORED), foreground)
         else:
             for column, code in ((8, 90), (9, 90), (10, 32)):
                 cell(decoder, 1, column, code, 0)
 
 
+def received_banks(pages, theme, compiler_owned):
+    banks = {}
+    owner = 0x1A0 if compiler_owned else 0x1C0
+    for page in pages:
+        if page.get("number") == owner and (28, 3) in page and 1 in page:
+            banks.setdefault(page["subcode"] & 15, page)
+    if compiler_owned:
+        expected = {0} if theme == "day" else set()
+        require(set(banks) == expected, "Expected fixed compiler-owned bank inventory")
+        require(all(page.get("number") in (0x124, 0x125, owner) for page in pages),
+                "Unexpected page in fixed compiler-owned capture")
+        return [banks[0]] if theme == "day" else []
+    require(set(banks) == {0, 1}, "Expected both actual normal DRCS banks")
+    return [banks[0], banks[1]]
+
+
 def main():
-    require(len(sys.argv) == 3 and sys.argv[2] in ("day", "night"), "Expected units file and fixed theme")
+    require(len(sys.argv) in (3, 4) and sys.argv[2] in ("day", "night")
+            and (len(sys.argv) == 3 or sys.argv[3] == "--compiler-owned"),
+            "Expected units file, fixed theme and optional --compiler-owned")
+    compiler_owned = len(sys.argv) == 4
     source = Path(sys.argv[1])
     require(source.is_file() and not source.is_symlink(), "Expected regular captured units file")
     with source.open("rb") as stream:
@@ -114,22 +138,23 @@ def main():
                 "Invalid actual DVB unit")
     reader_type, decoder_type = imager.load_decoder()
     pages = closed_pages(reader_type, units)
-    banks = {}
-    for page in pages:
-        if page.get("number") == 0x1C0 and (28, 3) in page and 1 in page:
-            banks.setdefault(page["subcode"] & 15, page)
-    require(set(banks) == {0, 1}, "Expected both actual normal DRCS banks")
+    banks = received_banks(pages, sys.argv[2], compiler_owned)
     displays = [page for page in pages if page.get("number") in (0x124, 0x125)
                 and page.get("subcode") == 32 and 1 in page and (26, 0) in page]
     require({p["number"] for p in displays} == {0x124, 0x125}, "Both complete displays are required")
     for page in displays:
-        check_display(decoder_type, page, [banks[0], banks[1]], sys.argv[2])
-    print(json.dumps({"decoder": "teletextimager", "version": imager.VERSION,
+        check_display(decoder_type, page, banks, sys.argv[2], compiler_owned)
+    report = {"decoder": "teletextimager", "version": imager.VERSION,
                       "commit": imager.COMMIT, "input_sha256": hashlib.sha256(raw).hexdigest(),
                       "theme": sys.argv[2], "units": len(units), "closed_displays_checked": len(displays),
                       "levels": ["1", "1.5", "2.5"], "literal_drcs_and_fragments": True,
                       "automatic_resource_routing_proven": False, "font_pixels_or_actual_client_proven": False,
-                      "fallback_receiver_region": 0}, sort_keys=True))
+                      "fallback_receiver_region": 0}
+    if compiler_owned:
+        report.update({"fixture": "compiler-owned", "normal_resource_page": "1A0",
+                       "subtable": 0, "polish_slot": 0,
+                       "resource_present": sys.argv[2] == "day"})
+    print(json.dumps(report, sort_keys=True))
 
 
 if __name__ == "__main__":

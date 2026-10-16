@@ -2968,6 +2968,62 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 no-bank genuine-editor ordinary delivery checkpoint:
+Criterion: join the fresh no-bank QTM concept below to two ordinary channel
+stream URLs and independent decoding, preserving theme/profile isolation and
+ordinary playback. A new ignored native test reuses the existing source fixture,
+loopback LiveOrigin, concurrent TCP capture and unchanged AV/TSDuck/full-model
+verifier. No production code, normative glyph, loader or external decoder changes.
+The source below still has zero authored resource transmissions; Day alone gains
+compiler-owned Normal1A0/S1=0slot0 after explicit concept publication. Night uses
+its original profile and no resource bank. Complete concept/published previews
+match; page125 G0 A has the same bitmap with red Day/blue Night RGB4 themes.
+
+Verification:
+- 174873cd-5696-4ebf-a19f-af5f0a627489 PASS21.728s, compile53.81s, reaches
+  actual /iptv/hls-direct/{channel}.ts responses on one owned native TCP host.
+  Both approximately7.52MB captures pass source audio/video comparison,
+  TSDuck transport checks and complete emitted-model equality, including the
+  generated bank. Original designs, receipts, profiles/bindings/config/package,
+  source media and genuine editor inputs remain exact through database reopen.
+  Owned origin closes and both response producers release capacity.
+- FFmpeg/ffprobe n9.0-20261006 (runtime2.0.6) and TSDuck3.44-4676 are hashed
+  in the canonical receipt. First512 chronological units/channel are retained
+  without rewriting or artificial page-closing headers; full TS files remain.
+- Unmodified teletextimager0.2.0 at2b0125b778c45ffdfa2df0b196870c093361f317,
+  with the unchanged eight-source hash loader, decodes15 Day and16 Night closed
+  display acquisitions at Level1/1.5/2.5. A narrowly explicit --compiler-owned
+  fixture selects fixed1A0/slot0, preserving the unchanged literal Polish mask,
+  enlargement fragments, neutral effects and fallback expectations. Page125
+  checks its actual G0 A with red/blue themes. Received Day bank is explicitly
+  supplied; this does not establish automatic X27 acquisition or font rendering.
+  Fallback uses default receiver region0; complete regional-font proof is open.
+- Parity-retaining single-pixel mutation of every captured generated slot0
+  occurrence rejects at literal DRCS mask; Day-as-Night rejects fixed resource
+  inventory. Both original TS/units remain untouched. Existing authored-bank
+  Day/Night decoder reports remain exactly equal, and the new fixed vector rejects
+  both old bank captures instead of silently reinterpreting their inventory.
+- Strict affected web all-target Clippy passes1m26s; format and architecture
+  checks pass. Five helper visibility changes plus one wrapped signature invert
+  byte-exact to5262dc24 (helper-visibility-equivalence.json); all earlier genuine
+  editor/native/negative assertions remain unchanged. Prior production evidence
+  remains applicable. No full workspace CI, new headed UI/client or platform claim.
+Canonical ignored receipt: tmp/phase9-compiler-polish-delivery/identity.json, SHA256
+dea41caf5197048e986b6556ef354f75958855fcc0484e07d105b3f7f0fcfcab.
+Actual captures: tmp/phase9-compiler-polish-editor/ordinary-1; original fresh
+GUI/editor provenance remains tmp/phase9-compiler-polish-editor/identity.json.
+All milestone contracts/statuses and unrelated changes remain; no push/publication.
+
+Missing proof / next action: connect this exact no-bank genuine save to existing
+localized headed admin import/preview/explicit publication, then these same ordinary
+routes. Reuse the old Polish headed harness; do not reuse its authored-bank
+request/inventory/page125 expectations. Suitable-client rendering/navigation and
+automatic resource acquisition remain separate: the bounded stock/candidate
+libzvbi failures and Kodi source-only assessment below do not prove suitability.
+No further libzvbi maintenance is initiated. Full authored resources/effects,
+regional fallback/editor/templates/zones, Lua/restart/hydration and six-platform
+requirements stay open; no generic-engine or production-guide acceptance.
+
 2026-10-16 genuine no-bank QTeletextMaker checkpoint:
 Criterion: connect the compiler-owned no-bank national-glyph realization to
 fresh export -> actual pinned editor edit/Save As -> native concept import ->
@@ -3013,14 +3069,11 @@ Canonical ignored receipt: tmp/phase9-compiler-polish-editor/identity.json, SHA2
 It binds source, input/Save As, GUI identity/images, test/lint logs and negatives.
 All milestone contracts/statuses remain unchanged; no push or publication.
 
-Missing proof / concrete next action: add the no-bank variant beside the existing
-polish_delivery ordinary TCP probe. Reuse LiveOrigin/capture/verify_capture and
-cleanup, but do not reuse publish_genuine's fixed authored-bank hash, unchanged
-page-count/resource zip or page125 DRCS oracle. The new generated bank changes
-inventory; page125 remains G0 A. Then adapt only the independent pinned imager
-case to captured Normal1A0/S1=0slot0 and unchanged literal mask, with Night's
-no-bank state. Actual automatic resource acquisition, suitable-client rendering/
-navigation and headed/hydrated new-flow admin proof remain open. Existing bounded
+Subsequent ordinary no-bank delivery and fixed independent imager proof are
+recorded above. The dedicated variant retains the changed resource inventory and
+page125 G0 A; it does not relax the previous authored-bank fixture. Automatic
+resource acquisition, suitable-client rendering/navigation and headed/hydrated
+new-flow admin proof remain open. Existing bounded
 client findings and every full-Level2.5/editor/Lua/restart/platform obligation
 remain; production TV-guide content still waits for independent engine acceptance.
 

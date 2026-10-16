@@ -14,7 +14,7 @@ X27 and X26/metadata decoding pass; full client open.
 C2 keeps per-instance final words; differing charset aliases remain pending.
 G1 mode/fallback and Latin decoder gaps survive.
 165 direct recipes;4 pending. Polish5B bank QTM/SSR/TCP/imager pass.
-No-bank QTM concept/reopen pass; stream/client/hydration open. Hebrew gap stays.
+No-bank QTM/TCP/imager pass; headed/client/hydration open. Hebrew gap stays.
 Glyph/DRCS keep original resources and loser/blank lineage; lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and
 permitted pairs. Child areas stay separate.
