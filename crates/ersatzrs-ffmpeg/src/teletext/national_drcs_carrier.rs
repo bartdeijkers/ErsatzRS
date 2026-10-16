@@ -12,9 +12,9 @@ use ersatzrs_domain::{
 
 use super::TeletextMainComposition;
 
-// Two established identities, each with a plain and underlined response. These
+// Four established identities, each with a plain and underlined response. These
 // slots remain independent of consumer order and the variants currently present.
-pub(super) const COMPILER_GLYPH_SLOTS: usize = 4;
+pub(super) const COMPILER_GLYPH_SLOTS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct NationalDrcsCarrier {
@@ -100,6 +100,8 @@ fn identity_slot(identity: TeletextGlyphIdentity) -> Option<u8> {
     match (glyph.national_subset(), glyph.code()) {
         (Some(TeletextNationalSubset::Polish), 0x5b) => Some(0),
         (Some(TeletextNationalSubset::Turkish), 0x23) => Some(2),
+        (Some(TeletextNationalSubset::Romanian), 0x5d) => Some(4),
+        (Some(TeletextNationalSubset::Romanian), 0x7d) => Some(6),
         _ => None,
     }
 }
@@ -152,7 +154,8 @@ fn original_identity(
     Some(original)
 }
 
-/// Table 36 Polish 5/B and Turkish 2/3 (one TL symbol) are established here.
+/// Table 36 Polish 5/B, Turkish 2/3 (one TL symbol) and Romanian 5/D, 7/D
+/// are established originals here; Romanian mark aliases remain unproven.
 /// Their national identities remain
 /// literal in the original service; no G0/G2 alias or editor metadata is trusted.
 /// The existing pinned original font policy supplies its exact 12x10 bitmap.

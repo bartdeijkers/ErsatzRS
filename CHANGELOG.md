@@ -712,6 +712,11 @@ release section when tagging a release.
   independent glyph, fragment and theme checks. Headed localized Chromium and
   Firefox trials connect the actual editor save to native forms and the same
   ordinary streams. Hydration and actual teletext-client proof remain open.
+- Preserve the assigned Romanian national Base `0x5D`/`0x7D` originals through
+  enlarged-page repaint with exact resource-backed glyphs, including underline.
+  Keep the original character identities and fallback bytes; no guessed breve
+  or caron conversion is introduced. Actual editor and client acceptance for
+  these variants remains open.
 - Realize the Turkish national Base `0x23` TL symbol through enlarged-page repaint
   with exact plain or underlined DRCS, retaining its original identity and
   fallback under both primary designations. Mixed Polish/Turkish pages keep

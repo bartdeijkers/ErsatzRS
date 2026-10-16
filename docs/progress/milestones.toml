@@ -2968,6 +2968,62 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 exact Romanian original carrier checkpoint:
+Criterion: P9A-04 authored national repertoire and non-spacing-attribute lowering:
+assigned Romanian G0 5D/7D must survive enlarged Base repaint without inventing
+a direct G0/G2 or breve/caron recipe. Table33 primary1F selects Romanian;
+primary37 is Greek. Table36/37 alone establish no chosen composite here, and
+the existing Romanian atlas differs from both candidate composite masks.
+EN300706V1.2.1 G.2 leaves non-DRCS font appearance to decoder policy. The exact
+original font policy is carried as DRCS, never treated as a semantic alias.
+The pinned font binary and direct-conversion source/expectations stay byte-exact:
+165direct/2Unsupported/2Unproven remains the separate recipe-table result.
+
+The existing sealed original-origin/invocation/resource/bitmap witness now admits
+Romanian5D/7D under primary1F, with stable plain/underline slots4/5 and6/7 beside
+Polish0/1 and Turkish2/3. Each admitted target bank's checked internal bound
+allows these eight fixed variants. Caller pages/units/work/deadline and the
+per-display two-subtable/24-distinct-glyph bounds remain unchanged. No comparator,
+producer quota, public converter, dependency, platform assumption or package is
+changed. Original Assigned/Base/full-identity and known-attribute guards stay
+strict; D5 underline is in the exact bitmap and physical DRCS D5 remains false.
+
+The frozen four-case positive first fails with located NationalConversion at
+original994 (Nextest8f3ccfd4-8ec0-46dd-bf86-01c51dbc83fd), after all four original
+identities/effects/literal masks are independently settled. After the small
+production correction, the SAME positive passes0.484s in
+846d6f42-d423-4c78-915f-a45b59b23f09. Full original/physical rasters, actual
+resource/reference/consumer/slot/bitmap, unchanged declaration and literal raw
+fallback rows pass for both codes plain/underlined. Direct conversion still
+returns UnprovenRecipe. The existing eight domain recipe tests pass in
+257debfc-d6cc-404e-9716-ffd414661352; all35 existing Polish/Turkish compiler
+regressions pass in0ee93d5f-72be-4000-ba31-fedf329679d7, including linked-target
+and scope limits.
+
+The first mixed run has two passes and one fixture-expectation failure: after
+reversing the authored page list, the test wrongly expects sorted consumers.
+Production preserves authored order. Only that expected consumer sequence is
+corrected; sorted fixed slots, literal masks, pixels and original positive bytes
+are unchanged. Finaldcad913f-611a-4ef0-a30f-8c5ea5fdf549 passes allthree tests:
+all8 variants share one NormalS0 bank; reversing/removing consumers preserves
+bank identity, fixed remaining slots, exact PTU bytes, fallback and full rasters.
+Exact caller page/unit bounds emit identical successful units; each minus-one
+bound rejects with the expected typed category and leaves input unchanged.
+Initial strict Clippy finds two redundant test closures; replacing each with
+the same data_units method pointer changes no behavior. No new allowances.
+Final strict ffmpeg all-target Clippy and focused independent review pass.
+Canonical receipt: tmp/phase9-romanian-carrier/identity.json
+SHA256 0133485837bae15b4ad94813723093e6bbb60d34d0b75d90dec88abf2ac3fc61.
+This checkpoint proves native exact-original realization only. Actual Romanian
+QTM SaveAs/concept/shared preview/explicit publication/ordinary stream/independent
+and suitable-client evidence is missing. Next use four existing-flow pages
+124..127/S32, primary1F, raw5D/7D, page-specific underline and two channel themes.
+Existing pinned QTM/native GUI helpers accept these raw codes; no decoder repair
+or new general proof framework is needed. Suitable-client acquisition/navigation
+remains a dependent acceptance blocker, not a reason to stop native/editor work.
+Full authored Level2.5, all editor/metadata/zones/Lua/restart/admin/playback/platform
+criteria remain required. No milestone status, acceptance or dependency changes.
+
 2026-10-16 actual three-linked-target editorial-delivery checkpoint:
 Criterion: join three distinct occupied Normal targets to a SAME-live genuine
 editor export/save/concept/shared preview/explicit publication/ordinary delivery

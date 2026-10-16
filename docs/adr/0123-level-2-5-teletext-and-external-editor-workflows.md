@@ -554,6 +554,13 @@ resource-backed path. Turkish 2/3 is the single TL symbol assigned by Table 36
 note 1, absent from Tables 35/37; neither a modern currency symbol, separate T/L
 origins nor an equal-looking enhanced glyph establishes its identity. Both
 Table 32 Turkish primary aliases (0x16/0x36) retain their original declarations.
+Table 36 Romanian 5/D and 7/D under Table 33 primary 0x1F are also exact assigned
+originals. Their existing pinned national masks differ from both candidate
+breve and caron composites. Resource-backed realization retains that original
+font policy; it does not infer a mark identity from glyph appearance. The separate
+direct-conversion table keeps both Romanian entries as `UnprovenRecipe`.
+Non-DRCS font appearance remains a decoder choice (EN 300 706 G.2), distinct
+from the exact bitmap carried by a DRCS resource.
 This adds no direct G0/G2/diacritic recipe to the separate national table.
 
 For these established identities, original G0 D5 underline is realized through
@@ -563,9 +570,10 @@ Only the sealed original-origin/invocation/resource/bitmap witness permits this
 paired correspondence; public detached comparisons remain strict. Original
 identity, fallback, geometry and every other painted attribute stay unchanged.
 Both known painted variants may coexist in one generated bank with stable Polish
-slots 0 (plain)/1 (underlined) and Turkish slots 2/3, independent of discovery/
-removal. Their definitions remain engine-owned. Each admitted target bank in
-either scope may require all four fixed slots; its checked internal glyph bound
+slots 0 (plain)/1 (underlined), Turkish slots 2/3 and Romanian 5/D slots 4/5
+and 7/D slots 6/7, independent of discovery/removal. Their definitions remain
+engine-owned. Each admitted target bank in either scope may require all eight
+fixed slots; its checked internal glyph bound
 therefore follows the admitted bank count. This prevents independent Normal,
 Global or already-linked targets from competing for another bank's allowance.
 Caller page, encoded-unit and assembly-work bounds still apply to the complete service;
