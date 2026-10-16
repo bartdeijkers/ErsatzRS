@@ -741,6 +741,9 @@ release section when tagging a release.
   using its exact plain or underlined glyph. Reuse matching authored definitions
   or provision bounded compiler-owned DRCS resources through unused links, keeping
   original declarations, fallback, existing resources and lifecycle intact.
+  Authenticated MOT-inherited roles now retain those originals through prepared
+  concepts, shared preview, explicit publication and indexed reexport; modified
+  MOT bytes or generated glyphs are rejected without changing either channel.
   Mixed plain/underlined glyphs retain stable generated slots and their painted
   attributes while keeping undefined DRCS underline bits disabled. Known Base
   spacing latches also survive the genuine editor/import/publication/stream flow,

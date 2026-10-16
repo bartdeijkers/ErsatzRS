@@ -178,3 +178,6 @@ mod rejections;
 
 #[path = "linked_targets/genuine.rs"]
 mod genuine;
+
+#[path = "linked_targets/implicit_mot.rs"]
+mod implicit_mot;

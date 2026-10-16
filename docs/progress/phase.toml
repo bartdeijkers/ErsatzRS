@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect selected-MOT resources to the native/editor flow'
+current_focus = 'P9A-04: actual QTM and ordinary delivery with implicit MOT'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -226,11 +226,17 @@ frozen whole-service REDc046edda/GREEN6ff66d03 correction: declaration-aware
 full-role X27 preserves original MOT/resource packets/defaults/fallback/raster,
 including occupiedS1 and fresh-bank cases. The54-test union passes; P9A-04 owns
 constructor/fixture corrections, typed namespace/budget negatives and exact scope.
-Next join this correction to the existing three-owner native/editor flow with
-same-magazine MOT1FE/S9, protected raw MOT .dvb, fresh receipts, shared previews,
-separate publication, indexed S0/S1 protection and reopen. Actual new MOT editor/
-ordinary/independent/client evidence is missing; do not borrow Romanian inputs.
-Hebrew and the rest of the full matrix remain required, not accepted restrictions.
+Prepared implicit-MOT native6a9a97fc passes10.623s. Review adds an independent
+magazine1/row1 MRAG assertion before the single valid-code raw-MOT mutation;
+finald7a8f7a8 passes10.718s. Three concept previews/separate publication/indexed
+S0/S1 protection, exact raw MOT, both-profile isolation and database reopen pass.
+MOT Association and generated-slot located Structure negatives preserve all
+heads/pointers/package/config/source/receipt state. P9A-04 owns the exact proof.
+Next run three NEW pinned QTM saves with the existing live receipt protocol,
+then ordinary TCP/AV/TSDuck/full-model and independent checks for this MOT input.
+Actual new MOT editor/ordinary/independent/client evidence is still missing;
+prior Romanian and explicit-link saves cannot substitute. No decoder repair
+or restriction is accepted. Hebrew and the rest of the full matrix remain required, not accepted restrictions.
 Existing165direct/2Unsupported/2Unproven expectations stay unchanged.
 Client acquisition/rendering/navigation and hydration remain open.
 Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source

@@ -2968,6 +2968,45 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 implicit-MOT prepared native/editor-boundary checkpoint:
+Criterion: connect authenticated selected MOT1FE/S9, three display owners124..126
+and occupied Normal2A0/2A2/2A3 S0 plus Global1A1S0 to the existing installed-profile
+export/concept/shared-preview/explicit-publication/indexed-reexport/reopen flow.
+The original display pages have no X27; all roles are inherited from the exact
+MOT. This adds test coverage only; the preceding core correction is unchanged.
+
+Prepared Nextest6a9a97fc-c4e0-4fce-90fb-a93b1b0cb479 passes10.623s. Review identifies
+one negative-proof gap: asserting framing and valid payload Hamming8/4 alone
+does not establish that packet3 is the intended MOT body row1. The test now
+independently decodes its two MRAG nibbles and requires magazine1/row1 before
+changing exactly one payload byte to another valid code. Only this assertion
+is added; positive content, masks, permissions and error expectations are intact.
+Final d7a8f7a8-ed72-4f09-a3a3-9922d79bc700 passes10.718s with that assertion.
+
+One persistent fixture uses the SAME installed addon with distinct Day/Night
+profiles/themes. Three prepared Base A-to-5B edits import as revision2 without
+changing publication. Shared three-page previews, explicit publication and mixed
+indexed S0/S1 export retain all original declarations/resource packets, effective
+MOT candidates/default sources and full raster/fallback. The generated Normal
+S1=1 banks retain Normalmask3/Globalmask1 against the original MOT. Reexported
+MOT raw .dvb bytes are identical. A valid-code original-MOT body mutation rejects
+as Association; a valid generated Normal2A0/S1=1 PTU pixel mutation rejects as
+located Structure at raw2A0/subcode1/row1. After each rejection and database
+reopen, concept head, accepted pointers, original package/config/profile/source/
+receipt state, effective Day model and unchanged Night remain exact. No playout
+refresh is emitted. This is database reopen evidence, not a whole-host restart.
+
+Focused review is otherwise clean. Strict web all-target Clippy, formatting,
+architecture and progress validation pass. Canonical receipt:
+tmp/phase9-implicit-mot-native/identity.json SHA256 ed1e1aeb2702156da95c20401499e4bcad296e6444347cb700084006b6de30e5.
+No admin, DTO, route, production, decoder or package code changes. Prior core and
+Romanian/explicit-linked editor/ordinary proofs retain their different scopes.
+Actual NEW MOT QTM saves, ordinary TCP/TSDuck/independent capture and suitable
+client display/navigation are still missing. Next reuse the existing bounded
+three-page genuine-editor runner with a named implicit-MOT case and fresh closed
+saves; no MOT-TTI format or new general infrastructure. All acceptance contracts,
+engine-first gates and known Local-Passive client gap remain open; no push.
+
 2026-10-16 authenticated implicit-MOT DRCS derivation checkpoint:
 Criterion: P9A-04 authored resources/default selection must survive exact national
 realization when occupied roles are inherited from selected MOT without explicit
@@ -9404,18 +9443,18 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Authored warm magazine-to-page presentation | Bounded complete-X28/history plus representative cold and retained-client warm bank publication proven; full warm matrix open |72 output tests, real AV/TSDuck/persistent Cyrillic-to-Greek decoding, cold editor/admin flow and same-client/decoder two-theme124/125/124 with18 actual library-map barriers above | Complete lower-level/resource/Header/POP/MOT/page-retirement, broader palette/context and client/platform matrix remain required | Reuse this fixed handover; address a specific remaining lifecycle clause when it blocks its accepted feature rather than expanding decoder maintenance |
-| Assigned national G0 physical realization | Exact original Polish5B, Turkish23 and Romanian5D/7D use sealed resource-backed normalization; stable eight plain/underline slots and linked-S1 derivation | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT supplements now have core proof above; their native/editor connection, broader effects/resources, hydrated admin and suitable-client rendering/navigation remain open | Join the corrected selected-MOT roles to fresh receipt/concept/shared preview/publication/indexed export/reopen in the existing flow |
+| Assigned national G0 physical realization | Exact original Polish5B, Turkish23 and Romanian5D/7D use sealed resource-backed normalization; stable eight plain/underline slots and linked-S1 derivation | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT core and prepared native concepts/publication/indexed protection/reopen pass; actual new editor/ordinary/independent, broader effects/resources, hydrated admin and suitable-client proof remain open | Extend the existing three-page genuine runner with an explicit implicit-MOT case and fresh saves; retain protected raw MOT |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next authored action: join authenticated implicit selected-MOT DRCS
-roles to the existing three-owner native/editor flow. The frozen RED/GREEN core
-correction and54-test union above retain exact declarations/resources/defaults,
-add complete effective X27 and keep semantic-only authority strict. Native
-owners124..126 need same-magazine MOT1FE/S9; protected raw MOT .dvb is the existing
-interchange carrier. Prove unchanged and rejected changed MOT bytes, shared
-preview/separate publication, indexed generated ownership and reopen before the
-actual editor/ordinary/client extension. No new general infrastructure or
-accepted resource/client/fallback/platform restriction follows from core proof.
+Concrete next authored action: connect the now proven implicit-MOT prepared
+native flow to three NEW actual pinned QTM saves, then the same live explicit
+publication and two ordinary TCP streams. The existing input protocol already
+binds all fresh files, receipt, sidecar and closed proofs, including protected
+MOT1FE/S9 .dvb; reuse it rather than invent MOT-TTI or a new framework. Original
+TTIs differ from earlier explicit-X27 inputs, so old saves cannot substitute.
+The core54-test union and prepared native rejection/state/reopen evidence above
+remain valid. New independent acquisition/client and broader resource/default/
+fallback/platform coverage are still required; no restriction is accepted.
 G1's fixed vector remains qualified; no external repair expansion starts. The actual padded sparse save now
 passes the joined admin/publication/ordinary route, strict edited-S1=1/fallback
 and qualified-client flow above. Independent and actual sparse client proof is
