@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 const GENERATION: &str = "original-correlation-sentinel";
 const ADDON: &str = "org.example.synthetic";
 
-fn budget() -> TeletextDesignDocumentBudget {
+pub(super) fn budget() -> TeletextDesignDocumentBudget {
     TeletextDesignDocumentBudget {
         max_serialized_bytes: 128 * 1024,
         max_documents: 8,
@@ -50,7 +50,7 @@ fn budget() -> TeletextDesignDocumentBudget {
         },
     }
 }
-fn address(subcode: u16) -> TeletextPageAddress {
+pub(super) fn address(subcode: u16) -> TeletextPageAddress {
     TeletextPageAddress {
         page: TeletextPageNumber::new(200).unwrap(),
         subcode: TeletextSubcode::new(subcode).unwrap(),
@@ -132,12 +132,12 @@ fn original_value(v3: bool) -> Value {
         "edit_policy":{"policy_version":1,"kind":"original_only"},
         "resource_transmissions":transmissions,"documents":[{"contract":contract,"generation":GENERATION,"response":response(v3)}]})
 }
-fn bytes(value: &Value) -> Vec<u8> {
+pub(super) fn bytes(value: &Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec_pretty(value).unwrap();
     bytes.extend_from_slice(b"\n \t");
     bytes
 }
-fn original_with_context() -> Vec<u8> {
+pub(super) fn original_with_context() -> Vec<u8> {
     let mut value = original_value(true);
     let original = decode_teletext_design_documents(&bytes(&value), budget()).unwrap();
     let channels = [TeletextGuideChannel {
@@ -174,7 +174,7 @@ fn original_with_context() -> Vec<u8> {
     .unwrap();
     bytes(&value)
 }
-fn provenance() -> TeletextSavedEditorialProvenance {
+pub(super) fn provenance() -> TeletextSavedEditorialProvenance {
     TeletextSavedEditorialProvenance {
         export_receipt_id: 3,
         export_receipt_digest: "d".repeat(64),
@@ -183,7 +183,7 @@ fn provenance() -> TeletextSavedEditorialProvenance {
         original_digest: "e".repeat(64),
     }
 }
-fn overlay() -> TeletextSavedEditorialOverlay {
+pub(super) fn overlay() -> TeletextSavedEditorialOverlay {
     TeletextSavedEditorialOverlay::new(
         provenance(),
         [16, 17]

@@ -14,13 +14,15 @@ use ersatzrs_addon_contract::{TeletextAuthoringRegionAreaWire, TeletextAuthoring
 use ersatzrs_app::teletext_export_project::TeletextExportProject;
 use ersatzrs_domain::{
     TeletextBaseDisplayCellKind, TeletextDisplayAttribute, TeletextDisplayCell,
-    TeletextDisplayFragment, TeletextEnhancementCommand, TeletextLocalProgramOperandOverlay,
-    TeletextPageAddress, TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
+    TeletextDisplayFragment, TeletextDrcsBitmapOverlay, TeletextDrcsCatalog,
+    TeletextEnhancementCommand, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
+    TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
 };
 use ersatzrs_ffmpeg::teletext::{
-    project_encoded_teletext_display, project_teletext_comparison_glyph,
+    encode_teletext_drcs_page, project_encoded_teletext_display, project_teletext_comparison_glyph,
     EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService, EncodedTeletextPage,
     TeletextAuthoredServiceEncodingBudget, TeletextEncodedDisplayRecord, TeletextMainComposition,
+    TeletextResourceFullUpdate,
 };
 
 #[cfg(test)]
@@ -104,6 +106,7 @@ pub(super) fn validate_teletext_editorial_effects(
 pub(super) struct TeletextEditorialEdits<'a> {
     pub rows: &'a [TeletextPhysicalBaseOverlay],
     pub operands: &'a [TeletextLocalProgramOperandOverlay],
+    pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
 
 pub(super) fn validate_teletext_editorial_effects_with_operands(
@@ -138,10 +141,12 @@ pub(super) fn validate_teletext_editorial_transition(
         TeletextEditorialEdits {
             rows: incoming,
             operands: &[],
+            bitmaps: &[],
         },
         TeletextEditorialEdits {
             rows: cumulative,
             operands: &[],
+            bitmaps: &[],
         },
         budget,
         deadline,
@@ -168,21 +173,13 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         check_deadline(deadline)?;
         let (Some((old_page, old)), Some((new_page, new))) = (display(before), display(after))
         else {
-            if before.resource_header() != after.resource_header()
-                || before.data_units() != after.data_units()
-            {
-                return Err(error(
-                    None,
-                    None,
-                    TeletextEditorialEffectsFailure::ProtectedStructure,
-                ));
-            }
+            check_resource(before, after, edited, incoming.bitmaps, deadline)?;
             continue;
         };
         let owner = old.owner();
         let overlay = incoming.rows.iter().find(|value| value.owner() == owner);
         let operand_change = incoming.operands.iter().any(|value| value.owner() == owner);
-        if overlay.is_none() && !operand_change {
+        if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() {
             if before.data_units() != after.data_units() {
                 return Err(error(
                     Some(owner),
@@ -234,6 +231,17 @@ fn check_service(
     deadline: Instant,
 ) -> Result<()> {
     let overlays = cumulative.rows;
+    // Bitmaps replace existing definitions and add no commands. The checked
+    // catalog has at most48 slots per bounded resource; cap the raw proposals
+    // before indexing without spending the unrelated command quota.
+    let maximum_bitmaps: usize = original
+        .declared()
+        .semantic()
+        .drcs()
+        .subtables()
+        .iter()
+        .map(|table| table.glyphs().len())
+        .sum();
     if budget.max_pages == 0
         || budget.max_units == 0
         || original.pages().len() > budget.max_pages
@@ -243,6 +251,8 @@ fn check_service(
         || overlays.len() > budget.max_pages
         || incoming.operands.len() > budget.max_commands
         || cumulative.operands.len() > budget.max_commands
+        || incoming.bitmaps.len() > maximum_bitmaps
+        || cumulative.bitmaps.len() > maximum_bitmaps
     {
         return Err(error(None, None, TeletextEditorialEffectsFailure::Budget));
     }
@@ -256,7 +266,6 @@ fn check_service(
         || before.magazine_presentations() != after.magazine_presentations()
         || before.objects() != after.objects()
         || before.object_companions() != after.object_companions()
-        || before.drcs() != after.drcs()
         || old.mots() != new.mots()
         || old.selections() != new.selections()
         || old.empty_object_pages() != new.empty_object_pages()
@@ -271,6 +280,13 @@ fn check_service(
             TeletextEditorialEffectsFailure::ProtectedStructure,
         ));
     }
+    check_bitmaps(
+        before.drcs(),
+        after.drcs(),
+        incoming.bitmaps,
+        cumulative.bitmaps,
+        deadline,
+    )?;
     check_enhancements(
         before.page_enhancements(),
         after.page_enhancements(),
@@ -297,6 +313,150 @@ fn check_service(
                 TeletextEditorialEffectsFailure::Association,
             ));
         }
+    }
+    Ok(())
+}
+
+/// Match every table and glyph against exactly the incoming bitmap changes.
+/// Cumulative intents describe the immutable root separately: their expected
+/// bitmap need not match this latest-export baseline, but their final value must.
+fn check_bitmaps(
+    before: &TeletextDrcsCatalog,
+    after: &TeletextDrcsCatalog,
+    incoming: &[TeletextDrcsBitmapOverlay],
+    cumulative: &[TeletextDrcsBitmapOverlay],
+    deadline: Instant,
+) -> Result<()> {
+    let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
+    let structure = || {
+        error(
+            None,
+            None,
+            TeletextEditorialEffectsFailure::ProtectedStructure,
+        )
+    };
+    let bitmap = |catalog: &TeletextDrcsCatalog, change: &TeletextDrcsBitmapOverlay| {
+        catalog
+            .subtables()
+            .iter()
+            .find(|table| table.identity() == change.identity())
+            .and_then(|table| {
+                table
+                    .glyphs()
+                    .iter()
+                    .find(|glyph| glyph.slot == change.slot())
+            })
+            .map(|glyph| glyph.bitmap)
+    };
+    let mut changes = BTreeMap::new();
+    for change in incoming {
+        check_deadline(deadline)?;
+        if changes
+            .insert((change.identity(), change.slot()), change)
+            .is_some()
+            || bitmap(before, change) != Some(change.expected())
+        {
+            return Err(association());
+        }
+    }
+    let mut final_changes = BTreeSet::new();
+    for change in cumulative {
+        check_deadline(deadline)?;
+        if !final_changes.insert((change.identity(), change.slot()))
+            || bitmap(after, change) != Some(change.replacement())
+        {
+            return Err(association());
+        }
+    }
+    if before.subtables().len() != after.subtables().len() {
+        return Err(structure());
+    }
+    for (old, new) in before.subtables().iter().zip(after.subtables()) {
+        check_deadline(deadline)?;
+        if old.identity() != new.identity() || old.glyphs().len() != new.glyphs().len() {
+            return Err(structure());
+        }
+        for (old_glyph, new_glyph) in old.glyphs().iter().zip(new.glyphs()) {
+            check_deadline(deadline)?;
+            let expected = changes
+                .get(&(old.identity(), old_glyph.slot))
+                .map_or(old_glyph.bitmap, |change| change.replacement());
+            if old_glyph.slot != new_glyph.slot || new_glyph.bitmap != expected {
+                return Err(structure());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resource packets may differ only from fully encoding the exact authorized
+/// semantic bitmap intent. Header identity, lifecycle, mode and X28/3 remain
+/// fixed; untouched resources retain every byte. This is a bounded one-resource
+/// encoding, not a second complete-service compilation or permission source.
+fn check_resource(
+    before: &EncodedTeletextAuthoredPage,
+    after: &EncodedTeletextAuthoredPage,
+    edited: &EncodedTeletextAuthoredService,
+    incoming: &[TeletextDrcsBitmapOverlay],
+    deadline: Instant,
+) -> Result<()> {
+    check_deadline(deadline)?;
+    let failure = || {
+        error(
+            None,
+            None,
+            TeletextEditorialEffectsFailure::ProtectedStructure,
+        )
+    };
+    if std::mem::discriminant(before) != std::mem::discriminant(after)
+        || before.resource_header() != after.resource_header()
+    {
+        return Err(failure());
+    }
+    let Some(header) = before.resource_header() else {
+        return Err(failure());
+    };
+    if !incoming
+        .iter()
+        .any(|change| change.identity() == header.identity())
+    {
+        return if before.data_units() == after.data_units() {
+            Ok(())
+        } else {
+            Err(failure())
+        };
+    }
+    let (EncodedTeletextAuthoredPage::Resource(old), EncodedTeletextAuthoredPage::Resource(new)) =
+        (before, after)
+    else {
+        return Err(failure());
+    };
+    if old.transmission_mode() != new.transmission_mode() {
+        return Err(failure());
+    }
+    let table = edited
+        .declared()
+        .semantic()
+        .drcs()
+        .subtables()
+        .iter()
+        .find(|table| table.identity() == header.identity())
+        .ok_or_else(failure)?;
+    let update = if header.transmission().update_indicator() {
+        TeletextResourceFullUpdate::Changed
+    } else {
+        TeletextResourceFullUpdate::Unchanged
+    };
+    let expected = encode_teletext_drcs_page(
+        table,
+        header.update_counter(),
+        update,
+        old.transmission_mode(),
+    )
+    .map_err(|_| failure())?;
+    check_deadline(deadline)?;
+    if expected.header() != header || expected.data_units() != after.data_units() {
+        return Err(failure());
     }
     Ok(())
 }

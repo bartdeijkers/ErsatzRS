@@ -219,7 +219,8 @@ pub enum TeletextExportAssetScope {
     Magazine {
         magazine: u8,
     },
-    /// Derived protected editor file, linked to unchanged original DVB units.
+    /// Derived editor file linked to protected original DVB units. Native import
+    /// may qualify bitmap intentions without rewriting those original assets.
     DrcsTti {
         resource_name: String,
         editor_ordinal: u64,

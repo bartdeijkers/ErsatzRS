@@ -32,9 +32,11 @@ release section when tagging a release.
   localized concept previews, explicit publication, ordinary-stream delivery and
   two-theme client navigation. An additional recorded DRCS bitmap edit/save and
   reload calibration preserves singleton resource identity and function. Checked
-  bitmap intentions now preserve the complete native service and exact fallback
-  during compilation and undo; native resource import and full external-editor/
-  Level 2.5 acceptance remain open.
+  bitmap concepts now retain authenticated original resources through native
+  import, shared preview, explicit publication and undo. Singleton V3/V4 resource
+  edits protect every shared display consumer and preserve fallback packets.
+  Multi-subpage resource editing and full external-editor/Level 2.5 acceptance
+  remain open.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source

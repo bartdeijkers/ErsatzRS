@@ -109,7 +109,7 @@ pub enum NativeTeletextEditorialImportError {
     MissingReceipt,
     #[error("teletext editorial data does not match the retained original export")]
     Association,
-    #[error("teletext editor input contains no changed display content")]
+    #[error("teletext editor input contains no changed authored content")]
     NoChanges,
     #[error(transparent)]
     Storage(#[from] TeletextDesignStoreError),
@@ -325,6 +325,7 @@ fn qualify_rows(
         .ok_or(NativeTeletextEditorialImportError::Association)?;
     let overlays = overlay.pages().to_vec();
     let operands = overlay.local_program_operands().to_vec();
+    let bitmaps = overlay.drcs_bitmap_overlays().to_vec();
     let encoding = policy.encoding;
     let edited = parts
         .compile(stored, policy, deadline, overlays.clone())
@@ -343,6 +344,7 @@ fn qualify_rows(
         TeletextEditorialEdits {
             rows: &overlays,
             operands: &operands,
+            bitmaps: &bitmaps,
         },
         &encoding,
         deadline,
@@ -468,6 +470,7 @@ fn reconcile_files(
     let mut changes = TeletextEditorialChanges {
         rows: Vec::new(),
         operands: Vec::new(),
+        bitmaps: Vec::new(),
     };
     let encoded = baseline
         .original
@@ -506,11 +509,27 @@ fn reconcile_files(
             )?;
             changes.rows.extend(incoming.rows);
             changes.operands.extend(incoming.operands);
+        } else if let Some(mapping) = body.project.assets.iter().find(|asset| {
+            asset.name == original.name
+                && super::teletext_editorial_tti::resources::supported(asset)
+        }) {
+            let context =
+                super::teletext_editorial_tti::resources::mapping(mapping, &body.project, encoded)?;
+            changes
+                .bitmaps
+                .extend(super::teletext_editorial_tti::resources::reconcile(
+                    context,
+                    &original.bytes,
+                    &edited.bytes,
+                    encoded,
+                    (tti, encoded.unit_count()),
+                    deadline,
+                )?);
         } else if original.bytes != edited.bytes {
             return Err(NativeTeletextEditorialImportError::Association);
         }
     }
-    if changes.rows.is_empty() && changes.operands.is_empty() {
+    if changes.rows.is_empty() && changes.operands.is_empty() && changes.bitmaps.is_empty() {
         return Err(NativeTeletextEditorialImportError::NoChanges);
     }
     Ok(changes)
@@ -530,6 +549,28 @@ fn validate_reconciled_files(
             .find(|file| file.name == mapping.name)
             .ok_or(NativeTeletextEditorialImportError::Association)?;
         validate_teletext_editorial_tti_encoding(mapping, &edited.bytes, tti, deadline, encoded)?;
+    }
+    for mapping in &baseline.body.project.assets {
+        if !super::teletext_editorial_tti::resources::supported(mapping) {
+            continue;
+        }
+        check_deadline(deadline)?;
+        let edited = files
+            .iter()
+            .find(|file| file.name == mapping.name)
+            .ok_or(NativeTeletextEditorialImportError::Association)?;
+        let context = super::teletext_editorial_tti::resources::mapping(
+            mapping,
+            &baseline.body.project,
+            encoded,
+        )?;
+        super::teletext_editorial_tti::resources::validate(
+            context,
+            &edited.bytes,
+            encoded,
+            (tti, encoded.unit_count()),
+            deadline,
+        )?;
     }
     Ok(())
 }

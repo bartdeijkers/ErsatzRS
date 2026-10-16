@@ -16,6 +16,7 @@ use ersatzrs_ffmpeg::teletext::{
 };
 use serde_json::json;
 use std::time::Duration;
+mod bitmaps;
 mod operands;
 
 const ADDON: &str = "org.ersatzrs.synthetic-editor-effects";

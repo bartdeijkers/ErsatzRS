@@ -3068,9 +3068,26 @@ or grant native import authority. `TeletextDrcsBitmapOverlay` and semantic/decla
 `with_drcs_bitmap_overlays` retain exact expected bitmap, resource identity and slot
 while revalidating a complete candidate. Shared consumers can change rendered
 pixels without any change to their own packets; host permissions must compare
-all of them. P9A-04 owns the evidence and missing native resource-concept/preview/
-publication connection. Resource-page classification and
-unsupported editor transformations must be checked explicitly.
+all of them. Private concept schema3 now stores fixed ten-row expected/replacement
+bitmap intentions, authenticates identical shared original producer resources and
+replays before complete encoding. V1/V2 storage remains byte-identical. Retained
+V3 singletons and production V4 banks with exactly one native S1=0 resource use
+receipt-qualified TTI reconciliation, the same preview and separate explicit
+publication. Original raw DVB, header/lifecycle, functions/modes and undefined
+slots stay exact. Repeated edits retain immutable-root expectations; exact undo
+restores original bytes. All shared display consumers are checked against the
+latest receipt, including unexported and panel users with unchanged own packets.
+Root provenance includes actual execution-record consumers, not unrelated pages.
+
+The actual dense S1=0/1 MAIN-bank editor trial preserves the second resource and
+changes one bitmap byte while its writer shifts both PN/SC ordinals from0/1 to1/2.
+These editor indices do not authorize native identity changes. Multi-group and
+padded-bank import remains an integration gap until that complete mapping is
+implemented and proved. P9A-04 owns current proof and the next integration action.
+The optional Linux/X11 widget harness uses bounded real pointer input for the
+Save As filename; it retains activation/focus/path/no-overwrite guards. Its
+successful dense-bank run does not fix the retained legacy modal-focus failure.
+Resource-page classification and unsupported transformations stay explicit.
 QTeletextMaker alone cannot establish the full enhanced broadcast-client gate.
 
 ### Actual synthetic edit/save calibration

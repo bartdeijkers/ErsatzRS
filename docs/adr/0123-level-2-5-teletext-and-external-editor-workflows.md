@@ -102,10 +102,16 @@ byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.
 Checked exact-original Normal/Global bitmap intents now rebuild and revalidate
 the complete semantic service and encode the recorded byte change without altering
-fallback or resource identities. This grants no resource import/publication
-authority: private persistence, receipt-qualified reconciliation and protection of
-every shared display consumer remain missing. No resource editing restriction is
-accepted.
+fallback or resource identities. Private concept schema3 now persists these
+intentions without changing V1/V2, authenticates shared original resources and
+replays them through complete native validation. Receipt-qualified retained V3
+singletons and fresh V4 one-resource S1=0 banks now use the existing concept,
+shared preview and explicit publication path. Exact resource-byte correspondence
+and resolved effects on every shared display enforce the latest receipt's edit
+boundaries. Multi-group/padded banks still require explicit reconciliation of
+QTM's observed whole-bank PN/SC ordinal renumbering; actual dense-bank editor
+editing/navigation/save is calibration evidence only. No resource editing
+restriction or full resource-editor/client acceptance is accepted.
 Full enhancement, resource, geometry, panel and actual editor coverage remains
 required; this slice introduces no accepted product restriction. P9A-04 owns
 verification and the concrete next integration step.

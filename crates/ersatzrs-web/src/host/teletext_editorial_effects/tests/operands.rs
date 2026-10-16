@@ -114,6 +114,7 @@ fn edits(operands: &[TeletextLocalProgramOperandOverlay]) -> TeletextEditorialEd
     TeletextEditorialEdits {
         rows: &[],
         operands,
+        bitmaps: &[],
     }
 }
 #[test]

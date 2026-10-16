@@ -1,5 +1,9 @@
 use super::*;
-use ersatzrs_domain::{TeletextColourReference, TeletextColumnOperation};
+use ersatzrs_domain::{
+    TeletextColourReference, TeletextColumnOperation, TeletextDrcsBitmap, TeletextDrcsGlyphSlot,
+    TeletextRawDataPageNumber, TeletextResourceIdentity, TeletextResourceKind,
+    TeletextResourceSubpageIndex,
+};
 use std::time::Duration;
 
 fn budget() -> TeletextServiceBudget {
@@ -109,5 +113,123 @@ fn repeat_operand_union_and_work_reuse_existing_budget_and_deadline() {
     assert!(matches!(
         merge_operands(&prior, &[], budget(), Instant::now()),
         Err(NativeTeletextEditorialImportError::TimedOut)
+    ));
+}
+
+fn bitmap_edit(page: u8, s1: u8, slot: u8, old: u16, new: u16) -> TeletextDrcsBitmapOverlay {
+    let bitmap = |bits| {
+        let mut rows = [0; 10];
+        rows[0] = bits;
+        TeletextDrcsBitmap::new(rows).unwrap()
+    };
+    TeletextDrcsBitmapOverlay::new(
+        TeletextResourceIdentity::new(
+            TeletextResourceKind::Drcs,
+            TeletextRawDataPageNumber::new(1, page).unwrap(),
+            TeletextResourceSubpageIndex::new(s1).unwrap(),
+        )
+        .unwrap(),
+        TeletextDrcsGlyphSlot::new(slot).unwrap(),
+        bitmap(old),
+        bitmap(new),
+    )
+    .unwrap()
+}
+
+#[test]
+fn repeat_bitmaps_keep_root_expectation_and_other_resources_subpages_and_slots() {
+    let prior = [
+        bitmap_edit(0xc0, 0, 0, 1, 3),
+        bitmap_edit(0xc0, 1, 0, 4, 6),
+        bitmap_edit(0xc0, 1, 1, 8, 10),
+        bitmap_edit(0xc1, 1, 0, 16, 18),
+    ];
+    let incoming = [bitmap_edit(0xc0, 1, 0, 6, 7), bitmap_edit(0xc2, 0, 0, 1, 2)];
+    let merged = merge_bitmaps(&prior, &incoming, budget(), deadline()).unwrap();
+    assert_eq!(
+        merged,
+        [
+            prior[0],
+            bitmap_edit(0xc0, 1, 0, 4, 7),
+            prior[2],
+            prior[3],
+            incoming[1]
+        ]
+    );
+}
+
+#[test]
+fn repeat_bitmap_revert_removes_only_exact_root_relative_glyph() {
+    let prior = [bitmap_edit(0xc0, 1, 0, 1, 3), bitmap_edit(0xc0, 1, 1, 4, 6)];
+    let undo = bitmap_edit(0xc0, 1, 0, 3, 1);
+    assert_eq!(
+        merge_bitmaps(&prior, &[undo], budget(), deadline()).unwrap(),
+        [prior[1]]
+    );
+    assert!(merge_bitmaps(&prior[..1], &[undo], budget(), deadline())
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn repeat_bitmaps_reject_stale_and_duplicate_targets_even_after_revert() {
+    let prior = bitmap_edit(0xc0, 1, 0, 1, 3);
+    for incoming in [
+        vec![bitmap_edit(0xc0, 1, 0, 2, 4)],
+        vec![bitmap_edit(0xc0, 1, 0, 3, 1), bitmap_edit(0xc0, 1, 0, 1, 4)],
+        vec![bitmap_edit(0xc1, 1, 0, 1, 3), bitmap_edit(0xc1, 1, 0, 1, 3)],
+    ] {
+        assert!(matches!(
+            merge_bitmaps(&[prior], &incoming, budget(), deadline()),
+            Err(NativeTeletextEditorialImportError::Association)
+        ));
+    }
+    assert!(matches!(
+        merge_bitmaps(&[prior, prior], &[], budget(), deadline()),
+        Err(NativeTeletextEditorialImportError::Association)
+    ));
+}
+
+#[test]
+fn repeat_bitmaps_use_existing_structure_budget_and_deadline() {
+    let prior = bitmap_edit(0xc0, 1, 0, 1, 3);
+    let tight = TeletextServiceBudget {
+        max_structure_items: 1,
+        ..budget()
+    };
+    assert!(matches!(
+        merge_bitmaps(
+            &[prior],
+            &[bitmap_edit(0xc0, 1, 1, 1, 3)],
+            tight,
+            deadline()
+        ),
+        Err(NativeTeletextEditorialImportError::Budget)
+    ));
+    assert_eq!(
+        merge_bitmaps(
+            &[prior],
+            &[bitmap_edit(0xc0, 1, 0, 3, 7)],
+            tight,
+            deadline()
+        )
+        .unwrap(),
+        [bitmap_edit(0xc0, 1, 0, 1, 7)]
+    );
+    assert!(matches!(
+        merge_bitmaps(&[prior], &[], budget(), Instant::now()),
+        Err(NativeTeletextEditorialImportError::TimedOut)
+    ));
+    assert!(matches!(
+        merge_bitmaps(
+            &[prior],
+            &[],
+            TeletextServiceBudget {
+                max_structure_items: 0,
+                ..budget()
+            },
+            deadline()
+        ),
+        Err(NativeTeletextEditorialImportError::Budget)
     ));
 }

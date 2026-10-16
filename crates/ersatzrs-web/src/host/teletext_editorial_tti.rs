@@ -12,19 +12,21 @@ use ersatzrs_app::{
     },
 };
 use ersatzrs_domain::{
-    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPageNumber,
-    TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextSubcode,
+    TeletextDrcsBitmapOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
+    TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextSubcode,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 
 mod operands;
+pub(super) mod resources;
 
 /// Reconciled intents, without region permission or publication authority.
 #[derive(Default)]
 pub(super) struct TeletextEditorialChanges {
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
+    pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
 }
 
 /// Static rejection without any authored text, file name or receipt digest.
@@ -119,6 +121,16 @@ impl<'a> Page<'a> {
         location: Location,
         deadline: Instant,
     ) -> Result<Self> {
+        Self::index_identity(document, mapping.editor_page, 0, location, deadline)
+    }
+
+    fn index_identity(
+        document: &'a TeletextTtiDocument,
+        expected_page: u16,
+        expected_ordinal: u64,
+        location: Location,
+        deadline: Instant,
+    ) -> Result<Self> {
         let mut page = Self::default();
         let mut page_numbers = 0_usize;
         let mut subcodes = 0_usize;
@@ -130,13 +142,13 @@ impl<'a> Page<'a> {
                     editor_ordinal,
                 } => {
                     page_numbers += 1;
-                    if *number != mapping.editor_page || *editor_ordinal != 0 {
+                    if *number != expected_page || *editor_ordinal != expected_ordinal {
                         return Err(location.error(NativeTeletextEditorialTtiFailure::Identity));
                     }
                 }
                 TeletextTtiRecord::SubpageOrdinal(ordinal) => {
                     subcodes += 1;
-                    if *ordinal != 0 {
+                    if *ordinal != expected_ordinal {
                         return Err(location.error(NativeTeletextEditorialTtiFailure::Identity));
                     }
                 }
@@ -391,7 +403,11 @@ fn reconcile_changes(
         vec![TeletextPhysicalBaseOverlay::new(owner, rows)
             .map_err(|_| location.error(NativeTeletextEditorialTtiFailure::Structure))?]
     };
-    Ok(TeletextEditorialChanges { rows, operands })
+    Ok(TeletextEditorialChanges {
+        rows,
+        operands,
+        bitmaps: Vec::new(),
+    })
 }
 
 /// Require the complete final native X26 emission to match the edited file.

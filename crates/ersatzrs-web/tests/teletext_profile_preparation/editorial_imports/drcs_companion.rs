@@ -536,7 +536,7 @@ async fn seed_v2_receipt(fixture: &Fixture, flow: &Flow) -> TeletextDesignExport
     seed_receipt(fixture, flow, body).await
 }
 
-async fn seed_receipt(
+pub(super) async fn seed_receipt(
     fixture: &Fixture,
     flow: &Flow,
     body: TeletextExportReceiptBody,
@@ -975,7 +975,7 @@ async fn indexed_sparse_drcs_set_null_group_preserves_native_absence_and_publica
     Box::pin(indexed_flow(true)).await;
 }
 
-fn v3_body(flow: &Flow) -> TeletextExportReceiptBody {
+pub(super) fn v3_body(flow: &Flow) -> TeletextExportReceiptBody {
     // Keep the unchanged original S1=0 fixture. A V3 singleton is not a V4 set
     // renamed: it used this native asset's basename and immediate file order.
     let mut body = v2_body(flow);

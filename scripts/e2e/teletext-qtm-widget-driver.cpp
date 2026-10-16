@@ -13,6 +13,7 @@
 #include <QRadioButton>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QProcess>
 #include <QTimer>
 #include <QWindow>
 #include <QtTest/QTest>
@@ -45,6 +46,7 @@ struct DriverContext {
     bool editForeground;
     bool editDrcs;
     bool verifyEditedDrcs;
+    bool resourceSet;
     int tripletIndex;
     int tripletColumn;
     int fromColour;
@@ -112,10 +114,11 @@ static DriverContext driverContext() {
             || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME").isEmpty()
             || !qgetenv("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE").isEmpty())
             qFatal("Native basenames/panels require explicit single-page driver mode");
-        return {false, true, false, false, false, 0, 0, 0, 0, 0, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
+        return {false, true, false, false, false, false, 0, 0, 0, 0, 0, "synthetic-editor-audit.tti", "edited-editor-audit.tti",
             "/work/synthetic-editor-audit.tti", "/work/edited-editor-audit.tti", {}, 0, 0};
     }
-    const bool drcsEdit = mode == "single-page-drcs-bit";
+    const bool resourceSet = mode == "resource-set-drcs-bit";
+    const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
     if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
@@ -138,7 +141,7 @@ static DriverContext driverContext() {
     }
     if (drcsVerify && (drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Edited DRCS verification requires the synthetic S1=0 companion");
-    return {true, mode == "single-page-zone-q", foreground, drcsEdit, drcsVerify, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
+    return {true, mode == "single-page-zone-q", foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
         QString("/work/") + QString::fromLatin1(output), drcs, left, right};
 }
 static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
@@ -353,7 +356,23 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
                     focusFailure("dialog-activation");
                     qFatal("Actual Save As dialog did not become active");
                 }
-                QTest::mouseClick(name, Qt::LeftButton, Qt::NoModifier, name->rect().center());
+                // QtTest's direct widget click can leave the native modal
+                // window behind QGraphicsView. Send a real X11 pointer click
+                // to the visible input, keeping the observed-focus guard.
+                const QPoint target = name->mapToGlobal(name->rect().center());
+                QProcess pointer;
+                pointer.start("/usr/bin/xdotool", {"mousemove", "--sync",
+                    QString::number(target.x()), QString::number(target.y()), "click", "1"});
+                if (!pointer.waitForFinished(3000)) {
+                    pointer.kill();
+                    pointer.waitForFinished(1000);
+                    focusFailure("native-pointer-timeout");
+                    qFatal("Actual X11 filename pointer input did not finish");
+                }
+                if (pointer.exitStatus() != QProcess::NormalExit || pointer.exitCode() != 0) {
+                    focusFailure("native-pointer-exit");
+                    qFatal("Actual X11 filename pointer input failed");
+                }
                 if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000)) {
                     focusFailure("filename-click");
                     qFatal("Actual Save As filename input did not receive focus");
@@ -450,7 +469,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
                 QTest::keyClicks(view, "Q", Qt::NoModifier, 20);
             }
             if (context.editDrcs) {
-                // Fixed singleton synthetic DRCS carrier: OL1 column1 is A.
+                // Fixed singleton/set synthetic DRCS carrier: OL1 column1 is A.
                 // Ordinary overwrite A->C adds bit1 to PTU0's first bitmap row.
                 // The controller must verify the original and every saved byte;
                 // the widget driver grants no resource-import permission.
@@ -462,6 +481,21 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             }
             QTimer::singleShot(100, qApp, [main, context] {
                 capture(context.captureName("edited").toUtf8().constData());
+                if (context.resourceSet) {
+                    auto view = editor();
+                    if (!view) qFatal("Resource-set navigation editor absent");
+                    QTest::keyClick(view, Qt::Key_PageUp);
+                    QTimer::singleShot(100, qApp, [view, main, context] {
+                        capture(context.captureName("resource-next").toUtf8().constData());
+                        QTest::keyClick(view, Qt::Key_PageDown);
+                        QTimer::singleShot(100, qApp, [main, context] {
+                            capture(context.captureName("resource-return").toUtf8().constData());
+                            std::puts("QTM actual DRCS resource-set PageUp/PageDown navigation complete");
+                            saveAs(main, context);
+                        });
+                    });
+                    return;
+                }
                 saveAs(main, context);
             });
             return;

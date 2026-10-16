@@ -32,7 +32,7 @@ use ersatzrs_ffmpeg::teletext::{
 use sha2::{Digest, Sha256};
 
 use super::teletext_channel_documents::{
-    encode_original_channel_documents_with_operands, maximum_producers,
+    encode_original_channel_documents_with_editorial_overlays, maximum_producers,
     ChannelTeletextDocumentEncodingError, EncodedChannelTeletextDocumentCandidate,
     EncodedChannelTeletextOriginals, TeletextChannelDocumentEncodingPolicy,
 };
@@ -468,11 +468,15 @@ pub(super) fn compile_restored_parts(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.local_program_operands());
-    let originals = encode_original_channel_documents_with_operands(
+    let bitmaps = parts
+        .editorial_overlay
+        .as_ref()
+        .map_or(&[][..], |overlay| overlay.drcs_bitmap_overlays());
+    let originals = encode_original_channel_documents_with_editorial_overlays(
         &parts.selection,
         parts.entry_addon_id.as_deref(),
         parts.documents,
-        (overlays, operands),
+        (overlays, operands, bitmaps),
         deadline,
         region,
         policy,

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: persist and import checked DRCS bitmap intents; full acceptance open'
+current_focus = 'P9A-04: reconcile multi-subpage DRCS editor imports; full acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -105,10 +105,15 @@ Checked exact-original Normal/Global bitmap intents now preserve the complete
 native service and encode one parity-correct A-to-C resource byte; both shared
 display masks change with identical fallback/page packets and undo is exact.
 All72 related regressions and strict domain/FFmpeg Clippy/formatting pass.
-Next persist receipt-bound bitmap concepts with unchanged V1/V2 bytes, reconcile
-resource TTI and protect every shared consumer before preview/publication.
-The additional legacy SaveAs focus
-failure remains explicit; a failed pointer-hover hypothesis was reverted.
+Schema3 now persists receipt-bound bitmap concepts with unchanged V1/V2 bytes;
+singleton V3/fresh V4 imports replay through shared preview/explicit publication
+and protect every shared display consumer, including unexported/panel users.
+A dense two-subpage actual QTM edit/save/navigation trial passes byte/visual checks;
+its whole-bank PN/SC indices shift0/1->1/2. Next reconcile that mapping against
+native S1 and protected padding before multi-group import. P9A-04 owns current
+focused verification and pending full resource-admin/transport/client proof.
+The additional legacy SaveAs focus failure remains explicit: real X11 input
+succeeds for the dense bank but still fails its legacy focus guard.
 Keep the resource/panel/set/geometry, wider operand browser and remaining authored
 conformance requirements open; this representative flow grants no full acceptance.
 Resource/panel/set/geometry editing and full authored Level2.5/fallback remain
@@ -118,7 +123,8 @@ General source-window/charset/resource/wrap, unknown policies and large sources
 remain concrete acceptance gaps; no product restriction is accepted.
 All authored Level2.5/fallback, editor/metadata/templates/themes/zones, Lua/restart,
 localized admin, actual suitable client and platform requirements are unchanged.
-Engine-first delivery, no milestone completion, no production addon or push.
+Engine-first delivery, no milestone completion or production addon/publication.
+The latest emergency instruction authorizes a checkpoint push without CI.
 
 Accepted UCU11 remote main61d1786c is integrated locally with the Phase9
 e5e45583 source. All six Phase9 acceptance/status/dependency records survive.

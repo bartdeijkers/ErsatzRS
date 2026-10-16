@@ -39,6 +39,8 @@ use ersatzrs_web::host::{
     teletext_preview::project_teletext_preview,
 };
 
+#[path = "editorial_imports/drcs_bitmap.rs"]
+mod drcs_bitmap;
 #[path = "editorial_imports/drcs_companion.rs"]
 mod drcs_companion;
 #[path = "editorial_http.rs"]

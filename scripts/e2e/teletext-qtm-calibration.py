@@ -2,7 +2,7 @@
 """Reproduce and verify one synthetic QTeletextMaker 1.0 edit/save trial.
 
 Pinned source: cac2167bac933a6160cca45a45d5d4ee95355898. The fixtures cover
-G0 mode 9 enhancement words and a singleton mode-0 DRCS bitmap carrier, without
+G0 mode 9 enhancement words, singleton and dense two-subpage mode-0 DRCS banks, without
 private engine sidecars. Verification covers only the recorded synthetic editor
 trials, not arbitrary TTI, import permissions or Rust roundtrips.
 """
@@ -22,6 +22,7 @@ LINKS = b"FL,201,202,203,204,205,206"
 ENHANCEMENT = b"OL,26,@iD@Ei`" + b"\x7f" * 33
 SIDECAR = b"XX,not-an-ErsatzRS-sidecar"
 DRCS_ORIGINAL_SHA256 = "208ee7a257e7300d7de8f8b413d943ce2c4b71a36c3d565f42895bec3d1ab0cf"
+DRCS_SET_ORIGINAL_SHA256 = "d1e9a9d49a28be14adb1e727c11ab0cfe908bbd0df83ca49c48ef4e170a0a870"
 
 
 class CalibrationError(Exception):
@@ -168,6 +169,50 @@ def verify_drcs(original_path, edited_path):
     }
 
 
+def drcs_set_original_bytes():
+    """The native dense S1=0/1 editor bank; ordinals are not native identities."""
+    first = drcs_original_bytes()
+    second = first.replace(b"PN,1C000", b"PN,1C001").replace(b"SC,0000", b"SC,0001")
+    second = second.replace(row(1, b"`A`@P@H@D@B@A@@`@P@I"),
+                            row(1, b"`A@A@B@D@H@P@`A@B@d@"))
+    require(digest(first + second) == DRCS_SET_ORIGINAL_SHA256,
+            "internal DRCS set differs from the native export")
+    return first + second
+
+
+def verify_drcs_set(original_path, edited_path):
+    original = bounded_read(original_path)
+    edited = bounded_read(edited_path)
+    require(original == drcs_set_original_bytes(), "original is not the pinned dense DRCS set")
+    records = lines(original)
+    require(len(records) == 10, "unexpected original set layout")
+    expected = []
+    for index in range(2):
+        group = records[index*5:(index+1)*5]
+        # The observed actual writer increments BOTH editor fields as a whole
+        # bank. A native importer must authenticate that mapping separately.
+        ordinal = str(index + 1).encode("ascii")
+        bitmap = group[4] if index else row(1, b"`C`@P@H@D@B@A@@`@P@I")
+        expected.extend([b"PN,1c00" + ordinal, b"SC,000" + ordinal,
+                         b"PS,c07c", b"RE,0", b"CT,20,T", group[3], bitmap])
+    require(lines(edited) == expected,
+            "saved set identity/order/status/function/modes or bitmap bytes differ")
+    return {
+        "calibration_passed": True, "engine_roundtrip_proven": False,
+        "native_identity_reconciliation_proven": False,
+        "editor": "QTeletextMaker", "editor_version": "1.0",
+        "editor_commit": EDITOR_COMMIT, "resources_verified": 2,
+        "original_sha256": digest(original), "edited_sha256": digest(edited),
+        "original_bytes": len(original), "edited_bytes": len(edited),
+        "editor_ordinals_before": [0, 1], "editor_ordinals_after": [1, 2],
+        "changed_resource_index": 0, "changed_row": 1, "changed_column": 1,
+        "bitmap_first_row_before": 0x801, "bitmap_first_row_after": 0x803,
+        "other_resource_and_packets_preserved": True,
+        "normalizations": ["whole-bank PN/SC ordinal increment", "PN/PS hexadecimal case",
+                           "added RE,0 and CT,20,T per resource"],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -181,17 +226,25 @@ def main():
     drcs_verifier = commands.add_parser("verify-drcs", help="verify the single DRCS bitmap edit")
     drcs_verifier.add_argument("original", type=Path)
     drcs_verifier.add_argument("edited", type=Path)
+    drcs_set_fixture = commands.add_parser("fixture-drcs-set", help="write the dense two-resource input")
+    drcs_set_fixture.add_argument("destination", type=Path)
+    drcs_set_verifier = commands.add_parser("verify-drcs-set", help="verify the actual dense set edit")
+    drcs_set_verifier.add_argument("original", type=Path)
+    drcs_set_verifier.add_argument("edited", type=Path)
     args = parser.parse_args()
-    if args.command in ("fixture", "fixture-drcs"):
-        payload = original_bytes() if args.command == "fixture" else drcs_original_bytes()
+    if args.command in ("fixture", "fixture-drcs", "fixture-drcs-set"):
+        payload = {"fixture": original_bytes, "fixture-drcs": drcs_original_bytes,
+                   "fixture-drcs-set": drcs_set_original_bytes}[args.command]()
         with args.destination.open("xb") as handle:
             handle.write(payload)
         result = {"fixture_bytes": len(payload), "fixture_sha256": digest(payload),
                   "engine_roundtrip_proven": False}
     elif args.command == "verify":
         result = verify(args.original, args.edited)
-    else:
+    elif args.command == "verify-drcs":
         result = verify_drcs(args.original, args.edited)
+    else:
+        result = verify_drcs_set(args.original, args.edited)
     print(json.dumps(result, sort_keys=True))
 
 

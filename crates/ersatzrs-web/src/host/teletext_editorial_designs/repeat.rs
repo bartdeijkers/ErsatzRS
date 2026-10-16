@@ -16,7 +16,8 @@ use super::{
 };
 use ersatzrs_core::locking::TeletextWorkHold;
 use ersatzrs_domain::{
-    TeletextLocalProgramOperandOverlay, TeletextPhysicalBaseRow, TeletextServiceBudget,
+    TeletextDrcsBitmapOverlay, TeletextLocalProgramOperandOverlay, TeletextPhysicalBaseRow,
+    TeletextServiceBudget,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -121,6 +122,7 @@ fn qualify_latest(
     let previous = TeletextEditorialChanges {
         rows: overlay.pages().to_vec(),
         operands: overlay.local_program_operands().to_vec(),
+        bitmaps: overlay.drcs_bitmap_overlays().to_vec(),
     };
     let original_document = latest.original.document.clone();
     let original = qualify_rows(
@@ -279,6 +281,92 @@ fn merge_operands(
     Ok(merged.into_values().collect())
 }
 
+fn merge_bitmaps(
+    previous: &[TeletextDrcsBitmapOverlay],
+    incoming: &[TeletextDrcsBitmapOverlay],
+    service: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<Vec<TeletextDrcsBitmapOverlay>> {
+    let maximum = service.max_structure_items;
+    if previous.len() > maximum || incoming.len() > maximum {
+        return Err(NativeTeletextEditorialImportError::Budget);
+    }
+    let mut merged = BTreeMap::new();
+    for bitmap in previous {
+        check_deadline(deadline)?;
+        if merged
+            .insert((bitmap.identity(), bitmap.slot()), *bitmap)
+            .is_some()
+        {
+            return Err(NativeTeletextEditorialImportError::Association);
+        }
+    }
+    let mut seen = BTreeSet::new();
+    for bitmap in incoming {
+        check_deadline(deadline)?;
+        let key = (bitmap.identity(), bitmap.slot());
+        if !seen.insert(key) {
+            return Err(NativeTeletextEditorialImportError::Association);
+        }
+        if let Some(previous) = merged.get(&key).copied() {
+            if previous.replacement() != bitmap.expected() {
+                return Err(NativeTeletextEditorialImportError::Association);
+            }
+            if bitmap.replacement() == previous.expected() {
+                merged.remove(&key);
+            } else {
+                let cumulative = TeletextDrcsBitmapOverlay::new(
+                    bitmap.identity(),
+                    bitmap.slot(),
+                    previous.expected(),
+                    bitmap.replacement(),
+                )
+                .map_err(|_| NativeTeletextEditorialImportError::Association)?;
+                merged.insert(key, cumulative);
+            }
+        } else {
+            if merged.len() >= maximum {
+                return Err(NativeTeletextEditorialImportError::Budget);
+            }
+            // Reconciliation authenticates against latest; compilation below
+            // independently authenticates this same expectation against root.
+            merged.insert(key, *bitmap);
+        }
+    }
+    Ok(merged.into_values().collect())
+}
+
+fn bitmap_consumer_owners(
+    service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    bitmaps: &[TeletextDrcsBitmapOverlay],
+    deadline: Instant,
+) -> Result<BTreeSet<TeletextPageAddress>> {
+    use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredPage;
+    let targets: BTreeSet<_> = bitmaps
+        .iter()
+        .map(|edit| (edit.identity(), edit.slot()))
+        .collect();
+    let mut owners = BTreeSet::new();
+    for page in service.pages() {
+        check_deadline(deadline)?;
+        let composition = match page {
+            EncodedTeletextAuthoredPage::CompiledDisplay(page) => page.normalized().original(),
+            EncodedTeletextAuthoredPage::NativeDisplay(page) => page.composition(),
+            _ => continue,
+        };
+        // Candidate-aligned execution retains object/default invocations,
+        // repeated references and losing contenders, not just visible winners.
+        for reference in composition.drcs_execution().records() {
+            check_deadline(deadline)?;
+            if targets.contains(&(reference.resource(), reference.reference().slot)) {
+                owners.insert(composition.owner());
+                break;
+            }
+        }
+    }
+    Ok(owners)
+}
+
 fn extend_root_export(
     root: &mut QualifiedBaseline,
     cumulative: &TeletextEditorialChanges,
@@ -287,11 +375,26 @@ fn extend_root_export(
     deadline: Instant,
 ) -> Result<Option<TeletextExportReceiptBody>> {
     let (project, tti) = import_limits(policy);
+    let resource_owners = if cumulative.bitmaps.is_empty() {
+        BTreeSet::new()
+    } else {
+        bitmap_consumer_owners(
+            root.original
+                .view()
+                .encoded()
+                .ok_or(NativeTeletextEditorialImportError::Association)?,
+            &cumulative.bitmaps,
+            deadline,
+        )?
+    };
     let owners: Vec<_> = cumulative
         .rows
         .iter()
         .map(TeletextPhysicalBaseOverlay::owner)
         .chain(cumulative.operands.iter().map(|operand| operand.owner()))
+        // Preserve every actual resource consumer without exporting unrelated
+        // pages or widening the incoming receipt's editable surface.
+        .chain(resource_owners)
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
@@ -349,6 +452,7 @@ fn prepare(
                 TeletextEditorialChanges {
                     rows: Vec::new(),
                     operands: Vec::new(),
+                    bitmaps: Vec::new(),
                 },
                 provenance,
             )
@@ -381,6 +485,12 @@ fn prepare(
             policy.document.validation.service,
             deadline,
         )?,
+        bitmaps: merge_bitmaps(
+            &previous.bitmaps,
+            &incoming.bitmaps,
+            policy.document.validation.service,
+            deadline,
+        )?,
     };
     let root_export = extend_root_export(
         &mut root,
@@ -410,7 +520,9 @@ fn prepare(
 }
 
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
-    let document = if prepared.cumulative.rows.is_empty() && prepared.cumulative.operands.is_empty()
+    let document = if prepared.cumulative.rows.is_empty()
+        && prepared.cumulative.operands.is_empty()
+        && prepared.cumulative.bitmaps.is_empty()
     {
         // An explicit edit back to the immutable root is still a new concept
         // revision. Preserve the authenticated original bytes without inventing
@@ -434,7 +546,14 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
             _ => return Err(NativeTeletextEditorialImportError::Association),
         }
     } else {
-        let overlay = if prepared.cumulative.operands.is_empty() {
+        let overlay = if !prepared.cumulative.bitmaps.is_empty() {
+            TeletextSavedEditorialOverlay::new_with_drcs_bitmap_overlays(
+                prepared.provenance.clone(),
+                prepared.cumulative.rows.clone(),
+                prepared.cumulative.operands.clone(),
+                prepared.cumulative.bitmaps.clone(),
+            )?
+        } else if prepared.cumulative.operands.is_empty() {
             TeletextSavedEditorialOverlay::new(
                 prepared.provenance.clone(),
                 prepared.cumulative.rows.clone(),
@@ -504,10 +623,12 @@ fn make_document(
         TeletextEditorialEdits {
             rows: &prepared.incoming.rows,
             operands: &prepared.incoming.operands,
+            bitmaps: &prepared.incoming.bitmaps,
         },
         TeletextEditorialEdits {
             rows: &prepared.cumulative.rows,
             operands: &prepared.cumulative.operands,
+            bitmaps: &prepared.cumulative.bitmaps,
         },
         &prepared.policy.encoding.encoding,
         deadline,

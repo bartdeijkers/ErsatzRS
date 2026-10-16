@@ -1286,6 +1286,9 @@ enum Path {
     EditorialCells,
     EditorialOperands,
     EditorialOperand,
+    EditorialBitmaps,
+    EditorialBitmap,
+    EditorialBitmapRows,
 }
 struct Scan {
     budget: TeletextDesignDocumentBudget,
@@ -1323,6 +1326,11 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 .scan
                 .check(storage::<editorial_overlay::StoredOperand>(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialBitmap) {
+            self.inner
+                .scan
+                .check(storage::<editorial_overlay::StoredBitmap>(self.count))?;
+        }
         self.inner.scan.editorial(self.inner.path)?;
         self.inner.deserialize(deserializer)
     }
@@ -1331,7 +1339,10 @@ impl Scan {
     fn editorial<E: serde::de::Error>(&mut self, path: Path) -> Result<(), E> {
         if !matches!(
             path,
-            Path::EditorialPage | Path::EditorialRow | Path::EditorialOperand
+            Path::EditorialPage
+                | Path::EditorialRow
+                | Path::EditorialOperand
+                | Path::EditorialBitmap
         ) {
             return Ok(());
         }
@@ -1464,6 +1475,8 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::Root, "editorial_overlay") => Path::EditorialOverlay,
                 (Path::EditorialOverlay, "pages") => Path::EditorialPages,
                 (Path::EditorialOverlay, "local_program_operands") => Path::EditorialOperands,
+                (Path::EditorialOverlay, "drcs_bitmap_overlays") => Path::EditorialBitmaps,
+                (Path::EditorialBitmap, "expected" | "replacement") => Path::EditorialBitmapRows,
                 (Path::EditorialPage, "rows") => Path::EditorialRows,
                 (Path::EditorialRow, "cells") => Path::EditorialCells,
                 (Path::GuideSource, "channel_ids") => Path::GuideChannels,
@@ -1525,6 +1538,12 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 Path::EditorialOperand,
                 "editorial operands",
             ),
+            Path::EditorialBitmaps => (
+                self.scan.budget.validation.service.max_structure_items,
+                Path::EditorialBitmap,
+                "editorial bitmaps",
+            ),
+            Path::EditorialBitmapRows => (10, Path::Other, "editorial bitmap rows"),
             Path::EditorialRows => (25, Path::EditorialRow, "editorial rows"),
             Path::EditorialCells => (40, Path::Other, "editorial cells"),
             _ => (MAX_BINDINGS, Path::Other, "sequence"),
