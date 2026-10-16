@@ -4,7 +4,9 @@ use async_trait::async_trait;
 use ersatzrs_core::repositories::{
     RepositoryError, Result, TeletextGenerationMutation as M, TeletextGenerationRejection as R,
     TeletextGenerationRepository, TeletextGenerationSave, TeletextProfileMutation,
-    TeletextPublicationRejection as P, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TeletextPublicationRejection as P, TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::{
     EntityId, TeletextAcceptedGeneration, TeletextChannelSelectionSnapshot,
@@ -301,7 +303,7 @@ fn decode_generation_for_version(
         u16::try_from(number("ArtifactVersion")?).map_err(|_| corrupt("artifact version"))?;
     let artifact_digest: Option<String> = row.try_get("ArtifactDigest").repository()?;
     let artifact_digest = artifact_digest.ok_or_else(|| corrupt("artifact digest"))?;
-    if artifact_version != expected_version || !valid_digest(&artifact_digest) {
+    if !valid_artifact_role(artifact_version, expected_version) || !valid_digest(&artifact_digest) {
         return Err(corrupt("artifact metadata"));
     }
     let digest: Option<String> = row.try_get("Digest").repository()?;
@@ -329,7 +331,21 @@ fn valid_digest(digest: &str) -> bool {
             .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 fn valid_artifact(version: u16, digest: &str) -> bool {
-    version == TELETEXT_GENERATION_ARTIFACT_VERSION && valid_digest(digest)
+    valid_artifact_role(version, TELETEXT_GENERATION_ARTIFACT_VERSION) && valid_digest(digest)
+}
+fn valid_artifact_role(version: u16, role: u16) -> bool {
+    match role {
+        TELETEXT_GENERATION_ARTIFACT_VERSION => matches!(
+            version,
+            TELETEXT_GENERATION_ARTIFACT_VERSION | TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+        ),
+        TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION => matches!(
+            version,
+            TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION
+                | TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+        ),
+        _ => false,
+    }
 }
 fn valid_request(request: &TeletextPublicationRequest) -> bool {
     request.id > 0

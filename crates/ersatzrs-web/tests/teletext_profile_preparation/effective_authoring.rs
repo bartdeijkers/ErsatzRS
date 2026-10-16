@@ -279,7 +279,7 @@ async fn actual_lua_over_saved_off_base_prepares_two_themes_and_explicitly_selec
         .unwrap()
         .unwrap();
     assert_eq!(selected.id, generation);
-    assert_eq!(selected.artifact_version, 2);
+    assert_eq!(selected.artifact_version, 4);
     assert_eq!(
         fixture
             .fixture

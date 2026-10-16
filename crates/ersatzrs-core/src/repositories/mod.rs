@@ -187,7 +187,9 @@ pub use watermark::WatermarkRepository;
 pub use teletext_generations::{
     TeletextEffectiveGenerationSave, TeletextGenerationMutation, TeletextGenerationRejection,
     TeletextGenerationRepository, TeletextGenerationSave,
-    TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 pub use teletext_guide_source::{
     TeletextGuideSourceCheckLimits, TeletextGuideSourceFence, TeletextGuideSourceFenceError,

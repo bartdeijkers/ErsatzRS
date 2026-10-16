@@ -102,6 +102,19 @@ pub struct RestoredOriginalTeletextDesign {
     edit_policy: TeletextSavedEditPolicy,
 }
 impl RestoredOriginalTeletextDesign {
+    pub(super) fn with_resource_lifecycle_variants(
+        mut self,
+        deadline: Instant,
+    ) -> Result<Self, ersatzrs_ffmpeg::teletext::TeletextResourceLifecycleError> {
+        self.originals.encoded = self
+            .originals
+            .encoded
+            .take()
+            .map(|service| service.with_resource_lifecycle_variants(deadline))
+            .transpose()?;
+        Ok(self)
+    }
+
     pub(crate) fn into_encoded_service(self) -> Option<EncodedTeletextAuthoredService> {
         self.originals.encoded
     }

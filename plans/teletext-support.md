@@ -432,6 +432,15 @@ cannot advance history. Changed or retired owners require Changed/next modulo-ei
 counter; identical Unchanged retains its counter, while deliberate full refresh
 may advance it. Completed legacy page reuse retires matching resource bodies.
 The reference owns exact normalization, finite history bounds and regressions.
+The actual imported-resource workflow exposed a distinct publication gap: saved
+original counters cannot represent every response's completed history.
+[ADR 0126](../docs/adr/0126-per-response-teletext-resource-lifecycle.md) defines
+explicit base/effective artifact3/4 header-family authorization while preserving
+strict historical1/2. Completed-history selection, compatible recovery and actual
+ordinary warm transport/independent decoding are verified; actual warm-client
+resource rendering/navigation still requires proof.
+P9A-04 owns the current criterion map and proof; full Level2.5 and editor
+acceptance remain unchanged.
 Independent original libzvbi 0.2.42 warm-cache DRCS decoding now passes four
 complete-service generations, retaining exact pixels, full-update flags,
 counter7-to0 and unchanged Base text. Fixed-literal negative and bounded-helper

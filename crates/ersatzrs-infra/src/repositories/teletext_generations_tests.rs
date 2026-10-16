@@ -15,6 +15,65 @@ use sqlx::Executor as _;
 const MAX_DOCUMENT: usize = 4096;
 
 #[tokio::test]
+async fn base_artifact_versions_keep_legacy_and_lifecycle_roles_distinct() {
+    for version in [
+        TELETEXT_GENERATION_ARTIFACT_VERSION,
+        TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    ] {
+        let fixture = Fixture::new().await;
+        let repository = SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+        let mut input = save(&fixture).await;
+        input.artifact_version = version;
+        for wrong in [
+            0,
+            TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+            TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+            5,
+            u16::MAX,
+        ] {
+            let mut invalid = input.clone();
+            invalid.artifact_version = wrong;
+            assert_eq!(
+                repository.accept(&invalid, MAX_DOCUMENT).await.unwrap(),
+                M::Rejected(R::Publication(P::InvalidValues))
+            );
+        }
+        let generation = accepted(repository.accept(&input, MAX_DOCUMENT).await.unwrap());
+        assert_eq!(generation.artifact_version, version);
+        let reopened = SqliteTeletextGenerationRepository(
+            open(&fixture.root.path().join("requests.sqlite")).await,
+        );
+        assert_eq!(reopened.current(1).await.unwrap(), Some(generation.clone()));
+        assert_eq!(
+            reopened
+                .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
+                .await
+                .unwrap(),
+            M::Accepted(())
+        );
+        for wrong in [
+            TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+            TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+            5,
+        ] {
+            let mut invalid = generation.clone();
+            invalid.artifact_version = wrong;
+            assert_eq!(
+                reopened
+                    .confirm_current(&invalid, &fixture.selection, MAX_DOCUMENT)
+                    .await
+                    .unwrap(),
+                M::Rejected(R::Publication(P::InvalidValues))
+            );
+        }
+        assert_eq!(count(&reopened).await, 1);
+        sqlx::query(r#"INSERT INTO "TeletextEffectiveAcceptedGenerationCurrent" ("ChannelId","GenerationId") VALUES (1,?)"#)
+            .bind(generation.id).execute(&reopened.0).await.unwrap();
+        assert!(reopened.current_effective(1).await.is_err());
+    }
+}
+
+#[tokio::test]
 async fn active_scripted_override_fences_base_output_without_replacing_accepted_history() {
     use crate::repositories::common::encode_datetime;
     let fixture = Fixture::new().await;

@@ -670,6 +670,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep teletext resource refresh counters aligned with each stream's completed
+  output using explicitly validated header choices. Preserve immutable designs,
+  page bodies and compatibility with older accepted publications. Representative
+  ordinary-stream updates preserve source audio/video; complete warm-client and
+  authored Level 2.5 acceptance remain open.
+
 - Preserve imported teletext resource kind, raw hexadecimal page and logical
   subpage in validation diagnostics, using the existing localized admin display.
   Actual singleton QTeletextMaker bitmap edits now have ordinary-stream,

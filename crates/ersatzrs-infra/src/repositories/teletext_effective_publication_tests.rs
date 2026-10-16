@@ -11,7 +11,10 @@ use ersatzrs_core::repositories::{
     ChannelTeletextBindingSave, TeletextDesignMutation, TeletextDesignRepository as _,
     TeletextDesignSave, TeletextEffectiveGenerationSave, TeletextGenerationMutation as G,
     TeletextGenerationRejection as GR, TeletextGenerationRepository as _, TeletextGenerationSave,
-    TeletextProfileRepository as _, TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TeletextProfileRepository as _, TeletextPublicationRejection as P,
+    TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::{
     TeletextAcceptedGeneration, TeletextProfileCandidateSnapshot, TeletextProfileValue,
@@ -21,6 +24,80 @@ use std::time::Duration;
 const FIRST: &str = "org.example.publication.first";
 const SECOND: &str = "org.example.publication.second";
 const DOCUMENT_BUDGET: usize = 16_384;
+
+#[tokio::test]
+async fn effective_artifact_versions_keep_legacy_and_lifecycle_roles_distinct() {
+    for version in [
+        TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+        TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+    ] {
+        let fixture = Fixture::new(true).await;
+        let request = fixture.request().await;
+        let mut input = fixture.generation_save(request, None);
+        input.artifact_version = version;
+        for wrong in [
+            0,
+            TELETEXT_GENERATION_ARTIFACT_VERSION,
+            TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+            5,
+            u16::MAX,
+        ] {
+            let mut invalid = input.clone();
+            invalid.artifact_version = wrong;
+            assert_eq!(
+                fixture
+                    .generations
+                    .accept_effective(&invalid, DOCUMENT_BUDGET, deadline())
+                    .await
+                    .unwrap(),
+                G::Rejected(GR::Publication(P::InvalidValues))
+            );
+        }
+        let generation = accepted(
+            fixture
+                .generations
+                .accept_effective(&input, DOCUMENT_BUDGET, deadline())
+                .await
+                .unwrap(),
+        );
+        assert_eq!(generation.artifact_version, version);
+        let reopened = SqliteTeletextGenerationRepository(
+            open(&fixture.base.root.path().join("requests.sqlite")).await,
+        );
+        assert_eq!(
+            reopened.current_effective(1).await.unwrap(),
+            Some(generation.clone())
+        );
+        assert_eq!(
+            reopened
+                .confirm_current_effective(
+                    &generation,
+                    &fixture.save.selection,
+                    DOCUMENT_BUDGET,
+                    deadline()
+                )
+                .await
+                .unwrap(),
+            G::Accepted(())
+        );
+        for wrong in [
+            TELETEXT_GENERATION_ARTIFACT_VERSION,
+            TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+            5,
+        ] {
+            let mut invalid = generation.clone();
+            invalid.artifact_version = wrong;
+            assert_eq!(
+                fixture.confirm(&invalid).await,
+                G::Rejected(GR::Publication(P::InvalidValues))
+            );
+        }
+        fixture.assert_base_unchanged().await;
+        sqlx::query(r#"UPDATE "TeletextAcceptedGenerationCurrent" SET "GenerationId"=? WHERE "ChannelId"=1"#)
+            .bind(generation.id).execute(&fixture.base.repo.0).await.unwrap();
+        assert!(fixture.generations.current(1).await.is_err());
+    }
+}
 
 fn deadline() -> Instant {
     Instant::now().checked_add(Duration::from_secs(10)).unwrap()

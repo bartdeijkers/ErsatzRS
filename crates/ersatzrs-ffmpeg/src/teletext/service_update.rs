@@ -17,6 +17,21 @@ use super::{
 };
 
 type Owner = (TeletextRawDataPageNumber, u8);
+type CurrentResources<'a> = BTreeMap<
+    Owner,
+    (
+        TeletextResourceUpdateCounter,
+        &'a EncodedTeletextAuthoredPage,
+    ),
+>;
+
+/// A completed carousel retains its effective emitted counters separately from
+/// the immutable accepted baseline. Pending candidates never enter this view.
+#[derive(Clone, Copy)]
+pub(super) struct CompletedResourceService<'a> {
+    pub service: &'a EncodedTeletextAuthoredService,
+    pub selected: Option<&'a super::resource_lifecycle::SelectedResourceHeaders>,
+}
 
 #[derive(Debug)]
 struct CompletedResource {
@@ -39,47 +54,101 @@ impl ResourceUpdateHistory {
         next: &EncodedTeletextAuthoredService,
         completed: Option<&EncodedTeletextAuthoredService>,
     ) -> Result<(), TeletextTransportError> {
-        // Authenticated candidates have unique physical raw page/S1 owners.
-        // This temporary borrowed index has the same finite key namespace.
-        let current = completed.map(|service| {
-            service
-                .pages()
-                .iter()
-                .filter_map(|page| {
-                    page.resource_header()
-                        .map(|header| (owner(header.identity()), page))
-                })
-                .collect::<BTreeMap<_, _>>()
-        });
+        self.validate_with_selected(
+            next,
+            completed.map(|service| CompletedResourceService {
+                service,
+                selected: None,
+            }),
+        )
+    }
+
+    pub(super) fn validate_with_selected(
+        &self,
+        next: &EncodedTeletextAuthoredService,
+        completed: Option<CompletedResourceService<'_>>,
+    ) -> Result<(), TeletextTransportError> {
+        let current = completed.map(current_resources);
         for page in next.pages() {
             let Some(header) = page.resource_header() else {
                 continue;
             };
-            let key = owner(header.identity());
-            if let Some(previous) = current.as_ref().and_then(|pages| pages.get(&key)) {
-                if let Some(previous_header) = previous.resource_header() {
-                    check(
-                        header,
-                        previous_header.update_counter(),
-                        same_content(previous, page),
-                    )?;
-                }
-            } else if let Some(previous) = self.resources.get(&key) {
-                // Absence from a newer completed service retires an older live
-                // owner even before that service has been moved into history.
-                let equal = completed.is_none()
-                    && previous
-                        .page
-                        .as_ref()
-                        .is_some_and(|previous| same_content(previous, page));
-                check(header, previous.counter, equal)?;
+            if let Some((previous, equal)) = self.previous(page, current.as_ref()) {
+                check(header, previous, equal)?;
             }
         }
         Ok(())
     }
 
+    /// Select only checked service-bound headers against completed receiver state.
+    /// Unknown owners retain their explicit cold baseline; history is not changed.
+    pub(super) fn select_headers(
+        &self,
+        next: &EncodedTeletextAuthoredService,
+        completed: Option<CompletedResourceService<'_>>,
+    ) -> super::resource_lifecycle::SelectedResourceHeaders {
+        let mut selected = super::resource_lifecycle::SelectedResourceHeaders::new();
+        let Some(plan) = next.resource_lifecycle_variants() else {
+            return selected;
+        };
+        let current = completed.map(current_resources);
+        for entry in plan.entries() {
+            let page = &next.pages()[entry.physical_page_index()];
+            let Some(header) = page.resource_header() else {
+                continue;
+            };
+            let (counter, changed) =
+                if let Some((previous, equal)) = self.previous(page, current.as_ref()) {
+                    if equal
+                        && header.transmission() == TeletextResourceTransmission::FullUnchangedFirst
+                    {
+                        (previous, false)
+                    } else {
+                        (previous.next_modulo_eight(), true)
+                    }
+                } else {
+                    (
+                        header.update_counter(),
+                        header.transmission() == TeletextResourceTransmission::FullChangedFirst,
+                    )
+                };
+            selected.insert(entry.physical_page_index(), entry.select(counter, changed));
+        }
+        selected
+    }
+
+    fn previous(
+        &self,
+        next: &EncodedTeletextAuthoredPage,
+        current: Option<&CurrentResources<'_>>,
+    ) -> Option<(TeletextResourceUpdateCounter, bool)> {
+        let header = next.resource_header()?;
+        let key = owner(header.identity());
+        if let Some((counter, previous)) = current.and_then(|pages| pages.get(&key)) {
+            Some((*counter, same_content(previous, next)))
+        } else {
+            self.resources.get(&key).map(|previous| {
+                let equal = current.is_none()
+                    && previous
+                        .page
+                        .as_ref()
+                        .is_some_and(|page| same_content(page, next));
+                (previous.counter, equal)
+            })
+        }
+    }
+
     /// Consume a fully completed generation; removed owners keep only counters.
     pub(super) fn record_completed(&mut self, service: EncodedTeletextAuthoredService) {
+        self.record_completed_with_selected(service, &BTreeMap::default());
+    }
+
+    pub(super) fn record_completed_with_selected(
+        &mut self,
+        service: EncodedTeletextAuthoredService,
+        selected: &super::resource_lifecycle::SelectedResourceHeaders,
+    ) {
+        let counters = selected_counters(&service, selected);
         for previous in self.resources.values_mut() {
             previous.page = None;
         }
@@ -88,7 +157,10 @@ impl ResourceUpdateHistory {
                 self.resources.insert(
                     owner(header.identity()),
                     CompletedResource {
-                        counter: header.update_counter(),
+                        counter: counters
+                            .get(&owner(header.identity()))
+                            .copied()
+                            .unwrap_or(header.update_counter()),
                         page: Some(page),
                     },
                 );
@@ -99,10 +171,18 @@ impl ResourceUpdateHistory {
     /// Retain only completed resource bodies when another epoch shares content.
     /// Native/compiled displays and their semantic projections are never cloned.
     pub(super) fn record_completed_shared(&mut self, service: &EncodedTeletextAuthoredService) {
+        self.record_completed_shared_with_selected(service, &BTreeMap::default());
+    }
+
+    pub(super) fn record_completed_shared_with_selected(
+        &mut self,
+        service: &EncodedTeletextAuthoredService,
+        selected: &super::resource_lifecycle::SelectedResourceHeaders,
+    ) {
         for previous in self.resources.values_mut() {
             previous.page = None;
         }
-        for page in service.pages() {
+        for (index, page) in service.pages().iter().enumerate() {
             let resource = match page {
                 EncodedTeletextAuthoredPage::Object(page) => {
                     EncodedTeletextAuthoredPage::Object(page.clone())
@@ -117,7 +197,11 @@ impl ResourceUpdateHistory {
                 self.resources.insert(
                     owner(header.identity()),
                     CompletedResource {
-                        counter: header.update_counter(),
+                        counter: selected
+                            .get(&index)
+                            .map_or(header.update_counter(), |selected| {
+                                selected.metadata.update_counter()
+                            }),
                         page: Some(resource),
                     },
                 );
@@ -142,6 +226,42 @@ impl ResourceUpdateHistory {
             }
         }
     }
+}
+
+fn current_resources(completed: CompletedResourceService<'_>) -> CurrentResources<'_> {
+    completed
+        .service
+        .pages()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, page)| {
+            page.resource_header().map(|header| {
+                let counter = completed
+                    .selected
+                    .and_then(|selected| selected.get(&index))
+                    .map_or(header.update_counter(), |selected| {
+                        selected.metadata.update_counter()
+                    });
+                (owner(header.identity()), (counter, page))
+            })
+        })
+        .collect()
+}
+
+fn selected_counters(
+    service: &EncodedTeletextAuthoredService,
+    selected: &super::resource_lifecycle::SelectedResourceHeaders,
+) -> BTreeMap<Owner, TeletextResourceUpdateCounter> {
+    selected
+        .iter()
+        .filter_map(|(index, selected)| {
+            service
+                .pages()
+                .get(*index)
+                .and_then(EncodedTeletextAuthoredPage::resource_header)
+                .map(|header| (owner(header.identity()), selected.metadata.update_counter()))
+        })
+        .collect()
 }
 
 fn owner(resource: TeletextResourceIdentity) -> Owner {

@@ -809,6 +809,12 @@ pub(in super::super::super) fn save_captures(directory: &Path, origin: &Origin) 
     Ok(())
 }
 
+/// Reuse the complete original synthetic PCR/PES/PMT clock oracle for an
+/// uninterrupted On-to-On resource replacement, where no gap is expected.
+pub(in super::super::super) fn assert_uninterrupted_source_clock(bytes: &[u8]) {
+    assert!(super::live_tcp_clock::verify_clock_gaps(bytes).is_empty());
+}
+
 async fn verify_native(
     directory: &Path,
     tools: (&str, &str, &str),

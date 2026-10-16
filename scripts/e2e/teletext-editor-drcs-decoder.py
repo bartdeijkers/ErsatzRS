@@ -59,10 +59,37 @@ def check_page(lib, decoder, number, theme, subpage, edited=False):
             lib.vbi_unref_page(C.byref(page))
 
 
+def warm_suffix(path):
+    """Read a second exact ordered acquisition under the existing fixed bounds."""
+    file = Path(path)
+    require(file.is_file() and not file.is_symlink(), "Expected regular warm suffix units file")
+    with file.open("rb") as stream:
+        raw = stream.read(base.MAX_INPUT + 1)
+    require(0 < len(raw) <= base.MAX_INPUT, "Warm suffix input byte bound exceeded")
+    units = json.loads(raw, object_pairs_hook=base.unique_object)
+    require(type(units) is list and 1 <= len(units) <= 512, "Warm suffix unit count bound exceeded")
+    for unit in units:
+        require(type(unit) is list and len(unit) == 46
+                and all(base.integer(v, 0, 255) for v in unit)
+                and unit[:2] == [2, 44] and unit[3] == 0xE4,
+                "Invalid warm suffix captured DVB unit")
+    return raw, units
+
+
+def feed(lib, decoder, units, first_index):
+    """Retain one receiver and a continuous explicit decoder input clock."""
+    for index, unit in enumerate(units, first_index):
+        sliced = base.Sliced()
+        sliced.id, sliced.line = 3, unit[2] & 31
+        sliced.data[:42] = bytes(base.BIT_REVERSE[v] for v in unit[4:])
+        lib.vbi_decode(decoder, C.byref(sliced), 1, 1.0 + index * .04)
+
+
 def main():
-    require(len(sys.argv) in (3, 4) and sys.argv[2] in ("day", "night"), "Expected units file, day/night and optional singleton-edited/indexed/sparse mode")
-    mode = sys.argv[3] if len(sys.argv) == 4 else "singleton"
-    require(mode in ("singleton", "singleton-edited", "indexed", "sparse"), "Unknown synthetic bitmap oracle")
+    require(len(sys.argv) in (3, 4, 5) and sys.argv[2] in ("day", "night"), "Expected units file, day/night and optional fixed mode/suffix")
+    mode = sys.argv[3] if len(sys.argv) >= 4 else "singleton"
+    require(mode in ("singleton", "singleton-edited", "indexed", "sparse", "singleton-warm-edited"), "Unknown synthetic bitmap oracle")
+    require((mode == "singleton-warm-edited") == (len(sys.argv) == 5), "Warm mode alone requires an explicit suffix file")
     file = Path(sys.argv[1])
     require(file.is_file() and not file.is_symlink(), "Expected regular captured units file")
     with file.open("rb") as stream:
@@ -80,6 +107,24 @@ def main():
     try:
         require(lib.vbi_event_handler_register(decoder, 2, callback, None), "Registration failed")
         lib.vbi_teletext_set_level(decoder, 2)
+        if mode == "singleton-warm-edited":
+            suffix_raw, suffix = warm_suffix(sys.argv[4])
+            feed(lib, decoder, units, 0)
+            original = [check_page(lib, decoder, number, sys.argv[2], 0, False)
+                        for number in (0x124, 0x125)]
+            feed(lib, decoder, suffix, len(units))
+            updated = [check_page(lib, decoder, number, sys.argv[2], 0, sys.argv[2] == "day")
+                       for number in (0x124, 0x125)]
+            print(json.dumps({"decoder_version": version, "mode": mode,
+                              "theme": sys.argv[2], "single_decoder": True,
+                              "decoder_input_clock_continuous": True,
+                              "prefix_sha256": hashlib.sha256(raw).hexdigest(),
+                              "suffix_sha256": hashlib.sha256(suffix_raw).hexdigest(),
+                              "prefix_units": len(units), "suffix_units": len(suffix),
+                              "max_units_per_file": 512, "max_bytes_per_file": base.MAX_INPUT,
+                              "original_pages": original, "updated_pages": updated,
+                              "panels_proven": False}, sort_keys=True))
+            return
         for index, unit in enumerate(units):
             sliced = base.Sliced()
             sliced.id, sliced.line = 3, unit[2] & 31

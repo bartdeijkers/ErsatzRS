@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ersatzrs_domain::{TeletextResourceHeaderMetadata, TeletextResourceKind};
 
@@ -96,6 +96,7 @@ enum CarouselContent {
     Authored {
         service: Arc<EncodedTeletextAuthoredService>,
         resource_order: Vec<usize>,
+        selected_headers: super::resource_lifecycle::SelectedResourceHeaders,
     },
 }
 
@@ -110,7 +111,7 @@ impl CarouselContent {
         service: Arc<EncodedTeletextAuthoredService>,
     ) -> Result<Self, TeletextTransportError> {
         Self::validate_authored(&service)?;
-        Ok(Self::authored_prevalidated(service))
+        Ok(Self::authored_prevalidated(service, BTreeMap::default()))
     }
 
     fn validate_authored(
@@ -141,7 +142,10 @@ impl CarouselContent {
         Ok(())
     }
 
-    fn authored_prevalidated(service: Arc<EncodedTeletextAuthoredService>) -> Self {
+    fn authored_prevalidated(
+        service: Arc<EncodedTeletextAuthoredService>,
+        selected_headers: super::resource_lifecycle::SelectedResourceHeaders,
+    ) -> Self {
         let displays = service.declared().semantic().base().pages.len();
         let mut resource_order: Vec<_> = (displays..service.pages().len()).collect();
         resource_order.sort_unstable_by_key(|&index| {
@@ -159,6 +163,7 @@ impl CarouselContent {
         Self::Authored {
             service,
             resource_order,
+            selected_headers,
         }
     }
 
@@ -208,6 +213,7 @@ impl CarouselContent {
             Self::Authored {
                 service,
                 resource_order,
+                ..
             } => {
                 let physical = if logical < resource_order.len() {
                     resource_order[logical]
@@ -226,6 +232,24 @@ impl CarouselContent {
                 (page.data_units(), subcode, page.resource_header())
             }
         }
+    }
+    fn selected_header(&self, logical: usize, repeat: bool) -> Option<[u8; 46]> {
+        let Self::Authored {
+            resource_order,
+            selected_headers,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let physical = *resource_order.get(logical)?;
+        selected_headers.get(&physical).map(|selected| {
+            if repeat {
+                selected.repeat
+            } else {
+                selected.first
+            }
+        })
     }
 }
 
@@ -320,7 +344,9 @@ impl TeletextCarousel {
     /// Replace with a complete authored service while retaining the programme clock.
     /// # Errors
     /// Rejects mid-cycle replacement, excessive acquisition cost or stale resource
-    /// lifecycle metadata. Cold startup has no previous receiver-state proof.
+    /// lifecycle metadata under the strict baseline contract. A service-bound
+    /// checked plan permits only its prevalidated headers against this response's
+    /// completed history. Cold startup retains the explicit baseline metadata.
     pub fn replace_authored_at_boundary(
         &mut self,
         service: EncodedTeletextAuthoredService,
@@ -349,9 +375,13 @@ impl TeletextCarousel {
         &self,
         service: Arc<EncodedTeletextAuthoredService>,
     ) -> Result<PreparedCarouselReplacement, TeletextTransportError> {
-        self.validate_shared_replacement_at_boundary(&service)?;
+        if !self.boundary {
+            return Err(TeletextTransportError::MidCycleReplacement);
+        }
+        CarouselContent::validate_authored(&service)?;
+        let selected = self.select_resource_headers(&service)?;
         Ok(PreparedCarouselReplacement {
-            content: CarouselContent::authored_prevalidated(service),
+            content: CarouselContent::authored_prevalidated(service, selected),
         })
     }
 
@@ -364,6 +394,7 @@ impl TeletextCarousel {
 
     /// Nonmutating preflight for a synchronous installer. This is not delivery
     /// evidence; state must not advance between this check and replacement.
+    #[cfg(test)]
     pub(super) fn validate_shared_replacement_at_boundary(
         &self,
         service: &Arc<EncodedTeletextAuthoredService>,
@@ -372,13 +403,40 @@ impl TeletextCarousel {
             return Err(TeletextTransportError::MidCycleReplacement);
         }
         CarouselContent::validate_authored(service)?;
+        self.select_resource_headers(service).map(|_| ())
+    }
+
+    fn select_resource_headers(
+        &self,
+        service: &EncodedTeletextAuthoredService,
+    ) -> Result<super::resource_lifecycle::SelectedResourceHeaders, TeletextTransportError> {
         let completed = match &self.content {
-            CarouselContent::Authored { service, .. } if !self.first_cycle => {
-                Some(service.as_ref())
-            }
+            CarouselContent::Authored {
+                service,
+                selected_headers,
+                ..
+            } if !self.first_cycle => Some(super::service_update::CompletedResourceService {
+                service,
+                selected: Some(selected_headers),
+            }),
             CarouselContent::Legacy(_) | CarouselContent::Authored { .. } => None,
         };
-        self.resource_history.validate(service, completed)
+        if service.resource_lifecycle_variants().is_some() {
+            Ok(self.resource_history.select_headers(service, completed))
+        } else {
+            if completed.as_ref().is_some_and(|completed| {
+                completed
+                    .selected
+                    .is_some_and(|selected| !selected.is_empty())
+            }) {
+                self.resource_history
+                    .validate_with_selected(service, completed)?;
+            } else {
+                self.resource_history
+                    .validate(service, completed.map(|completed| completed.service))?;
+            }
+            Ok(BTreeMap::default())
+        }
     }
 
     /// Advance withdrawn empty intervals without emitting or resetting content.
@@ -402,10 +460,25 @@ impl TeletextCarousel {
         self.magazine_pending = !content.magazines().is_empty();
         let previous = std::mem::replace(&mut self.content, content);
         if !self.first_cycle {
-            if let CarouselContent::Authored { service, .. } = previous {
+            if let CarouselContent::Authored {
+                service,
+                selected_headers,
+                ..
+            } = previous
+            {
                 match Arc::try_unwrap(service) {
-                    Ok(service) => self.resource_history.record_completed(service),
-                    Err(service) => self.resource_history.record_completed_shared(&service),
+                    Ok(service) if selected_headers.is_empty() => {
+                        self.resource_history.record_completed(service);
+                    }
+                    Ok(service) => self
+                        .resource_history
+                        .record_completed_with_selected(service, &selected_headers),
+                    Err(service) if selected_headers.is_empty() => {
+                        self.resource_history.record_completed_shared(&service);
+                    }
+                    Err(service) => self
+                        .resource_history
+                        .record_completed_shared_with_selected(&service, &selected_headers),
                 }
             }
         }
@@ -485,6 +558,9 @@ impl TeletextCarousel {
                 )
             }
             BatchPlan::Header { page, repeat } => {
+                if let Some(header) = self.content.selected_header(page, repeat) {
+                    return (TeletextCarouselBatchKind::Header, vec![header]);
+                }
                 let (units, subcode, resource_header) = self.content.page(page);
                 let mut header = units[0];
                 if repeat {

@@ -4712,6 +4712,40 @@ Every field has one tag byte, an eight-byte big-endian payload length and payloa
 | 6 | Each page's eight-byte big-endian unit count |
 | 7 | Each ordered 46-byte page unit |
 
+Base artifact version 3 preserves that exact baseline framing with version 3 in
+tag 1, then adds the finite resource lifecycle family:
+
+| Tag | Payload |
+| --- | --- |
+| 8 | Eight-byte big-endian resource-entry count |
+| 9 | Each entry's eight-byte big-endian physical page index |
+| 10 | Four bytes: kind, native magazine, raw page byte, logical S1 |
+| 11 | Each of the entry's sixteen ordered 46-byte first headers |
+
+Kind codes are MOT=0, DRCS=1, GDRCS=2, POP=3, GPOP=4, MIP=5. Entries follow native
+physical resource order. Header order is S2=0 through7, each Unchanged first then
+Changed first. Only native S2/C4/C8 fields may differ; every other header byte and
+every baseline body is retained. The private checked plan is constructed inside
+the owning immutable service before fingerprinting. It cannot be supplied as a
+detached header list. A version 3 fingerprint requires that plan, while a version
+1 fingerprint refuses it. Historical version 1 recovery remains strict.
+
+Effective artifact version 2 retains its original explicit service/absence role
+and nested version 1 fingerprint. Version 4 keeps the same role framing with
+version 4 and uses the nested version 3 fingerprint for a present service.
+Explicit absence has no fabricated service or resource plan. Base storage reads
+only1/3; effective storage reads only2/4. The compatibility migration preserves
+all historical rows and both current-pointer families.
+
+At a valid acknowledged cycle boundary, the carousel selects an authorized first
+and repeat header using its own completed resource bodies/counters. Equal
+Unchanged intent retains S2; changed content, deliberate Changed intent and known
+retired owners advance modulo eight. Unknown cold owners keep their authored
+seed. Pending and skipped publications do not advance history. The selected
+counter, rather than the unchanged baseline seed, becomes completed history;
+repeated headers retain it while clearing C4/C8. This does not change the shared
+preview, native identity/S1, body units, source clock or acknowledgement rules.
+
 The original document digest separately retains logical preview, layout,
 navigation and source identity. Gate PID/rate/retention policy is runtime-owned,
 not original content. Unknown artifact versions or mismatched recompilation

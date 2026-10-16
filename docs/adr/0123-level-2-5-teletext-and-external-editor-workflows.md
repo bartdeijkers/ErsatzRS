@@ -126,9 +126,11 @@ relaxing receiver checks is not a solution. Two native boundary variants now
 reproduce the counter mismatch. Accepted-state coalescing can skip intermediate
 generations, and different responses can have different completed histories;
 planning only from the last accepted counter is insufficient. Artifact-v1 binds
-exact resource headers. The bounded lifecycle-plan/artifact contract must be
-resolved explicitly before wiring warm updates. P9A-04 owns the concrete gap and
-proof; no update limitation is accepted.
+exact resource headers. [ADR 0126](0126-per-response-teletext-resource-lifecycle.md)
+specifies a separately versioned, finite header authorization constructed before
+acceptance and selected against each response's completed history. Legacy exact
+artifacts retain their meaning. P9A-04 owns implementation verification and the
+remaining actual warm-client proof; no update limitation is accepted.
 Full enhancement, resource, geometry, panel and actual editor coverage remains
 required; this slice introduces no accepted product restriction. P9A-04 owns
 verification and the concrete next integration step.

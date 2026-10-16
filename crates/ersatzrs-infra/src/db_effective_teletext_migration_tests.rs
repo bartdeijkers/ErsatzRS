@@ -13,6 +13,9 @@ const VERSION: i64 = 202_610_140_746;
 const SCOPED_VERSION: i64 = 202_610_140_838;
 const ORIGINAL: &[u8] = b"synthetic original bytes\r\n";
 
+#[path = "db_teletext_resource_lifecycle_migration_tests.rs"]
+mod resource_lifecycle;
+
 fn migrations_through(version: i64) -> Migrator {
     Migrator::with_migrations(
         SQLITE_MIGRATOR

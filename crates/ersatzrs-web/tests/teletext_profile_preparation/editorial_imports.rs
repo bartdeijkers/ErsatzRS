@@ -45,6 +45,8 @@ mod drcs_bitmap;
 mod drcs_bitmap_delivery;
 #[path = "editorial_imports/drcs_bitmap_warm.rs"]
 mod drcs_bitmap_warm;
+#[path = "editorial_imports/drcs_bitmap_warm_delivery.rs"]
+mod drcs_bitmap_warm_delivery;
 #[path = "editorial_imports/drcs_companion.rs"]
 mod drcs_companion;
 #[path = "editorial_http.rs"]

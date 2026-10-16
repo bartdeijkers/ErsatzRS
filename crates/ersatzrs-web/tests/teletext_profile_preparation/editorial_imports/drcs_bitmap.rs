@@ -123,7 +123,7 @@ fn from_receipt(
     }
 }
 
-fn bitmap_request(
+pub(super) fn bitmap_request(
     receipt: &TeletextDesignExportReceipt,
     head: i64,
     low: u8,
@@ -263,7 +263,7 @@ async fn assert_overlay(
     );
 }
 
-async fn reexport(
+pub(super) async fn reexport(
     fixture: &Fixture,
     concept: &SavedEditorialTeletextDesign,
 ) -> ExportedOriginalTeletextDesign {

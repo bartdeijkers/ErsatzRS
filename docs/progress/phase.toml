@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: actual DRCS cold flow proven; warm lifecycle and full editor acceptance open'
+current_focus = 'P9A-04: prove warm resource client rendering and editor interchange'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -116,10 +116,16 @@ source AV/TSDuck, independent120pixel oracles and inspected actual VLC124/125/12
 navigation with distinct profiles/themes. Resource errors retain typed raw1C0/S1
 through native/API and36 localized headed no-JS Chromium/Firefox views. P9A-04
 owns exact receipts and preserved failed attempts; these are partial acceptance.
-Two native warm-boundary variants reproduce changed bytes retaining counter1
-when completed history requires2. Next resolve per-response lifecycle planning
-and immutable accepted-artifact identity, including skipped generations, before
-ordinary warm AV/client proof. Do not retag accepted bytes or weaken history.
+The prior warm-boundary counter mismatch now has an explicit correction under
+ADR0126: new artifact3/4 binds exact baseline bytes plus sixteen checked resource
+header variants before acceptance; legacy1/2 stays strict. Each response selects
+from actual completed history, retaining chosen counters on repeats and across
+retirement. Fifty unique low-level/storage, two host fingerprint and32 native
+publication/reopen cases pass. Three original ordinary TCP responses now pass
+genuine saved-QTM publication, unchanged Night/source AV/clock, TSDuck and one
+retained independent bitmap decoder each. Next prove actual warm-client
+rendering/navigation, then retained multi-group/padded editor interchange.
+Keep all unproven engine/editor/Lua/restart/admin/platform criteria open.
 The additional legacy SaveAs focus failure remains explicit: real X11 input
 succeeds for the dense bank but still fails its legacy focus guard.
 Keep the resource/panel/set/geometry, wider operand browser and remaining authored

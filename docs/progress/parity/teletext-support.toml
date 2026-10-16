@@ -2,7 +2,7 @@ feature    = 'Teletext support'
 etv_source = 'No teletext-specific policy was located in the 2026-10-10 `$ERSATZTV_SRC` audit at 46118d43313b7828780fbfcfb46e980390ea8b0d; p9a-01 records existing subtitle behavior as the baseline and authored pages as an ErsatzRS extension under ADRs 0120/0121'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging, `crates/ersatzrs-addon-contract`, one new tvguide teletext add-on in the separate ErsatzRS-Addons repository'
 status     = 'In progress'
-adr        = ['0120', '0121', '0122', '0123', '0124']
+adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: authored Level2.5/fallback, pinned QTM TTI/sidecar,
 TSDuck/independent decoding, actual client display/navigation; Kodi optional.
@@ -31,7 +31,7 @@ empty owners and one MOT/magazine.
 Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/nested pass.
-DRCS actual singleton cold TCP/VLC124/125, pixels and typed errors pass; banks/warm open.
+DRCS cold TCP/VLC/pixels/errors pass. Lifecycle3/4 implemented; warm delivery/client open.
 
 v2 stays pinned; Base refuses v2. Encoding retains
 defaults, secondary uncertainty and channel/model/deadline fences.
@@ -63,7 +63,7 @@ Both tracks/VBV retain initial888/exactOff audio at seek0.5s;
 Routes retain AV/authored200/fallback; sought HTTP/general cues stay open.
 Linux x64/Windows interop/QEMU ARM proof is partial; native Windows/ARM, provider/
 Next and general source/seek/charset/resource behavior remain open.
-P9A-02 retains decoder Health/six-RID licensing. P9A-03/04 retain persistence,
+P9A-02: decoder Health/six-RID licensing. P9A-03/04 retain persistence,
 selection, Burn/Convert/copy, carriage, HLS/browser and playback gates; full slate,
 activation/publication/refresh/restart, management/client and platform acceptance
 remain open. UCU waives no gates. Content waits for p9a-04; Phase10 for p9b-02.
@@ -79,10 +79,10 @@ resolved    = true
 
 [[debt]]
 id          = 'teletext-editorial-resource-warm-publication-lifecycle'
-adr         = '0123'
+adr         = '0126'
 description = 'Connect edited resource concepts to ordinary cold/warm delivery with correct resource lifecycle and accepted-artifact identity. Derive publication transmissions from actual accepted/completed state without mutating immutable originals, weakening receiver history or assuming every viewer saw every intermediate generation.'
 discovered  = '2026-10-16'
-evidence    = 'P9A-04 owns actual singleton cold TCP/AV/independent-pixel/VLC success and two exercised native warm-boundary variants: changed DRCS1C0/S1=0 retains counter1 but completed history requires2; old page bodies survive atomic rejection. Completion is simulated, not HTTP/sink/AV proof. Artifact-v1 binds exact headers; per-response histories and skipped accepted generations prevent a universal previous-accepted+1 fix. Next resolve the bounded lifecycle-plan/artifact contract and prove ordinary warm AV/client safety. No permanent limitation is accepted.'
+evidence    = 'P9A-04 owns the actual singleton cold flow, prior warm mismatch reproduction and explicit lifecycle3/4 correction. Fifty unique low-level/storage, two host-fingerprint and32 native publication/reopen cases pass. The actual same-response three-viewer ordinary TCP gate now passes source AV/clock, TSDuck and one independent warm bitmap decoder per response; Day changes to0x803/S2=2 and Night stays0x801/blue/S2=1. Originals and legacy1/2 remain immutable. Actual warm-client resource display/navigation remains required; prior cold VLC evidence is not substituted. No permanent limitation is accepted.'
 resolved    = false
 
 [[debt]]

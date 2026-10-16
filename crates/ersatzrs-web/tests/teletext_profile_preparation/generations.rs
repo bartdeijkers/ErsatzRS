@@ -175,7 +175,8 @@ async fn pending_does_not_activate_and_explicit_acceptance_recovers_exact_native
     assert_eq!(count(&fixture).await, 0);
     let result = accepted(accept(&fixture, &pending, 1, None).await);
     assert_eq!(result.generation().request, pending);
-    assert_eq!(result.generation().artifact_version, 1);
+    assert_eq!(result.generation().artifact_version, 3);
+    assert!(result.service().resource_lifecycle_variants().is_some());
     assert_eq!(result.generation().artifact_digest.len(), 64);
     assert_eq!(result.selection(), saved.candidate().selection());
     assert_eq!(

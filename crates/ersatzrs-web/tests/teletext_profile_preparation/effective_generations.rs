@@ -8,7 +8,7 @@ use super::{
 };
 use ersatzrs_core::repositories::{
     TeletextGenerationMutation as M, TeletextGenerationRejection as R,
-    TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::TeletextPublicationRequest;
 use ersatzrs_web::host::{
@@ -115,7 +115,7 @@ async fn actual_lua_two_themes_accept_reopen_and_recover_exact_scoped_output_wit
     let b = accepted(accept(&fixture, &p2, 1, None).await.unwrap());
     assert_eq!(
         a.generation().artifact_version,
-        TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION
+        TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
     );
     assert_ne!(
         a.generation().artifact_digest,
@@ -299,7 +299,7 @@ async fn actual_lua_off_accepts_absence_and_preserves_separate_existing_base_his
             .unwrap(),
         Some(base_pending)
     );
-    assert_eq!(selected.generation().artifact_version, 2);
+    assert_eq!(selected.generation().artifact_version, 4);
     assert_ne!(
         selected.generation().artifact_digest,
         base_accepted.generation().artifact_digest

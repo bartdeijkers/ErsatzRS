@@ -471,3 +471,184 @@ fn eof_requires_acknowledged_withdrawal_and_new_replacement_cycle() {
         Err(TeletextOutputError::Unterminated)
     );
 }
+
+fn checked_resource(counter: u8, bits: u16) -> Arc<EncodedTeletextAuthoredService> {
+    let mut input = spec(counter, TeletextResourceFullUpdate::Changed);
+    input.glyph = Some((0, bits));
+    Arc::new(
+        candidate(input)
+            .with_resource_lifecycle_variants(std::time::Instant::now() + Duration::from_secs(30))
+            .unwrap(),
+    )
+}
+
+fn output_resource_header(
+    packets: &[[u8; 188]],
+) -> super::super::source_header::SuppliedTeletextHeader {
+    use crate::teletext::source_assembly::{SuppliedTeletextAssembler, TeletextAssemblyEvent};
+    use crate::teletext::source_header::{observe_dvb_teletext_header, TeletextHeaderObservation};
+    let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
+    let mut result = None;
+    for packet in packets {
+        if let TeletextAssemblyEvent::Complete(pes) = assembler.push(packet).unwrap() {
+            for unit in pes.units().filter_map(|unit| unit.teletext_unit()) {
+                if let TeletextHeaderObservation::Header(header) =
+                    observe_dvb_teletext_header(unit).unwrap()
+                {
+                    if header.wire_page == 0xc0 {
+                        result.get_or_insert(header);
+                    }
+                }
+            }
+        }
+    }
+    assembler.finish().unwrap();
+    result.expect("completed output cycle must emit the exact DRCS resource header")
+}
+
+#[test]
+fn checked_resource_variant_changes_only_after_ack_and_repeat_keeps_effective_counter() {
+    let mut input = spec(7, TeletextResourceFullUpdate::Changed);
+    input.glyph = Some((0, 1));
+    let old = Arc::new(candidate(input));
+    let (mut gate, source) = gate(Arc::clone(&old), 200);
+    let (receipt, before, now) = cycle(&mut gate);
+    let next = checked_resource(7, 2);
+    let baseline: Vec<_> = next
+        .pages()
+        .iter()
+        .map(|page| page.data_units().to_vec())
+        .collect();
+    let anchor = gate.anchor;
+    let ticks = gate.batch_ticks;
+    let continuity = gate.installer.as_ref().unwrap().next_continuity_counter();
+    gate.replace_authored_at_acknowledged_boundary(&receipt, &next, now)
+        .unwrap();
+    assert_eq!(gate.anchor, anchor);
+    assert_eq!(gate.batch_ticks, ticks);
+    assert_eq!(
+        gate.installer.as_ref().unwrap().next_continuity_counter(),
+        continuity
+    );
+    assert!(!gate.signalling_transition_pending());
+    assert!(Arc::ptr_eq(
+        gate.carousel
+            .as_ref()
+            .unwrap()
+            .authored_service_shared()
+            .unwrap(),
+        &next
+    ));
+    let (_, first, _) = cycle(&mut gate);
+    let first_header = output_resource_header(&first);
+    assert_eq!((first_header.subcode >> 4) & 7, 0);
+    assert!(first_header.controls.erase_page());
+    assert_ne!(first_header.controls.raw() & 16, 0);
+    let (_, repeat, _) = cycle(&mut gate);
+    let repeat_header = output_resource_header(&repeat);
+    assert_eq!((repeat_header.subcode >> 4) & 7, 0);
+    assert!(!repeat_header.controls.erase_page());
+    assert_eq!(repeat_header.controls.raw() & 16, 0);
+    assert_source_positions(&before, &source, 0);
+    assert_source_positions(&first, &source, before.len());
+    assert_source_positions(&repeat, &source, before.len() + first.len());
+    assert_eq!(
+        next.pages()
+            .iter()
+            .map(|page| page.data_units().to_vec())
+            .collect::<Vec<_>>(),
+        baseline
+    );
+    let authored: Vec<_> = before
+        .iter()
+        .chain(&first)
+        .chain(&repeat)
+        .filter(|packet| pid(packet) == 512)
+        .collect();
+    for pair in authored.windows(2) {
+        assert_eq!(pair[1][3] & 15, ((pair[0][3] & 15) + 1) & 15);
+    }
+}
+
+#[test]
+fn checked_resource_variant_pending_and_foreign_acks_leave_plan_and_prepared_bytes_untouched() {
+    let old = Arc::new(candidate(spec(7, TeletextResourceFullUpdate::Changed)));
+    let (mut first, _) = gate(Arc::clone(&old), 200);
+    let (mut other, _) = gate(Arc::clone(&old), 200);
+    let (foreign, _, _) = cycle(&mut other);
+    let (receipt, _, now) = cycle(&mut first);
+    let next = checked_resource(7, 2);
+    let snapshot = (
+        first.source_start,
+        first.batch_ticks,
+        first.installer.as_ref().unwrap().next_continuity_counter(),
+    );
+    assert_eq!(
+        first.replace_authored_at_acknowledged_boundary(&foreign, &next, now),
+        Err(TeletextOutputError::Acknowledgement)
+    );
+    assert_eq!(
+        (
+            first.source_start,
+            first.batch_ticks,
+            first.installer.as_ref().unwrap().next_continuity_counter()
+        ),
+        snapshot
+    );
+    assert!(Arc::ptr_eq(
+        first
+            .carousel
+            .as_ref()
+            .unwrap()
+            .authored_service_shared()
+            .unwrap(),
+        &old
+    ));
+    let end = first.window_end(1).unwrap().unwrap();
+    assert!(first
+        .prepare_window(usize::try_from(end - first.source_start).unwrap(), now)
+        .unwrap());
+    let schedule = first.pending_schedule().unwrap();
+    let pending = first
+        .pending_packets(schedule.first_due())
+        .unwrap()
+        .to_vec();
+    assert_eq!(
+        first.replace_authored_at_acknowledged_boundary(&receipt, &next, schedule.first_due()),
+        Err(TeletextOutputError::Pending)
+    );
+    assert_eq!(
+        first.pending_packets(schedule.first_due()).unwrap(),
+        pending
+    );
+    assert!(Arc::ptr_eq(
+        first
+            .carousel
+            .as_ref()
+            .unwrap()
+            .authored_service_shared()
+            .unwrap(),
+        &old
+    ));
+    first
+        .acknowledge_window(schedule, first.due_at(end - 1).unwrap())
+        .unwrap();
+    assert_eq!(
+        first.replace_authored_at_acknowledged_boundary(
+            &receipt,
+            &next,
+            first.due_at(end - 1).unwrap()
+        ),
+        Err(TeletextOutputError::Acknowledgement)
+    );
+    assert!(first.failure.is_none());
+    let (valid, _, now) = cycle(&mut first);
+    first
+        .replace_authored_at_acknowledged_boundary(&valid, &next, now)
+        .unwrap();
+    let (_, bytes, _) = cycle(&mut first);
+    // Neither rejected proposal selected or completed a resource update.
+    let header = output_resource_header(&bytes);
+    assert_eq!((header.subcode >> 4) & 7, 0);
+    assert!(header.controls.erase_page());
+}

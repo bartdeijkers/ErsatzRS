@@ -55,7 +55,7 @@ fn rich_candidate(update: TeletextResourceFullUpdate) -> EncodedTeletextAuthored
     encode_teletext_authored_service(declared, &tx, &fixtures::limits()).unwrap()
 }
 
-pub(super) fn cycle(carousel: &mut TeletextCarousel) -> Vec<TeletextCarouselBatch> {
+pub(in crate::teletext) fn cycle(carousel: &mut TeletextCarousel) -> Vec<TeletextCarouselBatch> {
     let mut batches = vec![];
     loop {
         let batch = carousel.next_batch().unwrap();
@@ -229,6 +229,7 @@ fn authored_cycle_acquires_magazine_then_mot_drcs_objects_and_displays() {
     let CarouselContent::Authored {
         service,
         resource_order,
+        ..
     } = &carousel.content
     else {
         panic!("authored content");

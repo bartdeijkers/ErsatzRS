@@ -16,10 +16,11 @@ use ersatzrs_app::{
 use ersatzrs_core::repositories::{
     TeletextGenerationMutation as M, TeletextGenerationRejection as R, TeletextGenerationSave,
     TeletextPublicationRejection as P, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
 };
 use ersatzrs_domain::{
     EntityId, TeletextAcceptedGeneration, TeletextChannelSelectionSnapshot,
-    TeletextPublicationRequest,
+    TeletextPublicationRequest, TeletextResourceKind,
 };
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextServiceDescriptor};
 use sha2::{Digest as _, Sha256};
@@ -31,6 +32,10 @@ use super::{
         RestoredOriginalTeletextDesign,
     },
 };
+
+#[cfg(test)]
+#[path = "teletext_generation_artifact_tests.rs"]
+mod artifact_tests;
 
 /// Explicit reviewed pending target and independent accepted-pointer CAS.
 #[derive(Debug)]
@@ -55,6 +60,8 @@ pub enum NativeTeletextGenerationError {
     GuideFreshnessRequired,
     #[error("teletext generation worker failed")]
     WorkerFailed,
+    #[error(transparent)]
+    ResourceLifecycle(#[from] ersatzrs_ffmpeg::teletext::TeletextResourceLifecycleError),
 }
 
 /// Exact shared service with durable selected identity and runtime snapshot proof.
@@ -108,25 +115,37 @@ pub(super) fn artifact_digest(
     service: &EncodedTeletextAuthoredService,
     deadline: Instant,
 ) -> Result<String, NativeTeletextGenerationError> {
+    artifact_digest_for_version(service, TELETEXT_GENERATION_ARTIFACT_VERSION, deadline)
+}
+
+fn frame(hash: &mut Sha256, tag: u8, bytes: &[u8]) -> Result<(), NativeTeletextGenerationError> {
+    hash.update([tag]);
+    hash.update(
+        u64::try_from(bytes.len())
+            .map_err(|_| NativeTeletextGenerationError::ArtifactMismatch)?
+            .to_be_bytes(),
+    );
+    hash.update(bytes);
+    Ok(())
+}
+
+pub(super) fn artifact_digest_for_version(
+    service: &EncodedTeletextAuthoredService,
+    version: u16,
+    deadline: Instant,
+) -> Result<String, NativeTeletextGenerationError> {
+    if !matches!(
+        version,
+        TELETEXT_GENERATION_ARTIFACT_VERSION | TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+    ) || (version == TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION)
+        != service.resource_lifecycle_variants().is_some()
+    {
+        return Err(NativeTeletextGenerationError::ArtifactMismatch);
+    }
     let mut hash = Sha256::new();
-    let frame =
-        |hash: &mut Sha256, tag: u8, bytes: &[u8]| -> Result<(), NativeTeletextGenerationError> {
-            hash.update([tag]);
-            hash.update(
-                u64::try_from(bytes.len())
-                    .map_err(|_| NativeTeletextGenerationError::ArtifactMismatch)?
-                    .to_be_bytes(),
-            );
-            hash.update(bytes);
-            Ok(())
-        };
     check_deadline(deadline)?;
     frame(&mut hash, 0, b"ErsatzRS.Teletext.CompiledService")?;
-    frame(
-        &mut hash,
-        1,
-        &TELETEXT_GENERATION_ARTIFACT_VERSION.to_be_bytes(),
-    )?;
+    frame(&mut hash, 1, &version.to_be_bytes())?;
     frame(
         &mut hash,
         2,
@@ -163,12 +182,66 @@ pub(super) fn artifact_digest(
             frame(&mut hash, 7, unit)?;
         }
     }
+    if version == TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION {
+        frame_resource_lifecycle(&mut hash, service, deadline)?;
+    }
     let mut digest = String::with_capacity(64);
     for byte in hash.finalize() {
         let _ = write!(digest, "{byte:02x}");
     }
     check_deadline(deadline)?;
     Ok(digest)
+}
+
+fn frame_resource_lifecycle(
+    hash: &mut Sha256,
+    service: &EncodedTeletextAuthoredService,
+    deadline: Instant,
+) -> Result<(), NativeTeletextGenerationError> {
+    let plan = service
+        .resource_lifecycle_variants()
+        .ok_or(NativeTeletextGenerationError::ArtifactMismatch)?;
+    frame(
+        hash,
+        8,
+        &u64::try_from(plan.entries().len())
+            .map_err(|_| NativeTeletextGenerationError::ArtifactMismatch)?
+            .to_be_bytes(),
+    )?;
+    for entry in plan.entries() {
+        check_deadline(deadline)?;
+        frame(
+            hash,
+            9,
+            &u64::try_from(entry.physical_page_index())
+                .map_err(|_| NativeTeletextGenerationError::ArtifactMismatch)?
+                .to_be_bytes(),
+        )?;
+        let identity = entry.resource();
+        let kind = match identity.kind() {
+            TeletextResourceKind::Mot => 0,
+            TeletextResourceKind::Drcs => 1,
+            TeletextResourceKind::Gdrcs => 2,
+            TeletextResourceKind::Pop => 3,
+            TeletextResourceKind::Gpop => 4,
+            TeletextResourceKind::Mip => 5,
+        };
+        frame(
+            hash,
+            10,
+            &[
+                kind,
+                identity.page().magazine(),
+                identity.page().page(),
+                identity.logical_subpage().get(),
+            ],
+        )?;
+        for header in entry.headers() {
+            check_deadline(deadline)?;
+            frame(hash, 11, header)?;
+        }
+    }
+    Ok(())
 }
 
 struct NativeGenerationConfirmation<'a> {
@@ -192,7 +265,7 @@ impl TeletextGenerationValidator for NativeGenerationConfirmation<'_> {
             || save.request.digest != self.design.digest()
             || save.request.channel_id != self.design.selection().channel_id
             || save.selection != *self.design.selection()
-            || save.artifact_version != TELETEXT_GENERATION_ARTIFACT_VERSION
+            || save.artifact_version != TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
             || save.artifact_digest != self.artifact_digest
         {
             return Err(TeletextPublicationValidationError::Association);
@@ -206,14 +279,21 @@ impl TeletextGenerationValidator for NativeGenerationConfirmation<'_> {
 
 async fn fingerprint(
     design: RestoredOriginalTeletextDesign,
+    version: u16,
     deadline: Instant,
     hold: ersatzrs_core::locking::TeletextWorkHold,
 ) -> Result<(RestoredOriginalTeletextDesign, String), NativeTeletextGenerationError> {
     super::teletext_work::spawn_blocking(hold, move || {
-        let digest = artifact_digest(
+        let design = if version == TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION {
+            design.with_resource_lifecycle_variants(deadline)?
+        } else {
+            design
+        };
+        let digest = artifact_digest_for_version(
             design
                 .encoded()
                 .ok_or(NativeTeletextGenerationError::ArtifactMismatch)?,
+            version,
             deadline,
         )?;
         Ok((design, digest))
@@ -307,13 +387,19 @@ pub(super) async fn accept_original_teletext_generation_with_hold(
     if design.encoded().is_none() {
         return Ok(M::Rejected(R::Publication(P::InvalidValues)));
     }
-    let (design, artifact_digest) = fingerprint(design, deadline, hold.clone()).await?;
+    let (design, artifact_digest) = fingerprint(
+        design,
+        TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+        deadline,
+        hold.clone(),
+    )
+    .await?;
     let save = TeletextGenerationSave {
         request: target.request,
         expected_design_head: target.expected_design_head,
         expected_generation_id: target.expected_generation_id,
         selection: design.selection().clone(),
-        artifact_version: TELETEXT_GENERATION_ARTIFACT_VERSION,
+        artifact_version: TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
         artifact_digest,
     };
     let selection = save.selection.clone();
@@ -362,7 +448,10 @@ pub async fn reload_accepted_teletext_generation(
     let Some(generation) = application.accepted_teletext_generation(channel_id).await? else {
         return Ok(None);
     };
-    if generation.artifact_version != TELETEXT_GENERATION_ARTIFACT_VERSION {
+    if !matches!(
+        generation.artifact_version,
+        TELETEXT_GENERATION_ARTIFACT_VERSION | TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+    ) {
         return Err(NativeTeletextGenerationError::ArtifactMismatch);
     }
     let Some(design) = reload_original_teletext_design_revision_with_hold(
@@ -384,7 +473,7 @@ pub async fn reload_accepted_teletext_generation(
     if !frozen_original(&design) {
         return Err(NativeTeletextGenerationError::GuideFreshnessRequired);
     }
-    let (design, actual) = fingerprint(design, deadline, hold).await?;
+    let (design, actual) = fingerprint(design, generation.artifact_version, deadline, hold).await?;
     if actual != generation.artifact_digest {
         return Err(NativeTeletextGenerationError::ArtifactMismatch);
     }

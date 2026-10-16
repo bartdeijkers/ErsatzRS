@@ -200,6 +200,7 @@ pub struct EncodedTeletextAuthoredService {
     magazine_units: Vec<[u8; 46]>,
     inventory: Vec<TeletextPhysicalPageInventoryRecord>,
     unit_count: usize,
+    resource_lifecycle_variants: Option<super::TeletextResourceLifecyclePlan>,
 }
 impl EncodedTeletextAuthoredService {
     #[must_use]
@@ -223,6 +224,31 @@ impl EncodedTeletextAuthoredService {
     #[must_use]
     pub const fn unit_count(&self) -> usize {
         self.unit_count
+    }
+
+    /// Derive finite checked lifecycle headers bound to this exact service.
+    /// Baseline pages, declarations, inventory and first-start bytes are unchanged.
+    /// Warm outputs may select only these alternatives using completed delivery.
+    /// # Errors
+    /// Rejects expired derivation, unsupported resource states, noncanonical
+    /// native headers or storage beyond the finite resource-owner namespace.
+    pub fn with_resource_lifecycle_variants(
+        mut self,
+        deadline: std::time::Instant,
+    ) -> Result<Self, super::TeletextResourceLifecycleError> {
+        self.resource_lifecycle_variants = Some(super::TeletextResourceLifecyclePlan::derive(
+            &self, deadline,
+        )?);
+        Ok(self)
+    }
+
+    /// Checked alternatives retained with the immutable baseline service.
+    /// Absence preserves the original strict authored lifecycle contract.
+    #[must_use]
+    pub const fn resource_lifecycle_variants(
+        &self,
+    ) -> Option<&super::TeletextResourceLifecyclePlan> {
+        self.resource_lifecycle_variants.as_ref()
     }
 
     /// Move only completed resource bodies into private carousel history.
@@ -551,6 +577,7 @@ fn encode_owned_service(
         magazine_units,
         inventory,
         unit_count: units,
+        resource_lifecycle_variants: None,
     })
 }
 

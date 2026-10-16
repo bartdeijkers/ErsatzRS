@@ -1,4 +1,4 @@
-//! Role-2 accepted metadata and fresh whole-scope confirmation, never delivery.
+//! Scoped accepted metadata and fresh whole-scope confirmation, never delivery.
 
 use super::super::teletext_publications::effective as publication;
 use super::*;
@@ -31,7 +31,7 @@ fn valid_target(
     valid_request(request)
         && publication::valid_scope(selection)
         && selection.channel_id == request.channel_id
-        && version == TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION
+        && valid_artifact_role(version, TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION)
         && valid_digest(digest)
         && maximum > 0
         && isize::try_from(maximum).is_ok()

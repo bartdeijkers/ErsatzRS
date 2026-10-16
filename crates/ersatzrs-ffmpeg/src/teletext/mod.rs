@@ -46,6 +46,7 @@ mod psi;
 mod psi_framing;
 mod psi_monitor;
 mod raster;
+mod resource_lifecycle;
 mod resource_pages;
 mod resource_transmission;
 mod service_update;
@@ -143,6 +144,9 @@ pub use physical_inventory::{
 pub use pmt_install::{TeletextPmtInstallError, TeletextPmtInstallReport, TeletextPmtInstaller};
 pub use psi::{TeletextProgramSelection, TeletextPsiDiscovery, TeletextPsiError};
 pub use psi_monitor::TeletextPsiMonitor;
+pub use resource_lifecycle::{
+    TeletextResourceLifecycleEntry, TeletextResourceLifecycleError, TeletextResourceLifecyclePlan,
+};
 pub use resource_pages::{
     encode_teletext_drcs_page, encode_teletext_mot_page, encode_teletext_resource_header,
     EncodedTeletextResourcePage, TeletextResourceFullUpdate, TeletextResourcePageEncodingError,

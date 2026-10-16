@@ -10,10 +10,14 @@ use ersatzrs_domain::{
 
 use super::{RepositoryError, Result, TeletextPublicationRejection};
 
-/// Latest native compiled-artifact fingerprint framing, independent of documents.
+/// Original strict native wire fingerprint, independent of documents.
 pub const TELETEXT_GENERATION_ARTIFACT_VERSION: u16 = 1;
-/// Scoped artifact framing includes an explicit authored-service/absence role.
+/// Strict scoped fingerprint includes an explicit authored-service/absence role.
 pub const TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION: u16 = 2;
+/// Base artifact binds its exact service and finite resource lifecycle headers.
+pub const TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION: u16 = 3;
+/// Scoped counterpart, retaining the explicit service/absence role.
+pub const TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION: u16 = 4;
 
 /// Fresh promotion target and independent accepted-pointer CAS.
 #[derive(Clone, PartialEq, Eq)]

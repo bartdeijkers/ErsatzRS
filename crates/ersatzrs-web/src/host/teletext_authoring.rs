@@ -630,6 +630,16 @@ fn generation_error(error: NativeTeletextGenerationError) -> TeletextAuthoringEr
         NativeTeletextGenerationError::WorkerFailed => {
             failure(TeletextAuthoringStatus::WorkerFailed)
         }
+        NativeTeletextGenerationError::ResourceLifecycle(error) => failure(
+            if matches!(
+                error,
+                ersatzrs_ffmpeg::teletext::TeletextResourceLifecycleError::TimedOut
+            ) {
+                TeletextAuthoringStatus::TimedOut
+            } else {
+                TeletextAuthoringStatus::EncodingFailed
+            },
+        ),
     }
 }
 

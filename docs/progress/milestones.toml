@@ -2968,6 +2968,100 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 response-owned resource lifecycle and ordinary warm transport (checkpoint):
+Criterion: correct the exercised actual-editor warm-counter mismatch without
+changing immutable original pages, weakening receiver history or assuming every
+response saw each accepted intermediate generation. ADR0126 defines the explicit
+native header-family contract. New base3/effective4 artifacts bind exact baseline
+units plus16 checked full first headers per native resource (S2=0..7, each
+Unchanged/Changed), under the original deadline/page bounds. The private plan is
+constructed inside the immutable service before fingerprint/acceptance; the same
+Arc carries it through existing selection, monitor, binding and control paths.
+Baseline getters, semantic preview, originals, TTI and all body bytes remain exact.
+Legacy base1/effective2 frames and strict recovery retain their previous meaning;
+new version-aware recovery reconstructs and verifies the complete authorization
+before current-pointer confirmation. Explicit Off remains absent content.
+
+Carousels choose resource headers against their own completed bodies/counters,
+including a retained actual counter separate from the baseline seed. Repeats use
+that selected counter and clear C4/C8; pending/discarded/skipped states do not
+advance history. Existing sink ACK, source clock, acquisition, PSI and retirement
+fences remain unchanged. No Cartesian service copies, packages or new runtime
+dependencies are introduced. The migration widens only artifact-role constraints,
+preserving histories, both pointer families, IDs, sequences, triggers and FKs.
+Generic migration readiness/checksum Health still derives from the full migrator.
+
+Current proof in tmp/phase9-resource-lifecycle/: foundation3 passes39/40
+(24cb1a18-8684-450b-a9fa-1f78c9be60be). Its single failed new empty-sequence fixture
+inserted a duplicate sqlite_sequence name because the prior empty-table migration
+already created a zero row. The corrected fixture updates that one row to197 and
+asserts its unique precondition; SQL and expected preservation remain unchanged.
+Boundary/migration run914980e4-62c0-4b4a-929c-af4954a985d4 passes12/12, including
+that case and two genuine output-gate ACK regressions. One earlier identity
+overlaps:50 unique low-level/storage successes, not51. Existing strict rejection,
+shared history, distinct completed responses, wrap7->0, skipped/pending/removal,
+deliberate refresh and selected first/repeat counters are exercised. Two host
+fingerprint cases pass (e923339f-77a5-4d9b-8348-f887ae3de184), binding body and
+authored seed even with the same finite header family. Source review confirms
+unchanged legacy framing and preacceptance authorization; it is not runtime proof.
+Initial compilation found a private test helper/missing test pattern field, then
+one String fixture constructor mismatch; these are corrected with no weakened
+validation. Native actual-QTM/generation run e324c013-a541-43af-940b-b3f57301e3ee
+passes32/32. The genuine retained QTM C bitmap imports/publishes/reopens as base3;
+completed-history simulation retains selected1->2->3, stable repeats, skipped
+candidate2 on a separate response, unchanged channel2 and immutable baseline.
+The second G edit is a receipt-bound synthetic fixture, not an additional GUI edit.
+Both authored Changed and Unchanged MOT intents are covered. This native case
+alone does not prove HTTP, AV, sink acknowledgement or actual-client behavior.
+
+The ordinary warm TCP gate f03f88c3-d87a-49ef-a020-c89749d43aa3 passes on
+FFmpeg n9.0-20261006, TSDuck3.44-4676 and independent libzvbi0.2.42. Its three
+original /iptv/hls-direct/{1,2}.ts responses stay open through genuine QTM import,
+pending intent, explicit acceptance and repeated resource acquisition. Two Day
+viewers receive edited0x803 with S2=2; Night retains0x801/blue and S2=1. One source
+reset occurs before requests and zero after; no reconnect, profile/package/config
+mutation or producer/Lua replay is used. Each actual response preserves original
+AV and the full source-clock oracle, passes qualified transport checks and feeds
+captured78-unit old/new cycles to ONE independent decoder. Both124/125 pass literal
+120 packed plus120 rendered bitmap pixels with the proper theme before and after.
+The decoder's continuous input clock is distinct from the actual TCP/source-clock
+oracle; neither is inferred from the other. Exact finite header aliases preserve
+all bytes/S2; low-level tests, rather than the alias matcher, prove C8-clear timing.
+Owned responses/producers close; natural EOF is not tested. Raw captures,
+wire offsets, per-viewer TSDuck/decoder receipts and warm-delivery.json are retained
+under tmp/phase9-resource-lifecycle/warm-tcp-3/.
+
+The first transport compile found a wrong fixture-relative path and missing mutable
+test receiver; both are corrected. Run2 ended all streams before acceptance at
+~1.76s. Offline review confirms six exact original cycles, no CC error or changed
+S2: its synchronous test-only recovered-raster comparisons starved the shared
+current-thread runtime. Run3 moves those full checks after shutdown and retains
+both-channel durable pointer checks during playback. No product/matcher/transport
+limit was weakened. Existing six old independent-decoder mode/error regressions
+pass; the warm mode remains bounded to512 units and2MiB per file. Strict all-target
+Clippy passes core/ffmpeg/infra/web after explicit empty-map constructors, unit
+semicolons, Copy for borrow-only completed views and equivalent method references.
+These preserve order, state, hash/wire bytes and assertions, so valid behavioral
+receipts are reused. Workspace formatting and the new-allow policy pass; no lint
+exemption is added. Final progress and architecture checks pass (all four admin
+ratchets remain zero); all129 milestone contracts/status/dependencies are unchanged.
+The final source/log/capture receipt is tmp/phase9-resource-lifecycle/identity.json,
+SHA25603a71a08be165594f573c84100938182b78dbf6e31e9aaba3b2097672d140476.
+Its85 unique Rust identities count overlapping successful cases once. Relevant
+unchanged prior cold/headed/editor/caption evidence is reused for its original
+scope; no full CI or additional admin-hydration result is claimed.
+
+Next concrete action: reuse the ordinary Origin and existing bounded headed-client
+handshake for original/edited bitmap stages, with the same two client processes,
+URLs and retained decoders across publication. Inspect both MAIN-plane glyphs and
+124->125->124 navigation while Night stays unchanged; shut down producers before
+waiting for visual review. Markers alone do not certify the image. Prior cold
+bitmap/client evidence and the new native warm receipts supply exact references.
+The prior cold VLC proof is reused only for its original cold scope. Actual warm
+client render/navigation, multi-group/padded interchange and complete Level2.5/fallback,
+metadata/zones, Lua/restart, localized admin and six-platform/playback acceptance
+remain open. No milestone, production addon, remote push or publication.
+
 2026-10-16 actual DRCS edit to ordinary cold-client delivery (partial):
 Criterion: connect retained actual QTeletextMaker output to profile selection,
 validation, the shared preview, explicit publication, the ordinary stream route
@@ -6932,20 +7026,20 @@ argv, transport or admin changes. Receipt: tmp/phase9-editorial-import/identity.
 and receipt-sha256.txt, SHA256b2e3ec1e5a5691a09eab216b3376a42090fa2014ea004c6ed0c878ae5b8cb73d. It binds final source/logs and
 excludes mutable progress prose; unchanged prerequisite receipts remain valid.
 
-Current criterion-to-next-step map (updated after actual singleton cold delivery and resource diagnostics; historical receipts retain their original scope):
+Current criterion-to-next-step map (updated during response-owned lifecycle correction; historical receipts retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
 | Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 bitmap concepts with native replay implemented | Existing sidecar/admin receipts plus actual singleton cold MAIN delivery above | Multi-group/padded resource, panel/geometry/set editing and wider resource admin flow remain open | Reconcile complete observed writer indices with native identities, permissions and protected padding |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE carrier tests; actual equal-NOS1 and independent fallback1/enhanced0 QTM Save As/native import; nine-culture headed transfer | General charset/resource/set/subpage fidelity remains open; sparse normative S1=1 independent decoding/client is blocked by the audited decoder defect | Reuse corrected carrier receipts; extend supported authored changes and select a correct independent sparse-resource decoder/client |
-| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour and actual-singleton bitmap flows; full acceptance open | Prior actual QTM/localized admin/replay receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37; new retained GUI input -> native preview/publication/reopen -> ordinary TCP -> independent pixels/TSDuck -> actual two-theme VLC124/125/124 above | Warm resource publication, full Level2.5, applied-state admin, default-capacity handoff and richer editor changes remain open; actual resource-upload headed journey is not proven | Resolve the completed-history/immutable-artifact lifecycle contract, then prove actual ordinary warm updates without AV damage |
+| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour and actual-singleton bitmap flows; response-owned lifecycle3/4 implemented; full acceptance open | Prior actual QTM/localized admin/replay receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37; retained GUI input -> native preview/publication/reopen -> ordinary TCP -> independent pixels/TSDuck -> actual cold two-theme VLC124/125/124; new original three-response warm AV/clock/TSDuck/single-decoder proof above | Actual warm-resource client render/navigation, full Level2.5, applied-state admin, default-capacity handoff and richer editor changes remain open; actual resource-upload headed journey is not proven | Prove actual same-response warm resource rendering/navigation with a suitable client; reuse native/transport/independent proof, then resume multi-group/padded editor interchange |
 | Actual pinned QTM workflow | Base-row/foreground native-admin flow and actual singleton native/cold-client delivery proven; full acceptance open | Existing pinned editor/admin receipts; current retained actual singleton -> fresh V4 -> native preview/publication/reopen/TCP/independent pixels/actual VLC; dense-bank GUI calibration | Multi-group/padded-bank import, resource-upload headed admin, panel/geometry, wider live updates and legacy modal focus remain open | Authenticate complete PN/SC ordinal shift0/1->1/2 against receipt, native S1 and protected fields; retain broader editor criteria |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: resolve resource lifecycle planning against each response's
-actual completed history and the immutable accepted-artifact contract, then prove
-ordinary warm updates/AV/client behavior. The actual singleton cold flow and
+Concrete next action: finish native/strict verification of the explicit response-
+owned lifecycle correction, then prove ordinary same-response warm updates,
+source AV/TSDuck/independent decoding and actual-client behavior. The actual singleton cold flow and
 localized resource identity now have the scoped evidence above; do not rerun them
 without changed inputs. Reconcile the actual V4 dense bank's complete PN/SC ordinal shift0/1->1/2
 against its receipt, preserving native S1 and protected padding/function/slots. Singleton concepts do not

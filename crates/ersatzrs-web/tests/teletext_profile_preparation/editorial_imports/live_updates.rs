@@ -217,6 +217,24 @@ impl Capture {
     pub(in super::super) fn bytes(&self) -> Vec<u8> {
         self.wire.lock().unwrap().bytes.clone()
     }
+    /// Bounded exact PES-order observations; offsets are complete PES ends.
+    /// No unit, header or timestamp is repaired for the resource-update probe.
+    pub(in super::super) fn ordered_units_after(
+        &self,
+        after: usize,
+        maximum: usize,
+    ) -> Vec<(usize, [u8; 46])> {
+        assert!((1..=512).contains(&maximum));
+        self.wire
+            .lock()
+            .unwrap()
+            .units
+            .iter()
+            .filter(|(offset, _)| *offset > after)
+            .take(maximum)
+            .copied()
+            .collect()
+    }
     async fn wait(&self, predicate: impl Fn(&Wire) -> bool) {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
