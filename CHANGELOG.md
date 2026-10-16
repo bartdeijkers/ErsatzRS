@@ -705,8 +705,10 @@ release section when tagging a release.
   or provision bounded compiler-owned DRCS resources through unused links, keeping
   original declarations, fallback, existing resources and lifecycle intact.
   Receipt-bound concepts can create or retire the generated carrier without
-  granting permission to edit its resource or X27 links. Full editor/client
-  acceptance remains open.
+  granting permission to edit its resource or X27 links. A fresh recorded
+  QTeletextMaker save now reaches native concept import, shared preview, explicit
+  publication and reopen without predefined banks. Full editor/client acceptance
+  remains open.
 
 - Permit acknowledged teletext updates from magazine defaults to complete page
   declarations while retaining bounded magazine cache history. Later incomplete

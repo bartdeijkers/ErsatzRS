@@ -1,6 +1,6 @@
 //! No authored bank: receipt-bound Polish Base edits retain literal originals.
-//! This native application regression does not reuse the different genuine QTM
-//! export, prove ordinary delivery or grant independent/client acceptance.
+//! The opt-in genuine case requires a fresh no-bank export and retained QTM
+//! Save As; native proof does not grant ordinary/independent/client acceptance.
 
 use super::*;
 use ersatzrs_app::teletext_export_project::TeletextExportAssetScope;
@@ -318,6 +318,7 @@ fn revert_request(receipt: &TeletextDesignExportReceipt) -> NativeTeletextEditor
 #[tokio::test]
 async fn no_bank_polish_concept_previews_publishes_reopens_and_reverts_with_read_only_companion() {
     let (mut fixture, flow) = setup_case(response).await;
+    polish_carrier::write_editor_inputs(&flow);
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
     for original in &flow.accepted {
         assert_authored(original.service());
@@ -420,4 +421,174 @@ async fn no_bank_polish_rejects_a_changed_enlarged_fragment_outside_original_fre
     retained.assert_unchanged(&fixture, &flow).await;
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
+}
+
+fn assert_actual_tti_edit(original: &[u8], edited: &[u8]) {
+    let mut expected = parse_teletext_tti(original, policy().tti)
+        .unwrap()
+        .records()
+        .to_vec();
+    let cells = expected
+        .iter_mut()
+        .find_map(|record| match record {
+            TeletextTtiRecord::BaseRow { row: 1, cells } => Some(cells),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(cells[7], b'A');
+    cells[7] = 0x5b;
+    let parsed = parse_teletext_tti(edited, policy().tti).unwrap();
+    assert_eq!(parsed.records().len(), expected.len());
+    // Numeric spelling and record order belong to the editor. Every parsed
+    // record, including all other OL bytes and protected packets, stays exact.
+    for record in parsed.records() {
+        let index = expected
+            .iter()
+            .position(|candidate| candidate == record)
+            .expect("genuine Save As may change only Base row1 column7 A to literal5B");
+        expected.remove(index);
+    }
+    assert!(expected.is_empty());
+}
+
+fn actual_editor_proof(directory: &Path, original: &[u8], edited: &[u8]) -> Value {
+    let bytes = live_client::read_bounded(&directory.join("editor-1/editor-proof.json"), 16 * 1024)
+        .unwrap();
+    let proof: Value = serde_json::from_slice(&bytes).unwrap();
+    for (field, expected) in [
+        ("editor_name", "QTeletextMaker"),
+        ("editor_version", "1.0"),
+        (
+            "editor_source_commit",
+            "cac2167bac933a6160cca45a45d5d4ee95355898",
+        ),
+        (
+            "editor_binary_sha256",
+            "af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a",
+        ),
+    ] {
+        assert_eq!(proof[field].as_str(), Some(expected));
+    }
+    assert_eq!(
+        proof["original_sha256"].as_str(),
+        Some(drcs_bitmap::hash(original).as_str())
+    );
+    assert_eq!(
+        proof["saved_sha256"].as_str(),
+        Some(drcs_bitmap::hash(edited).as_str())
+    );
+    // This fixture receipt binds bytes and reported editor identity only. Root
+    // separately inspects the actual owned GUI process and retained images.
+    proof
+}
+
+fn actual_input_hashes(flow: &Flow, directory: &Path) -> Vec<(String, String)> {
+    let mut names: Vec<_> = flow.exported[0]
+        .files()
+        .iter()
+        .map(|file| format!("native-original-1/{}", file.name))
+        .collect();
+    names.extend([
+        "editor-1/edited.tti".into(),
+        "editor-1/editor-proof.json".into(),
+    ]);
+    names
+        .into_iter()
+        .map(|name| {
+            let bytes = drcs_bitmap::read_retained_editor_file(&directory.join(&name));
+            (name, drcs_bitmap::hash(&bytes))
+        })
+        .collect()
+}
+
+fn actual_request(flow: &Flow, directory: &Path) -> (NativeTeletextEditorialImportRequest, Value) {
+    for file in flow.exported[0].files() {
+        let retained = drcs_bitmap::read_retained_editor_file(
+            &directory.join("native-original-1").join(&file.name),
+        );
+        assert_eq!(
+            retained, file.bytes,
+            "all retained editor inputs must equal this fresh no-bank export"
+        );
+    }
+    let name = &flow.exported[0].sidecar().project.pages[0].name;
+    assert_eq!(name, "page-124-0020.tti");
+    let original = &flow.exported[0]
+        .files()
+        .iter()
+        .find(|file| &file.name == name)
+        .unwrap()
+        .bytes;
+    let edited = drcs_bitmap::read_retained_editor_file(&directory.join("editor-1/edited.tti"));
+    let proof = actual_editor_proof(directory, original, &edited);
+    assert_actual_tti_edit(original, &edited);
+    let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
+    request.name = "Actual QTM no-bank Polish Base concept".into();
+    request
+        .files
+        .iter_mut()
+        .find(|file| &file.name == name)
+        .unwrap()
+        .bytes = edited;
+    (request, proof)
+}
+
+/// Set `ERSATZRS_QTM_COMPILER_POLISH_DIR` to retained fresh no-bank inputs and
+/// genuine QTM Save As. The separate regular test's existing editor-output env
+/// prepares native-original-1; older authored-bank input cannot substitute it.
+#[tokio::test]
+#[ignore = "requires fresh no-bank native-original-1 files, actual pinned QTM editor-1/edited.tti and editor-proof.json; no ordinary/client claim"]
+async fn actual_qtm_no_bank_polish_edit_previews_publishes_and_reopens() {
+    let directory =
+        std::path::PathBuf::from(client_capture::selected("ERSATZRS_QTM_COMPILER_POLISH_DIR"));
+    let (mut fixture, flow) = setup_case(response).await;
+    let retained = resource_bank_admin::Retained::capture(&fixture).await;
+    let (request, proof) = actual_request(&flow, &directory);
+    let hashes = actual_input_hashes(&flow, &directory);
+    let concept = import(&fixture, request).await;
+    assert_eq!(concept.head().id, flow.saved[0].head().id);
+    assert_eq!(concept.head().revision, 2);
+    assert_original_pointers(&fixture, &flow).await;
+    retained.assert_unchanged(&fixture, &flow).await;
+    let restored = drcs_bitmap::restored(&fixture, &concept).await;
+    assert_concept(&flow, restored.encoded().unwrap(), 0x5b);
+    let preview = external_editor_probe::preview_page(restored.encoded().unwrap(), 124);
+    fixture = fixture.reopen().await;
+    assert_original_pointers(&fixture, &flow).await;
+    assert_concept(
+        &flow,
+        drcs_bitmap::restored(&fixture, &concept)
+            .await
+            .encoded()
+            .unwrap(),
+        0x5b,
+    );
+    let accepted = publish_and_accept(&fixture, &flow, &concept).await;
+    assert_concept(&flow, accepted.service(), 0x5b);
+    assert_eq!(
+        external_editor_probe::preview_page(accepted.service(), 124),
+        preview
+    );
+    fixture = fixture.reopen().await;
+    assert_pointers(&fixture, &accepted, &flow.accepted[1]).await;
+    assert_concept(&flow, recover(&fixture, 1).await.service(), 0x5b);
+    retained.assert_unchanged(&fixture, &flow).await;
+    assert_eq!(actual_input_hashes(&flow, &directory), hashes);
+    assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+    polish_delivery::write_json(
+        &directory,
+        "native-proof.json",
+        &json!({"probe_version":1,
+        "scope":"retained fresh QTM no-bank Polish Save As to native concept, preview, explicit publication and reopen",
+        "editor_name":proof["editor_name"],"editor_version":proof["editor_version"],
+        "editor_source_commit":proof["editor_source_commit"],"editor_binary_sha256":proof["editor_binary_sha256"],
+        "original_sha256":proof["original_sha256"],"saved_sha256":proof["saved_sha256"],"input_hashes":hashes,
+        "design_id":concept.head().id,"revision":concept.head().revision,"digest":concept.digest(),
+        "generation_id":accepted.generation().id,"request_id":accepted.generation().request.id,
+        "exact_literal_polish_identity_and_generated_mask_and_shared_preview_verified":true,
+        "originals_profiles_bindings_package_receipts_config_and_night_unchanged":true,
+        "ordinary_delivery_proven":false,"independent_decoding_proven":false,"actual_client_proven":false,
+        "limitations":"GUI provenance and images remain external evidence; no headed admin, hydration, ordinary stream, warm transition, independent decoder, suitable-client or full-engine/platform acceptance claim"}),
+    );
 }

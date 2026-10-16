@@ -111,7 +111,7 @@ pub(super) fn assert_base(composition: &TeletextMainComposition, expected_code: 
     clippy::disallowed_methods,
     reason = "Manual native editor proof selects a disposable artifact directory; this is not application configuration"
 )]
-fn write_editor_inputs(flow: &Flow) {
+pub(super) fn write_editor_inputs(flow: &Flow) {
     if let Some(directory) = std::env::var_os("ERSATZRS_TELETEXT_POLISH_EDITOR_DIR") {
         let directory = std::path::PathBuf::from(directory);
         std::fs::create_dir(&directory).expect("editor input destination must be new");
