@@ -9,6 +9,7 @@ use ersatzrs_app::{
     teletext_export_project::parse_teletext_export_receipt_body,
 };
 use ersatzrs_domain::{ChannelTeletextBindingRead, TeletextProfileRead};
+use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use futures_util::FutureExt as _;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -20,6 +21,25 @@ const SPARSE_ORIGINAL_HASH: &str =
     "0e563bc16e0a5d3e339f0a035b2d802d3463e873cbba2a1c7d4d99f302a0afc7";
 const SPARSE_EDITED_HASH: &str = "65e4580a5cd766648cd9499ba1bc2f034c95e62c9243a16edcf0311a2dacc0d9";
 const BROWSER_TIMEOUT: Duration = Duration::from_mins(10);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BankCase {
+    Dense,
+    Sparse,
+    ExplicitPage,
+}
+
+impl BankCase {
+    fn sparse(self) -> bool {
+        self == Self::Sparse
+    }
+
+    fn assert_presentation(self, service: &EncodedTeletextAuthoredService) {
+        if matches!(self, Self::ExplicitPage) {
+            drcs_bank::assert_explicit_page_presentation(service);
+        }
+    }
+}
 
 fn actual_hashes(sparse: bool) -> (&'static str, &'static str) {
     if sparse {
@@ -183,8 +203,9 @@ async fn verified_concept(
     fixture: &Fixture,
     flow: &Flow,
     marker: &BrowserConcept,
-    sparse: bool,
+    case: BankCase,
 ) -> TeletextDesignExportReceipt {
+    let sparse = case.sparse();
     assert_eq!(marker.probe_version, 1);
     assert_eq!(marker.design_id, flow.saved[0].head().id);
     assert_eq!(marker.revision, 2);
@@ -265,6 +286,7 @@ async fn verified_concept(
         restored.encoded().unwrap(),
         sparse,
     );
+    case.assert_presentation(restored.encoded().unwrap());
     assert_original_pointers(fixture, flow).await;
     receipt
 }
@@ -274,14 +296,14 @@ async fn browser_publication(
     flow: &Flow,
     retained: &Retained,
     directory: &Path,
-    sparse: bool,
+    case: BankCase,
 ) -> io::Result<(
     [AcceptedTeletextOutputCandidate; 2],
     TeletextDesignExportReceipt,
 )> {
     tokio::time::timeout(BROWSER_TIMEOUT, async {
         let concept: BrowserConcept = marker(directory, "browser-concept-ready.json").await?;
-        let receipt = verified_concept(fixture, flow, &concept, sparse).await;
+        let receipt = verified_concept(fixture, flow, &concept, case).await;
         retained.assert_unchanged(fixture, flow).await;
         write_json(directory, "publication-ready.json", &concept)?;
         let complete: BrowserComplete = marker(directory, "browser-complete.json").await?;
@@ -307,7 +329,14 @@ async fn browser_publication(
                 .unwrap(),
             Some(day.request.clone())
         );
-        drcs_bank::assert_native_edit(flow.accepted[0].service(), accepted[0].service(), sparse);
+        drcs_bank::assert_native_edit(
+            flow.accepted[0].service(),
+            accepted[0].service(),
+            case.sparse(),
+        );
+        for candidate in &accepted {
+            case.assert_presentation(candidate.service());
+        }
         retained.assert_unchanged(fixture, flow).await;
         Ok((accepted, receipt))
     })
@@ -319,8 +348,9 @@ fn client_ready(
     origin: &live_client::LiveOrigin,
     accepted: &[AcceptedTeletextOutputCandidate; 2],
     source: &[u8],
-    sparse: bool,
+    case: BankCase,
 ) -> Value {
+    let sparse = case.sparse();
     let channels: Vec<_> = accepted.iter().enumerate().map(|(index,candidate)| {
         let channel = index+1;
         let binding = &candidate.selection().bindings[0];
@@ -343,10 +373,10 @@ fn client_ready(
     } else {
         "Open both ordinary URLs; navigate124 to125 to124. Main columns8/10 use bank0 on124 and bank1 on125. Only day124 gains bitmap pixel x10 row0; inspect both themes and close owned clients before completion."
     },
-    "limitations":if sparse {
-        "Cold sparse-bank MAIN client proof with a test-corrected decoder only; panels, warm transitions, full Level2.5 and platform acceptance remain open."
-    } else {
-        "Cold dense-bank client proof only; sparse decoding, warm transitions, full Level2.5 and platform acceptance remain open."
+    "limitations":match case {
+        BankCase::Sparse => "Cold sparse-bank MAIN client proof with a test-corrected decoder only; panels, warm transitions, full Level2.5 and platform acceptance remain open.",
+        BankCase::Dense => "Cold dense-bank client proof only; sparse decoding, warm transitions, full Level2.5 and platform acceptance remain open.",
+        BankCase::ExplicitPage => "Cold dense-bank explicit page-X28/no-M29 client proof only; source reset prevents a warm handover claim. Acknowledged M29-to-page-X28 ordinary handover, full Level2.5 and platform acceptance remain open."
     }})
 }
 
@@ -357,15 +387,14 @@ async fn served_trial(
     origin: &live_client::LiveOrigin,
     directory: &Path,
     media: (&drcs_bitmap_delivery::Tools, &[u8]),
-    sparse: bool,
+    case: BankCase,
 ) -> io::Result<(
     [AcceptedTeletextOutputCandidate; 2],
     TeletextDesignExportReceipt,
     Value,
 )> {
     let (tools, source) = media;
-    let (accepted, receipt) =
-        browser_publication(fixture, flow, retained, directory, sparse).await?;
+    let (accepted, receipt) = browser_publication(fixture, flow, retained, directory, case).await?;
     ordinary_stream_flow::reset_source_start(fixture).await;
     let (day, night) = tokio::join!(
         drcs_bitmap_delivery::capture_tcp(origin.url(1)),
@@ -374,7 +403,7 @@ async fn served_trial(
     let mut channels = Vec::with_capacity(2);
     for (index, bytes) in [&day, &night].into_iter().enumerate() {
         let channel = i64::try_from(index + 1).unwrap();
-        let report = if sparse {
+        let report = if case.sparse() {
             drcs_bitmap_delivery::verify_sparse_edited_capture(
                 directory,
                 tools,
@@ -408,7 +437,7 @@ async fn served_trial(
     write_json(
         directory,
         "ready.json",
-        &client_ready(origin, &accepted, source, sparse),
+        &client_ready(origin, &accepted, source, case),
     )?;
     let completion = live_client::wait_for_client(directory).await?;
     retained.assert_unchanged(fixture, flow).await;
@@ -421,7 +450,16 @@ async fn served_trial(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires retained actual QTM dense bank, exact FFmpeg9/TSDuck/libzvbi, headed browser and VLC on owned ordinary URLs"]
 async fn actual_browser_bank_import_preview_publication_and_ordinary_clients() {
-    Box::pin(run_trial(false)).await;
+    Box::pin(run_trial(BankCase::Dense)).await;
+}
+
+/// Reuses retained actual-2 and the same headed forms/ordinary URLs with native
+/// explicit page X28 and no M29. Source reset makes this a cold client proof;
+/// acknowledged warm M29-to-page-X28 ordinary handover remains separate.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires retained actual QTM dense bank, exact FFmpeg9/TSDuck/libzvbi, headed browser and VLC on owned ordinary URLs"]
+async fn actual_explicit_page_browser_bank_import_preview_publication_and_ordinary_clients() {
+    Box::pin(run_trial(BankCase::ExplicitPage)).await;
 }
 
 /// Set `ERSATZRS_QTM_DRCS_SPARSE_CALIBRATION_DIR` to retained actual-padded-2.
@@ -433,14 +471,15 @@ async fn actual_browser_bank_import_preview_publication_and_ordinary_clients() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires retained actual padded QTM sparse bank, exact FFmpeg9/TSDuck, qualified test decoder, headed browser and VLC on owned ordinary URLs"]
 async fn actual_sparse_browser_bank_import_preview_publication_and_ordinary_clients() {
-    Box::pin(run_trial(true)).await;
+    Box::pin(run_trial(BankCase::Sparse)).await;
 }
 
 async fn prepare_trial(
-    sparse: bool,
+    case: BankCase,
     tools: &drcs_bitmap_delivery::Tools,
     directory: &Path,
 ) -> (Fixture, Flow, Vec<u8>, PathBuf) {
+    let sparse = case.sparse();
     let actual = std::fs::canonicalize(client_capture::selected(if sparse {
         "ERSATZRS_QTM_DRCS_SPARSE_CALIBRATION_DIR"
     } else {
@@ -464,6 +503,13 @@ async fn prepare_trial(
             drcs_companion::sparse_encoding_policy,
         ))
         .await
+    } else if matches!(case, BankCase::ExplicitPage) {
+        Box::pin(setup_with_fixture_policy(
+            drcs_bank::explicit_page_response,
+            fixture,
+            drcs_companion::dense_encoding_policy,
+        ))
+        .await
     } else {
         Box::pin(setup_with_fixture_policy(
             drcs_bank::dense_response,
@@ -473,16 +519,20 @@ async fn prepare_trial(
         .await
     };
     authenticate_actual(&flow, &actual, sparse);
+    for candidate in &flow.accepted {
+        case.assert_presentation(candidate.service());
+    }
     (fixture, flow, source, actual)
 }
 
-async fn run_trial(sparse: bool) {
+async fn run_trial(case: BankCase) {
+    let sparse = case.sparse();
     let directory = PathBuf::from(client_capture::selected(
         "ERSATZRS_TELETEXT_RESOURCE_BANK_DIR",
     ));
     std::fs::create_dir(&directory).expect("resource-bank destination must be new");
     let tools = drcs_bitmap_delivery::Tools::load().await;
-    let (fixture, flow, source, actual) = Box::pin(prepare_trial(sparse, &tools, &directory)).await;
+    let (fixture, flow, source, actual) = Box::pin(prepare_trial(case, &tools, &directory)).await;
     let retained = Retained::capture(&fixture).await;
     let mut origin = live_client::LiveOrigin::start(&fixture).await.unwrap();
     let outcome = AssertUnwindSafe(async {
@@ -498,7 +548,7 @@ async fn run_trial(sparse: bool) {
             &origin,
             &directory,
             (&tools, &source),
-            sparse,
+            case,
         ))
         .await
     })
@@ -521,10 +571,9 @@ async fn run_trial(sparse: bool) {
     closed.expect("owned resource-bank server failed to close");
     let fixture = fixture.reopen().await;
     for (index, expected) in accepted.iter().enumerate() {
-        generations::assert_same_output(
-            &recover(&fixture, i64::try_from(index + 1).unwrap()).await,
-            expected,
-        );
+        let recovered = recover(&fixture, i64::try_from(index + 1).unwrap()).await;
+        generations::assert_same_output(&recovered, expected);
+        case.assert_presentation(recovered.service());
     }
     retained.assert_unchanged(&fixture, &flow).await;
     assert_eq!(
@@ -546,9 +595,9 @@ async fn run_trial(sparse: bool) {
         "fresh_http_receipt_and_exact_bitmap_concept_verified_before_publication":true,
         "same_host_ordinary_transport_source_av_independent_decoding_passed":true,
         "channel_profile_package_original_receipt_config_isolation_and_reopen_verified":true,
-        "owned_server_closed":true,"limitations":if sparse {
-            "Attach inspected browser/client images. Sparse cold MAIN flow with a test-corrected decoder only; panels, warm transitions and complete engine/platform acceptance remain open."
-        } else {
-            "Attach inspected browser/client images. Dense cold flow only; sparse decoding and complete engine/platform acceptance remain open."
+        "owned_server_closed":true,"limitations":match case {
+            BankCase::Sparse => "Attach inspected browser/client images. Sparse cold MAIN flow with a test-corrected decoder only; panels, warm transitions and complete engine/platform acceptance remain open.",
+            BankCase::Dense => "Attach inspected browser/client images. Dense cold flow only; sparse decoding and complete engine/platform acceptance remain open.",
+            BankCase::ExplicitPage => "Attach inspected browser/client images. Dense explicit page-X28/no-M29 cold flow only; source reset prevents a warm handover claim. Acknowledged M29-to-page-X28 ordinary handover and complete engine/platform acceptance remain open."
         }})).unwrap();
 }

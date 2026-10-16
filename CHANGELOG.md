@@ -50,6 +50,9 @@ release section when tagging a release.
   actual sparse-original and genuinely edited padded-bank flows now connect
   localized admin import/preview/explicit publication to ordinary streams,
   independent pixels/fallback and two-theme navigation with that candidate.
+  Explicit page-X28 presentation now has the same genuine bank-edit,
+  localized admin/publication, ordinary-stream and two-theme stock-client proof;
+  warm M29-to-X28 handover remains separate.
   Complete Level 2.5 and editor acceptance remain open.
   Ordinary-stream G1 calibration now proves fixed-vector fallback/enhanced
   decoding and navigation with a separate qualified test decoder, retaining the

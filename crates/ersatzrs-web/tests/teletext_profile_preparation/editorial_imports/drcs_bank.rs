@@ -7,7 +7,10 @@ use ersatzrs_app::{
     teletext_export_project::TeletextExportAssetScope, teletext_tti::TeletextTtiCycleUnit,
 };
 use ersatzrs_domain::teletext::*;
-use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
+use ersatzrs_ffmpeg::teletext::{
+    project_encoded_teletext_display, EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService,
+    TeletextEncodedDisplayRecord,
+};
 use serde_json::{json, Value};
 
 type Groups = Vec<Vec<TeletextTtiRecord>>;
@@ -26,6 +29,23 @@ fn free_glyphs(mut value: Value) -> Value {
 
 pub(super) fn dense_response(theme: &str, page: u16, subcode: u16) -> Value {
     free_glyphs(drcs_companion::dense_response(theme, page, subcode))
+}
+
+pub(super) fn explicit_page_response(theme: &str, page: u16, subcode: u16) -> Value {
+    let mut value = dense_response(theme, page, subcode);
+    let magazines = value["service"]["magazines"].as_array_mut().unwrap();
+    assert_eq!(magazines.len(), 1);
+    assert_eq!(magazines[0]["magazine"], 1);
+    let presentation = magazines[0]["presentation"].clone();
+    magazines.clear();
+    for enhancement in value["service"]["page_enhancements"]
+        .as_array_mut()
+        .unwrap()
+    {
+        assert!(enhancement["presentation"].is_null());
+        enhancement["presentation"] = presentation.clone();
+    }
+    value
 }
 
 pub(super) fn sparse_response(theme: &str, page: u16, subcode: u16) -> Value {
@@ -212,6 +232,7 @@ async fn prove_flow(
     flow: Flow,
     request: NativeTeletextEditorialImportRequest,
     sparse: bool,
+    explicit_page: bool,
 ) {
     let package = calculate_addon_content_sha256(&fixture.root.path().join("package"))
         .await
@@ -241,6 +262,9 @@ async fn prove_flow(
         serde_json::from_slice::<Value>(&flow.originals[0].document).unwrap()
     );
     let restored = drcs_bitmap::restored(&fixture, &concept).await;
+    if explicit_page {
+        assert_explicit_page_presentation(restored.encoded().unwrap());
+    }
     assert_native_edit(
         flow.accepted[0].service(),
         restored.encoded().unwrap(),
@@ -279,8 +303,15 @@ async fn prove_flow(
     assert_eq!(before_groups[untouched], after_groups[untouched]);
     let accepted = publish_and_accept(&fixture, &flow, &concept).await;
     assert_native_edit(flow.accepted[0].service(), accepted.service(), sparse);
+    if explicit_page {
+        assert_explicit_page_presentation(accepted.service());
+    }
     let fixture = fixture.reopen().await;
-    generations::assert_same_output(&recover(&fixture, 1).await, &accepted);
+    let recovered = recover(&fixture, 1).await;
+    generations::assert_same_output(&recovered, &accepted);
+    if explicit_page {
+        assert_explicit_page_presentation(recovered.service());
+    }
     generations::assert_same_output(&recover(&fixture, 2).await, &flow.accepted[1]);
     assert_retained_storage(&fixture, &flow).await;
     assert_eq!(
@@ -297,7 +328,7 @@ async fn dense_bank_canonical_and_qtm_shifted_bitmap_concepts_publish_and_reopen
     for offset in [0, 1] {
         let (fixture, flow) = Box::pin(setup_bank(false)).await;
         let request = bitmap_request(&flow, false, offset);
-        Box::pin(prove_flow(fixture, flow, request, false)).await;
+        Box::pin(prove_flow(fixture, flow, request, false, false)).await;
     }
 }
 
@@ -305,7 +336,7 @@ async fn dense_bank_canonical_and_qtm_shifted_bitmap_concepts_publish_and_reopen
 async fn sparse_bank_preserves_undefined_padding_with_qtm_defaults() {
     let (fixture, flow) = Box::pin(setup_bank(true)).await;
     let request = bitmap_request(&flow, true, 1);
-    Box::pin(prove_flow(fixture, flow, request, true)).await;
+    Box::pin(prove_flow(fixture, flow, request, true, false)).await;
 }
 
 async fn rejected(
@@ -543,6 +574,7 @@ async fn stale_bank_receipt_cannot_overwrite_a_new_concept() {
 
 async fn retained_actual_bank_flow(
     sparse: bool,
+    explicit_page: bool,
     environment: &str,
     source_hash: &str,
     edited_hash: &str,
@@ -553,7 +585,20 @@ async fn retained_actual_bank_flow(
     let edited = drcs_bitmap::read_retained_editor_file(&directory.join("edited.tti"));
     assert_eq!(drcs_bitmap::hash(&source), source_hash);
     assert_eq!(drcs_bitmap::hash(&edited), edited_hash);
-    let (fixture, flow) = Box::pin(setup_bank(sparse)).await;
+    let (fixture, flow) = if explicit_page {
+        assert!(
+            !sparse,
+            "this retained page-X28 case uses the actual dense bank"
+        );
+        Box::pin(setup_with_fixture_policy(
+            explicit_page_response,
+            Fixture::new_persistent().await,
+            drcs_companion::dense_encoding_policy,
+        ))
+        .await
+    } else {
+        Box::pin(setup_bank(sparse)).await
+    };
     let name = bank_name(&flow);
     let original_file = flow.exported[0]
         .files()
@@ -564,6 +609,12 @@ async fn retained_actual_bank_flow(
         original_file.bytes, source,
         "retained GUI input must be this exact regenerated bank export"
     );
+    assert_eq!(drcs_bitmap::hash(&original_file.bytes), source_hash);
+    if explicit_page {
+        for accepted in &flow.accepted {
+            assert_explicit_page_presentation(accepted.service());
+        }
+    }
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
     request
         .files
@@ -571,7 +622,45 @@ async fn retained_actual_bank_flow(
         .find(|file| file.name == name)
         .unwrap()
         .bytes = edited;
-    Box::pin(prove_flow(fixture, flow, request, sparse)).await;
+    Box::pin(prove_flow(fixture, flow, request, sparse, explicit_page)).await;
+}
+
+pub(super) fn assert_explicit_page_presentation(service: &EncodedTeletextAuthoredService) {
+    let semantic = service.declared().semantic();
+    assert!(service.magazine_units().is_empty());
+    assert!(semantic.magazine_presentations().is_empty());
+    let mut displays = 0;
+    for encoded in service.pages() {
+        let page = match encoded {
+            EncodedTeletextAuthoredPage::NativeDisplay(page) => page.encoded().page(),
+            EncodedTeletextAuthoredPage::CompiledDisplay(page) => page.page(),
+            EncodedTeletextAuthoredPage::Object(_) | EncodedTeletextAuthoredPage::Resource(_) => {
+                continue;
+            }
+        };
+        displays += 1;
+        let defaults = semantic.page_enhancements()[&page.address()]
+            .presentation
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            semantic.effective_presentation(page.address()),
+            Some(TeletextEffectivePresentation::Extension {
+                source: TeletextPresentationSource::Page,
+                defaults,
+            })
+        );
+        let projection = project_encoded_teletext_display(page, 128).unwrap();
+        assert!(projection.records.iter().any(|record| matches!(
+            record,
+            TeletextEncodedDisplayRecord::Triplets {
+                row: 28,
+                designation: 0,
+                ..
+            }
+        )));
+    }
+    assert_eq!(displays, semantic.base().pages.len());
 }
 
 /// Set `ERSATZRS_QTM_DRCS_BANK_CALIBRATION_DIR` to retained actual-2. This reuses
@@ -581,6 +670,22 @@ async fn retained_actual_bank_flow(
 async fn retained_actual_qtm_dense_bank_import_preview_publication_and_reopen() {
     Box::pin(retained_actual_bank_flow(
         false,
+        false,
+        "ERSATZRS_QTM_DRCS_BANK_CALIBRATION_DIR",
+        "d1e9a9d49a28be14adb1e727c11ab0cfe908bbd0df83ca49c48ef4e170a0a870",
+        "6b4ac2e70bab6d73b6bdbb52bf9590887c7094582c14bbbca87433225aaebda6",
+    ))
+    .await;
+}
+
+/// Reuses the same retained actual-2 bank Save As with fresh page-X28 export
+/// receipts. This native concept proof does not claim warm or ordinary delivery.
+#[tokio::test]
+#[ignore = "requires retained actual-2 QTeletextMaker calibration files"]
+async fn retained_actual_qtm_dense_bank_explicit_page_import_preview_publication_and_reopen() {
+    Box::pin(retained_actual_bank_flow(
+        false,
+        true,
         "ERSATZRS_QTM_DRCS_BANK_CALIBRATION_DIR",
         "d1e9a9d49a28be14adb1e727c11ab0cfe908bbd0df83ca49c48ef4e170a0a870",
         "6b4ac2e70bab6d73b6bdbb52bf9590887c7094582c14bbbca87433225aaebda6",
@@ -595,6 +700,7 @@ async fn retained_actual_qtm_dense_bank_import_preview_publication_and_reopen() 
 async fn retained_actual_qtm_sparse_bank_import_preview_publication_and_reopen() {
     Box::pin(retained_actual_bank_flow(
         true,
+        false,
         "ERSATZRS_QTM_DRCS_SPARSE_CALIBRATION_DIR",
         "0e563bc16e0a5d3e339f0a035b2d802d3463e873cbba2a1c7d4d99f302a0afc7",
         "65e4580a5cd766648cd9499ba1bc2f034c95e62c9243a16edcf0311a2dacc0d9",
