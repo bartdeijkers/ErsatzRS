@@ -707,7 +707,9 @@ release section when tagging a release.
   validation retains zone and resource ownership. A recorded QTeletextMaker edit
   reaches receipt-bound concepts, shared preview, explicit publication and two
   ordinary streams with transport and independent bitmap checks. Localized
-  headed admin and suitable-client acceptance for this variant remain open.
+  headed Chromium and Firefox now prove receipt-bound import, exact preview,
+  separate publication and the same ordinary streams. Hydration and suitable-
+  client acceptance for this variant remain open.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
   using its exact plain or underlined glyph. Reuse matching authored definitions
   or provision bounded compiler-owned DRCS resources through unused links, keeping

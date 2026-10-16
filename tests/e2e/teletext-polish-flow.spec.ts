@@ -15,7 +15,7 @@ import {
 const readyPath = process.env.ERSATZRS_TELETEXT_POLISH_ADMIN_READY;
 type Ready = {
   probe_version: number; base_url: string; channels: Channel[];
-  fixture?: 'authored-bank' | 'compiler-owned' | 'compiler-owned-spacing';
+  fixture?: 'authored-bank' | 'compiler-owned' | 'compiler-owned-spacing' | 'compiler-owned-turkish';
   editor: { name: string; original_path: string; edited_path: string;
     original_sha256: string; edited_sha256: string };
 };
@@ -27,6 +27,7 @@ const latinA = [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0];
 const underlinedPolish = [0, 0x3fc, 0x18, 0x30, 0x1f8, 0xc0, 0x180, 0x3fc, 0, 0xfff];
 const underlinedLatinA = [0, 0x0f0, 0x198, 0x30c, 0x606, 0x7fe, 0x606, 0x606, 0, 0xfff];
 const separatedMosaic = [0, 0x79e, 0x79e, 0, 0x79e, 0x79e, 0x79e, 0, 0x79e, 0x79e];
+const turkishTL = [0, 0, 0x3f0, 0xc0, 0xd8, 0xd8, 0xd8, 0xde, 0, 0];
 
 function polishGlyph(value: Raster, rows = polish): void {
   for (let y = 0; y < 10; y++) for (let x = 0; x < 24; x++) {
@@ -66,25 +67,28 @@ function changedPixels(before: Raster, after: Raster): number[] {
   return result;
 }
 
-test('genuine Polish QTM page uses localized native import, preview and explicit publication', async ({ browser }, testInfo) => {
-  test.skip(!readyPath, 'Requires a fresh owned Polish native admin fixture for this browser.');
+test('genuine national Base QTM page uses localized native import, preview and explicit publication', async ({ browser }, testInfo) => {
+  test.skip(!readyPath, 'Requires a fresh owned native admin fixture for this browser.');
   test.setTimeout(600_000);
   const directory = dirname(resolve(readyPath!));
   const ready = JSON.parse(bounded(readyPath!).toString('utf8')) as Ready;
   expect(ready.probe_version).toBe(1);
-  expect([undefined, 'authored-bank', 'compiler-owned', 'compiler-owned-spacing']).toContain(ready.fixture);
+  expect([undefined, 'authored-bank', 'compiler-owned', 'compiler-owned-spacing', 'compiler-owned-turkish']).toContain(ready.fixture);
   const spacing = ready.fixture === 'compiler-owned-spacing';
-  const compilerOwned = ready.fixture === 'compiler-owned' || spacing;
+  const turkish = ready.fixture === 'compiler-owned-turkish';
+  const compilerOwned = ready.fixture === 'compiler-owned' || spacing || turkish;
   expect(ready.base_url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   expect(ready.channels).toHaveLength(2);
   const [day, night] = ['day', 'night'].map(theme => ready.channels.find(c => c.theme === theme)!);
   expect(day.addon_id).toBe(night.addon_id); expect(day.profile_id).not.toBe(night.profile_id);
   expect(ready.editor.name).toBe('page-124-0020.tti');
   const original = bounded(ready.editor.original_path), edited = bounded(ready.editor.edited_path);
-  expect(hash(original)).toBe(spacing
+  expect(hash(original)).toBe(turkish
+    ? 'a491d9e62df63aa12143cd21e5513af1f99c99e87b8fb79eab08f8de8c96c588' : spacing
     ? 'f314df192ce7d66ede32eb3ec18d7933839844b326356c48ca11a5d41aa92939'
     : 'a1cb39545a3ed73c13ff7cafc14b999b4a677ef39d1604b434aabee3453e9e3a');
-  expect(hash(edited)).toBe(spacing
+  expect(hash(edited)).toBe(turkish
+    ? '446bc9065d5573a79d76d7171fb62ef3703dd24ed828161c71cd2adef1644edb' : spacing
     ? 'a9b6cf3411b9ca992eaa243fe13135c79f24f99be513646529bca34d34b0eb60'
     : '962254bbb0427b5e9d1ff4d25f24d59fb5354203f61c3f1c4db2ae63b59f00fe');
   expect(hash(original)).toBe(ready.editor.original_sha256);
@@ -124,6 +128,7 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
           polishGlyph(value, underlinedLatinA);
           protectedMosaic(value);
         }
+        if (turkish && channel.theme === 'day' && number === 124) polishGlyph(value, latinA);
         before.set(`${channel.theme}-${number}`, value);
       }
     }
@@ -152,7 +157,7 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
     await visit(page, preview(day));
     const download = page.waitForEvent('download');
     await page.getByTestId('teletext-editor-export-all-form').locator('button').click();
-    const archive = testInfo.outputPath('original-polish.zip');
+    const archive = testInfo.outputPath(turkish ? 'original-turkish.zip' : 'original-polish.zip');
     await (await download).saveAs(archive);
     const files = archiveFiles(archive), display = files.filter(f => f.name === ready.editor.name);
     expect(display).toHaveLength(1); expect(display[0].buffer.equals(original)).toBe(true);
@@ -165,11 +170,18 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
     const sidecar = files.filter(f => f.name === 'project.ersatzrs.json');
     expect(sidecar).toHaveLength(1);
     const project = JSON.parse(sidecar[0].buffer.toString('utf8')).project;
+    if (turkish) {
+      const retained = JSON.parse(bounded(join(dirname(ready.editor.original_path), 'project.ersatzrs.json')).toString('utf8'));
+      const downloaded = JSON.parse(sidecar[0].buffer.toString('utf8'));
+      expect(downloaded.project).toEqual(retained.project);
+      expect(downloaded.receipt_id).not.toBe(retained.receipt_id);
+      expect(downloaded.receipt_digest).toMatch(/^[a-f0-9]{64}$/);
+    }
     expect(project.channel_id).toBe(day.channel_id);
     expect(project.pages.find((p: { name: string }) => p.name === ready.editor.name).page)
       .toEqual({ page: 124, subcode: 32 });
     const upload = page.getByTestId('teletext-editor-import-form');
-    await upload.locator('[name="name"]').fill(`Genuine Polish QTM ${testInfo.project.name}`);
+    await upload.locator('[name="name"]').fill(`Genuine ${turkish ? 'Turkish' : 'Polish'} QTM ${testInfo.project.name}`);
     await upload.locator('[name="sidecar"]').setInputFiles(sidecar);
     await upload.locator('[name="files"]').setInputFiles(files.filter(f => f.name !== 'project.ersatzrs.json')
       .map(f => f.name === ready.editor.name ? { ...f, buffer: edited } : f));
@@ -188,7 +200,7 @@ test('genuine Polish QTM page uses localized native import, preview and explicit
       const value = await raster(page, number);
       const changes = number === 124 ? changedPixels(before.get('day-124')!, value) : [];
       if (number === 124) {
-        polishGlyph(value, spacing ? underlinedPolish : polish);
+        polishGlyph(value, turkish ? turkishTL : spacing ? underlinedPolish : polish);
         if (spacing) protectedMosaic(value);
       } else {
         themeGlyphs(value, 'day', compilerOwned);

@@ -20,11 +20,28 @@ enum FixtureCase {
     AuthoredBank,
     CompilerOwned,
     CompilerOwnedSpacing,
+    CompilerOwnedTurkish,
 }
 
 impl FixtureCase {
     fn is_compiler_owned(self) -> bool {
         self != Self::AuthoredBank
+    }
+
+    fn input_hashes(self, flow: &Flow, actual: &Path) -> Vec<(String, String)> {
+        match self {
+            Self::AuthoredBank => Vec::new(),
+            Self::CompilerOwnedTurkish => compiler_turkish::actual_input_hashes(flow, actual),
+            _ => compiler_polish::actual_input_hashes(flow, actual),
+        }
+    }
+
+    fn base_code(self) -> u8 {
+        if self == Self::CompilerOwnedTurkish {
+            0x23
+        } else {
+            0x5b
+        }
     }
 }
 
@@ -40,7 +57,7 @@ impl Trial<'_> {
     fn assert_inputs(&self, flow: &Flow) {
         if self.fixture_case.is_compiler_owned() {
             assert_eq!(
-                compiler_polish::actual_input_hashes(flow, self.actual),
+                self.fixture_case.input_hashes(flow, self.actual),
                 self.input_hashes
             );
         }
@@ -84,6 +101,13 @@ fn browser_ready(
             ready["editor"]["edited_sha256"] =
                 json!("a9b6cf3411b9ca992eaa243fe13135c79f24f99be513646529bca34d34b0eb60");
         }
+        FixtureCase::CompilerOwnedTurkish => {
+            ready["fixture"] = json!("compiler-owned-turkish");
+            ready["editor"]["original_sha256"] =
+                json!("a491d9e62df63aa12143cd21e5513af1f99c99e87b8fb79eab08f8de8c96c588");
+            ready["editor"]["edited_sha256"] =
+                json!("446bc9065d5573a79d76d7171fb62ef3703dd24ed828161c71cd2adef1644edb");
+        }
     }
     assert!(serde_json::to_vec(&ready).unwrap().len() <= 64 * 1024);
     ready
@@ -122,7 +146,7 @@ async fn fresh_receipt(
     receipt
 }
 
-fn assert_row_overlay(flow: &Flow, document: &[u8]) {
+fn assert_row_overlay(flow: &Flow, document: &[u8], code: u8) {
     let documents = decode_teletext_design_documents(document, designs::budget()).unwrap();
     let overlay = documents.editorial_overlay().unwrap();
     assert!(overlay.local_program_operands().is_empty());
@@ -147,7 +171,7 @@ fn assert_row_overlay(flow: &Flow, document: &[u8]) {
         })
         .unwrap();
     assert_eq!(cells[7], b'A');
-    cells[7] = 0x5b;
+    cells[7] = code;
     assert_eq!(*page.rows()[0].cells(), cells);
     let mut value: Value = serde_json::from_slice(document).unwrap();
     value.as_object_mut().unwrap().remove("editorial_overlay");
@@ -174,7 +198,7 @@ async fn verified_concept(
         .unwrap()
         .unwrap();
     assert_eq!(revision.digest, concept.digest);
-    assert_row_overlay(flow, &revision.document);
+    assert_row_overlay(flow, &revision.document, fixture_case.base_code());
     let documents =
         decode_teletext_design_documents(&revision.document, designs::budget()).unwrap();
     let receipt = fresh_receipt(
@@ -257,7 +281,9 @@ fn assert_polish_effect(
     );
     let service = restored.encoded().unwrap();
     if fixture_case.is_compiler_owned() {
-        if fixture_case == FixtureCase::CompilerOwnedSpacing {
+        if fixture_case == FixtureCase::CompilerOwnedTurkish {
+            compiler_turkish::assert_concept(flow, service);
+        } else if fixture_case == FixtureCase::CompilerOwnedSpacing {
             assert_spacing_concept(flow, service);
         } else {
             compiler_polish::assert_concept(flow, service, 0x5b);
@@ -344,8 +370,15 @@ async fn published(
     );
     let restored = restore_concept(fixture, concept).await;
     assert_polish_effect(flow, &restored, fixture_case);
-    polish_carrier::assert_base(polish_carrier::composition(accepted[0].service()), 0x5b);
-    if fixture_case == FixtureCase::CompilerOwnedSpacing {
+    if fixture_case != FixtureCase::CompilerOwnedTurkish {
+        polish_carrier::assert_base(polish_carrier::composition(accepted[0].service()), 0x5b);
+    }
+    if fixture_case == FixtureCase::CompilerOwnedTurkish {
+        compiler_turkish::assert_concept(flow, accepted[0].service());
+        compiler_polish_underline_delivery::assert_profiles(&accepted);
+        let preview = external_editor_probe::preview_page(restored.encoded().unwrap(), 124);
+        compiler_turkish_delivery::write_previews(directory, flow, &preview, &accepted);
+    } else if fixture_case == FixtureCase::CompilerOwnedSpacing {
         assert_spacing_concept(flow, accepted[0].service());
         compiler_polish_underline_delivery::assert_profiles(&accepted);
         let preview = external_editor_probe::preview_page(restored.encoded().unwrap(), 124);
@@ -407,14 +440,18 @@ async fn prepare(
     tools: &drcs_bitmap_delivery::Tools,
     fixture_case: FixtureCase,
 ) -> (Fixture, Flow, Vec<u8>, PathBuf) {
-    let actual = std::fs::canonicalize(client_capture::selected(
-        if fixture_case.is_compiler_owned() {
-            "ERSATZRS_QTM_COMPILER_POLISH_DIR"
-        } else {
-            "ERSATZRS_QTM_POLISH_CALIBRATION_DIR"
-        },
-    ))
-    .unwrap();
+    let mut actual = if fixture_case == FixtureCase::CompilerOwnedTurkish {
+        PathBuf::from(client_capture::selected("ERSATZRS_QTM_TURKISH_DIR"))
+    } else {
+        std::fs::canonicalize(client_capture::selected(
+            if fixture_case.is_compiler_owned() {
+                "ERSATZRS_QTM_COMPILER_POLISH_DIR"
+            } else {
+                "ERSATZRS_QTM_POLISH_CALIBRATION_DIR"
+            },
+        ))
+        .unwrap()
+    };
     let (fixture, source) = drcs_bitmap_delivery::playback_fixture(tools, directory).await;
     ordinary_stream_flow::setting(
         &fixture,
@@ -427,6 +464,7 @@ async fn prepare(
         FixtureCase::AuthoredBank => polish_carrier::response,
         FixtureCase::CompilerOwned => compiler_polish::response,
         FixtureCase::CompilerOwnedSpacing => compiler_polish_spacing::response,
+        FixtureCase::CompilerOwnedTurkish => compiler_turkish::response,
     };
     let encoding = if fixture_case.is_compiler_owned() {
         channel_documents::policy as fn() -> _
@@ -434,11 +472,20 @@ async fn prepare(
         drcs_companion::dense_encoding_policy
     };
     let (fixture, flow) = Box::pin(setup_with_fixture_policy(response, fixture, encoding)).await;
-    if fixture_case == FixtureCase::CompilerOwnedSpacing {
+    if fixture_case == FixtureCase::CompilerOwnedTurkish {
+        compiler_turkish::assert_originals(&flow);
+        Box::pin(compiler_turkish_delivery::await_actual_editor(
+            &fixture, &flow, &actual,
+        ))
+        .await;
+        actual = std::fs::canonicalize(actual).unwrap();
+    } else if fixture_case == FixtureCase::CompilerOwnedSpacing {
         compiler_polish_spacing::assert_originals(&flow);
     }
     // Authenticate every fresh input and genuine saved output without importing.
-    let request = if fixture_case.is_compiler_owned() {
+    let request = if fixture_case == FixtureCase::CompilerOwnedTurkish {
+        compiler_turkish::actual_request(&flow, &actual).0
+    } else if fixture_case.is_compiler_owned() {
         compiler_polish::actual_request(&flow, &actual).0
     } else {
         polish_carrier::genuine_polish_request(&flow, &actual)
@@ -524,6 +571,12 @@ async fn actual_qtm_no_bank_polish_spacing_headed_admin_import_preview_publicati
     Box::pin(run_trial(FixtureCase::CompilerOwnedSpacing)).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "exports fresh Turkish originals, waits for pinned actual QTM, then requires headed localized SSR forms and FFmpeg9/TSDuck; no decoder/client claim"]
+async fn actual_qtm_no_bank_turkish_headed_admin_import_preview_publication_and_ordinary_streams() {
+    Box::pin(run_trial(FixtureCase::CompilerOwnedTurkish)).await;
+}
+
 async fn run_trial(fixture_case: FixtureCase) {
     let directory = PathBuf::from(client_capture::selected(
         "ERSATZRS_TELETEXT_POLISH_ADMIN_DIR",
@@ -538,11 +591,7 @@ async fn run_trial(fixture_case: FixtureCase) {
         retained: &retained,
         actual: &actual,
         directory: &directory,
-        input_hashes: if fixture_case.is_compiler_owned() {
-            compiler_polish::actual_input_hashes(&flow, &actual)
-        } else {
-            Vec::new()
-        },
+        input_hashes: fixture_case.input_hashes(&flow, &actual),
     };
     if fixture_case.is_compiler_owned() {
         compiler_polish_delivery::assert_source(&fixture, &directory, &source);
@@ -586,7 +635,10 @@ async fn run_trial(fixture_case: FixtureCase) {
         .await;
     trial.assert_inputs(&flow);
     if fixture_case.is_compiler_owned() {
-        if fixture_case == FixtureCase::CompilerOwnedSpacing {
+        if fixture_case == FixtureCase::CompilerOwnedTurkish {
+            compiler_turkish::assert_concept(&flow, accepted[0].service());
+            compiler_polish_underline_delivery::assert_profiles(&accepted);
+        } else if fixture_case == FixtureCase::CompilerOwnedSpacing {
             assert_spacing_concept(&flow, accepted[0].service());
             compiler_polish_underline_delivery::assert_profiles(&accepted);
         } else {

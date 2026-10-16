@@ -8,7 +8,7 @@ use futures_util::FutureExt as _;
 use serde_json::{json, Value};
 use std::{panic::AssertUnwindSafe, path::PathBuf, time::Duration};
 
-async fn await_actual_editor(fixture: &Fixture, flow: &Flow, actual: &Path) {
+pub(super) async fn await_actual_editor(fixture: &Fixture, flow: &Flow, actual: &Path) {
     let retained = resource_bank_admin::Retained::capture(fixture).await;
     turkish::write_editor_inputs_at(flow, actual);
     let original = flow.exported[0]
@@ -69,7 +69,7 @@ fn assert_theme(candidate: &AcceptedTeletextOutputCandidate, foreground: [u8; 3]
     }
 }
 
-fn write_previews(
+pub(super) fn write_previews(
     directory: &Path,
     flow: &Flow,
     preview: &TeletextRaster,
