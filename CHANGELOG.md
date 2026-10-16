@@ -696,7 +696,8 @@ release section when tagging a release.
   links are occupied, preserving authored banks, fallback and link identities.
   Independent linked targets can each receive a bank within the existing caller
   budgets, preserving per-page DRCS limits instead of imposing a two-bank service cap.
-  Indexed TTI banks keep authored and compiler editing permissions separate.
+  Indexed TTI banks retain separate authored and compiler editing permissions
+  across independently linked pages through native concepts and explicit publication.
   A pinned actual QTeletextMaker save now reaches receipt-bound concept import,
   shared preview, explicit publication and two ordinary streams with independent
   bank/fallback decoding. Suitable-client and full engine acceptance remain open.

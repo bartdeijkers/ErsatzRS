@@ -619,3 +619,6 @@ async fn actual_qtm_no_bank_polish_edit_previews_publishes_and_reopens() {
 
 #[path = "compiler_polish/linked_subpages.rs"]
 mod linked_subpages;
+
+#[path = "compiler_polish/linked_targets.rs"]
+mod linked_targets;
