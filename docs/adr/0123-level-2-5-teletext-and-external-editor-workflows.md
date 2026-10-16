@@ -26,6 +26,13 @@ A finite-client whole-host restart trial retains two selected themes and a newer
 pending-only original. Open-client graceful drain remains unproven; P9A-04 owns
 the exact proof and negative shutdown receipt.
 P9A-04 owns current independent proof and all remaining obligations.
+A separately receipted test-only libzvbi candidate now decodes an unchanged sparse
+normal-DRCS capture with native S1=1. It combines the previously audited X27 field
+correction with the normal-DRCS formatter link correction. Original and X27-only
+controls retain their exact negative outcome. Source, library and actually mapped
+process identity are verified; neither authored packets nor the fixed pixel oracle
+change. This grants no stock-client, side-panel, editor or full-engine acceptance;
+actual client qualification remains a separate obligation.
 The generic transport gate now admits an initially absent authored epoch with
 unchanged source PSI/version and no placeholder page model. First activation
 uses that same source clock/counter and acknowledges changed PMT before PES.

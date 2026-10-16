@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: qualify sparse resource decoding without changing native identities'
+current_focus = 'P9A-04: prove sparse resource navigation in a qualified client'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -66,8 +66,9 @@ Dense resource-bank transfer now connects the retained pinned QTM save to
 headed Chromium/Firefox SSR forms, exact shared preview, separate Request/Publish,
 same-host ordinary TCP/TSDuck/independent bitmap and Level1/1.5 fallback, and
 actual two-theme VLC124/125/124 navigation. P9A-04 owns the receipts. Reuse this
-representative flow. Next resolve the already witnessed normative sparse-X27
-independent-decoder/client blocker without rewriting native S1, then extend the
+representative flow. A receipted test-only decoder now passes unchanged sparse
+S1=1 after the audited X27/normal-DRCS corrections. Next prove the candidate's
+actual mapped identity and sparse client display/navigation, then extend the
 remaining authored/editor feature clauses. Full engine, Lua/restart, hydrated
 admin and playback/platform acceptance remain open; production guide work waits.
 

@@ -446,8 +446,11 @@ Receipt-bound resource-bank import now connects genuine dense and padded QTM
 saves to native preview, explicit publication and database reopen. Dense-bank
 resource upload now passes localized headed SSR/no-JS admin, same-host ordinary
 TCP, independent bitmap/fallback decoding and suitable-client navigation.
-P9A-04 retains the exact proof and the next sparse normative-X27 decoder/client
-blocker; no native S1 rewrite or reduced authored target is accepted.
+P9A-04 retains the exact proof. A separately receipted independent test decoder
+now handles unchanged sparse native S1=1 after the audited X27 and normal-DRCS
+formatter corrections; original/X27-only controls still fail exactly. Next prove
+actual client mapping/display/navigation with that qualified candidate. No native
+S1 rewrite, stock-client success or reduced authored target is accepted.
 P9A-04 owns the current criterion map and proof; full Level2.5 and editor
 acceptance remain unchanged.
 Independent original libzvbi 0.2.42 warm-cache DRCS decoding now passes four

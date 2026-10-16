@@ -2800,6 +2800,40 @@ observations do not restrict legal authored addresses or declare X27 unsupported
 by the engine. X27 external decoding, partial/multi-version cache behavior and
 full suitable-client feature coverage remain acceptance work.
 
+### Sparse normal-DRCS decoder candidate
+
+The separately receipted `teletext-zvbi-sparse-build.sh` runs the existing pinned
+X27 recipe unchanged, retaining its upstream and X27-only variants, and adds a
+third test-only library. Its only further source change selects normal DRCS
+`link[27]` in the formatter; the POP use of `link[25]` remains unchanged. The new
+receipt binds the original archive/license/tag, exact recipes, configuration,
+sources and built library independently of the old receipt. No production
+installation or dependency changes.
+
+`teletext-zvbi-sparse-proof.py` requires an external SHA256 pin of that receipt,
+verifies all three variants and executes the unchanged pinned sparse pixel oracle.
+It checks the actual mapped decoder path/hash after execution. The exact retained
+ordinary-stream units have native normal DRCS1C0/S1=1, physical subcode0111, no real
+S1=0 and X27 mask2. Upstream and X27-only variants retain the exact missing-slot
+failure; the combined candidate decodes both124/0020 and125/0020 as private
+UnicodeF440 with the mirrored S1=1 bitmap and all120 literal pixels/colour checked.
+The transmitted TS/units and expected pixels are unchanged.
+
+```bash
+LD_LIBRARY_PATH="$DECODER_BUILD/sparse" \
+  python3 scripts/e2e/teletext-zvbi-sparse-proof.py \
+  --build "$DECODER_BUILD" --proof "$DECODER_INPUT" \
+  --build-receipt-sha256 "$BUILD_RECEIPT_SHA256" \
+  --units "$CAPTURED_SPARSE_UNITS" --receipt-dir "$NEW_PROOF_DIR" --variant sparse
+```
+
+Use separate fresh processes/directories for `original`, `corrected` and `sparse`,
+with the matching library directory. A successful control wrapper records an
+expected decoder failure; inspect `conformance_passed` and `exit_code`. This is
+scoped independent MAIN decoding, not actual client/navigation or a full-engine
+pass. The candidate still exposes41 MAIN columns; panels and complete Level2.5
+client coverage remain open. P9A-04 owns exact receipts and the next client step.
+
 Run/export/replay instructions are in the
 [resource calibration workflow](../../scripts/e2e/README.md#teletext-resource-decoder-calibration).
 This proves representative independent decoding and offscreen native glyph
