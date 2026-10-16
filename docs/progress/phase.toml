@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: raw-spacing editor/publication integration; exact original-glyph proof retained'
+current_focus = 'P9A-04: raw-latch localized headed admin; native/QTM/ordinary proof retained'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -127,9 +127,15 @@ GUI input recovery and scope. A valid assigned-G0 raw-spacing original now passe
 complete encoding without changing its latch/fallback; the physical D5false
 cancels spacing as required by Table29. Final124 related cases pass0c2b53fa,
 including exact authored-bank reuse, neighboring G1 paint and strict detached
-comparison. Next connect the raw-latch case to actual QTM/permission-bound concept
-import/publication; the earlier underlined editor flow stays separately scoped.
-Client acquisition/rendering/navigation and hydration remain open.
+comparison. The raw-latch original now uses a declarative separated mosaic with
+unchanged authoring zones: fresh actual QTM Save As/native concept/preview/
+publication/reopen passes995d2777, then ordinary two-profile TCP/TSDuck/AV/model
+and cleanup40d61a00. Unchanged pinned imager validates fixed underline/fallback/
+themes; missing-row/channel/old-export negatives reject. P9A-04 owns escaping
+proof correction, exact captures and scope. Next connect THIS raw-latch export
+and save to the existing localized headed admin/preview/Publish flow; reuse
+earlier neutral-language evidence where unchanged. Client acquisition/rendering/
+navigation and hydration remain open.
 Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source
 assessment does not establish enlarged DRCS suitability; no decoder maintenance
 program starts. Both-occupied roles, unproven absent-X27 MOT/default supplements,

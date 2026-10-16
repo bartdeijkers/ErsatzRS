@@ -706,8 +706,8 @@ release section when tagging a release.
   original declarations, fallback, existing resources and lifecycle intact.
   Mixed plain/underlined glyphs retain stable generated slots and their painted
   attributes while keeping undefined DRCS underline bits disabled. Known Base
-  spacing latches preserve the assigned G0 glyph, literal fallback and neighboring
-  mosaic separation.
+  spacing latches also survive the genuine editor/import/publication/stream flow,
+  preserving assigned G0 paint, literal fallback and protected mosaics.
   Receipt-bound concepts can create or retire the generated carrier without
   granting permission to edit its resource or X27 links. Fresh recorded
   QTeletextMaker saves cover plain and underlined variants through native concept
@@ -715,7 +715,8 @@ release section when tagging a release.
   Two ordinary channel streams preserve audio/video and separate themes, with
   transport and independent glyph/fallback checks. Headed Chromium and Firefox
   connect the plain variant to localized native forms and the same streams.
-  Underlined headed proof, hydration and full editor/client acceptance remain open.
+  Underlined/raw-latch headed proof, hydration and full editor/client acceptance
+  remain open.
 
 - Permit acknowledged teletext updates from magazine defaults to complete page
   declarations while retaining bounded magazine cache history. Later incomplete

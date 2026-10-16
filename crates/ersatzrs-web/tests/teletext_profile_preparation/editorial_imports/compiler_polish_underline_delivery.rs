@@ -154,6 +154,10 @@ async fn assert_retained(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires fresh underlined no-bank actual QTM save and FFmpeg9/ffprobe/TSDuck; independent decoder/client proof is separate"]
 async fn actual_qtm_no_bank_polish_underline_concept_serves_two_ordinary_channels() {
+    Box::pin(run(underline::response, underline::assert_originals)).await;
+}
+
+pub(super) async fn run(source_response: fn(&str, u16, u16) -> Value, verify_originals: fn(&Flow)) {
     let actual = PathBuf::from(client_capture::selected("ERSATZRS_QTM_COMPILER_POLISH_DIR"));
     let directory = PathBuf::from(client_capture::selected(
         "ERSATZRS_TELETEXT_POLISH_DELIVERY_DIR",
@@ -163,12 +167,12 @@ async fn actual_qtm_no_bank_polish_underline_concept_serves_two_ordinary_channel
     let tools = drcs_bitmap_delivery::Tools::load().await;
     let (fixture, source) = drcs_bitmap_delivery::playback_fixture(&tools, &directory).await;
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
-        underline::response,
+        source_response,
         fixture,
         channel_documents::policy,
     ))
     .await;
-    underline::assert_originals(&flow);
+    verify_originals(&flow);
     let retained = polish_delivery::Retained::capture(&fixture, &flow, &actual).await;
     let hashes = compiler_polish::actual_input_hashes(&flow, &actual);
     let (accepted, proof) = Box::pin(publish_actual(

@@ -250,7 +250,7 @@ pub(super) async fn assert_restored(
 
 #[tokio::test]
 async fn no_bank_polish_underline_concept_previews_publishes_and_reopens() {
-    Box::pin(run(None)).await;
+    Box::pin(run(response, assert_originals, None)).await;
 }
 
 /// The existing editor-output selector prepares a fresh native-original-1 using
@@ -260,17 +260,21 @@ async fn no_bank_polish_underline_concept_previews_publishes_and_reopens() {
 async fn actual_qtm_no_bank_polish_underline_edit_previews_publishes_and_reopens() {
     let directory =
         std::path::PathBuf::from(client_capture::selected("ERSATZRS_QTM_COMPILER_POLISH_DIR"));
-    Box::pin(run(Some(&directory))).await;
+    Box::pin(run(response, assert_originals, Some(&directory))).await;
 }
 
-async fn run(actual: Option<&Path>) {
+pub(super) async fn run(
+    source_response: fn(&str, u16, u16) -> Value,
+    verify_originals: fn(&Flow),
+    actual: Option<&Path>,
+) {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
-        response,
+        source_response,
         Fixture::new_persistent().await,
         channel_documents::policy,
     ))
     .await;
-    assert_originals(&flow);
+    verify_originals(&flow);
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
     let (request, proof, hashes) = if let Some(directory) = actual {
         let (request, proof) = compiler_polish::actual_request(&flow, directory);
