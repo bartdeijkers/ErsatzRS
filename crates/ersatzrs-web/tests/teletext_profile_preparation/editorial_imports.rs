@@ -49,6 +49,8 @@ mod compiler_polish_spacing;
 mod compiler_polish_underline;
 #[path = "editorial_imports/compiler_polish_underline_delivery.rs"]
 mod compiler_polish_underline_delivery;
+#[path = "editorial_imports/compiler_romanian.rs"]
+mod compiler_romanian;
 #[path = "editorial_imports/compiler_scopes.rs"]
 mod compiler_scopes;
 #[path = "editorial_imports/compiler_turkish.rs"]

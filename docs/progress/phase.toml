@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect exact Romanian originals to the editor/native flow'
+current_focus = 'P9A-04: preserve implicit selected-MOT DRCS ownership'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -214,11 +214,17 @@ native raster. The frozen positive fails before and passes after the small
 correction. Existing35 Polish/Turkish and8 direct-table tests pass; the latter
 keeps both Romanian recipes UnprovenRecipe and the font binary unchanged.
 P9A-04 owns mixed-slot/caller-boundary proof and the initial fixture-order error.
-Next join four pages124..127/S32 through the existing actual QTM save/concept/
-shared preview/explicit publication/ordinary-stream flow with two channel themes.
-Romanian editor/independent/client evidence is missing; actual client navigation
-blocks only dependent acceptance. No new decoder-maintenance or proof framework
-is needed; no alias or standard restriction is accepted.
+Four pages124..127/S32 now pass native concept/shared preview/separate
+publication/indexed reexport/reopen and four generated-slot rejection checks
+4f176f0a. Fresh same-live QTM SaveAs/exit0/native/ordinary two-channel AV/TSDuck/
+model/reopen5a4a6f19 passes149.698s. Unchanged pinned imager independently checks
+15Day/16Night closed displays and4banks; two profile swaps and4slot-pixel
+negatives reject. P9A-04 owns the15input hashes, pins, images and exact scope.
+Romanian suitable-client/hydrated-admin proof remains open; no decoder repair
+or scope restriction is accepted. Next reproduce the named implicit selected-MOT
+resource-ownership gap: both resolved DRCS roles occupied without explicit X27,
+where the current linked supplement cannot select a free S1. Preserve original
+MOT/defaults/resources and extend the same native/editor flow after a valid RED.
 Hebrew and the rest of the full matrix remain required, not accepted restrictions.
 Existing165direct/2Unsupported/2Unproven expectations stay unchanged.
 Client acquisition/rendering/navigation and hydration remain open.
