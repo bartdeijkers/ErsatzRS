@@ -419,14 +419,45 @@ pub(super) async fn probe(executable: &str, args: &[&str], input: &[u8], limit: 
     probe_with_input(executable, args, input, limit, ToolInput::Complete).await
 }
 
-// Join every pipe and wait even after a writer error. Only the explicitly
-// selected stream-probe caller may accept successful prefix consumption.
+/// Select only this owned tool's environment; pipe/deadline/reaping policy is
+/// identical to other native probes and never changes the parent host.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub(super) async fn probe_with_environment(
+    executable: &str,
+    args: &[&str],
+    environment: &[(&str, &str)],
+    limit: usize,
+) -> Vec<u8> {
+    probe_with_input_and_environment(
+        executable,
+        args,
+        &[],
+        limit,
+        ToolInput::Complete,
+        environment,
+    )
+    .await
+}
+
 async fn probe_with_input(
     executable: &str,
     args: &[&str],
     input: &[u8],
     limit: usize,
     policy: ToolInput,
+) -> Vec<u8> {
+    probe_with_input_and_environment(executable, args, input, limit, policy, &[]).await
+}
+
+// Join every pipe and wait even after a writer error. Only the explicitly
+// selected stream-probe caller may accept successful prefix consumption.
+async fn probe_with_input_and_environment(
+    executable: &str,
+    args: &[&str],
+    input: &[u8],
+    limit: usize,
+    policy: ToolInput,
+    environment: &[(&str, &str)],
 ) -> Vec<u8> {
     let name = Path::new(executable)
         .file_name()
@@ -435,6 +466,7 @@ async fn probe_with_input(
     let stage = tool_stage(args);
     let mut child = Command::new(executable)
         .args(args)
+        .envs(environment.iter().copied())
         .kill_on_drop(true)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

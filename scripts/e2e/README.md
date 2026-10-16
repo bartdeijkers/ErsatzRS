@@ -1485,6 +1485,20 @@ calibration. Use the same FFmpeg9/ffprobe/TSDuck overrides as the ordinary-clien
 trial below. The fixture authenticates the original and edited editor files
 before writing `browser-ready.json`.
 
+For the Linux-x64 sparse diagnostic, select
+`actual_sparse_browser_bank_import_preview_publication_and_ordinary_clients`
+instead, and set `ERSATZRS_QTM_DRCS_SPARSE_CALIBRATION_DIR` to the verified
+`actual-padded-2` save. Keep a new `ERSATZRS_TELETEXT_RESOURCE_BANK_DIR` for
+each run. Supply all five `ERSATZRS_TELETEXT_DECODER_CANDIDATE_*` inputs from
+[the qualified sparse workflow](../../docs/reference/teletext-design-interchange.md#sparse-normal-drcs-decoder-candidate).
+Use the same browser spec below. Sparse capture verification retains source AV,
+TSDuck and the complete emitted model, then requires strict edited S1=1 pixels
+and Level1/1.5 fallback from the qualified decoder. Its recorded stock FFmpeg
+fallback is a separate negative enhancement result. For the final actual client
+step, pass all five candidate flags to the existing cold-client driver and
+inspect both edited Day pages, unchanged Night pages and navigation before
+releasing native completion. No library is installed or selected in the host.
+
 Run one fixture per browser, serially:
 
 ```bash

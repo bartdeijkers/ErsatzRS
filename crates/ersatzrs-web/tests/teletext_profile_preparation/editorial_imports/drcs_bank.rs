@@ -28,7 +28,7 @@ pub(super) fn dense_response(theme: &str, page: u16, subcode: u16) -> Value {
     free_glyphs(drcs_companion::dense_response(theme, page, subcode))
 }
 
-fn sparse_response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn sparse_response(theme: &str, page: u16, subcode: u16) -> Value {
     free_glyphs(drcs_companion::sparse_response(theme, page, subcode))
 }
 

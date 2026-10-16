@@ -2859,9 +2859,38 @@ these arguments keeps the separately hash-qualified stock path. Inspect all six
 actual MAIN navigation images and successful owned client exits before writing
 the exact native completion marker; also require terminal native success and its
 state/cleanup assertions. A marker alone is insufficient. Current actual evidence
-covers sparse originals and a separate dense stock regression, not the edited
-padded bank. Navigation uses owned native Qt spin arrows; keyboard numeric entry,
+covers sparse originals, the actual padded bank joined through admin/publication/
+ordinary delivery and a separate dense stock regression. P9A-04 owns the exact
+source, browser, independent-decoder, transport and client receipts. Navigation uses owned native Qt spin arrows; keyboard numeric entry,
 56-column panels and complete client/engine acceptance remain unproven.
+
+The separate `teletext-sparse-editor-decoder.py` accepts fresh captured units,
+`day` or `night`, and the same five mandatory candidate arguments. It retains
+the old original sparse oracle unchanged. For the fixed edited-bank calibration
+it checks both MAIN consumers (columns8/10) on both124/0020 and125/0020, normal
+bank17/S1=1/slot0, all120 literal bitmap nibbles and rendered pixels per cell,
+red/blue palettes and black background. Day retains the mirrored glyph with only
+row0 changing801->803; Night remains801. The same pinned fallback helper checks
+Level1/1.5 ZZ at8/9, space10 and white/black colours. The output binds the fresh
+input SHA256, qualified build/proof and actual mapped library. This is a
+synthetic independent test oracle, not an authoring API or full engine pass.
+
+The joined sparse native fixture takes these explicit inputs; they map directly
+to the five client/oracle flags above:
+
+| Native test environment variable | Meaning |
+| --- | --- |
+| `ERSATZRS_TELETEXT_DECODER_CANDIDATE_PROOF` | Positive original sparse receipt |
+| `ERSATZRS_TELETEXT_DECODER_CANDIDATE_PROOF_SHA256` | Independently retained positive-receipt SHA256 |
+| `ERSATZRS_TELETEXT_DECODER_CANDIDATE_BUILD` | Verified three-variant build directory |
+| `ERSATZRS_TELETEXT_DECODER_CANDIDATE_PROOF_ROOT` | Build input directory containing frozen recipes |
+| `ERSATZRS_TELETEXT_DECODER_CANDIDATE_BUILD_SHA256` | Independently retained sparse-build receipt SHA256 |
+
+Only the owned oracle child receives the exact candidate `LD_LIBRARY_PATH`;
+all existing process input/output/deadline/reaping bounds remain. The native
+host, FFmpeg and system libraries retain their original environments. This
+external diagnostic is explicitly Linux-x64-only; other supported platforms
+retain their required native acceptance rather than silently using this build.
 
 Run/export/replay instructions are in the
 [resource calibration workflow](../../scripts/e2e/README.md#teletext-resource-decoder-calibration).

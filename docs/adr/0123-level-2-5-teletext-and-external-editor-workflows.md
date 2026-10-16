@@ -33,9 +33,12 @@ controls retain their exact negative outcome. Source, library and actually mappe
 process identity are verified; neither authored packets nor the fixed pixel oracle
 change. A subsequent actual ordinary-URL trial verifies the candidate/plugin
 mappings and sparse-original MAIN display/navigation with two isolated themes;
-the shared dense stock-client path also passes. This grants no stock sparse,
-side-panel, edited-sparse interchange or full-engine acceptance. P9A-04 owns
-the scoped client evidence and remaining complete-client obligations.
+the shared dense stock-client path also passes. The retained actual padded
+editor save now also reaches fresh-receipt admin concept/shared preview and
+explicit publication, same-host ordinary transport/AV/model, strict edited-S1=1
+pixels/fallback and the qualified two-theme client. The shared dense branch is
+reverified. This grants no stock sparse, side-panel or full-engine acceptance.
+P9A-04 owns the scoped evidence and remaining complete-editor/client obligations.
 The generic transport gate now admits an initially absent authored epoch with
 unchanged source PSI/version and no placeholder page model. First activation
 uses that same source clock/counter and acknowledges changed PMT before PES.

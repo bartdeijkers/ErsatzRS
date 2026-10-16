@@ -255,6 +255,129 @@ pub(super) async fn verify_capture_mode(
         "scope":"Exact ordinary TCP prefix ending at a complete authored PES; cold receivers only"})
 }
 
+/// Linux-x64 test-only candidate qualification uses the receipted ELF build and
+/// /proc mappings. Other supported platforms retain their independent native
+/// acceptance obligations and never install or select this library.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub(super) async fn verify_sparse_edited_capture(
+    directory: &Path,
+    tools: &Tools,
+    source: &[u8],
+    channel: i64,
+    bytes: &[u8],
+    accepted: &AcceptedTeletextOutputCandidate,
+) -> Value {
+    let filename = format!("channel-{channel}.ts");
+    live_client::write_new(&directory.join(&filename), bytes).unwrap();
+    client_capture::verify_transport_with_qualified_authored_pts_gaps(
+        &tools.tsanalyze,
+        &tools.ffprobe,
+        bytes,
+        0,
+        Some(&directory.join(format!("channel-{channel}-tsduck.json"))),
+        false,
+    )
+    .await;
+    client_capture::verify_av(&tools.ffmpeg, source, bytes).await;
+    ordinary_stream_flow::assert_emitted_model(bytes, accepted.service());
+    let units_name = format!("channel-{channel}-drcs-units.json");
+    let units_path = directory.join(&units_name);
+    live_client::write_new(
+        &units_path,
+        &serde_json::to_vec(&captured_units(bytes)).unwrap(),
+    )
+    .unwrap();
+    let theme = if channel == 1 { "day" } else { "night" };
+    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/e2e/teletext-sparse-editor-decoder.py");
+    assert_eq!(
+        live_client::hash(&std::fs::read(&script).unwrap()),
+        "1a4613ec59ddb6e85b22e80fad702edc51de1fd30f7b8097d990b104177a03aa"
+    );
+    let build = std::fs::canonicalize(client_capture::selected(
+        "ERSATZRS_TELETEXT_DECODER_CANDIDATE_BUILD",
+    ))
+    .unwrap();
+    let library_directory = build.join("sparse");
+    let mut args = vec![
+        script.to_str().unwrap().to_owned(),
+        units_path.to_str().unwrap().to_owned(),
+        theme.to_owned(),
+    ];
+    for (flag, variable) in [
+        (
+            "--decoder-candidate-proof",
+            "ERSATZRS_TELETEXT_DECODER_CANDIDATE_PROOF",
+        ),
+        (
+            "--decoder-candidate-proof-sha256",
+            "ERSATZRS_TELETEXT_DECODER_CANDIDATE_PROOF_SHA256",
+        ),
+        (
+            "--decoder-candidate-proof-root",
+            "ERSATZRS_TELETEXT_DECODER_CANDIDATE_PROOF_ROOT",
+        ),
+        (
+            "--decoder-candidate-build-sha256",
+            "ERSATZRS_TELETEXT_DECODER_CANDIDATE_BUILD_SHA256",
+        ),
+    ] {
+        args.extend([flag.to_owned(), client_capture::selected(variable)]);
+    }
+    args.extend([
+        "--decoder-candidate-build".to_owned(),
+        build.to_str().unwrap().to_owned(),
+    ]);
+    let arguments: Vec<_> = args.iter().map(String::as_str).collect();
+    let output = client_capture::probe_with_environment(
+        "python3",
+        &arguments,
+        &[("LD_LIBRARY_PATH", library_directory.to_str().unwrap())],
+        262_144,
+    )
+    .await;
+    let decoder: Value = serde_json::from_slice(&output).unwrap();
+    live_client::write_new(
+        &directory.join(format!("channel-{channel}-independent.json")),
+        &output,
+    )
+    .unwrap();
+    // This exact stock FFmpeg decoder still cannot display sparse S1=1.
+    // Retain its negative result separately; the qualified independent decoder
+    // above must prove enhanced pixels and the exact Level1/1.5 fallback.
+    for page in [124, 125] {
+        let text = client_capture::decode_page_text(&tools.ffmpeg, bytes, &page.to_string()).await;
+        assert!(text.contains("ZZ") && !text.contains('\u{f440}'));
+        live_client::write_new(
+            &directory.join(format!("channel-{channel}-stock-page-{page}.srt")),
+            text.as_bytes(),
+        )
+        .unwrap();
+    }
+    json!({"channel_id":channel,"theme":theme,"capture":filename,"bytes":bytes.len(),
+        "sha256":live_client::hash(bytes),"generation_id":accepted.generation().id,
+        "revision":accepted.generation().request.revision,
+        "complete_emitted_model_equal":true,"source_av_passed":true,"tsduck_transport_passed":true,
+        "units_file":units_name,"independent_decoder":decoder,
+        "stock_ffmpeg_sparse_enhancement_accepted":false,"stock_fallback_ZZ_observed":true,
+        "scope":"Exact ordinary TCP prefix; qualified test-only decoder proves both edited sparse consumers and fallback"})
+}
+
+/// The candidate is an intentionally Linux-x64-only external test artifact.
+/// This counterpart keeps all supported targets buildable and refuses accidental
+/// use; their native decoder/client acceptance remains required.
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+pub(super) async fn verify_sparse_edited_capture(
+    _directory: &Path,
+    _tools: &Tools,
+    _source: &[u8],
+    _channel: i64,
+    _bytes: &[u8],
+    _accepted: &AcceptedTeletextOutputCandidate,
+) -> Value {
+    panic!("the receipted test-only sparse decoder requires Linux x64");
+}
+
 fn ready(
     origin: &live_client::LiveOrigin,
     accepted: &[AcceptedTeletextOutputCandidate; 2],

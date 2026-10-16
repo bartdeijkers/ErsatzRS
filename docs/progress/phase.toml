@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: join the actual padded sparse editor save to admin and ordinary clients'
+current_focus = 'P9A-04: verify the known G1 later-spacing vector on an ordinary client'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,23 +62,18 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Sparse originals now pass actual qualified-client124/125/124 display/navigation
-on two ordinary URLs, with exact mapped library/plugin identities, both themes,
-four owned client exit0 results including the stock dense control, and native
-state/cleanup checks. P9A-04 owns the canonical proof and prior failed waiter.
-Next join the actual padded sparse QTM save to the existing headed bank
-import/shared preview/explicit publication/ordinary/client flow. Preserve strict
-S1=1 edited pixels and Level1/1.5 fallback; no full engine acceptance is implied.
-
-Dense resource-bank transfer now connects the retained pinned QTM save to
-headed Chromium/Firefox SSR forms, exact shared preview, separate Request/Publish,
-same-host ordinary TCP/TSDuck/independent bitmap and Level1/1.5 fallback, and
-actual two-theme VLC124/125/124 navigation. P9A-04 owns the receipts. Reuse this
-representative flow. A receipted test-only decoder now passes unchanged sparse
-S1=1 after the audited X27/normal-DRCS corrections. The actual sparse-original
-client now passes; next connect the retained padded editor save, then extend the
-remaining authored/editor feature clauses. Full engine, Lua/restart, hydrated
-admin and playback/platform acceptance remain open; production guide work waits.
+Dense and padded sparse QTM bank saves now connect localized headed SSR import,
+shared validated preview, separate Request/Publish and the SAME ordinary host.
+Exact TSDuck/sourceAV/emitted-model checks, independent edited pixels/Level1-1.5
+fallback and actual two-theme VLC124/125/124 pass. Sparse uses the receipted
+test-only candidate; dense stock behavior is reverified after shared-fixture
+changes. P9A-04 owns source/image/receipt hashes, original negative evidence and
+native state/reopen/cleanup proof. Reuse these representative joined flows.
+Next exercise the existing G1 D5/later0x1A vector on an ordinary suitable client,
+retaining native column20 separation and the pinned independent-imager proof.
+The documented stock-libzvbi discrepancy is not an engine defect. Full authored/
+editor/resources/panels/Lua/restart/hydrated admin/default-capacity/playback/
+platform acceptance remains open; production guide waits for generic acceptance.
 
 Caption checkpoint closeout now has terminal strict three-crate/xtask lint and
 clean-container software smoke proof; P9A-04 owns exact receipts and failures.
