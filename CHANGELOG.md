@@ -705,7 +705,9 @@ release section when tagging a release.
   or provision bounded compiler-owned DRCS resources through unused links, keeping
   original declarations, fallback, existing resources and lifecycle intact.
   Mixed plain/underlined glyphs retain stable generated slots and their painted
-  attributes while keeping undefined DRCS underline bits disabled.
+  attributes while keeping undefined DRCS underline bits disabled. Known Base
+  spacing latches preserve the assigned G0 glyph, literal fallback and neighboring
+  mosaic separation.
   Receipt-bound concepts can create or retire the generated carrier without
   granting permission to edit its resource or X27 links. Fresh recorded
   QTeletextMaker saves cover plain and underlined variants through native concept

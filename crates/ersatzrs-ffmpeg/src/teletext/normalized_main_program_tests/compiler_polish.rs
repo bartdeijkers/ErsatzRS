@@ -565,6 +565,8 @@ fn consumer_variants(
     declared(semantic)
 }
 
+#[path = "compiler_polish/spacing.rs"]
+mod spacing;
 #[path = "compiler_polish/underline.rs"]
 mod underline;
 

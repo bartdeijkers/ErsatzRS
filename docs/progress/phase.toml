@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: remaining authored national-glyph effects; underlined QTM-to-stream proof retained'
+current_focus = 'P9A-04: raw-spacing editor/publication integration; exact original-glyph proof retained'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -123,13 +123,17 @@ profile TCP/TSDuck/AV/model/cleanup (334858db). Independent pinned imager checks
 the fixed underline and L1/1.5 fallback; missing-row/channel negatives fail as
 expected. The previous neutral ordinary flow passes31a23382 with byte-identical
 512-unit sequences, reusing its independent evidence. P9A-04 owns exact hashes,
-GUI input recovery and scope. Next reproduce/correct raw-spacing NationalConversion
-against unchanged original semantics, then connect the same editor/publication
-route. Client acquisition/rendering/navigation and hydration remain open.
+GUI input recovery and scope. A valid assigned-G0 raw-spacing original now passes
+complete encoding without changing its latch/fallback; the physical D5false
+cancels spacing as required by Table29. Final124 related cases pass0c2b53fa,
+including exact authored-bank reuse, neighboring G1 paint and strict detached
+comparison. Next connect the raw-latch case to actual QTM/permission-bound concept
+import/publication; the earlier underlined editor flow stays separately scoped.
+Client acquisition/rendering/navigation and hydration remain open.
 Existing-bank proof stays scoped to its different full export set. The bounded Kodi21.3 source
 assessment does not establish enlarged DRCS suitability; no decoder maintenance
 program starts. Both-occupied roles, unproven absent-X27 MOT/default supplements,
-raw spacing/other unproved effects, authored-bitmap transitions needing a new bank and
+unproved raw-state/effect interactions, authored-bitmap transitions needing a bank and
 remaining national recipes stay open. No guessed alias or page restriction is
 accepted. Full authored/
 editor/resources/panels/Lua/restart/hydrated admin/default-capacity/playback/

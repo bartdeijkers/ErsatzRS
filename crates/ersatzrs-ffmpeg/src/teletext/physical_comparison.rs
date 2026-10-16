@@ -665,7 +665,9 @@ impl Builder<'_> {
                     spacing_separated: false
                 }
             )
-            || first.attributes().spacing_separated().value() != Some(false)
+            // A known raw spacing latch has no G0 paint. The exact bound DRCS
+            // still requires both physical separation states to be false.
+            || first.attributes().spacing_separated().value().is_none()
         {
             return Ok(false);
         }

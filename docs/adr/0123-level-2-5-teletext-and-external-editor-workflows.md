@@ -537,6 +537,12 @@ identity, fallback, geometry and every other painted attribute stay unchanged.
 Both known painted variants may coexist in one generated bank with stable slots
 0 (plain) and 1 (underlined), independent of discovery/removal. Their definitions
 remain engine-owned and use the existing shared bounds; no glyph alias is added.
+A known original spacing-mosaic latch does not change this assigned G0 paint
+(Table 26 notes 11/12). Keep the original latch and fallback byte exactly; the
+existing physical Adaptive D5=0 cancels that latch for the enhanced carrier.
+The same private witness admits that paint-preserving correspondence, with both
+physical separation states false. Detached comparisons and other glyph-family
+rules remain strict; neighboring Base G1 separation must retain its own paint.
 
 Added resources share the existing page/unit, composition, reference, work and
 absolute-deadline bounds. The final actual inventory and the existing per-response
@@ -548,8 +554,8 @@ companions against their export baseline and separately validates final generate
 resources/links against compiler provenance. A permitted Base edit may create or
 retire its required physical carrier; it never grants uploaded X27 authority or
 loosens protected display effects. Occupied roles, unproven MOT supplementation,
-raw spacing and other unproved glyph effects, plus unrealized national identities,
-remain explicit implementation gaps until resolved, not accepted restrictions.
+unproved raw-state interactions and other glyph effects, plus unrealized national
+identities, remain explicit implementation gaps until resolved, not accepted restrictions.
 
 A domain-owned bounded base-cell trace is now retained by main composition from
 the actual checked fallback rows. Coded cells, authored Unicode/mosaic intent and

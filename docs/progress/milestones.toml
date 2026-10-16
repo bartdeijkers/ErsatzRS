@@ -2968,6 +2968,64 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 known raw-spacing G0 realization checkpoint:
+Criterion: P9A-04 authored repertoire/non-spacing-attribute lowering, specifically
+an assigned Polish G0 Base5B origin with D5true and a known raw spacing latch.
+The original declared identity, fallback bytes and normative painted response
+must remain unchanged. This is a demonstrated encoding defect, not a new audit.
+
+Normative EN300706V1.2.1 PDF SHA256
+58648ab3d0df769c6f6800ea5d3270f1df40f3e6b393c4fb984ca6984d4f32ab:
+Table26 printed73 notes11/12 gives spacing mosaic separation no assigned-G0
+paint. Table29 printed87 defines DRCS D5true as undefined and says D5 cancellation
+also cancels the prior spacing state. Existing gs txtwrite extracts retain both
+sections; device-finalization warning does not omit their text. No norm is edited.
+
+A valid-original reproduction first packs/settles the transmission independently:
+checked raw1A at1/6, literal5B at1/7, assigned original Polish identity, both wide
+fragments, D5true/spacingtrue and exact fixed underlined mask. Only then does the
+complete encoder fail NationalConversion at origin994. RED56852f1b-4de6-4571-
+bc31-855a1024654d is retained; it is not a fixture/precondition failure.
+The smallest correction changes two private guards from spacingfalse-only to
+known-spacing-only. The existing physical Adaptive D5false clears raw spacing;
+physical DRCS still requires BOTH separation states false. Exact mask, original
+origin/invocation/resource/executed-bitmap witness, all limits, immutable fallback
+and strict public detached comparisons remain mandatory. No G3/DRCS D5true or
+unknown state is admitted. No alias or permission fence is changed.
+
+Final124 related FFmpeg cases pass0c2b53fa-45bc-4e7e-8c5a-ef1e6d0e04a6 in10.686s,
+including three new cases: complete generated-bank encoding with independent
+original facts; exact authored-bank reuse with literal fallback; and a neighboring
+Base G1 mosaic whose separation, independently resolved mask and120 RGB pixels
+remain exact. Detached comparisons still report GlyphEffects at both Polish
+fragments. First green17f2eec3 passes0.062s; it is included in the final124.
+Strict FFmpeg all-target Clippy passes12.15s on the frozen correction/tests.
+
+Consumer regression03412936-4084-4078-8bdb-664732100683 passes all3 EXISTING
+underlined native/genuine/ordinary cases in22.518s (compile1m14s). It reuses the
+exact genuine QTM save from the preceding checkpoint, not a new raw-spacing GUI
+edit. Concept/shared preview/explicit publication/reopen, profile isolation and
+ordinary source AV/TSDuck/full emitted-model/cleanup remain correct. Both512-unit
+sequences equal the preceding underlined captures byte-for-byte, so their pinned
+independent literal-mask/fallback/theme reports are reused. The unchanged web
+fixture source is c1066ead; subsequent raw-spacing fixture preparation is excluded
+from this checkpoint and has not yet run. Previous headed evidence retains scope.
+
+Canonical source/standard/log/consumer/capture/reuse hashes:
+ tmp/phase9-polish-spacing/engine-identity.json
+SHA2562618131bb1f3da17cbbe0eaedf2653c72db0064710860cb5df1b4c88f23b7497.
+No new raw-spacing TTI/editor/admin/client or full-engine/platform acceptance is
+claimed. Next connect the real raw-latch original to the same strict single-cell
+QTM/native/ordinary flow: prepend a declarative separated-mosaic run at column3,
+keeping existing TextA7 and authoring metadata/zones unchanged. First assert the
+actual generated Base controls and selected G0 raw state. Then export fresh,
+perform actual A7-to5B Save As, import concept, preview, explicitly publish and
+verify ordinary delivery. The source-supported route is not yet executed.
+Inserting a NEW1A into an enlarged Free6..8 zone instead would alter protected
+raw-state columns9..39 and must still reject; do not waive that permission fence.
+Suitable-client acquisition/render/navigation, hydration and the remaining full
+matrix remain open; no engine limitation or production-addon start is accepted.
+
 2026-10-16 authored Polish underline editor-to-ordinary checkpoint:
 Criterion: P9A-04 authoritative authored repertoire/physical-lowering and exact
 QTM interchange clauses, specifically original Polish G0 primary08/Base5B with

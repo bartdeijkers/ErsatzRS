@@ -99,13 +99,14 @@ fn original_identity(
 ) -> Option<TeletextGlyphIdentity> {
     // Table 29 does not assign DRCS underline/separation. The original G0 D5
     // effect is baked into the exact mask; the physical DRCS always has D5=0.
-    // Raw spacing remains a separate located implementation gap.
+    // Table 26 spacing mosaic separation has no painted effect on this assigned
+    // G0 glyph. Keep its known original latch; the physical D5=0 cancels it.
     let attributes = composition.display_resolution().origin_attributes(origin)?;
     if attributes
         .underline_or_separated_mosaics()
         .value()
         .is_none()
-        || attributes.spacing_separated().value() != Some(false)
+        || attributes.spacing_separated().value().is_none()
     {
         return None;
     }
