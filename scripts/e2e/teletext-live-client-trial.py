@@ -341,6 +341,12 @@ def main():
     parser.add_argument("--decoder-candidate-build", type=Path, help="Receipted decoder build output directory")
     parser.add_argument("--decoder-candidate-proof-root", type=Path, help="Build proof input directory containing scripts/")
     parser.add_argument("--decoder-candidate-build-sha256", help="External SHA256 of proof-sparse-build.json")
+    parser.add_argument("--g1-decoder-candidate-proof", type=Path,
+                        help="Positive G1 capture proof; all five G1 candidate arguments are required")
+    parser.add_argument("--g1-decoder-candidate-proof-sha256", help="External SHA256 of the positive G1 capture proof")
+    parser.add_argument("--g1-decoder-candidate-build", type=Path, help="Receipted fourth-variant G1 build output directory")
+    parser.add_argument("--g1-decoder-candidate-proof-root", type=Path, help="G1 build proof input directory containing scripts/")
+    parser.add_argument("--g1-decoder-candidate-build-sha256", help="External SHA256 of the fourth-variant build receipt")
     args = parser.parse_args()
     candidate_arguments = [args.decoder_candidate_proof, args.decoder_candidate_proof_sha256,
                            args.decoder_candidate_build, args.decoder_candidate_proof_root,
@@ -348,6 +354,14 @@ def main():
     candidate_requested = any(value is not None for value in candidate_arguments)
     if candidate_requested and not all(value is not None for value in candidate_arguments):
         parser.error("All five decoder-candidate arguments are required together")
+    g1_arguments = [args.g1_decoder_candidate_proof, args.g1_decoder_candidate_proof_sha256,
+                    args.g1_decoder_candidate_build, args.g1_decoder_candidate_proof_root,
+                    args.g1_decoder_candidate_build_sha256]
+    g1_requested = any(value is not None for value in g1_arguments)
+    if g1_requested and not all(value is not None for value in g1_arguments):
+        parser.error("All five g1-decoder-candidate arguments are required together")
+    if candidate_requested and g1_requested:
+        parser.error("Sparse and G1 decoder candidate modes are mutually exclusive")
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("A real headed X11 display is required")
     for executable in ["xprop", "import"]:
@@ -366,6 +380,8 @@ def main():
     ready, by_theme, first_page, next_page, subcode = validate_readiness(raw_ready, ready_path.parent, args.captured_replay)
     if candidate_requested and (args.captured_replay or ready["probe_version"] != 1):
         raise RuntimeError("Sparse decoder candidate requires actual ordinary v1 URLs for pages124/125")
+    if g1_requested and (args.captured_replay or ready["probe_version"] != 1):
+        raise RuntimeError("G1 decoder candidate requires actual ordinary v1 URLs for pages124/125")
     qualifier_path = REPO / "scripts/e2e/teletext-client-decoder-candidate.py"
     qualifier_body = bounded_bytes(qualifier_path, MAX_READY)
     qualifier_hash = digest(qualifier_body)
@@ -376,10 +392,21 @@ def main():
     sources[str(qualifier_path.relative_to(REPO))] = qualifier_hash
     stock_library = Path("/usr/lib/x86_64-linux-gnu/libzvbi.so.0.13.2")
     plugin = Path("/usr/lib/x86_64-linux-gnu/vlc/plugins/codec/libzvbi_plugin.so")
-    decoder = (qualification["qualify"](*candidate_arguments) if candidate_requested else {
-        "path": str(stock_library), "sha256": RECEIPTED[stock_library],
-        "label": "Ubuntu libzvbi 0.2.42-2", "test_only": False,
-    })
+    if g1_requested:
+        g1_path = REPO / "scripts/e2e/teletext-client-g1-candidate.py"
+        g1_body = bounded_bytes(g1_path, MAX_READY)
+        g1_hash = digest(g1_body)
+        if g1_hash != "fd709e0193357e218aaa94c067a2cc03a95669d2fd34178fec969eaed683b3c9":
+            raise RuntimeError("G1 client decoder qualification helper source changed")
+        g1_qualification = {"__file__": str(g1_path), "__name__": "authenticated_g1_client_decoder_qualification"}
+        exec(compile(g1_body, str(g1_path), "exec"), g1_qualification)
+        sources[str(g1_path.relative_to(REPO))] = g1_hash
+        decoder = g1_qualification["qualify"](*g1_arguments)
+    elif candidate_requested:
+        decoder = qualification["qualify"](*candidate_arguments)
+    else:
+        decoder = {"path": str(stock_library), "sha256": RECEIPTED[stock_library],
+                   "label": "Ubuntu libzvbi 0.2.42-2", "test_only": False}
     channels = ready.get("channels")
     effective = not args.captured_replay and ready["probe_version"] in [2, 3]
     legacy_wrapper = not args.captured_replay and ready["probe_version"] == 3
@@ -415,9 +442,11 @@ def main():
               **({"ordinary_wrapper_role": "generated-legacy", "expected_termination": "owned-sigterm",
                   "natural_eof_proven": False} if legacy_wrapper else {}),
               "client": "VLC 3.0.20-3build6",
-              "decoder": "test-corrected libzvbi 0.2.42 (X27 and normal DRCS)" if candidate_requested else "libzvbi 0.2.42-2",
+              "decoder": ("test-corrected libzvbi 0.2.42 (G1 later spacing, X27 and normal DRCS)" if g1_requested else
+                          "test-corrected libzvbi 0.2.42 (X27 and normal DRCS)" if candidate_requested else "libzvbi 0.2.42-2"),
               "decoder_qualification": decoder,
-              "scope": "Finite captured-ordinary MAIN palette/AZ and requested page navigation inspection"
+              "scope": "G1 MAIN later-spacing candidate and requested page navigation inspection" if g1_requested else
+                       "Finite captured-ordinary MAIN palette/AZ and requested page navigation inspection"
                        if args.captured_replay else "MAIN glyph/palette and requested page navigation inspection",
               "panel_display_proven": False, "rendered_navigation_proven": False,
               "expected_navigation": [first_page, next_page, first_page], "expected_subcode": subcode,
@@ -430,7 +459,7 @@ def main():
             metadata = by_theme[theme]
             env = os.environ.copy()
             env["QT_QPA_PLATFORM"] = "xcb"
-            if candidate_requested:
+            if candidate_requested or g1_requested:
                 # Select only for this owned process, without changing host
                 # libraries or trusting an inherited alternate decoder path.
                 env["LD_LIBRARY_PATH"] = str(Path(decoder["path"]).parent)
@@ -551,7 +580,8 @@ def main():
                   "limitations": "Interactive numeric entry remains unproven; this trial requests pages through the owned Qt spin arrows.",
                   "next": "Inspect actual 200/201 headers, AZ and distinct palettes; link original admin capture provenance separately."}
                  if args.captured_replay else {"ordinary_live_url_attachment_and_client_exit_proven": True,
-                                               "next": ("Inspect actual200/201 headers, AZ, day200-only cumulative Q/R and isolated red/blue themes in six captured windows."
+                                               "next": ("Inspect actual124/125 headers and white/black normative G1 mosaics at columns8/9,12/13,20/21; this candidate supplies no full client conformance."
+                                                        if g1_requested else "Inspect actual200/201 headers, AZ, day200-only cumulative Q/R and isolated red/blue themes in six captured windows."
                                                         if effective else "Inspect actual headers, day-only Q and red/blue indexed DRCS/Z in six captured windows."),
                                                "effective_cumulative_role": effective, "interactive_numeric_entry_verified": False}),
               **({"ordinary_wrapper_role": "generated-legacy", "owned_sigterm_and_expected_exit_proven": True,

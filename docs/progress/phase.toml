@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: verify the known G1 later-spacing vector on an ordinary client'
+current_focus = 'P9A-04: preserve authored presentation through safe M29-to-page-X28 publication'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -69,12 +69,14 @@ fallback and actual two-theme VLC124/125/124 pass. Sparse uses the receipted
 test-only candidate; dense stock behavior is reverified after shared-fixture
 changes. P9A-04 owns source/image/receipt hashes, original negative evidence and
 native state/reopen/cleanup proof. Reuse these representative joined flows.
-The G1 vector now reaches both ordinary TCP captures with exact native bodies,
-TSDuck/sourceAV/model and pinned independent fallback/enhanced decoding. Stock
-libzvbi reproduces the known spacing discrepancy. Actual headed navigation
-fails on an owned-window xprop error; the native run times out, so the joined
-trial/reopen remains unproven. Diagnose window/client lifetime before repeating.
-Retain native column20 separation; no engine-golden change is justified. Full authored/
+G1 ordinary stock and qualified test-candidate trials now finish state/reopen/
+cleanup. Six candidate images prove124/125/124 and normative separated20/21;
+stock keeps the actual failure. Immediate launch fixes the finite-source delay;
+explicit480/672 expectations fix the shared fixture. P9A-04 owns hashes/failures.
+No further external decoder repair program starts. Next reproduce and implement
+the explicit-X28 safe M29-retirement case at the existing acknowledged boundary,
+preserving uncertain Header/POP and MOT rejection, independent charset/palette/
+fallback and ordinary AV. Connect this capability to the existing editor flow. Full authored/
 editor/resources/panels/Lua/restart/hydrated admin/default-capacity/playback/
 platform acceptance remains open; production guide waits for generic acceptance.
 

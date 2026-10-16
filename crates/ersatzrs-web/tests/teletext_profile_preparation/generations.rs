@@ -107,6 +107,14 @@ pub(super) fn assert_same_output(
     actual: &AcceptedTeletextOutputCandidate,
     expected: &AcceptedTeletextOutputCandidate,
 ) {
+    assert_same_output_width(actual, expected, 56 * 12);
+}
+
+pub(super) fn assert_same_output_width(
+    actual: &AcceptedTeletextOutputCandidate,
+    expected: &AcceptedTeletextOutputCandidate,
+    expected_width: usize,
+) {
     assert_eq!(actual.generation(), expected.generation());
     assert_eq!(actual.selection(), expected.selection());
     assert_eq!(
@@ -121,7 +129,7 @@ pub(super) fn assert_same_output(
     let second = preview(expected.service());
     assert_eq!(first.raster(), second.raster());
     assert_eq!(first.navigation(), second.navigation());
-    assert_eq!(first.raster().width(), 56 * 12);
+    assert_eq!(first.raster().width(), expected_width);
     assert!(first.raster().diagnostics().is_empty());
 }
 

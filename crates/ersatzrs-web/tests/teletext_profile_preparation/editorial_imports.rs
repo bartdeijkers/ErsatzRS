@@ -359,6 +359,10 @@ async fn recover(fixture: &Fixture, channel: i64) -> AcceptedTeletextOutputCandi
 }
 
 async fn assert_original_pointers(fixture: &Fixture, flow: &Flow) {
+    assert_original_pointers_with_width(fixture, flow, 56 * 12).await;
+}
+
+async fn assert_original_pointers_with_width(fixture: &Fixture, flow: &Flow, width: usize) {
     for index in 0..2 {
         let channel = i64::try_from(index + 1).unwrap();
         assert_eq!(
@@ -379,7 +383,11 @@ async fn assert_original_pointers(fixture: &Fixture, flow: &Flow) {
                 .unwrap(),
             Some(flow.accepted[index].generation().clone())
         );
-        generations::assert_same_output(&recover(fixture, channel).await, &flow.accepted[index]);
+        generations::assert_same_output_width(
+            &recover(fixture, channel).await,
+            &flow.accepted[index],
+            width,
+        );
     }
     assert_retained_storage(fixture, flow).await;
 }

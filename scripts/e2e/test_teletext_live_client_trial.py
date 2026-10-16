@@ -5,6 +5,7 @@ Run with: python3 -m unittest discover -s scripts/e2e -p test_teletext_live_clie
 
 import copy
 from datetime import datetime, timedelta, timezone
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -214,6 +215,44 @@ class LiveClientManifestTests(unittest.TestCase):
                 HELPER.main()
             client.assert_not_called()
         self.assertFalse(output.exists())
+
+    def test_g1_candidate_arguments_are_complete_and_exclusive_with_sparse(self):
+        names = ["proof", "proof-sha256", "build", "proof-root", "build-sha256"]
+        full = [part for name in names for part in ("--g1-decoder-candidate-" + name, "unused")]
+        sparse = [part for name in names for part in ("--decoder-candidate-" + name, "unused")]
+        cases = [["--g1-decoder-candidate-proof", "unused"], full + sparse]
+        for arguments in cases:
+            with self.subTest(arguments=arguments), \
+                 patch.object(HELPER.sys, "argv", [str(SCRIPT), "unused-ready", "unused-output", *arguments]), \
+                 patch.object(HELPER.sys, "stderr", io.StringIO()), \
+                 patch.object(HELPER.subprocess, "Popen") as client:
+                with self.assertRaises(SystemExit) as failure:
+                    HELPER.main()
+                self.assertEqual(failure.exception.code, 2)
+                client.assert_not_called()
+
+    def test_g1_candidate_rejects_effective_and_replay_roles_before_output(self):
+        ready = self.directory / "ready.json"
+        output = self.directory / "g1-output"
+        names = ["proof", "proof-sha256", "build", "proof-root", "build-sha256"]
+        arguments = [part for name in names for part in ("--g1-decoder-candidate-" + name, "unused")]
+        source = self.ready["source"]
+        replay = {"probe_version": 1, "mode": "captured-ordinary-replay", "expected_pages": [200, 201],
+                  "subcode": 0, "viewers": [{"viewer": theme,
+                  "url": f"http://127.0.0.1:{8560 + index}/synthetic.ts", "capture": {
+                      "file": source["file"], "bytes": source["bytes"], "sha256": source["sha256"]}}
+                  for index, theme in enumerate(["day", "night"])]}
+        for request, flags in [(self.ready, []), (replay, ["--captured-replay"])]:
+            ready.write_text(json.dumps(request))
+            with self.subTest(flags=flags), patch.dict(HELPER.os.environ, {"DISPLAY": ":0"}), \
+                 patch.object(HELPER, "RECEIPTED", {}), \
+                 patch.object(HELPER.shutil, "which", return_value="unused-existing-tool"), \
+                 patch.object(HELPER.sys, "argv", [str(SCRIPT), str(ready), str(output), *arguments, *flags]), \
+                 patch.object(HELPER.subprocess, "Popen") as client:
+                with self.assertRaisesRegex(RuntimeError, "G1 decoder candidate requires actual ordinary v1"):
+                    HELPER.main()
+                client.assert_not_called()
+            self.assertFalse(output.exists())
 
     def test_wrapper_version_is_distinct_with_same_scope_source_and_navigation(self):
         request = legacy_wrapper_request(self.ready)

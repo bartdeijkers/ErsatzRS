@@ -226,7 +226,7 @@ impl Retained {
     }
 
     async fn assert_unchanged(&self, fixture: &mut Fixture, flow: &Flow) {
-        assert_original_pointers(fixture, flow).await;
+        assert_original_pointers_with_width(fixture, flow, 40 * 12).await;
         assert_eq!(
             calculate_addon_content_sha256(&fixture.root.path().join("package"))
                 .await
