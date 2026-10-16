@@ -38,8 +38,9 @@ use super::{
         validate_teletext_editorial_effects_with_operands, TeletextEditorialEdits,
     },
     teletext_editorial_tti::{
-        reconcile_teletext_editorial_tti_with_operands, validate_teletext_editorial_tti_encoding,
-        TeletextEditorialChanges,
+        reconcile_teletext_editorial_tti_with_operands,
+        validate_recompiled_teletext_editorial_tti_encoding,
+        validate_teletext_editorial_tti_encoding, TeletextEditorialChanges,
     },
     teletext_effective_designs::{native_effective_confirmation, RestoredEffectiveOriginalDesign},
     teletext_export_project::{
@@ -541,6 +542,7 @@ fn validate_reconciled_files(
     tti: TeletextTtiBudget,
     deadline: Instant,
     encoded: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    incoming: &TeletextEditorialChanges,
 ) -> Result<()> {
     for mapping in &baseline.body.project.pages {
         check_deadline(deadline)?;
@@ -548,7 +550,35 @@ fn validate_reconciled_files(
             .iter()
             .find(|file| file.name == mapping.name)
             .ok_or(NativeTeletextEditorialImportError::Association)?;
-        validate_teletext_editorial_tti_encoding(mapping, &edited.bytes, tti, deadline, encoded)?;
+        let owner = TeletextPageAddress {
+            page: TeletextPageNumber::new(mapping.page.page)
+                .map_err(|_| NativeTeletextEditorialImportError::Association)?,
+            subcode: TeletextSubcode::new(mapping.page.subcode)
+                .map_err(|_| NativeTeletextEditorialImportError::Association)?,
+        };
+        if incoming.rows.iter().any(|overlay| overlay.owner() == owner) {
+            validate_recompiled_teletext_editorial_tti_encoding(
+                mapping,
+                &edited.bytes,
+                tti,
+                deadline,
+                baseline
+                    .original
+                    .view()
+                    .encoded()
+                    .ok_or(NativeTeletextEditorialImportError::Association)?,
+                encoded,
+                &incoming.operands,
+            )?;
+        } else {
+            validate_teletext_editorial_tti_encoding(
+                mapping,
+                &edited.bytes,
+                tti,
+                deadline,
+                encoded,
+            )?;
+        }
     }
     for mapping in &baseline.body.project.assets {
         if !super::teletext_editorial_tti::resources::supported(mapping) {

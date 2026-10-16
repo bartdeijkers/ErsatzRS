@@ -692,6 +692,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Rebuild generated teletext repaint packets after authorized Base-cell edits,
+  retaining exact authored operands and protected zones. A pinned QTeletextMaker
+  national-cell save now reaches native concept import, shared preview, explicit
+  publication and database reopen without changing installed packages or the
+  other channel. Headed admin and ordinary-stream client proof for this case
+  remain open.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
   when an existing linked DRCS definition provides its exact glyph and neutral
   effects. Keep fallback, resource bytes and lifecycle intact; missing or changed

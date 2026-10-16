@@ -104,6 +104,41 @@ pub(super) fn check_packets(
     location: Location,
     deadline: Instant,
 ) -> Result<()> {
+    let actual = packet_words(service, owner, location, deadline)?;
+    for designation in 0_u8..16 {
+        let index = usize::from(designation);
+        let before = expected.packets[0][index];
+        let after = actual[index].as_ref();
+        location.check_deadline(deadline)?;
+        if before != after {
+            return Err(NativeTeletextEditorialTtiError {
+                row: Some(26),
+                designation: Some(designation),
+                column: before
+                    .zip(after)
+                    .and_then(|(old, new)| old.iter().zip(new).position(|(a, b)| a != b)),
+                ..location.error(NativeTeletextEditorialTtiFailure::Packet)
+            });
+        }
+    }
+    Ok(())
+}
+
+fn located_word(location: Location, word: usize) -> NativeTeletextEditorialTtiError {
+    NativeTeletextEditorialTtiError {
+        row: Some(26),
+        designation: u8::try_from(word / 13).ok(),
+        column: Some(word % 13),
+        ..location.error(NativeTeletextEditorialTtiFailure::Packet)
+    }
+}
+
+fn packet_words(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    location: Location,
+    deadline: Instant,
+) -> Result<[Option<[u32; 13]>; 16]> {
     location.check_deadline(deadline)?;
     let page = service
         .pages()
@@ -122,33 +157,133 @@ pub(super) fn check_packets(
             _ => None,
         })
         .ok_or_else(|| location.error(NativeTeletextEditorialTtiFailure::Mapping))?;
-    let projected = project_encoded_teletext_display(page, service.unit_count())
+    let projection = project_encoded_teletext_display(page, service.unit_count())
         .map_err(|_| location.error(NativeTeletextEditorialTtiFailure::Mapping))?;
-    let mut actual = [None; 16];
-    for record in &projected.records {
+    let mut result = [None; 16];
+    for record in projection.records {
+        location.check_deadline(deadline)?;
         if let TeletextEncodedDisplayRecord::Triplets {
             row: 26,
             designation,
             words,
         } = record
         {
-            actual[usize::from(*designation)] = Some(words);
+            if result[usize::from(designation)].replace(words).is_some() {
+                return Err(located_word(location, usize::from(designation) * 13));
+            }
         }
     }
-    for designation in 0_u8..16 {
-        let index = usize::from(designation);
-        let before = expected.packets[0][index];
-        let after = actual[index];
+    Ok(result)
+}
+
+fn command_word(
+    service: &EncodedTeletextAuthoredService,
+    change: &TeletextLocalProgramOperandOverlay,
+    expected: TeletextColumnOperation,
+    location: Location,
+    deadline: Instant,
+) -> Result<usize> {
+    let owner = change.owner();
+    let command = service
+        .declared()
+        .semantic()
+        .page_enhancements()
+        .get(&owner)
+        .and_then(|page| page.local_program.as_ref())
+        .and_then(|program| program.commands().get(change.command()));
+    let page = service
+        .pages()
+        .iter()
+        .find_map(|page| match page {
+            EncodedTeletextAuthoredPage::CompiledDisplay(page)
+                if page.page().address() == owner =>
+            {
+                Some(page)
+            }
+            _ => None,
+        })
+        .ok_or_else(|| location.error(NativeTeletextEditorialTtiFailure::Mapping))?;
+    let mut found = None;
+    for position in page.normalized().encoded().command_positions() {
         location.check_deadline(deadline)?;
-        if before != after {
-            return Err(NativeTeletextEditorialTtiError {
-                row: Some(26),
-                designation: Some(designation),
-                column: before
-                    .zip(after)
-                    .and_then(|(old, new)| old.iter().zip(new).position(|(a, b)| a != b)),
-                ..location.error(NativeTeletextEditorialTtiFailure::Packet)
-            });
+        if position.original_local_command() == Some(change.command()) {
+            let word = position.semantic_word();
+            if word >= 16 * 13 || found.replace(word).is_some() {
+                return Err(located_word(location, word));
+            }
+        }
+    }
+    let word = found.ok_or_else(|| location.error(NativeTeletextEditorialTtiFailure::Packet))?;
+    if command
+        != Some(&TeletextEnhancementCommand::AtColumn {
+            column: change.column(),
+            operation: expected,
+        })
+    {
+        return Err(located_word(location, word));
+    }
+    Ok(word)
+}
+
+/// The complete uploaded X26 is checked against its private original. Only
+/// reconciled existing operands may differ; their final words are found again
+/// through unique retained-command provenance, never their old packet offsets.
+pub(super) fn check_recompiled_packets(
+    baseline: &EncodedTeletextAuthoredService,
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    uploaded: &Page<'_>,
+    changes: &[TeletextLocalProgramOperandOverlay],
+    location: Location,
+    deadline: Instant,
+) -> Result<()> {
+    let before = packet_words(baseline, owner, location, deadline)?;
+    let after = packet_words(service, owner, location, deadline)?;
+    // There are at most sixteen packets of thirteen words on one display.
+    if changes
+        .iter()
+        .filter(|change| change.owner() == owner)
+        .count()
+        > 16 * 13
+    {
+        return Err(location.error(NativeTeletextEditorialTtiFailure::Packet));
+    }
+    let mut allowed = [None; 16 * 13];
+    for change in changes.iter().filter(|change| change.owner() == owner) {
+        location.check_deadline(deadline)?;
+        let old_word = command_word(baseline, change, change.expected(), location, deadline)?;
+        let original = before[old_word / 13]
+            .map(|words| words[old_word % 13])
+            .ok_or_else(|| located_word(location, old_word))?;
+        let edited = uploaded.packets[0][old_word / 13]
+            .map(|words| words[old_word % 13])
+            .ok_or_else(|| located_word(location, old_word))?;
+        if original == edited
+            || operand(change.column(), change.expected(), original, edited)
+                != Some(change.replacement())
+            || allowed[old_word].replace(edited).is_some()
+        {
+            return Err(located_word(location, old_word));
+        }
+        let final_word = command_word(service, change, change.replacement(), location, deadline)?;
+        if after[final_word / 13].map(|words| words[final_word % 13]) != Some(edited) {
+            return Err(located_word(location, final_word));
+        }
+    }
+    for designation in 0..16 {
+        location.check_deadline(deadline)?;
+        match (before[designation], uploaded.packets[0][designation]) {
+            (None, None) => {}
+            (Some(original), Some(edited)) => {
+                for slot in 0..13 {
+                    if original[slot] != edited[slot]
+                        && allowed[designation * 13 + slot] != Some(edited[slot])
+                    {
+                        return Err(located_word(location, designation * 13 + slot));
+                    }
+                }
+            }
+            _ => return Err(located_word(location, designation * 13)),
         }
     }
     Ok(())

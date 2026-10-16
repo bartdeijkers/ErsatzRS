@@ -315,7 +315,8 @@ fn background_and_nonspacing_attributes_use_the_entire_effect_range() {
 
 use crate::host::teletext_editorial_tti::{
     reconcile_teletext_editorial_tti, reconcile_teletext_editorial_tti_with_operands,
-    reconcile_teletext_editorial_tti_with_status, validate_teletext_editorial_tti_encoding,
+    reconcile_teletext_editorial_tti_with_status,
+    validate_recompiled_teletext_editorial_tti_encoding, validate_teletext_editorial_tti_encoding,
     NativeTeletextEditorialTtiFailure,
 };
 use ersatzrs_app::{
@@ -524,6 +525,134 @@ fn native_tti_recognizes_exact_existing_operands_and_matches_complete_reencoding
             (123, 16, Some(26))
         );
     }
+}
+
+fn mixed_base_and_operand_files() -> (
+    EncodedTeletextAuthoredService,
+    Vec<u8>,
+    Vec<TeletextTtiRecord>,
+) {
+    let original = local_service(1, 1, 0);
+    let mut cells = std::array::from_fn(|column| {
+        display(&original.pages()[0])
+            .unwrap()
+            .1
+            .base_display()
+            .cell(1, u8::try_from(column).unwrap())
+            .unwrap()
+            .code()
+    });
+    assert_eq!(cells[12], b'I');
+    let mut baseline_records = tti_records(&original);
+    baseline_records.insert(5, TeletextTtiRecord::BaseRow { row: 1, cells });
+    let baseline = tti_bytes(baseline_records.clone());
+    cells[12] = b'Q';
+    let mut edited_records = baseline_records;
+    let row = edited_records
+        .iter_mut()
+        .find_map(|record| match record {
+            TeletextTtiRecord::BaseRow { row: 1, cells } => Some(cells),
+            _ => None,
+        })
+        .unwrap();
+    *row = cells;
+    mutate_word(&mut edited_records, native_word(&original, 1), |word| {
+        (word & 0x7ff) | (4 << 11)
+    });
+    (original, baseline, edited_records)
+}
+
+#[test]
+fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_words() {
+    let (original, baseline, mut edited_records) = mixed_base_and_operand_files();
+    let uploaded = tti_bytes(edited_records.clone());
+    let changes = reconcile_teletext_editorial_tti_with_operands(
+        &tti_mapping(),
+        &baseline,
+        &uploaded,
+        tti_budget(),
+        deadline(),
+        0x8040,
+        &original,
+    )
+    .unwrap();
+    assert_eq!(changes.rows.len(), 1);
+    assert_eq!(changes.operands, [operand(123, 1, 4)]);
+    let encode = |replacement| {
+        ersatzrs_ffmpeg::teletext::encode_teletext_authored_service_before(
+            original
+                .declared()
+                .clone()
+                .with_local_program_operand_overlays(
+                    &[operand(123, 1, replacement)],
+                    policy().validation.service,
+                )
+                .unwrap()
+                .with_physical_base_overlays(changes.rows.clone(), policy().validation.service)
+                .unwrap(),
+            &[],
+            &policy().encoding,
+            deadline(),
+        )
+        .unwrap()
+    };
+    let candidate = encode(4);
+    validate_teletext_editorial_effects_with_operands(
+        &original,
+        &candidate,
+        &project("free", 1, 8, 32, 1),
+        TeletextEditorialEdits {
+            rows: &changes.rows,
+            operands: &changes.operands,
+            bitmaps: &[],
+        },
+        &policy().encoding,
+        deadline(),
+    )
+    .unwrap();
+    validate_recompiled_teletext_editorial_tti_encoding(
+        &tti_mapping(),
+        &uploaded,
+        tti_budget(),
+        deadline(),
+        &original,
+        &candidate,
+        &changes.operands,
+    )
+    .unwrap();
+    // A final typed command with a different replacement cannot masquerade as
+    // the reconciled uploaded operand, even on a page with a valid Base edit.
+    let mismatch = validate_recompiled_teletext_editorial_tti_encoding(
+        &tti_mapping(),
+        &uploaded,
+        tti_budget(),
+        deadline(),
+        &original,
+        &encode(2),
+        &changes.operands,
+    )
+    .unwrap_err();
+    assert_eq!(mismatch.failure, NativeTeletextEditorialTtiFailure::Packet);
+    assert_eq!(mismatch.row, Some(26));
+    // The context does not authorize changing a retained position command.
+    mutate_word(&mut edited_records, native_word(&original, 0), |word| {
+        word ^ (1 << 11)
+    });
+    let unapproved = validate_recompiled_teletext_editorial_tti_encoding(
+        &tti_mapping(),
+        &tti_bytes(edited_records),
+        tti_budget(),
+        deadline(),
+        &original,
+        &candidate,
+        &changes.operands,
+    )
+    .unwrap_err();
+    assert_eq!(
+        unapproved.failure,
+        NativeTeletextEditorialTtiFailure::Packet
+    );
+    assert_eq!(unapproved.row, Some(26));
 }
 
 #[test]

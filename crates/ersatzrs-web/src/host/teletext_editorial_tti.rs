@@ -454,6 +454,29 @@ pub(super) fn validate_teletext_editorial_tti_encoding(
     operands::check_packets(service, owner, &page, location, deadline)
 }
 
+/// A receipt-qualified Base edit can change compiler-owned carrier packing.
+/// Uploaded words must still equal the private baseline except for reconciled
+/// typed operands, whose final emitted words are checked by command provenance.
+pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
+    mapping: &TeletextExportPageMapping,
+    edited_bytes: &[u8],
+    budget: TeletextTtiBudget,
+    deadline: Instant,
+    baseline: &EncodedTeletextAuthoredService,
+    service: &EncodedTeletextAuthoredService,
+    changes: &[TeletextLocalProgramOperandOverlay],
+) -> Result<()> {
+    let location = Location {
+        page: mapping.page.page,
+        subcode: mapping.page.subcode,
+        resource: None,
+    };
+    let owner = owner(mapping, location)?;
+    let document = location.parse(edited_bytes, budget, deadline)?;
+    let page = Page::index(&document, mapping, location, deadline)?;
+    operands::check_recompiled_packets(baseline, service, owner, &page, changes, location, deadline)
+}
+
 #[cfg(test)]
 #[path = "teletext_editorial_tti/tests.rs"]
 mod tests;

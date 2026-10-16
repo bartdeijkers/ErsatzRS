@@ -643,6 +643,7 @@ fn make_document(
             .view()
             .encoded()
             .ok_or(NativeTeletextEditorialImportError::Association)?,
+        &prepared.incoming,
     )?;
     check_deadline(deadline)?;
     Ok((document, document_digest))

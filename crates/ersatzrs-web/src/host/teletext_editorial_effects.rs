@@ -195,6 +195,7 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             new_page,
             &allowed,
             operand_change,
+            overlay.is_some(),
             budget.max_units,
         )?;
         if let Some(overlay) = overlay {
@@ -631,6 +632,7 @@ fn check_packets(
     new: &EncodedTeletextPage,
     allowed: &PermissionMask,
     operand_change: bool,
+    row_change: bool,
     max_units: usize,
 ) -> Result<()> {
     let owner = old.address();
@@ -652,8 +654,29 @@ fn check_packets(
         || before.kind != after.kind
         || before.language != after.language
         || before.header != after.header
-        || before.records.len() != after.records.len()
     {
+        return Err(error(
+            Some(owner),
+            None,
+            TeletextEditorialEffectsFailure::ProtectedStructure,
+        ));
+    }
+    // check_service/check_enhancements already authenticate the retained
+    // authored commands and exactly the supplied semantic overlays. A Base edit
+    // can change compiler-owned repaint recipes, selectors and X26 packing even
+    // though uploaded X26 and every authored command remain unchanged. Compare
+    // all other completed packets exactly; protected cells are checked below.
+    // An uploaded X26 edit still needs the original TTI/operand reconciliation.
+    let protected = |record: &&TeletextEncodedDisplayRecord| {
+        !(row_change
+            && matches!(
+                record,
+                TeletextEncodedDisplayRecord::Triplets { row: 26, .. }
+            ))
+    };
+    let old_records = before.records.iter().filter(protected);
+    let new_records = after.records.iter().filter(protected);
+    if old_records.clone().count() != new_records.clone().count() {
         return Err(error(
             Some(owner),
             None,
@@ -664,12 +687,11 @@ fn check_packets(
     // packets::editorial_links, rather than authored navigation. Both inputs
     // are private completed encoder outputs: retain all 38 link/control
     // nibbles and allow a rebuilt CRC only when header/base cells changed.
-    let changed_cells = before
-        .records
-        .iter()
-        .zip(&after.records)
+    let changed_cells = old_records
+        .clone()
+        .zip(new_records.clone())
         .any(|(old, new)| changed_page_cells(old, new));
-    for (before, after) in before.records.iter().zip(&after.records) {
+    for (before, after) in old_records.zip(new_records) {
         match (before, after) {
             (
                 TeletextEncodedDisplayRecord::BaseRow {
