@@ -2968,6 +2968,60 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 independently decoded inherited-panel ordinary-flow checkpoint:
+Criterion: independently validate the exact published Main+RightPanel captures,
+including magazine-inherited presentation, fixed bitmap cells and Level1/1.5
+fallback. The preceding retained-bank/native/TCP/AV/TSDuck/model/isolation/reopen
+receipt is reused; neither Rust nor those immutable captures changed.
+
+Pinned unmodified teletextimager0.2.0 at2b0125b778c45ffdfa2df0b196870c093361f317
+with the existing eight source hashes, loader45bd284d and national oracle2887bf80
+checks both actual512-unit prefixes. A separate fixed adapter leaves all previous
+linked-target/national/English modes byte-identical. The first X28 premise is
+explicitly rejected: these displays have NO X28. Presentation is actually M29/0;
+the pinned reader discards packet29, so unmodified decoder.m29_page receives ONLY
+words extracted from actual captured M29 using its pinned Hamming converters.
+All seven contexts per channel must agree and precede every dependent display
+header. Without context the diagnostic reports0/0 panels/default green CLUT2;
+no X28 or native presentation is fabricated to make that attempt pass.
+
+Both positive actual inputs pass: each has12 CLOSED124/125/S32 displays (six per
+page), seven complete Normal1C0/S0 banks and seven original MOT1FE acquisitions.
+Every closed bank retains literal mode0/slot0, all120 bits and undefined-slot
+modes; every closed MOT has fixed original encoded correspondence only.
+At Level2.5 each display independently resolves4-left/12-right widths and actual
+red Day/blue Night on black, with exact literal120-pixel masks at raw1/8 and1/40
+(standard visual columns12/44). Day's first row is0x803, Night0x801. Both levels1
+and1.5 retain literal Base Z/Z/space, no DRCS or enhanced panels. All non-header
+raw cells retain fixed Base/fragment and exact two-cell DRCS placement inventory.
+This is received-context and explicitly supplied-bank decoding, not automatic
+magazine/MOT/X27 acquisition, cache routing, font/PNG rendering or client proof.
+
+All13 retained negative trials reject: two wrong profiles; two valid-odd-parity
+bank-pixel mutations across all seven respective bank acquisitions; two moved
+OriginModifier32-to31 and two absent LocalPassive invocations across all13
+received display-X26 packets per channel, with valid Hamming24/18 and located
+124/S32 raw1/40 palette rejection; two missing M29 contexts; two contradictory
+contexts using one actual other-channel M29 unit; and one first-M29 moved late.
+Positive captures, external source pins and existing adapters remain exact.
+No packet/header is added or EOF page synthesized; a trailing partial acquisition
+is excluded by the unchanged closed-page policy. Adapter syntax and scoped
+source review pass; prior affected Rust/Clippy proof is reused unchanged.
+Canonical adapter/input/positive/negative/context/review/check identities:
+tmp/phase9-panel-independent/identity.json SHA256 528244f361eb2eb5f9d3a57644966fd235cc615ef08470442a469789cd979a88.
+
+Remaining: actual standalone QTM page/panel presentation and editing, complete
+metadata/zones/editor interchange and suitable-client panel display/navigation.
+The standalone TTI already materializes M29 as X28 in append_display, records
+materialized_magazine1 and retains it through protected import. Both fresh pages
+contain OL28 with4+12 panels; pinned QTM loads/saves those fields. No missing-
+materialization product defect was found. Next attach the real exported bank
+through normal QTM controls and prove this fixture's actual panel display and
+edit/save/import; earlier unrelated672x250 logs are not this panel-cell proof. No general decoder repair/client hunt
+starts. Warm lifecycle/Lua/restart/localized headed admin/playback/platform and
+full authored engine acceptance remain required; production guide content waits.
+No permanent restriction, milestone completion or push is introduced.
+
 2026-10-16 retained actual-editor bank to panel ordinary-stream checkpoint:
 Criterion: join the existing captured Main+RightPanel authoring zones to genuine
 QTM resource editing, fresh V4 concept/preview/explicit publication and ordinary
@@ -9994,9 +10048,9 @@ gate. Engine-first delivery remains; no milestone completion or push.
 Current criterion-to-next-step map (updated during response-owned lifecycle correction; historical receipts retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
-| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts implemented; authenticated Main/left/right-zone effects now pass unit/native and retained-bank ordinary panel publication | Prior sidecar/editor receipts plus exact fresh-receipt dense bank headed import/preview/publication, package retention and reopen above | Richer zones/dynamic fields, panel/geometry/set semantics and complete resource interchange remain open | Retained singleton GUI bank equality and fresh-authority native/ordinary join pass above. Prove panel-specific independent decoding, then qualified client display/navigation; retain template/package-version and protected effects rules |
+| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts implemented; authenticated Main/left/right-zone effects now pass unit/native and retained-bank ordinary panel publication | Prior sidecar/editor receipts plus exact fresh-receipt dense bank headed import/preview/publication, package retention and reopen above | Richer zones/dynamic fields, panel/geometry/set semantics and complete resource interchange remain open | Retained singleton GUI bank equality, fresh-authority native/ordinary join and scoped independent inherited-panel decoding pass above. Prove actual QTM page/panel presentation and qualified client display/navigation; retain template/package-version and protected effects rules |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE and actual dense/padded editor receipts; combined test decoder now independently qualifies unchanged sparseS1=1 MAIN pixels above | General charset/resource/set/subpage fidelity and stock sparse decoding remain open; the qualified candidate now passes actual sparse-original and edited-bank client navigation | Reuse the joined padded proof; extend remaining exact repertoire/resource/set clauses without changing native identity |
-| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Representative bank, national-original and implicit-MOT flows connected; full acceptance open | Existing headed/admin colour/bank receipts plus fresh Romanian, rendered-MOT-default and English two-pair QTM/native/ordinary TCP/AV/TSDuck/independent receipts above; same addon, distinct profiles/themes, unchanged Night | Romanian hydration and suitable enlarged Local-Passive client/navigation remain open; independent banks are explicit | Reuse joined00/10 and new exact-bank/fresh-receipt panel ordinary receipts plus retained failed Kodi20.5 display. Independently decode exact panel captures with existing pinned API; client proof stays open without decoder repair expansion |
+| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Representative bank, national-original and implicit-MOT flows connected; full acceptance open | Existing headed/admin colour/bank receipts plus fresh Romanian, rendered-MOT-default and English two-pair QTM/native/ordinary TCP/AV/TSDuck/independent receipts above; same addon, distinct profiles/themes, unchanged Night | Romanian hydration and suitable enlarged Local-Passive client/navigation remain open; independent banks are explicit | Reuse joined00/10 and new exact-bank/fresh-receipt panel ordinary receipts plus retained failed Kodi20.5 display. Scoped exact-panel decoding now passes with explicitly supplied captured M29/banks. Prove standalone QTM inherited-presentation editing and suitable-client rendering/navigation; no decoder repair expansion |
 | Actual pinned QTM workflow | Base/colour/local-X26 and representative singleton/dense/padded/multiple-target/national-original interchange connected | Existing pinned saves and fresh same-live four-Romanian Save As/exit/concept/preview/publication/ordinary proof above; generated-slot rejection and immutable package/sidecar/reopen | Complete authored editor/zone/dynamic-field/panel/geometry/set and suitable-client coverage remain open | Extend only a named remaining authored/resource clause through the same actual editor flow |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
@@ -10004,14 +10058,17 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | Assigned national G0 physical realization | Exact original Polish5B, Turkish23, Romanian5D/7D and pair-pressured English7C use sealed resource-backed normalization; fixed slots0..9 and linked-S1 ownership | f6e6dd03 RED/GREEN/mixed-slot/boundary proof; genuine four-Romanian QTM/native/TCP/TSDuck/independent positive/negative receipts above; older scoped Polish admin proof retained | English primary00 and10 core/native/actual-QTM/ordinary/closed-independent proof passes, including raw10 source/X28 identity. Suitable-client/acquisition remain open; actual Kodi20.5 lacks the required00 glyph. Direct Romanian recipes remain UnprovenRecipe, separately from proven exact-mask DRCS realization. Implicit selected-MOT core/native/actual QTM/ordinary/independent bank and encoded-MOT proof pass. Rendered MOT defaults now have whole-service/native/actual-QTM/ordinary-TCP/TSDuck and scoped independent bodies/cells/fallback proof; automatic resource/default acquisition, suitable-client and broader matrix remain open | Reuse joined raw10 proof; next connect the existing side-panel/editor geometry clause while retaining full client/repertoire acceptance |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: independently decode the exact new MainAndRight ordinary
-captures with the existing pinned imager API, fixed bank masks and raw-to-visual
-positions. The retained genuine singleton bank save now passes exact fresh-bank
-equality and fresh receipt/sidecar/displays through concept/preview/publication
-and two ordinary channels. No fresh editor panel rendering is inferred.
-Panel-specific independent decoding and suitable-client display/navigation remain
-required; retained Kodi20.5 failure blocks only its dependent acceptance. No
-repeated client trial, decoder repair, general audit or measurement program follows.
+Concrete next action: prove actual pinned-QTM standalone page editing preserves
+magazine-inherited panel geometry and theme. Reuse the existing materialized-X28
+standalone exporter; open these exact pages, attach the actual bitmap companion
+through normal editor controls, and prove their panel cells before edit/save/import.
+Preserve original identities and generated/protected data; no export defect is
+currently demonstrated. Retained bank
+editing, native publication, ordinary streams and scoped explicitly supplied-M29/
+bank decoding now pass; those proofs do not establish editor panel presentation.
+Suitable-client panel display/navigation remains required; retained Kodi20.5
+failure blocks only its dependent acceptance. No repeated client trial, decoder
+repair, general audit or measurement program follows.
 Full metadata/zones/lifecycle/Lua/restart/admin/playback/platform acceptance stays
 open; no permanent limitation is silently accepted.
 Production TV-guide content still waits for full independent generic acceptance.

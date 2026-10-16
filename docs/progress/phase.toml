@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: independently decode the joined panel ordinary-stream flow'
+current_focus = 'P9A-04: inherited panel presentation in actual QTM page editing'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -288,8 +288,15 @@ fresh V4 receipt/sidecar/displays, native panel concept/preview/separate publica
 repeat/undo/reopen and two ordinary TCP channels with source AV/TSDuck/fullmodel,
 state isolation, host close and capacity cleanup. No fresh editor launch or panel
 editor rendering is claimed. P9A-04 owns hashes and the corrected path invocation.
-Next independently decode the exact panel captures with existing pinned APIs and
-literal masks/positions. Panel-specific independent/client proof remains open. Earlier proof
+Both exact panel captures now independently pass all24closed displays,14banks
+and14MOTs with literal masks/colours/4+12 widths and Level1/1.5 fallback. Thirteen
+wrong-profile/pixel/invocation/magazine-context negatives reject. The fixed adapter
+supplies ONLY actual received M29/banks to unchanged pinned imager APIs; no
+fabricated X28, automatic acquisition or client rendering is claimed. P9A-04 owns
+all source/positive/negative/provenance identities. Next prove actual QTM page
+editing preserves inherited panel geometry/theme. StandaloneTTI already carries
+materialized-X28; use its real bank through normal QTM controls and actual panel
+cells. No missing-materialization defect was found. Suitable-client proof remains open. Earlier proof
 retains its scope. Required suitable enlarged client/navigation stays
 open; this gap does not block independent authored work. Full aliases/lifecycle/
 admin/platform and engine acceptance remain required; no milestone or restriction.
