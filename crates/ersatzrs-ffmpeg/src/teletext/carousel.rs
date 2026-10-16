@@ -149,8 +149,13 @@ impl CarouselContent {
         let displays = service.declared().semantic().base().pages.len();
         let mut resource_order: Vec<_> = (displays..service.pages().len()).collect();
         resource_order.sort_unstable_by_key(|&index| {
-            // Authenticated owned candidates retain displays first, then resources.
-            let kind = service.declared().resource_inventory()[index - displays].kind();
+            // Physical headers also cover compiler-owned banks absent from the
+            // original authored inventory. Encoded resources follow displays.
+            let kind = service.pages()[index]
+                .resource_header()
+                .expect("encoded resource pages retain their physical identity")
+                .identity()
+                .kind();
             let rank = match kind {
                 TeletextResourceKind::Mot => 0,
                 TeletextResourceKind::Drcs | TeletextResourceKind::Gdrcs => 1,

@@ -3,6 +3,9 @@
 use super::super::super::variants::expected_mask;
 use super::*;
 
+#[path = "proof/carousel.rs"]
+mod carousel;
+
 fn assert_links(
     input: &TeletextDeclaredService,
     resource: &crate::teletext::TeletextCompilerDrcsResource,

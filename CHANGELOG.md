@@ -692,6 +692,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Prevent teletext stream-task panics when authored DRCS banks coexist with
+  compiler-generated banks; acquisition orders the actual encoded resource headers.
 - Rebuild generated teletext repaint packets after authorized Base-cell edits,
   retaining exact authored operands and protected zones. A pinned QTeletextMaker
   national-cell save now reaches native concept import, shared preview, explicit
@@ -707,8 +709,9 @@ release section when tagging a release.
   resource ownership. Both resource scopes can carry all four variants together
   while retaining caller page, output and work limits. An eight-page actual editor
   trial now preserves both scopes through receipt-bound concept validation, shared
-  preview, separate publication and restart recovery. Ordinary delivery of this
-  combined set remains unproven. The earlier single-cell Turkish editor flow
+  preview, separate publication and restart recovery. Both ordinary streams now
+  pass transport, source audio/video, full-model and independent bitmap/fallback
+  checks; suitable-client display and navigation remain open. The earlier single-cell Turkish editor flow
   reaches receipt-bound concepts, shared preview, explicit publication and two
   ordinary streams with transport and independent bitmap checks. Localized
   headed Chromium and Firefox now prove receipt-bound import, exact preview,

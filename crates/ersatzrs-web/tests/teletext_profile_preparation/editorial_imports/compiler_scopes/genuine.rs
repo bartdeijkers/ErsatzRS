@@ -237,6 +237,124 @@ fn input_hashes(flow: &Flow, directory: &Path) -> Vec<(String, String)> {
         .collect()
 }
 
+pub(super) fn retained_input_hashes(flow: &Flow, directory: &Path) -> Vec<(String, String)> {
+    let mut hashes = input_hashes(flow, directory);
+    let bytes =
+        live_client::read_bounded(&directory.join("native-proof.json"), 128 * 1024).unwrap();
+    hashes.push(("native-proof.json".into(), live_client::hash(&bytes)));
+    hashes
+}
+
+fn retained_native_proof(flow: &Flow, directory: &Path) -> Value {
+    let bytes =
+        live_client::read_bounded(&directory.join("native-proof.json"), 128 * 1024).unwrap();
+    let proof: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(proof["probe_version"], 1);
+    assert_eq!(proof["revision"], 2);
+    let hashes: Vec<(String, String)> =
+        serde_json::from_value(proof["input_hashes"].clone()).unwrap();
+    assert_eq!(hashes.len(), 29);
+    assert_eq!(hashes, input_hashes(flow, directory));
+    for field in [
+        "all_eight_shared_previews_equal_published_and_reopened",
+        "both_generated_banks_all_four_fixed_masks_ptus_and_bindings_verified",
+        "original_and_authored_companions_fresh_and_exact",
+        "night_original_profiles_bindings_package_receipts_config_unchanged",
+    ] {
+        assert_eq!(proof[field], true);
+    }
+    proof
+}
+
+/// Reuse only genuine saved bytes whose entire original file set matches this
+/// new Flow. Old project/receipt authority is retained as evidence, never uploaded.
+pub(super) fn retained_request(
+    flow: &Flow,
+    directory: &Path,
+) -> (NativeTeletextEditorialImportRequest, Value) {
+    assert_eq!(flow.exported[0].files().len(), 10);
+    assert_eq!(
+        std::fs::read_dir(directory.join("native-original-1"))
+            .unwrap()
+            .count(),
+        11
+    );
+    for file in flow.exported[0].files() {
+        assert_eq!(
+            drcs_bitmap::read_retained_editor_file(
+                &directory.join("native-original-1").join(&file.name)
+            ),
+            file.bytes,
+            "all ten original display/authored companion files must match before genuine-byte reuse"
+        );
+    }
+    let native = retained_native_proof(flow, directory);
+    let marker = live_client::read_bounded(&directory.join("editor-complete.json"), 4096).unwrap();
+    let completed: Completion = serde_json::from_slice(&marker).unwrap();
+    assert_eq!(completed.probe_version, 1);
+    assert_eq!(completed.proof_sha256_by_page.len(), 8);
+    let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
+    request.name = "Retained genuine QTM eight-page national ordinary concept".into();
+    let mut proofs = Vec::new();
+    for (page, closed) in (124..132).zip(&completed.proof_sha256_by_page) {
+        assert_eq!(closed.page, page);
+        let name = format!("page-{page}-0020.tti");
+        let file = request
+            .files
+            .iter_mut()
+            .find(|file| file.name == name)
+            .unwrap();
+        let edited = drcs_bitmap::read_retained_editor_file(
+            &directory.join(format!("editor-1/{page}/edited.tti")),
+        );
+        let proof = editor_proof(directory, page, &file.bytes, &edited, &closed.sha256);
+        compiler_polish::assert_actual_tti_edit(&file.bytes, &edited, code(page));
+        file.bytes = edited;
+        proofs.push(json!({"page":page,"proof":proof}));
+    }
+    assert_eq!(native["editor_proofs"], json!(proofs));
+    assert_eq!(request.sidecar, sidecar(flow));
+    assert_eq!(request.files.len(), 10);
+    for original in flow.exported[0].files() {
+        if !flow.exported[0]
+            .sidecar()
+            .project
+            .pages
+            .iter()
+            .any(|page| page.name == original.name)
+        {
+            assert_eq!(
+                request
+                    .files
+                    .iter()
+                    .find(|file| file.name == original.name)
+                    .unwrap(),
+                original,
+                "only saved display files are reused; authored companions stay fresh and exact"
+            );
+        }
+    }
+    let old_sidecar = live_client::read_bounded(
+        &directory.join("native-original-1/project.ersatzrs.json"),
+        policy().project.max_bytes,
+    )
+    .unwrap();
+    let old: Value = serde_json::from_slice(&old_sidecar).unwrap();
+    assert_ne!(
+        old_sidecar, request.sidecar,
+        "this new Flow owns fresh authority"
+    );
+    (
+        request,
+        json!({"scope":"reused genuine saved bytes after exact equality of all ten original files; no new GUI trial",
+        "retained_native_proof_sha256":live_client::hash(&live_client::read_bounded(&directory.join("native-proof.json"),128*1024).unwrap()),
+        "retained_sidecar_sha256":live_client::hash(&old_sidecar),
+        "retained_receipt_id":old["receipt_id"],"retained_receipt_digest":old["receipt_digest"],
+        "retained_original":old["project"]["original"],"closed_editor_proofs":proofs,
+        "all_original_files_compared":10,"fresh_sidecar_only_uploaded":true,"new_gui_operations_claimed":false}),
+    )
+}
+
 #[tokio::test]
 #[ignore = "exports one fresh live eight-page original, waits up to 4800 seconds for pinned actual QTM saves, then verifies native concept/publication/reopen; no ordinary/client claim"]
 async fn actual_qtm_eight_page_dual_scope_concept_previews_publishes_and_reopens() {

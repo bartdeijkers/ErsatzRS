@@ -9,6 +9,8 @@ use ersatzrs_ffmpeg::teletext::{
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
+#[path = "compiler_scopes/delivery.rs"]
+mod delivery;
 #[path = "compiler_scopes/genuine.rs"]
 mod genuine;
 #[path = "compiler_scopes/oracle.rs"]
