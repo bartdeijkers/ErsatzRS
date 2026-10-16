@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: connect resource-bank editor import to preview and publication'
+current_focus = 'P9A-04: qualify sparse resource decoding without changing native identities'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Dense resource-bank transfer now connects the retained pinned QTM save to
+headed Chromium/Firefox SSR forms, exact shared preview, separate Request/Publish,
+same-host ordinary TCP/TSDuck/independent bitmap and Level1/1.5 fallback, and
+actual two-theme VLC124/125/124 navigation. P9A-04 owns the receipts. Reuse this
+representative flow. Next resolve the already witnessed normative sparse-X27
+independent-decoder/client blocker without rewriting native S1, then extend the
+remaining authored/editor feature clauses. Full engine, Lua/restart, hydrated
+admin and playback/platform acceptance remain open; production guide work waits.
+
 Caption checkpoint closeout now has terminal strict three-crate/xtask lint and
 clean-container software smoke proof; P9A-04 owns exact receipts and failures.
 Native WSL startup remains blocked by a witnessed driver-library loader SIGSEGV;

@@ -138,6 +138,10 @@ pub(in super::super) struct LiveOrigin {
 }
 
 impl LiveOrigin {
+    pub(super) fn base_url(&self) -> &str {
+        &self.base
+    }
+
     pub(in super::super) async fn start(fixture: &Fixture) -> io::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;

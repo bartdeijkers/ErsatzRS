@@ -55,6 +55,15 @@ async fn http_v3_only_addon_appears_in_channel_admin_before_profile_setup() {
 
 async fn fixture() -> (Fixture, Flow) {
     let fixture = Fixture::new_persistent().await;
+    configure_authoring_policy(&fixture).await;
+    Box::pin(setup_with_fixture(
+        external_editor_probe::editor_response,
+        fixture,
+    ))
+    .await
+}
+
+pub(super) async fn configure_authoring_policy(fixture: &Fixture) {
     let mut policy: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/teletext-output-policy-v1.json")).unwrap();
     policy.as_object_mut().unwrap().remove("source");
@@ -74,11 +83,6 @@ async fn fixture() -> (Fixture, Flow) {
         })
         .await
         .unwrap();
-    Box::pin(setup_with_fixture(
-        external_editor_probe::editor_response,
-        fixture,
-    ))
-    .await
 }
 
 async fn post(fixture: &Fixture, route: &str, content_type: &str, bytes: Vec<u8>) -> Response {
@@ -265,6 +269,101 @@ async fn http_import_saves_exact_revision_for_shared_preview_without_publication
     assert_eq!(preview.navigation()[0].target.page.get(), 125);
     assert_original_pointers(&fixture, &flow).await;
     assert_retained_storage(&fixture, &flow).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn http_resource_bank_download_and_multipart_import_preserve_output_until_publication() {
+    let fixture = Fixture::new_persistent().await;
+    configure_authoring_policy(&fixture).await;
+    let (fixture, flow) = Box::pin(setup_with_fixture_policy(
+        drcs_bank::dense_response,
+        fixture,
+        drcs_companion::dense_encoding_policy,
+    ))
+    .await;
+    let package = calculate_addon_content_sha256(&fixture.root.path().join("package"))
+        .await
+        .unwrap();
+    let mut downloaded = bundle(export_response(&fixture, &fields(&flow, 1)).await).await;
+    let edited = drcs_bank::bitmap_request(&flow, false, 1);
+    let bank = &drcs_companion::indexed_companion(&flow, 0).0.name;
+    assert_eq!(
+        downloaded[bank],
+        flow.exported[0]
+            .files()
+            .iter()
+            .find(|file| &file.name == bank)
+            .unwrap()
+            .bytes
+    );
+    let sidecar = downloaded.remove("project.ersatzrs.json").unwrap();
+    let metadata = parse_teletext_export_sidecar(&sidecar, policy().project).unwrap();
+    let mut submitted = NativeTeletextEditorialImportRequest {
+        name: "HTTP resource-bank concept".to_owned(),
+        receipt_id: metadata.receipt_id,
+        receipt_digest: metadata.receipt_digest,
+        expected_design_head: 1,
+        sidecar,
+        files: downloaded
+            .into_iter()
+            .map(|(name, bytes)| TeletextExportFile { name, bytes })
+            .collect(),
+    };
+    submitted
+        .files
+        .iter_mut()
+        .find(|file| &file.name == bank)
+        .unwrap()
+        .bytes
+        .clone_from(
+            &edited
+                .files
+                .iter()
+                .find(|file| &file.name == bank)
+                .unwrap()
+                .bytes,
+        );
+    let foreign = import_response(&fixture, &submitted, 2).await;
+    assert_eq!(redirect(&foreign, 2)["error"], "foreign-channel");
+    let index = submitted
+        .files
+        .iter()
+        .position(|file| &file.name == bank)
+        .unwrap();
+    let removed = submitted.files.remove(index);
+    assert!(redirect(&import_response(&fixture, &submitted, 1).await, 1).contains_key("error"));
+    submitted.files.insert(index, removed);
+    assert_eq!(head_revision(&fixture, &flow).await, 1);
+    assert_original_pointers(&fixture, &flow).await;
+    let query = redirect(&import_response(&fixture, &submitted, 1).await, 1);
+    assert_eq!(query["saved"], "draft");
+    assert_eq!(query["design_id"], flow.saved[0].head().id.to_string());
+    assert_eq!(query["revision"], "2");
+    let restored = reload_original_teletext_design_revision(
+        &fixture.state.application,
+        flow.saved[0].head().id,
+        2,
+        designs::budget(),
+        drcs_companion::dense_encoding_policy(),
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    drcs_bank::assert_native_edit(
+        flow.accepted[0].service(),
+        restored.encoded().unwrap(),
+        false,
+    );
+    assert_original_pointers(&fixture, &flow).await;
+    assert_retained_storage(&fixture, &flow).await;
+    assert_eq!(
+        calculate_addon_content_sha256(&fixture.root.path().join("package"))
+            .await
+            .unwrap(),
+        package
+    );
+    fixture.state.pool.close().await;
 }
 
 async fn head_revision(fixture: &Fixture, flow: &Flow) -> i64 {

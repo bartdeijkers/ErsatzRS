@@ -14,14 +14,14 @@ const SOURCE_MAXIMUM: usize = 48 * 1024 * 1024;
 const CAPTURE_MAXIMUM: usize = 8 * 1024 * 1024;
 const CAPTURE_TARGET: usize = 40_000 * 188;
 
-struct Tools {
+pub(super) struct Tools {
     ffmpeg: String,
     ffprobe: String,
     tsanalyze: String,
 }
 
 impl Tools {
-    async fn load() -> Self {
+    pub(super) async fn load() -> Self {
         let tools = Self {
             ffmpeg: client_capture::selected("ERSATZRS_TELETEXT_TEST_FFMPEG"),
             ffprobe: client_capture::selected("FFPROBE_PATH"),
@@ -32,7 +32,7 @@ impl Tools {
     }
 }
 
-async fn playback_fixture(tools: &Tools, directory: &Path) -> (Fixture, Vec<u8>) {
+pub(super) async fn playback_fixture(tools: &Tools, directory: &Path) -> (Fixture, Vec<u8>) {
     let fixture = Fixture::new_persistent().await;
     ordinary_stream_flow::setting(
         &fixture,
@@ -104,7 +104,7 @@ async fn published_fixture(
     (fixture, flow, accepted)
 }
 
-async fn capture_tcp(url: String) -> Vec<u8> {
+pub(super) async fn capture_tcp(url: String) -> Vec<u8> {
     tokio::time::timeout(Duration::from_secs(35), async {
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
@@ -171,6 +171,27 @@ async fn verify_capture(
     bytes: &[u8],
     accepted: &AcceptedTeletextOutputCandidate,
 ) -> Value {
+    verify_capture_mode(
+        directory,
+        tools,
+        source,
+        channel,
+        bytes,
+        accepted,
+        "singleton-edited",
+    )
+    .await
+}
+
+pub(super) async fn verify_capture_mode(
+    directory: &Path,
+    tools: &Tools,
+    source: &[u8],
+    channel: i64,
+    bytes: &[u8],
+    accepted: &AcceptedTeletextOutputCandidate,
+    mode: &str,
+) -> Value {
     let filename = format!("channel-{channel}.ts");
     live_client::write_new(&directory.join(&filename), bytes).unwrap();
     let _report = client_capture::verify_transport_with_qualified_authored_pts_gaps(
@@ -200,7 +221,7 @@ async fn verify_capture(
             script.to_str().unwrap(),
             units_path.to_str().unwrap(),
             theme,
-            "singleton-edited",
+            mode,
         ],
         &[],
         262_144,
@@ -214,7 +235,12 @@ async fn verify_capture(
     .unwrap();
     for page in [124, 125] {
         let text = client_capture::decode_page_text(&tools.ffmpeg, bytes, &page.to_string()).await;
-        assert!(text.contains('\u{f400}') && text.contains('Z') && !text.contains('Q'));
+        let glyph = if mode == "indexed-edited" && page == 125 {
+            '\u{f440}'
+        } else {
+            '\u{f400}'
+        };
+        assert!(text.contains(glyph) && text.contains('Z') && !text.contains('Q'));
         live_client::write_new(
             &directory.join(format!("channel-{channel}-page-{page}.srt")),
             text.as_bytes(),

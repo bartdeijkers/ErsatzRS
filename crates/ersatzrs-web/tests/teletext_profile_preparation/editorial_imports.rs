@@ -59,6 +59,8 @@ pub(super) mod live_client;
 pub(super) mod live_updates;
 #[path = "editorial_imports/qtm_carrier.rs"]
 mod qtm_carrier;
+#[path = "editorial_imports/resource_bank_admin.rs"]
+mod resource_bank_admin;
 
 pub(super) fn policy() -> NativeTeletextExportPolicy {
     NativeTeletextExportPolicy {

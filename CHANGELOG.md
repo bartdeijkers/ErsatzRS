@@ -39,7 +39,10 @@ release section when tagging a release.
   Receipt-bound resource-bank imports now reconcile editor numbering while
   retaining native identities, protected packets and undefined slots. Actual
   dense and padded editor saves reach shared preview, explicit publication and
-  reopen without modifying installed packages. Complete resource administration,
+  reopen without modifying installed packages. Dense bank saves now have headed
+  nine-culture admin import/preview/publication proof through the same ordinary
+  streams, independent bitmap/fallback decoding and two-theme client navigation.
+  Complete resource administration,
   external-editor and Level 2.5 acceptance remain open.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share

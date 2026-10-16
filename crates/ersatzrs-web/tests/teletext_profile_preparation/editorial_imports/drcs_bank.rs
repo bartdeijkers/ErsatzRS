@@ -24,7 +24,7 @@ fn free_glyphs(mut value: Value) -> Value {
     value
 }
 
-fn dense_response(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn dense_response(theme: &str, page: u16, subcode: u16) -> Value {
     free_glyphs(drcs_companion::dense_response(theme, page, subcode))
 }
 
@@ -143,7 +143,11 @@ fn writer_defaults(groups: &mut Groups, offset: u64) {
     }
 }
 
-fn bitmap_request(flow: &Flow, sparse: bool, offset: u64) -> NativeTeletextEditorialImportRequest {
+pub(super) fn bitmap_request(
+    flow: &Flow,
+    sparse: bool,
+    offset: u64,
+) -> NativeTeletextEditorialImportRequest {
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
     let name = bank_name(flow);
     let mut groups = bank_groups(&request, name);
@@ -155,7 +159,7 @@ fn bitmap_request(flow: &Flow, sparse: bool, offset: u64) -> NativeTeletextEdito
     request
 }
 
-fn assert_native_edit(
+pub(super) fn assert_native_edit(
     before: &EncodedTeletextAuthoredService,
     after: &EncodedTeletextAuthoredService,
     sparse: bool,

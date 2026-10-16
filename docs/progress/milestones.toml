@@ -2968,6 +2968,72 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 dense resource-bank admin-to-ordinary-client checkpoint:
+Criterion: join existing profile selection/validation, actual pinned editor output,
+shared preview and explicit publication to the same ordinary route and real client.
+Prior profile creation/selection and validation receipts remain valid; this new
+flow observes the two existing selected profiles and their Day/Night overrides.
+The production admin already accepts the complete extracted TTI/DVB set plus its
+versioned sidecar. No new upload interface or package mutation was needed.
+A nonignored HTTP regression downloads a fresh complete ZIP/receipt, replaces
+only the bank companion and proves foreign-channel/missing-bank rejection before
+concept save, with accepted output and the other channel/package unchanged.
+All7 HTTP adapter cases pass: runf20ffaf3-8441-4065-bf80-0de2f027a1f9.
+
+Two independent disposable native hosts now carry genuine headed browser actions.
+Chromium151.0.7922.34 passes in32.7s; Firefox153.0 in34.6s. Each checks existing
+same-addon/different-profile/theme selections, nine cultures in light/dark,
+downloaded bank equality with the retained genuine QTM original and complete
+receipt-bound multipart upload using the unchanged actual editor save. Literal
+672x250 previews check both consumers at columns8/10: only Day124 gains the two
+red pixels x154/178,row10; Day125 and both Night pages remain unchanged.
+Actual preview links navigate124/0020->125/0020->124/0020. Native code independently
+authenticates the new HTTP receipt, exact immutable original documents and sole
+S1=0/slot0 bitmap overlay while pending/accepted pointers stay original, before
+acknowledging permission for browser Request/Publish. The browser then performs
+both native forms; exact selected generation/request3 and revision2 are verified.
+Preferences return to their baseline before both barriers. Markers alone prove
+neither browser actions nor client rendering. No hydration claim is made.
+
+Each same host then serves ordinary /iptv/hls-direct/{channel}.ts captures.
+Existing source-AV/TSDuck/full emitted-model checks pass. Independent libzvbi0.2.42
+indexed-edited decoding checks both120-pixel glyph consumers, native bank/slot,
+red/blue palettes, unchanged S1=1 and exact Level1/1.5 ZZ/space white-black fallback.
+Five Python oracle regressions pass; genuine unchanged Night input passes and
+unchanged Day input rejects the missing edit. Existing indexed baseline output
+stays byte-identical. Actual VLC3.0.20/libzvbi0.2.42 attaches to both original
+ordinary URLs after each browser publication, displays the correct dense shapes
+and124.20->125.20->124.20 headers, and closes all four owned clients with exit0.
+Root inspects52 browser images and12 actual client images before native completion.
+Both native runs pass terminally: aac08f45-e30b-478b-9115-56756df9048f in164.286s,
+984ddd91-98a8-4d0c-bf96-c27498b52e62 in163.563s. Exact accepted output, fresh/root
+receipts, installed package, profile/binding/config isolation and database reopen
+are retained; both owned servers close. Reopen is not whole-runtime restart.
+
+Retained QTM1.0 cac2167bac933a6160cca45a45d5d4ee95355898/Qt6.10.2 dense GUI proof
+is reused without rerunning the editor. Original bank SHA256
+d1e9a9d49a28be14adb1e727c11ab0cfe908bbd0df83ca49c48ef4e170a0a870;
+actual save6b4ac2e70bab6d73b6bdbb52bf9590887c7094582c14bbbca87433225aaebda6.
+Initial Rust fixture construction omitted required receipt fields/assumed Clone;
+corrected before behavior. First actual Chromium native run rejects only the
+fixture's lowercase false versus UI-canonical False config baseline; the new
+fixture now seeds canonical False before baseline capture. Strict config equality
+is unchanged. The initial contact-sheet localization suspicion is disproven by
+full-resolution Dutch/German images; Firefox additionally asserts exact selected
+status translations in all18 culture/theme views. No product patch was warranted.
+
+Canonical receipts: tmp/phase9-resource-admin-flow/identity.json
+SHA256 b28bef596c05b02c9ea84f9b8c13a548243fd5f85cceb0d2ce7ad3382717878a.
+Strict web all-target Clippy, final formatting, architecture and progress checks
+pass without new suppressions or progress warnings. Final Clippy uses the
+semantically identical from_mins(10) spelling of the tested600-second timeout.
+Firefox passes the final added status assertion; Chromium retains its full flow
+and inspected original images from before that assertion, with no product change.
+No production Rust, admin DOM, schema, dependency or FFmpeg argv changes. Sparse normative-X27 decoding/client, full authored Level2.5, richer
+resource/panel/set/template/zone interchange, full Lua/restart, hydrated admin and
+playback/platform criteria remain open. This dense cold flow is representative,
+not full engine acceptance; engine-first and all milestone contracts remain.
+
 2026-10-16 receipt-bound resource-bank editor checkpoint:
 Criterion: actual pinned QTeletextMaker bank output must retain native identities
 and supported content through draft import, shared preview and explicit publication.
@@ -7174,33 +7240,22 @@ excludes mutable progress prose; unchanged prerequisite receipts remain valid.
 Current criterion-to-next-step map (updated during response-owned lifecycle correction; historical receipts retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
-| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts with native replay implemented | Existing sidecar/admin receipts plus dense and actual padded bank import/preview/publication/reopen above | Panel/geometry/set semantics, richer zones/dynamic fields and complete resource-admin workflow remain open | Connect existing bank import to localized headed admin, retaining template/package-version and protected effects rules |
+| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts implemented | Prior sidecar/editor receipts plus exact fresh-receipt dense bank headed import/preview/publication, package retention and reopen above | Richer zones/dynamic fields, panel/geometry/set semantics and complete resource interchange remain open | Extend the next concrete authored/editor feature while retaining template/package-version and protected effects rules |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE carrier tests; actual equal-NOS1 and independent fallback1/enhanced0 QTM Save As/native import; nine-culture headed transfer | General charset/resource/set/subpage fidelity remains open; sparse normative S1=1 independent decoding/client is blocked by the audited decoder defect | Reuse corrected carrier receipts; extend supported authored changes and select a correct independent sparse-resource decoder/client |
-| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour and singleton bitmap flows; response-owned lifecycle3/4 plus bounded authorized handover implemented; full acceptance open | Prior actual QTM/localized admin/replay receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37; retained GUI input -> native preview/publication/reopen -> ordinary TCP -> independent pixels/TSDuck -> actual cold and retained-decoder two-theme VLC124/125/124; newest21 Rust/20 protocol passes and12 inspected images above | Full Level2.5, applied-state admin, default-capacity handoff, richer editor and resource-upload headed journey remain open; demonstrated monitor withdrawal is corrected for the proven same-selection singleton flow | Authenticate multi-group QTM writer indices against exact receipt/native identities, then extend editor/import/preview/publication proof without treating this representative warm flow as engine acceptance |
-| Actual pinned QTM workflow | Base-row/foreground native-admin flow and singleton/dense/sparse bitmap native interchange proven; full acceptance open | Existing pinned editor/admin receipts; dense SaveAs output reused and new padded GUI with8 inspected images; both exact input/output pairs pass native import/shared pixels/explicit publication/reopen and immutable package/receipt checks above | Resource-upload headed admin, panel/geometry/set semantics and wider independent stream/client coverage remain open; sparse normative X27 decoder defect is still a client acceptance blocker | Connect bank resource upload to existing localized preview/Publish controls and ordinary stream; select/prove a suitable sparse-resource decoder/client without rewriting native identities |
+| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour, singleton cold/warm and dense-bank admin flows; full acceptance open | Prior profile/validation and warm receipts; new headed Chromium/Firefox real bank upload/preview/Request/Publish, same-host ordinary TCP, independent pixels/fallback/TSDuck and actual two-theme VLC124/125/124 above | Full Level2.5, applied-state admin, default-capacity handoff, sparse and richer editor/client matrix remain open | Resolve the witnessed sparse normative-X27 decoder/client gap without changing native S1; reuse this joined dense flow rather than repeating general foundation audits |
+| Actual pinned QTM workflow | Base-row/foreground native-admin and singleton/dense/sparse bitmap native interchange; dense bank joined admin/stream/client proven | Existing pinned genuine dense/padded GUI files; exact original/download/save equality, fresh receipt/native concept barrier, headed explicit publication, independent emitted pixels/fallback, client navigation and reopen above | Sparse normative-X27 independent decoding/client, panel/geometry/set semantics and complete authored editor coverage remain open | Select/prove a correct sparse-resource decoder/client; extend remaining authored changes against the same file/validation/preview/publication boundaries |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: finish native/strict verification of the explicit response-
-owned lifecycle correction, then prove ordinary same-response warm updates,
-source AV/TSDuck/independent decoding and actual-client behavior. The actual singleton cold flow and
-localized resource identity now have the scoped evidence above; do not rerun them
-without changed inputs. Reconcile the actual V4 dense bank's complete PN/SC ordinal shift0/1->1/2
-against its receipt, preserving native S1 and protected padding/function/slots. Singleton concepts do not
-establish multi-group fidelity or full engine/editor acceptance. The separately
-observed legacy SaveAs modal focus failure remains open; retained negative trials
-need a new precise input/focus hypothesis before repetition. The representative colour
-admin/ordinary-route and inspected client replay flow above is proven for its
-stated scope. Preserve it; return to foundations only for a demonstrated missing
-conformance clause or defect. Resource/panel/set/geometry, wider browser and full
-standards/client/platform requirements remain; no representative flow closes them.
-The representative userflow already exists; its archived logs, receipts and68
-images remain hash-exact. Four harness sources evolved afterwards, so that receipt
-is retained evidence for its recorded inputs, not new exact-head browser CI.
-No representative success grants complete engine or editor acceptance. Full
-M29/MOT/DRCS warm transitions, per-response admin applied state, retained/Next,
-complete charset/resource/panel editing and all six platforms remain required.
+Concrete next action: resolve the already witnessed sparse normative-X27
+independent-decoder/client blocker while preserving exact authored native S1 and
+fallback packets, then extend the remaining authored/editor resource and panel
+clauses. Reuse the now joined dense-bank and prior singleton warm evidence unless
+relevant code/inputs change. Do not substitute this representative cold MAIN flow
+for full standards, editor, Lua/restart, applied-state admin, default-capacity,
+retained/Next or six-platform acceptance. Production content still waits for
+independent generic engine acceptance.
 
 The capacity-wait defect is independently visible: repeated finite slates reset
 clocks, while a stable copy mux cannot safely combine its current H264/one-audio

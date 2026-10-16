@@ -443,9 +443,11 @@ singleton MAIN bitmap publication and124/125/124 navigation on two ordinary URLs
 Off, expiry, changed selection and failed recovery retain withdrawal behavior.
 Broader resource/client rendering and complete editor interchange remain open.
 Receipt-bound resource-bank import now connects genuine dense and padded QTM
-saves to native preview, explicit publication and database reopen. The next flow
-step is localized headed resource upload and ordinary-route client proof;
-P9A-04 retains exact evidence and the sparse normative-X27 decoder gap.
+saves to native preview, explicit publication and database reopen. Dense-bank
+resource upload now passes localized headed SSR/no-JS admin, same-host ordinary
+TCP, independent bitmap/fallback decoding and suitable-client navigation.
+P9A-04 retains the exact proof and the next sparse normative-X27 decoder/client
+blocker; no native S1 rewrite or reduced authored target is accepted.
 P9A-04 owns the current criterion map and proof; full Level2.5 and editor
 acceptance remain unchanged.
 Independent original libzvbi 0.2.42 warm-cache DRCS decoding now passes four

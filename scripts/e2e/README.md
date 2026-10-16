@@ -1476,6 +1476,41 @@ The structured agent-file workflow and protection rules live in
 P9A-04 owns the current proof/gap map. No representative flow closes full authored
 Level 2.5, editor-resource, Lua/restart or platform acceptance.
 
+The resource-bank connection uses a separate owned native host and the actual
+retained QTeletextMaker bank save. Select the ignored Rust test
+`actual_browser_bank_import_preview_publication_and_ordinary_clients`, with
+`ERSATZRS_TELETEXT_RESOURCE_BANK_DIR` pointing to a new proof directory and
+`ERSATZRS_QTM_DRCS_BANK_CALIBRATION_DIR` pointing to the verified dense editor
+calibration. Use the same FFmpeg9/ffprobe/TSDuck overrides as the ordinary-client
+trial below. The fixture authenticates the original and edited editor files
+before writing `browser-ready.json`.
+
+Run one fixture per browser, serially:
+
+```bash
+ERSATZRS_TELETEXT_RESOURCE_BANK_READY="$PROOF_DIR/browser-ready.json" \
+  npx --no-install playwright test tests/e2e/teletext-resource-bank-flow.spec.ts \
+  --project=chromium --headed --workers=1
+```
+
+Repeat with a fresh fixture/proof directory and `--project=firefox`. This spec
+uses the production SSR/no-JS forms, checks nine cultures in both themes, downloads
+the ZIP and uploads all extracted files with only the actual saved bank replaced.
+It checks the exact preview pixels and writes `browser-concept-ready.json`.
+The native fixture verifies receipt ownership, the stored concept and unchanged
+accepted output before acknowledging with `publication-ready.json`. Only then
+does the browser click Request and Publish. These markers synchronize assertions;
+they do not replace browser screenshots or native state checks.
+
+After browser completion, the same native host checks ordinary TCP captures with
+TSDuck, source AV and the independent `indexed-edited` DRCS oracle, including the
+Level1/1.5 fallback. When `ready.json` appears, run the existing headed
+`teletext-live-client-trial.py` against it. Inspect all client navigation images
+and clean client exits before explicitly writing its exact `expected_completion`
+to `client-complete.json`. Require terminal Rust success and `success.json` as
+well as the browser/client receipts. This dense cold-client flow grants no
+hydration, sparse-X27, panel, warm-update or complete-engine acceptance.
+
 The versioned carrier probes use the same replay procedure with test filters
 `pinned_external_editor_nonzero_equal_nos` and
 `pinned_external_editor_independent_nos`. Set **all** fixture/route/decoder paths

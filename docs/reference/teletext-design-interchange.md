@@ -5550,7 +5550,14 @@ zip8 dependency with stored entries, without a new archive implementation.
 Import posts multipart to `/admin-api/teletext/design/import?channel_id=<id>`:
 text `channel_id`, `name`, `expected_design_head`, one `sidecar` file and repeated
 `files` parts with their original flat names. Include every file from the same
-export. The optional query context preserves channel-local error feedback when
+export. Extract the downloaded ZIP first: select `project.ersatzrs.json` as the
+sidecar and every remaining exported file in the multiple-file input. The import
+form accepts the extracted files, rather than a ZIP upload. For an edited DRCS
+bank, replace only its TTI companion with the actual editor save, retaining its
+exported filename and all other companions. The versioned sidecar and retained
+receipt determine native resource identities and editing permissions; editor
+subpage numbering cannot replace those identities. The optional query context
+preserves channel-local error feedback when
 the body limit rejects before parsing a field; it must agree with the body.
 Stored receipt/original ownership is authoritative before export or save. Closed
 fields, duplicate names, malformed sets and oversized uploads reject. The total
