@@ -3071,9 +3071,12 @@ pixels without any change to their own packets; host permissions must compare
 all of them. Private concept schema3 now stores fixed ten-row expected/replacement
 bitmap intentions, authenticates identical shared original producer resources and
 replays before complete encoding. V1/V2 storage remains byte-identical. Retained
-V3 singletons and production V4 banks with exactly one native S1=0 resource use
-receipt-qualified TTI reconciliation, the same preview and separate explicit
-publication. Original raw DVB, header/lifecycle, functions/modes and undefined
+V3 singletons and production V4 resource banks have a receipt-qualified native
+TTI reconciliation path, the same preview and separate explicit publication.
+The complete-bank rules below keep editor indices separate from native identity;
+P9A-04 owns current verification, including actual dense and padded editor/native
+proof and the remaining resource-admin and transport/client requirements.
+Original raw DVB, header/lifecycle, functions/modes and undefined
 slots stay exact. Repeated edits retain immutable-root expectations; exact undo
 restores original bytes. All shared display consumers are checked against the
 latest receipt, including unexported and panel users with unchanged own packets.
@@ -3081,9 +3084,12 @@ Root provenance includes actual execution-record consumers, not unrelated pages.
 
 The actual dense S1=0/1 MAIN-bank editor trial preserves the second resource and
 changes one bitmap byte while its writer shifts both PN/SC ordinals from0/1 to1/2.
-These editor indices do not authorize native identity changes. Multi-group and
-padded-bank import remains an integration gap until that complete mapping is
-implemented and proved. P9A-04 owns current proof and the next integration action.
+These editor indices do not authorize native identity changes. The bounded
+complete mapping now has native bank verification, including a genuine padded
+GUI edit/save with unchanged undefined positions. Both dense and padded saved
+files pass native import, shared preview, explicit publication and database reopen.
+Resource-upload admin and wider transport/client proof remain open.
+P9A-04 owns current proof and the next integration action.
 The optional Linux/X11 widget harness uses bounded real pointer input for the
 Save As filename; it retains activation/focus/path/no-overwrite guards. Its
 successful dense-bank run does not fix the retained legacy modal-focus failure.
@@ -5466,15 +5472,31 @@ strict existing packet inverse. Their unchanged DVB mappings own normal/global
 kind, native S1, physical subcode and update/lifecycle controls. The companion
 unit count is0: these are derived file bytes, not additional transmitted packets.
 Existing total/file-byte and TTI-record bounds cover every group including nulls.
-The complete set, including padding, and all DVB bytes stay protected on import.
-Editing those files never grants resource editing, display overlay, package
-installation or publication authority.
+Import authenticates the complete original set with canonical ordinals 0..N-1.
+Edited PN and SC must agree and retain encounter order with one whole-bank offset
+of 0 or +1; a singleton retains 0. The receipt's array position remains the sole
+source of native S1, independently of edited numbers. Missing, extra, duplicate,
+mixed-offset or out-of-order numbering rejects. A canonicalized exchange of
+otherwise indistinguishable bitmap bodies is treated as bitmap changes against
+those fixed native identities, subject to the same complete effects checks.
+
+Raw DVB assets, metadata, packet presence, functions/modes and undefined glyph
+halves remain protected. Only defined monochrome bitmap halves can supply checked
+concept intentions; full-service edit permissions, native validation and exact
+final re-encoding remain mandatory. Null groups remain all-F/no-PTU and may gain
+only pinned-writer defaults PS8000/RE0/CT20,T. They cannot acquire bitmap rows or
+other packets. Source-derived normalization does not prove actual padded GUI
+interchange. Parsing retains existing aggregate byte/record limits and deadline;
+fixed group indexes borrow one parsed original and one edited document.
+Editing these files never installs packages, modifies a package or changes
+broadcast publication implicitly.
 
 Retained V3 `drcs_tti` assets keep their original singleton S1=0 recipe, filename,
 resource reference and ordinal0. No V4 migration rewrites old receipts/concepts.
 Pinned QTM1.0/cac2167 loads attached sets through View -> DRCS pages -> Normal
-or Global DRCS -> Load file. Ordinary File/Open treats a resource as a display;
-do not use it for this dependency. The attached loader indexes PN groups by
+or Global DRCS -> Load file. Ordinary File/Open treats a resource as a MAIN
+document; use that separate route to edit/save the bank itself, not to attach
+the dependency to a display. The attached loader indexes PN groups by
 list order, ignoring SC and PN suffixes, and renders monochrome mode0.
 QTM has no attached-resource edit/save action. That integration gap and complete
 resource/enhancement editing remain required work, with no permanent restriction

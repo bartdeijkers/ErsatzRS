@@ -108,9 +108,12 @@ replays them through complete native validation. Receipt-qualified retained V3
 singletons and fresh V4 one-resource S1=0 banks now use the existing concept,
 shared preview and explicit publication path. Exact resource-byte correspondence
 and resolved effects on every shared display enforce the latest receipt's edit
-boundaries. Multi-group/padded banks still require explicit reconciliation of
-QTM's observed whole-bank PN/SC ordinal renumbering; actual dense-bank editor
-editing/navigation/save is calibration evidence only. No resource editing
+boundaries. Bounded receipt-qualified multi-group/padded reconciliation of QTM's
+observed whole-bank PN/SC ordinal renumbering is implemented and source-reviewed.
+P9A-04 records36 unique native passes and actual dense/padded editor saves through
+shared preview, explicit publication and database reopen. Original/native identity,
+undefined positions, the other channel and installed packages remain intact.
+No resource editing
 restriction or full resource-editor/client acceptance is accepted.
 Retained genuine singleton editor output now also reaches native shared preview,
 explicit publication/reopen, ordinary two-channel TCP and actual cold-client
@@ -1091,10 +1094,26 @@ support label or accepted by substituting decoder availability.
 - [Authoritative milestone acceptance](../progress/milestones.toml)
 
 The V4 external-editor carrier represents a complete normal/global DRCS bank as
-an ordered protected TTI set. Explicit null slots preserve missing native S1
+an ordered receipt-bound TTI set. Reconcile editor groups against the complete
+original mapping before accepting any bitmap intention. Require canonical
+original ordinals0..N-1; an edited multi-group bank may use only one uniform
+offset0 or1, matching the pinned writer, while a singleton retains ordinal0.
+PN and SC must agree in every group. Native identity, kind, logical S1 and
+physical transmission metadata come only from the authenticated original mapping,
+never the edited ordinal. Missing, extra, duplicate or out-of-order group numbers
+and protected packet changes reject; eligible defined bitmap changes still need
+whole-service permissions, native validation and exact re-encoding. This grants
+no package mutation or implicit publication authority.
+Explicit null slots preserve missing native S1
 indices for QTM's attached PN-list indexing. They contain all-F modes and no PTU;
 they never become native pages, assets or publication authority. Exact retained
 original reconstruction verifies all real references and absent slots. Preserve
+that absence through import: an unchanged padding group may gain only the pinned
+writer's default PS8000, region0 and20-second cycle declarations, never bitmap rows
+or other packet content. Source-derived normalization is distinct from actual
+padded-editor workflow evidence; P9A-04 owns both the actual GUI/native receipts
+and the remaining resource-admin, transport/client and full-editor requirements.
+Preserve
 Legacy/V2/V3 recipes, receipt/document schemas and native addon ownership.
 Pinned QTM offers no attached-resource editing/saving. The interchange reference
 owns the file contract; P9A-04 owns actual editor/stream proof and all remaining

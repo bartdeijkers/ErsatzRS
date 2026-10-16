@@ -36,8 +36,11 @@ release section when tagging a release.
   import, shared preview, explicit publication and undo. Singleton V3/V4 resource
   edits protect every shared display consumer and preserve fallback packets;
   retained actual QTeletextMaker output now passes the native publication flow.
-  Multi-subpage resource editing and full external-editor/Level 2.5 acceptance
-  remain open.
+  Receipt-bound resource-bank imports now reconcile editor numbering while
+  retaining native identities, protected packets and undefined slots. Actual
+  dense and padded editor saves reach shared preview, explicit publication and
+  reopen without modifying installed packages. Complete resource administration,
+  external-editor and Level 2.5 acceptance remain open.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source

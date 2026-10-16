@@ -2968,6 +2968,78 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 receipt-bound resource-bank editor checkpoint:
+Criterion: actual pinned QTeletextMaker bank output must retain native identities
+and supported content through draft import, shared preview and explicit publication.
+The implemented≤16 borrowed-group codec authenticates canonical original0..N-1
+against the complete receipt/native inventory, then permits only one edited global
+offset0/+1 (singleton0). Kind/raw page/nativeS1/physical subcode stay original;
+PN and SC agree in every encounter-ordered group. Defined bitmap intentions still
+pass full-service permissions, original expectations, complete native validation
+and exact final reencoding. Original raw DVB, PS/function/modes/packet presence,
+undefined halves and null all-F/no-PTU positions remain protected. Padding can
+normalize only the pinned writer's exact PS8000/RE0/CT20T defaults; no native page
+or glyph is materialized. Observable bad group order rejects; otherwise
+indistinguishable bitmap exchanges remain ordinary effects-checked bitmap edits.
+No new schemas, package mutation, configuration or implicit publication authority.
+
+All36 unique selected Rust identities pass, reusing unchanged successes. Initial
+run52fbb53b-dd05-40d9-b554-c8cbc75cc520 passes29/30:17 host parser/reconciliation,
+six existing singleton cases including actual retained QTM output, and six new
+bank cases including actual dense import/publication and sparse normalization.
+The remaining matrix's14 structural/packet mutations reach rejection; its later
+sidecar setup fails because the checked export writer correctly rejects the
+intentional invalid mapping before the host. The test now serializes that
+malformed sidecar as untrusted bytes without weakening either production writer
+or importer. Final runbe6b2ea2-2ee9-40e7-85c4-08acde095d91 passes8/8: corrected
+matrix, actual dense and actual sparse files, plus five existing V2/V3/companion/
+indexed compatibility cases. Actual dense is the one repeated identity; this is
+not a single36-pass run. All production/other fixture bytes remain unchanged;
+only corrected/new actual-bank tests differ. Exact identities/source hashes and
+commands are retained in tmp/phase9-drcs-bank-import/passing-identities.json and
+runtime-source-with-actual-sparse.json. Strict web all-target Clippy, formatting,
+architecture/progress/new-allow checks accompany the checkpoint; no full CI.
+
+The native flow proves exact baseline export, authenticated concept save, shared
+literal pixels, explicit publication, file-backed database reopen, unchanged
+fallback/display headers and untouched resource groups. Both consuming glyph
+positions change only for the edited S1; the other channel/profile/blue theme,
+original documents/receipts/calls/config and actual installed package digest stay
+unchanged. Re-export restores canonical receipt ordinals and preserves absent
+positions. Missing/extra/duplicate/reordered/mixed/arbitrary(+7) groups, raw page,
+status/function/mode/packet loss, undefined halves, forged sidecars/raw DVB,
+protected consumers and stale heads reject without publication.
+
+Actual dense GUI evidence is reused with all six image and input/output hashes
+rechecked: QTM1.0 cac2167bac933a6160cca45a45d5d4ee95355898/Qt6.10.2 shifts0/1->1/2
+and edits only first resource bitmap0x801->0x803. The genuine retained190-byte
+sparse export maps[null,resource S1=1]; the new headed actual-padded-2 trial now
+proves the missing padding behavior. All eight images are inspected by root:
+blank group1/2, PageUp to defined2/2, real overwrite A->C, PageDown still blank,
+PageUp return, actual SaveAs filename/dialog and File saved. QTM exits0; owned
+container is removed. Original SHA0e563bc16e0a5d3e339f0a035b2d802d3463e873cbba2a1c7d4d99f302a0afc7;
+saved229-byte SHA65e4580a5cd766648cd9499ba1bc2f034c95e62c9243a16edcf0311a2dacc0d9.
+Complete saved-byte comparison confirms uniform+1, unchanged all-F X28/3 and
+no rows in padding; only the defined S1=1 bitmap changes. Both actual dense and
+sparse files then pass exact regenerated export equality, native import/preview/
+explicit publication/reopen. Root visual/comparison/process receipts and driver/
+binary/image pins are under actual-padded-2; original source receipts remain linked.
+Actual-padded-1 fails the SaveAs focus guard with no output. The successful retry
+uses real X11 dialog-relative pointer coordinates, preserving activation/focus/
+no-overwrite guards, and correct nonwrapping PageDown/PageUp navigation. No direct
+editor model/save callback or manufactured saved TTI substitutes for the GUI.
+
+Canonical proof: tmp/phase9-drcs-bank-import/identity.json
+SHA256 b5672f39f946ada12a00e3cb3848cb9f6838ddbdfc53248d6f022aef231b2c84. This is native/editor
+interchange evidence, not new stream/client or full authored-engine acceptance.
+P9A-04 retains prior independent decoder/TSDuck/actual warm singleton client proof
+with its exact revision/scope. Next connect resource-bank upload to localized
+headed admin preview/Publish and ordinary-route display/navigation; qualify the
+known sparse normative-X27 decoder/client gap rather than changing native S1 or
+waiving it. Full palette/repertoire/attributes/objects/panels/fallback, wider editor
+and templates/zones, Lua/restart/admin/playback/platform criteria stay required.
+All129 milestone contracts remain unchanged. No milestone closes or push/publication.
+
 2026-10-16 actual warm DRCS client handover checkpoint:
 Criterion: actual same-URL suitable-client display/navigation must exercise a warm
 resource receiver, rather than recreating a cold decoder after publication.
@@ -7102,10 +7174,10 @@ excludes mutable progress prose; unchanged prerequisite receipts remain valid.
 Current criterion-to-next-step map (updated during response-owned lifecycle correction; historical receipts retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
-| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 bitmap concepts with native replay implemented | Existing sidecar/admin receipts plus actual singleton cold MAIN delivery above | Multi-group/padded resource, panel/geometry/set editing and wider resource admin flow remain open | Reconcile complete observed writer indices with native identities, permissions and protected padding |
+| Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts with native replay implemented | Existing sidecar/admin receipts plus dense and actual padded bank import/preview/publication/reopen above | Panel/geometry/set semantics, richer zones/dynamic fields and complete resource-admin workflow remain open | Connect existing bank import to localized headed admin, retaining template/package-version and protected effects rules |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE carrier tests; actual equal-NOS1 and independent fallback1/enhanced0 QTM Save As/native import; nine-culture headed transfer | General charset/resource/set/subpage fidelity remains open; sparse normative S1=1 independent decoding/client is blocked by the audited decoder defect | Reuse corrected carrier receipts; extend supported authored changes and select a correct independent sparse-resource decoder/client |
 | Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour and singleton bitmap flows; response-owned lifecycle3/4 plus bounded authorized handover implemented; full acceptance open | Prior actual QTM/localized admin/replay receipt071cba5d88f4218d0b9c3c71b2bf52e4687962da56cdc008c46dfefd24c01c37; retained GUI input -> native preview/publication/reopen -> ordinary TCP -> independent pixels/TSDuck -> actual cold and retained-decoder two-theme VLC124/125/124; newest21 Rust/20 protocol passes and12 inspected images above | Full Level2.5, applied-state admin, default-capacity handoff, richer editor and resource-upload headed journey remain open; demonstrated monitor withdrawal is corrected for the proven same-selection singleton flow | Authenticate multi-group QTM writer indices against exact receipt/native identities, then extend editor/import/preview/publication proof without treating this representative warm flow as engine acceptance |
-| Actual pinned QTM workflow | Base-row/foreground native-admin flow and actual singleton native/cold-client delivery proven; full acceptance open | Existing pinned editor/admin receipts; current retained actual singleton -> fresh V4 -> native preview/publication/reopen/TCP/independent pixels/actual VLC; dense-bank GUI calibration | Multi-group/padded-bank import, resource-upload headed admin, panel/geometry, wider live updates and legacy modal focus remain open | Authenticate complete PN/SC ordinal shift0/1->1/2 against receipt, native S1 and protected fields; retain broader editor criteria |
+| Actual pinned QTM workflow | Base-row/foreground native-admin flow and singleton/dense/sparse bitmap native interchange proven; full acceptance open | Existing pinned editor/admin receipts; dense SaveAs output reused and new padded GUI with8 inspected images; both exact input/output pairs pass native import/shared pixels/explicit publication/reopen and immutable package/receipt checks above | Resource-upload headed admin, panel/geometry/set semantics and wider independent stream/client coverage remain open; sparse normative X27 decoder defect is still a client acceptance blocker | Connect bank resource upload to existing localized preview/Publish controls and ordinary stream; select/prove a suitable sparse-resource decoder/client without rewriting native identities |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |

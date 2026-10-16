@@ -31,7 +31,10 @@ empty owners and one MOT/magazine.
 Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
 Replacement checks completed/pending/retired/legacy; warm DRCS passes.
 TSDuck/shifted slots/EOF/root/nested pass.
-DRCS cold TCP/VLC/pixels/errors pass. Lifecycle3/4 implemented; warm delivery/client open.
+DRCS lifecycle3/4/bounded handover: singleton cold/warm TCP and retained VLC pass.
+Banks≤16 receipt-bound import:36 unique native passes, actual dense/padded QTM
+save/import/preview/publication/reopen. P9A-04 owns proof.
+Broader resources/admin/client and full editor acceptance remain open.
 
 v2 stays pinned; Base refuses v2. Encoding retains
 defaults, secondary uncertainty and channel/model/deadline fences.
@@ -54,13 +57,10 @@ ownership. Missing bytes stay NotAcquired; descriptors/PTS do not grant readines
 Carousel PSI/PCR preserves AV/EOF; accepted ACK/cycle boundaries fence updates,
 withdrawal and expiry. Cold/warm resources, restart and Next remain open.
 
-Finite Local888 scan/Burn passes legacy/Hybrid with both audio choices,
-Off/stale fallback, AV/authored200 and default2 cleanup. P9A-04 owns generated
-command/physical-owner fences, same-held native stream/PID checks and known
-seek/duration mismatch refusal before open/retry. Source-bound initialization
-opens an independent caption decoder aligned to measured selected AV clocks.
-Both tracks/VBV retain initial888/exactOff audio at seek0.5s;
-Routes retain AV/authored200/fallback; sought HTTP/general cues stay open.
+Finite Local888 scan/Burn: legacy/Hybrid retain both tracks/VBV, Off/stale,
+AV/authored200 and default2 cleanup. P9A-04 owns command/physical-owner,
+held stream/PID/seek/duration fences and independent clock-aligned initialization.
+Initial888/exactOff audio survive seek0.5s; sought HTTP/general cues remain open.
 Linux x64/Windows interop/QEMU ARM proof is partial; native Windows/ARM, provider/
 Next and general source/seek/charset/resource behavior remain open.
 P9A-02: decoder Health/six-RID licensing. P9A-03/04 retain persistence,

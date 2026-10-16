@@ -630,7 +630,7 @@ async fn retained_v2_drcs_receipt_without_companion_still_recovers_edited_concep
     fixture.state.pool.close().await;
 }
 
-fn indexed_companion(
+pub(super) fn indexed_companion(
     flow: &Flow,
     index: usize,
 ) -> (&TeletextExportAssetMapping, &[Option<String>]) {
@@ -648,7 +648,7 @@ fn indexed_companion(
         .unwrap()
 }
 
-fn groups(records: &[TeletextTtiRecord]) -> Vec<Vec<TeletextTtiRecord>> {
+pub(super) fn groups(records: &[TeletextTtiRecord]) -> Vec<Vec<TeletextTtiRecord>> {
     let mut output = Vec::new();
     for record in records {
         if matches!(record, TeletextTtiRecord::PageNumber { .. }) {
@@ -758,7 +758,7 @@ fn assert_indexed_set(flow: &Flow, index: usize, sparse: bool) {
     assert_native_banks(flow.saved[index].candidate().encoded().unwrap(), sparse);
 }
 
-fn assert_native_banks(service: &EncodedTeletextAuthoredService, sparse: bool) {
+pub(super) fn assert_native_banks(service: &EncodedTeletextAuthoredService, sparse: bool) {
     let mut banks = service
         .pages()
         .iter()
@@ -795,7 +795,11 @@ fn assert_native_banks(service: &EncodedTeletextAuthoredService, sparse: bool) {
         }));
 }
 
-fn assert_bitmap_preview(service: &EncodedTeletextAuthoredService, sparse: bool, theme: &str) {
+pub(super) fn assert_bitmap_preview(
+    service: &EncodedTeletextAuthoredService,
+    sparse: bool,
+    theme: &str,
+) {
     for page_number in [124, 125] {
         let bank = u8::from(sparse || page_number == 125);
         assert_eq!(

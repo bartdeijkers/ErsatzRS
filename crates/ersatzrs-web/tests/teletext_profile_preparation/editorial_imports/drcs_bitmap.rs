@@ -71,7 +71,7 @@ fn unrelated_response(theme: &str, page: u16, subcode: u16) -> Value {
     value
 }
 
-fn hash(bytes: &[u8]) -> String {
+pub(super) fn hash(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut result = String::with_capacity(64);
     for byte in Sha256::digest(bytes) {
@@ -99,7 +99,7 @@ fn companion(body: &TeletextExportReceiptBody) -> (&str, &str) {
         .unwrap()
 }
 
-fn from_receipt(
+pub(super) fn from_receipt(
     receipt: &TeletextDesignExportReceipt,
     head: i64,
 ) -> NativeTeletextEditorialImportRequest {
@@ -160,7 +160,7 @@ pub(super) fn bitmap_request(
     request
 }
 
-async fn stored(
+pub(super) async fn stored(
     fixture: &Fixture,
     concept: &SavedEditorialTeletextDesign,
 ) -> TeletextDesignRevision {
@@ -177,7 +177,7 @@ async fn stored(
         .unwrap()
 }
 
-async fn restored(
+pub(super) async fn restored(
     fixture: &Fixture,
     concept: &SavedEditorialTeletextDesign,
 ) -> ersatzrs_web::host::teletext_designs::RestoredOriginalTeletextDesign {
@@ -387,7 +387,7 @@ async fn retained_latest(
         .unwrap()
 }
 
-fn read_retained_editor_file(path: &Path) -> Vec<u8> {
+pub(super) fn read_retained_editor_file(path: &Path) -> Vec<u8> {
     use std::io::Read as _;
     let maximum = policy().tti.max_bytes;
     let metadata = std::fs::symlink_metadata(path).expect("retained editor file must exist");

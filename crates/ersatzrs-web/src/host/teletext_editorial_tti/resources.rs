@@ -1,13 +1,7 @@
-//! Receipt-qualified singleton DRCS TTI reconciliation for legacy and V4 carriers.
+//! Receipt-qualified DRCS bank reconciliation; editor ordinals never grant S1 authority.
 
 use super::{Location, NativeTeletextEditorialTtiFailure as Failure, Page, Result};
-use ersatzrs_addon_contract::TeletextResourceKindWire;
-use ersatzrs_app::{
-    teletext_export_project::{
-        TeletextExportAssetMapping, TeletextExportAssetScope, TeletextExportProject,
-    },
-    teletext_tti::{TeletextTtiBudget, TeletextTtiCycleUnit},
-};
+use ersatzrs_app::teletext_tti::{TeletextTtiBudget, TeletextTtiCycleUnit};
 use ersatzrs_domain::{
     TeletextDrcsBitmap, TeletextDrcsBitmapOverlay, TeletextDrcsSubtable, TeletextResourceIdentity,
     TeletextResourceKind,
@@ -17,6 +11,72 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextEncodedDisplayRecord,
 };
 use std::time::Instant;
+
+mod groups;
+mod mapping;
+mod padding;
+pub(in crate::host) use mapping::{mapping, supported};
+
+/// Ordered receipt claims, with a fixed four-bit native subtable namespace.
+#[derive(Clone, Copy)]
+pub(in crate::host) struct DrcsTtiBank {
+    groups: [Option<DrcsTtiContext>; 16],
+    len: usize,
+}
+impl DrcsTtiBank {
+    fn location(self) -> Location {
+        self.groups.iter().flatten().next().map_or(
+            Location {
+                page: 0,
+                subcode: 0,
+                resource: None,
+            },
+            |context| context.location(),
+        )
+    }
+    fn parse(
+        self,
+        bytes: &[u8],
+        budget: TeletextTtiBudget,
+        deadline: Instant,
+    ) -> Result<ersatzrs_app::teletext_tti::TeletextTtiDocument> {
+        self.location()
+            .parse(bytes, budget, deadline)
+            .map_err(|mut error| {
+                // Only error coordinates use the failing record's group position.
+                // Uploaded PN/SC values never choose or authenticate native S1.
+                if let Some(cause) = &error.cause {
+                    if bytes.len() <= budget.max_bytes
+                        && cause.line <= budget.max_records.saturating_add(1)
+                    {
+                        let count = bytes
+                            .split(|byte| *byte == b'\n')
+                            .take(cause.line)
+                            .filter(|line| line.starts_with(b"PN,"))
+                            .take(17)
+                            .count();
+                        if count > 0 && count <= self.len {
+                            let location = self.group_location(count - 1);
+                            error.resource = location.resource;
+                            error.page = location.page;
+                            error.subcode = location.subcode;
+                        }
+                    }
+                }
+                error
+            })
+    }
+    fn group_location(self, index: usize) -> Location {
+        self.groups.get(index).copied().flatten().map_or_else(
+            || Location {
+                resource: None,
+                subcode: u16::try_from(index).unwrap_or(u16::MAX),
+                ..self.location()
+            },
+            DrcsTtiContext::location,
+        )
+    }
+}
 
 /// Borrowed trusted native identity, independently checked against the linked asset.
 #[derive(Clone, Copy)]
@@ -35,83 +95,6 @@ impl DrcsTtiContext {
             resource: Some(self.identity),
         }
     }
-}
-
-/// Singleton V4 banks carry the same checked records as a legacy companion.
-/// Multi-group and padded banks require separate ordinal reconciliation.
-pub(in crate::host) fn supported(companion: &TeletextExportAssetMapping) -> bool {
-    match &companion.scope {
-        TeletextExportAssetScope::DrcsTti {
-            editor_ordinal: 0, ..
-        } => true,
-        TeletextExportAssetScope::DrcsTtiSet { resource_names } => {
-            matches!(resource_names.as_slice(), [Some(_)])
-        }
-        _ => false,
-    }
-}
-
-pub(in crate::host) fn mapping(
-    companion: &TeletextExportAssetMapping,
-    project: &TeletextExportProject,
-    service: &EncodedTeletextAuthoredService,
-) -> Result<DrcsTtiContext> {
-    let invalid = || {
-        Location {
-            page: 0,
-            subcode: 0,
-            resource: None,
-        }
-        .error(Failure::Mapping)
-    };
-    let (resource_name, singleton_set) = match &companion.scope {
-        TeletextExportAssetScope::DrcsTti {
-            resource_name,
-            editor_ordinal: 0,
-        } => (resource_name, false),
-        TeletextExportAssetScope::DrcsTtiSet { resource_names } => {
-            let [Some(name)] = resource_names.as_slice() else {
-                return Err(invalid());
-            };
-            (name, true)
-        }
-        _ => return Err(invalid()),
-    };
-    let resource = project
-        .assets
-        .iter()
-        .find(|asset| asset.name == *resource_name)
-        .ok_or_else(invalid)?;
-    let TeletextExportAssetScope::Resource {
-        identity,
-        physical_subcode,
-    } = &resource.scope
-    else {
-        return Err(invalid());
-    };
-    if singleton_set && identity.subpage != 0 {
-        return Err(invalid());
-    }
-    let page = service
-        .pages()
-        .iter()
-        .filter_map(EncodedTeletextAuthoredPage::resource_header)
-        .find(|header| {
-            let native = header.identity();
-            matches!(
-                (native.kind(), identity.kind),
-                (TeletextResourceKind::Drcs, TeletextResourceKindWire::Drcs)
-                    | (TeletextResourceKind::Gdrcs, TeletextResourceKindWire::Gdrcs)
-            ) && native.page().magazine() == identity.page.magazine
-                && native.page().page() == identity.page.page
-                && native.logical_subpage().get() == identity.subpage
-                && header.physical_subcode() == *physical_subcode
-        })
-        .ok_or_else(invalid)?;
-    Ok(DrcsTtiContext {
-        identity: page.identity(),
-        physical_subcode: *physical_subcode,
-    })
 }
 
 fn metadata(page: &Page<'_>, location: Location, status: u16) -> Result<()> {
@@ -202,12 +185,11 @@ fn compare_packets(
     Ok(())
 }
 
-/// Exact full candidate/file match; edited metadata never derives native headers.
-pub(in crate::host) fn validate(
+fn validate_page(
     context: DrcsTtiContext,
-    bytes: &[u8],
+    page: &Page<'_>,
     service: &EncodedTeletextAuthoredService,
-    limits: (TeletextTtiBudget, usize),
+    max_units: usize,
     deadline: Instant,
 ) -> Result<()> {
     let location = context.location();
@@ -222,17 +204,56 @@ pub(in crate::host) fn validate(
             })
         })
         .ok_or_else(|| location.error(Failure::Mapping))?;
-    let projection = project_encoded_teletext_drcs(resource, limits.1)
+    let projection = project_encoded_teletext_drcs(resource, max_units)
         .map_err(|_| location.error(Failure::Packet))?;
-    let document = location.parse(bytes, limits.0, deadline)?;
-    let page = Page::index_identity(&document, location.page, 0, location, deadline)?;
     metadata(
-        &page,
+        page,
         location,
         super::super::teletext_export_project::TeletextEditorCarrier::Legacy
             .status(projection.header.controls.raw(), 0),
     )?;
-    compare_native(&page, &projection.records, location, deadline)
+    compare_native(page, &projection.records, location, deadline)
+}
+
+fn validate_original<'a>(
+    bank: DrcsTtiBank,
+    document: &'a ersatzrs_app::teletext_tti::TeletextTtiDocument,
+    service: &EncodedTeletextAuthoredService,
+    max_units: usize,
+    deadline: Instant,
+) -> Result<groups::Groups<'a>> {
+    let groups = groups::Groups::index(document, bank, false, deadline)?;
+    for index in 0..bank.len {
+        let page = groups.page(index, bank, deadline)?;
+        if let Some(context) = bank.groups[index] {
+            validate_page(context, &page, service, max_units, deadline)?;
+        } else {
+            padding::validate(&page, bank, index, false)?;
+        }
+    }
+    Ok(groups)
+}
+
+/// Exact final candidate/file match, allowing only the pinned editor's global
+/// multi-group ordinal offset. Native S1 always comes from the trusted bank.
+pub(in crate::host) fn validate(
+    bank: DrcsTtiBank,
+    bytes: &[u8],
+    service: &EncodedTeletextAuthoredService,
+    limits: (TeletextTtiBudget, usize),
+    deadline: Instant,
+) -> Result<()> {
+    let document = bank.parse(bytes, limits.0, deadline)?;
+    let groups = groups::Groups::index(&document, bank, true, deadline)?;
+    for index in 0..bank.len {
+        let page = groups.page(index, bank, deadline)?;
+        if let Some(context) = bank.groups[index] {
+            validate_page(context, &page, service, limits.1, deadline)?;
+        } else {
+            padding::validate(&page, bank, index, true)?;
+        }
+    }
+    bank.location().check_deadline(deadline)
 }
 
 fn table(
@@ -250,21 +271,43 @@ fn table(
 }
 
 pub(in crate::host) fn reconcile(
-    context: DrcsTtiContext,
+    bank: DrcsTtiBank,
     original: &[u8],
     edited: &[u8],
     service: &EncodedTeletextAuthoredService,
     limits: (TeletextTtiBudget, usize),
     deadline: Instant,
 ) -> Result<Vec<TeletextDrcsBitmapOverlay>> {
+    let location = bank.location();
+    let original = bank.parse(original, limits.0, deadline)?;
+    let edited = bank.parse(edited, limits.0, deadline)?;
+    let before = validate_original(bank, &original, service, limits.1, deadline)?;
+    let after = groups::Groups::index(&edited, bank, true, deadline)?;
+    let mut changes = Vec::new();
+    for index in 0..bank.len {
+        location.check_deadline(deadline)?;
+        let before = before.page(index, bank, deadline)?;
+        let after = after.page(index, bank, deadline)?;
+        if let Some(context) = bank.groups[index] {
+            changes.extend(reconcile_page(context, &before, &after, service, deadline)?);
+        } else {
+            padding::validate(&after, bank, index, true)?;
+        }
+    }
+    location.check_deadline(deadline)?;
+    Ok(changes)
+}
+
+fn reconcile_page(
+    context: DrcsTtiContext,
+    before: &Page<'_>,
+    after: &Page<'_>,
+    service: &EncodedTeletextAuthoredService,
+    deadline: Instant,
+) -> Result<Vec<TeletextDrcsBitmapOverlay>> {
     let location = context.location();
-    validate(context, original, service, limits, deadline)?;
-    let original = location.parse(original, limits.0, deadline)?;
-    let edited = location.parse(edited, limits.0, deadline)?;
-    let before = Page::index_identity(&original, location.page, 0, location, deadline)?;
-    let after = Page::index_identity(&edited, location.page, 0, location, deadline)?;
     metadata(
-        &after,
+        after,
         location,
         before
             .status

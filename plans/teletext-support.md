@@ -442,6 +442,10 @@ same-selection monitor handover now also retains the actual VLC decoder through
 singleton MAIN bitmap publication and124/125/124 navigation on two ordinary URLs.
 Off, expiry, changed selection and failed recovery retain withdrawal behavior.
 Broader resource/client rendering and complete editor interchange remain open.
+Receipt-bound resource-bank import now connects genuine dense and padded QTM
+saves to native preview, explicit publication and database reopen. The next flow
+step is localized headed resource upload and ordinary-route client proof;
+P9A-04 retains exact evidence and the sparse normative-X27 decoder gap.
 P9A-04 owns the current criterion map and proof; full Level2.5 and editor
 acceptance remain unchanged.
 Independent original libzvbi 0.2.42 warm-cache DRCS decoding now passes four

@@ -53,9 +53,9 @@ pub enum NativeTeletextEditorialTtiFailure {
 #[error("teletext editor {failure:?} at resource {resource:?}, page code {page}, subcode {subcode}, row {row:?}, column {column:?}, designation {designation:?}")]
 pub struct NativeTeletextEditorialTtiError {
     pub failure: NativeTeletextEditorialTtiFailure,
-    /// Native resource identity; absence identifies the ordinary display path.
+    /// Native resource identity; absent for displays and editor-only padding.
     pub resource: Option<TeletextResourceIdentity>,
-    /// Decimal display page, or raw hexadecimal address when `resource` is set.
+    /// Decimal display page, or a resource bank's raw hexadecimal address.
     pub page: u16,
     pub subcode: u16,
     pub row: Option<u8>,
@@ -137,10 +137,26 @@ impl<'a> Page<'a> {
         location: Location,
         deadline: Instant,
     ) -> Result<Self> {
+        Self::index_records(
+            document.records(),
+            expected_page,
+            expected_ordinal,
+            location,
+            deadline,
+        )
+    }
+
+    fn index_records(
+        records: &'a [TeletextTtiRecord],
+        expected_page: u16,
+        expected_ordinal: u64,
+        location: Location,
+        deadline: Instant,
+    ) -> Result<Self> {
         let mut page = Self::default();
         let mut page_numbers = 0_usize;
         let mut subcodes = 0_usize;
-        for record in document.records() {
+        for record in records {
             location.check_deadline(deadline)?;
             match record {
                 TeletextTtiRecord::PageNumber {

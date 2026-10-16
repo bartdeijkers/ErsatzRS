@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: prove warm resource client rendering and editor interchange'
+current_focus = 'P9A-04: connect resource-bank editor import to preview and publication'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -128,9 +128,15 @@ corrects the actual monitor PID withdrawal defect while preserving Off/expiry/
 failure safety. All21 final Rust cases and20 protocol cases pass;12 inspected
 actual VLC images prove retained decoders, two themes and124/125/124 through
 singleton bitmap publication. P9A-04 owns exact proof and remaining criteria.
-Next authenticate observed multi-group QTM ordinal shifts against exact native
-resource identities/protected fields, then extend editor/import/preview/publication
-proof. Padded-resource and complete interchange acceptance remain required.
+The≤16 receipt-bound bank codec now passes36 unique focused Rust cases,
+including retained actual dense and new actual padded QTM saves through native
+import, shared preview, explicit publication and database reopen. Eight new actual
+padded GUI images are root-reviewed; undefined positions and native S1 remain exact.
+P9A-04 owns precise reuse/failure/source receipts and unchanged broader acceptance.
+Next connect resource-bank upload to localized headed admin preview/Publish and
+ordinary stream/client navigation, resolving the known sparse normative-X27
+independent decoder/client gap without changing native identities. Full editor,
+authored engine, Lua/restart/admin/playback/platform acceptance remains required.
 Keep all unproven engine/editor/Lua/restart/admin/platform criteria open.
 The additional legacy SaveAs focus failure remains explicit: real X11 input
 succeeds for the dense bank but still fails its legacy focus guard.
