@@ -2832,13 +2832,43 @@ with the matching library directory. A successful control wrapper records an
 expected decoder failure; inspect `conformance_passed` and `exit_code`. This is
 scoped independent MAIN decoding, not actual client/navigation or a full-engine
 pass. The candidate still exposes41 MAIN columns; panels and complete Level2.5
-client coverage remain open. P9A-04 owns exact receipts and the next client step.
+client coverage remain open. P9A-04 owns exact receipts and the next joined editor step.
+
+The opt-in Linux-x64 cold-client fixture
+`published_sparse_originals_serve_live_ordinary_urls` now supplies sparse-original
+readiness metadata for the ordinary application URLs. Its actual headed trial
+qualifies the combined candidate before process creation and rechecks exact
+library/plugin mappings, file identities and hashes after activation and before
+every image. Only owned VLC child environments select the candidate; neither
+the application host nor installed runtime libraries are modified.
+
+```bash
+python3 scripts/e2e/teletext-live-client-trial.py \
+  "$NATIVE_PROOF/ready.json" "$NEW_CLIENT_PROOF" \
+  --decoder-candidate-proof "$POSITIVE_SPARSE_PROOF/receipt.json" \
+  --decoder-candidate-proof-sha256 "$POSITIVE_RECEIPT_SHA256" \
+  --decoder-candidate-build "$DECODER_BUILD" \
+  --decoder-candidate-proof-root "$DECODER_INPUT" \
+  --decoder-candidate-build-sha256 "$BUILD_RECEIPT_SHA256"
+```
+
+All five candidate arguments are required together. The positive proof and build
+receipt need independently retained SHA256 pins; candidate mode accepts actual
+ordinary v1 URLs, not captured replay or an effective-state manifest. Omitting
+these arguments keeps the separately hash-qualified stock path. Inspect all six
+actual MAIN navigation images and successful owned client exits before writing
+the exact native completion marker; also require terminal native success and its
+state/cleanup assertions. A marker alone is insufficient. Current actual evidence
+covers sparse originals and a separate dense stock regression, not the edited
+padded bank. Navigation uses owned native Qt spin arrows; keyboard numeric entry,
+56-column panels and complete client/engine acceptance remain unproven.
 
 Run/export/replay instructions are in the
 [resource calibration workflow](../../scripts/e2e/README.md#teletext-resource-decoder-calibration).
-This proves representative independent decoding and offscreen native glyph
-rendering. It proves neither actual client display/navigation nor TS delivery,
-full Level 2.5 support, the QTeletextMaker GUI workflow or design publication.
+The standalone resource calibration proves representative independent decoding
+and offscreen native glyph rendering. Actual client and ordinary-stream proof
+are separate as above; full Level 2.5, QTeletextMaker workflow and publication
+acceptance still require their complete P9A-04 evidence.
 
 ### Pinned independent object decoding
 

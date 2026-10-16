@@ -2968,6 +2968,55 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 sparse ordinary-client checkpoint:
+Criterion: display/navigate legal sparse normal-DRCS originals on the actual
+ordinary stream URLs with a qualified client, retaining native S1 and channel
+isolation. No authored packets, page identities or decoder oracle change.
+The explicit candidate mode authenticates the independently positive receipt
+and complete build provenance before starting clients. Each owned VLC process
+must map exactly the qualified library and existing plugin, with matching path,
+device/inode and SHA256 after activation and before every navigation screenshot.
+The candidate LD_LIBRARY_PATH applies only to those two children, not the native
+host or system. Stock mode retains its distinct original library checks.
+
+Actual VLC3.0.20-3build6 with the combined test-only libzvbi0.2.42 candidate
+111b42e01d65422b97406860268ee7c90d2dac2e8dc6cdded71be81affc34107 now shows
+both sparse S1=1/slot0 consumers on124/0020 and125/0020, in red Day and blue Night.
+All six original actual images are inspected by root at full resolution:
+124.20->125.20->124.20 on both ordinary /iptv/hls-direct/{channel}.ts URLs.
+Both clients exit0 before the exact marker is released. The native fixture then
+checks unchanged accepted generations, requests, originals, resource documents,
+receipts, installed package/profile/binding state, and closes its owned server.
+Run281fcdea-cd86-47a4-8cbc-e9973af58d5d passes in101.491s.
+The independent candidate build/original-pixel receipt above is reused unchanged;
+these new clients prove actual rendering/navigation, not another TSDuck/AV gate.
+
+The shared dense/stock path is separately exercised after the helper change.
+Actual mapped stock library134705a7ef4d982eb57bf71a9378f3eb0d95237c8dcb686d684e35471ae834b0
+and existing plugin are verified in both owned clients. Six further actual images
+show the dense124/mirrored125 glyphs, Q only on Day124, isolated red/blue palettes
+and124.20->125.20->124.20. Both clients exit0; native state/cleanup assertions pass.
+Run4456ecb4-0449-4b64-bbc8-a1872c751069 passes in100.405s.
+The first sparse host runf0c72ad7-4824-4bc1-9a09-100e88f422c8 timed out waiting180s
+because no separate GUI was launched during emergency preservation. It remains
+a failed orchestration run, not a pass or a demonstrated packet defect.
+
+Canonical proof: tmp/phase9-sparse-client/identity.json
+SHA256 5372bbf72a605d756999e848e44fad0c3f1780c537c2658f2b4f8145f4f677c2.
+Runtime source is exact committed1b97e40b. Reuse the43 focused Python regressions,
+strict web all-target Clippy and formatting from the implementation checkpoint.
+All44 imported non-main helper AST/global nodes remain unchanged; warm protocol
+tests pass and their earlier actual runtime evidence remains scoped and valid.
+No production Rust, DOM/island, schema, dependency, argv or installed decoder
+changes. Navigation uses actual owned Qt spin arrows, not keyboard-number proof.
+Candidate41-column MAIN scope, stock sparse failures, side panels, actual padded
+editor save joined through admin/publication, full authored/editor/Lua/restart/
+hydrated-admin/default-capacity/playback/platform acceptance remain open.
+This closes the sparse-original cold client seam only; P9A-04 remains In progress.
+Next join the retained actual padded sparse editor save to the existing complete
+bank import/preview/explicit publication/ordinary-route/client flow. Engine-first
+and all129 milestone contracts remain unchanged; no push or publication.
+
 2026-10-16 sparse independent-decoder checkpoint:
 Criterion: independently decode legal sparse normal DRCS without rewriting native
 identities, generated packets or the fixed literal pixel oracle. Source-backed
@@ -7284,18 +7333,19 @@ Current criterion-to-next-step map (updated during response-owned lifecycle corr
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
 | Original addon templates/themes/zones | Captured metadata, immutable originals, row/local-X26 and schema3 singleton/bank bitmap concepts implemented | Prior sidecar/editor receipts plus exact fresh-receipt dense bank headed import/preview/publication, package retention and reopen above | Richer zones/dynamic fields, panel/geometry/set semantics and complete resource interchange remain open | Extend the next concrete authored/editor feature while retaining template/package-version and protected effects rules |
-| Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE and actual dense/padded editor receipts; combined test decoder now independently qualifies unchanged sparseS1=1 MAIN pixels above | General charset/resource/set/subpage fidelity remains open; stock X27/normal-DRCS decoding and actual candidate client remain unproven | Verify the qualified decoder/plugin mappings in owned clients and prove sparse navigation before reconnecting padded editor publication |
-| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour, singleton cold/warm and dense-bank admin flows; full acceptance open | Prior profile/validation and warm receipts; new headed Chromium/Firefox real bank upload/preview/Request/Publish, same-host ordinary TCP, independent pixels/fallback/TSDuck and actual two-theme VLC124/125/124 above | Full Level2.5, applied-state admin, default-capacity handoff, sparse and richer editor/client matrix remain open | Prove actual sparse client display with the now positive test decoder, preserving native S1; reuse this joined dense flow rather than repeating general foundation audits |
-| Actual pinned QTM workflow | Base-row/foreground native-admin and singleton/dense/sparse bitmap native interchange; dense bank joined admin/stream/client proven | Existing pinned genuine dense/padded GUI files; exact original/download/save equality, fresh receipt/native concept barrier, headed explicit publication, independent emitted pixels/fallback, client navigation and reopen above | Actual sparse candidate client and edited publication, panel/geometry/set semantics and complete authored editor coverage remain open | Qualify the positive sparse decoder in an actual client; extend remaining authored changes against the same file/validation/preview/publication boundaries |
+| Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE and actual dense/padded editor receipts; combined test decoder now independently qualifies unchanged sparseS1=1 MAIN pixels above | General charset/resource/set/subpage fidelity and stock sparse decoding remain open; the qualified candidate now passes actual sparse-original client navigation | Reconnect retained padded editor publication to this qualified ordinary client flow |
+| Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Connected representative colour, singleton cold/warm and dense-bank admin flows; full acceptance open | Prior profile/validation and warm receipts; new headed Chromium/Firefox real bank upload/preview/Request/Publish, same-host ordinary TCP, independent pixels/fallback/TSDuck and actual two-theme VLC124/125/124 above | Full Level2.5, applied-state admin, default-capacity handoff, sparse and richer editor/client matrix remain open | Join retained actual sparse editor output to the already proven original sparse ordinary-client flow, preserving native S1 and reusing the joined dense browser flow |
+| Actual pinned QTM workflow | Base-row/foreground native-admin and singleton/dense/sparse bitmap native interchange; dense bank joined admin/stream/client proven | Existing pinned genuine dense/padded GUI files; exact original/download/save equality, fresh receipt/native concept barrier, headed explicit publication, independent emitted pixels/fallback, client navigation and reopen above | Actual sparse edited publication/client, panel/geometry/set semantics and complete authored editor coverage remain open; candidate original-client navigation now passes | Join the retained actual padded save through admin import/shared preview/explicit publication and strict edited-S1=1 decoding/client checks |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Full authored engine acceptance | Typed model/compiler/preview/transport implemented with incomplete conformance | Existing palette/repertoire/attribute/object/DRCS wire and independent-decoder receipts; Level1/1.5 and representative suitable-client trials | Complete Table4/A7/A8/C3, repertoire/alias, panels, resources/objects, fallback/warm lifecycle, editor and platform/client coverage remains required | Prioritize authored Level2.5 and actual editor interchange; close only individually evidenced clauses. Production guide addon waits for independent generic engine acceptance |
 
-Concrete next action: verify actual candidate/plugin mappings in owned sparse
-clients, then prove124/125/124 display/navigation on ordinary URLs and reconnect
-the retained actual padded editor save to shared preview/explicit publication.
-The independent sparse decoder is now positive only for the separately receipted
-test candidate; stock decoding and full feature coverage remain open. Reuse the now joined dense-bank and prior singleton warm evidence unless
+Concrete next action: reconnect the retained actual padded editor save through
+shared admin preview/explicit publication to ordinary URLs, with strict edited
+S1=1 pixels/fallback and qualified-client navigation. Exact candidate/plugin
+mappings and sparse-original124/125/124 navigation now pass above.
+Independent and actual sparse client proof is scoped to the separately receipted
+test candidate; stock sparse decoding and full feature coverage remain open. Reuse the now joined dense-bank and prior singleton warm evidence unless
 relevant code/inputs change. Do not substitute this representative cold MAIN flow
 for full standards, editor, Lua/restart, applied-state admin, default-capacity,
 retained/Next or six-platform acceptance. Production content still waits for
@@ -7307,11 +7357,12 @@ slate with MPEG2/caption/alternate-audio source topology. Resolve compatible
 admission/final-mux handoff without bypassing capacity or dropping tracks.
 Four-slot normal-route success does not establish wait-slate acceptance. These
 concrete behavior gaps determine integration work; no general audit expansion.
-Sparse native/editor indexing is valid; the current decoder's audited normative
-X27 defects block its streamed glyph proof. Select/verify a correct independent
-candidate and actual client; never shift native packet fields or add native S1=0.
-Attached-resource editing has no QTM save action and remains required integration
-work. Full charset/resource/editor/panel, warm open-client and remaining
+Sparse native/editor indexing is valid; audited upstream X27/normal-DRCS defects
+retain their negative evidence. The qualified test candidate now proves streamed
+original glyphs/navigation; native fields and absent S1=0 remain unchanged.
+Actual monochrome dense/padded QTM saves and native resource concepts are proven.
+The padded save still needs the joined admin/ordinary/client step, and richer
+attached-resource editing remains required integration work. Full charset/resource/editor/panel, warm open-client and remaining
 admin/Lua flows stay required. Authenticated base-row/local-operand imports,
 unchanged-file refusal and cumulative concepts now have proof above. Other
 protected enhancement/PS/resource and geometry editing still require the explicit

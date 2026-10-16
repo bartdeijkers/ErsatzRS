@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: prove sparse resource navigation in a qualified client'
+current_focus = 'P9A-04: join the actual padded sparse editor save to admin and ordinary clients'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,22 +62,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Emergency preservation checkpoint: sparse ordinary-stream host/client wiring
-now has strict web all-target Clippy and 43 focused Python protocol/qualification
-regressions. Canonical logs and source-equivalence receipt are retained under
-`tmp/phase9-sparse-client/`. The first native sparse host reached readiness, but
-no completed headed client display/navigation result is claimed. Next run the
-receipted candidate against fresh ordinary URLs, inspect both themes through
-124/125/124, then complete native cleanup/state checks. This is a work checkpoint,
-not P9A-04 or engine acceptance; all remaining clauses below stay open.
+Sparse originals now pass actual qualified-client124/125/124 display/navigation
+on two ordinary URLs, with exact mapped library/plugin identities, both themes,
+four owned client exit0 results including the stock dense control, and native
+state/cleanup checks. P9A-04 owns the canonical proof and prior failed waiter.
+Next join the actual padded sparse QTM save to the existing headed bank
+import/shared preview/explicit publication/ordinary/client flow. Preserve strict
+S1=1 edited pixels and Level1/1.5 fallback; no full engine acceptance is implied.
 
 Dense resource-bank transfer now connects the retained pinned QTM save to
 headed Chromium/Firefox SSR forms, exact shared preview, separate Request/Publish,
 same-host ordinary TCP/TSDuck/independent bitmap and Level1/1.5 fallback, and
 actual two-theme VLC124/125/124 navigation. P9A-04 owns the receipts. Reuse this
 representative flow. A receipted test-only decoder now passes unchanged sparse
-S1=1 after the audited X27/normal-DRCS corrections. Next prove the candidate's
-actual mapped identity and sparse client display/navigation, then extend the
+S1=1 after the audited X27/normal-DRCS corrections. The actual sparse-original
+client now passes; next connect the retained padded editor save, then extend the
 remaining authored/editor feature clauses. Full engine, Lua/restart, hydrated
 admin and playback/platform acceptance remain open; production guide work waits.
 

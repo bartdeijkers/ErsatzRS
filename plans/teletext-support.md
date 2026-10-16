@@ -448,9 +448,12 @@ resource upload now passes localized headed SSR/no-JS admin, same-host ordinary
 TCP, independent bitmap/fallback decoding and suitable-client navigation.
 P9A-04 retains the exact proof. A separately receipted independent test decoder
 now handles unchanged sparse native S1=1 after the audited X27 and normal-DRCS
-formatter corrections; original/X27-only controls still fail exactly. Next prove
-actual client mapping/display/navigation with that qualified candidate. No native
-S1 rewrite, stock-client success or reduced authored target is accepted.
+formatter corrections; original/X27-only controls still fail exactly. Actual
+ordinary-URL candidate/plugin mappings and sparse-original124/125/124 display
+now pass with two themes; the dense stock-client control also passes.
+Next join the actual padded sparse QTM save to the same admin/publication/client
+flow with strict edited-S1=1 and fallback decoding. No native S1 rewrite, stock
+sparse success or reduced authored target is accepted.
 P9A-04 owns the current criterion map and proof; full Level2.5 and editor
 acceptance remain unchanged.
 Independent original libzvbi 0.2.42 warm-cache DRCS decoding now passes four

@@ -47,7 +47,9 @@ release section when tagging a release.
   external-editor and Level 2.5 acceptance remain open.
   Sparse ordinary-stream client trials now support an explicitly receipted
   decoder candidate and verify the decoder actually loaded by each client;
-  actual sparse client display/navigation has not yet been accepted.
+  actual sparse-original display and two-theme navigation now pass on ordinary
+  stream URLs with that qualified candidate. Joined sparse editor publication
+  and complete Level 2.5 acceptance remain open.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source
