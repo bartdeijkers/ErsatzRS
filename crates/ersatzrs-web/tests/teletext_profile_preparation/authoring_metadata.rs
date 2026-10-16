@@ -59,6 +59,14 @@ pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
 pub(super) fn write(fixture: &Fixture, theme: &str, value: &Value) -> Vec<u8> {
     // Deliberately retain exact noncanonical whitespace in the saved original.
     let bytes = serde_json::to_vec_pretty(value).unwrap();
+    write_bytes(fixture, theme, bytes)
+}
+
+pub(super) fn write_compact(fixture: &Fixture, theme: &str, value: &Value) -> Vec<u8> {
+    write_bytes(fixture, theme, serde_json::to_vec(value).unwrap())
+}
+
+fn write_bytes(fixture: &Fixture, theme: &str, bytes: Vec<u8>) -> Vec<u8> {
     std::fs::write(
         fixture
             .root

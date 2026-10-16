@@ -14,7 +14,7 @@ X27 and X26/metadata decoding pass; full client open.
 C2 keeps per-instance final words; differing charset aliases remain pending.
 G1 mode/fallback and Latin decoder gaps survive.
 165 direct;4 pending. Polish/Turkish QTM/headed pass.
-Dual-scope bounds pass; richer flow open(P9A-04).
+Two-scope QTM/native pass; stream/client open(P9A-04).
 Raw/TL imager reused; hydration/client/Hebrew open.
 Glyph/DRCS keep original resources and loser/blank lineage; lowering owns selectors.
 Geometry checks raw own AP areas; A7 retains whole-instance type masks and

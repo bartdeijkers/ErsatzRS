@@ -49,6 +49,8 @@ mod compiler_polish_spacing;
 mod compiler_polish_underline;
 #[path = "editorial_imports/compiler_polish_underline_delivery.rs"]
 mod compiler_polish_underline_delivery;
+#[path = "editorial_imports/compiler_scopes.rs"]
+mod compiler_scopes;
 #[path = "editorial_imports/compiler_turkish.rs"]
 mod compiler_turkish;
 #[path = "editorial_imports/compiler_turkish_delivery.rs"]
@@ -201,9 +203,24 @@ pub(super) async fn setup_with_fixture_policy(
     fixture: Fixture,
     encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
 ) -> (Fixture, Flow) {
+    Box::pin(setup_with_fixture_policy_and_writer(
+        response,
+        fixture,
+        encoding,
+        authoring_metadata::write,
+    ))
+    .await
+}
+
+pub(super) async fn setup_with_fixture_policy_and_writer(
+    response: fn(&str, u16, u16) -> serde_json::Value,
+    fixture: Fixture,
+    encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+    write: fn(&Fixture, &str, &serde_json::Value) -> Vec<u8>,
+) -> (Fixture, Flow) {
     authoring_metadata::install(&fixture).await;
     for (channel, theme) in [(1, "day"), (2, "night")] {
-        authoring_metadata::write(&fixture, theme, &response(theme, 124, 32));
+        write(&fixture, theme, &response(theme, 124, 32));
         let profile = fixture.profile(theme, theme, "good").await;
         fixture.bind(channel, &profile, None).await;
     }

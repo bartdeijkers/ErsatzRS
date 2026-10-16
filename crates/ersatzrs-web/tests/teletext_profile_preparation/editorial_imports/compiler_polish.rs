@@ -423,7 +423,7 @@ async fn no_bank_polish_rejects_a_changed_enlarged_fragment_outside_original_fre
     fixture.state.pool.close().await;
 }
 
-fn assert_actual_tti_edit(original: &[u8], edited: &[u8], code: u8) {
+pub(super) fn assert_actual_tti_edit(original: &[u8], edited: &[u8], code: u8) {
     let mut expected = parse_teletext_tti(original, policy().tti)
         .unwrap()
         .records()

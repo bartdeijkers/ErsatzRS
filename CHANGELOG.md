@@ -705,7 +705,10 @@ release section when tagging a release.
   fallback under both primary designations. Mixed Polish/Turkish pages keep
   stable compiler slots, and native editorial validation retains zone and
   resource ownership. Both resource scopes can carry all four variants together
-  while retaining caller page, output and work limits. A recorded QTeletextMaker edit
+  while retaining caller page, output and work limits. An eight-page actual editor
+  trial now preserves both scopes through receipt-bound concept validation, shared
+  preview, separate publication and restart recovery. Ordinary delivery of this
+  combined set remains unproven. The earlier single-cell Turkish editor flow
   reaches receipt-bound concepts, shared preview, explicit publication and two
   ordinary streams with transport and independent bitmap checks. Localized
   headed Chromium and Firefox now prove receipt-bound import, exact preview,
