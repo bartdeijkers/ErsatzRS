@@ -73,7 +73,11 @@ fn authored_operation(
     };
     if !matches!(
         operation,
-        TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. }
+        TeletextColumnOperation::G0 { .. }
+            | TeletextColumnOperation::G1 { .. }
+            | TeletextColumnOperation::Foreground { .. }
+            | TeletextColumnOperation::Background { .. }
+            | TeletextColumnOperation::Attributes { .. }
     ) {
         return Err(fail());
     }

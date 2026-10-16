@@ -587,7 +587,23 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
                 TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. }
             )
         });
-        let overlay = if !prepared.cumulative.object_operands.is_empty() || has_glyphs {
+        let has_object_attributes = prepared.cumulative.object_operands.iter().any(|operand| {
+            matches!(
+                operand.expected(),
+                TeletextColumnOperation::Foreground { .. }
+                    | TeletextColumnOperation::Background { .. }
+                    | TeletextColumnOperation::Attributes { .. }
+            )
+        });
+        let overlay = if has_object_attributes {
+            TeletextSavedEditorialOverlay::new_with_local_object_attributes(
+                prepared.provenance.clone(),
+                prepared.cumulative.rows.clone(),
+                prepared.cumulative.operands.clone(),
+                prepared.cumulative.object_operands.clone(),
+                prepared.cumulative.bitmaps.clone(),
+            )?
+        } else if !prepared.cumulative.object_operands.is_empty() || has_glyphs {
             TeletextSavedEditorialOverlay::new_with_local_object_operands(
                 prepared.provenance.clone(),
                 prepared.cumulative.rows.clone(),

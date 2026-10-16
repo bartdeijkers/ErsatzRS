@@ -105,14 +105,35 @@ fn original_local_catalogue_membership_and_exact_source_are_required() {
 }
 
 #[test]
-fn original_non_glyph_object_command_is_not_a_glyph_operand() {
-    let catalog = catalog(TeletextColumnOperation::Attributes {
-        double_height: false,
-        double_width: false,
-        boxed: false,
-        conceal: false,
-        invert: false,
-        underline_or_separated_mosaics: false,
+fn original_colour_and_attribute_commands_keep_exact_original_local_source() {
+    for operation in [
+        TeletextColumnOperation::Foreground {
+            colour: ersatzrs_domain::TeletextColourReference::new(18).unwrap(),
+        },
+        TeletextColumnOperation::Background {
+            colour: ersatzrs_domain::TeletextColourReference::new(0).unwrap(),
+        },
+        TeletextColumnOperation::Attributes {
+            double_height: true,
+            double_width: true,
+            boxed: false,
+            conceal: false,
+            invert: false,
+            underline_or_separated_mosaics: false,
+        },
+    ] {
+        let catalog = catalog(operation);
+        let (_, column, retained) =
+            authored_operation(&catalog, owner(32), source(), location()).unwrap();
+        assert_eq!((column, retained), (0, operation));
+        assert!(authored_operation(&catalog, owner(33), source(), location()).is_err());
+    }
+}
+
+#[test]
+fn unsupported_original_object_family_cannot_gain_operand_edit_authority() {
+    let catalog = catalog(TeletextColumnOperation::G1Alpha {
+        code: ersatzrs_domain::TeletextG1AlphaCode::new(b'A').unwrap(),
     });
     assert!(authored_operation(&catalog, owner(32), source(), location()).is_err());
 }

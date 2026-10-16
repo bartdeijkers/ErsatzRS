@@ -18,6 +18,7 @@ use serde_json::json;
 use std::time::Duration;
 mod bitmaps;
 mod compiler_resources;
+mod local_object_attributes;
 mod operands;
 
 const ADDON: &str = "org.ersatzrs.synthetic-editor-effects";

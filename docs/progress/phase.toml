@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: Local-object colour and attribute authoring'
+current_focus = 'P9A-04: Extended-character editor authoring'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -315,12 +315,16 @@ saved address/family negatives and retained sources/package/profiles/Night.
 P9A-04 owns tmp/phase9-object-editor/identity.json and22 retained
 GUI captures; no new publication/ordinary/client proof is claimed. The prior
 157 scoped successes retain their original inputs and meanings.
-Next product action: admit exact-original Local-object colour/attribute changes
-within captured zones. Existing typed intentions and TTI source authentication
-currently refuse these commands although the compiler already supports them.
-Reuse checked page-local operations, immutable object provenance and complete
-shared-consumer effects, retaining private version compatibility. Bundle colour/
-attribute/geometry negatives rather than run separate whole-chain variants.
+Local-object colour/attribute intent now uses explicit private schema5 with
+versions1–4 retained. Bundled native Free/Zone, exact shared pixels, separate
+publication/reopen/repeat/undo and malformed/protected consumers pass. The actual
+pinned foreground popup/Save As imports to an unpublished concept and reopens;
+all180 focused cases pass. P9A-04 owns canonical receipts and9 GUI captures;
+actual widget/client equivalence is not asserted. Reuse unchanged delivery proof.
+Next product step: original G2/G0-diacritic edits are still rejected by editable
+intent/source guards. Connect checked extended-character operands to existing
+versioned concepts and previews, preserving original charset/fallback and shared
+zone effects. Bundle related families and validate only changed boundaries.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.
 Suitable-client/full engine proof remains open. Earlier proof

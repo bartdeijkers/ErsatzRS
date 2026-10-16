@@ -1,4 +1,4 @@
-//! Closed V4 glyph intent tied to exact original local-object commands.
+//! Closed V4 glyph and V5 attribute intent tied to original local-object commands.
 
 use super::{
     invalid, map_only, unique_original_owner, StoredOperation, TeletextDesignDocumentError,

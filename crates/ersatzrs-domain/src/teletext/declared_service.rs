@@ -229,7 +229,7 @@ impl TeletextDeclaredService {
             .with_local_program_operand_overlays(overlays, budget)?;
         Ok(self)
     }
-    /// Replace checked G0/G1 operands in existing local object definitions.
+    /// Replace checked glyph/colour/attribute operands in existing local definitions.
     /// Authenticated declarations, object identities/types and resource selections
     /// remain unchanged. Hosts must check all protected effects before publication.
     /// # Errors

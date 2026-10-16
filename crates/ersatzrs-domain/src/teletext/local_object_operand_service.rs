@@ -9,7 +9,7 @@ use super::{
 use crate::teletext::{TeletextLocalObjectOperandFailure, TeletextLocalObjectOperandOverlay};
 
 impl TeletextSemanticService {
-    /// Replace G0/G1 operands in existing local object definitions only.
+    /// Replace checked glyph/colour/attribute operands in existing local definitions only.
     ///
     /// Preserves object identities, types, command order, all other commands and
     /// every other semantic input. Raw work and existing service budgets are

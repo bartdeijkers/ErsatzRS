@@ -127,6 +127,22 @@ attributes and bitmap edits; it is independent of the editor carrier version.
 This engineering slice does not restrict the accepted full object/resource,
 repertoire or editor requirements. P9A-04 owns verification status and missing
 actual-editor/client evidence.
+
+Private concept version5 adds same-family foreground, background and
+size-preserving attribute changes in existing Local object definitions. At least
+one such object-attribute intent is required; it may accompany existing glyph,
+page-local, row and bitmap intents. Version4 remains object-G0/G1-only, and
+versions1–4 retain their serialized forms and meanings. This private concept
+version is independent of the QTM editor-carrier version5; it changes neither the
+original design role nor the addon response contract. Exact original identity,
+command, column and expected operand remain mandatory. Uploaded words cannot
+change object scope/type, character size, invocations or generated definitions.
+Recompilation must validate every affected consumer against its captured region
+permissions, including effects extending beyond the command column. Repeated
+imports remain root-relative; a complete undo restores the immutable original
+without inventing an empty version5 overlay or changing publication. P9A-04 owns
+verification and the remaining genuine editor/client and full-engine evidence.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

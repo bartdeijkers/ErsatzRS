@@ -1,4 +1,4 @@
-//! Exact-original glyph changes in retained local object definitions.
+//! Exact-original operand changes in retained local object definitions.
 //!
 //! These values identify authored commands, not expanded calls or generated
 //! carrier objects. Hosts must establish original compiler provenance, recompile
@@ -18,7 +18,7 @@ pub enum TeletextLocalObjectOperandOverlayError {
     Operand(#[from] TeletextLocalProgramOperandOverlayError),
 }
 
-/// One same-family G0/G1 replacement in an existing local object definition.
+/// One same-family colour, attribute or G0/G1 replacement in a local definition.
 ///
 /// Object identity/type, command order, geometry, charset, invocation targets and
 /// all other commands are immutable. G1 alpha, G2/G3 and resource edits are absent.
@@ -29,9 +29,11 @@ pub struct TeletextLocalObjectOperandOverlay {
 }
 
 impl TeletextLocalObjectOperandOverlay {
-    /// Check a local, same-family G0 or G1 intent under exact original expectations.
+    /// Check an exact-original local operand through the shared page validator.
+    /// Foreground, background, attributes, G0 and G1 retain their own families;
+    /// attribute changes preserve both original character-size flags.
     /// # Errors
-    /// Rejects nonlocal identities, other families, invalid columns and no-op edits.
+    /// Rejects nonlocal identities, other families, size changes, invalid columns and no-op edits.
     pub fn new(
         identity: TeletextObjectIdentity,
         command: usize,
@@ -42,18 +44,6 @@ impl TeletextLocalObjectOperandOverlay {
         let owner = identity
             .owner()
             .ok_or(TeletextLocalObjectOperandOverlayError::Scope)?;
-        if !matches!(
-            (expected, replacement),
-            (
-                TeletextColumnOperation::G0 { .. },
-                TeletextColumnOperation::G0 { .. }
-            ) | (
-                TeletextColumnOperation::G1 { .. },
-                TeletextColumnOperation::G1 { .. }
-            )
-        ) {
-            return Err(TeletextLocalProgramOperandOverlayError::Family.into());
-        }
         Ok(Self {
             identity,
             operand: TeletextLocalProgramOperandOverlay::new(

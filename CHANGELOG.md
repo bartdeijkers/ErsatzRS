@@ -26,11 +26,13 @@ release section when tagging a release.
 ### Added
 
 - Import same-family G0 text and G1 mosaic changes in existing page-local and
-  Local-object teletext commands into versioned concepts. Exact original command
+  Local-object teletext commands into versioned concepts. Existing Local-object
+  foreground/background and size-preserving attributes use explicit concept
+  version 5 while versions 1–4 keep their original contracts. Exact original command
   provenance, immutable object/invocation structure and permissions for every
   shared panel consumer protect generated content. Repeated imports and undo
   preserve originals and remain separate from explicit publication. Actual pinned
-  QTeletextMaker G0/G1 panel glyph saves now pass concept import, shared preview
+  QTeletextMaker G0/G1 panel glyph and Local foreground saves pass concept import, shared preview
   and reopen; full object/editor and Level 2.5 acceptance remain open.
 - Import existing local teletext colour/attribute edits into versioned concepts,
   with exact command correspondence, complete native validation and protected-zone

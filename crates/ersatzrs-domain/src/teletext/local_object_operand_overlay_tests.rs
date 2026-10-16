@@ -13,6 +13,37 @@ fn g1(bits: u8) -> TeletextColumnOperation {
     }
 }
 
+fn foreground(colour: u8) -> TeletextColumnOperation {
+    TeletextColumnOperation::Foreground {
+        colour: TeletextColourReference::new(colour).unwrap(),
+    }
+}
+fn background(colour: u8) -> TeletextColumnOperation {
+    TeletextColumnOperation::Background {
+        colour: TeletextColourReference::new(colour).unwrap(),
+    }
+}
+fn attributes(double_height: bool, double_width: bool, mask: u8) -> TeletextColumnOperation {
+    TeletextColumnOperation::Attributes {
+        double_height,
+        double_width,
+        boxed: mask & 1 != 0,
+        conceal: mask & 2 != 0,
+        invert: mask & 4 != 0,
+        underline_or_separated_mosaics: mask & 8 != 0,
+    }
+}
+fn attribute_input(double_height: bool, double_width: bool) -> TeletextResolvedServiceDraft {
+    let mut input = input();
+    let mut commands = input.objects[0].program.commands().to_vec();
+    commands.push(TeletextEnhancementCommand::AtColumn {
+        column: 0,
+        operation: attributes(double_height, double_width, 0),
+    });
+    input.objects[0].program = program(commands);
+    input
+}
+
 fn target(owner: TeletextPageAddress) -> TeletextObjectIdentity {
     TeletextObjectIdentity::local(owner, TeletextObjectId::new(65520))
 }
@@ -180,7 +211,7 @@ fn local_object_intents_reject_external_scope_cross_family_noop_and_invalid_colu
             TeletextColumnOperation::Foreground {
                 colour: TeletextColourReference::new(1).unwrap(),
             },
-            TeletextColumnOperation::Foreground {
+            TeletextColumnOperation::Background {
                 colour: TeletextColourReference::new(2).unwrap(),
             },
         ),
@@ -299,44 +330,57 @@ fn local_object_application_rejects_duplicate_missing_foreign_and_stale_commands
 
 #[test]
 fn local_object_application_reuses_raw_work_and_complete_service_budget_preflight() {
-    let original = service(input());
-    let valid = change(target(address(200, 0)), 2, 0, g0(b'A'), g0(b'B'));
-    // Raw change count wins before constructing a duplicate index.
-    let mut raw = budget();
-    raw.max_commands = 1;
-    assert_eq!(
-        original
-            .clone()
-            .with_local_object_operand_overlays(&[valid, valid], raw),
-        Err(TeletextServiceError::Budget {
-            dimension: "authored command",
-            maximum: 1
-        })
-    );
-    for dimension in [
-        "record",
-        "object",
-        "structure item",
-        "base content byte",
-        "authored command",
-        "collected command",
-        "collected DRCS reference",
+    let original = service(attribute_input(false, false));
+    let identity = target(address(200, 0));
+    for valid in [
+        change(identity, 2, 0, g0(b'A'), g0(b'B')),
+        change(identity, 0, 0, foreground(18), foreground(31)),
+        change(identity, 1, 0, background(0), background(16)),
+        change(
+            identity,
+            5,
+            0,
+            attributes(false, false, 0),
+            attributes(false, false, 15),
+        ),
     ] {
-        let mut limit = budget();
-        match dimension {
-            "record" => limit.max_records = 0,
-            "object" => limit.max_objects = 0,
-            "structure item" => limit.max_structure_items = 0,
-            "base content byte" => limit.max_base_content_bytes = 0,
-            "authored command" => limit.max_commands = 0,
-            "collected command" => limit.max_collected_commands = 0,
-            _ => limit.max_collected_drcs_references = 0,
-        }
-        assert!(
-            matches!(original.clone().with_local_object_operand_overlays(&[valid], limit),
-            Err(TeletextServiceError::Budget { dimension: actual, .. }) if actual == dimension),
-            "{dimension}"
+        // Raw change count wins before constructing a duplicate index.
+        let mut raw = budget();
+        raw.max_commands = 1;
+        assert_eq!(
+            original
+                .clone()
+                .with_local_object_operand_overlays(&[valid, valid], raw),
+            Err(TeletextServiceError::Budget {
+                dimension: "authored command",
+                maximum: 1
+            })
         );
+        for dimension in [
+            "record",
+            "object",
+            "structure item",
+            "base content byte",
+            "authored command",
+            "collected command",
+            "collected DRCS reference",
+        ] {
+            let mut limit = budget();
+            match dimension {
+                "record" => limit.max_records = 0,
+                "object" => limit.max_objects = 0,
+                "structure item" => limit.max_structure_items = 0,
+                "base content byte" => limit.max_base_content_bytes = 0,
+                "authored command" => limit.max_commands = 0,
+                "collected command" => limit.max_collected_commands = 0,
+                _ => limit.max_collected_drcs_references = 0,
+            }
+            assert!(
+                matches!(original.clone().with_local_object_operand_overlays(&[valid], limit),
+            Err(TeletextServiceError::Budget { dimension: actual, .. }) if actual == dimension),
+                "{dimension}"
+            );
+        }
     }
 }
 
@@ -383,3 +427,6 @@ fn page_local_g0_and_g1_use_same_exact_original_family_and_service_validation() 
         TeletextSemanticService::new(input, budget()).unwrap()
     );
 }
+
+#[path = "local_object_operand_attribute_tests.rs"]
+mod attribute_tests;

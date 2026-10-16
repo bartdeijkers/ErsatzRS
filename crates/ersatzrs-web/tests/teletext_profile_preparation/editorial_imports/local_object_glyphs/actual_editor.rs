@@ -11,7 +11,7 @@ const EDITOR_BINARY: &str = "af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a0
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
-struct EditorSaved {
+pub(super) struct EditorSaved {
     probe_version: u16,
     editor_name: String,
     editor_version: String,
@@ -20,7 +20,7 @@ struct EditorSaved {
     saved_file: String,
 }
 
-fn json_new(directory: &Path, name: &str, value: &impl serde::Serialize) {
+pub(super) fn json_new(directory: &Path, name: &str, value: &impl serde::Serialize) {
     live_client::write_new(
         &directory.join(name),
         &serde_json::to_vec_pretty(value).unwrap(),
@@ -28,7 +28,7 @@ fn json_new(directory: &Path, name: &str, value: &impl serde::Serialize) {
     .unwrap();
 }
 
-fn word_at(bytes: &[u8], semantic_word: usize) -> u32 {
+pub(super) fn word_at(bytes: &[u8], semantic_word: usize) -> u32 {
     let parsed = parse_teletext_tti(bytes, policy().tti).unwrap();
     let mut matching = parsed.records().iter().filter_map(|record| match record {
         TeletextTtiRecord::Packet {
@@ -43,7 +43,7 @@ fn word_at(bytes: &[u8], semantic_word: usize) -> u32 {
     word
 }
 
-fn original_identity(flow: &Flow, family: Family) -> TeletextObjectIdentity {
+pub(super) fn original_identity(flow: &Flow, family: Family) -> TeletextObjectIdentity {
     let owner = channel_documents::address(124, 32);
     let identity = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65520));
     let service = flow.accepted[0].service();
@@ -93,7 +93,26 @@ fn original_identity(flow: &Flow, family: Family) -> TeletextObjectIdentity {
 }
 
 fn edit_metadata(flow: &Flow, family: Family) -> Value {
-    let identity = original_identity(flow, family);
+    operand_metadata(
+        flow,
+        original_identity(flow, family),
+        2,
+        family.word(0),
+        family.word(1),
+        "local_glyph",
+    )
+}
+
+pub(super) fn operand_metadata(
+    flow: &Flow,
+    identity: TeletextObjectIdentity,
+    command: usize,
+    before: u32,
+    after: u32,
+    kind: &str,
+) -> Value {
+    assert_eq!(before & 0x7ff, after & 0x7ff);
+    assert!(before <= 0x3ffff && after <= 0x3ffff);
     let owner = identity.owner().unwrap();
     let service = flow.accepted[0].service();
     let program = service
@@ -118,7 +137,7 @@ fn edit_metadata(flow: &Flow, family: Family) -> Value {
         })
         .unwrap();
     let mut positions = program.command_positions().iter().filter(|position| {
-        position.source().object == Some(identity) && position.source().command == 2
+        position.source().object == Some(identity) && position.source().command == command
     });
     let position = positions.next().unwrap();
     assert!(positions.next().is_none());
@@ -156,21 +175,30 @@ fn edit_metadata(flow: &Flow, family: Family) -> Value {
         .iter()
         .find(|file| file.name == mapping.name)
         .unwrap();
-    assert_eq!(word_at(&file.bytes, word), family.word(0));
+    assert_eq!(word_at(&file.bytes, word), before);
     let number = u32::from(marker.object_number());
     assert_eq!(
         word_at(&file.bytes, marker_index),
         (0x28 | (number >> 7)) | (0x17 << 6) | ((number & 127) << 11)
     );
-    json!({"kind":"local_glyph","mode":match family {Family::G0=>9,Family::G1=>1},
-        "from":family.data(0),"to":family.data(1),"column":0,"row":1,
+    json!({"kind":kind,"mode":(before>>6)&31,
+        "from":before>>11,"to":after>>11,"column":before&63,"row":1,
         "semantic_word":word,"designation":word/13,"triplet_slot":word%13,
-        "identity":identity,"source_command":2,
+        "identity":identity,"source_command":command,
         "definition_marker":{"absolute_index":marker_index,"object_number":marker.object_number(),"object_type":"passive"},
         "invocation_offsets":[32,33]})
 }
 
 fn inputs(directory: &Path, name: &str, flow: &Flow, family: Family) -> Value {
+    inputs_for_edit(directory, name, flow, || edit_metadata(flow, family))
+}
+
+pub(super) fn inputs_for_edit(
+    directory: &Path,
+    name: &str,
+    flow: &Flow,
+    edit: impl FnOnce() -> Value,
+) -> Value {
     std::fs::create_dir(directory).expect("each editor case directory must be create-new");
     let original = directory.join("original");
     std::fs::create_dir(&original).unwrap();
@@ -187,7 +215,7 @@ fn inputs(directory: &Path, name: &str, flow: &Flow, family: Family) -> Value {
         .iter()
         .find(|page| page.page.page == 124 && page.page.subcode == 32)
         .unwrap();
-    let edit = edit_metadata(flow, family);
+    let edit = edit();
     let ready = json!({"probe_version":1,"case":name,"editor_profile":exported.sidecar().project.editor_profile,
         "design_id":flow.saved[0].head().id,"design_revision":1,"design_digest":flow.saved[0].digest(),
         "receipt_id":exported.metadata().id,"receipt_digest":exported.metadata().digest,
@@ -203,7 +231,7 @@ fn inputs(directory: &Path, name: &str, flow: &Flow, family: Family) -> Value {
     ready
 }
 
-async fn completion(directory: &Path) -> EditorSaved {
+pub(super) async fn completion(directory: &Path) -> EditorSaved {
     tokio::time::timeout(Duration::from_mins(10), async {
         loop {
             if tokio::fs::try_exists(directory.join("editor-saved.json"))
@@ -230,7 +258,7 @@ async fn completion(directory: &Path) -> EditorSaved {
     marker
 }
 
-fn actual_request(
+pub(super) fn actual_request(
     directory: &Path,
     flow: &Flow,
     bytes: &[u8],
@@ -273,10 +301,14 @@ fn actual_request(
 }
 
 fn assert_saved_packets(flow: &Flow, saved: &[u8], family: Family) {
+    assert_saved_packet_words(flow, saved, family.word(0), family.word(1));
+}
+
+pub(super) fn assert_saved_packet_words(flow: &Flow, saved: &[u8], before: u32, after: u32) {
     // Compare fixed packet content independently of record order, hex spelling
     // and permitted editor metadata. Main rows are checked by the exact empty
     // row-overlay and full protected native-model assertions after import.
-    let expected = edited_request(&flow.receipts[0], 1, family.word(0), family.word(1));
+    let expected = edited_request(&flow.receipts[0], 1, before, after);
     let mapping = flow.exported[0]
         .sidecar()
         .project
