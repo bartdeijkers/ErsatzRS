@@ -49,6 +49,10 @@ mod compiler_polish_spacing;
 mod compiler_polish_underline;
 #[path = "editorial_imports/compiler_polish_underline_delivery.rs"]
 mod compiler_polish_underline_delivery;
+#[path = "editorial_imports/compiler_turkish.rs"]
+mod compiler_turkish;
+#[path = "editorial_imports/compiler_turkish_delivery.rs"]
+mod compiler_turkish_delivery;
 #[path = "editorial_imports/drcs_bank.rs"]
 mod drcs_bank;
 #[path = "editorial_imports/drcs_bitmap.rs"]

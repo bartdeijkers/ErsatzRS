@@ -704,8 +704,10 @@ release section when tagging a release.
   with exact plain or underlined DRCS, retaining its original identity and
   fallback under both primary designations. Mixed Polish/Turkish pages keep
   stable compiler slots within existing resource limits, and native editorial
-  validation retains zone and resource ownership. The actual Turkish editor,
-  stream and client workflow still requires acceptance.
+  validation retains zone and resource ownership. A recorded QTeletextMaker edit
+  reaches receipt-bound concepts, shared preview, explicit publication and two
+  ordinary streams with transport and independent bitmap checks. Localized
+  headed admin and suitable-client acceptance for this variant remain open.
 - Preserve the Polish national Base `0x5B` identity through enlarged-page repaint
   using its exact plain or underlined glyph. Reuse matching authored definitions
   or provision bounded compiler-owned DRCS resources through unused links, keeping

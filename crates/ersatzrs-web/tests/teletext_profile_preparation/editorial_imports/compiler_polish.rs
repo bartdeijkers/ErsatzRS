@@ -423,7 +423,7 @@ async fn no_bank_polish_rejects_a_changed_enlarged_fragment_outside_original_fre
     fixture.state.pool.close().await;
 }
 
-fn assert_actual_tti_edit(original: &[u8], edited: &[u8]) {
+fn assert_actual_tti_edit(original: &[u8], edited: &[u8], code: u8) {
     let mut expected = parse_teletext_tti(original, policy().tti)
         .unwrap()
         .records()
@@ -436,7 +436,7 @@ fn assert_actual_tti_edit(original: &[u8], edited: &[u8]) {
         })
         .unwrap();
     assert_eq!(cells[7], b'A');
-    cells[7] = 0x5b;
+    cells[7] = code;
     let parsed = parse_teletext_tti(edited, policy().tti).unwrap();
     assert_eq!(parsed.records().len(), expected.len());
     // Numeric spelling and record order belong to the editor. Every parsed
@@ -445,7 +445,9 @@ fn assert_actual_tti_edit(original: &[u8], edited: &[u8]) {
         let index = expected
             .iter()
             .position(|candidate| candidate == record)
-            .expect("genuine Save As may change only Base row1 column7 A to literal5B");
+            .expect(
+                "genuine Save As may change only Base row1 column7 A to the expected literal code",
+            );
         expected.remove(index);
     }
     assert!(expected.is_empty());
@@ -505,6 +507,15 @@ pub(super) fn actual_request(
     flow: &Flow,
     directory: &Path,
 ) -> (NativeTeletextEditorialImportRequest, Value) {
+    actual_request_for_code(flow, directory, 0x5b)
+}
+
+pub(super) fn actual_request_for_code(
+    flow: &Flow,
+    directory: &Path,
+    code: u8,
+) -> (NativeTeletextEditorialImportRequest, Value) {
+    assert!(matches!(code, 0x5b | 0x23));
     for file in flow.exported[0].files() {
         let retained = drcs_bitmap::read_retained_editor_file(
             &directory.join("native-original-1").join(&file.name),
@@ -524,9 +535,12 @@ pub(super) fn actual_request(
         .bytes;
     let edited = drcs_bitmap::read_retained_editor_file(&directory.join("editor-1/edited.tti"));
     let proof = actual_editor_proof(directory, original, &edited);
-    assert_actual_tti_edit(original, &edited);
+    assert_actual_tti_edit(original, &edited, code);
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
     request.name = "Actual QTM no-bank Polish Base concept".into();
+    if code == 0x23 {
+        request.name = "Actual QTM no-bank Turkish Base concept".into();
+    }
     request
         .files
         .iter_mut()

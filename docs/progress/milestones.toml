@@ -2968,6 +2968,99 @@ proof covers all changed admin. Full engine acceptance stays open until all part
 are implemented and evidenced; production TV-guide content still waits for it.
 '''
 evidence = '''
+2026-10-16 Turkish TL genuine-editor-to-ordinary checkpoint:
+Criterion: connect the exact authored Turkish Base23 carrier to the existing
+profile/design, validation, export, actual QTM edit, concept/shared preview,
+explicit publication and ordinary two-channel stream/reopen flow. Only synthetic
+Day124 primary16 changes; Night/page125/authoring regions/metadata stay exact.
+Production code, package contents, translations and all milestone contracts stay
+unchanged. The existing Polish5B wrapper retains its old assertions; one narrow
+code23 wrapper shares the strict complete-fresh-TTI/pinned-editor/record-multiset
+check. Turkish-only checks additionally require the EXACT current receipt sidecar.
+
+Regular native preparation86bad0dc-fc42-49b1-a070-c3307a18741f passes5.437s and
+writes a fresh two-TTI/sidecar export. An initial private-method test call fails
+compilation E0624; removing that inaccessible assertion changes no product API
+or identity/fallback oracle. Final regular native test
+b5ec585e-582e-4b53-ba8b-2c908e4b7aa4 passes5.222s on the final source.
+Pinned QTM1.0/cac2167b, binaryaf7cb112, Qt6.10.2+dfsg-7, offline image6064a1cf
+actually opens the export, selects OVERWRITE1/7, types literal # (raw23), and
+writes edited.tti with the REAL File-menu Save As button. Original124 hash is
+ a491d9e62df63aa12143cd21e5513af1f99c99e87b8fb79eab08f8de8c96c588;
+actual saved1501-byte hash is
+ 446bc9065d5573a79d76d7171fb62ef3703dd24ed828161c71cd2adef1644edb.
+Every other OL record is byte-exact as a multiset; the native parser separately
+requires every protected parsed record, navigation and packet to stay exact.
+
+The strict sidecar check exposes a real fixture-composition gap: independent
+fresh fixtures differ ONLY in installation state_revision and its original/
+receipt digests. Rejecting that comparison is retained in
+ tmp/phase9-turkish-flow/sidecar-freshness-counterexample.json.
+This is a fixture preflight failure, not a claimed product rejection. Do not
+ignore authority fields, rewrite metadata or invent deterministic installation
+identities. The sole genuine ordinary test now owns ONE fixture and receipt,
+exports create-new files, then reuses the existing bounded JSON marker under a
+600s/4096-byte wait. Package/profile/config/pointer/receipt state stays unchanged
+across that wait. A closed, atomically published editor proof grants no authority;
+all fresh files/sidecar/editor/hash/literal-edit checks run before import.
+
+Actual same-flow GUI trial b0e17928-7b8c-41b6-aefc-8b93148fe69a uses the new
+owned export and exact sidecar, then PASSES concept import, shared fixed TL
+preview and explicit publication (editor-live-1/native-proof.json). It subsequently
+FAILS at LiveOrigin bind with sandbox EPERM; no ordinary capture/client success
+is claimed for that run. GUI/window PID1/hostname90aaa390fdc8 and seven original
+screenshots are root-inspected. Save As and normal File-menu Exit succeed with
+read-only inputs and exit0. Ctrl+Q did not close the editor; a fresh Exit-menu XID
+is inspected instead. A premature private receipt-preparation attempt correctly
+finds no process receipt and publishes no completion marker; no data/oracle changes.
+
+The SAME frozen case reruns with local TCP rights in fresh editor-loopback-2/
+ordinary-loopback-2 directories. To reuse valid editor evidence, both complete
+fresh TTIs must equal the actual GUI input byte-for-byte. Only the already-proven
+edited TTI/proof is copied; the new fixture keeps its OWN exact fresh sidecar and
+receipt. Comparison confirms only the same three authority fields differ; no
+old authority is substituted. editor-reuse.json records this composition and
+explicitly says no GUI rerun for the retry. Exact current sidecar checking remains
+unchanged. Run14d10a57-d949-4a3d-bb36-e548769aded6 PASS69.323s includes the
+manual evidence wait; it is not performance acceptance. Actual concurrent ordinary
+/iptv/hls-direct/{channel}.ts responses retain source AV, TSDuck3.44-4676 transport
+and complete emitted-model equality under FFmpeg2.0.6/n9.0. Day uses Normal1A0/
+logicalS1=0/slot2; Night has no generated bank. Fixed240 TL preview pixels, unchanged
+page125 LatinA red/blue120pixels/channel, distinct profiles/same addon, original
+inputs/package/config/receipts/pointers, cleanup/capacity and persisted reopen pass.
+
+Unchanged pinned teletextimager0.2.0/2b0125b7 checks actual512-unit captures:
+15Day/16Night closed displays at Level1/1.5/2.5, fixed TL mask/width fragments,
+neutral physical DRCS effects, page125 themes and literal fallback cells with
+receiver default region0. Explicitly supplied received banks do NOT prove automatic
+X27/MOT acquisition, Turkish fallback-font rendering or actual client navigation.
+The new explicit --turkish oracle initially assumed PTUrow1; actual bank1A0
+contains row2 for slot2 (physicalnn2, logicalS1=0). Requiring row2 ONLY in this
+new vector fixes that test assumption; existing Polish vectors and the independent
+decoder/loader/normative bytes are unchanged. One received bitmap pixel changed
+with mode/framing/odd parity retained fails the fixed mask; Day-as-Night fails
+inventory. Source TS/units stay immutable. Four old Polish plain/underline/theme
+vectors pass the final oracle; Polish-as-Turkish fails required bank inventory.
+The Night unit sequence remains byte-exact ce112816 to prior isolation evidence.
+
+Existing genuine underlined Polish helper regression e577919e-ad04-43b5-a8bd-
+9b5510f1fcb7 passes5.076s with exact retained inputs in a NEW proof destination.
+Its first attempt hits AlreadyExists writing an old proof after behavior checks;
+old evidence is preserved, not overwritten. Final strict web Clippy, format,
+architecture/progress/allow-policy results, all source/artifact/image/state/
+transport/reuse/negative hashes are bound in
+ tmp/phase9-turkish-flow/identity.json
+SHA2566ed261fab8256daba8c1d192c97ef82e56340faca0fdea9b27f331efcf6fbd2b. All129milestone contracts/statuses stay
+unchanged; this is one partial repertoire/workflow criterion.
+
+Next: connect THIS Turkish export/edit/slot2 to the existing localized headed
+admin profile/ZIP/concept/shared-preview/Request/Publish flow and124/125 navigation.
+Keep exact fresh receipt authority, reuse content-identical editor evidence, and
+reuse unchanged prior locale/theme evidence where applicable. Suitable-client
+acquisition/render/navigation, hydration, further full Level2.5/editor/resource/
+life-cycle/platform criteria remain open. No full engine or production-TV-guide
+acceptance, new decoder maintenance, broad audit or push is authorized here.
+
 2026-10-16 Turkish national TL carrier checkpoint:
 Criterion: remove the existing authored enlarged Turkish national Base23
 NationalConversion blocker without changing the original identity or fallback.
