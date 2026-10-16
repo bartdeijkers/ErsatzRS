@@ -335,7 +335,19 @@ def main():
     parser.add_argument("new_output_directory", type=Path)
     parser.add_argument("--captured-replay", action="store_true",
                         help="explicit finite captured-ordinary replay manifest; no live application attachment")
+    parser.add_argument("--decoder-candidate-proof", type=Path,
+                        help="Positive combined sparse decoder receipt; all five candidate arguments are required")
+    parser.add_argument("--decoder-candidate-proof-sha256", help="External SHA256 of the positive sparse receipt")
+    parser.add_argument("--decoder-candidate-build", type=Path, help="Receipted decoder build output directory")
+    parser.add_argument("--decoder-candidate-proof-root", type=Path, help="Build proof input directory containing scripts/")
+    parser.add_argument("--decoder-candidate-build-sha256", help="External SHA256 of proof-sparse-build.json")
     args = parser.parse_args()
+    candidate_arguments = [args.decoder_candidate_proof, args.decoder_candidate_proof_sha256,
+                           args.decoder_candidate_build, args.decoder_candidate_proof_root,
+                           args.decoder_candidate_build_sha256]
+    candidate_requested = any(value is not None for value in candidate_arguments)
+    if candidate_requested and not all(value is not None for value in candidate_arguments):
+        parser.error("All five decoder-candidate arguments are required together")
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("A real headed X11 display is required")
     for executable in ["xprop", "import"]:
@@ -352,6 +364,22 @@ def main():
     ready_path = args.native_ready_file.absolute()
     raw_ready = bounded_bytes(ready_path, MAX_READY)
     ready, by_theme, first_page, next_page, subcode = validate_readiness(raw_ready, ready_path.parent, args.captured_replay)
+    if candidate_requested and (args.captured_replay or ready["probe_version"] != 1):
+        raise RuntimeError("Sparse decoder candidate requires actual ordinary v1 URLs for pages124/125")
+    qualifier_path = REPO / "scripts/e2e/teletext-client-decoder-candidate.py"
+    qualifier_body = bounded_bytes(qualifier_path, MAX_READY)
+    qualifier_hash = digest(qualifier_body)
+    if qualifier_hash != "f1acfc1ab867e67b2ca3e1eecb26e1289e0192c62b9f78b383adec6832a0d4ec":
+        raise RuntimeError("Client decoder qualification helper source changed")
+    qualification = {"__file__": str(qualifier_path), "__name__": "authenticated_client_decoder_qualification"}
+    exec(compile(qualifier_body, str(qualifier_path), "exec"), qualification)
+    sources[str(qualifier_path.relative_to(REPO))] = qualifier_hash
+    stock_library = Path("/usr/lib/x86_64-linux-gnu/libzvbi.so.0.13.2")
+    plugin = Path("/usr/lib/x86_64-linux-gnu/vlc/plugins/codec/libzvbi_plugin.so")
+    decoder = (qualification["qualify"](*candidate_arguments) if candidate_requested else {
+        "path": str(stock_library), "sha256": RECEIPTED[stock_library],
+        "label": "Ubuntu libzvbi 0.2.42-2", "test_only": False,
+    })
     channels = ready.get("channels")
     effective = not args.captured_replay and ready["probe_version"] in [2, 3]
     legacy_wrapper = not args.captured_replay and ready["probe_version"] == 3
@@ -386,7 +414,9 @@ def main():
                                               "effective_cumulative_role": effective}),
               **({"ordinary_wrapper_role": "generated-legacy", "expected_termination": "owned-sigterm",
                   "natural_eof_proven": False} if legacy_wrapper else {}),
-              "client": "VLC 3.0.20-3build6", "decoder": "libzvbi 0.2.42-2",
+              "client": "VLC 3.0.20-3build6",
+              "decoder": "test-corrected libzvbi 0.2.42 (X27 and normal DRCS)" if candidate_requested else "libzvbi 0.2.42-2",
+              "decoder_qualification": decoder,
               "scope": "Finite captured-ordinary MAIN palette/AZ and requested page navigation inspection"
                        if args.captured_replay else "MAIN glyph/palette and requested page navigation inspection",
               "panel_display_proven": False, "rendered_navigation_proven": False,
@@ -400,6 +430,10 @@ def main():
             metadata = by_theme[theme]
             env = os.environ.copy()
             env["QT_QPA_PLATFORM"] = "xcb"
+            if candidate_requested:
+                # Select only for this owned process, without changing host
+                # libraries or trusting an inherited alternate decoder path.
+                env["LD_LIBRARY_PATH"] = str(Path(decoder["path"]).parent)
             for name in ["XDG_CONFIG_HOME", "XDG_CACHE_HOME"]:
                 folder = destination / f"{theme}-{name.lower()}"
                 folder.mkdir()
@@ -445,20 +479,28 @@ def main():
             x, y = owned["origin"]["x"], owned["origin"]["y"]
             gui(deadline, "click", x + 249, y + 10)
             settle(deadline, 0.5)
-            menu_image = destination / f"{owned['theme']}-subtitle-menu.png"
-            subprocess.run(["import", "-window", str(owned["window"]), str(menu_image)], check=True, timeout=remaining(deadline, 10))
             gui(deadline, "key", "Escape")
             gui(deadline, "click", x + 39, y + 394)
             activation_deadline = time.monotonic() + remaining(deadline, 8)
             while True:
                 log = Path(owned["client_log"].name).read_text(errors="replace")
                 if 'using spu decoder module "zvbi"' in log:
+                    if owned["client"].poll() is not None:
+                        raise RuntimeError("Owned client exited before decoder qualification")
+                    mapped = qualification["verify_process"](owned["client"].pid, decoder, plugin, RECEIPTED[plugin])
                     emit({"event": "decoder_active", "theme": owned["theme"],
-                          "selection": "native Qt teletext activation button forces spu-es"})
+                          "selection": "native Qt teletext activation button forces spu-es",
+                          "mapped_decoder": mapped})
                     break
                 if time.monotonic() >= activation_deadline:
                     raise RuntimeError("Native subtitle-track activation did not start zvbi")
                 settle(deadline, 0.2)
+            # Every image follows actual decoder activation and map checks.
+            gui(deadline, "click", x + 249, y + 10)
+            settle(deadline, 0.5)
+            menu_image = destination / f"{owned['theme']}-subtitle-menu.png"
+            subprocess.run(["import", "-window", str(owned["window"]), str(menu_image)], check=True, timeout=remaining(deadline, 10))
+            gui(deadline, "key", "Escape")
         for page, stage in [(first_page, "first"), (next_page, "next"), (first_page, "return")]:
             for owned in clients:
                 assert_owned_window(owned["window"], owned["client"].pid, deadline)
@@ -477,12 +519,14 @@ def main():
             settle(deadline, 4)
             for owned in clients:
                 assert_owned_window(owned["window"], owned["client"].pid, deadline)
+                mapped = qualification["verify_process"](owned["client"].pid, decoder, plugin, RECEIPTED[plugin])
                 image = destination / f"{owned['theme']}-page{page}-{stage}.png"
                 subprocess.run(["import", "-window", str(owned["window"]), str(image)],
                                check=True, timeout=remaining(deadline, 10))
                 image_hash = digest(bounded_bytes(image, MAX_IMAGE))
                 emit({"event": "captured", "theme": owned["theme"], "requested_page": page,
                       "stage": stage, "image": image.name, "sha256": image_hash,
+                      "mapped_decoder": mapped,
                       "rendered_page_verified": False, "expected_header": f"{page}.{subcode:02X}"})
         for owned in clients:
             client_exit = (stop_owned_wrapper_client(owned, deadline) if legacy_wrapper

@@ -45,6 +45,9 @@ release section when tagging a release.
   An isolated test decoder now qualifies unchanged sparse normal-DRCS packets
   after two audited decoder corrections; stock client and complete resource,
   external-editor and Level 2.5 acceptance remain open.
+  Sparse ordinary-stream client trials now support an explicitly receipted
+  decoder candidate and verify the decoder actually loaded by each client;
+  actual sparse client display/navigation has not yet been accepted.
 - Add exact-page teletext bitmap input support to the native FFmpeg command
   builder, preserving the selected page when video, audio and captions share
   one input. A bounded native decode preflight retains the exact local source

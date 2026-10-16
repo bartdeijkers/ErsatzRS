@@ -92,7 +92,7 @@ def urls(ready):
 
 
 # The legacy-wrapper extension retains the imported helper functions exactly.
-COLD_HELPER_SHA256 = "53c970091ea28f82c6070be97a91a06a69702a619e2c35d27cb7e9dac7d0e23b"
+COLD_HELPER_SHA256 = "8f96fc781af1baed6aa06fb7fb5a66b9fdefcaa251465dd8fa2979cda69fda84"
 STATES = ["q", "cumulative_qr", "lua_off"]
 CHANNEL_KEYS = {"channel_id", "theme", "url", "addon_id", "profile_id", "profile_revision", "theme_rgb4",
     "generation_id", "request_id", "design_id", "design_revision", "scoped_role", "original_design_id",

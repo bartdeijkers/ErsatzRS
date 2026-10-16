@@ -196,11 +196,12 @@ fn ready(
     origin: &LiveOrigin,
     accepted: &[AcceptedTeletextOutputCandidate; 2],
     source: &[u8],
+    sparse: bool,
 ) -> Value {
     let channels = accepted.iter().enumerate().map(|(index, candidate)| {
         let channel = index + 1;
         let selection = &candidate.selection().bindings[0];
-        json!({"channel_id":channel,
+        let mut value = json!({"channel_id":channel,
             "url":format!("{}/iptv/hls-direct/{channel}.ts", origin.base),
             "addon_id":selection.addon_id,"profile_id":selection.profile_id,
             "profile_revision":selection.profile_revision,"theme":if channel==1 {"day"} else {"night"},
@@ -208,8 +209,15 @@ fn ready(
             "generation_id":candidate.generation().id,"request_id":candidate.generation().request.id,
             "design_revision":candidate.generation().request.revision,
             "expected_pages":[124,125],"subcode":32,"expected_navigation":[124,125,124],
-            "edited_q_page":if channel==1 {Some(124)} else {None},
-            "edited_q_cell":{"row":2,"column":8},"drcs_mode":"monochrome_dense_s1_0_1"})
+            "edited_q_page":if !sparse && channel==1 {Some(124)} else {None},
+            "edited_q_cell":{"row":2,"column":8},
+            "drcs_mode":if sparse {"monochrome_sparse_s1_1_x27"} else {"monochrome_dense_s1_0_1"}});
+        if sparse {
+            value["normal_drcs_subpages"] = json!([1]);
+            value["absent_normal_drcs_subpages"] = json!([0]);
+            value["drcs_consumers"] = json!({"row":1,"columns":[8,10]});
+        }
+        value
     }).collect::<Vec<_>>();
     json!({"probe_version":1,"scope":"cold actual ordinary HTTP URLs; no capture replay or warm transition proof",
         "source":{"file":"source.ts","sha256":hash(source),"bytes":source.len(),"duration_seconds":60},
@@ -262,6 +270,16 @@ async fn assert_unchanged(
 #[tokio::test]
 #[ignore = "requires exact FFmpeg/ffprobe9, a create-new live-client proof directory and separately operated pinned headed VLC/libzvbi clients on the actual ordinary URLs"]
 async fn published_indexed_originals_serve_live_ordinary_urls_for_two_headed_clients() {
+    Box::pin(run_live_trial(false)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires exact FFmpeg/ffprobe9, a create-new live-client proof directory and separately operated receipted headed VLC/test-decoder clients on the actual ordinary URLs"]
+async fn published_sparse_originals_serve_live_ordinary_urls() {
+    Box::pin(run_live_trial(true)).await;
+}
+
+async fn run_live_trial(sparse: bool) {
     let directory = PathBuf::from(client_capture::selected(DIRECTORY_ENV));
     std::fs::create_dir(&directory).expect("live-client proof destination must not already exist");
     let ffmpeg = client_capture::selected("ERSATZRS_TELETEXT_TEST_FFMPEG");
@@ -288,17 +306,34 @@ async fn published_indexed_originals_serve_live_ordinary_urls_for_two_headed_cli
     assert!(!source.is_empty());
     assert_eq!(source.len() % 188, 0);
     write_new(&directory.join("source.ts"), &source).unwrap();
-    let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
-        drcs_companion::dense_response,
-        fixture,
-        drcs_companion::dense_encoding_policy,
-    ))
-    .await;
-    let edited = import(&fixture, request(&flow, 2, 8, b'Q')).await;
-    assert_original_pointers(&fixture, &flow).await;
-    let preview = assert_concept_preview(&fixture, &flow, &edited, 2).await;
-    let day = publish_and_accept(&fixture, &flow, &edited).await;
-    assert_eq!(generations::preview(day.service()).raster(), &preview);
+    let (response, encoding) = if sparse {
+        (
+            drcs_companion::sparse_response as fn(&str, u16, u16) -> Value,
+            drcs_companion::sparse_encoding_policy as fn() -> _,
+        )
+    } else {
+        (
+            drcs_companion::dense_response as fn(&str, u16, u16) -> Value,
+            drcs_companion::dense_encoding_policy as fn() -> _,
+        )
+    };
+    let (mut fixture, flow) =
+        Box::pin(setup_with_fixture_policy(response, fixture, encoding)).await;
+    let day = if sparse {
+        assert_original_pointers(&fixture, &flow).await;
+        for (candidate, theme) in flow.accepted.iter().zip(["day", "night"]) {
+            drcs_companion::assert_native_banks(candidate.service(), true);
+            drcs_companion::assert_bitmap_preview(candidate.service(), true, theme);
+        }
+        None
+    } else {
+        let edited = import(&fixture, request(&flow, 2, 8, b'Q')).await;
+        assert_original_pointers(&fixture, &flow).await;
+        let preview = assert_concept_preview(&fixture, &flow, &edited, 2).await;
+        let day = publish_and_accept(&fixture, &flow, &edited).await;
+        assert_eq!(generations::preview(day.service()).raster(), &preview);
+        Some(day)
+    };
     fixture = fixture.reopen().await;
     assert_eq!(
         ersatzrs_infra::transcode_capacity::load_active_transcode_limit(&fixture.state.pool)
@@ -307,7 +342,7 @@ async fn published_indexed_originals_serve_live_ordinary_urls_for_two_headed_cli
         Some(4)
     );
     let accepted = [recover(&fixture, 1).await, recover(&fixture, 2).await];
-    generations::assert_same_output(&accepted[0], &day);
+    generations::assert_same_output(&accepted[0], day.as_ref().unwrap_or(&flow.accepted[0]));
     generations::assert_same_output(&accepted[1], &flow.accepted[1]);
     assert_retained_storage(&fixture, &flow).await;
     let package_hash = calculate_addon_content_sha256(&fixture.root.path().join("package"))
@@ -320,7 +355,7 @@ async fn published_indexed_originals_serve_live_ordinary_urls_for_two_headed_cli
     let outcome = AssertUnwindSafe(async {
         write_new(
             &directory.join("ready.json"),
-            &serde_json::to_vec_pretty(&ready(&origin, &accepted, &source)).unwrap(),
+            &serde_json::to_vec_pretty(&ready(&origin, &accepted, &source, sparse)).unwrap(),
         )?;
         let complete = wait_for_client(&directory).await?;
         assert_unchanged(&mut fixture, &flow, &accepted, &package_hash).await;
