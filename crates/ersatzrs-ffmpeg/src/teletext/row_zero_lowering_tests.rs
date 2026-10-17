@@ -406,15 +406,15 @@ fn deferred_header_keeps_drcs_latches_and_never_invents_a_late_header_reset() {
 
 #[test]
 fn other_row_zero_moves_remain_located_and_failure_keeps_state() {
-    let mut state = LoweringState::new();
     for column in [1, 39] {
+        let mut state = LoweringState::new();
+        assert!(lower(&mut state, position(0, column)).is_empty());
         assert_eq!(
-            state.lower(position(0, column), None).err().unwrap(),
-            TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
-                position: TeletextEnhancementPosition::new(0, column).unwrap()
-            }
+            lower(&mut state, glyph(column)),
+            [(u32::from(column), 9, 65)]
         );
     }
+    let mut state = LoweringState::new();
     assert!(lower(&mut state, position(0, 0)).is_empty());
     lower(&mut state, position(1, 0));
     assert_eq!(
@@ -424,7 +424,7 @@ fn other_row_zero_moves_remain_located_and_failure_keeps_state() {
         }
     );
     assert_eq!(lower(&mut state, glyph(1)), [(1, 9, 65)]);
-    let main = program(vec![position(0, 0), position(0, 0), position(0, 8)]);
+    let main = program(vec![position(0, 0), position(1, 0), position(0, 8)]);
     let saved = main.clone();
     let error = compile(&main, &catalog(vec![]), budget()).unwrap_err();
     assert_eq!(error.location, Some(source(None, 2)));
@@ -437,6 +437,156 @@ fn other_row_zero_moves_remain_located_and_failure_keeps_state() {
         )
     );
     assert_eq!(main, saved);
+}
+
+#[test]
+fn relative_forward_position_local_types_keep_exact_words_and_sparse_sources() {
+    for (kind, invocation_mode, marker_mode) in [
+        (TeletextObjectType::Active, 17, 21),
+        (TeletextObjectType::Adaptive, 18, 22),
+        (TeletextObjectType::Passive, 19, 23),
+    ] {
+        let fg = at(8, TeletextColumnOperation::Foreground { colour: colour(3) });
+        let main = program(vec![position(1, 0), invoke(kind), glyph(1)]);
+        let objects = catalog(vec![definition(
+            kind,
+            vec![position(0, 8), position(0, 8), fg, glyph(8)],
+        )]);
+        let saved = (main.clone(), objects.clone());
+        let actual = compile(&main, &objects, budget()).unwrap();
+        let expected = compile(
+            &main,
+            &catalog(vec![definition(kind, vec![fg, glyph(8)])]),
+            budget(),
+        )
+        .unwrap();
+        assert_eq!(actual.packet_bodies(), expected.packet_bodies());
+        assert_eq!(
+            &words(actual.packet_bodies())[..8],
+            &[
+                (41, 4, 0),
+                (40, invocation_mode, 4),
+                (1, 9, 65),
+                (63, 31, 6),
+                (40, marker_mode, 4),
+                (8, 0, 3),
+                (8, 9, 65),
+                (63, 31, 5),
+            ]
+        );
+        assert_eq!(actual.definition_positions()[0].absolute_index(), 4);
+        let sources: Vec<_> = actual
+            .command_positions()
+            .iter()
+            .map(|record| (record.source(), record.first_word(), record.semantic_word()))
+            .collect();
+        assert_eq!(
+            sources,
+            [
+                (source(None, 0), 0, 0),
+                (source(None, 1), 1, 1),
+                (source(None, 2), 2, 2),
+                (source(Some(target()), 2), 5, 5),
+                (source(Some(target()), 3), 6, 6),
+            ]
+        );
+        assert_eq!((main, objects), saved);
+    }
+}
+
+#[test]
+fn relative_forward_position_unused_local_definition_starts_fresh() {
+    let unused = TeletextObjectIdentity::local(owner(), TeletextObjectId::new(65534));
+    let main = program(vec![position(1, 0), invoke(TeletextObjectType::Passive)]);
+    let objects = catalog(vec![
+        definition(TeletextObjectType::Passive, vec![position(2, 3), glyph(3)]),
+        TeletextEnhancementObjectDefinition {
+            identity: unused,
+            object_type: TeletextObjectType::Passive,
+            program: program(vec![position(0, 8), glyph(8)]),
+        },
+    ]);
+    let actual = compile(&main, &objects, budget()).unwrap();
+    assert_eq!(actual.definition_positions().len(), 2);
+    assert_eq!(actual.definition_positions()[1].target(), unused);
+    assert_eq!(
+        &words(actual.packet_bodies())[..9],
+        &[
+            (41, 4, 0),
+            (40, 19, 3),
+            (63, 31, 6),
+            (40, 23, 3),
+            (42, 4, 3),
+            (3, 9, 65),
+            (40, 23, 6),
+            (8, 9, 65),
+            (63, 31, 5),
+        ]
+    );
+    let unused_sources: Vec<_> = actual
+        .command_positions()
+        .iter()
+        .filter(|record| record.source().object == Some(unused))
+        .map(|record| (record.source(), record.semantic_word()))
+        .collect();
+    assert_eq!(unused_sources, [(source(Some(unused), 1), 7)]);
+}
+
+#[test]
+fn relative_forward_position_nested_call_requires_real_parent_ap() {
+    let outer = TeletextObjectIdentity::local(owner(), TeletextObjectId::new(65534));
+    let outer_call = TeletextEnhancementCommand::InvokeObject {
+        target: outer,
+        object_type: TeletextObjectType::Adaptive,
+        offset: None,
+    };
+    let main = program(vec![position(1, 0), outer_call]);
+    let make = |materialized| {
+        let mut commands = vec![position(0, 8)];
+        if materialized {
+            commands.push(at(
+                8,
+                TeletextColumnOperation::Foreground { colour: colour(3) },
+            ));
+        }
+        commands.push(invoke(TeletextObjectType::Passive));
+        catalog(vec![
+            TeletextEnhancementObjectDefinition {
+                identity: outer,
+                object_type: TeletextObjectType::Adaptive,
+                program: program(commands),
+            },
+            definition(TeletextObjectType::Passive, vec![glyph(0)]),
+        ])
+    };
+    let error = compile(&main, &make(false), budget()).unwrap_err();
+    assert_eq!(error.location, Some(source(Some(outer), 1)));
+    assert_eq!(
+        error.reason,
+        TeletextLocalObjectProgramEncodingFailure::Lowering(
+            TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
+                position: TeletextEnhancementPosition::new(0, 8).unwrap(),
+            }
+        )
+    );
+    let actual = compile(&main, &make(true), budget()).unwrap();
+    assert!(actual
+        .command_positions()
+        .iter()
+        .any(|record| record.source() == source(Some(outer), 2)));
+    assert!(!words(actual.packet_bodies())
+        .iter()
+        .any(|&(address, mode, _)| address == 63 && mode == 7));
+    let mut state = LoweringState::new();
+    assert!(lower(&mut state, position(0, 8)).is_empty());
+    assert_eq!(
+        state.lower(glyph(7), None).err().unwrap(),
+        TeletextLocalProgramEncodingFailure::ActivePositionOrder {
+            previous: (0, 8),
+            requested: (0, 7),
+        }
+    );
+    assert_eq!(lower(&mut state, glyph(8)), [(8, 9, 65)]);
 }
 
 #[test]

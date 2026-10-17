@@ -727,8 +727,10 @@ release section when tagging a release.
   attributes protected during TTI import and preserve source locations, fallback,
   DRCS selections and packet bounds through concept preview and publication.
   Resolve same-Main header colour conflicts from actual encoded writer order before
-  positioning an object call; retain uncertain cross-object context and later
-  header resets as validation errors.
+  positioning an object call. Local, public and global object definitions can
+  defer forward relative positions until a real column operation, preserving
+  original source ordinals and pointer allocation. Uncertain cross-object context,
+  unmaterialized calls and backward addressing retain validation errors.
 - Preserve original implicit AP00 teletext position anchors during structural
   editor imports, keeping glyph provenance and shared-consumer protection intact.
   Valid imports no longer fail because a hidden anchor moves past an edited glyph;

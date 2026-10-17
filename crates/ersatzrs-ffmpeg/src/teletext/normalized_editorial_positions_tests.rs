@@ -4,6 +4,8 @@ use super::authored_service_tests::{input, limits, semantic_limits};
 use super::*;
 use ersatzrs_domain::*;
 
+mod object_positions;
+
 fn position(row: u8, column: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::SetPosition {
         position: TeletextEnhancementPosition::new(row, column).unwrap(),

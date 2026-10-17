@@ -127,7 +127,8 @@ impl EncodedTeletextLocalProgram {
 /// is (0,0), as specified by clause 12.3.2. Initial column commands are preserved;
 /// header geometry, charset assignments and inherited attribute validity remain
 /// composition obligations. Row-zero colour has an explicit wire operation;
-/// row-zero positioning alone needs a later colour/context-aware lowering.
+/// Forward row-zero positions defer to a real column operation without adding
+/// colour or row-address effects. Calls before that operation need normalization.
 /// # Errors
 /// Returns a located budget/capacity/order error, or an explicit requirement for
 /// row-zero position lowering or physical object allocation. No partial result
@@ -439,7 +440,11 @@ impl LoweringState {
                     if position.column() == 0 && self.active_position == (0, 0) {
                         return Ok(CommandWords::none());
                     }
-                    if self.compatibility.is_some() && self.active_position.0 == 0 {
+                    // Each object also starts at relative AP(0,0) (13.7).
+                    // A real following column operation supplies this forward
+                    // column without a display-header/row-colour instruction.
+                    // A call before that operation still requires normalization.
+                    if self.active_position.0 == 0 {
                         self.move_to((0, position.column()))?;
                         return Ok(CommandWords::none());
                     }

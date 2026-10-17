@@ -387,15 +387,14 @@ fn command_budget_precedes_lowering_and_counts_only_the_exact_resource() {
         error.reason,
         TeletextObjectPageEncodingFailure::CommandBudget { maximum: 1 }
     );
-    let error = encode_teletext_object_page(owner, &input, &allocations, transmission(true), 2)
-        .unwrap_err();
-    assert_eq!(error.command, Some(0));
-    assert!(matches!(
-        error.reason,
-        TeletextObjectPageEncodingFailure::Lowering(
-            TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering { .. }
-        )
-    ));
+    let encoded =
+        encode_teletext_object_page(owner, &input, &allocations, transmission(true), 2).unwrap();
+    assert_eq!(encoded.definition_positions().len(), 2);
+    assert_eq!(encoded.command_positions().len(), 1);
+    assert_eq!(
+        encoded.command_positions()[0].source().object,
+        Some(target(owner, 3))
+    );
 }
 
 #[test]

@@ -546,7 +546,7 @@ fn raw_object_and_exact_owned_command_budgets_precede_lowering() {
         error.reason,
         TeletextLocalObjectProgramEncodingFailure::CommandBudget { maximum: 1 }
     );
-    let error = compile_teletext_local_program_with_objects(
+    let encoded = compile_teletext_local_program_with_objects(
         display,
         &main,
         &objects,
@@ -557,20 +557,12 @@ fn raw_object_and_exact_owned_command_budgets_precede_lowering() {
             max_commands: 2,
         },
     )
-    .unwrap_err();
-    assert_eq!(
-        error.location,
-        Some(TeletextEnhancementSource {
-            object: None,
-            command: 0
-        })
-    );
-    assert!(matches!(
-        error.reason,
-        TeletextLocalObjectProgramEncodingFailure::Lowering(
-            TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering { .. }
-        )
-    ));
+    .unwrap();
+    assert_eq!(encoded.main_triplet_count(), 0);
+    assert!(encoded
+        .command_positions()
+        .iter()
+        .all(|position| position.source().object.is_some()));
 }
 
 #[test]

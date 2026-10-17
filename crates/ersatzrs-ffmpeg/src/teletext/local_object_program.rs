@@ -497,7 +497,7 @@ impl Input<'_> {
                 object.map(|item| item.object_type),
                 numbers,
             )?;
-            // A position identity emits no semantic word. Preserve the authored
+            // A deferred position emits no semantic word. Preserve the authored
             // ordinals of following commands without inventing timing evidence.
             if words.words().is_empty() {
                 continue;

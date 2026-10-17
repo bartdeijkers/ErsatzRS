@@ -109,7 +109,7 @@ impl TeletextObjectDefinitionPosition {
 /// Coordinates start at FIRST X3, including pointer extensions. Injected DRCS
 /// selectors and origin modifiers belong to the range; its last word is the
 /// original command's semantic word. Definition markers, termination, padding
-/// and zero-word position identities have no command record. This is producer
+/// and deferred zero-word positions have no command record. This is producer
 /// provenance, not executing-instance, generation or receiver authority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextObjectCommandPosition {
@@ -197,7 +197,8 @@ impl EncodedTeletextObjectPage {
 /// An explicitly declared empty resource contains unused X1/X2 plus a
 /// termination-only X3, without inventing a definition. At most 43 DVB units
 /// are returned. Source ownership and complete-service validation remain caller
-/// obligations; row-zero position lowering and local-object packing remain open.
+/// obligations. Calls at an unmaterialized relative position and local-object
+/// packing remain separate obligations.
 /// # Errors
 /// Rejects wrong purpose, budget/map/type/capacity mismatches, forbidden colour
 /// operations or located shared lowering failures. No partial output is returned.

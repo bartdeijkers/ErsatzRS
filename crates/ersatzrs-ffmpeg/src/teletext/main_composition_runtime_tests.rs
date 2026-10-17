@@ -1244,13 +1244,18 @@ fn contextual_header_objects() -> Vec<serde_json::Value> {
 #[tokio::test]
 #[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
 async fn contextual_main_program_decodes_with_pinned_independent_teletextimager() {
+    let cases = contextual_cases();
+    assert_eq!(cases.len(), 8);
+    assert_contextual_decoding(cases, "ERSATZRS_TELETEXT_TEST_CONTEXT_MAIN_FIXTURE").await;
+}
+
+async fn assert_contextual_decoding(cases: Vec<serde_json::Value>, fixture_env: &str) {
+    let count = cases.len();
     let request = serde_json::to_vec(&serde_json::json!({
-        "expected_version":"0.2.0", "cases":contextual_cases()
+        "expected_version":"0.2.0", "cases":cases
     }))
     .unwrap();
-    if let Some(path) =
-        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_CONTEXT_MAIN_FIXTURE"])
-    {
+    if let Some(path) = crate::locator::first_non_empty_env(&[fixture_env]) {
         std::fs::write(path, &request).unwrap();
     }
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1267,7 +1272,60 @@ async fn contextual_main_program_decodes_with_pinned_independent_teletextimager(
         serde_json::json!({
             "decoder":"teletextimager", "decoder_version":"0.2.0",
             "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317",
-            "cases_passed":8, "levels":["1.5","2.5"]
+            "cases_passed":count, "levels":["1.5","2.5"]
         })
     );
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn relative_object_positions_decode_with_pinned_independent_teletextimager() {
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let target = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
+    let mut cases = Vec::new();
+    for object_type in [
+        TeletextObjectType::Active,
+        TeletextObjectType::Adaptive,
+        TeletextObjectType::Passive,
+    ] {
+        cases.push(encoded_case_with_encoding(
+            &format!("relative_object_{object_type:?}"),
+            vec![text(1, 8, "B       Z")],
+            vec![
+                position(1, 8),
+                TeletextEnhancementCommand::InvokeObject {
+                    target,
+                    object_type,
+                    offset: None,
+                },
+            ],
+            vec![TeletextEnhancementObjectDefinition {
+                identity: target,
+                object_type,
+                program: TeletextEnhancementProgram::new(vec![
+                    position(0, 8),
+                    at(
+                        8,
+                        TeletextColumnOperation::Foreground {
+                            colour: TeletextColourReference::new(2).unwrap(),
+                        },
+                    ),
+                    at(
+                        8,
+                        TeletextColumnOperation::G0 {
+                            code: TeletextGlyphCode::new(b'A').unwrap(),
+                        },
+                    ),
+                ])
+                .unwrap(),
+            }],
+            &[
+                cell(1, 8, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
+                cell(1, 16, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0]),
+            ],
+            MainEncoding::Normalized,
+        ));
+    }
+    assert_eq!(cases.len(), 3);
+    assert_contextual_decoding(cases, "ERSATZRS_TELETEXT_TEST_RELATIVE_OBJECT_FIXTURE").await;
 }
