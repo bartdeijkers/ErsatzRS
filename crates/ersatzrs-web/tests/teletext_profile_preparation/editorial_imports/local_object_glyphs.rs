@@ -337,18 +337,38 @@ async fn positive(factory: fn(&str, u16, u16) -> Value, family: Family) {
     ))
     .await;
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
-    // Literal address and family mutations are not same-command glyph edits.
-    for replacement in [family.word(1) | 1, family.word(1) ^ (1 << 6)] {
-        assert!(matches!(
-            reject(
-                &fixture,
-                &flow,
-                edited_request(&flow.receipts[0], 1, family.word(0), replacement)
+    // Column movement is structural intent now; the second consumer's new
+    // third panel cell must still reject under the original two-cell permission.
+    let NativeTeletextEditorialImportError::Effects(error) = reject(
+        &fixture,
+        &flow,
+        edited_request(&flow.receipts[0], 1, family.word(0), family.word(1) | 1),
+    )
+    .await
+    else {
+        panic!("a moved protected consumer requires an effects refusal");
+    };
+    assert_eq!(
+        error.reason,
+        TeletextEditorialEffectsFailure::ProtectedDisplay
+    );
+    assert_eq!(error.page, Some(channel_documents::address(124, 32)));
+    assert_eq!(error.position, Some((1, 46)));
+    // A fixed-topology cross-family mutation still has no original intent.
+    assert!(matches!(
+        reject(
+            &fixture,
+            &flow,
+            edited_request(
+                &flow.receipts[0],
+                1,
+                family.word(0),
+                family.word(1) ^ (1 << 6)
             )
-            .await,
-            NativeTeletextEditorialImportError::Tti(_)
-        ));
-    }
+        )
+        .await,
+        NativeTeletextEditorialImportError::Tti(_)
+    ));
     let concept = import(
         &fixture,
         edited_request(&flow.receipts[0], 1, family.word(0), family.word(1)),
@@ -480,6 +500,15 @@ mod actual_flash_charset_editor;
 
 #[path = "local_object_glyphs/drcs_selections.rs"]
 mod drcs_selections;
+
+pub(super) fn structural_original_banks(value: &mut Value) {
+    drcs_selections::fixture::prepare_banks(value);
+}
+
+pub(super) fn structural_encoding(
+) -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy {
+    drcs_selections::fixture::encoding()
+}
 
 #[path = "local_object_glyphs/actual_drcs_selection_editor.rs"]
 mod actual_drcs_selection_editor;

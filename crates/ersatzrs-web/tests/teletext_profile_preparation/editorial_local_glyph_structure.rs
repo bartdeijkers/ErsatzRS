@@ -10,6 +10,9 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 };
 use serde_json::{json, Value};
 
+#[path = "editorial_all_glyph_structure.rs"]
+mod all_glyph_structure;
+
 #[derive(Clone, Copy)]
 enum Permission {
     Free,
@@ -584,7 +587,7 @@ async fn malformed(fixture: &Fixture, flow: &Flow) {
     let mut deleted = glyph_words(1);
     deleted.remove(2); // Original charset anchor must not disappear.
     let mut resource = glyph_words(1);
-    resource.splice(3..3, [word(40, 24, 80), word(0, 13, 64)]); // Valid original bank; no new resource-reference authority.
+    resource.splice(3..3, [word(40, 24, 80), word(0, 13, 112)]); // Normal slot48 is invalid even in an original bound bank.
     let mut call = glyph_words(1);
     call.insert(
         3,

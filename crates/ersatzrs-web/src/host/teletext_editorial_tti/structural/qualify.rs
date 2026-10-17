@@ -1,5 +1,5 @@
 //! Uploaded structure is authenticated against old ownership before native rebuild.
-use super::{fail, stream, Location, Page, Result, TeletextEditorialChanges};
+use super::{fail, raw, stream, Location, Page, Result, TeletextEditorialChanges};
 use ersatzrs_domain::TeletextPageAddress;
 use ersatzrs_ffmpeg::teletext::{
     EncodedTeletextAuthoredService, EncodedTeletextLocalObjectProgram,
@@ -62,7 +62,7 @@ pub(in super::super) fn check(
             .iter()
             .map(|word| translate(*word, old, new, &a, &b, location))
             .collect::<Result<Vec<_>>>()?;
-        if tokens(&translated, location)? != tokens(b.body(j), location)? {
+        if tokens(&translated, location, deadline)? != tokens(b.body(j), location, deadline)? {
             return Err(fail(location));
         }
     }
@@ -163,35 +163,26 @@ enum Token {
         slot: u32,
     },
 }
-fn tokens(words: &[u32], location: Location) -> Result<Vec<Token>> {
-    let mut state = [None; 2];
-    let mut result = Vec::new();
-    for word in words {
-        let address = word & 63;
-        let mode = (word >> 6) & 31;
-        let data = word >> 11;
-        if mode == 24 && address >= 40 {
-            if *word > 0x3ffff || data & 0x30 != 0x10 {
-                return Err(fail(location));
-            }
-            state[usize::from(data & 64 != 0)] = Some(data & 15);
-        } else if mode == 13 && address < 40 {
-            let scope = usize::from(data & 64 != 0);
-            let subtable = state[scope].ok_or_else(|| fail(location))?;
-            if *word > 0x3ffff || data & 63 >= 48 {
-                return Err(fail(location));
-            }
-            result.push(Token::Drcs {
-                column: address,
-                scope,
-                subtable,
-                slot: data & 63,
-            });
-        } else {
-            result.push(Token::Word(*word));
-        }
-    }
-    Ok(result)
+fn tokens(words: &[u32], location: Location, deadline: Instant) -> Result<Vec<Token>> {
+    let body = raw::Body::read(words, location, deadline)?;
+    Ok(body
+        .entries
+        .into_iter()
+        .map(|entry| match entry.command {
+            Some(ersatzrs_domain::TeletextEnhancementCommand::AtColumn {
+                column,
+                operation: ersatzrs_domain::TeletextColumnOperation::Drcs { reference },
+            }) => Token::Drcs {
+                column: u32::from(column),
+                scope: usize::from(
+                    reference.table == ersatzrs_domain::TeletextDrcsTableScope::Normal,
+                ),
+                subtable: u32::from(reference.subtable.get()),
+                slot: u32::from(reference.slot.get()),
+            },
+            _ => Token::Word(entry.word),
+        })
+        .collect())
 }
 fn main_sources(
     old: &EncodedTeletextLocalObjectProgram,
@@ -226,10 +217,10 @@ fn main_sources(
         if (before >> 6) & 31 == 13 && before & 63 < 40 {
             let first = position.semantic_word();
             let last = final_position.semantic_word();
-            let left = tokens(&a.words[..=first], location)?
+            let left = tokens(&a.words[..=first], location, deadline)?
                 .pop()
                 .ok_or_else(|| fail(location))?;
-            let right = tokens(&b.words[..=last], location)?
+            let right = tokens(&b.words[..=last], location, deadline)?
                 .pop()
                 .ok_or_else(|| fail(location))?;
             if left != right {

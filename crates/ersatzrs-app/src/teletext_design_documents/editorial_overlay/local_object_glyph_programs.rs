@@ -1,4 +1,4 @@
-//! Closed V11 structure and exact-root association for retained Local glyph programs.
+//! Closed V11/V12 structure and exact-root association for retained Local glyph programs.
 
 use super::{
     failure, invalid, limit, map_only, object_operands, unique_original_owner,
@@ -55,11 +55,17 @@ impl<'de> Deserialize<'de> for OptionalStoredGlyphPrograms {
 
 pub(super) fn restore(
     programs: Vec<StoredGlyphProgram>,
+    all_glyphs: bool,
 ) -> Result<Vec<TeletextLocalObjectGlyphProgramOverlay>, TeletextDesignDocumentError> {
     programs
         .into_iter()
         .map(|program| {
-            TeletextLocalObjectGlyphProgramOverlay::new(
+            let constructor = if all_glyphs {
+                TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs
+            } else {
+                TeletextLocalObjectGlyphProgramOverlay::new
+            };
+            constructor(
                 program.identity.0,
                 program.expected,
                 program.replacement,
@@ -92,8 +98,12 @@ fn structural(program: &TeletextLocalObjectGlyphProgramOverlay) -> bool {
 pub(super) fn distinct(
     programs: &[TeletextLocalObjectGlyphProgramOverlay],
     operands: &[TeletextLocalObjectOperandOverlay],
+    all_glyphs: bool,
 ) -> Result<(), TeletextDesignDocumentError> {
-    if !programs.iter().any(structural) {
+    let has_wider_change = programs
+        .iter()
+        .any(|program| !program.is_legacy_compatible());
+    if !programs.iter().any(structural) || has_wider_change != all_glyphs {
         return Err(invalid());
     }
     let mut identities = BTreeSet::new();
@@ -101,7 +111,11 @@ pub(super) fn distinct(
         if !identities.insert(program.identity())
             || operands.iter().any(|operand| {
                 operand.identity() == program.identity()
-                    && object_operands::glyph(operand.expected())
+                    && if all_glyphs {
+                        operand.expected().glyph_family().is_some()
+                    } else {
+                        object_operands::glyph(operand.expected())
+                    }
             })
         {
             return Err(invalid());

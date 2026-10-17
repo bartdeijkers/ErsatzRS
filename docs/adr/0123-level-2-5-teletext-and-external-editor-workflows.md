@@ -230,6 +230,29 @@ closed and byte-compatible. Streaming preflight charges program arrays and survi
 maps before typed allocation; exact-original association patches cumulative
 nonglyph operands first and rejects overlapping G0/G1 scalar/program ownership.
 
+The explicit complete-glyph constructor extends the same checked Local program
+intent to G1 alphabetic, G2, G0-with-diacritic, G3 and DRCS operations. Retained
+commands keep their glyph family, including G3 compatibility. Private concept
+version12 uses the existing program/map fields and bounded preflight; it requires
+a genuinely wider intent and structural change. Versions1–11 retain their closed
+constructors and bytes. An unchanged wider glyph anchor does not promote V11;
+same-position wider scalar edits can still accompany its G0/G1 structure.
+V12 folds all same-object glyph edits into the program and authenticates separate
+nonglyph patches against original ordinals. Repeat/undo selects the minimal valid
+older representation rather than promoting on the mere presence of wider glyphs.
+
+DRCS structure retains complete typed Normal/Global, S1 and slot references.
+Definition-local replay authenticates original compiler-owned spans and consumes
+derived mode24 selectors against their mode13 glyphs. Normal/Global latches start
+unknown independently in each definition. Used prefixes may be added, omitted or
+changed only through complete checked references; no resource or permission is
+created. An unused uploaded selector is allowed only as an exact ordered original
+prefix whose entire original consumer set was deleted. New or changed unused
+selectors reject. Fixed semantic topology still follows the original scalar-family
+rules: a pure same-position family or G3-compatibility flip cannot masquerade as
+delete/insert. This records import correspondence, not recovered editor history;
+complete arbitrary command/resource authoring remains an open requirement.
+
 The host authenticates the complete uploaded X26 stream against original compiler
 spans: definition count/type/order, marker and invocation relocation, unowned
 blocks, termination, contiguous designations and padding. Canonical monotonic

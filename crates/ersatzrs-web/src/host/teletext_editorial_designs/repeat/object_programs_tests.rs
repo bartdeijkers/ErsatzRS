@@ -1,8 +1,8 @@
 use super::*;
 use ersatzrs_domain::{
-    TeletextColourReference, TeletextEnhancementObjectDefinition, TeletextGlyphCode,
-    TeletextObjectCatalogBudget, TeletextObjectId, TeletextObjectType, TeletextPageAddress,
-    TeletextPageNumber, TeletextSubcode,
+    TeletextColourReference, TeletextColumnOperation, TeletextEnhancementObjectDefinition,
+    TeletextGlyphCode, TeletextObjectCatalogBudget, TeletextObjectId, TeletextObjectType,
+    TeletextPageAddress, TeletextPageNumber, TeletextSubcode,
 };
 use std::time::Duration;
 fn identity() -> TeletextObjectIdentity {
@@ -197,4 +197,74 @@ fn stale_duplicate_deadline_and_caller_budgets_remain_closed() {
         end()
     )
     .is_err());
+}
+
+fn g2(code: u8) -> TeletextColumnOperation {
+    TeletextColumnOperation::G2 {
+        code: TeletextGlyphCode::new(code).unwrap(),
+    }
+}
+#[test]
+fn wide_inserted_glyph_edits_fold_into_v12_and_undo_downgrades_to_v11() {
+    let mut commands = growth().replacement().commands().to_vec();
+    commands.insert(2, at(0, g2(0x23)));
+    let wide = TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs(
+        identity(),
+        root(),
+        TeletextEnhancementProgram::new(commands).unwrap(),
+        vec![Some(0), None, None, Some(1), Some(2)],
+    )
+    .unwrap();
+    assert!(!wide.is_legacy_compatible());
+    let previous = TeletextEditorialChanges {
+        object_programs: vec![wide.clone()],
+        ..TeletextEditorialChanges::default()
+    };
+    let incoming = TeletextEditorialChanges {
+        object_operands: vec![scalar(2, 0, g2(0x23), g2(0x27))],
+        ..TeletextEditorialChanges::default()
+    };
+    let (operands, programs) = merge(&catalog(), &previous, &incoming, budget(), end()).unwrap();
+    assert!(operands.is_empty());
+    assert!(!programs[0].is_legacy_compatible());
+    assert_eq!(programs[0].replacement().commands()[2], at(0, g2(0x27)));
+    let revert = TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs(
+        identity(),
+        wide.replacement().clone(),
+        growth().replacement().clone(),
+        vec![Some(0), Some(1), Some(3), Some(4)],
+    )
+    .unwrap();
+    let incoming = TeletextEditorialChanges {
+        object_programs: vec![revert],
+        ..TeletextEditorialChanges::default()
+    };
+    let (operands, programs) = merge(&catalog(), &previous, &incoming, budget(), end()).unwrap();
+    assert!(operands.is_empty());
+    assert_eq!(programs, [growth()]);
+    assert!(programs[0].is_legacy_compatible());
+}
+#[test]
+fn wide_same_column_scalar_can_stay_a_legacy_anchor_beside_g0_structure() {
+    let mut original = root().commands().to_vec();
+    original[2] = at(1, g2(0x23));
+    let original = TeletextEnhancementProgram::new(original).unwrap();
+    let mut changed = original.commands().to_vec();
+    changed.insert(1, at(0, g(b'Q')));
+    changed[3] = at(1, g2(0x27));
+    let replacement = TeletextEnhancementProgram::new(changed).unwrap();
+    let mut operands = Vec::new();
+    let mut programs = Vec::new();
+    collect(
+        identity(),
+        &original,
+        &replacement,
+        &[Some(0), None, Some(1), Some(2)],
+        &mut operands,
+        &mut programs,
+    )
+    .unwrap();
+    assert_eq!(operands, [scalar(2, 1, g2(0x23), g2(0x27))]);
+    assert!(programs[0].is_legacy_compatible());
+    assert_eq!(programs[0].expected().commands()[2], at(1, g2(0x27)));
 }

@@ -121,6 +121,47 @@ pub enum TeletextColumnOperation {
     },
 }
 
+/// Semantic glyph family for checked editorial correspondence.
+///
+/// This is not repertoire assignment, resource authority or rendering readiness.
+/// G3 compatibility remains part of the family; a DRCS operation retains its
+/// complete checked table/subtable/slot reference separately from this key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeletextColumnGlyphFamily {
+    G0,
+    G1,
+    G1Alpha,
+    G2,
+    G0Diacritic,
+    G3 {
+        compatibility: TeletextG3Compatibility,
+    },
+    Drcs,
+}
+
+impl TeletextColumnOperation {
+    /// Classify glyph operations without treating context/attributes as glyphs.
+    /// Full typed operands still carry code, diacritic and resource selection.
+    #[must_use]
+    pub const fn glyph_family(self) -> Option<TeletextColumnGlyphFamily> {
+        use TeletextColumnGlyphFamily as Family;
+        match self {
+            Self::G0 { .. } => Some(Family::G0),
+            Self::G1 { .. } => Some(Family::G1),
+            Self::G1Alpha { .. } => Some(Family::G1Alpha),
+            Self::G2 { .. } => Some(Family::G2),
+            Self::G0Diacritic { .. } => Some(Family::G0Diacritic),
+            Self::G3 { compatibility, .. } => Some(Family::G3 { compatibility }),
+            Self::Drcs { .. } => Some(Family::Drcs),
+            Self::Foreground { .. }
+            | Self::Background { .. }
+            | Self::DesignateCharset { .. }
+            | Self::Attributes { .. }
+            | Self::Flash { .. } => None,
+        }
+    }
+}
+
 /// Logical command order is meaningful; raw terminators/pointer definitions are absent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

@@ -241,14 +241,14 @@ fn at(packets: &PacketWords, word: usize) -> Option<u32> {
         .as_ref()
         .map(|packet| packet[word % 13])
 }
-fn selector(word: u32) -> Option<(usize, u8)> {
+pub(in super::super) fn selector(word: u32) -> Option<(usize, u8)> {
     if word > 0x3ffff || word & 0x7ff != 0x28 | (24 << 6) {
         return None;
     }
     let data = u8::try_from(word >> 11).ok()?;
     (data & 0x30 == 0x10).then_some((usize::from(data >> 6), data & 15))
 }
-fn glyph(word: u32, column: u8) -> Option<(usize, TeletextDrcsGlyphSlot)> {
+pub(in super::super) fn glyph(word: u32, column: u8) -> Option<(usize, TeletextDrcsGlyphSlot)> {
     if word > 0x3ffff || column >= 40 || word & 0x7ff != u32::from(column) | (13 << 6) {
         return None;
     }
@@ -258,7 +258,7 @@ fn glyph(word: u32, column: u8) -> Option<(usize, TeletextDrcsGlyphSlot)> {
         TeletextDrcsGlyphSlot::new(data & 63).ok()?,
     ))
 }
-fn reference(
+pub(in super::super) fn reference(
     scope: usize,
     subtable: u8,
     slot: TeletextDrcsGlyphSlot,

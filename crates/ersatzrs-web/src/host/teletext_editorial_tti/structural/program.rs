@@ -1,8 +1,8 @@
 //! Glyph segments retain exact nonglyph anchors and original command ordinals.
-use super::{alignment, fail, glyph_family, stream, Location, Result};
+use super::{alignment, fail, glyph_family, raw, stream, Location, Result};
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementProgram,
-    TeletextGlyphCode, TeletextMosaic, TeletextObjectIdentity,
+    TeletextObjectIdentity,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextLocalObjectProgram;
 use std::time::Instant;
@@ -29,6 +29,10 @@ pub(super) fn parse(
         return Err(fail(location));
     }
     check_rebuilt_count(definition.program.commands(), actual, location)?;
+    let before = raw::Body::read(old.body(index), location, deadline)?;
+    let uploaded = raw::Body::read(actual, location, deadline)?;
+    raw::protect_fixed_families(&before, &uploaded, location)?;
+    let actual = uploaded.entries.as_slice();
     let mut cursor = 0;
     let mut output = Candidate {
         identity: definition.identity,
@@ -44,7 +48,7 @@ pub(super) fn parse(
         if cluster_command(definition, program, ordinal, location)?
             || actual
                 .get(cursor)
-                .is_some_and(|word| decode(*word).is_some())
+                .is_some_and(|entry| entry.command.is_some())
         {
             let start = ordinal;
             while ordinal < definition.program.commands().len()
@@ -52,70 +56,106 @@ pub(super) fn parse(
             {
                 ordinal += 1;
             }
-            let before = (start..ordinal)
+            let original = (start..ordinal)
                 .map(|i| (i, definition.program.commands()[i]))
                 .collect::<Vec<_>>();
             let mut inserted = Vec::new();
-            while let Some(command) = actual.get(cursor).and_then(|word| decode(*word)) {
+            while let Some(command) = actual.get(cursor).and_then(|entry| entry.command) {
                 inserted.push(command);
                 cursor += 1;
             }
-            let cluster = alignment::with_anchors(&before, &inserted, location, deadline)?;
+            let cluster = alignment::with_anchors(&original, &inserted, location, deadline)?;
             output.retained.extend(cluster.retained);
             output.replacement.extend(cluster.commands);
         } else {
-            let positions = program
-                .command_positions()
-                .iter()
-                .filter(|position| {
-                    position.source().object == Some(definition.identity)
-                        && position.source().command == ordinal
-                })
-                .collect::<Vec<_>>();
-            if positions.len() > 1 {
-                return Err(fail(location));
-            }
-            if let Some(position) = positions.first() {
-                let count = position.semantic_word() - position.first_word() + 1;
-                let words = actual
-                    .get(cursor..cursor + count)
-                    .ok_or_else(|| fail(location))?;
-                let expected = &old.words[position.first_word()..=position.semantic_word()];
-                anchor(command, expected, words, images, location)?;
-                for (offset, word) in words.iter().enumerate() {
-                    aligned[position.first_word() + offset] =
-                        if stream::relocate(expected[offset], old, new, location)?
-                            == expected[offset]
-                        {
-                            *word
-                        } else {
-                            expected[offset]
-                        };
-                }
-                cursor += count;
-            }
+            cursor += consume_anchor(
+                (definition, ordinal),
+                program,
+                images,
+                (actual, cursor),
+                aligned,
+                location,
+            )?;
             output.replacement.push(command);
             output.retained.push(Some(ordinal));
             ordinal += 1;
         }
     }
-    for word in &actual[cursor..] {
+    for entry in &actual[cursor..] {
         output
             .replacement
-            .push(decode(*word).ok_or_else(|| fail(location))?);
+            .push(entry.command.ok_or_else(|| fail(location))?);
         output.retained.push(None);
     }
-    finish(output, definition, program, aligned, location)
+    let original = original_spans(definition, program, old.markers[index] + 1, location)?;
+    raw::qualify_selectors(
+        &before,
+        &uploaded,
+        &original,
+        &output.retained,
+        location,
+        deadline,
+    )?;
+    Ok(finish(output, definition))
+}
+fn consume_anchor(
+    source: (&ersatzrs_domain::TeletextEnhancementObjectDefinition, usize),
+    program: &EncodedTeletextLocalObjectProgram,
+    images: (&stream::Image, &stream::Image),
+    input: (&[raw::Entry], usize),
+    aligned: &mut [u32],
+    location: Location,
+) -> Result<usize> {
+    let (definition, ordinal) = source;
+    let mut positions = program.command_positions().iter().filter(|position| {
+        position.source().object == Some(definition.identity)
+            && position.source().command == ordinal
+    });
+    let position = positions.next().ok_or_else(|| fail(location))?;
+    if positions.next().is_some() {
+        return Err(fail(location));
+    }
+    let count = position.semantic_word() - position.first_word() + 1;
+    let entries = input
+        .0
+        .get(input.1..input.1 + count)
+        .ok_or_else(|| fail(location))?;
+    if entries
+        .windows(2)
+        .any(|pair| pair[0].index + 1 != pair[1].index)
+    {
+        return Err(fail(location));
+    }
+    let words = entries.iter().map(|entry| entry.word).collect::<Vec<_>>();
+    let expected = &images.0.words[position.first_word()..=position.semantic_word()];
+    anchor(
+        definition.program.commands()[ordinal],
+        expected,
+        &words,
+        images,
+        location,
+    )?;
+    for (offset, word) in words.iter().enumerate() {
+        aligned[position.first_word() + offset] = if stream::relocate(
+            expected[offset],
+            images.0,
+            images.1,
+            location,
+        )? == expected[offset]
+        {
+            *word
+        } else {
+            expected[offset]
+        };
+    }
+    Ok(count)
 }
 fn check_rebuilt_count(
     original: &[TeletextEnhancementCommand],
     actual: &[u32],
     location: Location,
 ) -> Result<()> {
-    let glyphs = actual
-        .iter()
-        .filter(|word| decode(**word).is_some())
-        .count();
+    let glyphs = actual.iter().filter(|word| raw::is_glyph(**word)).count();
     let mandatory = original
         .iter()
         .filter(|command| glyph_family(command).is_none())
@@ -150,13 +190,44 @@ fn cluster_command(
     // Every other nonglyph retains its exact physical anchor/span handling.
     Ok(glyph_family(command).is_some() || (count == 0 && alignment::hidden_identity(command)))
 }
+fn original_spans(
+    definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+    program: &EncodedTeletextLocalObjectProgram,
+    start: usize,
+    location: Location,
+) -> Result<Vec<raw::OriginalSpan>> {
+    program
+        .command_positions()
+        .iter()
+        .filter(|position| {
+            position.source().object == Some(definition.identity)
+                && matches!(
+                    definition.program.commands().get(position.source().command),
+                    Some(TeletextEnhancementCommand::AtColumn {
+                        operation: TeletextColumnOperation::Drcs { .. },
+                        ..
+                    })
+                )
+        })
+        .map(|position| {
+            Ok(raw::OriginalSpan {
+                first: position
+                    .first_word()
+                    .checked_sub(start)
+                    .ok_or_else(|| fail(location))?,
+                word: position
+                    .semantic_word()
+                    .checked_sub(start)
+                    .ok_or_else(|| fail(location))?,
+                ordinal: position.source().command,
+            })
+        })
+        .collect()
+}
 fn finish(
     mut output: Candidate,
     definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
-    program: &EncodedTeletextLocalObjectProgram,
-    aligned: &mut [u32],
-    location: Location,
-) -> Result<Candidate> {
+) -> Candidate {
     output.structural = output.replacement.len() != definition.program.commands().len()
         || output
             .retained
@@ -174,56 +245,7 @@ fn finish(
                 ) => a != b,
                 _ => false,
             });
-    if !output.structural {
-        for (ordinal, command) in output
-            .replacement
-            .iter()
-            .enumerate()
-            .filter(|(_, command)| glyph_family(command).is_some())
-        {
-            let position = program
-                .command_positions()
-                .iter()
-                .find(|position| {
-                    position.source().object == Some(definition.identity)
-                        && position.source().command == ordinal
-                })
-                .ok_or_else(|| fail(location))?;
-            aligned[position.semantic_word()] = encode(*command).ok_or_else(|| fail(location))?;
-        }
-    }
-    Ok(output)
-}
-pub(super) fn decode(word: u32) -> Option<TeletextEnhancementCommand> {
-    if word > 0x3ffff || word & 63 >= 40 {
-        return None;
-    }
-    let column = u8::try_from(word & 63).ok()?;
-    let data = u8::try_from(word >> 11).ok()?;
-    let operation = match (word >> 6) & 31 {
-        9 => TeletextColumnOperation::G0 {
-            code: TeletextGlyphCode::new(data).ok()?,
-        },
-        1 if data & 32 != 0 => TeletextColumnOperation::G1 {
-            mosaic: TeletextMosaic::new((data & 31) | ((data & 64) >> 1)).ok()?,
-        },
-        _ => return None,
-    };
-    Some(TeletextEnhancementCommand::AtColumn { column, operation })
-}
-fn encode(command: TeletextEnhancementCommand) -> Option<u32> {
-    let TeletextEnhancementCommand::AtColumn { column, operation } = command else {
-        return None;
-    };
-    let (mode, data) = match operation {
-        TeletextColumnOperation::G0 { code } => (9, u32::from(code.get())),
-        TeletextColumnOperation::G1 { mosaic } => {
-            let bits = u32::from(mosaic.blocks());
-            (1, 32 | (bits & 31) | ((bits & 32) << 1))
-        }
-        _ => return None,
-    };
-    Some(u32::from(column) | (mode << 6) | (data << 11))
+    output
 }
 fn anchor(
     command: TeletextEnhancementCommand,
@@ -239,24 +261,6 @@ fn anchor(
         if before.len() == 1
             && super::super::operands::operand(column, operation, before[0], after[0]).is_some()
         {
-            return Ok(());
-        }
-        if matches!(operation, TeletextColumnOperation::Drcs { .. }) && before.len() <= 2 {
-            for (index, word) in after.iter().enumerate() {
-                if index + 1 == after.len() {
-                    if word & 0x7ff != u32::from(column) | (13 << 6)
-                        || *word > 0x3ffff
-                        || (word >> 11) & 63 >= 48
-                    {
-                        return Err(fail(location));
-                    }
-                } else if word & 0x7ff != 0x28 | (0x18 << 6)
-                    || *word > 0x3ffff
-                    || (word >> 11) & 0x30 != 0x10
-                {
-                    return Err(fail(location));
-                }
-            }
             return Ok(());
         }
     }

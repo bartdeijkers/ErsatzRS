@@ -686,6 +686,35 @@ fn has_object_attributes(prepared: &PreparedImport) -> bool {
     })
 }
 
+fn program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
+    if prepared
+        .cumulative
+        .object_programs
+        .iter()
+        .any(|program| !program.is_legacy_compatible())
+    {
+        TeletextSavedEditorialOverlay::new_with_all_local_object_glyph_programs(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+            prepared.cumulative.object_programs.clone(),
+        )
+        .map_err(Into::into)
+    } else {
+        TeletextSavedEditorialOverlay::new_with_local_object_glyph_programs(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+            prepared.cumulative.object_programs.clone(),
+        )
+        .map_err(Into::into)
+    }
+}
+
 fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
     let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
         matches!(
@@ -696,14 +725,7 @@ fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditoria
     let (has_drcs_references, has_remaining_glyphs, has_extended_glyphs) =
         glyph_family_flags(&prepared.cumulative);
     let overlay = if !prepared.cumulative.object_programs.is_empty() {
-        TeletextSavedEditorialOverlay::new_with_local_object_glyph_programs(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
-            prepared.cumulative.object_programs.clone(),
-        )?
+        program_overlay(prepared)?
     } else if prepared.cumulative.has_drcs_selection(None) {
         TeletextSavedEditorialOverlay::new_with_drcs_reference_selections(
             prepared.provenance.clone(),

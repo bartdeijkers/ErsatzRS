@@ -2,13 +2,15 @@
 use super::{Location, NativeTeletextEditorialTtiFailure, Page, Result, TeletextEditorialChanges};
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementProgram,
-    TeletextLocalObjectGlyphProgramOverlay, TeletextPageAddress,
+    TeletextPageAddress,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 mod alignment;
+mod intents;
 mod program;
 mod qualify;
+mod raw;
 mod stream;
 pub(super) use qualify::check as qualify_recompiled;
 fn fail(location: Location) -> super::NativeTeletextEditorialTtiError {
@@ -17,16 +19,11 @@ fn fail(location: Location) -> super::NativeTeletextEditorialTtiError {
         ..location.error(NativeTeletextEditorialTtiFailure::Structure)
     }
 }
-fn glyph_family(command: &TeletextEnhancementCommand) -> Option<u8> {
+fn glyph_family(
+    command: &TeletextEnhancementCommand,
+) -> Option<ersatzrs_domain::TeletextColumnGlyphFamily> {
     match command {
-        TeletextEnhancementCommand::AtColumn {
-            operation: TeletextColumnOperation::G0 { .. },
-            ..
-        } => Some(0),
-        TeletextEnhancementCommand::AtColumn {
-            operation: TeletextColumnOperation::G1 { .. },
-            ..
-        } => Some(1),
+        TeletextEnhancementCommand::AtColumn { operation, .. } => operation.glyph_family(),
         _ => None,
     }
 }
@@ -108,21 +105,9 @@ pub(super) fn reconcile(
     aligned_page.packets[0] = packets.each_ref().map(Option::as_ref);
     let mut result =
         super::operands::reconcile(service, owner, baseline, &aligned_page, location, deadline)?;
-    for mut candidate in candidates
-        .into_iter()
-        .filter(|candidate| candidate.structural)
-    {
+    for mut candidate in candidates {
         patch_anchors(&mut candidate, &result, location)?;
-        result.object_programs.push(
-            TeletextLocalObjectGlyphProgramOverlay::new(
-                candidate.identity,
-                candidate.expected,
-                TeletextEnhancementProgram::new(candidate.replacement)
-                    .map_err(|_| fail(location))?,
-                candidate.retained,
-            )
-            .map_err(|_| fail(location))?,
-        );
+        intents::append(candidate, &mut result, location)?;
     }
     if result.object_programs.is_empty() {
         return Err(fail(location));

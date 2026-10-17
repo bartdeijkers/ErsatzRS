@@ -25,7 +25,7 @@ mod objects;
 mod flash_charset;
 
 #[path = "operands/drcs_selection.rs"]
-mod drcs_selection;
+pub(super) mod drcs_selection;
 
 pub(super) type PacketWords = [Option<[u32; 13]>; 16];
 
@@ -475,26 +475,10 @@ pub(super) fn operand(
     }
     let data = u8::try_from(after >> 11).ok()?;
     match expected {
-        G0 { .. } => Some(G0 {
-            code: TeletextGlyphCode::new(data).ok()?,
-        }),
-        G2 { .. } => Some(G2 {
-            code: TeletextGlyphCode::new(data).ok()?,
-        }),
-        G1Alpha { .. } => Some(G1Alpha {
-            code: TeletextG1AlphaCode::new(data).ok()?,
-        }),
-        G3 { compatibility, .. } => Some(G3 {
-            code: TeletextGlyphCode::new(data).ok()?,
-            compatibility,
-        }),
-        G0Diacritic { .. } => Some(G0Diacritic {
-            code: TeletextGlyphCode::new(data).ok()?,
-            diacritic: TeletextDiacriticIndex::new(u8::try_from(edited_mode - 16).ok()?).ok()?,
-        }),
-        G1 { .. } if data & 0x20 != 0 => Some(G1 {
-            mosaic: TeletextMosaic::new((data & 31) | ((data & 64) >> 1)).ok()?,
-        }),
+        G0 { .. } | G1 { .. } | G1Alpha { .. } | G2 { .. } | G3 { .. } | G0Diacritic { .. } => {
+            let replacement = glyph_operation(after)?;
+            (replacement.glyph_family() == expected.glyph_family()).then_some(replacement)
+        }
         Foreground { .. } => Some(Foreground {
             colour: TeletextColourReference::new(data).ok()?,
         }),
@@ -511,6 +495,43 @@ pub(super) fn operand(
         }),
         _ => None,
     }
+}
+
+/// Checked stateless Table28 glyph word; DRCS requires the separate scoped replay.
+pub(super) fn glyph_operation(word: u32) -> Option<TeletextColumnOperation> {
+    use TeletextColumnOperation::{G0Diacritic, G1Alpha, G0, G1, G2, G3};
+
+    if word > 0x3ffff || word & 63 >= 40 {
+        return None;
+    }
+    let data = u8::try_from(word >> 11).ok()?;
+    Some(match (word >> 6) & 31 {
+        9 => G0 {
+            code: TeletextGlyphCode::new(data).ok()?,
+        },
+        1 if data & 0x20 != 0 => G1 {
+            mosaic: TeletextMosaic::new((data & 31) | ((data & 64) >> 1)).ok()?,
+        },
+        1 => G1Alpha {
+            code: TeletextG1AlphaCode::new(data).ok()?,
+        },
+        15 => G2 {
+            code: TeletextGlyphCode::new(data).ok()?,
+        },
+        mode @ (2 | 11) => G3 {
+            code: TeletextGlyphCode::new(data).ok()?,
+            compatibility: if mode == 2 {
+                TeletextG3Compatibility::Level15
+            } else {
+                TeletextG3Compatibility::Level25
+            },
+        },
+        mode @ 16..=31 => G0Diacritic {
+            code: TeletextGlyphCode::new(data).ok()?,
+            diacritic: TeletextDiacriticIndex::new(u8::try_from(mode - 16).ok()?).ok()?,
+        },
+        _ => return None,
+    })
 }
 
 // The compiler emits a separate mode24 selection when needed. Only its retained

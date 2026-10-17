@@ -1,22 +1,20 @@
 //! Root-relative composition of checked Local program correspondence.
 use super::{check_deadline, NativeTeletextEditorialImportError, Result, TeletextEditorialChanges};
 use ersatzrs_domain::{
-    TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
-    TeletextEnhancementProgram, TeletextLocalObjectGlyphProgramOverlay,
-    TeletextLocalObjectOperandOverlay, TeletextObjectIdentity, TeletextServiceBudget,
+    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog, TeletextEnhancementProgram,
+    TeletextLocalObjectGlyphProgramOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextObjectIdentity, TeletextServiceBudget,
 };
 use std::{collections::BTreeSet, time::Instant};
 fn fail() -> NativeTeletextEditorialImportError {
     NativeTeletextEditorialImportError::Association
 }
 fn glyph(command: &TeletextEnhancementCommand) -> bool {
-    matches!(
-        command,
-        TeletextEnhancementCommand::AtColumn {
-            operation: TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. },
-            ..
-        }
-    )
+    matches!(command, TeletextEnhancementCommand::AtColumn { operation, .. } if operation.glyph_family().is_some())
+}
+fn legacy_glyph(command: &TeletextEnhancementCommand) -> bool {
+    matches!(command, TeletextEnhancementCommand::AtColumn { operation, .. }
+        if matches!(operation.glyph_family(), Some(ersatzrs_domain::TeletextColumnGlyphFamily::G0 | ersatzrs_domain::TeletextColumnGlyphFamily::G1)))
 }
 
 pub(super) fn merge(
@@ -83,8 +81,8 @@ pub(super) fn merge(
         collect(
             identity,
             original,
-            current,
-            retained,
+            &current,
+            &retained,
             &mut operands,
             &mut programs,
         )?;
@@ -141,12 +139,12 @@ fn apply_operands(
 fn collect(
     identity: TeletextObjectIdentity,
     original: &TeletextEnhancementProgram,
-    replacement: TeletextEnhancementProgram,
-    retained: Vec<Option<usize>>,
+    replacement: &TeletextEnhancementProgram,
+    retained: &[Option<usize>],
     operands: &mut Vec<TeletextLocalObjectOperandOverlay>,
     programs: &mut Vec<TeletextLocalObjectGlyphProgramOverlay>,
 ) -> Result<()> {
-    if replacement == *original {
+    if replacement == original {
         return Ok(());
     }
     let structural = replacement.commands().len() != original.commands().len()
@@ -176,22 +174,52 @@ fn collect(
         }
         return Ok(());
     }
+    let (program, scalar_operands) = make_program(identity, original, replacement, retained, true)
+        .or_else(|_| make_program(identity, original, replacement, retained, false))?;
+    operands.extend(scalar_operands);
+    programs.push(program);
+    Ok(())
+}
+fn make_program(
+    identity: TeletextObjectIdentity,
+    original: &TeletextEnhancementProgram,
+    replacement: &TeletextEnhancementProgram,
+    retained: &[Option<usize>],
+    legacy: bool,
+) -> Result<(
+    TeletextLocalObjectGlyphProgramOverlay,
+    Vec<TeletextLocalObjectOperandOverlay>,
+)> {
     let mut expected = original.commands().to_vec();
-    for (command, source) in replacement.commands().iter().zip(&retained) {
+    let mut operands = Vec::new();
+    for (command, source) in replacement.commands().iter().zip(retained) {
         let Some(source) = *source else { continue };
         let before = original.commands().get(source).ok_or_else(fail)?;
-        if !glyph(before) {
-            push_operand(identity, source, before, command, operands)?;
+        if !glyph(before) || (legacy && !legacy_glyph(before)) {
+            push_operand(identity, source, before, command, &mut operands)?;
             expected[source] = *command;
         }
     }
     let expected = TeletextEnhancementProgram::new(expected).map_err(|_| fail())?;
-    programs.push(
-        TeletextLocalObjectGlyphProgramOverlay::new(identity, expected, replacement, retained)
-            .map_err(|_| fail())?,
-    );
-    Ok(())
+    let program = if legacy {
+        TeletextLocalObjectGlyphProgramOverlay::new(
+            identity,
+            expected,
+            replacement.clone(),
+            retained.to_vec(),
+        )
+    } else {
+        TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs(
+            identity,
+            expected,
+            replacement.clone(),
+            retained.to_vec(),
+        )
+    }
+    .map_err(|_| fail())?;
+    Ok((program, operands))
 }
+
 fn push_operand(
     identity: TeletextObjectIdentity,
     ordinal: usize,

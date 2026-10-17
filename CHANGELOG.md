@@ -40,14 +40,17 @@ release section when tagging a release.
   charset context is checked even when a change produces identical pixels. Actual
   pinned
   QTeletextMaker G0/G1/G2/G3 glyph, diacritic-selector, Normal DRCS slot,
-  Local foreground, flash/charset, DRCS scope/subtable and Local structure saves
+  Local foreground, flash/charset, DRCS scope/subtable and Local G0/G1 structure saves
   pass concept import,
   shared preview and reopen.
   Prohibited G2/G3 positions remain refused without changing publication; full
   editor/Level 2.5 acceptance is open.
   Exact-original Local G0/G1 insertion, deletion and column changes now use
   private version 11 concepts with bounded survivor correspondence, authenticated
-  marker/pointer relocation and protected shared-consumer lineage. Complete native
+  marker/pointer relocation and protected shared-consumer lineage. Explicit version
+  12 extends structural Local edits to G1 alphabetic, G2, G3, diacritics and DRCS
+  glyphs while preserving earlier formats. DRCS selectors retain complete checked
+  resource references and independent definition-local scope. Complete native
   reconstruction preserves original documents and keeps import separate from
   publication. Complete command, resource/object and editor/Level 2.5 acceptance
   remain open.

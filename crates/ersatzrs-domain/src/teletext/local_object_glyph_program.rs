@@ -1,16 +1,16 @@
 //! Bounded exact-original glyph structure changes in retained Local definitions.
 
 use super::{
-    TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementProgram,
+    TeletextColumnGlyphFamily, TeletextEnhancementCommand, TeletextEnhancementProgram,
     TeletextObjectIdentity, TeletextPageAddress,
 };
 
 const MAX_COMMANDS: usize = 16 * 13;
 
-#[derive(PartialEq, Eq)]
-enum GlyphFamily {
-    G0,
-    G1,
+#[derive(Clone, Copy)]
+enum GlyphPolicy {
+    Legacy,
+    All,
 }
 
 /// Rejected structural intent, without retaining authored content in diagnostics.
@@ -30,8 +30,9 @@ pub enum TeletextLocalObjectGlyphProgramOverlayError {
 
 /// One checked replacement of an existing Local definition's ordered program.
 ///
-/// Only G0/G1 commands may be inserted, omitted or changed within their original
-/// family. Every other command survives exactly and in order, retaining position,
+/// The legacy constructor permits G0/G1 structure changes. The explicit complete
+/// glyph constructor supports all typed glyph families, retaining G3 compatibility.
+/// Every nonglyph command survives exactly and in order, retaining position,
 /// context, attributes and invocation anchors. Retained glyphs cannot cross an
 /// unchanged anchor. The map records checked correspondence, not edit permission:
 /// hosts must establish original provenance and qualify every shared consumer.
@@ -60,6 +61,47 @@ impl TeletextLocalObjectGlyphProgramOverlay {
         replacement: TeletextEnhancementProgram,
         retained_commands: Vec<Option<usize>>,
     ) -> Result<Self, TeletextLocalObjectGlyphProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            GlyphPolicy::Legacy,
+        )
+    }
+
+    /// Check structural changes across all checked glyph families.
+    ///
+    /// Retained glyphs keep their semantic family and G3 compatibility. Inserted
+    /// and omitted commands may be any typed glyph; nonglyph anchors remain exact.
+    /// DRCS operations keep complete explicit table/subtable/slot selections; the
+    /// full service must resolve them against its original links and catalogues.
+    /// This creates no resources, edit permissions or publication authority.
+    /// # Errors
+    /// Rejects nonlocal/no-op intents, over208 inputs, invalid correspondence,
+    /// changed anchors, cross-family matches and G3 compatibility changes.
+    pub fn new_with_all_glyphs(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+    ) -> Result<Self, TeletextLocalObjectGlyphProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            GlyphPolicy::All,
+        )
+    }
+
+    fn new_for_policy(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+        policy: GlyphPolicy,
+    ) -> Result<Self, TeletextLocalObjectGlyphProgramOverlayError> {
         let owner = identity
             .owner()
             .ok_or(TeletextLocalObjectGlyphProgramOverlayError::Scope)?;
@@ -72,7 +114,7 @@ impl TeletextLocalObjectGlyphProgramOverlay {
         if expected == replacement {
             return Err(TeletextLocalObjectGlyphProgramOverlayError::Unchanged);
         }
-        validate_correspondence(&expected, &replacement, &retained_commands)?;
+        validate_correspondence(&expected, &replacement, &retained_commands, policy)?;
         Ok(Self {
             identity,
             owner,
@@ -80,6 +122,21 @@ impl TeletextLocalObjectGlyphProgramOverlay {
             replacement,
             retained_commands,
         })
+    }
+
+    /// Whether this checked value also satisfies the unchanged G0/G1 contract.
+    ///
+    /// Borrowed validation neither clones programs nor treats unchanged extended
+    /// glyph anchors as new features. Versioned storage must retain this boundary.
+    #[must_use]
+    pub fn is_legacy_compatible(&self) -> bool {
+        validate_correspondence(
+            &self.expected,
+            &self.replacement,
+            &self.retained_commands,
+            GlyphPolicy::Legacy,
+        )
+        .is_ok()
     }
 
     #[must_use]
@@ -130,6 +187,7 @@ fn validate_correspondence(
     expected: &TeletextEnhancementProgram,
     replacement: &TeletextEnhancementProgram,
     retained: &[Option<usize>],
+    policy: GlyphPolicy,
 ) -> Result<(), TeletextLocalObjectGlyphProgramOverlayError> {
     use TeletextLocalObjectGlyphProgramOverlayError as Error;
     if retained.len() != replacement.commands().len() {
@@ -138,7 +196,7 @@ fn validate_correspondence(
     let mut next_original = 0;
     for (command, original) in replacement.commands().iter().zip(retained) {
         let Some(ordinal) = *original else {
-            if glyph_family(command).is_none() {
+            if glyph_family(command, policy).is_none() {
                 return Err(Error::ProtectedCommand);
             }
             continue;
@@ -148,12 +206,12 @@ fn validate_correspondence(
         }
         if expected.commands()[next_original..ordinal]
             .iter()
-            .any(|command| glyph_family(command).is_none())
+            .any(|command| glyph_family(command, policy).is_none())
         {
             return Err(Error::ProtectedCommand);
         }
         let before = &expected.commands()[ordinal];
-        match (glyph_family(before), glyph_family(command)) {
+        match (glyph_family(before, policy), glyph_family(command, policy)) {
             (Some(before), Some(after)) if before == after => {}
             (None, None) if before == command => {}
             _ => return Err(Error::ProtectedCommand),
@@ -162,25 +220,30 @@ fn validate_correspondence(
     }
     if expected.commands()[next_original..]
         .iter()
-        .any(|command| glyph_family(command).is_none())
+        .any(|command| glyph_family(command, policy).is_none())
     {
         return Err(Error::ProtectedCommand);
     }
     Ok(())
 }
 
-fn glyph_family(command: &TeletextEnhancementCommand) -> Option<GlyphFamily> {
-    match command {
-        TeletextEnhancementCommand::AtColumn {
-            operation: TeletextColumnOperation::G0 { .. },
-            ..
-        } => Some(GlyphFamily::G0),
-        TeletextEnhancementCommand::AtColumn {
-            operation: TeletextColumnOperation::G1 { .. },
-            ..
-        } => Some(GlyphFamily::G1),
-        _ => None,
+fn glyph_family(
+    command: &TeletextEnhancementCommand,
+    policy: GlyphPolicy,
+) -> Option<TeletextColumnGlyphFamily> {
+    let TeletextEnhancementCommand::AtColumn { operation, .. } = command else {
+        return None;
+    };
+    let family = operation.glyph_family()?;
+    if matches!(policy, GlyphPolicy::Legacy)
+        && !matches!(
+            family,
+            TeletextColumnGlyphFamily::G0 | TeletextColumnGlyphFamily::G1
+        )
+    {
+        return None;
     }
+    Some(family)
 }
 
 /// Exact Local definition failure while applying a checked program replacement.
