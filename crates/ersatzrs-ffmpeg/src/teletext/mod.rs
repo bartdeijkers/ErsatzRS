@@ -25,6 +25,7 @@ mod composed_main;
 mod compositional;
 mod drcs;
 mod enhancement_program;
+mod header_position_materialization;
 mod layout;
 mod lift;
 mod local_object_program;

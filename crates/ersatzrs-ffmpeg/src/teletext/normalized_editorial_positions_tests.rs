@@ -172,6 +172,95 @@ fn shifted_carrier_positions_retain_original_local_ordinal_and_physical_source()
 }
 
 #[test]
+fn header_position_before_nonempty_object_passes_the_authored_factory() {
+    use super::authored_service_tests::{declared, transmissions};
+
+    for defined_foreground in [false, true] {
+        let column = if defined_foreground { 9 } else { 8 };
+        let mut draft = input();
+        let owner = draft.base.pages[0].address;
+        let target = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
+        let mut commands = vec![TeletextEnhancementCommand::SetRowColour {
+            row: 0,
+            colour: TeletextColourReference::new(3).unwrap(),
+            following_rows: false,
+        }];
+        if defined_foreground {
+            commands.push(foreground(8, 7));
+        }
+        commands.extend([
+            position(0, column),
+            TeletextEnhancementCommand::InvokeObject {
+                target,
+                object_type: TeletextObjectType::Passive,
+                offset: None,
+            },
+        ]);
+        draft.pages[0].local_program = Some(TeletextEnhancementProgram::new(commands).unwrap());
+        draft.objects.push(TeletextEnhancementObjectDefinition {
+            identity: target,
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![foreground(0, 2), glyph(0)]).unwrap(),
+        });
+        let original = declared(draft);
+        let saved = original.clone();
+        let encoded =
+            encode_teletext_authored_service(original, &transmissions(&saved), &limits()).unwrap();
+        assert_eq!(encoded.declared(), &saved);
+        let EncodedTeletextAuthoredPage::CompiledDisplay(display) = &encoded.pages()[0] else {
+            panic!("nonempty header object must retain authored display ownership")
+        };
+        let fallback = encode_teletext_page(
+            &saved.semantic().base().pages[0],
+            TeletextEncodingRegion::WesternLatin,
+        )
+        .unwrap();
+        let actual = project_encoded_teletext_display(display.page(), 128).unwrap();
+        let baseline = project_encoded_teletext_display(&fallback, 128).unwrap();
+        assert_eq!(actual.header, baseline.header);
+        let rows = |records: Vec<TeletextEncodedDisplayRecord>| {
+            records
+                .into_iter()
+                .filter(|record| !matches!(record, TeletextEncodedDisplayRecord::Triplets { .. }))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(rows(actual.records), rows(baseline.records));
+        for trace in [
+            display.normalized().original().spatial_trace(),
+            display.normalized().physical().replay().spatial_trace(),
+        ] {
+            let invocation = trace
+                .invocations()
+                .iter()
+                .find(|call| call.target() == target)
+                .unwrap();
+            for position in [invocation.origin(), invocation.caller_position()] {
+                assert_eq!((position.row(), position.column()), (0, u16::from(column)));
+            }
+            assert_eq!(invocation.offset(), None);
+        }
+        for geometry in [
+            display.normalized().original().display_geometry(),
+            display.normalized().physical().replay().display_geometry(),
+        ] {
+            let region = geometry
+                .object_regions()
+                .iter()
+                .find(|region| region.instance().target() == target)
+                .unwrap();
+            assert_eq!(
+                region.interval(),
+                TeletextObjectAddressInterval::Known {
+                    start: (0, u16::from(column)),
+                    finish: (0, u16::from(column)),
+                }
+            );
+            assert_eq!(geometry.object_open_count().maximum_known_open(), 1);
+        }
+    }
+}
+
+#[test]
 fn forward_header_positions_pass_the_authored_factory_without_changing_transmission() {
     use super::authored_service_tests::{declared, transmissions};
 

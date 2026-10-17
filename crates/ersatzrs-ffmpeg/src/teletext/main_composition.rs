@@ -73,6 +73,11 @@ pub enum TeletextMainCompositionSource {
         position: TeletextEnhancementPosition,
         kind: TeletextBaseCellCommandKind,
     },
+    /// A real, derived attribute writer materializes this original position.
+    /// It is never an authored operand or original C.2 transmission witness.
+    HeaderPosition {
+        command: usize,
+    },
     /// A body ordinal remains in its original full object identity.
     Object {
         identity: TeletextObjectIdentity,
@@ -347,6 +352,60 @@ impl TeletextMainComposition {
         location: TeletextEnhancementSource,
     ) -> Option<TeletextMainCompositionSource> {
         mapped_location(&self.provenance, location)
+    }
+
+    /// Replace only the physical main and its private emitter map. The authored
+    /// execution, Base, glyphs and attributes remain the immutable target; the
+    /// supplied candidate must still pass complete physical comparison.
+    pub(super) fn with_physical_main(
+        mut self,
+        service: &TeletextSemanticService,
+        program: TeletextEnhancementProgram,
+        provenance: Vec<TeletextMainCompositionSource>,
+        budget: TeletextMainCompositionBudget,
+        context: &mut TeletextCompileContext<'_, '_>,
+    ) -> Result<Self, TeletextMainCompositionError> {
+        if program.commands().len() != provenance.len() {
+            return Err(error(
+                self.owner,
+                None,
+                TeletextMainCompositionFailure::SelectionState,
+            ));
+        }
+        if program.commands().len() > budget.max_output_commands {
+            return Err(error(
+                self.owner,
+                None,
+                TeletextMainCompositionFailure::OutputBudget {
+                    maximum: budget.max_output_commands,
+                },
+            ));
+        }
+        let primary = service
+            .effective_presentation(self.owner)
+            .ok_or_else(|| {
+                error(
+                    self.owner,
+                    None,
+                    TeletextMainCompositionFailure::SelectionState,
+                )
+            })?
+            .primary_designation()
+            .map_err(|reason| error(self.owner, None, reason.into()))?
+            .pair();
+        let collected = collect_composed_program(
+            context,
+            service,
+            self.owner,
+            &program,
+            primary,
+            budget.collection,
+            &provenance,
+        )?;
+        self.program = program;
+        self.provenance = provenance;
+        self.collected = collected;
+        Ok(self)
     }
 }
 

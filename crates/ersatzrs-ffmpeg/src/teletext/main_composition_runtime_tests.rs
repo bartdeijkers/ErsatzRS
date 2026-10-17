@@ -1161,6 +1161,57 @@ fn contextual_cases() -> Vec<serde_json::Value> {
             true,
         ));
     }
+    cases.extend(contextual_header_objects());
+    cases
+}
+
+fn contextual_header_objects() -> Vec<serde_json::Value> {
+    let mut cases = Vec::new();
+    for column in [8, 39] {
+        let owner = super::transport_tests::draft(200, 0, false).address;
+        let target = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
+        cases.push(encoded_case_with_encoding(
+            &format!("context_header_object_{column}"),
+            vec![text(0, column, "Z"), text(1, 8, "B")],
+            vec![
+                TeletextEnhancementCommand::SetRowColour {
+                    row: 0,
+                    colour: TeletextColourReference::new(3).unwrap(),
+                    following_rows: false,
+                },
+                position(0, column),
+                TeletextEnhancementCommand::InvokeObject {
+                    target,
+                    object_type: TeletextObjectType::Passive,
+                    offset: None,
+                },
+            ],
+            vec![TeletextEnhancementObjectDefinition {
+                identity: target,
+                object_type: TeletextObjectType::Passive,
+                program: TeletextEnhancementProgram::new(vec![
+                    at(
+                        0,
+                        TeletextColumnOperation::Foreground {
+                            colour: TeletextColourReference::new(2).unwrap(),
+                        },
+                    ),
+                    at(
+                        0,
+                        TeletextColumnOperation::G0 {
+                            code: TeletextGlyphCode::new(b'A').unwrap(),
+                        },
+                    ),
+                ])
+                .unwrap(),
+            }],
+            &[
+                cell(0, column, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0]),
+                cell(1, 8, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
+            ],
+            MainEncoding::Normalized,
+        ));
+    }
     cases
 }
 
@@ -1190,7 +1241,7 @@ async fn contextual_main_program_decodes_with_pinned_independent_teletextimager(
         serde_json::json!({
             "decoder":"teletextimager", "decoder_version":"0.2.0",
             "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317",
-            "cases_passed":4, "levels":["1.5","2.5"]
+            "cases_passed":6, "levels":["1.5","2.5"]
         })
     );
 }

@@ -1,6 +1,6 @@
 //! Owned engine normalization candidate; not whole-service admission or publication.
 use super::compile_context::TeletextCompileContext;
-use super::composed_main::compile_composed_with_context;
+use super::composed_main::compile_composed_with_header_positions;
 #[cfg(test)]
 use super::resource_transmission::ResourceTransmissionContext;
 use super::{
@@ -195,7 +195,7 @@ pub(super) fn compose_normalization_original(
         )))
     })?;
     check_deadline(owner, context.deadline)?;
-    let original = compile_composed_with_context(
+    let original = compile_composed_with_header_positions(
         service,
         owner,
         &original_allocations,

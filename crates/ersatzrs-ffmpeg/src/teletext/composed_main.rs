@@ -112,11 +112,62 @@ pub(super) fn compile_composed_with_context(
     packing_budget: TeletextObjectCatalogBudget,
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
+    compile_composed_with_policy(
+        service,
+        owner,
+        allocations,
+        composition_budget,
+        packing_budget,
+        context,
+        false,
+    )
+}
+
+/// Normalization-only bootstrap. The generated typed Main must subsequently
+/// pass the existing whole-model comparisons; composed-only callers cannot opt in.
+pub(super) fn compile_composed_with_header_positions(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    allocations: &TeletextResourceObjectAllocations,
+    composition_budget: TeletextMainCompositionBudget,
+    packing_budget: TeletextObjectCatalogBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
+    compile_composed_with_policy(
+        service,
+        owner,
+        allocations,
+        composition_budget,
+        packing_budget,
+        context,
+        true,
+    )
+}
+
+fn compile_composed_with_policy(
+    service: &TeletextSemanticService,
+    owner: TeletextPageAddress,
+    allocations: &TeletextResourceObjectAllocations,
+    composition_budget: TeletextMainCompositionBudget,
+    packing_budget: TeletextObjectCatalogBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+    header_positions: bool,
+) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
     if let Some(resources) = context.resources {
         resources.validate_catalog(service.objects(), allocations)?;
     }
     let composition =
         compose_teletext_main_program_with_context(service, owner, composition_budget, context)?;
+    let composition = if header_positions {
+        super::header_position_materialization::materialize(
+            composition,
+            service,
+            composition_budget,
+            context,
+        )?
+    } else {
+        composition
+    };
     let links = service.page_enhancements().get(&owner).map_or(
         TeletextResolvedObjectPageLinks {
             public: None,

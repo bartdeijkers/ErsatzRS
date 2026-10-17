@@ -11,6 +11,9 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 };
 use serde_json::{json, Value};
 
+#[path = "forward_header/object_call.rs"]
+mod object_call;
+
 const GLYPHS: [(usize, u8); 2] = [(4, 8), (6, 39)];
 
 fn response(theme: &str, page: u16, subcode: u16) -> Value {
