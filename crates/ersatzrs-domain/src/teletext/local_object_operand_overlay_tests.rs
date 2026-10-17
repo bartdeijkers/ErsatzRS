@@ -430,3 +430,6 @@ fn page_local_g0_and_g1_use_same_exact_original_family_and_service_validation() 
 
 #[path = "local_object_operand_attribute_tests.rs"]
 mod attribute_tests;
+
+#[path = "extended_operand_tests.rs"]
+mod extended_operand_tests;

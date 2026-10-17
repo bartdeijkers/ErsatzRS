@@ -78,6 +78,8 @@ fn authored_operation(
             | TeletextColumnOperation::Foreground { .. }
             | TeletextColumnOperation::Background { .. }
             | TeletextColumnOperation::Attributes { .. }
+            | TeletextColumnOperation::G2 { .. }
+            | TeletextColumnOperation::G0Diacritic { .. }
     ) {
         return Err(fail());
     }

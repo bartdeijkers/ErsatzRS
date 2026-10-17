@@ -5,9 +5,9 @@ use super::{
     TeletextEditorialChanges,
 };
 use ersatzrs_domain::{
-    TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
-    TeletextGlyphCode, TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay,
-    TeletextMosaic, TeletextPageAddress,
+    TeletextColourReference, TeletextColumnOperation, TeletextDiacriticIndex,
+    TeletextEnhancementCommand, TeletextGlyphCode, TeletextLocalObjectOperandOverlay,
+    TeletextLocalProgramOperandOverlay, TeletextMosaic, TeletextPageAddress,
 };
 use ersatzrs_ffmpeg::teletext::{
     project_encoded_teletext_display, EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService,
@@ -380,9 +380,11 @@ fn operand(
     before: u32,
     after: u32,
 ) -> Option<TeletextColumnOperation> {
-    use TeletextColumnOperation::{Attributes, Background, Foreground, G0, G1};
+    use TeletextColumnOperation::{Attributes, Background, Foreground, G0Diacritic, G0, G1, G2};
     let (mode, data) = match expected {
         G0 { code } => (9, u32::from(code.get())),
+        G2 { code } => (15, u32::from(code.get())),
+        G0Diacritic { code, diacritic } => (16 | u32::from(diacritic.get()), u32::from(code.get())),
         G1 { mosaic } => {
             let blocks = u32::from(mosaic.blocks());
             (1, 0x20 | (blocks & 31) | ((blocks & 32) << 1))
@@ -407,9 +409,16 @@ fn operand(
         ),
         _ => return None,
     };
+    let edited_mode = (after >> 6) & 31;
+    let same_family = if matches!(expected, G0Diacritic { .. }) {
+        (16..=31).contains(&edited_mode)
+    } else {
+        edited_mode == mode
+    };
     if column > 39
         || before != u32::from(column) | (mode << 6) | (data << 11)
-        || after & 0x7ff != before & 0x7ff
+        || after & 63 != before & 63
+        || !same_family
         || after > 0x3ffff
     {
         return None;
@@ -418,6 +427,13 @@ fn operand(
     match expected {
         G0 { .. } => Some(G0 {
             code: TeletextGlyphCode::new(data).ok()?,
+        }),
+        G2 { .. } => Some(G2 {
+            code: TeletextGlyphCode::new(data).ok()?,
+        }),
+        G0Diacritic { .. } => Some(G0Diacritic {
+            code: TeletextGlyphCode::new(data).ok()?,
+            diacritic: TeletextDiacriticIndex::new(u8::try_from(edited_mode - 16).ok()?).ok()?,
         }),
         G1 { .. } if data & 0x20 != 0 => Some(G1 {
             mosaic: TeletextMosaic::new((data & 31) | ((data & 64) >> 1)).ok()?,

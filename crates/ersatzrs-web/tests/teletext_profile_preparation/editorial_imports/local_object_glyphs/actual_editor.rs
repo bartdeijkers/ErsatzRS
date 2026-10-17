@@ -111,7 +111,13 @@ pub(super) fn operand_metadata(
     after: u32,
     kind: &str,
 ) -> Value {
-    assert_eq!(before & 0x7ff, after & 0x7ff);
+    let before_mode = (before >> 6) & 31;
+    let after_mode = (after >> 6) & 31;
+    assert!(
+        before_mode == after_mode
+            || ((16..=31).contains(&before_mode) && (16..=31).contains(&after_mode))
+    );
+    assert_eq!(before & 63, after & 63);
     assert!(before <= 0x3ffff && after <= 0x3ffff);
     let owner = identity.owner().unwrap();
     let service = flow.accepted[0].service();
@@ -181,12 +187,16 @@ pub(super) fn operand_metadata(
         word_at(&file.bytes, marker_index),
         (0x28 | (number >> 7)) | (0x17 << 6) | ((number & 127) << 11)
     );
-    json!({"kind":kind,"mode":(before>>6)&31,
+    let mut metadata = json!({"kind":kind,"mode":before_mode,
         "from":before>>11,"to":after>>11,"column":before&63,"row":1,
         "semantic_word":word,"designation":word/13,"triplet_slot":word%13,
         "identity":identity,"source_command":command,
         "definition_marker":{"absolute_index":marker_index,"object_number":marker.object_number(),"object_type":"passive"},
-        "invocation_offsets":[32,33]})
+        "invocation_offsets":[32,33]});
+    if before_mode != after_mode {
+        metadata["to_mode"] = json!(after_mode);
+    }
+    metadata
 }
 
 fn inputs(directory: &Path, name: &str, flow: &Flow, family: Family) -> Value {

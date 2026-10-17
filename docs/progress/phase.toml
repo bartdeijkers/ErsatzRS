@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: Extended-character editor authoring'
+current_focus = 'P9A-04: Remaining authored glyph editor families'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -321,10 +321,17 @@ publication/reopen/repeat/undo and malformed/protected consumers pass. The actua
 pinned foreground popup/Save As imports to an unpublished concept and reopens;
 all180 focused cases pass. P9A-04 owns canonical receipts and9 GUI captures;
 actual widget/client equivalence is not asserted. Reuse unchanged delivery proof.
-Next product step: original G2/G0-diacritic edits are still rejected by editable
-intent/source guards. Connect checked extended-character operands to existing
-versioned concepts and previews, preserving original charset/fallback and shared
-zone effects. Bundle related families and validate only changed boundaries.
+Extended page/Local G2 and G0-diacritic edits now use explicit V6 concepts;
+versions1–5 retain their contracts. All195 focused cases pass, including the
+four-intent/six-cell Free/Zone native publication/reopen/repeat/undo bundle and
+actual pinned G2-popup/diacritic-menu saves to unpublished concepts. Four
+prohibited-G2 native refusals retain state;12 driver controls and24 GUI captures
+are retained. P9A-04 owns canonical hashes and reused delivery proof. No new
+ordinary/client or full-engine acceptance is claimed.
+Next product step: original G1-alpha/G3 glyph edits remain blocked by editable
+family guards. Connect these existing types to versioned intent/shared preview,
+keeping original G3 compatibility/fallback and G1 alpha/mosaic distinction.
+Bundle the two families and check changed boundaries; preserve existing proof.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.
 Suitable-client/full engine proof remains open. Earlier proof

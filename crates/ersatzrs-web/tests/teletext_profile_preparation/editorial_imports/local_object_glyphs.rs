@@ -453,3 +453,9 @@ mod attributes;
 
 #[path = "local_object_glyphs/actual_attribute_editor.rs"]
 mod actual_attribute_editor;
+
+#[path = "local_object_glyphs/extended_glyphs.rs"]
+mod extended_glyphs;
+
+#[path = "local_object_glyphs/actual_extended_editor.rs"]
+mod actual_extended_editor;

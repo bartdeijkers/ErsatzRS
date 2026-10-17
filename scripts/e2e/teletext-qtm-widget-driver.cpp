@@ -10,6 +10,7 @@
 #include <QDockWidget>
 #include <QTableView>
 #include <QMainWindow>
+#include <QMenu>
 #include <QRadioButton>
 #include <QLineEdit>
 #include <QPushButton>
@@ -65,6 +66,7 @@ struct DriverContext {
     int glyphMode = 0;
     int fromGlyph = 0;
     int toGlyph = 0;
+    int toGlyphMode = 0;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -102,22 +104,31 @@ static DriverContext driverContext() {
     const QByteArray input = qgetenv("ERSATZRS_QTM_INPUT_BASENAME");
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
     const bool foreground = mode == "single-page-foreground";
-    const bool localGlyph = mode == "single-page-local-glyph";
+    const bool extendedGlyph = mode == "single-page-local-extended-glyph";
+    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph;
     const bool suppliedGlyph = qEnvironmentVariableIsSet("ERSATZRS_QTM_GLYPH_MODE")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_GLYPH")
-        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH");
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE");
     if (!localGlyph && suppliedGlyph)
         qFatal("Glyph operands require explicit single-page-local-glyph mode");
-    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", 9) : 0;
+    if (!extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE"))
+        qFatal("Replacement glyph mode requires the fixed extended glyph trial");
+    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", extendedGlyph ? 31 : 9) : 0;
+    const int toGlyphMode = extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE")
+        ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH_MODE", 31) : glyphMode;
     const int fromGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_FROM_GLYPH", 127) : 0;
     const int toGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH", 127) : 0;
-    if (localGlyph && (glyphMode != 9 && glyphMode != 1))
+    if (localGlyph && !extendedGlyph && (glyphMode != 9 && glyphMode != 1))
         qFatal("Fixed local glyph mode must retain raw G0 mode9 or G1 mode1");
-    if (localGlyph && fromGlyph == toGlyph)
+    if (localGlyph && fromGlyph == toGlyph && glyphMode == toGlyphMode)
         qFatal("Local glyph trial requires a changed glyph");
-    if (localGlyph && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
+    if (localGlyph && !extendedGlyph && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
         || (glyphMode == 1 && (fromGlyph != 33 || toGlyph != 34))))
         qFatal("Fixed local glyph trial requires G0 A-to-B or G1 0x21-to-0x22");
+    if (extendedGlyph && !((glyphMode == 15 && toGlyphMode == 15 && fromGlyph == 35 && toGlyph == 66)
+        || (glyphMode == 25 && toGlyphMode == 28 && fromGlyph == 65 && toGlyph == 65)))
+        qFatal("Fixed extended trial requires G2 35-to-66 or A diacritic9-to12");
     const bool panelDay = mode == "single-page-panel-zone-q";
     const bool panelNight = mode == "single-page-panel-save";
     const bool panelProof = panelDay || panelNight;
@@ -175,7 +186,7 @@ static DriverContext driverContext() {
     if (localGlyph && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -289,6 +300,66 @@ static void captureLocalGlyphWidget(const DriverContext &context, const char *st
             (QByteArray("local-glyph-") + stage + "-widget").constData())))
         qFatal("Actual local glyph widget capture failed");
 }
+// Select the existing cooked-mode button's real nested menu. The timer is
+// queued before the click because QPushButton::setMenu may enter a nested loop.
+// Every transition is an observed mouse hover/click, never QAction::trigger or
+// a document/model assignment.
+static void editDiacriticMode(QDockWidget *dock, const DriverContext &context) {
+    if (context.glyphMode != 25 || context.toGlyphMode != 28
+        || context.fromGlyph != 65 || context.toGlyph != 65)
+        qFatal("Unexpected fixed diacritic mode transition");
+    QPushButton *button = nullptr;
+    for (QPushButton *candidate : dock->findChildren<QPushButton *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || !candidate->menu()
+            || candidate->text() != "G0 character diacritical 9") continue;
+        if (button) qFatal("Ambiguous actual cooked diacritic mode button");
+        button = candidate;
+    }
+    if (!button) qFatal("Actual cooked diacritic mode button absent");
+    auto menu = button->menu();
+    QTimer::singleShot(150, qApp, [menu, context] {
+        const auto actionNamed = [](QMenu *parent, const char *text) {
+            QAction *found = nullptr;
+            for (QAction *action : parent->actions()) {
+                if (action->text() != text || !action->isVisible() || !action->isEnabled()) continue;
+                if (found) qFatal("Ambiguous fixed actual mode menu action");
+                found = action;
+            }
+            if (!found) qFatal("Fixed actual mode menu action absent");
+            return found;
+        };
+        const auto hoverSubmenu = [context, actionNamed](QMenu *parent, const char *name, const char *stage) {
+            if (!QTest::qWaitFor([parent] { return parent->isVisible(); }, 3000))
+                qFatal("Actual mode menu did not open");
+            QAction *action = actionNamed(parent, name);
+            QMenu *child = action->menu();
+            const QPoint point = parent->actionGeometry(action).center();
+            if (!child || !parent->rect().contains(point))
+                qFatal("Actual mode submenu is not mouse-addressable");
+            QTest::mouseMove(parent, point);
+            if (!QTest::qWaitFor([parent, child, action] {
+                return parent->activeAction() == action && child->isVisible();
+            }, 3000)) qFatal("Actual mode submenu did not receive mouse hover");
+            if (!parent->grab().save(QString("/work/") + context.captureName(stage)))
+                qFatal("Actual mode menu capture failed");
+            return child;
+        };
+        QMenu *column = hoverSubmenu(menu, "Column triplet", "local-glyph-mode-top");
+        QMenu *diacritic = hoverSubmenu(column, "G0 diacritical", "local-glyph-mode-column");
+        QAction *target = actionNamed(diacritic, "G0 character diacritical C");
+        if (target->menu()) qFatal("Fixed final diacritic action is unexpectedly a submenu");
+        const QPoint point = diacritic->actionGeometry(target).center();
+        if (!diacritic->rect().contains(point)) qFatal("Actual diacritic choice is not mouse-addressable");
+        QTest::mouseMove(diacritic, point);
+        if (!QTest::qWaitFor([diacritic, target] {
+            return diacritic->isVisible() && diacritic->activeAction() == target;
+        }, 3000)) qFatal("Actual diacritic choice did not receive mouse hover");
+        if (!diacritic->grab().save(QString("/work/") + context.captureName("local-glyph-mode-popup")))
+            qFatal("Actual diacritic choice capture failed");
+        QTest::mouseClick(diacritic, Qt::LeftButton, Qt::NoModifier, point);
+    });
+    QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
+}
 static void editForeground(QMainWindow *main, const DriverContext &context) {
     const int expectedMode = context.editLocalGlyph ? context.glyphMode : 0;
     const int expectedFrom = context.editLocalGlyph ? context.fromGlyph : context.fromColour;
@@ -344,6 +415,20 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
     if (!dock->grab().save(QString("/work/") + operandCapture("before")))
         qFatal("Actual foreground dock baseline capture failed");
     if (context.editLocalGlyph) captureLocalGlyphWidget(context, "before");
+    if (context.editLocalGlyph && context.toGlyphMode != context.glyphMode) {
+        editDiacriticMode(dock, context);
+        if (!QTest::qWaitFor([colour, main, context, raw] {
+            return colour->currentIndex() == context.toGlyph - 32 && main->isWindowModified()
+                && raw(0) == context.tripletColumn && raw(1) == context.toGlyphMode
+                && raw(2) == context.toGlyph;
+        }, 3000)) qFatal("Actual diacritic menu did not update only the fixed mode");
+        if (!dock->grab().save(QString("/work/") + operandCapture("edited")))
+            qFatal("Actual diacritic edited dock capture failed");
+        captureLocalGlyphWidget(context, "edited");
+        std::printf("QTM actual local diacritic menu edit: triplet=%d column=%d mode=%d-to-%d code=%d\n",
+            context.tripletIndex, context.tripletColumn, context.glyphMode, context.toGlyphMode, context.toGlyph);
+        return;
+    }
     QTest::mouseClick(colour, Qt::LeftButton, Qt::NoModifier, colour->rect().center());
     auto popup = colour->view();
     if (!QTest::qWaitFor([popup] { return popup->isVisible(); }, 3000))

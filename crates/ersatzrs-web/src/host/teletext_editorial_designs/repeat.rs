@@ -553,6 +553,85 @@ fn prepare(
     Ok(prepared)
 }
 
+fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
+    let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
+        matches!(
+            operand.expected(),
+            TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. }
+        )
+    });
+    let has_object_attributes = prepared.cumulative.object_operands.iter().any(|operand| {
+        matches!(
+            operand.expected(),
+            TeletextColumnOperation::Foreground { .. }
+                | TeletextColumnOperation::Background { .. }
+                | TeletextColumnOperation::Attributes { .. }
+        )
+    });
+    let has_extended_glyphs = prepared
+        .cumulative
+        .operands
+        .iter()
+        .map(|operand| operand.expected())
+        .chain(
+            prepared
+                .cumulative
+                .object_operands
+                .iter()
+                .map(|operand| operand.expected()),
+        )
+        .any(|operation| {
+            matches!(
+                operation,
+                TeletextColumnOperation::G2 { .. } | TeletextColumnOperation::G0Diacritic { .. }
+            )
+        });
+    let overlay = if has_extended_glyphs {
+        TeletextSavedEditorialOverlay::new_with_extended_glyph_operands(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+        )?
+    } else if has_object_attributes {
+        TeletextSavedEditorialOverlay::new_with_local_object_attributes(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+        )?
+    } else if !prepared.cumulative.object_operands.is_empty() || has_glyphs {
+        TeletextSavedEditorialOverlay::new_with_local_object_operands(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+        )?
+    } else if !prepared.cumulative.bitmaps.is_empty() {
+        TeletextSavedEditorialOverlay::new_with_drcs_bitmap_overlays(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+        )?
+    } else if prepared.cumulative.operands.is_empty() {
+        TeletextSavedEditorialOverlay::new(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+        )?
+    } else {
+        TeletextSavedEditorialOverlay::new_with_local_program_operands(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+        )?
+    };
+    Ok(overlay)
+}
+
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {
     let document = if prepared.cumulative.rows.is_empty()
         && prepared.cumulative.operands.is_empty()
@@ -581,55 +660,7 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
             _ => return Err(NativeTeletextEditorialImportError::Association),
         }
     } else {
-        let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
-            matches!(
-                operand.expected(),
-                TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. }
-            )
-        });
-        let has_object_attributes = prepared.cumulative.object_operands.iter().any(|operand| {
-            matches!(
-                operand.expected(),
-                TeletextColumnOperation::Foreground { .. }
-                    | TeletextColumnOperation::Background { .. }
-                    | TeletextColumnOperation::Attributes { .. }
-            )
-        });
-        let overlay = if has_object_attributes {
-            TeletextSavedEditorialOverlay::new_with_local_object_attributes(
-                prepared.provenance.clone(),
-                prepared.cumulative.rows.clone(),
-                prepared.cumulative.operands.clone(),
-                prepared.cumulative.object_operands.clone(),
-                prepared.cumulative.bitmaps.clone(),
-            )?
-        } else if !prepared.cumulative.object_operands.is_empty() || has_glyphs {
-            TeletextSavedEditorialOverlay::new_with_local_object_operands(
-                prepared.provenance.clone(),
-                prepared.cumulative.rows.clone(),
-                prepared.cumulative.operands.clone(),
-                prepared.cumulative.object_operands.clone(),
-                prepared.cumulative.bitmaps.clone(),
-            )?
-        } else if !prepared.cumulative.bitmaps.is_empty() {
-            TeletextSavedEditorialOverlay::new_with_drcs_bitmap_overlays(
-                prepared.provenance.clone(),
-                prepared.cumulative.rows.clone(),
-                prepared.cumulative.operands.clone(),
-                prepared.cumulative.bitmaps.clone(),
-            )?
-        } else if prepared.cumulative.operands.is_empty() {
-            TeletextSavedEditorialOverlay::new(
-                prepared.provenance.clone(),
-                prepared.cumulative.rows.clone(),
-            )?
-        } else {
-            TeletextSavedEditorialOverlay::new_with_local_program_operands(
-                prepared.provenance.clone(),
-                prepared.cumulative.rows.clone(),
-                prepared.cumulative.operands.clone(),
-            )?
-        };
+        let overlay = cumulative_overlay(prepared)?;
         append_overlay(
             prepared.root.original.view().document_version(),
             &prepared.root.original_document,

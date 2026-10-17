@@ -143,6 +143,20 @@ imports remain root-relative; a complete undo restores the immutable original
 without inventing an empty version5 overlay or changing publication. P9A-04 owns
 verification and the remaining genuine editor/client and full-engine evidence.
 
+Private concept version6 adds explicit same-family G2 and G0-with-diacritic
+intent in existing page-local and Local-object commands. It requires at least
+one extended-glyph edit; versions1–5 remain closed to those new intents. A
+G0-with-diacritic edit may change its checked character code, mark selector or
+both. Original charset context, addresses, command/source identity, object type,
+invocations, geometry and all unselected inputs remain immutable. Raw column
+modes16–31 are that family, including mode31 at a column address; they must not
+be confused with row-addressed termination markers. The existing compiler,
+validated shared preview and complete captured-region effects still qualify
+assignment, context and rendering before concept storage or explicit publication.
+Scalar validity alone does not prove a complete repertoire or editor/client
+acceptance. The V6 concept is independent of external editor-carrier versions;
+P9A-04 retains the implementation evidence and every remaining acceptance gate.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

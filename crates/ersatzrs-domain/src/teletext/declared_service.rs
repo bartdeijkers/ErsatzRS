@@ -214,7 +214,7 @@ impl TeletextDeclaredService {
     pub const fn semantic(&self) -> &TeletextSemanticService {
         &self.semantic
     }
-    /// Replace checked existing local colour/attribute/G0/G1 operands, preserving the
+    /// Replace checked existing local colour/attribute/glyph operands, preserving the
     /// authenticated declarations and resource selections. Hosts must still
     /// enforce captured edit permissions, recompile and publish explicitly.
     /// # Errors

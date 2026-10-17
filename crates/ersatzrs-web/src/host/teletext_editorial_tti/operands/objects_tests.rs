@@ -105,13 +105,20 @@ fn original_local_catalogue_membership_and_exact_source_are_required() {
 }
 
 #[test]
-fn original_colour_and_attribute_commands_keep_exact_original_local_source() {
+fn original_editable_commands_keep_exact_original_local_source() {
     for operation in [
         TeletextColumnOperation::Foreground {
             colour: ersatzrs_domain::TeletextColourReference::new(18).unwrap(),
         },
         TeletextColumnOperation::Background {
             colour: ersatzrs_domain::TeletextColourReference::new(0).unwrap(),
+        },
+        TeletextColumnOperation::G2 {
+            code: TeletextGlyphCode::new(0x23).unwrap(),
+        },
+        TeletextColumnOperation::G0Diacritic {
+            code: TeletextGlyphCode::new(b'e').unwrap(),
+            diacritic: ersatzrs_domain::TeletextDiacriticIndex::new(15).unwrap(),
         },
         TeletextColumnOperation::Attributes {
             double_height: true,

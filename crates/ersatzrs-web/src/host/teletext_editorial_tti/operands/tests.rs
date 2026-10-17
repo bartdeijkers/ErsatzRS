@@ -2,6 +2,9 @@
 use super::{operand, TeletextColumnOperation, TeletextGlyphCode, TeletextMosaic};
 use ersatzrs_domain::TeletextG1AlphaCode;
 
+#[path = "tests/extended_glyphs.rs"]
+mod extended_glyphs;
+
 fn g0(code: u8) -> TeletextColumnOperation {
     TeletextColumnOperation::G0 {
         code: TeletextGlyphCode::new(code).unwrap(),

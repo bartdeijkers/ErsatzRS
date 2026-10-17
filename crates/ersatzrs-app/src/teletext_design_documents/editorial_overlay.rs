@@ -28,6 +28,7 @@ const OPERAND_OVERLAY_VERSION: u16 = 2;
 const DRCS_OVERLAY_VERSION: u16 = 3;
 const GLYPH_OVERLAY_VERSION: u16 = 4;
 const OBJECT_ATTRIBUTE_OVERLAY_VERSION: u16 = 5;
+const EXTENDED_GLYPH_OVERLAY_VERSION: u16 = 6;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -64,6 +65,7 @@ pub struct TeletextSavedEditorialOverlay {
     local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     glyph_schema: bool,
     object_attribute_schema: bool,
+    extended_glyph_schema: bool,
 }
 impl TeletextSavedEditorialOverlay {
     /// Check reference shape and distinct exact owners. Original-page membership
@@ -207,6 +209,42 @@ impl TeletextSavedEditorialOverlay {
         )
     }
 
+    /// Capture version 6 G2 or G0-with-diacritic operands in original local commands.
+    ///
+    /// At least one page-local or local-object operand must change within one of
+    /// these two families. G0-with-diacritic may change its code and/or mark index;
+    /// charset, source identity, ordering, invocation and character size stay fixed.
+    /// Existing glyph/attribute, row and bitmap intents may accompany the change.
+    /// This grants no authoring-region permission or publication authority.
+    /// # Errors
+    /// Rejects missing extended-glyph intent, unsupported or crossed families,
+    /// invalid provenance and repeated exact original targets.
+    pub fn new_with_extended_glyph_operands(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if !local_program_operands
+            .iter()
+            .any(|operand| same_extended_glyph_family(operand.expected(), operand.replacement()))
+            && !local_object_operands.iter().any(|operand| {
+                same_extended_glyph_family(operand.expected(), operand.replacement())
+            })
+        {
+            return Err(invalid());
+        }
+        Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
+            true,
+        )
+    }
+
     fn new_parts(
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
@@ -214,13 +252,35 @@ impl TeletextSavedEditorialOverlay {
         drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
         local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
+        Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
+            false,
+        )
+    }
+
+    fn new_parts_for_families(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        allow_extended: bool,
+    ) -> Result<Self, TeletextDesignDocumentError> {
         validate_provenance(&provenance)?;
+        let supported = |expected, replacement| {
+            supported_family(expected, replacement)
+                || (allow_extended && same_extended_glyph_family(expected, replacement))
+        };
         if local_program_operands
             .iter()
-            .any(|operand| !supported_family(operand.expected(), operand.replacement()))
+            .any(|operand| !supported(operand.expected(), operand.replacement()))
             || local_object_operands
                 .iter()
-                .any(|operand| !supported_family(operand.expected(), operand.replacement()))
+                .any(|operand| !supported(operand.expected(), operand.replacement()))
         {
             return Err(invalid());
         }
@@ -245,6 +305,12 @@ impl TeletextSavedEditorialOverlay {
             }
         }
         object_operands::distinct(&local_object_operands)?;
+        let extended_glyph_schema = local_program_operands
+            .iter()
+            .any(|operand| same_extended_glyph_family(operand.expected(), operand.replacement()))
+            || local_object_operands.iter().any(|operand| {
+                same_extended_glyph_family(operand.expected(), operand.replacement())
+            });
         let object_attribute_schema = local_object_operands
             .iter()
             .any(|operand| same_attribute_family(operand.expected(), operand.replacement()));
@@ -260,11 +326,14 @@ impl TeletextSavedEditorialOverlay {
             local_object_operands,
             glyph_schema,
             object_attribute_schema,
+            extended_glyph_schema,
         })
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
-        if self.object_attribute_schema {
+        if self.extended_glyph_schema {
+            EXTENDED_GLYPH_OVERLAY_VERSION
+        } else if self.object_attribute_schema {
             OBJECT_ATTRIBUTE_OVERLAY_VERSION
         } else if self.glyph_schema {
             GLYPH_OVERLAY_VERSION
@@ -361,6 +430,21 @@ fn supported_family(
     replacement: TeletextColumnOperation,
 ) -> bool {
     same_glyph_family(expected, replacement) || same_attribute_family(expected, replacement)
+}
+fn same_extended_glyph_family(
+    expected: TeletextColumnOperation,
+    replacement: TeletextColumnOperation,
+) -> bool {
+    matches!(
+        (expected, replacement),
+        (
+            TeletextColumnOperation::G2 { .. },
+            TeletextColumnOperation::G2 { .. }
+        ) | (
+            TeletextColumnOperation::G0Diacritic { .. },
+            TeletextColumnOperation::G0Diacritic { .. }
+        )
+    )
 }
 fn invalid() -> TeletextDesignDocumentError {
     failure(TeletextDesignDocumentFailure::EditorialOverlay)
@@ -530,6 +614,11 @@ impl StoredOverlay {
             (OPERAND_OVERLAY_VERSION, Some(operands), None, None) if !operands.is_empty() => {}
             (DRCS_OVERLAY_VERSION, operands, Some(bitmaps), None)
                 if !bitmaps.is_empty() && operands.as_ref().is_none_or(|v| !v.is_empty()) => {}
+            (EXTENDED_GLYPH_OVERLAY_VERSION, operands, bitmaps, objects)
+                if (operands.is_some() || objects.is_some())
+                    && operands.as_ref().is_none_or(|v| !v.is_empty())
+                    && objects.as_ref().is_none_or(|v| !v.is_empty())
+                    && bitmaps.as_ref().is_none_or(|v| !v.is_empty()) => {}
             (OBJECT_ATTRIBUTE_OVERLAY_VERSION, operands, bitmaps, Some(objects))
                 if !objects.is_empty()
                     && operands.as_ref().is_none_or(|v| !v.is_empty())
@@ -614,6 +703,11 @@ impl StoredOverlay {
             .collect::<Result<Vec<_>, _>>()?;
         let objects = object_operands::restore(objects.unwrap_or_default())?;
         let value = match self.schema_version {
+            EXTENDED_GLYPH_OVERLAY_VERSION => {
+                TeletextSavedEditorialOverlay::new_with_extended_glyph_operands(
+                    provenance, pages, operands, objects, bitmaps,
+                )?
+            }
             OBJECT_ATTRIBUTE_OVERLAY_VERSION => {
                 TeletextSavedEditorialOverlay::new_with_local_object_attributes(
                     provenance, pages, operands, objects, bitmaps,
@@ -995,3 +1089,7 @@ mod glyph_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/object_attribute_tests.rs"]
 mod object_attribute_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/extended_glyph_tests.rs"]
+mod extended_glyph_tests;

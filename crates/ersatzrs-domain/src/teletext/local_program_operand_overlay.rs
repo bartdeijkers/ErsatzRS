@@ -10,7 +10,7 @@ use super::{TeletextColumnOperation, TeletextPageAddress};
 pub enum TeletextLocalProgramOperandOverlayError {
     #[error("teletext local operand column {column} is outside 0..=39")]
     Column { column: u8 },
-    #[error("teletext local operand must retain its foreground, background, attributes, G0 or G1 family")]
+    #[error("teletext local operand must retain its foreground, background, attributes, G0, G1, G2 or G0-diacritic family")]
     Family,
     #[error("teletext local operand replacement does not change the original")]
     Unchanged,
@@ -34,7 +34,11 @@ pub struct TeletextLocalProgramOperandOverlay {
 }
 
 impl TeletextLocalProgramOperandOverlay {
-    /// Check same-family foreground/background/attributes/G0/G1 replacement intent.
+    /// Check same-family colour/attribute or G0/G1/G2/G0-diacritic replacement.
+    ///
+    /// A G0-diacritic replacement may change its code, selector, or both. The
+    /// original charset context and every other command remain unchanged; valid
+    /// scalar ranges do not establish assigned glyphs or rendering readiness.
     ///
     /// Service application must still match the exact original local command.
     /// # Errors
@@ -66,6 +70,12 @@ impl TeletextLocalProgramOperandOverlay {
             ) | (
                 TeletextColumnOperation::G1 { .. },
                 TeletextColumnOperation::G1 { .. }
+            ) | (
+                TeletextColumnOperation::G2 { .. },
+                TeletextColumnOperation::G2 { .. }
+            ) | (
+                TeletextColumnOperation::G0Diacritic { .. },
+                TeletextColumnOperation::G0Diacritic { .. }
             )
         ) {
             return Err(TeletextLocalProgramOperandOverlayError::Family);
