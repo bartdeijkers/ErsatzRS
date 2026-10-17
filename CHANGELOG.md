@@ -34,7 +34,10 @@ release section when tagging a release.
   Version17 separately records inserted/omitted resource calls. Receipt-bound V8
   import also accepts existing same-family G0/G1 glyph value changes at unchanged
   columns alongside call addition/deletion, preserving complete callee identities
-  and every other command. Dependent display carriers are regenerated while
+  and every other command. A pinned QTeletextMaker 1.0 save combining a G0 change
+  with a new nested call now passes unchanged-byte concept import, shared previews,
+  unpublished reopen and separate explicit publication/cold reopen. Dependent display
+  carriers are regenerated while
   uploaded display words remain bound to their original export; rejected words
   retain their exact X26 location. New/retired subtrees cannot inherit protected content authority. General mixed glyph/style topology and invisible-position boundaries
   remain open.

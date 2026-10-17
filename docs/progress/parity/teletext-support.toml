@@ -25,8 +25,8 @@ protected; complete topology and interchange remain open.
 
 V14 scalars, V15 glyph/style, V16 retained calls and V17 calls plus fixed-column
 G0/G1 values retain identities, shared permissions and root undo. Actual QTM V8
-call saves reach native previews/publication/reopens; the combined actual save
-needs proof. PassiveDefault lineage preserves retained IDs, never new
+call saves, including a combined G0/call SaveAs, reach native previews, unpublished
+reopen and explicit publication/cold reopen; P9A-04 owns the scoped V2 receipt. PassiveDefault lineage preserves retained IDs, never new
 subtrees. V6/V7 capacity and ordinary POP/Night/cold/TSDuck/AV proof stay intact.
 General mixed structure, zero-word roots, full resource/link/set editing and
 oversized context remain open. F6 needs compatible finite-item codecs/tracks

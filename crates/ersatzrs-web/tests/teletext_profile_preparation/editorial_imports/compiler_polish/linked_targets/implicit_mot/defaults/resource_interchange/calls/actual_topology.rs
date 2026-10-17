@@ -2,6 +2,9 @@
 use super::*;
 use ersatzrs_core::repositories::TeletextPublicationMutation;
 
+#[path = "actual_topology/mixed.rs"]
+mod mixed;
+
 const INSERT: &str = "existing-gpop-call-pair-insert";
 const DELETE: &str = "existing-gpop-call-pair-delete";
 

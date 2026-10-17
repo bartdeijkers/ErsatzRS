@@ -91,6 +91,7 @@ struct DriverContext {
     bool resourceCallContext = false;
     bool insertResourceCall = false;
     bool deleteResourceCall = false;
+    bool mixedResourceCallGlyph = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -134,7 +135,8 @@ static DriverContext driverContext() {
     const bool resourceInsert = mode == "resource-object-g0-insert-copy";
     const bool resourceDelete = mode == "resource-object-g0-delete";
     const bool resourceStructure = resourceInsert || resourceDelete;
-    const bool insertResourceCall = mode == "resource-object-call-insert-context";
+    const bool mixedResourceCallGlyph = mode == "resource-object-call-insert-glyph-context";
+    const bool insertResourceCall = mode == "resource-object-call-insert-context" || mixedResourceCallGlyph;
     const bool deleteResourceCall = mode == "resource-object-call-delete-context";
     const bool callTopology = insertResourceCall || deleteResourceCall;
     const bool resourceCallContext = mode == "resource-object-call-origin-context" || callTopology;
@@ -268,7 +270,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1463,6 +1465,21 @@ static std::vector<StructureTriplet> resourceCallContextTriplets(bool added) {
     }
     return expected;
 }
+// The combined fixture omits only the original Adaptive size writer. Keep the
+// old call-only catalogue exact; all aliases are relocated by the same rules.
+static std::vector<StructureTriplet> mixedResourceCallTriplets(bool added) {
+    auto expected = resourceCallContextTriplets(false);
+    if (expected[11] != StructureTriplet{7,12,64})
+        qFatal("Fixed mixed Adaptive size writer differs");
+    expected.erase(expected.begin() + 11);
+    structureRelocate(expected, 11, -1);
+    if (added) {
+        expected.insert(expected.begin() + 9, StructureTriplet{40,16,1});
+        expected.insert(expected.begin() + 10, StructureTriplet{40,19,16});
+        structureRelocate(expected, 9, 2);
+    }
+    return expected;
+}
 static QImage resourceCallOriginalPaint;
 static QImage resourceCallViewport() {
     auto main = window();
@@ -1638,6 +1655,40 @@ static void captureResourceCallTopologyPaint(const DriverContext &context, const
     if (!painted.save(QString("/work/") + context.captureName(label.constData())))
         qFatal("Actual call topology viewport capture failed");
 }
+// Actual widget paint, not a decoder or model patch. The remaining Adaptive
+// reset occupies the right quarter, so only the unobscured left quarter has a
+// literal enlarged-B oracle. Every pixel outside B and the added P stays exact.
+static void captureMixedResourceCallPaint(const DriverContext &context, const char *stage) {
+    if (!context.mixedResourceCallGlyph || !context.insertResourceCall
+        || resourceCallTopologyOriginalPaint.size() != QSize(480, 250))
+        qFatal("Mixed call paint requires the fixed original viewport");
+    const unsigned short rows[10] = {0,0x3fc,0x306,0x306,0x3fc,0x306,0x306,0x3fc,0,0};
+    const auto matches = [&rows](const QImage &painted) {
+        bool changed[2] = {false, false};
+        for (int y = 0; y < 250; ++y)
+            for (int x = 0; x < 480; ++x) {
+                QColor expected = resourceCallTopologyOriginalPaint.pixelColor(x, y);
+                if (y >= 10 && y < 30 && x >= 96 && x < 120) {
+                    if (x >= 108) continue;
+                    expected = rows[(y - 10) / 2] & (1 << (11 - (x - 96) / 2))
+                        ? QColor(255, 255, 255) : QColor(0, 0, 0);
+                    changed[(y - 10) / 10] |= painted.pixelColor(x, y)
+                        != resourceCallTopologyOriginalPaint.pixelColor(x, y);
+                }
+                if (y >= 50 && y < 60 && x >= 144 && x < 156)
+                    expected = resourceCallTopologyOriginalPaint.pixelColor(x - 12, y);
+                if (painted.pixelColor(x, y) != expected) return false;
+            }
+        return changed[0] && changed[1];
+    };
+    if (!QTest::qWaitFor([&matches] { return matches(resourceCallViewport()); }, 3000))
+        qFatal("Actual mixed viewport differs from fixed B/P and unchanged outside pixels");
+    const auto painted = resourceCallViewport();
+    const QByteArray label = QByteArray("resource-call-mixed-") + stage + "-widget";
+    if (!painted.save(QString("/work/") + context.captureName(label.constData())))
+        qFatal("Actual mixed call viewport evidence capture failed");
+    std::puts("QTM mixed actual viewport: literal B left quarter in both enlarged halves; exact added P and unchanged outside B/P");
+}
 static void resourceOriginStep(QDockWidget *dock, int maximum, int from, int to, const DriverContext &context) {
     QSpinBox *field = nullptr;
     for (auto candidate : dock->findChildren<QSpinBox *>()) {
@@ -1782,7 +1833,8 @@ static void editResourceCallTopology(QMainWindow *main, const DriverContext &con
     if (tables.size() != 1) qFatal("Actual call topology requires one table");
     auto table = tables.front();
     auto model = table->model();
-    auto expected = resourceCallContextTriplets(context.deleteResourceCall);
+    auto expected = context.mixedResourceCallGlyph ? mixedResourceCallTriplets(false)
+        : resourceCallContextTriplets(context.deleteResourceCall);
     structureCheck(model, expected);
     captureResourceCallTopologyPaint(context, "before", context.deleteResourceCall, false);
     if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-before")))
@@ -1819,11 +1871,19 @@ static void editResourceCallTopology(QMainWindow *main, const DriverContext &con
             structureCheck(model, expected);
         }
     }
-    if (expected != resourceCallContextTriplets(context.insertResourceCall))
+    if (expected != (context.mixedResourceCallGlyph ? mixedResourceCallTriplets(true)
+        : resourceCallContextTriplets(context.insertResourceCall)))
         qFatal("Actual topology final expected catalogue differs");
     structureCheck(model, expected);
     if (!main->isWindowModified()) qFatal("Actual call topology did not modify the document");
     captureResourceCallTopologyPaint(context, "edited", context.insertResourceCall, true);
+    if (context.mixedResourceCallGlyph) {
+        structureSelect(table, 5);
+        structureCode(dock, context, 5, 65, 66);
+        expected[5] = StructureTriplet{8,9,66};
+        structureCheck(model, expected);
+        captureMixedResourceCallPaint(context, "edited");
+    }
     if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-edited")))
         qFatal("Actual topology edited dock capture failed");
     savedGlyphStructure = expected;
@@ -1965,8 +2025,10 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
         if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, context.resourceCallContext ? 21 : 10);
         if (context.insertResourceCall || context.deleteResourceCall) {
-            verifySavedGlyphStructure(saved, context.insertResourceCall ? 23 : 21);
-            captureResourceCallTopologyPaint(context, "saved", context.insertResourceCall, true);
+            verifySavedGlyphStructure(saved, context.mixedResourceCallGlyph ? 22
+                : context.insertResourceCall ? 23 : 21);
+            if (context.mixedResourceCallGlyph) captureMixedResourceCallPaint(context, "saved");
+            else captureResourceCallTopologyPaint(context, "saved", context.insertResourceCall, true);
         } else if (context.resourceCallContext) captureResourceCallPaint(context, "saved", true);
         capture(context.captureName("saved").toUtf8().constData());
         if (context.panelProof) capturePanelPaint(context, "saved");
