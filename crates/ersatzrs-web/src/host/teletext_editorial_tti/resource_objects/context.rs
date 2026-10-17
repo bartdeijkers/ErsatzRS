@@ -356,4 +356,4 @@ pub(super) fn validate_applied(
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

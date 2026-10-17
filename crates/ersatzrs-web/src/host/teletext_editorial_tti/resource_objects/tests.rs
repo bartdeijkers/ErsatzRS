@@ -602,3 +602,6 @@ mod fragments;
 
 #[path = "tests/structure.rs"]
 mod structure;
+
+#[path = "tests/fragment_calls.rs"]
+mod fragment_calls;

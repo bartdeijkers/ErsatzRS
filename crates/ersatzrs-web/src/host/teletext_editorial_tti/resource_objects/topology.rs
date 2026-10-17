@@ -1,4 +1,4 @@
-//! V8 call topology and resource structure retain sealed identities and anchors.
+//! Resource call topology and structure retain sealed identities and anchors.
 use super::{project, Failure, Mapping, Result};
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand as Command, TeletextEnhancementProgram,
@@ -202,11 +202,11 @@ fn noncall_commands(
 fn fixed_program(
     mapped: &Mapping<'_>,
     body: &project::Body,
+    after: &[Call],
     limits: project::Limits,
     deadline: Instant,
 ) -> Result<TeletextResourceObjectProgramOverlay> {
     let fail = || mapped.location.error(Failure::Structure);
-    let after = body.context_calls.as_ref().ok_or_else(fail)?;
     let before = original_calls(mapped, body, deadline)?;
     if before.len() == after.len() {
         return Err(fail());
@@ -270,16 +270,21 @@ pub(super) fn program(
     limits: project::Limits,
     deadline: Instant,
 ) -> Result<TeletextResourceObjectProgramOverlay> {
-    match fixed_program(mapped, body, limits, deadline) {
+    let native_calls;
+    let calls = if let Some(calls) = body.context_calls.as_deref() {
+        calls
+    } else {
+        native_calls = super::invocations::topology_calls(mapped, body, limits, deadline)?;
+        &native_calls
+    };
+    match fixed_program(mapped, body, calls, limits, deadline) {
         Ok(program) => return Ok(program),
         Err(error) if error.failure == Failure::TimedOut => return Err(error),
         Err(_) => {}
     }
     mapped.location.check_deadline(deadline)?;
     let fail = || mapped.location.error(Failure::Structure);
-    let calls = body.context_calls.as_ref().ok_or_else(fail)?;
-    // Keep the new structural route scoped to the existing V8 call-topology
-    // boundary. Equal-count retained-call edits retain their earlier policy.
+    // Equal-count retained-call edits retain their earlier policy in each view.
     if original_calls(mapped, body, deadline)?.len() == calls.len() {
         return Err(fail());
     }

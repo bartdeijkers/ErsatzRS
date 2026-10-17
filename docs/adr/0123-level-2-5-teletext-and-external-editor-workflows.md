@@ -342,15 +342,29 @@ inherited writer or charset authority survives a new subtree. Full native
 service validation, selected links, consumer permissions and explicit publication
 remain mandatory. The V8 importer binds new calls to authenticated original
 command boundaries and rejects invisible-anchor ambiguity. Existing same-family
-G0/G1 glyph values may change at the same column alongside call insertion/deletion:
-restore original call atoms only for the existing structural validator, require
-exact original semantic correspondence, then merge the actual authenticated calls.
-Non-glyph words, lowering prefixes, styles and semantic anchors remain exact.
+G0/G1 values and bounded glyph/style insertion, deletion and glyph column changes
+may coexist with call topology through the same structural validator. Original
+zero-word positions remain mandatory authenticated anchors; only qualified
+resource call-adjacent active positions are restored. Fixed lowering/context
+anchors and all protected-consumer permissions remain exact.
+
+V7 command fragments also support native call addition/deletion after complete
+original groups are joined. Authenticate original call spans against the exact
+full-ID/type native allocations, selector words and explicit/absent offsets.
+Coalesce a known selector only when all its original calls have one identical
+full identity/type; conflicting known identities refuse without fallback. An
+unused selector requires a unique original catalogue allocation. This preserves
+a known original target despite an unrelated unused resource with equal wire
+selector, and grants no unexpressed retargeting intent. Offset parsing, whole
+native/context/effects validation and new-writer ancestry remain mandatory.
+This route requires V7 fragment metadata and changed call count; it neither
+fabricates V8 Local aliases nor changes V16 retained-call policy or stored bytes.
 Resource-program changes use the existing baseline-bound display validator when
 native compilation regenerates dependent display carriers. This grants no
 uploaded display-word authority; complete native/effects checks still apply.
-General mixed glyph/style/topology, zero-word-position boundaries and complete
-resource/set editing remain required work, not accepted permanent restrictions.
+Remaining same-position style-value/family combinations, initial/deferred active-
+position and other context cases, plus complete resource/set editing remain
+required work, not accepted permanent restrictions.
 
 QTM carrier version8 adds `object_context_tti_v1`, a separately named editor-only
 view. It is regenerated from the complete original resource catalogue: the

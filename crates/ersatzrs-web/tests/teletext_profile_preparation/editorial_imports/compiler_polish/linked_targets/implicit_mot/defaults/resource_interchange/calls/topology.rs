@@ -2,6 +2,9 @@
 use super::*;
 use ersatzrs_domain::{TeletextEnhancementProgram, TeletextResourceObjectProgramOverlay};
 
+#[path = "topology/fragment_calls.rs"]
+mod fragment_calls;
+
 #[derive(Clone, Copy)]
 enum Shape {
     Added,

@@ -25,7 +25,7 @@ fn policy() -> crate::host::teletext_channel_documents::TeletextChannelDocumentE
     .unwrap()
     .encoding
 }
-fn limits() -> project::Limits {
+pub(in super::super) fn limits() -> project::Limits {
     (
         TeletextTtiBudget {
             max_bytes: 65536,
@@ -35,7 +35,7 @@ fn limits() -> project::Limits {
         policy().validation.service,
     )
 }
-fn target(id: u16) -> TeletextObjectIdentity {
+pub(in super::super) fn target(id: u16) -> TeletextObjectIdentity {
     let global = id == 21;
     let identity = TeletextResourceIdentity::new(
         if global {
@@ -164,7 +164,7 @@ fn definitions(
     }
     objects
 }
-fn native_fixture(
+pub(in super::super) fn native_fixture(
     replacement: TeletextEnhancementProgram,
     colliding: bool,
 ) -> EncodedTeletextAuthoredService {
@@ -242,7 +242,7 @@ fn native_fixture(
     encode_teletext_authored_service_before(declared, &transmissions, &policy.encoding, deadline())
         .unwrap()
 }
-fn receipt(service: &EncodedTeletextAuthoredService) -> TeletextExportProject {
+pub(in super::super) fn receipt(service: &EncodedTeletextAuthoredService) -> TeletextExportProject {
     let hash = "a".repeat(64);
     let mut value = json!({"schema_version":1,"editor_profile":"qteletextmaker-1.0-carrier-v8",
         "original":{"design_id":1,"revision":1,"digest":hash,"expected_head":1,"document_version":1},

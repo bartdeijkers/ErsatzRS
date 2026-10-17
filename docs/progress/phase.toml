@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: full-capacity resource/context interchange; suitable-client gate open'
+current_focus = 'P9A-04: V7 native-call editor workflow; suitable-client gate open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,17 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+V7 large-resource native call addition/deletion now reuses whole-fragment joining,
+sealed full-ID allocations and existing V17 correspondence/effects. Parser63 and
+native2 pass, including publication/reopen/rootundo/repeat and Generated125 atomic
+refusal. Strict web Clippy, fmt and architecture pass after equivalent test-only
+helper/literal corrections. P9A-04 owns canonical hashes, RED, exact reuse and the
+compact F/V/X list. Next prove actual pinned nonfirst-fragment native-call add/
+delete SaveAs using the same targets and existing handshake; reuse unchanged
+transport/client/protection evidence. QTM's208-word/page-local context limitation
+and suitable-client V3/X1 remain open; no permanent restriction or full engine
+acceptance is inferred. This checkpoint stays local.
+
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.
 Exact TSDuck/sourceAV/emitted-model checks, independent edited pixels/Level1-1.5

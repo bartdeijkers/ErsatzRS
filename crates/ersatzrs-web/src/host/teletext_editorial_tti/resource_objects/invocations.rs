@@ -6,6 +6,7 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::teletext::{
     allocate_teletext_resource_objects, EncodedTeletextAuthoredService,
+    TeletextResourceObjectAllocation, TeletextResourceObjectAllocations,
 };
 use std::{collections::BTreeMap, ops::Range, time::Instant};
 
@@ -31,12 +32,11 @@ fn calls(words: &[u32], location: Location, deadline: Instant) -> Result<Vec<Ran
 
 type Targets = BTreeMap<u32, Option<(ersatzrs_domain::TeletextObjectIdentity, TeletextObjectType)>>;
 
-fn targets(
+fn allocations(
     original: &EncodedTeletextAuthoredService,
     maximum: usize,
     location: Location,
-    deadline: Instant,
-) -> Result<Targets> {
+) -> Result<TeletextResourceObjectAllocations> {
     let fail = || location.error(Failure::Structure);
     let declared = original.declared();
     let defaults = declared
@@ -44,24 +44,34 @@ fn targets(
         .iter()
         .map(ersatzrs_domain::TeletextDeclaredDefaultReservation::selection)
         .collect::<Vec<_>>();
-    let allocations =
-        allocate_teletext_resource_objects(declared.semantic().objects(), &defaults, maximum)
-            .map_err(|_| fail())?;
+    allocate_teletext_resource_objects(declared.semantic().objects(), &defaults, maximum)
+        .map_err(|_| fail())
+}
+
+fn target_word(entry: &TeletextResourceObjectAllocation, location: Location) -> Result<u32> {
+    let scope = match entry.target().scope() {
+        TeletextObjectScope::Public => 0x30,
+        TeletextObjectScope::Global => 0x38,
+        TeletextObjectScope::Local => return Err(location.error(Failure::Structure)),
+    };
+    let mode = match entry.object_type() {
+        TeletextObjectType::Active => 17,
+        TeletextObjectType::Adaptive => 18,
+        TeletextObjectType::Passive => 19,
+    };
+    let number = u32::from(entry.object_number());
+    Ok((scope | (number >> 7)) | (mode << 6) | ((number & 127) << 11))
+}
+
+fn allocated_targets(
+    allocations: &TeletextResourceObjectAllocations,
+    location: Location,
+    deadline: Instant,
+) -> Result<Targets> {
     let mut targets = BTreeMap::new();
     for entry in allocations.entries() {
         location.check_deadline(deadline)?;
-        let scope = match entry.target().scope() {
-            TeletextObjectScope::Public => 0x30,
-            TeletextObjectScope::Global => 0x38,
-            TeletextObjectScope::Local => return Err(fail()),
-        };
-        let mode = match entry.object_type() {
-            TeletextObjectType::Active => 17,
-            TeletextObjectType::Adaptive => 18,
-            TeletextObjectType::Passive => 19,
-        };
-        let number = u32::from(entry.object_number());
-        let word = (scope | (number >> 7)) | (mode << 6) | ((number & 127) << 11);
+        let word = target_word(entry, location)?;
         // Different complete resources can have the same physical selector.
         // Uploaded words cannot choose between them or invent a resource page.
         targets
@@ -70,6 +80,141 @@ fn targets(
             .or_insert(Some((entry.target(), entry.object_type())));
     }
     Ok(targets)
+}
+
+fn targets(
+    original: &EncodedTeletextAuthoredService,
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Targets> {
+    allocated_targets(
+        &allocations(original, maximum, location)?,
+        location,
+        deadline,
+    )
+}
+
+fn offset(words: &[u32], location: Location) -> Result<Option<TeletextObjectOffset>> {
+    let fail = || location.error(Failure::Structure);
+    match words {
+        [_, _] if words[0] & 63 >= 40 && (words[0] >> 6) & 31 == 16 => {
+            let row = u8::try_from((words[0] & 63) - 40).map_err(|_| fail())?;
+            let column = u8::try_from(words[0] >> 11).map_err(|_| fail())?;
+            Ok(Some(
+                TeletextObjectOffset::new(row, column).map_err(|_| fail())?,
+            ))
+        }
+        [_] => Ok(None),
+        _ => Err(fail()),
+    }
+}
+
+fn known_targets(
+    mapped: &super::Mapping<'_>,
+    body: &super::project::Body,
+    before: &[Range<usize>],
+    allocations: &TeletextResourceObjectAllocations,
+    deadline: Instant,
+) -> Result<Targets> {
+    let fail = || mapped.location.error(Failure::Structure);
+    let mut known = Targets::new();
+    let mut physical = before.iter();
+    for (ordinal, command) in mapped.definition.program.commands().iter().enumerate() {
+        mapped.location.check_deadline(deadline)?;
+        let Command::InvokeObject {
+            target,
+            object_type,
+            offset: expected_offset,
+        } = command
+        else {
+            continue;
+        };
+        let range = physical.next().ok_or_else(fail)?;
+        let mut matching = body.spans.iter().filter(|span| span.ordinal == ordinal);
+        let (Some(span), None) = (matching.next(), matching.next()) else {
+            return Err(fail());
+        };
+        if span.first != range.start || span.word.checked_add(1) != Some(range.end) {
+            return Err(fail());
+        }
+        let entry = allocations.lookup(*target, *object_type).ok_or_else(fail)?;
+        let selector = target_word(entry, mapped.location)?;
+        if body.before.get(span.word) != Some(&selector)
+            || offset(&body.before[range.clone()], mapped.location)? != *expected_offset
+        {
+            return Err(fail());
+        }
+        let identity = (*target, *object_type);
+        known
+            .entry(selector)
+            .and_modify(|value| {
+                if *value != Some(identity) {
+                    *value = None;
+                }
+            })
+            .or_insert(Some(identity));
+    }
+    if physical.next().is_some() {
+        return Err(fail());
+    }
+    Ok(known)
+}
+
+/// V7 is a native command-edit view; it never supplies disposable Local aliases.
+pub(super) fn topology_calls(
+    mapped: &super::Mapping<'_>,
+    body: &super::project::Body,
+    limits: super::project::Limits,
+    deadline: Instant,
+) -> Result<Vec<super::topology::Call>> {
+    mapped.location.check_deadline(deadline)?;
+    let fail = || mapped.location.error(Failure::Structure);
+    if mapped.project.editor_profile != "qteletextmaker-1.0-carrier-v7"
+        || !matches!(
+            mapped.asset.scope,
+            super::TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
+        )
+        || body.before.len() > 507
+        || body.after.len() > 507
+        || mapped.definition.program.commands().len() > limits.2.max_commands
+        || body.spans.len() > limits.2.max_commands
+    {
+        return Err(fail());
+    }
+    let before = calls(&body.before, mapped.location, deadline)?;
+    let after = calls(&body.after, mapped.location, deadline)?;
+    // Existing equal-count V16 imports retain their original exact-target rule.
+    if before.len() == after.len() || after.len() > limits.2.max_commands {
+        return Err(fail());
+    }
+    let allocations = allocations(mapped.service, limits.2.max_objects, mapped.location)?;
+    let known = known_targets(mapped, body, &before, &allocations, deadline)?;
+    let targets = allocated_targets(&allocations, mapped.location, deadline)?;
+    let mut result = Vec::new();
+    for range in after {
+        mapped.location.check_deadline(deadline)?;
+        let words = &body.after[range.clone()];
+        let selector = words.last().ok_or_else(fail)?;
+        // A known selector carries sealed full identity; an unused collision
+        // cannot relabel it. Conflicting known identities remain unresolvable.
+        let (target, object_type) = known
+            .get(selector)
+            .or_else(|| targets.get(selector))
+            .copied()
+            .flatten()
+            .ok_or_else(fail)?;
+        result.push(super::topology::Call {
+            first: range.start,
+            word: range.end - 1,
+            command: Command::InvokeObject {
+                target,
+                object_type,
+                offset: offset(words, mapped.location)?,
+            },
+        });
+    }
+    Ok(result)
 }
 
 /// Normalize only call spans for the unchanged glyph/style parser, then restore
@@ -129,14 +274,7 @@ pub(super) fn program(
                 .ok_or_else(fail)?;
             target
         };
-        let offset = if words.len() == 2 {
-            let row = u8::try_from((words[0] & 63).checked_sub(40).ok_or_else(fail)?)
-                .map_err(|_| fail())?;
-            let column = u8::try_from(words[0] >> 11).map_err(|_| fail())?;
-            Some(TeletextObjectOffset::new(row, column).map_err(|_| fail())?)
-        } else {
-            None
-        };
+        let offset = offset(words, location)?;
         replacements.insert(
             ordinal,
             Command::InvokeObject {

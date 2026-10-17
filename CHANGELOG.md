@@ -34,7 +34,10 @@ release section when tagging a release.
   Version17 separately records inserted/omitted resource calls. Receipt-bound V8
   import combines call addition/deletion with bounded glyph/style insertion and
   deletion, glyph column changes and same-family G0/G1 value edits. Complete callee
-  identities, fixed anchors and every shared consumer remain checked. A pinned
+  identities, fixed anchors and every shared consumer remain checked.
+  Rejoined version7 fragments now also support native resource-call addition and
+  deletion in large objects, retaining complete original identities and protected
+  consumers without reducing native capacity. A pinned
   QTeletextMaker 1.0 save combining a G0 change with a new nested call passes
   unchanged-byte concept import, shared previews, unpublished reopen and separate
   explicit publication/cold reopen. An actual compound save now also proves
