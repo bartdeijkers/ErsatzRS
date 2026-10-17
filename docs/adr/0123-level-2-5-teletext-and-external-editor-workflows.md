@@ -197,6 +197,24 @@ Unchanged pending consensus remains valid. Actual editor controls and native
 Original/Alternate preview phases do not prove receiver wall-clock flash timing;
 complete editor, suitable-client and engine acceptance remain required.
 
+Private concept version10 adds checked Normal/Global and logical-subtable changes
+in existing page-local and Local-object DRCS references. At least one selection
+change is required; versions1–9 retain their closed intent sets and bytes.
+Authenticate original mode24 selectors and mode13 glyphs through the compiler's
+unique command spans. Replay independent Normal/Global latches from an unknown
+initial state in Main and each Local definition; selections do not cross object
+invocations or returns. Derive every affected reference, including unchanged glyph
+words fed by a changed shared selector. Reject unowned/generated consumers,
+unselected target latches and dangling selectors. Recompilation may canonically
+omit redundant selectors or add newly necessary selectors; qualify complete final
+references by original command identity rather than old physical offsets.
+Existing resource identity/bitmap ownership, two-subtable/24-glyph limits and all
+consumer permissions still apply before concept storage. Imported packet topology
+is fixed in this partial implementation; full insertion/deletion/relocation and
+resource interchange remain required under P9A-04, not accepted restrictions.
+Publication stays explicit; this private format changes neither the addon contract
+nor external editor carrier and does not establish complete engine acceptance.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

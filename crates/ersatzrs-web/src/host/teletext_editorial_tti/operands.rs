@@ -24,6 +24,9 @@ mod objects;
 #[path = "operands/flash_charset.rs"]
 mod flash_charset;
 
+#[path = "operands/drcs_selection.rs"]
+mod drcs_selection;
+
 type PacketWords = [Option<[u32; 13]>; 16];
 
 pub(super) fn reconcile(
@@ -44,7 +47,10 @@ pub(super) fn reconcile(
         .get(&owner)
         .and_then(|page| page.local_program.as_ref());
     let packets = baseline.packets[0].map(Option::<&[u32; 13]>::copied);
-    let mut result = TeletextEditorialChanges::default();
+    let uploaded = edited.packets[0].map(Option::<&[u32; 13]>::copied);
+    let selected =
+        drcs_selection::reconcile(service, owner, &packets, &uploaded, location, deadline)?;
+    let mut result = selected.changes;
     for designation in 0..16 {
         location.check_deadline(deadline)?;
         let (Some(before), Some(after)) = (
@@ -58,6 +64,9 @@ pub(super) fn reconcile(
                 continue;
             }
             let word = designation * 13 + slot;
+            if selected.allowed[word] == Some(after[slot]) {
+                continue;
+            }
             let position = position_at_word(encoded, word, location, deadline)?;
             if position.source().object.is_some() {
                 result.object_operands.push(objects::reconcile(
@@ -288,8 +297,21 @@ pub(super) fn check_recompiled_packets(
     {
         return Err(location.error(NativeTeletextEditorialTtiFailure::Packet));
     }
-    let mut allowed = [None; 16 * 13];
-    for change in changes.0.iter().filter(|change| change.owner() == owner) {
+    let uploaded_words = uploaded.packets[0].map(Option::<&[u32; 13]>::copied);
+    let mut allowed = drcs_selection::qualify_recompiled(
+        baseline,
+        service,
+        owner,
+        &uploaded_words,
+        changes,
+        location,
+        deadline,
+    )?;
+    for change in changes
+        .0
+        .iter()
+        .filter(|change| change.owner() == owner && !drcs_selection::is_drcs(change.expected()))
+    {
         location.check_deadline(deadline)?;
         let old = command_word(baseline, change, change.expected(), location, deadline)?;
         let final_word = command_word(service, change, change.replacement(), location, deadline)?;
@@ -303,7 +325,11 @@ pub(super) fn check_recompiled_packets(
             location,
         )?;
     }
-    for change in changes.1.iter().filter(|change| change.owner() == owner) {
+    for change in changes
+        .1
+        .iter()
+        .filter(|change| change.owner() == owner && !drcs_selection::is_drcs(change.expected()))
+    {
         location.check_deadline(deadline)?;
         let old = objects::command_word(
             baseline,

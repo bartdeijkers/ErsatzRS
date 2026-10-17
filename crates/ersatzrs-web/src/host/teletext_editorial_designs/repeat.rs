@@ -608,6 +608,17 @@ fn has_flash_charset(prepared: &PreparedImport) -> bool {
         })
 }
 
+fn has_object_attributes(prepared: &PreparedImport) -> bool {
+    prepared.cumulative.object_operands.iter().any(|operand| {
+        matches!(
+            operand.expected(),
+            TeletextColumnOperation::Foreground { .. }
+                | TeletextColumnOperation::Background { .. }
+                | TeletextColumnOperation::Attributes { .. }
+        )
+    })
+}
+
 fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
     let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
         matches!(
@@ -615,17 +626,17 @@ fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditoria
             TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. }
         )
     });
-    let has_object_attributes = prepared.cumulative.object_operands.iter().any(|operand| {
-        matches!(
-            operand.expected(),
-            TeletextColumnOperation::Foreground { .. }
-                | TeletextColumnOperation::Background { .. }
-                | TeletextColumnOperation::Attributes { .. }
-        )
-    });
     let (has_drcs_references, has_remaining_glyphs, has_extended_glyphs) =
         glyph_family_flags(&prepared.cumulative);
-    let overlay = if has_flash_charset(prepared) {
+    let overlay = if prepared.cumulative.has_drcs_selection(None) {
+        TeletextSavedEditorialOverlay::new_with_drcs_reference_selections(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+        )?
+    } else if has_flash_charset(prepared) {
         TeletextSavedEditorialOverlay::new_with_flash_charset_operands(
             prepared.provenance.clone(),
             prepared.cumulative.rows.clone(),
@@ -657,7 +668,7 @@ fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditoria
             prepared.cumulative.object_operands.clone(),
             prepared.cumulative.bitmaps.clone(),
         )?
-    } else if has_object_attributes {
+    } else if has_object_attributes(prepared) {
         TeletextSavedEditorialOverlay::new_with_local_object_attributes(
             prepared.provenance.clone(),
             prepared.cumulative.rows.clone(),

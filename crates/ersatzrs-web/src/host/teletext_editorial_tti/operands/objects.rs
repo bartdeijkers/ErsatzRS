@@ -50,7 +50,7 @@ pub(super) fn reconcile(
     Ok(change)
 }
 
-fn authored_operation(
+pub(super) fn authored_operation(
     catalog: &TeletextEnhancementObjectCatalog,
     owner: TeletextPageAddress,
     source: TeletextEnhancementSource,
@@ -117,7 +117,7 @@ pub(super) fn command_word(
     retained_word(program, definition, source, packets, location, deadline)
 }
 
-fn retained_word(
+pub(super) fn retained_word(
     program: &EncodedTeletextLocalObjectProgram,
     definition: &TeletextEnhancementObjectDefinition,
     source: TeletextEnhancementSource,

@@ -22,8 +22,9 @@ pub enum TeletextLocalObjectOperandOverlayError {
 ///
 /// Object identity/type, command order, geometry, invocation targets and
 /// all other commands are immutable. G1 alphabetic edits retain their operation
-/// family and G3 retains its compatibility. DRCS slot changes retain their original
-/// table/subtable; resource declarations and bitmap contents remain immutable.
+/// family and G3 retains its compatibility. DRCS selection changes retain checked
+/// scope/subtable/slot values; resource declarations and bitmaps stay immutable.
+/// Full service reconstruction resolves each selected resource and target glyph.
 /// Existing Flash or `DesignateCharset` operands may change within their typed
 /// family; rebuilding the full service still qualifies repertoire/context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -4,79 +4,57 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123: authored Level2.5/fallback, pinned QTM TTI/sidecar,
-TSDuck/independent decoding, actual client display/navigation; Kodi optional.
+ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
+QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
+rendering/navigation. Kodi is optional. P9A-04 owns the exact criterion map,
+canonical receipts, failures and remaining acceptance; no complete engine claim.
 
-v1 retains bytes/resources/pointers/metadata/fresh state/local X26.
-Replay/raster keep fallback; encoding keeps IDs/lineage/ancestry.
-AP00 retains pointers/C2; native pages keep no-X26/default/X27/X28/M29.
-X27 and X26/metadata decoding pass; full client open.
-C2 keeps per-instance final words; differing charset aliases remain pending.
-G1 mode/fallback and Latin decoder gaps survive.
-165 direct;4 pending. Polish/Turkish QTM/headed pass.
-Two-scope TCP/imager pass; client open(P9A-04).
-Raw/TL imager reused; hydration/client/Hebrew open.
-3-target QTM/native/TCP/imager pass; client open(P9A-04).
-Romanian/MOT/English two-pair QTM/native/TCP/imager pass; suitable enlarged client open(P9A-04).
-Raw English primary10 core/native/actual-QTM/TCP/imager flow passes; source/X28 raw alias retained.
-Panels: zones/M29/POP and scoped ordinary/independent proof pass(P9A-04);
-absence/DecoderDependent remain unchanged.
-V4–9 page/Local glyph/attribute/DRCS-slot/Flash/charset concepts and publication/
-undo pass; actual QTM cooked/raw saves and protected charset context pass(P9A-04).
-Full DRCS selection/resource interchange/client remain open; Kodi20.5 failure
-retained, no decoder repair expansion.
-Geometry checks raw own AP areas; A7 retains whole-instance type masks and
-permitted pairs. Child areas stay separate.
-Intervals reject sixteen simultaneous opens; unknown survive.
-Collector:127/type/display, with defaults.
-MIT masks/C1 rasterize fragments/DRCS; Unicode keeps Base priority.
-Header/flash/bottom origins;8 DRCS rectangles match native RGBA.
-Composites/BBS retain masks/writers; D5 cancels spacing with original scope.
-Enhanced G1 uses D5; native/qualified later-spacing proof passes.
-Unicode/Active wire normalization passes;
-foreign X26, row-zero and full A7/A8/C3/client proof stay open.
-X27/MOT keep masks/S1/banks/defaults/IDs/provenance/conflicts.
-Headers fence physical/logical owners; declarations check roles/defaults/extents,
-empty owners and one MOT/magazine.
-Compiler keeps resources/M29; sweeps preserve deadlines/cursors/FF.
-Replacement checks completed/pending/retired/legacy; warm DRCS passes.
-TSDuck/slots/EOF/root/nested pass.
-DRCS lifecycle3/4/bounded handover: singleton cold/warm TCP and retained VLC pass.
-Receipt-bound≤16 groups retain S1 through dense/padded QTM.
-Dense headed nine-culture SSR/TCP/TSDuck/independent pixels/fallback/VLC pass.
-P9A-04: bank flows pass; engine open.
+Typed services, provenance, resource identities/defaults, physical ownership,
+X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization are
+implemented with incomplete conformance. Original bytes, fallback, IDs,
+lineage/ancestry, absent/default distinctions and pending charset uncertainty
+remain protected. A7/A8/C3, row-zero/foreign-X26, full repertoire/aliases,
+resource/object/panel and suitable-client coverage remain required.
 
-v2 stays pinned; Base refuses v2. Encoding retains
-defaults, secondary uncertainty and channel/model/deadline fences.
-Cold composition isolates M29/resources; checks MOT.
-Originals/pending persist; raw v2/v1.
-Producer caps;13 quotas;100-number flow;workers survive cancellation.
-Direct/reopen AV,200→201 pass; RSS/bounds open.
-Two-channel client themes; nine-culture Health pass.
-Lua originals/scoped pointers/acceptance/recovery and two-theme stream/reopen pass.
-Finite Off expiry/base restore pass; effective admin/client remain open.
-Copy fixed; finite restart/AV pass.
-V3/M29 exports, receipt-bound row concepts/zones/CAS/reopen connect.
-QTM foreground edits pass native/admin import/publication, independent fallback
-and two-theme VLC200/201 replay. Editor/panels/browser matrix stay open.
-P9A-04 retains PS/NOS/DRCS/warm proof and qualified G1 navigation; stock spacing fails.
-Slate/full acceptance stay open.
+Private V1–10 concepts retain immutable metadata/originals, physical rows,
+page/Local glyphs, colours/attributes, bitmap and DRCS references, Flash and
+charset context. Native publication/reopen/repeat/undo and protected shared
+consumers pass. Genuine pinned QTM scope/subtable saves reach unpublished
+concepts/shared four-consumer preview/reopen; P9A-04 owns the bundled proof.
+Next admit bounded Local command-structure edits. Full command/resource/object,
+template/dynamic-field/zone/set and editor/client interchange remain open.
 
-P9A-03 owns source descriptors, Local rescans and worker/lease
-ownership. Missing bytes stay NotAcquired; descriptors/PTS do not grant readiness.
-Carousel PSI/PCR preserves AV/EOF; accepted ACK/cycle boundaries fence updates,
-withdrawal and expiry. Cold/warm resources, restart and Next remain open.
+P9A-04 retains representative national-original, bank and panel QTM/native/
+ordinary-TCP/TSDuck/independent proof. Dense/padded banks join nine-culture
+headed SSR, explicit publication, fallback and two-theme client navigation.
+Raw English primary10 preserves its original alias; Polish/Turkish/Romanian,
+MOT defaults and inherited panels have scoped receipts. Banks/defaults may be
+explicitly supplied in independent trials. Enlarged clients, hydration, Hebrew
+and general repertoire/resource acquisition remain open. Qualified sparse/G1
+candidates retain exact pins; stock failures remain. No decoder repair expansion.
 
-P9A-04 retains Local888 legacy/Hybrid both-track/VBV, Off/stale, AV/authored200,
-default2 cleanup and seek0.5s initialization proof; general sought cues stay open.
-Complete page-X28 handover retains acknowledged M29 history; native AV/TSDuck/
-persistent2.5/cold and retained warm client pass; repertoire open(P9A-04).
-Linux x64/Windows interop/QEMU ARM proof is partial; native Windows/ARM, provider/
-Next and general source/seek/charset/resource behavior remain open.
-P9A-02: decoder Health/six-RID licensing. P9A-03/04 retain persistence,
-selection, Burn/Convert/copy, carriage, HLS/browser and playback gates; full slate,
-activation/publication/refresh/restart, management/client and platform acceptance
-remain open. UCU waives no gates. Content waits for p9a-04; Phase10 for p9b-02.
+V1/v2 producer contracts retain selection/channel/model/deadline fences,
+aggregate quotas, original/pending persistence and cancellation ownership.
+Two-channel themes, Lua controls/recovery, finite Off expiry/base restoration
+and finite restart/AV have scoped proof. Full profile/On/error/restart/client,
+RSS/work bounds, automatic Base redisplay and open-client host drain remain open.
+M29-to-page-X28 and resource handover preserve bounded acknowledged history;
+representative warm retained-client navigation passes. Complete retirement,
+Header/POP/lifecycle and general palette/context behavior remain required.
+
+P9A-03 owns source descriptors, Local rescans and worker/lease ownership.
+Missing bytes stay NotAcquired; descriptors/PTS do not grant readiness.
+Carousel PSI/PCR preserves AV/EOF; ACK/cycle boundaries fence updates,
+withdrawal and expiry. P9A-04 retains Local888 legacy/Hybrid both-track/VBV,
+Off/stale/authored200, default-capacity cleanup and seek0.5s initializer proof.
+General source/seek/cue/charset/resource/wrap and Next behavior remain open.
+
+Linux x64, Windows interop and QEMU ARM proof is partial; native Windows/ARM
+and all six-RID operational acceptance remain required. P9A-02 owns decoder
+Health/licensing. P9A-03/04 retain Burn/Convert/copy, carriage, HLS/browser,
+playback/slate, activation/publication/refresh/restart and management gates.
+UCU waives none. Production TV-guide content waits for full independent
+P9A-04 generic acceptance; Phase10 waits for P9B-02.
 '''
 
 [[debt]]

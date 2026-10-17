@@ -32,6 +32,7 @@ const EXTENDED_GLYPH_OVERLAY_VERSION: u16 = 6;
 const REMAINING_GLYPH_OVERLAY_VERSION: u16 = 7;
 const DRCS_REFERENCE_OVERLAY_VERSION: u16 = 8;
 const FLASH_CHARSET_OVERLAY_VERSION: u16 = 9;
+const DRCS_SELECTION_OVERLAY_VERSION: u16 = 10;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -351,6 +352,42 @@ impl TeletextSavedEditorialOverlay {
         )
     }
 
+    /// Capture version 10 DRCS table/subtable selection changes in original commands.
+    ///
+    /// At least one page-local or local-object reference must change its checked
+    /// Normal/Global scope or logical subtable. Slot changes and known version1–9
+    /// intents may accompany it. Resource declarations/catalogs stay original;
+    /// native reconstruction still resolves every target and enforces usage caps.
+    /// This grants no edit permission or publication authority.
+    /// # Errors
+    /// Rejects missing selection change, unsupported/crossed families, invalid
+    /// provenance and repeated exact original targets.
+    pub fn new_with_drcs_reference_selections(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if !local_program_operands
+            .iter()
+            .any(|operand| changed_drcs_selection(operand.expected(), operand.replacement()))
+            && !local_object_operands
+                .iter()
+                .any(|operand| changed_drcs_selection(operand.expected(), operand.replacement()))
+        {
+            return Err(invalid());
+        }
+        Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
+            OperandFamilies::DrcsSelections,
+        )
+    }
+
     fn new_parts(
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
@@ -470,6 +507,7 @@ enum OperandFamilies {
     Remaining,
     DrcsReferences,
     FlashCharset,
+    DrcsSelections,
 }
 impl OperandFamilies {
     fn supports(
@@ -481,12 +519,16 @@ impl OperandFamilies {
             || (!matches!(self, Self::Legacy) && same_extended_glyph_family(expected, replacement))
             || (matches!(
                 self,
-                Self::Remaining | Self::DrcsReferences | Self::FlashCharset
+                Self::Remaining | Self::DrcsReferences | Self::FlashCharset | Self::DrcsSelections
             ) && same_remaining_glyph_family(expected, replacement))
-            || (matches!(self, Self::DrcsReferences | Self::FlashCharset)
-                && same_drcs_reference_slots(expected, replacement))
-            || (matches!(self, Self::FlashCharset)
+            || (matches!(
+                self,
+                Self::DrcsReferences | Self::FlashCharset | Self::DrcsSelections
+            ) && same_drcs_reference_slots(expected, replacement))
+            || (matches!(self, Self::FlashCharset | Self::DrcsSelections)
                 && same_flash_charset_family(expected, replacement))
+            || (matches!(self, Self::DrcsSelections)
+                && changed_drcs_selection(expected, replacement))
     }
 }
 fn inferred_schema_version(
@@ -502,7 +544,9 @@ fn inferred_schema_version(
                 .iter()
                 .any(|operand| family(operand.expected(), operand.replacement()))
     };
-    if any_family(same_flash_charset_family) {
+    if any_family(changed_drcs_selection) {
+        DRCS_SELECTION_OVERLAY_VERSION
+    } else if any_family(same_flash_charset_family) {
         FLASH_CHARSET_OVERLAY_VERSION
     } else if any_family(same_drcs_reference_slots) {
         DRCS_REFERENCE_OVERLAY_VERSION
@@ -644,6 +688,20 @@ fn same_flash_charset_family(
             TeletextColumnOperation::DesignateCharset { .. }
         )
     )
+}
+fn changed_drcs_selection(
+    expected: TeletextColumnOperation,
+    replacement: TeletextColumnOperation,
+) -> bool {
+    match (expected, replacement) {
+        (
+            TeletextColumnOperation::Drcs {
+                reference: original,
+            },
+            TeletextColumnOperation::Drcs { reference: changed },
+        ) => original.table != changed.table || original.subtable != changed.subtable,
+        _ => false,
+    }
 }
 fn invalid() -> TeletextDesignDocumentError {
     failure(TeletextDesignDocumentFailure::EditorialOverlay)
@@ -835,7 +893,8 @@ impl StoredOverlay {
                 EXTENDED_GLYPH_OVERLAY_VERSION
                 | REMAINING_GLYPH_OVERLAY_VERSION
                 | DRCS_REFERENCE_OVERLAY_VERSION
-                | FLASH_CHARSET_OVERLAY_VERSION,
+                | FLASH_CHARSET_OVERLAY_VERSION
+                | DRCS_SELECTION_OVERLAY_VERSION,
                 operands,
                 bitmaps,
                 objects,
@@ -911,6 +970,11 @@ impl StoredOverlay {
             .collect::<Result<Vec<_>, _>>()?;
         let objects = object_operands::restore(objects.unwrap_or_default())?;
         let value = match self.schema_version {
+            DRCS_SELECTION_OVERLAY_VERSION => {
+                TeletextSavedEditorialOverlay::new_with_drcs_reference_selections(
+                    provenance, pages, operands, objects, bitmaps,
+                )?
+            }
             FLASH_CHARSET_OVERLAY_VERSION => {
                 TeletextSavedEditorialOverlay::new_with_flash_charset_operands(
                     provenance, pages, operands, objects, bitmaps,
@@ -1328,3 +1392,7 @@ mod drcs_reference_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/flash_charset_tests.rs"]
 mod flash_charset_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/drcs_selection_tests.rs"]
+mod drcs_selection_tests;

@@ -564,7 +564,9 @@ fn validate_reconciled_files(
             subcode: TeletextSubcode::new(mapping.page.subcode)
                 .map_err(|_| NativeTeletextEditorialImportError::Association)?,
         };
-        if incoming.rows.iter().any(|overlay| overlay.owner() == owner) {
+        if incoming.rows.iter().any(|overlay| overlay.owner() == owner)
+            || incoming.has_drcs_selection(Some(owner))
+        {
             validate_recompiled_teletext_editorial_tti_encoding(
                 mapping,
                 &edited.bytes,

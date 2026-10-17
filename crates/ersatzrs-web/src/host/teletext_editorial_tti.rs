@@ -12,7 +12,7 @@ use ersatzrs_app::{
     },
 };
 use ersatzrs_domain::{
-    TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextColumnOperation, TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
     TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPageNumber,
     TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextResourceIdentity,
     TeletextSubcode,
@@ -30,6 +30,29 @@ pub(super) struct TeletextEditorialChanges {
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
     pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
+}
+
+impl TeletextEditorialChanges {
+    /// Selection changes can alter canonical selector placement without Base edits.
+    pub(super) fn has_drcs_selection(&self, owner: Option<TeletextPageAddress>) -> bool {
+        self.operands
+            .iter()
+            .filter(|value| owner.is_none_or(|owner| value.owner() == owner))
+            .map(|value| (value.expected(), value.replacement()))
+            .chain(
+                self.object_operands
+                    .iter()
+                    .filter(|value| owner.is_none_or(|owner| value.owner() == owner))
+                    .map(|value| (value.expected(), value.replacement())),
+            )
+            .any(|(expected, replacement)| match (expected, replacement) {
+                (
+                    TeletextColumnOperation::Drcs { reference: before },
+                    TeletextColumnOperation::Drcs { reference: after },
+                ) => before.table != after.table || before.subtable != after.subtable,
+                _ => false,
+            })
+    }
 }
 
 /// Static rejection without any authored text, file name or receipt digest.

@@ -16,6 +16,7 @@
 #include <QSpinBox>
 #include <QStyle>
 #include <QStyleOptionSpinBox>
+#include <QStyleOptionButton>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QProcess>
@@ -24,6 +25,7 @@
 #include <QtTest/QTest>
 #include <dlfcn.h>
 #include <cstdio>
+#include <array>
 
 static QWidget *editor() {
     for (QWidget *widget : QApplication::allWidgets())
@@ -74,6 +76,11 @@ struct DriverContext {
     bool editLocalDrcsSlot = false;
     bool editLocalFlash = false;
     bool editLocalCharset = false;
+    bool editLocalDrcsSubtable = false;
+    bool editLocalDrcsScope = false;
+    int drcsGlyph0Index = 0;
+    int drcsGlyph1Index = 0;
+    QByteArray globalDrcsName;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -117,7 +124,18 @@ static DriverContext driverContext() {
     const bool flash = mode == "single-page-local-flash";
     const bool charset = mode == "single-page-local-charset";
     const bool attribute = flash || charset;
-    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph || remainingGlyph || drcsSlot || attribute;
+    const bool drcsSubtable = mode == "single-page-local-drcs-subtable";
+    const bool drcsScope = mode == "single-page-local-drcs-scope";
+    const bool drcsSelection = drcsSubtable || drcsScope;
+    const bool suppliedDrcsIndices = qEnvironmentVariableIsSet("ERSATZRS_QTM_DRCS_GLYPH0_INDEX")
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_DRCS_GLYPH1_INDEX");
+    const QByteArray globalDrcs = qgetenv("ERSATZRS_QTM_GLOBAL_DRCS_BASENAME");
+    if (!drcsSelection && (suppliedDrcsIndices
+        || qEnvironmentVariableIsSet("ERSATZRS_QTM_GLOBAL_DRCS_BASENAME")))
+        qFatal("DRCS selection indices/Global companion require a fixed selection trial");
+    const int glyph0 = drcsSelection ? boundedDecimal("ERSATZRS_QTM_DRCS_GLYPH0_INDEX", 207) : 0;
+    const int glyph1 = drcsSelection ? boundedDecimal("ERSATZRS_QTM_DRCS_GLYPH1_INDEX", 207) : 0;
+    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph || remainingGlyph || drcsSlot || attribute || drcsSelection;
     const bool suppliedGlyph = qEnvironmentVariableIsSet("ERSATZRS_QTM_GLYPH_MODE")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_GLYPH")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH")
@@ -126,16 +144,16 @@ static DriverContext driverContext() {
         qFatal("Glyph operands require explicit single-page-local-glyph mode");
     if (!extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE"))
         qFatal("Replacement glyph mode requires the fixed extended glyph trial");
-    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", (extendedGlyph || remainingGlyph || drcsSlot || attribute) ? 31 : 9) : 0;
+    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", (extendedGlyph || remainingGlyph || drcsSlot || attribute || drcsSelection) ? 31 : 9) : 0;
     const int toGlyphMode = extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE")
         ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH_MODE", 31) : glyphMode;
     const int fromGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_FROM_GLYPH", 127) : 0;
     const int toGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH", 127) : 0;
-    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && !attribute && (glyphMode != 9 && glyphMode != 1))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && !attribute && !drcsSelection && (glyphMode != 9 && glyphMode != 1))
         qFatal("Fixed local glyph mode must retain raw G0 mode9 or G1 mode1");
     if (localGlyph && fromGlyph == toGlyph && glyphMode == toGlyphMode)
         qFatal("Local glyph trial requires a changed glyph");
-    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && !attribute && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && !attribute && !drcsSelection && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
         || (glyphMode == 1 && (fromGlyph != 33 || toGlyph != 34))))
         qFatal("Fixed local glyph trial requires G0 A-to-B or G1 0x21-to-0x22");
     if (extendedGlyph && !((glyphMode == 15 && toGlyphMode == 15 && fromGlyph == 35 && toGlyph == 66)
@@ -150,6 +168,9 @@ static DriverContext driverContext() {
         qFatal("Fixed Flash trial requires mode7 raw0-to11");
     if (charset && (glyphMode != 8 || fromGlyph != 0 || toGlyph != 55))
         qFatal("Fixed charset trial requires mode8 raw0-to55");
+    if (drcsSelection && (glyphMode != 24 || fromGlyph != 80
+        || toGlyph != (drcsSubtable ? 81 : 16)))
+        qFatal("Fixed DRCS selection requires mode24 NormalS0 raw80-to81 or80-to16");
     const bool panelDay = mode == "single-page-panel-zone-q";
     const bool panelNight = mode == "single-page-panel-save";
     const bool panelProof = panelDay || panelNight;
@@ -164,7 +185,9 @@ static DriverContext driverContext() {
     if (!foreground && (suppliedForeground || (!localGlyph && suppliedTarget)))
         qFatal("Foreground operands require explicit single-page-foreground mode");
     const int triplet = (foreground || localGlyph) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
-    const int column = (foreground || localGlyph) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", 39) : 0;
+    const int column = (foreground || localGlyph) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", drcsSelection ? 40 : 39) : 0;
+    if (drcsSelection && (column != 40 || !(triplet < glyph0 && glyph0 < glyph1)))
+        qFatal("Fixed DRCS prefix address40 and ordered distinct glyph indices are required");
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
     if (foreground && from == to) qFatal("Foreground trial requires a changed colour");
@@ -188,6 +211,9 @@ static DriverContext driverContext() {
     const QByteArray drcs = qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME");
     if (!drcs.isEmpty() && (!safeTtiBasename(drcs) || drcs == input || drcs == output))
         qFatal("Invalid explicit protected Normal DRCS companion name");
+    if (drcsSelection && (!safeTtiBasename(globalDrcs) || globalDrcs == input
+        || globalDrcs == output || globalDrcs == drcs))
+        qFatal("Fixed selection requires a distinct safe Global DRCS companion basename");
     if (left + right > 16) qFatal("Native Level 2.5 panel counts exceed sixteen columns");
     if (drcsEdit && (left != 0 || right != 0 || !drcs.isEmpty()))
         qFatal("Synthetic DRCS bitmap edit requires a standalone no-panel resource document");
@@ -207,7 +233,7 @@ static DriverContext driverContext() {
     if (localGlyph && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -307,6 +333,74 @@ static void loadNormalDrcs(QMainWindow *main, const DriverContext &context) {
         context.drcsSubpage, context.verifyEditedDrcs);
     std::printf("QTM actual Normal DRCS Load file complete: %s\n", context.drcsName.constData());
 }
+static void loadGlobalDrcs(QMainWindow *main, const DriverContext &context) {
+    if (context.globalDrcsName.isEmpty()) return;
+    const QString path = QString("/work/") + QString::fromLatin1(context.globalDrcsName);
+    const QFileInfo file(path);
+    if (!file.isFile() || file.isSymLink() || file.size() <= 0)
+        qFatal("Protected Global DRCS companion absent");
+    QAction *load = nullptr;
+    for (QAction *action : main->findChildren<QAction *>())
+        if (action->statusTip() == "Load a file to use for Global DRCS definitions") load = action;
+    if (!load) qFatal("Actual Global DRCS Load file action absent");
+    QTimer::singleShot(250, qApp, [main, context, path] {
+        for (QWidget *widget : QApplication::topLevelWidgets())
+            if (auto dialog = qobject_cast<QFileDialog *>(widget)) {
+                if (!dialog->isVisible() || dialog->parentWidget() != main
+                    || dialog->acceptMode() != QFileDialog::AcceptOpen
+                    || dialog->windowTitle() != "Select Global DRCS file") continue;
+                auto name = dialog->findChild<QLineEdit *>("fileNameEdit");
+                if (!name) qFatal("Actual DRCS filename input absent");
+                // Reuse Save As's observed native modal/input focus gate.
+                dialog->raise();
+                dialog->activateWindow();
+                if (auto handle = dialog->windowHandle()) handle->requestActivate();
+                if (!QTest::qWaitForWindowActive(dialog, 5000))
+                    qFatal("Actual Global DRCS dialog did not become active");
+                const QPoint target = name->mapToGlobal(name->rect().center());
+                QProcess pointer;
+                pointer.start("/usr/bin/xdotool", {"mousemove",
+                    QString::number(target.x()), QString::number(target.y()), "click", "1"});
+                if (!pointer.waitForFinished(3000)) {
+                    pointer.kill();
+                    pointer.waitForFinished(1000);
+                    qFatal("Actual Global DRCS filename pointer timed out");
+                }
+                if (pointer.exitStatus() != QProcess::NormalExit || pointer.exitCode() != 0)
+                    qFatal("Actual Global DRCS filename pointer failed");
+                if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000))
+                    QTest::keyClick(dialog, Qt::Key_N, Qt::AltModifier);
+                if (!QTest::qWaitFor([name] { return name->hasFocus(); }, 3000))
+                    qFatal("Actual Global DRCS filename input did not receive focus");
+                QTest::qWait(100);
+                QTest::keyClick(name, Qt::Key_A, Qt::ControlModifier);
+                QTest::keyClicks(name, path, Qt::NoModifier, 5);
+                QTest::keyClick(name, Qt::Key_Tab);
+                if (!QTest::qWaitFor([dialog, path] { return dialog->selectedFiles() == QStringList{path}; }, 3000))
+                    qFatal("Actual Global DRCS filename did not select its exact companion");
+                QTimer::singleShot(200, qApp, [dialog, context, path] {
+                    if (!dialog->grab().save(QString("/work/") + context.captureName("global-drcs-open-dialog"))
+                        || dialog->selectedFiles() != QStringList{path})
+                        qFatal("Actual DRCS dialog selection/capture failed");
+                    for (QPushButton *button : dialog->findChildren<QPushButton *>()) {
+                        QString text = button->text(); text.remove('&');
+                        if (text == "Open" && button->isEnabled()) { button->click(); return; }
+                    }
+                    qFatal("Actual enabled DRCS Open button absent");
+                });
+                return;
+            }
+        qFatal("Actual Global DRCS open dialog absent");
+    });
+    load->trigger();
+    bool attached = false;
+    for (QAction *action : main->findChildren<QAction *>())
+        if (action->text() == QString("Global DRCS: ") + QString::fromLatin1(context.globalDrcsName)) attached = true;
+    if (!attached) qFatal("Actual Global DRCS attachment did not complete");
+    capture(context.captureName("global-drcs-loaded").toUtf8().constData());
+    if (main->isWindowModified()) qFatal("Actual Global companion attachment changed the original document");
+}
+
 // Captures actual painted widgets; native import remains the edit authority.
 static void captureLocalGlyphWidget(const DriverContext &context, const char *stage) {
     auto main = window();
@@ -523,6 +617,137 @@ static void editFlashCharset(QMainWindow *main, QDockWidget *dock, QAbstractItem
     std::printf("QTM actual Local Flash/charset mouse edit: triplet=%d column=%d mode=%d raw0-to%d\n",
         context.tripletIndex, context.tripletColumn, context.glyphMode, context.toGlyph);
 }
+// Real cooked Global radio indicator, used for the fixed mode24/mode13 rows.
+static void clickGlobalDrcs(QDockWidget *dock, const DriverContext &context, const char *stage) {
+    QRadioButton *global = nullptr, *normal = nullptr;
+    for (auto radio : dock->findChildren<QRadioButton *>()) {
+        if (!radio->isVisible() || !radio->isEnabled()) continue;
+        if (radio->text() == "Global") {
+            if (global) qFatal("Ambiguous visible Global DRCS radio");
+            global = radio;
+        } else if (radio->text() == "Normal") {
+            if (normal) qFatal("Ambiguous visible Normal DRCS radio");
+            normal = radio;
+        }
+    }
+    if (!global || !normal || global->isChecked() || !normal->isChecked())
+        qFatal("Actual cooked DRCS scope must start Normal");
+    QStyleOptionButton option;
+    option.initFrom(global);
+    option.text = global->text();
+    const QRect indicator = global->style()->subElementRect(QStyle::SE_RadioButtonIndicator, &option, global);
+    if (!indicator.isValid() || !global->rect().contains(indicator.center()))
+        qFatal("Actual visible Global DRCS radio indicator is not clickable");
+    if (!dock->grab().save(QString("/work/") + context.captureName(stage)))
+        qFatal("Actual Global DRCS radio capture failed");
+    QTest::mouseMove(global, indicator.center());
+    QTest::mouseClick(global, Qt::LeftButton, Qt::NoModifier, indicator.center());
+    if (!QTest::qWaitFor([global, normal] { return global->isChecked() && !normal->isChecked(); }, 3000))
+        qFatal("Actual Global DRCS radio click did not select Global");
+    const QByteArray selectedStage = QByteArray(stage) + "-selected";
+    if (!dock->grab().save(QString("/work/") + context.captureName(selectedStage.constData())))
+        qFatal("Actual selected Global DRCS radio capture failed");
+}
+static void editDrcsSelection(QMainWindow *main, QDockWidget *dock, QTableView *table,
+    QAbstractItemModel *model, const DriverContext &context) {
+    const int rows = model->rowCount();
+    if (!(context.editLocalDrcsSubtable || context.editLocalDrcsScope) || rows <= 0 || rows > 208
+        || context.drcsGlyph1Index >= rows || main->isWindowModified())
+        qFatal("Unexpected fixed original DRCS selection context");
+    const auto raw = [model](int row, int column) {
+        bool valid = false;
+        const int value = model->data(model->index(row, column), Qt::UserRole).toInt(&valid);
+        if (!valid) qFatal("Actual DRCS raw tuple absent");
+        return value;
+    };
+    std::array<std::array<int, 3>, 208> expected{};
+    for (int row = 0; row < rows; ++row)
+        for (int column = 0; column < 3; ++column) expected[row][column] = raw(row, column);
+    if (expected[context.tripletIndex] != std::array<int, 3>{40, 24, 80}
+        || expected[context.drcsGlyph0Index] != std::array<int, 3>{0, 13, 64}
+        || expected[context.drcsGlyph1Index] != std::array<int, 3>{1, 13, 65})
+        qFatal("Original DRCS prefix and two NormalS0 PTU0/1 tuples differ");
+    QComboBox *levels = nullptr;
+    for (auto candidate : dock->findChildren<QComboBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != 3) continue;
+        if (levels) qFatal("Ambiguous actual DRCS required-level selector");
+        levels = candidate;
+    }
+    if (!levels || levels->currentIndex() != 0)
+        qFatal("Original DRCS prefix must remain L2.5-only");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-glyph-before")))
+        qFatal("Actual DRCS selection baseline dock capture failed");
+    captureLocalGlyphWidget(context, "before");
+    if (context.editLocalDrcsSubtable) {
+        QSpinBox *subtable = nullptr;
+        for (auto candidate : dock->findChildren<QSpinBox *>()) {
+            if (!candidate->isVisible() || !candidate->isEnabled()
+                || candidate->minimum() != 0 || candidate->maximum() != 15) continue;
+            if (subtable) qFatal("Ambiguous actual DRCS subtable spinbox");
+            subtable = candidate;
+        }
+        if (!subtable || subtable->value() != 0 || subtable->isReadOnly()
+            || subtable->buttonSymbols() == QAbstractSpinBox::NoButtons)
+            qFatal("Actual original DRCS subtable0 step-up control absent");
+        QStyleOptionSpinBox option;
+        option.initFrom(subtable);
+        option.rect = subtable->rect();
+        option.frame = subtable->hasFrame();
+        option.buttonSymbols = subtable->buttonSymbols();
+        option.stepEnabled = QAbstractSpinBox::StepUpEnabled | QAbstractSpinBox::StepDownEnabled;
+        option.subControls = QStyle::SC_SpinBoxEditField | QStyle::SC_SpinBoxUp | QStyle::SC_SpinBoxDown;
+        if (subtable->style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, subtable))
+            option.subControls |= QStyle::SC_SpinBoxFrame;
+        const QRect up = subtable->style()->subControlRect(QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxUp, subtable);
+        if (!up.isValid() || !subtable->rect().contains(up.center())
+            || subtable->style()->hitTestComplexControl(QStyle::CC_SpinBox, &option, up.center(), subtable) != QStyle::SC_SpinBoxUp)
+            qFatal("Actual DRCS subtable step-up button is not clickable");
+        if (!subtable->grab().save(QString("/work/") + context.captureName("local-drcs-subtable-step-up")))
+            qFatal("Actual DRCS subtable step-up capture failed");
+        QTest::mouseMove(subtable, up.center());
+        QTest::mouseClick(subtable, Qt::LeftButton, Qt::NoModifier, up.center());
+        if (!QTest::qWaitFor([subtable, raw, context] {
+            return subtable->value() == 1 && raw(context.tripletIndex, 2) == 81;
+        }, 3000)) qFatal("Actual DRCS subtable step-up did not select1");
+    } else {
+        clickGlobalDrcs(dock, context, "local-drcs-prefix-global-radio");
+        if (!QTest::qWaitFor([raw, context] { return raw(context.tripletIndex, 2) == 16; }, 3000))
+            qFatal("Actual DRCS prefix did not retain usage/S0 while selecting Global");
+        captureLocalGlyphWidget(context, "prefix-global");
+        for (int glyph = 0; glyph < 2; ++glyph) {
+            const int index = glyph == 0 ? context.drcsGlyph0Index : context.drcsGlyph1Index;
+            const QModelIndex target = model->index(index, 0);
+            table->scrollTo(target, QAbstractItemView::PositionAtCenter);
+            if (!QTest::qWaitFor([table, target] {
+                return table->isVisible() && table->isEnabled()
+                    && table->viewport()->rect().contains(table->visualRect(target).center());
+            }, 3000)) qFatal("Actual DRCS glyph row is not clickable");
+            QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, table->visualRect(target).center());
+            if (table->currentIndex().row() != index || raw(index, 0) != glyph
+                || raw(index, 1) != 13 || raw(index, 2) != 64 + glyph)
+                qFatal("Actual DRCS glyph source row no longer matches original Normal slot");
+            clickGlobalDrcs(dock, context, glyph == 0 ? "local-drcs-glyph0-global-radio" : "local-drcs-glyph1-global-radio");
+            if (!QTest::qWaitFor([raw, index, glyph] { return raw(index, 2) == glyph; }, 3000))
+                qFatal("Actual DRCS glyph Global click changed the slot");
+            captureLocalGlyphWidget(context, glyph == 0 ? "glyph0-global" : "glyph1-global");
+        }
+        expected[context.drcsGlyph0Index][2] = 0;
+        expected[context.drcsGlyph1Index][2] = 1;
+    }
+    expected[context.tripletIndex][2] = context.toGlyph;
+    if (model->rowCount() != rows || !main->isWindowModified())
+        qFatal("Actual DRCS selection must change only existing tuples");
+    for (int row = 0; row < rows; ++row)
+        for (int column = 0; column < 3; ++column)
+            if (raw(row, column) != expected[row][column])
+                qFatal("Actual DRCS selection changed an unapproved tuple/address/mode/slot");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-glyph-edited")))
+        qFatal("Actual DRCS selection edited dock capture failed");
+    captureLocalGlyphWidget(context, "edited");
+    std::printf("QTM actual cooked DRCS selection: prefix=%d mode24 address40 raw80-to%d glyphs=%d/%d PTU0/1 retained scope=%s\n",
+        context.tripletIndex, context.toGlyph, context.drcsGlyph0Index, context.drcsGlyph1Index,
+        context.editLocalDrcsScope ? "Global" : "Normal");
+}
 static void editForeground(QMainWindow *main, const DriverContext &context) {
     const int expectedMode = context.editLocalGlyph ? context.glyphMode : 0;
     const int expectedFrom = context.editLocalGlyph ? context.fromGlyph : context.fromColour;
@@ -567,6 +792,10 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
     QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, table->visualRect(target).center());
     if (table->currentIndex().row() != context.tripletIndex)
         qFatal("Actual X/26 row selection failed");
+    if (context.editLocalDrcsSubtable || context.editLocalDrcsScope) {
+        editDrcsSelection(main, dock, table, model, context);
+        return;
+    }
     if (context.editLocalDrcsSlot) {
         editDrcsSlot(main, dock, model, context);
         return;
@@ -817,6 +1046,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
         if (!selected) qFatal("Level 2.5 radio absent");
         capture(context.captureName("level25").toUtf8().constData());
         loadNormalDrcs(main, context);
+        loadGlobalDrcs(main, context);
         if (context.singlePage) {
             // cac2167 mainwidget.cpp:240,567-581: x/12 minus the
             // decoder's left count addresses Main; y/10 addresses the row.

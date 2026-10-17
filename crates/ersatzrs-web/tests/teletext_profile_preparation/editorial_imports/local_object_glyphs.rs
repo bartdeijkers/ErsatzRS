@@ -477,3 +477,9 @@ mod flash_charset;
 
 #[path = "local_object_glyphs/actual_flash_charset_editor.rs"]
 mod actual_flash_charset_editor;
+
+#[path = "local_object_glyphs/drcs_selections.rs"]
+mod drcs_selections;
+
+#[path = "local_object_glyphs/actual_drcs_selection_editor.rs"]
+mod actual_drcs_selection_editor;

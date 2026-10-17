@@ -276,8 +276,7 @@ fn selector_request(
 
 async fn malformed(fixture: &Fixture, flow: &Flow) {
     for (target, bad) in [
-        (0, word(1, 0) ^ (1 << 17)),
-        (3, word(1, 3) ^ (1 << 17)),
+        (0, word(1, 0) ^ (1 << 17)), // Main Global latch is not selected yet.
         (0, (word(1, 0) & 0x7ff) | (0x70 << 11)),
         (3, (word(1, 3) & 0x7ff) | (48 << 11)),
         (0, word(1, 0) ^ 1),
@@ -300,21 +299,75 @@ async fn malformed(fixture: &Fixture, flow: &Flow) {
         ));
         assert_retained_storage(fixture, flow).await;
     }
-    for target in 0..4 {
+    Box::pin(undefined_subtables(fixture, flow)).await;
+}
+
+async fn undefined_subtables(fixture: &Fixture, flow: &Flow) {
+    use ersatzrs_domain::{
+        TeletextCollectedDrcsError, TeletextDrcsResourceError, TeletextEffectiveProgramSource,
+        TeletextEnhancementSource, TeletextProducerCompositionFailure, TeletextServiceError,
+    };
+    use ersatzrs_web::host::{
+        teletext_channel_documents::ChannelTeletextDocumentEncodingError,
+        teletext_designs::NativeTeletextDesignError,
+    };
+    // S1 is now valid selector grammar, but neither original bank supplies S1.
+    // Exact resource lookup precedes the per-display two-subtable limit.
+    for (target, &command) in COMMANDS.iter().enumerate() {
         let old = if matches!(target, 0 | 2) {
             0x28628
         } else {
             0x08628
         };
-        assert!(matches!(
-            super::reject(
-                fixture,
-                flow,
-                selector_request(flow, target, old ^ (1 << 11))
-            )
-            .await,
-            NativeTeletextEditorialImportError::Tti(_)
-        ));
+        let NativeTeletextEditorialImportError::Design(error) = super::reject(
+            fixture,
+            flow,
+            selector_request(flow, target, old ^ (1 << 11)),
+        )
+        .await
+        else {
+            panic!("valid selector grammar must reach native resource validation");
+        };
+        let NativeTeletextDesignError::Encoding(error) = *error else {
+            panic!("absent original S1 requires native reconstruction refusal");
+        };
+        let ChannelTeletextDocumentEncodingError::Composition(error) = *error else {
+            panic!("absent S1 must reject during service reconstruction");
+        };
+        let TeletextProducerCompositionFailure::Semantic(reason) = error.reason else {
+            panic!("both immutable original banks supply S0 only");
+        };
+        let TeletextServiceError::CollectedDrcs {
+            program_source: TeletextEffectiveProgramSource::Local,
+            error:
+                TeletextCollectedDrcsError {
+                    source_location: Some(source),
+                    error:
+                        TeletextDrcsResourceError::MissingSubtable {
+                            display,
+                            identity: resource,
+                            ..
+                        },
+                },
+        } = *reason
+        else {
+            panic!("exact missing original subtable diagnostic required");
+        };
+        assert_eq!(display, channel_documents::address(124, 32));
+        assert_eq!(resource.kind(), bank(scope(target)).kind());
+        assert_eq!(resource.page(), bank(scope(target)).page());
+        assert_eq!(resource.logical_subpage().get(), 1);
+        assert_eq!(
+            source,
+            TeletextEnhancementSource {
+                object: if target < 2 {
+                    None
+                } else {
+                    Some(identity(124))
+                },
+                command,
+            }
+        );
         assert_retained_storage(fixture, flow).await;
     }
 }

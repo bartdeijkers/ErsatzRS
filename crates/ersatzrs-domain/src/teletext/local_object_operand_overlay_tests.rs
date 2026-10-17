@@ -442,3 +442,6 @@ mod drcs_reference_operand_tests;
 
 #[path = "flash_charset_operand_tests.rs"]
 mod flash_charset_operand_tests;
+
+#[path = "drcs_selection_operand_tests.rs"]
+mod drcs_selection_operand_tests;

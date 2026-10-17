@@ -10,7 +10,7 @@ use super::{TeletextColumnOperation, TeletextG3Compatibility, TeletextPageAddres
 pub enum TeletextLocalProgramOperandOverlayError {
     #[error("teletext local operand column {column} is outside 0..=39")]
     Column { column: u8 },
-    #[error("teletext local operand must retain a supported family, G3 compatibility and DRCS selection")]
+    #[error("teletext local operand must retain a supported family and G3 compatibility")]
     Family,
     #[error("teletext local operand replacement does not change the original")]
     Unchanged,
@@ -37,8 +37,9 @@ impl TeletextLocalProgramOperandOverlay {
     /// Check same-family colour, attribute, flash, charset or checked glyph replacement.
     /// G1 alphabetic intent cannot become mosaics; G3 keeps its original
     /// Level 1.5/2.5 compatibility rather than changing its transmitted mode.
-    /// DRCS references may change only the checked slot within the same original
-    /// table and subtable; complete service validation must resolve the target glyph.
+    /// DRCS references may change their checked Normal/Global scope, subtable and
+    /// slot. Complete service validation must resolve the selected original resource
+    /// and glyph, retaining the existing per-display subtable/glyph limits.
     ///
     /// A G0-diacritic replacement may change its code, selector, or both.
     /// Every other command remains unchanged; valid scalar ranges do not
@@ -110,13 +111,10 @@ impl TeletextLocalProgramOperandOverlay {
                     compatibility: TeletextG3Compatibility::Level25,
                     ..
                 }
+            ) | (
+                TeletextColumnOperation::Drcs { .. },
+                TeletextColumnOperation::Drcs { .. }
             )
-        ) && !matches!(
-            (expected, replacement),
-            (
-                TeletextColumnOperation::Drcs { reference: before },
-                TeletextColumnOperation::Drcs { reference: after }
-            ) if before.table == after.table && before.subtable == after.subtable
         ) {
             return Err(TeletextLocalProgramOperandOverlayError::Family);
         }

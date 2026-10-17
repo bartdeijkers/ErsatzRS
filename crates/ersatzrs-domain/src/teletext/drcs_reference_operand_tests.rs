@@ -130,12 +130,8 @@ fn drcs_slot_operands_preserve_typed_scope_subtable_and_boundary_slots() {
 }
 
 #[test]
-fn drcs_slot_operands_reject_scope_subtable_family_noop_and_bad_column_changes() {
+fn drcs_operands_reject_cross_family_noop_and_bad_column_changes() {
     for (before, after) in [
-        (reference(Normal, 0, 0), reference(Global, 0, 47)),
-        (reference(Global, 0, 0), reference(Normal, 0, 47)),
-        (reference(Normal, 0, 0), reference(Normal, 15, 47)),
-        (reference(Global, 15, 0), reference(Global, 0, 47)),
         (reference(Normal, 0, 0), g0(b'A')),
         (g0(b'A'), reference(Normal, 0, 47)),
     ] {

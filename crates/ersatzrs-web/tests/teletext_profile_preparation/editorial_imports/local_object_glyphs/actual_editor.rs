@@ -226,6 +226,25 @@ pub(super) fn inputs_for_edit(
         .find(|page| page.page.page == 124 && page.page.subcode == 32)
         .unwrap();
     let edit = edit();
+    let consumer_visual_columns = edit.get("consumer_visual_columns").map_or_else(
+        || json!([44, 45]),
+        |columns| {
+            let values = columns
+                .as_array()
+                .expect("native consumer columns are an array");
+            assert!(!values.is_empty() && values.len() <= 56);
+            let mut previous = None;
+            for value in values {
+                let column = value.as_u64().expect("native consumer column is unsigned");
+                assert!(
+                    column < 56 && previous.is_none_or(|previous| previous < column),
+                    "native columns are unique, sorted and inside original56columns"
+                );
+                previous = Some(column);
+            }
+            columns.clone()
+        },
+    );
     let ready = json!({"probe_version":1,"case":name,"editor_profile":exported.sidecar().project.editor_profile,
         "design_id":flow.saved[0].head().id,"design_revision":1,"design_digest":flow.saved[0].digest(),
         "receipt_id":exported.metadata().id,"receipt_digest":exported.metadata().digest,
@@ -233,7 +252,7 @@ pub(super) fn inputs_for_edit(
         "sidecar":"original/project.ersatzrs.json","sidecar_sha256":drcs_bitmap::hash(&sidecar),"page":mapping.page,
         "files":exported.files().iter().map(|file|json!({"name":file.name,"path":format!("original/{}",file.name),"bytes":file.bytes.len(),"sha256":drcs_bitmap::hash(&file.bytes)})).collect::<Vec<_>>(),
         "editor_geometry":{"left_columns":4,"right_columns":12,"total_columns":56,"main_origin_column":4,
-            "target_visual_column":44,"target_visual_columns":[44,45]},"edit":edit,
+            "target_visual_column":44,"target_visual_columns":consumer_visual_columns},"edit":edit,
         "save_as":"edited.tti","completion":"editor-saved.json","timeout_seconds":600,
         "editor":{"name":"QTeletextMaker","version":"1.0","source_commit":EDITOR_COMMIT,"binary_sha256":EDITOR_BINARY},
         "publication":"concept only; accepted generation remains unchanged"});
