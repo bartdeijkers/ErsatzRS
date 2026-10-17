@@ -25,17 +25,22 @@ release section when tagging a release.
 
 ### Added
 
-- Import same-family G0 text, G1 mosaics/alphabetic characters, G2, G3, DRCS slots
-  and G0-with-diacritic changes in existing page-local and Local-object teletext
-  commands into versioned concepts. Local colours/attributes use version 5,
+- Import same-family G0 text, G1 mosaics/alphabetic characters, G2, G3, DRCS slots,
+  flash/charset settings and G0-with-diacritic changes in existing page-local and
+  Local-object teletext commands into versioned concepts. Local colours/attributes
+  use version 5,
   extended characters version 6, G1-alphabetic/G3 edits version 7 and DRCS slot
-  edits version 8; earlier formats keep their original contracts. G3 compatibility
-  and DRCS table/subtable selections remain fixed. Exact command
+  edits version 8 and flash/charset edits version 9; earlier formats keep their
+  original contracts. G3 compatibility and DRCS table/subtable selections remain
+  fixed. Exact command
   provenance, immutable object/invocation structure and permissions for every
   shared panel consumer protect generated content. Repeated imports and undo
-  preserve originals and remain separate from explicit publication. Actual pinned
-  QTeletextMaker G0/G1/G2/G3 glyph, diacritic-selector, Normal DRCS slot and
-  Local foreground saves pass concept import, shared preview and reopen.
+  preserve originals and remain separate from explicit publication. Protected
+  charset context is checked even when a change produces identical pixels. Actual
+  pinned
+  QTeletextMaker G0/G1/G2/G3 glyph, diacritic-selector, Normal DRCS slot,
+  Local foreground and flash/charset saves pass concept import, shared preview
+  and reopen.
   Prohibited G2/G3 positions remain refused without changing publication; full
   editor/Level 2.5 acceptance is open.
 - Import existing local teletext colour/attribute edits into versioned concepts,

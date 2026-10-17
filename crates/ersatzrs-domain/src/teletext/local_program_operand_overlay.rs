@@ -21,8 +21,8 @@ pub enum TeletextLocalProgramOperandOverlayError {
 /// One immutable replacement of an existing local `AtColumn` operand.
 ///
 /// The exact owner, original command ordinal, column and original operation are
-/// retained. Charset, positions, invocation/resource identities and command
-/// ordering cannot be changed through this value. This does not grant permission
+/// retained. Positions, invocation/resource identities and command ordering
+/// cannot be changed through this value. This does not grant permission
 /// to modify any affected cell or to publish an edited service.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextLocalProgramOperandOverlay {
@@ -34,15 +34,18 @@ pub struct TeletextLocalProgramOperandOverlay {
 }
 
 impl TeletextLocalProgramOperandOverlay {
-    /// Check same-family colour, attribute or checked glyph replacement.
+    /// Check same-family colour, attribute, flash, charset or checked glyph replacement.
     /// G1 alphabetic intent cannot become mosaics; G3 keeps its original
     /// Level 1.5/2.5 compatibility rather than changing its transmitted mode.
     /// DRCS references may change only the checked slot within the same original
     /// table and subtable; complete service validation must resolve the target glyph.
     ///
-    /// A G0-diacritic replacement may change its code, selector, or both. The
-    /// original charset context and every other command remain unchanged; valid
-    /// scalar ranges do not establish assigned glyphs or rendering readiness.
+    /// A G0-diacritic replacement may change its code, selector, or both.
+    /// Every other command remains unchanged; valid scalar ranges do not
+    /// establish assigned glyphs or rendering readiness. An existing charset
+    /// designation may change only to another assigned designation; complete
+    /// service reconstruction still qualifies all transitive repertoire/context
+    /// requirements. Flash edits retain the typed mode and rate semantics.
     ///
     /// Service application must still match the exact original local command.
     /// # Errors
@@ -68,6 +71,12 @@ impl TeletextLocalProgramOperandOverlay {
             ) | (
                 TeletextColumnOperation::Attributes { .. },
                 TeletextColumnOperation::Attributes { .. }
+            ) | (
+                TeletextColumnOperation::Flash { .. },
+                TeletextColumnOperation::Flash { .. }
+            ) | (
+                TeletextColumnOperation::DesignateCharset { .. },
+                TeletextColumnOperation::DesignateCharset { .. }
             ) | (
                 TeletextColumnOperation::G0 { .. },
                 TeletextColumnOperation::G0 { .. }

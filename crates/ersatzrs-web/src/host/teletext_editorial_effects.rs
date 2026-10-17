@@ -26,6 +26,7 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextResourceFullUpdate,
 };
 
+mod charset_context;
 mod compiler_resources;
 mod object_operands;
 #[cfg(test)]
@@ -921,7 +922,7 @@ fn compare_protected(
         }
         for column in 0_u8..width {
             if !allowed.visual[usize::from(row)][usize::from(column)] {
-                compare_cell(old, new, row, column)?;
+                compare_cell(old, new, row, column, deadline)?;
             }
         }
     }
@@ -1067,6 +1068,7 @@ fn compare_cell(
     new: &TeletextMainComposition,
     row: u8,
     column: u8,
+    deadline: Instant,
 ) -> Result<()> {
     let owner = old.owner();
     let mismatch = || {
@@ -1098,6 +1100,9 @@ fn compare_cell(
         return Err(mismatch());
     }
     if origin_signature(old, before) != origin_signature(new, after) {
+        return Err(mismatch());
+    }
+    if !charset_context::same_cell(old, new, before, after, deadline)? {
         return Err(mismatch());
     }
     let unresolved = || {

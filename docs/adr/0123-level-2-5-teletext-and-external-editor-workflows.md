@@ -183,6 +183,20 @@ storing a concept. Publication remains explicit. This does not change the addon
 response or external editor-carrier format; broader resource/reference editing
 and complete editor/client/engine acceptance remain required under P9A-04.
 
+Private concept version9 adds same-family changes to existing page-local and
+Local-object Flash and Modified G0/G2 charset commands. At least one new-family
+intent is required; versions1–8 remain closed and retain their bytes. Reconcile
+exact Table29 column mode7/8 words without normalizing reserved flash rate/data
+bits or charset aliases. Original addresses, command structure, resources and
+fallback remain immutable. Reconstruct the complete service, including transitive
+two-pair qualification, before concept storage or explicit publication.
+Protected consumers retain full flash mode/rate and original glyph/charset
+context, not only one phase's pixels: compare exact raw selections and semantic
+pending contenders/previous contexts without depending on registry indexes.
+Unchanged pending consensus remains valid. Actual editor controls and native
+Original/Alternate preview phases do not prove receiver wall-clock flash timing;
+complete editor, suitable-client and engine acceptance remain required.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

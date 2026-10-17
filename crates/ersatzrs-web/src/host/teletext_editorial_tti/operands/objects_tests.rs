@@ -156,11 +156,32 @@ fn original_editable_commands_keep_exact_original_local_source() {
 }
 
 #[test]
-fn unsupported_original_object_family_cannot_gain_operand_edit_authority() {
-    let catalog = catalog(TeletextColumnOperation::DesignateCharset {
-        designation: ersatzrs_domain::TeletextEnhancementCharsetDesignation::new(0).unwrap(),
-    });
-    assert!(authored_operation(&catalog, owner(32), source(), location()).is_err());
+fn original_charset_and_flash_still_require_exact_owner_and_source() {
+    for operation in [
+        TeletextColumnOperation::DesignateCharset {
+            designation: ersatzrs_domain::TeletextEnhancementCharsetDesignation::new(0).unwrap(),
+        },
+        TeletextColumnOperation::Flash {
+            mode: ersatzrs_domain::TeletextFlashMode::Normal,
+            rate: ersatzrs_domain::TeletextFlashRate::Fast2HzPhase3,
+        },
+    ] {
+        let catalog = catalog(operation);
+        let (_, column, retained) =
+            authored_operation(&catalog, owner(32), source(), location()).unwrap();
+        assert_eq!((column, retained), (0, operation));
+        assert!(authored_operation(&catalog, owner(33), source(), location()).is_err());
+        assert!(authored_operation(
+            &catalog,
+            owner(32),
+            TeletextEnhancementSource {
+                command: 1,
+                ..source()
+            },
+            location()
+        )
+        .is_err());
+    }
 }
 
 #[test]

@@ -62,7 +62,7 @@ fn editable_input() -> TeletextResolvedServiceDraft {
 }
 
 #[test]
-fn local_operand_value_rejects_noop_cross_family_charset_and_invalid_column() {
+fn local_operand_value_rejects_noop_cross_family_and_invalid_column() {
     let owner = address(200, 0);
     for (expected, replacement) in [
         (foreground(1), background(2)),
@@ -79,9 +79,7 @@ fn local_operand_value_rejects_noop_cross_family_charset_and_invalid_column() {
             TeletextColumnOperation::DesignateCharset {
                 designation: TeletextEnhancementCharsetDesignation::new(0).unwrap(),
             },
-            TeletextColumnOperation::DesignateCharset {
-                designation: TeletextEnhancementCharsetDesignation::new(1).unwrap(),
-            },
+            foreground(1),
         ),
     ] {
         assert_eq!(

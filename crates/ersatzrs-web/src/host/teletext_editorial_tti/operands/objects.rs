@@ -83,6 +83,8 @@ fn authored_operation(
             | TeletextColumnOperation::G1Alpha { .. }
             | TeletextColumnOperation::G3 { .. }
             | TeletextColumnOperation::Drcs { .. }
+            | TeletextColumnOperation::Flash { .. }
+            | TeletextColumnOperation::DesignateCharset { .. }
     ) {
         return Err(fail());
     }

@@ -586,6 +586,28 @@ fn glyph_family_flags(changes: &TeletextEditorialChanges) -> (bool, bool, bool) 
         )
 }
 
+fn has_flash_charset(prepared: &PreparedImport) -> bool {
+    prepared
+        .cumulative
+        .operands
+        .iter()
+        .map(|operand| operand.expected())
+        .chain(
+            prepared
+                .cumulative
+                .object_operands
+                .iter()
+                .map(|operand| operand.expected()),
+        )
+        .any(|operation| {
+            matches!(
+                operation,
+                TeletextColumnOperation::Flash { .. }
+                    | TeletextColumnOperation::DesignateCharset { .. }
+            )
+        })
+}
+
 fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
     let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
         matches!(
@@ -603,7 +625,15 @@ fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditoria
     });
     let (has_drcs_references, has_remaining_glyphs, has_extended_glyphs) =
         glyph_family_flags(&prepared.cumulative);
-    let overlay = if has_drcs_references {
+    let overlay = if has_flash_charset(prepared) {
+        TeletextSavedEditorialOverlay::new_with_flash_charset_operands(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+        )?
+    } else if has_drcs_references {
         TeletextSavedEditorialOverlay::new_with_drcs_reference_slots(
             prepared.provenance.clone(),
             prepared.cumulative.rows.clone(),

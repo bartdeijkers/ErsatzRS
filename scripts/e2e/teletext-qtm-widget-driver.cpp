@@ -7,6 +7,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QDockWidget>
 #include <QTableView>
 #include <QMainWindow>
@@ -71,6 +72,8 @@ struct DriverContext {
     int toGlyph = 0;
     int toGlyphMode = 0;
     bool editLocalDrcsSlot = false;
+    bool editLocalFlash = false;
+    bool editLocalCharset = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -111,7 +114,10 @@ static DriverContext driverContext() {
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
-    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph || remainingGlyph || drcsSlot;
+    const bool flash = mode == "single-page-local-flash";
+    const bool charset = mode == "single-page-local-charset";
+    const bool attribute = flash || charset;
+    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph || remainingGlyph || drcsSlot || attribute;
     const bool suppliedGlyph = qEnvironmentVariableIsSet("ERSATZRS_QTM_GLYPH_MODE")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_GLYPH")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH")
@@ -120,16 +126,16 @@ static DriverContext driverContext() {
         qFatal("Glyph operands require explicit single-page-local-glyph mode");
     if (!extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE"))
         qFatal("Replacement glyph mode requires the fixed extended glyph trial");
-    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", (extendedGlyph || remainingGlyph || drcsSlot) ? 31 : 9) : 0;
+    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", (extendedGlyph || remainingGlyph || drcsSlot || attribute) ? 31 : 9) : 0;
     const int toGlyphMode = extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE")
         ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH_MODE", 31) : glyphMode;
     const int fromGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_FROM_GLYPH", 127) : 0;
     const int toGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH", 127) : 0;
-    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && (glyphMode != 9 && glyphMode != 1))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && !attribute && (glyphMode != 9 && glyphMode != 1))
         qFatal("Fixed local glyph mode must retain raw G0 mode9 or G1 mode1");
     if (localGlyph && fromGlyph == toGlyph && glyphMode == toGlyphMode)
         qFatal("Local glyph trial requires a changed glyph");
-    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && !attribute && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
         || (glyphMode == 1 && (fromGlyph != 33 || toGlyph != 34))))
         qFatal("Fixed local glyph trial requires G0 A-to-B or G1 0x21-to-0x22");
     if (extendedGlyph && !((glyphMode == 15 && toGlyphMode == 15 && fromGlyph == 35 && toGlyph == 66)
@@ -140,6 +146,10 @@ static DriverContext driverContext() {
         qFatal("Fixed remaining trial requires G1 alphabetic65-to64 or G3 Level25 47-to95");
     if (drcsSlot && (glyphMode != 13 || fromGlyph != 64 || toGlyph != 65))
         qFatal("Fixed DRCS reference trial requires Normal mode13 slot0-to1");
+    if (flash && (glyphMode != 7 || fromGlyph != 0 || toGlyph != 11))
+        qFatal("Fixed Flash trial requires mode7 raw0-to11");
+    if (charset && (glyphMode != 8 || fromGlyph != 0 || toGlyph != 55))
+        qFatal("Fixed charset trial requires mode8 raw0-to55");
     const bool panelDay = mode == "single-page-panel-zone-q";
     const bool panelNight = mode == "single-page-panel-save";
     const bool panelProof = panelDay || panelNight;
@@ -197,7 +207,7 @@ static DriverContext driverContext() {
     if (localGlyph && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -420,6 +430,99 @@ static void editDrcsSlot(QMainWindow *main, QDockWidget *dock,
     std::printf("QTM actual Local DRCS PTU visible step-up click: triplet=%d column=%d mode13 Normal slot0-to1 raw64-to65\n",
         context.tripletIndex, context.tripletColumn);
 }
+// Existing cooked Flash selectors and raw Data spinbox; real mouse events only.
+static void pickFlashCombo(QDockWidget *dock, int count, int choice) {
+    QComboBox *combo = nullptr;
+    for (auto candidate : dock->findChildren<QComboBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != count) continue;
+        if (combo) qFatal("Ambiguous actual Flash selector");
+        combo = candidate;
+    }
+    if (!combo || combo->currentIndex() != 0) qFatal("Original Flash selector must be zero");
+    QTest::mouseClick(combo, Qt::LeftButton, Qt::NoModifier, combo->rect().center());
+    auto popup = combo->view();
+    if (!QTest::qWaitFor([popup] { return popup->isVisible(); }, 3000)) qFatal("Actual Flash popup absent");
+    const QModelIndex target = popup->model()->index(choice, combo->modelColumn(), combo->rootModelIndex());
+    popup->scrollTo(target, QAbstractItemView::PositionAtCenter);
+    if (!QTest::qWaitFor([popup, target] { return popup->viewport()->rect().contains(popup->visualRect(target).center()); }, 3000))
+        qFatal("Actual Flash choice not clickable");
+    // Reuse the existing glyph/foreground popup's real hover requirement.
+    const QPoint point = popup->visualRect(target).center();
+    QTest::mouseMove(popup->viewport(), point);
+    if (!QTest::qWaitFor([popup, target, point] {
+        return popup->isVisible() && popup->indexAt(point) == target && popup->currentIndex() == target;
+    }, 3000)) qFatal("Actual Flash choice did not receive mouse hover");
+    if (!popup->window()->grab().save(QString("/work/actual-flash-choice-%1.png").arg(count)))
+        qFatal("Actual Flash popup capture failed");
+    QTest::mouseClick(popup->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+    if (!QTest::qWaitFor([combo, choice] { return combo->currentIndex() == choice; }, 3000))
+        qFatal("Actual Flash choice did not apply");
+}
+static void editFlashCharset(QMainWindow *main, QDockWidget *dock, QAbstractItemModel *model,
+    const DriverContext &context) {
+    if (main->isWindowModified()) qFatal("Original Flash/charset trial must be unmodified");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-glyph-before")))
+        qFatal("Actual Flash/charset baseline dock capture failed");
+    captureLocalGlyphWidget(context, "before");
+    if (context.editLocalFlash) {
+        pickFlashCombo(dock, 4, 3);
+        pickFlashCombo(dock, 6, 2);
+    } else {
+        QCheckBox *raw = nullptr;
+        for (auto candidate : dock->findChildren<QCheckBox *>()) {
+            if (!candidate->isVisible() || candidate->text() != "Raw values") continue;
+            if (raw) qFatal("Ambiguous actual Raw values checkbox");
+            raw = candidate;
+        }
+        if (!raw || raw->isChecked()) qFatal("Original raw selector state differs");
+        QTest::mouseClick(raw, Qt::LeftButton, Qt::NoModifier, QPoint(8, raw->rect().center().y()));
+        if (!raw->isChecked()) qFatal("Actual Raw values click did not select raw controls");
+        QSpinBox *data = nullptr;
+        for (auto candidate : dock->findChildren<QSpinBox *>()) {
+            if (!candidate->isVisible() || !candidate->isEnabled() || candidate->minimum() != 0 || candidate->maximum() != 127) continue;
+            // The TODO charset parameter fallback also exposes a reserved/PDC
+            // spinbox0..127. Only the actual raw Address/Mode/Data group qualifies.
+            const auto fields = candidate->parentWidget()->findChildren<QSpinBox *>();
+            bool address = false, mode = false;
+            for (auto field : fields) {
+                address = address || (field->maximum() == 63 && field->value() == context.tripletColumn);
+                mode = mode || (field->maximum() == 31 && field->value() == 8);
+            }
+            if (fields.size() != 3 || !address || !mode) continue;
+            if (data) qFatal("Ambiguous actual raw Data spinbox");
+            data = candidate;
+        }
+        if (!data || data->value() != 0) qFatal("Original raw Data value differs");
+        QStyleOptionSpinBox option;
+        option.initFrom(data);
+        option.rect = data->rect();
+        option.frame = data->hasFrame();
+        option.buttonSymbols = data->buttonSymbols();
+        option.stepEnabled = QAbstractSpinBox::StepUpEnabled;
+        option.subControls = QStyle::SC_All;
+        const QRect up = data->style()->subControlRect(QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxUp, data);
+        if (!data->rect().contains(up.center()) || data->style()->hitTestComplexControl(QStyle::CC_SpinBox, &option, up.center(), data) != QStyle::SC_SpinBoxUp)
+            qFatal("Actual raw Data step-up must be visible");
+        for (int value = 1; value <= 55; ++value) {
+            QTest::mouseClick(data, Qt::LeftButton, Qt::NoModifier, up.center());
+            if (!QTest::qWaitFor([data, value] { return data->value() == value; }, 3000))
+                qFatal("Actual raw Data step-up did not advance exactly one");
+        }
+        if (!data->grab().save(QString("/work/") + context.captureName("local-glyph-raw-data")))
+            qFatal("Actual raw Data capture failed");
+    }
+    if (!QTest::qWaitFor([main, model, context] {
+        return main->isWindowModified()
+            && model->data(model->index(context.tripletIndex, 0), Qt::UserRole).toInt() == context.tripletColumn
+            && model->data(model->index(context.tripletIndex, 1), Qt::UserRole).toInt() == context.glyphMode
+            && model->data(model->index(context.tripletIndex, 2), Qt::UserRole).toInt() == context.toGlyph;
+    }, 3000)) qFatal("Actual Flash/charset changed the wrong raw tuple");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-glyph-edited")))
+        qFatal("Actual Flash/charset edited dock capture failed");
+    captureLocalGlyphWidget(context, "edited");
+    std::printf("QTM actual Local Flash/charset mouse edit: triplet=%d column=%d mode=%d raw0-to%d\n",
+        context.tripletIndex, context.tripletColumn, context.glyphMode, context.toGlyph);
+}
 static void editForeground(QMainWindow *main, const DriverContext &context) {
     const int expectedMode = context.editLocalGlyph ? context.glyphMode : 0;
     const int expectedFrom = context.editLocalGlyph ? context.fromGlyph : context.fromColour;
@@ -466,6 +569,10 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
         qFatal("Actual X/26 row selection failed");
     if (context.editLocalDrcsSlot) {
         editDrcsSlot(main, dock, model, context);
+        return;
+    }
+    if (context.editLocalFlash || context.editLocalCharset) {
+        editFlashCharset(main, dock, model, context);
         return;
     }
     QComboBox *colour = nullptr;

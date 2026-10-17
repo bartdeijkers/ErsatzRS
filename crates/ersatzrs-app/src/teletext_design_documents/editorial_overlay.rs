@@ -31,6 +31,7 @@ const OBJECT_ATTRIBUTE_OVERLAY_VERSION: u16 = 5;
 const EXTENDED_GLYPH_OVERLAY_VERSION: u16 = 6;
 const REMAINING_GLYPH_OVERLAY_VERSION: u16 = 7;
 const DRCS_REFERENCE_OVERLAY_VERSION: u16 = 8;
+const FLASH_CHARSET_OVERLAY_VERSION: u16 = 9;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -315,6 +316,41 @@ impl TeletextSavedEditorialOverlay {
         )
     }
 
+    /// Capture version 9 Flash or `DesignateCharset` edits in original local commands.
+    ///
+    /// At least one page-local or local-object operand must change within one of
+    /// these two typed families. Known version1–8 intents may accompany the edit.
+    /// Native reconstruction still qualifies all repertoire/context and protected
+    /// display effects; this grants no permission or publication authority.
+    /// # Errors
+    /// Rejects missing Flash/`DesignateCharset` intent, crossed or unsupported
+    /// families, invalid provenance and repeated exact original targets.
+    pub fn new_with_flash_charset_operands(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if !local_program_operands
+            .iter()
+            .any(|operand| same_flash_charset_family(operand.expected(), operand.replacement()))
+            && !local_object_operands
+                .iter()
+                .any(|operand| same_flash_charset_family(operand.expected(), operand.replacement()))
+        {
+            return Err(invalid());
+        }
+        Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
+            OperandFamilies::FlashCharset,
+        )
+    }
+
     fn new_parts(
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
@@ -433,6 +469,7 @@ enum OperandFamilies {
     Extended,
     Remaining,
     DrcsReferences,
+    FlashCharset,
 }
 impl OperandFamilies {
     fn supports(
@@ -442,10 +479,14 @@ impl OperandFamilies {
     ) -> bool {
         supported_family(expected, replacement)
             || (!matches!(self, Self::Legacy) && same_extended_glyph_family(expected, replacement))
-            || (matches!(self, Self::Remaining | Self::DrcsReferences)
-                && same_remaining_glyph_family(expected, replacement))
-            || (matches!(self, Self::DrcsReferences)
+            || (matches!(
+                self,
+                Self::Remaining | Self::DrcsReferences | Self::FlashCharset
+            ) && same_remaining_glyph_family(expected, replacement))
+            || (matches!(self, Self::DrcsReferences | Self::FlashCharset)
                 && same_drcs_reference_slots(expected, replacement))
+            || (matches!(self, Self::FlashCharset)
+                && same_flash_charset_family(expected, replacement))
     }
 }
 fn inferred_schema_version(
@@ -461,7 +502,9 @@ fn inferred_schema_version(
                 .iter()
                 .any(|operand| family(operand.expected(), operand.replacement()))
     };
-    if any_family(same_drcs_reference_slots) {
+    if any_family(same_flash_charset_family) {
+        FLASH_CHARSET_OVERLAY_VERSION
+    } else if any_family(same_drcs_reference_slots) {
         DRCS_REFERENCE_OVERLAY_VERSION
     } else if any_family(same_remaining_glyph_family) {
         REMAINING_GLYPH_OVERLAY_VERSION
@@ -586,6 +629,21 @@ fn same_drcs_reference_slots(
         }
         _ => false,
     }
+}
+fn same_flash_charset_family(
+    expected: TeletextColumnOperation,
+    replacement: TeletextColumnOperation,
+) -> bool {
+    matches!(
+        (expected, replacement),
+        (
+            TeletextColumnOperation::Flash { .. },
+            TeletextColumnOperation::Flash { .. }
+        ) | (
+            TeletextColumnOperation::DesignateCharset { .. },
+            TeletextColumnOperation::DesignateCharset { .. }
+        )
+    )
 }
 fn invalid() -> TeletextDesignDocumentError {
     failure(TeletextDesignDocumentFailure::EditorialOverlay)
@@ -776,7 +834,8 @@ impl StoredOverlay {
             (
                 EXTENDED_GLYPH_OVERLAY_VERSION
                 | REMAINING_GLYPH_OVERLAY_VERSION
-                | DRCS_REFERENCE_OVERLAY_VERSION,
+                | DRCS_REFERENCE_OVERLAY_VERSION
+                | FLASH_CHARSET_OVERLAY_VERSION,
                 operands,
                 bitmaps,
                 objects,
@@ -852,6 +911,11 @@ impl StoredOverlay {
             .collect::<Result<Vec<_>, _>>()?;
         let objects = object_operands::restore(objects.unwrap_or_default())?;
         let value = match self.schema_version {
+            FLASH_CHARSET_OVERLAY_VERSION => {
+                TeletextSavedEditorialOverlay::new_with_flash_charset_operands(
+                    provenance, pages, operands, objects, bitmaps,
+                )?
+            }
             DRCS_REFERENCE_OVERLAY_VERSION => {
                 TeletextSavedEditorialOverlay::new_with_drcs_reference_slots(
                     provenance, pages, operands, objects, bitmaps,
@@ -1260,3 +1324,7 @@ mod remaining_glyph_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/drcs_reference_tests.rs"]
 mod drcs_reference_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/flash_charset_tests.rs"]
+mod flash_charset_tests;

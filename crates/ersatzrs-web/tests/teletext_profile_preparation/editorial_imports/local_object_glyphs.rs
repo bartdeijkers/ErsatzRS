@@ -471,3 +471,9 @@ mod drcs_references;
 
 #[path = "local_object_glyphs/actual_drcs_reference_editor.rs"]
 mod actual_drcs_reference_editor;
+
+#[path = "local_object_glyphs/flash_charset.rs"]
+mod flash_charset;
+
+#[path = "local_object_glyphs/actual_flash_charset_editor.rs"]
+mod actual_flash_charset_editor;

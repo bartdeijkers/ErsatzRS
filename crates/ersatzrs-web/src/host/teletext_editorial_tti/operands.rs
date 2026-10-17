@@ -21,6 +21,9 @@ use std::time::Instant;
 #[path = "operands/objects.rs"]
 mod objects;
 
+#[path = "operands/flash_charset.rs"]
+mod flash_charset;
+
 type PacketWords = [Option<[u32; 13]>; 16];
 
 pub(super) fn reconcile(
@@ -422,10 +425,13 @@ fn operand(
                 | (u32::from(underline_or_separated_mosaics) << 5)
                 | (u32::from(double_width) << 6),
         ),
+        TeletextColumnOperation::Flash { .. }
+        | TeletextColumnOperation::DesignateCharset { .. } => {
+            return flash_charset::operand(column, expected, before, after);
+        }
         TeletextColumnOperation::Drcs { reference } => {
             return drcs_slot_operand(column, reference, before, after);
         }
-        _ => return None,
     };
     let edited_mode = (after >> 6) & 31;
     let same_family = if matches!(expected, G0Diacritic { .. }) {

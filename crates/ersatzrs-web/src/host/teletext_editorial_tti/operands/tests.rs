@@ -77,3 +77,6 @@ fn old_attribute_reserved_bit_is_still_refused() {
     let original = 4 | (12 << 6);
     assert_eq!(operand(4, expected, original, original | (8 << 11)), None);
 }
+
+#[path = "tests/flash_charset.rs"]
+mod flash_charset;
