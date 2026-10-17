@@ -1,7 +1,7 @@
-//! V8 call topology from sealed aliases, with the non-call native skeleton fixed.
+//! V8 call topology from sealed aliases and checked fixed-position glyph edits.
 use super::{project, Failure, Mapping, Result};
 use ersatzrs_domain::{
-    TeletextEnhancementCommand as Command, TeletextEnhancementProgram,
+    TeletextColumnOperation, TeletextEnhancementCommand as Command, TeletextEnhancementProgram,
     TeletextResourceObjectProgramOverlay,
 };
 use std::{collections::BTreeMap, time::Instant};
@@ -125,6 +125,81 @@ fn append_calls(
     Ok(())
 }
 
+fn noncall_commands(
+    mapped: &Mapping<'_>,
+    body: &project::Body,
+    old: &Layout,
+    new: &Layout,
+    limits: project::Limits,
+    deadline: Instant,
+) -> Result<Vec<Command>> {
+    let fail = || mapped.location.error(Failure::Structure);
+    let original = mapped.definition.program.commands();
+    if old.words == new.words {
+        return Ok(original.to_vec());
+    }
+    if old.words.len() != new.words.len() {
+        return Err(fail());
+    }
+    // Only existing G0/G1 semantic words may differ. Compound prefixes, styles,
+    // selectors and positions stay byte-exact, including their call boundaries.
+    let mut normalized = body.before.clone();
+    for (&word, &offset) in &old.offsets {
+        mapped.location.check_deadline(deadline)?;
+        let Some(after) = new.words.get(offset) else {
+            continue; // The authenticated end boundary carries no word.
+        };
+        if old.words[offset] != *after {
+            let span = body
+                .spans
+                .iter()
+                .find(|span| span.word == word)
+                .ok_or_else(fail)?;
+            if !matches!(
+                original[span.ordinal],
+                Command::AtColumn {
+                    operation: TeletextColumnOperation::G0 { .. }
+                        | TeletextColumnOperation::G1 { .. },
+                    ..
+                }
+            ) {
+                return Err(fail());
+            }
+        }
+        normalized[word] = *after;
+    }
+    // Restore original call atoms only for validation by the existing parser.
+    // Actual calls still come from the authenticated uploaded alias catalogue.
+    let rebuilt = super::super::structural::resource::parse(
+        mapped.definition,
+        &body.spans,
+        (&body.before, &normalized),
+        limits.2.max_commands,
+        mapped.location,
+        deadline,
+    )?;
+    if rebuilt.replacement.commands().len() != original.len()
+        || rebuilt.retained.len() != original.len()
+        || rebuilt
+            .retained
+            .iter()
+            .enumerate()
+            .any(|(ordinal, retained)| *retained != Some(ordinal))
+        || original
+            .iter()
+            .zip(rebuilt.replacement.commands())
+            .any(|(before, after)| match (before, after) {
+                (Command::AtColumn { column: a, .. }, Command::AtColumn { column: b, .. }) => {
+                    a != b
+                }
+                _ => before != after,
+            })
+    {
+        return Err(fail());
+    }
+    Ok(rebuilt.replacement.commands().to_vec())
+}
+
 pub(super) fn program(
     mapped: &Mapping<'_>,
     body: &project::Body,
@@ -144,9 +219,7 @@ pub(super) fn program(
     let new = after.iter().enumerate().collect::<Vec<_>>();
     let mut old = layout(&body.before, &old, mapped.location, deadline)?;
     let mut new = layout(&body.after, &new, mapped.location, deadline)?;
-    if old.words != new.words {
-        return Err(fail());
-    }
+    let noncalls = noncall_commands(mapped, body, &old, &new, limits, deadline)?;
     let mut commands = Vec::new();
     let mut retained = Vec::new();
     for (ordinal, command) in mapped.definition.program.commands().iter().enumerate() {
@@ -168,7 +241,7 @@ pub(super) fn program(
             &mut retained,
             (limits.2.max_commands, mapped.location, deadline),
         )?;
-        commands.push(*command);
+        commands.push(noncalls[ordinal]);
         retained.push(Some(ordinal));
     }
     append_calls(

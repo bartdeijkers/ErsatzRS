@@ -28,7 +28,8 @@ pub(super) fn reconcile(
         owner,
         position.source(),
         location,
-    )?;
+    )
+    .map_err(|_| located_word(location, word))?;
     let before = word_at(edited.0, word).ok_or_else(|| located_word(location, word))?;
     let replacement =
         operand(column, expected, before, edited.1).ok_or_else(|| located_word(location, word))?;

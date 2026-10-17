@@ -5694,12 +5694,19 @@ same bounded program/map shape. It requires actual call topology; V15/V16 stay
 closed. The initial V8 importer authenticates full callee identities/types through
 sealed original aliases before translating native selectors. Calls (with an
 optional owned origin modifier) align at original non-call command boundaries;
-all other native words and semantic anchors remain exact. Calls cannot split a
-compound prefix, invent a target or change copied context. New/retired subtrees
+non-glyph native words and semantic anchors remain exact. An existing G0/G1 glyph
+may change value within its original family and column in the same upload. The
+host restores original call atoms only to reuse the existing structural validator;
+semantic count, original correspondence and lowering prefixes must stay exact.
+It then merges the actual authenticated call atoms, never the normalized copies.
+Dependent compiler-owned display X26 may be regenerated from the typed resource
+change. Uploaded display words stay bound to the sealed baseline plus separately
+reconciled Local operands; copying candidate-derived words grants no authority.
+Calls cannot split a compound prefix, invent a target or change copied context. New/retired subtrees
 have no original protected-writer or charset authority. Native reconstruction,
 selected links/type/graph validation and every shared consumer's permissions are
 still mandatory before concept save. Repeat/undo selects V17 only while genuine
-root-relative call insertion/deletion remains. Combined glyph/style/topology,
+root-relative call insertion/deletion remains. General mixed glyph/style topology,
 zero-word anchor ambiguity and complete set/definition editing remain open under
 P9A-04, alongside the mandatory actual editor/client proof.
 

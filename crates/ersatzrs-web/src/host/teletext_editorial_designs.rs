@@ -647,6 +647,9 @@ fn validate_reconciled_display_files(
         };
         if incoming.rows.iter().any(|overlay| overlay.owner() == owner)
             || incoming.has_drcs_selection(Some(owner))
+            // A resource edit can also change compiler-owned display lowering.
+            // Uploaded display words remain bound to the sealed baseline.
+            || !incoming.resource_programs.is_empty()
             || incoming
                 .object_programs
                 .iter()

@@ -340,11 +340,17 @@ Versions15/16 retain their closed policies and bytes. Exact inserted calls and
 retired original calls authorize only their own new/retired descendants; no
 inherited writer or charset authority survives a new subtree. Full native
 service validation, selected links, consumer permissions and explicit publication
-remain mandatory. The initial V8 importer keeps every non-call native word and
-semantic anchor exact, binds new calls to authenticated original command
-boundaries and rejects invisible-anchor ambiguity. Mixed glyph/style/topology,
-zero-word-position boundaries and complete resource/set editing remain required
-work, not accepted permanent restrictions.
+remain mandatory. The V8 importer binds new calls to authenticated original
+command boundaries and rejects invisible-anchor ambiguity. Existing same-family
+G0/G1 glyph values may change at the same column alongside call insertion/deletion:
+restore original call atoms only for the existing structural validator, require
+exact original semantic correspondence, then merge the actual authenticated calls.
+Non-glyph words, lowering prefixes, styles and semantic anchors remain exact.
+Resource-program changes use the existing baseline-bound display validator when
+native compilation regenerates dependent display carriers. This grants no
+uploaded display-word authority; complete native/effects checks still apply.
+General mixed glyph/style/topology, zero-word-position boundaries and complete
+resource/set editing remain required work, not accepted permanent restrictions.
 
 QTM carrier version8 adds `object_context_tti_v1`, a separately named editor-only
 view. It is regenerated from the complete original resource catalogue: the

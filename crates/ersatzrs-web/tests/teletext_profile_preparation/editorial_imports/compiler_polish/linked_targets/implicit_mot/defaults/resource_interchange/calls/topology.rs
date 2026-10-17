@@ -237,11 +237,25 @@ async fn changes(
     assert_eq!(changes[0].retained_commands(), map);
     changes.to_vec()
 }
+type DisplayUnitExpectations = Vec<(TeletextPageAddress, Vec<[u8; 46]>)>;
+
 async fn assert_concept(
     fixture: &Fixture,
     flow: &Flow,
     concept: &SavedEditorialTeletextDesign,
     target: &Target,
+) {
+    Box::pin(assert_concept_with_displays(
+        fixture, flow, concept, target, None,
+    ))
+    .await;
+}
+async fn assert_concept_with_displays(
+    fixture: &Fixture,
+    flow: &Flow,
+    concept: &SavedEditorialTeletextDesign,
+    target: &Target,
+    displays: Option<&DisplayUnitExpectations>,
 ) {
     let changes = changes(fixture, flow, concept, target).await;
     let restored = drcs_bitmap::restored(fixture, concept).await;
@@ -272,13 +286,38 @@ async fn assert_concept(
     assert_eq!(pixels(service, target.occupied), target.pixels);
     assert_eq!(service.magazine_units(), root.magazine_units());
     assert_eq!(service.inventory(), root.inventory());
+    let mut checked_displays = 0;
     for (before, after) in root.pages().iter().zip(service.pages()) {
+        let address = match before {
+            EncodedTeletextAuthoredPage::NativeDisplay(page) => {
+                Some(page.encoded().page().address())
+            }
+            EncodedTeletextAuthoredPage::CompiledDisplay(page) => Some(page.page().address()),
+            _ => None,
+        };
+        if let (Some(expected), Some(address)) = (displays, address) {
+            let mut matches = expected.iter().filter(|(owner, _)| *owner == address);
+            let (_, units) = matches
+                .next()
+                .expect("every display has an independent target");
+            assert!(matches.next().is_none(), "display target address is unique");
+            assert_eq!(
+                after.data_units(),
+                units.as_slice(),
+                "exact independently compiled {address:?}"
+            );
+            checked_displays += 1;
+            continue;
+        }
         if before
             .resource_header()
             .is_none_or(|h| Some(h.identity()) != seed::target(20).resource())
         {
             assert_eq!(before.data_units(), after.data_units());
         }
+    }
+    if let Some(expected) = displays {
+        assert_eq!(checked_displays, expected.len(), "no extra display targets");
     }
 }
 
@@ -493,3 +532,6 @@ async fn v8_inserted_calls_reject_unknown_context_alias_and_reserved_origin() {
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
 }
+
+#[path = "topology/mixed.rs"]
+mod mixed;

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: stable capacity-wait handoff; suitable-client gate open'
+current_focus = 'P9A-04: combined glyph/call workflow; suitable-client gate open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -415,16 +415,20 @@ bytes into three shared native previews, explicit publication/two reopens.
 P9A-04 owns the canonical receipt, 122 composed unique passes (8/8 final native),
 first missing-replay failures, strict app/web Clippy/fmt/architecture and complete
 F1–F6/V1–V6/X1–X3 map. Original resource/display/bank files stay byte-exact.
-P9A-04 owns the bounded selected-POP/X27 rejection proof and V17 call-topology
-receipt: composed114 distinct successes, actual pinned QTM add/delete saves,
-three shared previews, both explicit publications, root-byte undo and reopens.
-Retained PassiveDefault attributes survive ID shifts; new subtrees keep no old
-authority. Mixed glyph/style/topology, zero-word roots and complete definition/
+P9A-04 owns selected-POP/X27 rejection and V17 call-topology proof, actual pinned
+call saves, shared previews/publication/reopens and exact root undo. The importer
+now composes fixed-column G0/G1 values with authenticated call additions/deletions,
+reusing original correspondence, native validation and all-consumer permissions.
+General mixed glyph/style structure, zero-word roots and complete definition/
 set/link editing remain open. Oversized context stays X3; V6/V7 retain full content.
-Next F6: qualify the canonical capacity-wait slate PTS/PCR reset against current
-transport/iptv/stream.rs, then correct the remaining admission/final-mux gap. Keep capacity,
-source codec, captions/alternate audio and ordinary legacy/Hybrid clocks intact.
-Higher-capacity success is not closure; reuse unchanged editor/normal-route proof.
+F6 current-source qualification confirms finite-slate epoch concatenation. The
+missing prerequisite is a compatible finite-item codec/initialization/complete-
+track contract before existing admitted final-mux reuse. Preserve capacity,
+source codec, captions/alternate audio and owned refusal; no runtime fix claimed.
+Next F1/V2: one genuine pinned combined glyph/call SaveAs through the existing
+editor handshake, unchanged saved bytes into concept/preview/separate publication.
+Reuse ordinary carriage and unrelated headed admin/client proof; a new complete
+stream/client round is not justified by this importer-only boundary.
 Suitable ordinary-client coverage V3/X1 remains decisive, unchanged and unqualified;
 QTM's editor-only alias rendering grants no native Public-stream/client acceptance.
 Full topology, F4 retirement/Base/drain and all end requirements remain open.
