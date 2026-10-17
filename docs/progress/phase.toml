@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: bundled structural editor proof; suitable-client gate open'
+current_focus = 'P9A-04: full-capacity resource/context interchange; suitable-client gate open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -432,14 +432,19 @@ compile failure. This is new evidence, not new product functionality or full V2.
 F1 bounded glyph/style structure and glyph-column changes now compose with V8
 call addition/deletion through the existing resource parser and V17 lifecycle.
 P9A-04 owns the exact RED-to-green, affected/native/protection evidence and remaining
-actual structural editor gap. Original zero-word position anchors now survive
+native requirements. Original zero-word position anchors now survive
 bounded resource glyph/call edits with physical-only DP and semantic quotas;
 parser57/native2 prove leading/multiple/known-AP adjacency, publication/reopen,
 rootundo/repeat and Generated125 atomic refusal. P9A-04 owns the canonical receipt,
-RED and exact reuse scope. Next executable V2 package: actual pinned compound
-glyph/style structure and call SaveAs through existing controls/harness, then
-unchanged-byte import/preview/publication/reopen; reuse unaffected carriage/admin/
-client and current native protection/undo proof. Full F1/V2 remain open.
+RED and exact reuse scope. V2 actual compound glyph/style structure, column and
+call SaveAs now passes through unchanged-byte concept17, three previews/every
+native unit, unpublished reopen and separate explicit publication/cold reopen.
+P9A-04 owns pinned editor/artifact hashes, six inspected captures and both initial
+fixture/control failures. Reuse native protection/undo and unchanged carriage;
+full F1/V2 remain open. Next product package F1/X3: lossless complete-capacity
+resource/context interchange using existing V7 fragments/context evidence; qualify
+the exact remaining reachable-context boundary before the smallest correction.
+No208-word truncation, silent editor restriction or new scalar-variant cycle.
 Suitable ordinary-client coverage V3/X1 remains decisive, unchanged and unqualified;
 QTM's editor-only alias rendering grants no native Public-stream/client acceptance.
 Full topology, F4 retirement/Base/drain and all end requirements remain open.

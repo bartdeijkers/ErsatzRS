@@ -92,6 +92,7 @@ struct DriverContext {
     bool insertResourceCall = false;
     bool deleteResourceCall = false;
     bool mixedResourceCallGlyph = false;
+    bool mixedResourceCallStructure = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -136,7 +137,8 @@ static DriverContext driverContext() {
     const bool resourceDelete = mode == "resource-object-g0-delete";
     const bool resourceStructure = resourceInsert || resourceDelete;
     const bool mixedResourceCallGlyph = mode == "resource-object-call-insert-glyph-context";
-    const bool insertResourceCall = mode == "resource-object-call-insert-context" || mixedResourceCallGlyph;
+    const bool mixedResourceCallStructure = mode == "resource-object-call-insert-structure-context";
+    const bool insertResourceCall = mode == "resource-object-call-insert-context" || mixedResourceCallGlyph || mixedResourceCallStructure;
     const bool deleteResourceCall = mode == "resource-object-call-delete-context";
     const bool callTopology = insertResourceCall || deleteResourceCall;
     const bool resourceCallContext = mode == "resource-object-call-origin-context" || callTopology;
@@ -270,7 +272,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1818,6 +1820,137 @@ static void insertResourceOrigin(QDockWidget *dock, const DriverContext &context
     });
     QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
 }
+// The structural fixture also retains Adaptive22's original Passive21 call.
+// Keep that protected edge and relocate every complete alias/pointer normally.
+static std::vector<StructureTriplet> resourceStructureTriplets(bool added) {
+    auto expected = mixedResourceCallTriplets(false);
+    if (expected[13] != StructureTriplet{40,23,16})
+        qFatal("Original structural Passive definition differs");
+    expected.insert(expected.begin() + 13, StructureTriplet{40,16,0});
+    expected.insert(expected.begin() + 14, StructureTriplet{40,19,16});
+    structureRelocate(expected, 13, 2);
+    if (added) {
+        expected.insert(expected.begin() + 9, StructureTriplet{40,16,1});
+        expected.insert(expected.begin() + 10, StructureTriplet{40,19,18});
+        structureRelocate(expected, 9, 2);
+    }
+    return expected;
+}
+// One fixed real-control resource structure trial, after the existing call pair.
+static void captureResourceStructurePaint(const DriverContext &context, const char *stage) {
+    if (!context.mixedResourceCallStructure || resourceCallTopologyOriginalPaint.size() != QSize(480, 250))
+        qFatal("Resource structure paint requires the captured original viewport");
+    const unsigned short rows[10] = {0,0x3fc,0x306,0x306,0x3fc,0x306,0x306,0x3fc,0,0};
+    const auto matches = [&rows](const QImage &painted) {
+        bool changed[2] = {false, false};
+        for (int y = 0; y < 250; ++y)
+            for (int x = 0; x < 480; ++x) {
+                QColor expected = resourceCallTopologyOriginalPaint.pixelColor(x, y);
+                if (y >= 10 && y < 30 && x >= 96 && x < 132) {
+                    if (x >= 108) continue; // Moved A and the existing Adaptive reset.
+                    expected = rows[(y - 10) / 2] & (1 << (11 - (x - 96) / 2))
+                        ? QColor(255, 255, 255) : QColor(0, 0, 0);
+                    changed[(y - 10) / 10] |= painted.pixelColor(x, y)
+                        != resourceCallTopologyOriginalPaint.pixelColor(x, y);
+                }
+                if (y >= 50 && y < 60 && x >= 144 && x < 156)
+                    expected = resourceCallTopologyOriginalPaint.pixelColor(x - 12, y);
+                if (painted.pixelColor(x, y) != expected) return false;
+            }
+        return changed[0] && changed[1];
+    };
+    if (!QTest::qWaitFor([&matches] { return matches(resourceCallViewport()); }, 3000))
+        qFatal("Actual resource structure paint differs from B/P or protected outside pixels");
+    const QByteArray label = QByteArray("resource-call-structure-") + stage + "-widget";
+    if (!resourceCallViewport().save(QString("/work/") + context.captureName(label.constData())))
+        qFatal("Actual resource structure paint capture failed");
+}
+static void editResourceCallStructure(QDockWidget *dock, QTableView *table,
+        QAbstractItemModel *model, const DriverContext &context,
+        std::vector<StructureTriplet> &expected) {
+    if (!context.mixedResourceCallStructure || !context.insertResourceCall
+        || expected != resourceStructureTriplets(true))
+        qFatal("Fixed resource structure requires the exact original22-to24 call insertion");
+    structureSelect(table, 4);
+    structureButton(dock, "Insert copy");
+    expected.insert(expected.begin() + 4, StructureTriplet{8,12,65});
+    structureRelocate(expected, 4, 1);
+    structureCheck(model, expected);
+    structureSelect(table, 5);
+    QCheckBox *boxed = nullptr;
+    for (auto candidate : dock->findChildren<QCheckBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->text() != "Box/Win") continue;
+        if (boxed) qFatal("Ambiguous real Box/Win control");
+        boxed = candidate;
+    }
+    if (!boxed || boxed->isChecked()) qFatal("Copied original Attributes must have Box/Win off");
+    // A stretched checkbox includes blank layout space outside its hit area.
+    // Use the same style-derived real indicator click as the existing radios.
+    QStyleOptionButton boxStyle;
+    boxStyle.initFrom(boxed);
+    boxStyle.text = boxed->text();
+    const QRect boxIndicator = boxed->style()->subElementRect(
+        QStyle::SE_CheckBoxIndicator, &boxStyle, boxed);
+    if (!boxIndicator.isValid() || !boxed->rect().contains(boxIndicator.center()))
+        qFatal("Actual Box/Win indicator is not clickable");
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-structure-boxed-before")))
+        qFatal("Actual original Box/Win control capture failed");
+    QTest::mouseMove(boxed, boxIndicator.center());
+    QTest::mouseClick(boxed, Qt::LeftButton, Qt::NoModifier, boxIndicator.center());
+    if (!QTest::qWaitFor([boxed] { return boxed->isChecked(); }, 3000))
+        qFatal("Actual Box/Win click did not set the copied writer");
+    expected[5] = StructureTriplet{8,12,67};
+    structureCheck(model, expected);
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-structure-boxed")))
+        qFatal("Actual boxed writer capture failed");
+    structureSelect(table, 6);
+    structureButton(dock, "Insert copy");
+    expected.insert(expected.begin() + 6, StructureTriplet{8,9,65});
+    structureRelocate(expected, 6, 1);
+    structureCheck(model, expected);
+    structureSelect(table, 6);
+    structureCode(dock, context, 6, 65, 66);
+    expected[6] = StructureTriplet{8,9,66};
+    structureCheck(model, expected);
+    structureSelect(table, 7);
+    QSpinBox *column = nullptr;
+    for (auto candidate : dock->findChildren<QSpinBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled()
+            || candidate->minimum() != 0 || candidate->maximum() != 39) continue;
+        if (column) qFatal("Ambiguous actual resource structure Column control");
+        column = candidate;
+    }
+    if (!column || column->value() != 8) qFatal("Original shifted A must remain at column8");
+    QStyleOptionSpinBox style;
+    style.initFrom(column);
+    style.subControls = QStyle::SC_All;
+    style.stepEnabled = QAbstractSpinBox::StepDownEnabled | QAbstractSpinBox::StepUpEnabled;
+    style.frame = column->hasFrame();
+    style.buttonSymbols = column->buttonSymbols();
+    const auto step = column->style()->subControlRect(QStyle::CC_SpinBox, &style,
+        QStyle::SC_SpinBoxUp, column);
+    if (!step.isValid() || !column->rect().contains(step.center())
+        || column->style()->hitTestComplexControl(QStyle::CC_SpinBox, &style, step.center(), column)
+            != QStyle::SC_SpinBoxUp)
+        qFatal("Actual resource structure Column step is not clickable");
+    QTest::mouseClick(column, Qt::LeftButton, Qt::NoModifier, step.center());
+    if (!QTest::qWaitFor([column] { return column->value() == 9; }, 3000))
+        qFatal("Actual resource structure Column did not step8-to9");
+    expected[7] = StructureTriplet{9,9,65};
+    structureCheck(model, expected);
+    const std::vector<StructureTriplet> final{
+        {40,17,2},{63,31,6},{40,21,2},{41,4,8},{8,12,65},{8,12,67},
+        {8,9,66},{9,9,65},{10,12,0},{40,16,0},{40,19,22},{40,16,1},
+        {40,19,22},{40,22,16},{41,4,7},{9,12,0},{9,9,88},{40,16,0},
+        {40,19,22},{40,23,22},
+        {44,4,1},{1,12,0},{1,0,2},{1,3,0},{1,9,80},{63,31,5}
+    };
+    if (expected != final) qFatal("Fixed complete26-word resource structure differs");
+    captureResourceStructurePaint(context, "edited");
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-structure-edited")))
+        qFatal("Actual resource structure edited dock capture failed");
+}
+
 static void editResourceCallTopology(QMainWindow *main, const DriverContext &context) {
     if (context.insertResourceCall == context.deleteResourceCall || !context.resourceCallContext
         || context.tripletIndex != 7 || context.tripletColumn != 40 || main->isWindowModified())
@@ -1833,7 +1966,8 @@ static void editResourceCallTopology(QMainWindow *main, const DriverContext &con
     if (tables.size() != 1) qFatal("Actual call topology requires one table");
     auto table = tables.front();
     auto model = table->model();
-    auto expected = context.mixedResourceCallGlyph ? mixedResourceCallTriplets(false)
+    auto expected = context.mixedResourceCallStructure ? resourceStructureTriplets(false)
+        : context.mixedResourceCallGlyph ? mixedResourceCallTriplets(false)
         : resourceCallContextTriplets(context.deleteResourceCall);
     structureCheck(model, expected);
     captureResourceCallTopologyPaint(context, "before", context.deleteResourceCall, false);
@@ -1871,7 +2005,8 @@ static void editResourceCallTopology(QMainWindow *main, const DriverContext &con
             structureCheck(model, expected);
         }
     }
-    if (expected != (context.mixedResourceCallGlyph ? mixedResourceCallTriplets(true)
+    if (expected != (context.mixedResourceCallStructure ? resourceStructureTriplets(true)
+        : context.mixedResourceCallGlyph ? mixedResourceCallTriplets(true)
         : resourceCallContextTriplets(context.insertResourceCall)))
         qFatal("Actual topology final expected catalogue differs");
     structureCheck(model, expected);
@@ -1886,6 +2021,8 @@ static void editResourceCallTopology(QMainWindow *main, const DriverContext &con
     }
     if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-edited")))
         qFatal("Actual topology edited dock capture failed");
+    if (context.mixedResourceCallStructure)
+        editResourceCallStructure(dock, table, model, context, expected);
     savedGlyphStructure = expected;
     std::printf("QTM actual resource call topology: action=%s modelrows=%zu; complete alias catalogue and pointers checked\n",
         context.insertResourceCall ? "InsertCopy invocation then InsertBefore OriginModifier and cooked row/column clicks" : "two single Delete clicks, not GUIUndo", expected.size());
@@ -2025,9 +2162,10 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
         if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, context.resourceCallContext ? 21 : 10);
         if (context.insertResourceCall || context.deleteResourceCall) {
-            verifySavedGlyphStructure(saved, context.mixedResourceCallGlyph ? 22
+            verifySavedGlyphStructure(saved, context.mixedResourceCallStructure ? 26 : context.mixedResourceCallGlyph ? 22
                 : context.insertResourceCall ? 23 : 21);
-            if (context.mixedResourceCallGlyph) captureMixedResourceCallPaint(context, "saved");
+            if (context.mixedResourceCallStructure) captureResourceStructurePaint(context, "saved");
+            else if (context.mixedResourceCallGlyph) captureMixedResourceCallPaint(context, "saved");
             else captureResourceCallTopologyPaint(context, "saved", context.insertResourceCall, true);
         } else if (context.resourceCallContext) captureResourceCallPaint(context, "saved", true);
         capture(context.captureName("saved").toUtf8().constData());

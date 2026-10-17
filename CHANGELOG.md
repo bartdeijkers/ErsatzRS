@@ -35,9 +35,11 @@ release section when tagging a release.
   import combines call addition/deletion with bounded glyph/style insertion and
   deletion, glyph column changes and same-family G0/G1 value edits. Complete callee
   identities, fixed anchors and every shared consumer remain checked. A pinned
-  QTeletextMaker 1.0 save combining a G0 change
-  with a new nested call now passes unchanged-byte concept import, shared previews,
-  unpublished reopen and separate explicit publication/cold reopen. Dependent
+  QTeletextMaker 1.0 save combining a G0 change with a new nested call passes
+  unchanged-byte concept import, shared previews, unpublished reopen and separate
+  explicit publication/cold reopen. An actual compound save now also proves
+  glyph/style insertion, a glyph column change and an added call through the same
+  boundaries, preserving the complete original callee context. Dependent
   display carriers can be repacked after authenticated resource edits; uploaded
   display words remain bound to their original export and rejected words retain
   their exact X26 location. New/retired subtrees cannot inherit protected content

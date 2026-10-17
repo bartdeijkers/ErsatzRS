@@ -489,3 +489,6 @@ async fn actual_qtm_resource_call_pair_insert_delete_root_undo_and_explicit_publ
     );
     fixture.state.pool.close().await;
 }
+
+#[path = "actual_topology/structure.rs"]
+mod structure;

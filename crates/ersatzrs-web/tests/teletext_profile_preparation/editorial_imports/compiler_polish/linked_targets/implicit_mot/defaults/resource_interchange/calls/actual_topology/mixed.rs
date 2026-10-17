@@ -167,7 +167,7 @@ fn assert_pixels(flow: &Flow, pixels: &[TeletextRaster]) {
         }
     }
 }
-fn meaningful(records: &[TeletextTtiRecord]) -> Vec<[u8; 3]> {
+pub(super) fn meaningful(records: &[TeletextTtiRecord]) -> Vec<[u8; 3]> {
     let mut result = Vec::new();
     let mut next = 0;
     for record in records {

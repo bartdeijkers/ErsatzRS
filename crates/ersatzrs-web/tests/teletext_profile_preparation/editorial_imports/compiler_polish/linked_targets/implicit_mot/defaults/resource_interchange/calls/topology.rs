@@ -537,7 +537,7 @@ async fn v8_inserted_calls_reject_unknown_context_alias_and_reserved_origin() {
 mod mixed;
 
 #[path = "topology/structure.rs"]
-mod structure;
+pub(super) mod structure;
 
 #[path = "topology/position_anchors.rs"]
 mod position_anchors;

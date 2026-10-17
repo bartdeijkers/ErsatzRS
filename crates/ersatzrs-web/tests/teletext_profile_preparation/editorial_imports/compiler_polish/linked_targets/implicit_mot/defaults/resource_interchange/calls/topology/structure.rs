@@ -2,7 +2,7 @@
 use super::*;
 use ersatzrs_ffmpeg::teletext::{project_encoded_teletext_display, TeletextEncodedDisplayRecord};
 
-fn original(theme: &str, page: u16, subcode: u16) -> Value {
+pub(in super::super) fn original(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = mixed::original(theme, page, subcode);
     for page in value["authoring"]["pages"].as_array_mut().unwrap() {
         let regions = page["regions"].as_array_mut().unwrap();
@@ -83,11 +83,22 @@ fn removed(theme: &str, page: u16, subcode: u16) -> Value {
     shaped(theme, page, subcode, false)
 }
 
-struct Expected {
+pub(in super::super) struct Expected {
     target: Target,
     units: Vec<Vec<[u8; 46]>>,
     retained: Vec<Option<usize>>,
     x26: Vec<u8>,
+}
+impl Expected {
+    pub(in super::super) fn records(&self) -> &[TeletextTtiRecord] {
+        &self.target.records
+    }
+    pub(in super::super) fn program(&self) -> &TeletextEnhancementProgram {
+        &self.target.program
+    }
+    pub(in super::super) fn pixels(&self) -> &[TeletextRaster] {
+        &self.target.pixels
+    }
 }
 fn expected(flow: &Flow, occupied: [bool; 2], retained: Vec<Option<usize>>) -> Expected {
     let service = flow.accepted[0].service();
@@ -140,7 +151,7 @@ fn x26_designations(service: &EncodedTeletextAuthoredService) -> Vec<u8> {
         })
         .collect()
 }
-async fn qualify(insert: bool) -> Expected {
+pub(in super::super) async fn qualify(insert: bool) -> Expected {
     let factory: fn(&str, u16, u16) -> Value = if insert { added } else { removed };
     let (fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
         factory,
@@ -174,7 +185,7 @@ async fn qualify(insert: bool) -> Expected {
     fixture.state.pool.close().await;
     target
 }
-async fn assert_concept(
+pub(in super::super) async fn assert_concept(
     fixture: &Fixture,
     flow: &Flow,
     concept: &SavedEditorialTeletextDesign,
@@ -240,7 +251,7 @@ async fn assert_concept(
     assert_units(service, target);
 }
 
-fn assert_units(service: &EncodedTeletextAuthoredService, target: &Expected) {
+pub(in super::super) fn assert_units(service: &EncodedTeletextAuthoredService, target: &Expected) {
     assert_eq!(service.pages().len(), target.units.len());
     for (page, expected) in service.pages().iter().zip(&target.units) {
         assert_eq!(
