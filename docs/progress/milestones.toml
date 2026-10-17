@@ -10696,7 +10696,7 @@ Missing product functionality:
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4, singleton bitmap warm/client and scoped expiry/native Base proof retained; ordinary POP edit/growth/shrink, per-owner updates, unchanged Night and reopened cold output now pass6d495364 | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
 | F5 — source acquisition and accepted output policies | P9A-03 Local descriptors/header windows and source ownership; ordinary Local888 legacy/Hybrid/seek0.5s/audio/VBV proof retained | Discover/select complete page/charset/provenance across supported providers and use all accepted native/Next Burn/Convert/copy/HLS/browser combinations | Persist distinct source/version/stream/page identities through rescan/replacement; implement remaining exact policies/timing/handoff/cancellation, with visible unsupported results and no caption loss, engine switch or double source consumption |
-| F6 — ordinary playback safety defect | Historical clock-reset reproduction is source-qualified: current finite-slate loops still copy separate epochs; the generic H264/AAC single-track slate cannot establish arbitrary copy-source topology | Wait for capacity then enter programme output on one stable clock/topology | Establish a compatible finite-item codec/initialization/complete-track contract without premature source opens, then reuse admitted final mux; prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio and cleanup without bypass |
+| F6 — ordinary playback safety defect | Current default2 runtime reproduces Legacy wait/programme clock and PMT breaks; default-timeout Hybrid delays the response until release then fails authored null-packet admission. Bounded fixture stop drains both; no product correction yet | Wait for capacity then enter programme output on one stable clock/topology | Establish a compatible finite-item codec/initialization/complete-track contract without premature source opens, then reuse admitted final mux; prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio and cleanup without bypass |
 
 Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
@@ -10762,26 +10762,43 @@ and coordinated resource/link/set editing remain part of F1; no general alias
 capability is inferred from this executed invalid relationship.
 Suitable-client V3/X1 remains the strongest independent engine gate. No newly
 qualified positive candidate is retained, so no unchanged trial or decoder repair starts.
-F6 bounded current-source qualification: canonical
- tmp/phase9-mixed-resource-calls/capacity-qualification.json
-(SHA256be9dd78cc89e4fb2c49e369d22effad542244651bd27ec79589b61014fb2e548).
-All three wait loops still copy separate finite4s slate processes then programme/
-wrapper output into one response without epoch rebasing. The generic slate forces
-H264/AAC for Copy and contains one stereo track; map-all/copy-all preserves streams
-that exist but cannot synthesize missing initial captions/alternate audio or
-reconcile incompatible codec initialization. A verified compatible finite-item
-output contract is the concrete prerequisite, followed by the existing admitted
-final mux/internal-item lifetime. Preserve owned legacy retry503 and atomic leases;
-Hybrid's already-running HLS producer is outside source-free waiting claims.
-This is source-only qualification, not a new Legacy/Hybrid runtime trial or F6 fix.
-The unchanged historical receipt tmp/phase9-live-editor-flow/identity.json
-(SHA2568b161e0d96f1d7e394213bb8c7452a9bff6e6de22710db3ce7d2dc06ae393f08)
-proves eight PTS/four PCR leaps and19pct delivery on a single-English-AAC MPEG2
-source, not the later caption/two-audio fixture. Current closure needs default2
-controlled wait/repeat/release in the same ordinary legacy/Hybrid response, full
-TSDuck/AV/clock and bounded drop/cleanup proof using existing harnesses. No source
-codec coercion, track loss, capacity bypass or permanent restriction is accepted;
-higher-capacity success does not close F6. Other independent F1/V2 work proceeds.
+F6 current runtime qualification (2026-10-18; no product fix): canonical
+ tmp/phase9-f6-capacity/identity.json. Two focused opt-in ordinary-host tests
+reuse the managed four-stream Local source (video, English440Hz, page888,
+Dutch660Hz), accepted authored output and production capacity2. Both slots
+remain occupied14s; each route makes one HTTP request. Legacy delivers repeated
+slates then programme within36s. Caption888 pixel presence and at least1s of
+selected660Hz audio pass, while the unchanged transport oracle fails:8PTS,
+4PCR and1PMT continuity breaks. The existing TSDuck gate reports6/22 failures,
+including strict PCR jitter and51pct PCR-media/wall-time delivery. This is not
+continuous successful AV. Captured prefix is H2641920x1080/AAC; programme tail
+is H264492x250/AAC(nld) plus authored PID512. Whole-response ffprobe initially
+sees only AV; the unchanged native clock assertion stops before the remaining
+inventory/authored-text assertions. Arbitrary Copy codecs remain source-qualified,
+not runtime-proven by this software-profile case.
+Hybrid with the reused fixture's5s timeout returns503; do not generalize that
+setting to the default. The distinct default60s trial returns200 only after
+release (~14.1s), then ends with a body error: teletext needs7null packets in a
+window containing2. It delivers no pre-release waiting bytes. Hybrid handoff
+AV/caption/audio/clock/delivery acceptance is therefore unproven. These are
+failed acceptance probes, not green regressions or suitable-client evidence.
+Both captures retain peak2, unchanged addon calls/accepted generation and drained
+leases/registries/native work after explicit fixture stop; listeners/database
+close before final assertions. This proves bounded explicit cleanup, not new
+spontaneous-disconnect/source-opening coverage. Reuse the9 unchanged ownership/
+held-SQLite cancellation passes in tmp/phase9-wrapper-selection/identity.json
+(run b5d1a36f-3eb2-42a4-988f-eb715a53b198) and previously recorded private-route
+source fences for their exact scope. Production wait/wrapper/mux sources and
+historical tmp/phase9-mixed-resource-calls/capacity-qualification.json plus
+ tmp/phase9-live-editor-flow/identity.json remain hash-identical; editor,
+publication and channel-isolation evidence is unchanged.
+Next F6 action: qualify the smallest existing-path finite-item/output contract
+covering initialization, full track mapping and a common clock before connecting
+wait output to the admitted final mux. Address Hybrid readiness/null-budget
+failure within that boundary. A timestamp-only patch, extra outer copy mux,
+track omission, capacity increase or reconnect is not accepted. Maintainer
+continuation is authorized; keep F6 first, continue independent accepted work
+when specifically blocked, and do not push or publish. All F/V/X criteria stay open.
 Complete oversized context (X3), remaining call/definition/set topology and remaining F2/V2
 packages stay required. The208-word limit is an editor constraint, never a native
 cap or a waiver; V6/V7 continue preserving full content. Bound each package to a

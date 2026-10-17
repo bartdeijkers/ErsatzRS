@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: resource-set/context interchange; suitable-client gate open'
+current_focus = 'P9A-04 F6: capacity-wait handoff correctness; engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,26 +62,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Paused checkpoint: 6dd49c0a31276a72941403eb698723c0bd38919d.
-P9A-04 owns the unchanged F/V/X closure list and canonical evidence:
-tmp/phase9-resource-definition-editor/identity.json and post-commit.json.
-Fifty scoped Rust cases, pinned actual QTM SaveAs/import/preview/publication/
-reopen, both headed browsers and strict affected lint pass. This is partial
-F1/V2/V4 delivery, not full authored Level2.5/editor/client/engine acceptance.
-No checkpoint source remains uncommitted. Preserve these seven pre-existing,
-unrelated worktree deltas: CHANGELOG.md;
-crates/ersatzrs-infra/src/addon_media_list_prepared_selection.rs;
-crates/ersatzrs-infra/src/addon_media_list_subtitle_selection.rs;
-crates/ersatzrs-infra/src/repositories/managed_library_operation.rs;
-docs/progress/parity/addon-metadata-management.toml;
-docs/progress/phase.toml; docs/progress/sessions.ndjson.
-Relevant owned processes: none. Native/QTM/browser/lint checks are terminal;
-the final temporary router closed and the owned QTM container exited/removed.
-First action: independent maintainer steering review of the compact P9A-04
-completion list and evidence. Do not start another implementation or client
-investigation before that review. Full F/V/X acceptance, including V3/X1 suitable
-client and F1/F2 resource/set/context/metadata/template requirements, remains
-open. No milestone is complete. Nothing was pushed or published.
+F6 evidence checkpoint follows6dd49c0a and its2b20d9ae handoff. Canonical
+ tmp/phase9-f6-capacity/identity.json records default2 occupied/release probes.
+Legacy reaches programme/caption888/selected Dutch audio in one response but
+fails clock/PMT continuity; default-timeout Hybrid begins only after release,
+then fails authored null-packet admission. F6 is not fixed or accepted.
+P9A-04 owns exact results, reuse, limits and the unchanged F/V/X closure list.
+Next action: qualify a compatible finite-item codec/initialization/full-track
+contract in the existing wait/wrapper/mux paths, then correct and re-prove F6.
+The maintainer authorizes focused research and autonomous continuation beyond
+this checkpoint; do not pause for ordinary checkpoint review. Unused-object
+removal is deferred. V3/X1 remains mandatory but does not block F6.
+Preserve the seven unrelated deltas listed in the prior handoff and all retained
+proof. No product change or milestone completion is claimed by this evidence
+checkpoint. Push/publication remain unauthorized.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

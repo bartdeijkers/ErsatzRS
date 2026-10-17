@@ -15,6 +15,10 @@ const HEIGHT: usize = 250;
 const FRAME_BYTES: usize = WIDTH * HEIGHT * 3;
 
 async fn local_source(ffmpeg: &str, library: &Path) -> PathBuf {
+    local_source_duration(ffmpeg, library, "12").await
+}
+
+async fn local_source_duration(ffmpeg: &str, library: &Path, duration: &str) -> PathBuf {
     tokio::fs::create_dir(library).await.unwrap();
     let bytes = probe(
         ffmpeg,
@@ -40,7 +44,7 @@ async fn local_source(ffmpeg: &str, library: &Path) -> PathBuf {
             "-i",
             "pipe:0",
             "-t",
-            "12",
+            duration,
             "-map",
             "0:v:0",
             "-map",
@@ -304,6 +308,10 @@ fn compare_burn(actual: &[u8], caption: &[u8], guide: &[u8], plain: &[u8]) {
 }
 
 async fn tone(ffmpeg: &str, bytes: &[u8], frequency: usize) {
+    tone_with_limit(ffmpeg, bytes, frequency, 2 * 1024 * 1024).await;
+}
+
+async fn tone_with_limit(ffmpeg: &str, bytes: &[u8], frequency: usize, limit: usize) {
     let pcm = probe(
         ffmpeg,
         &[
@@ -326,7 +334,7 @@ async fn tone(ffmpeg: &str, bytes: &[u8], frequency: usize) {
             "pipe:1",
         ],
         bytes,
-        2 * 1024 * 1024,
+        limit,
     )
     .await
     .unwrap();
@@ -1027,3 +1035,6 @@ fn normal_hybrid_local_route_burns_exact_source_caption_and_preserves_off_and_al
 
 #[path = "stream_source_caption_initializer_tests.rs"]
 mod initializer;
+
+#[path = "stream_capacity_wait_runtime_tests.rs"]
+mod capacity_wait;
