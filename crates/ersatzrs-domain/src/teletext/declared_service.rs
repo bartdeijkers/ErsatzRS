@@ -244,6 +244,25 @@ impl TeletextDeclaredService {
             .with_local_object_operand_overlays(overlays, budget)?;
         Ok(self)
     }
+    /// Replace exact existing POP/GPOP scalars without rebinding resource owners.
+    ///
+    /// Preserves MOT/default selections, resource inventory and all declaration
+    /// identities. Complete semantic reconstruction checks every consumer and
+    /// dependency; hosts must still qualify captured edit permissions and publish
+    /// explicitly. This grants no edit or current-output authority.
+    /// # Errors
+    /// Rejects empty, duplicate, absent or stale targets and budget/dependency failures.
+    pub fn with_resource_object_operand_overlays(
+        mut self,
+        overlays: &[super::TeletextResourceObjectOperandOverlay],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self
+            .semantic
+            .with_resource_object_operand_overlays(overlays, budget)?;
+        Ok(self)
+    }
+
     /// Replace checked Local glyph programs while retaining all authenticated
     /// declarations, selections, identities, defaults and resource inventory.
     /// Hosts must qualify compiler correspondence and every shared consumer;

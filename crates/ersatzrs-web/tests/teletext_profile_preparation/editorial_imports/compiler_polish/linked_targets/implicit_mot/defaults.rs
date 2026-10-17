@@ -7,6 +7,9 @@ mod checks;
 #[path = "defaults/fixture.rs"]
 mod seed;
 
+#[path = "defaults/resource_interchange.rs"]
+mod resource_interchange;
+
 fn protected_file(
     exported: &ExportedOriginalTeletextDesign,
     kind: TeletextResourceKindWire,

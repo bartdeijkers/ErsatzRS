@@ -1288,6 +1288,8 @@ enum Path {
     EditorialOperand,
     EditorialObjectOperands,
     EditorialObjectOperand,
+    EditorialResourceOperands,
+    EditorialResourceOperand,
     EditorialGlyphPrograms,
     EditorialGlyphProgram,
     EditorialProgramDefinition,
@@ -1341,6 +1343,11 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::object_operands::StoredObjectOperand,
             >(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialResourceOperand) {
+            self.inner.scan.check(storage::<
+                editorial_overlay::resource_object_operands::StoredResourceObjectOperand,
+            >(self.count))?;
+        }
         if matches!(self.inner.path, Path::EditorialGlyphProgram) {
             self.inner.scan.check(storage::<
                 editorial_overlay::local_object_glyph_programs::StoredGlyphProgram,
@@ -1375,6 +1382,7 @@ impl Scan {
                 | Path::EditorialRow
                 | Path::EditorialOperand
                 | Path::EditorialObjectOperand
+                | Path::EditorialResourceOperand
                 | Path::EditorialGlyphProgram
                 | Path::EditorialProgramCommand
                 | Path::EditorialRetainedCommand
@@ -1384,7 +1392,10 @@ impl Scan {
         }
         if matches!(
             path,
-            Path::EditorialOperand | Path::EditorialObjectOperand | Path::EditorialProgramCommand
+            Path::EditorialOperand
+                | Path::EditorialObjectOperand
+                | Path::EditorialResourceOperand
+                | Path::EditorialProgramCommand
         ) {
             self.editorial_operands = self
                 .editorial_operands
@@ -1527,6 +1538,9 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "local_program_operands") => Path::EditorialOperands,
                 (Path::EditorialOverlay, "drcs_bitmap_overlays") => Path::EditorialBitmaps,
                 (Path::EditorialOverlay, "local_object_operands") => Path::EditorialObjectOperands,
+                (Path::EditorialOverlay, "resource_object_operands") => {
+                    Path::EditorialResourceOperands
+                }
                 (Path::EditorialOverlay, "local_object_glyph_program_overlays") => {
                     Path::EditorialGlyphPrograms
                 }
@@ -1602,6 +1616,11 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
             Path::EditorialObjectOperands => (
                 self.scan.budget.validation.service.max_commands,
                 Path::EditorialObjectOperand,
+                "editorial operands",
+            ),
+            Path::EditorialResourceOperands => (
+                self.scan.budget.validation.service.max_commands,
+                Path::EditorialResourceOperand,
                 "editorial operands",
             ),
             Path::EditorialBitmaps => (

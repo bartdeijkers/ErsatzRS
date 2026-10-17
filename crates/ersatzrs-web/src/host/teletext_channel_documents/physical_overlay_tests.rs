@@ -638,6 +638,72 @@ fn replay_saved(
 }
 
 #[test]
+fn restored_compilers_refuse_unapplied_resource_intent_in_both_envelope_roles() {
+    // Compiler admission only: this does not authenticate a resource edit against
+    // a receipt. Even mixed typed intent must not be dropped by either role.
+    for effective in [false, true] {
+        for kind in [TeletextResourceKind::Pop, TeletextResourceKind::Gpop] {
+            let resource = TeletextResourceIdentity::new(
+                kind,
+                TeletextRawDataPageNumber::new(2, 0xa0).unwrap(),
+                TeletextResourceSubpageIndex::new(15).unwrap(),
+            )
+            .unwrap();
+            let id = TeletextObjectId::new(65520);
+            let target = if kind == TeletextResourceKind::Pop {
+                TeletextObjectIdentity::public(resource, id)
+            } else {
+                TeletextObjectIdentity::global(resource, id)
+            }
+            .unwrap();
+            let local = saved_overlay(true, vec![]);
+            let saved = TeletextSavedEditorialOverlay::new_with_resource_object_operands(
+                local.provenance().clone(),
+                vec![],
+                local.local_program_operands().to_vec(),
+                vec![],
+                vec![],
+                vec![],
+                vec![TeletextResourceObjectOperandOverlay::new(
+                    target,
+                    0,
+                    8,
+                    TeletextColumnOperation::Foreground {
+                        colour: TeletextColourReference::new(1).unwrap(),
+                    },
+                    TeletextColumnOperation::Foreground {
+                        colour: TeletextColourReference::new(2).unwrap(),
+                    },
+                )
+                .unwrap()],
+            )
+            .unwrap();
+            let document = stored_original(effective);
+            let stored = stored_revision(effective, document.clone());
+            let rejected = if effective {
+                let mut parts =
+                    decode_teletext_effective_design_documents(&document, storage_budget())
+                        .unwrap()
+                        .into_parts();
+                parts.editorial_overlay = Some(saved);
+                compile_effective_restored_parts(stored, parts, bounds(1).0, deadline(), vec![])
+                    .map(|_| ())
+            } else {
+                let mut parts = decode_teletext_design_documents(&document, storage_budget())
+                    .unwrap()
+                    .into_parts();
+                parts.editorial_overlay = Some(saved);
+                compile_restored_parts(stored, parts, bounds(1).0, deadline(), vec![]).map(|_| ())
+            };
+            assert!(matches!(
+                rejected,
+                Err(NativeTeletextDesignError::EditorialValidationUnavailable)
+            ));
+        }
+    }
+}
+
+#[test]
 fn restored_compilers_apply_saved_operands_and_replay_v1_rows_exactly() {
     // Real decoding for both envelope roles, without import permission,
     // scripted selection, durable storage or publication claims.

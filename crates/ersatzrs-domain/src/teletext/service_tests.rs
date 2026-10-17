@@ -1366,3 +1366,6 @@ mod local_object_operand_overlay_tests;
 
 #[path = "local_object_glyph_program_tests.rs"]
 mod local_object_glyph_program_tests;
+
+#[path = "resource_object_operand_tests.rs"]
+mod resource_object_operand_tests;

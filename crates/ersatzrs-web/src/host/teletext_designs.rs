@@ -453,11 +453,12 @@ pub(super) fn compile_restored_parts(
     check_deadline(deadline)?;
     // Stored physical rows require the caller's authenticated reconstruction;
     // operand-only concepts legitimately have no physical-row overlays.
-    if parts
-        .editorial_overlay
-        .as_ref()
-        .is_some_and(|overlay| !overlay.pages().is_empty() && overlays.is_empty())
-    {
+    // Resource-object intent still requires a native receipt/effects adapter;
+    // never replay an unchanged service under an edited concept's digest.
+    if parts.editorial_overlay.as_ref().is_some_and(|overlay| {
+        (!overlay.pages().is_empty() && overlays.is_empty())
+            || !overlay.resource_object_operands().is_empty()
+    }) {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
     policy.entry = parts.entry;

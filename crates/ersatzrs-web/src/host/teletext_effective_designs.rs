@@ -554,11 +554,12 @@ pub(super) fn compile_effective_restored_parts(
     overlays: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
 ) -> Result<RestoredEffectiveOriginalDesign, NativeTeletextDesignError> {
     check_deadline(deadline)?;
-    if parts
-        .editorial_overlay
-        .as_ref()
-        .is_some_and(|overlay| !overlay.pages().is_empty() && overlays.is_empty())
-    {
+    // Resource-object intent cannot be silently omitted while its native
+    // receipt/effects adapter is still unavailable.
+    if parts.editorial_overlay.as_ref().is_some_and(|overlay| {
+        (!overlay.pages().is_empty() && overlays.is_empty())
+            || !overlay.resource_object_operands().is_empty()
+    }) {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
     policy.entry = parts.entry;

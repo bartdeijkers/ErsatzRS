@@ -2,7 +2,7 @@
 //!
 //! This is a strict inverse of the host's packet encoder, not a forgiving
 //! receiver decoder. Correctable errors are rejected rather than concealed in
-//! editor exports. Only the explicit DRCS inverse supports resource pages;
+//! editor exports. Explicit DRCS and object inverses support resource pages;
 //! transport, edit permissions and publication remain outside these projections.
 
 use std::fmt;
@@ -20,6 +20,11 @@ use super::source_header::{
 use super::{
     encode_teletext_resource_header, EncodedTeletextAuthoredPage, EncodedTeletextPage,
     EncodedTeletextResourcePage, TeletextResourceTransmissionMode,
+};
+
+mod object;
+pub use object::{
+    project_encoded_teletext_object, TeletextEncodedObjectPacket, TeletextEncodedObjectProjection,
 };
 
 /// An exact logical packet body in native transmission order.
@@ -414,7 +419,7 @@ fn project_drcs_units(
     ) {
         return Err(error(Failure::Identity, None, None, None));
     }
-    let header = drcs_header(page, &units[0])?;
+    let header = resource_header(page.header(), page.transmission_mode(), &units[0])?;
     let mut records = Vec::new();
     records
         .try_reserve_exact(units.len())
@@ -433,7 +438,7 @@ fn project_drcs_units(
                 return Err(error(Failure::Envelope, Some(unit_index), None, None));
             }
         };
-        check_drcs_packet(page, unit, packet, unit_index)?;
+        check_resource_packet(page.header(), unit, packet, unit_index)?;
         let row = packet.packet_number;
         if (unit_index == 1 && row != 28)
             || (unit_index > 1 && (!(1..=24).contains(&row) || row <= last_row))
@@ -496,8 +501,9 @@ fn check_drcs_modes(
     Ok(())
 }
 
-fn drcs_header(
-    page: &EncodedTeletextResourcePage,
+fn resource_header(
+    metadata: TeletextResourceHeaderMetadata,
+    mode: TeletextResourceTransmissionMode,
     unit: &[u8; 46],
 ) -> Result<SuppliedTeletextHeader, TeletextEncodedDisplayProjectionError> {
     use TeletextEncodedDisplayProjectionFailure as Failure;
@@ -506,21 +512,21 @@ fn drcs_header(
     let TeletextHeaderObservation::Header(header) = observation else {
         return Err(error(Failure::HeaderOrder, Some(0), None, None));
     };
-    check_drcs_packet(page, unit, header.packet_address, 0)?;
+    check_resource_packet(metadata, unit, header.packet_address, 0)?;
     if header.corrected_header_bytes != 0 {
         return Err(error(Failure::Protection, Some(0), Some(0), None));
     }
     for column in 8_u8..40 {
         base_cell(unit[6 + usize::from(column)].reverse_bits(), 0, 0, column)?;
     }
-    if *unit != encode_teletext_resource_header(page.header(), page.transmission_mode()) {
+    if *unit != encode_teletext_resource_header(metadata, mode) {
         return Err(error(Failure::Identity, Some(0), Some(0), None));
     }
     Ok(header)
 }
 
-fn check_drcs_packet(
-    page: &EncodedTeletextResourcePage,
+fn check_resource_packet(
+    metadata: TeletextResourceHeaderMetadata,
     bytes: &[u8; 46],
     packet: SuppliedTeletextPacketAddress,
     unit: usize,
@@ -531,7 +537,7 @@ fn check_drcs_packet(
         return Err(error(Failure::Protection, Some(unit), row, None));
     }
     if packet.data_unit_kind != TeletextDataUnitKind::NonSubtitle
-        || packet.wire_magazine != page.header().identity().page().wire_magazine()
+        || packet.wire_magazine != metadata.identity().page().wire_magazine()
     {
         return Err(error(Failure::Identity, Some(unit), row, None));
     }

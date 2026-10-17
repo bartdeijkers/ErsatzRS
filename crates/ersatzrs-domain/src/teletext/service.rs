@@ -31,6 +31,9 @@ pub use drcs_extension::*;
 #[path = "local_object_operand_service.rs"]
 mod local_object_operands;
 
+#[path = "resource_object_operand_service.rs"]
+mod resource_object_operands;
+
 #[path = "local_object_glyph_program_service.rs"]
 mod local_object_glyph_programs;
 
@@ -215,6 +218,14 @@ pub enum TeletextServiceError {
         identity: TeletextObjectIdentity,
         command: usize,
         reason: super::TeletextLocalObjectOperandFailure,
+    },
+    #[error("teletext resource object operand overlays must not be empty")]
+    EmptyResourceObjectOperandOverlays,
+    #[error("teletext resource object {identity:?} command {command}: {reason}")]
+    ResourceObjectOperandOverlay {
+        identity: TeletextObjectIdentity,
+        command: usize,
+        reason: super::TeletextResourceObjectOperandFailure,
     },
     #[error("teletext Local glyph program changes must not be empty")]
     EmptyLocalObjectGlyphProgramOverlays,

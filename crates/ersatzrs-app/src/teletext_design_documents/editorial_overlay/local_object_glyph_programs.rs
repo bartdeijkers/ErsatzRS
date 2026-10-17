@@ -3,11 +3,12 @@
 use super::{
     failure, invalid, limit, map_only, object_operands, unique_original_owner,
     TeletextDesignDocumentBudget, TeletextDesignDocumentError, TeletextDesignDocumentFailure,
-    TeletextProfileDocument, TeletextSavedEditorialOverlay,
+    TeletextProfileDocument, TeletextSavedEditorialOverlay, TeletextSavedEditorialProvenance,
 };
 use ersatzrs_domain::{
-    TeletextEnhancementCommand, TeletextEnhancementProgram, TeletextLocalObjectGlyphProgramOverlay,
-    TeletextLocalObjectOperandOverlay,
+    TeletextDrcsBitmapOverlay, TeletextEnhancementCommand, TeletextEnhancementProgram,
+    TeletextLocalObjectGlyphProgramOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextLocalProgramOperandOverlay, TeletextPhysicalBaseOverlay,
 };
 use object_operands::StoredLocalIdentity;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
@@ -85,6 +86,37 @@ pub(super) fn restore(
             .map_err(|_| invalid())
         })
         .collect()
+}
+
+/// Restore the unchanged V11–V13 constructor choice after parent preflight.
+pub(super) fn restore_overlay(
+    provenance: TeletextSavedEditorialProvenance,
+    pages: Vec<TeletextPhysicalBaseOverlay>,
+    operands: Vec<TeletextLocalProgramOperandOverlay>,
+    objects: Vec<TeletextLocalObjectOperandOverlay>,
+    bitmaps: Vec<TeletextDrcsBitmapOverlay>,
+    programs: Vec<StoredGlyphProgram>,
+    policy: ProgramPolicy,
+) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+    let constructor = match policy {
+        ProgramPolicy::StyleCommands => {
+            TeletextSavedEditorialOverlay::new_with_local_object_style_programs
+        }
+        ProgramPolicy::AllGlyphs => {
+            TeletextSavedEditorialOverlay::new_with_all_local_object_glyph_programs
+        }
+        ProgramPolicy::Legacy => {
+            TeletextSavedEditorialOverlay::new_with_local_object_glyph_programs
+        }
+    };
+    constructor(
+        provenance,
+        pages,
+        operands,
+        objects,
+        bitmaps,
+        restore(programs, policy)?,
+    )
 }
 
 fn structural(program: &TeletextLocalObjectGlyphProgramOverlay) -> bool {

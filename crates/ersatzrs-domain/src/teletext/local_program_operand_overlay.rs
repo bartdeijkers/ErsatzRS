@@ -58,86 +58,7 @@ impl TeletextLocalProgramOperandOverlay {
         expected: TeletextColumnOperation,
         replacement: TeletextColumnOperation,
     ) -> Result<Self, TeletextLocalProgramOperandOverlayError> {
-        if column > 39 {
-            return Err(TeletextLocalProgramOperandOverlayError::Column { column });
-        }
-        if !matches!(
-            (expected, replacement),
-            (
-                TeletextColumnOperation::Foreground { .. },
-                TeletextColumnOperation::Foreground { .. }
-            ) | (
-                TeletextColumnOperation::Background { .. },
-                TeletextColumnOperation::Background { .. }
-            ) | (
-                TeletextColumnOperation::Attributes { .. },
-                TeletextColumnOperation::Attributes { .. }
-            ) | (
-                TeletextColumnOperation::Flash { .. },
-                TeletextColumnOperation::Flash { .. }
-            ) | (
-                TeletextColumnOperation::DesignateCharset { .. },
-                TeletextColumnOperation::DesignateCharset { .. }
-            ) | (
-                TeletextColumnOperation::G0 { .. },
-                TeletextColumnOperation::G0 { .. }
-            ) | (
-                TeletextColumnOperation::G1 { .. },
-                TeletextColumnOperation::G1 { .. }
-            ) | (
-                TeletextColumnOperation::G2 { .. },
-                TeletextColumnOperation::G2 { .. }
-            ) | (
-                TeletextColumnOperation::G0Diacritic { .. },
-                TeletextColumnOperation::G0Diacritic { .. }
-            ) | (
-                TeletextColumnOperation::G1Alpha { .. },
-                TeletextColumnOperation::G1Alpha { .. }
-            ) | (
-                TeletextColumnOperation::G3 {
-                    compatibility: TeletextG3Compatibility::Level15,
-                    ..
-                },
-                TeletextColumnOperation::G3 {
-                    compatibility: TeletextG3Compatibility::Level15,
-                    ..
-                }
-            ) | (
-                TeletextColumnOperation::G3 {
-                    compatibility: TeletextG3Compatibility::Level25,
-                    ..
-                },
-                TeletextColumnOperation::G3 {
-                    compatibility: TeletextG3Compatibility::Level25,
-                    ..
-                }
-            ) | (
-                TeletextColumnOperation::Drcs { .. },
-                TeletextColumnOperation::Drcs { .. }
-            )
-        ) {
-            return Err(TeletextLocalProgramOperandOverlayError::Family);
-        }
-        if let (
-            TeletextColumnOperation::Attributes {
-                double_height: old_height,
-                double_width: old_width,
-                ..
-            },
-            TeletextColumnOperation::Attributes {
-                double_height: new_height,
-                double_width: new_width,
-                ..
-            },
-        ) = (expected, replacement)
-        {
-            if old_height != new_height || old_width != new_width {
-                return Err(TeletextLocalProgramOperandOverlayError::Geometry);
-            }
-        }
-        if expected == replacement {
-            return Err(TeletextLocalProgramOperandOverlayError::Unchanged);
-        }
+        validate_scalar_operand(column, expected, replacement)?;
         Ok(Self {
             owner,
             command,
@@ -172,6 +93,95 @@ impl TeletextLocalProgramOperandOverlay {
     pub const fn replacement(self) -> TeletextColumnOperation {
         self.replacement
     }
+}
+
+/// Shared scalar shape validation without inventing a display owner.
+pub(super) fn validate_scalar_operand(
+    column: u8,
+    expected: TeletextColumnOperation,
+    replacement: TeletextColumnOperation,
+) -> Result<(), TeletextLocalProgramOperandOverlayError> {
+    if column > 39 {
+        return Err(TeletextLocalProgramOperandOverlayError::Column { column });
+    }
+    if !matches!(
+        (expected, replacement),
+        (
+            TeletextColumnOperation::Foreground { .. },
+            TeletextColumnOperation::Foreground { .. }
+        ) | (
+            TeletextColumnOperation::Background { .. },
+            TeletextColumnOperation::Background { .. }
+        ) | (
+            TeletextColumnOperation::Attributes { .. },
+            TeletextColumnOperation::Attributes { .. }
+        ) | (
+            TeletextColumnOperation::Flash { .. },
+            TeletextColumnOperation::Flash { .. }
+        ) | (
+            TeletextColumnOperation::DesignateCharset { .. },
+            TeletextColumnOperation::DesignateCharset { .. }
+        ) | (
+            TeletextColumnOperation::G0 { .. },
+            TeletextColumnOperation::G0 { .. }
+        ) | (
+            TeletextColumnOperation::G1 { .. },
+            TeletextColumnOperation::G1 { .. }
+        ) | (
+            TeletextColumnOperation::G2 { .. },
+            TeletextColumnOperation::G2 { .. }
+        ) | (
+            TeletextColumnOperation::G0Diacritic { .. },
+            TeletextColumnOperation::G0Diacritic { .. }
+        ) | (
+            TeletextColumnOperation::G1Alpha { .. },
+            TeletextColumnOperation::G1Alpha { .. }
+        ) | (
+            TeletextColumnOperation::G3 {
+                compatibility: TeletextG3Compatibility::Level15,
+                ..
+            },
+            TeletextColumnOperation::G3 {
+                compatibility: TeletextG3Compatibility::Level15,
+                ..
+            }
+        ) | (
+            TeletextColumnOperation::G3 {
+                compatibility: TeletextG3Compatibility::Level25,
+                ..
+            },
+            TeletextColumnOperation::G3 {
+                compatibility: TeletextG3Compatibility::Level25,
+                ..
+            }
+        ) | (
+            TeletextColumnOperation::Drcs { .. },
+            TeletextColumnOperation::Drcs { .. }
+        )
+    ) {
+        return Err(TeletextLocalProgramOperandOverlayError::Family);
+    }
+    if let (
+        TeletextColumnOperation::Attributes {
+            double_height: old_height,
+            double_width: old_width,
+            ..
+        },
+        TeletextColumnOperation::Attributes {
+            double_height: new_height,
+            double_width: new_width,
+            ..
+        },
+    ) = (expected, replacement)
+    {
+        if old_height != new_height || old_width != new_width {
+            return Err(TeletextLocalProgramOperandOverlayError::Geometry);
+        }
+    }
+    if expected == replacement {
+        return Err(TeletextLocalProgramOperandOverlayError::Unchanged);
+    }
+    Ok(())
 }
 
 /// Application failure bound to an exact local program location.
