@@ -3,14 +3,14 @@
 //! An attribute can affect cells beyond its command column. Hosts must recompile
 //! and check every protected effect; a checked operand is not a permission mask.
 
-use super::{TeletextColumnOperation, TeletextPageAddress};
+use super::{TeletextColumnOperation, TeletextG3Compatibility, TeletextPageAddress};
 
 /// Rejected operand shape, without exposing page text or raw packet data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextLocalProgramOperandOverlayError {
     #[error("teletext local operand column {column} is outside 0..=39")]
     Column { column: u8 },
-    #[error("teletext local operand must retain its foreground, background, attributes, G0, G1, G2 or G0-diacritic family")]
+    #[error("teletext local operand must retain a supported family and its G3 compatibility")]
     Family,
     #[error("teletext local operand replacement does not change the original")]
     Unchanged,
@@ -34,7 +34,9 @@ pub struct TeletextLocalProgramOperandOverlay {
 }
 
 impl TeletextLocalProgramOperandOverlay {
-    /// Check same-family colour/attribute or G0/G1/G2/G0-diacritic replacement.
+    /// Check same-family colour, attribute or checked glyph replacement.
+    /// G1 alphabetic intent cannot become mosaics; G3 keeps its original
+    /// Level 1.5/2.5 compatibility rather than changing its transmitted mode.
     ///
     /// A G0-diacritic replacement may change its code, selector, or both. The
     /// original charset context and every other command remain unchanged; valid
@@ -76,6 +78,27 @@ impl TeletextLocalProgramOperandOverlay {
             ) | (
                 TeletextColumnOperation::G0Diacritic { .. },
                 TeletextColumnOperation::G0Diacritic { .. }
+            ) | (
+                TeletextColumnOperation::G1Alpha { .. },
+                TeletextColumnOperation::G1Alpha { .. }
+            ) | (
+                TeletextColumnOperation::G3 {
+                    compatibility: TeletextG3Compatibility::Level15,
+                    ..
+                },
+                TeletextColumnOperation::G3 {
+                    compatibility: TeletextG3Compatibility::Level15,
+                    ..
+                }
+            ) | (
+                TeletextColumnOperation::G3 {
+                    compatibility: TeletextG3Compatibility::Level25,
+                    ..
+                },
+                TeletextColumnOperation::G3 {
+                    compatibility: TeletextG3Compatibility::Level25,
+                    ..
+                }
             )
         ) {
             return Err(TeletextLocalProgramOperandOverlayError::Family);

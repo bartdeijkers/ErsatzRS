@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: Remaining authored glyph editor families'
+current_focus = 'P9A-04: Authored DRCS-reference slot interchange'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -328,10 +328,21 @@ actual pinned G2-popup/diacritic-menu saves to unpublished concepts. Four
 prohibited-G2 native refusals retain state;12 driver controls and24 GUI captures
 are retained. P9A-04 owns canonical hashes and reused delivery proof. No new
 ordinary/client or full-engine acceptance is claimed.
-Next product step: original G1-alpha/G3 glyph edits remain blocked by editable
-family guards. Connect these existing types to versioned intent/shared preview,
-keeping original G3 compatibility/fallback and G1 alpha/mosaic distinction.
-Bundle the two families and check changed boundaries; preserve existing proof.
+Original G1alpha/G3 page/Local edits now use closed privateV7 concepts, preserving
+original G3 compatibility and alpha/mosaic separation. All211 unique focused
+cases pass, including four-intent/six-cell Free/Zone publication/repeat/undo,
+prohibited-G3 atomic refusals and actual pinned popup saves to unpublished
+concepts/shared preview/reopen. Complete non-X26 projection stays exact.
+P9A-04 owns tmp/phase9-remaining-glyphs/identity.json, corrected-fixture evidence,
+22 captures and20 driver controls. No new ordinary/client/full-engine claim.
+Next product step: existing page-local and Local DRCS-reference slot changes
+cannot yet import from QTM. Reuse checked original table/subtable/slot types,
+source-word authentication, versioned concepts and complete shared-consumer
+validation; first support slot replacement within the same selected resource.
+Bundle Normal/Global, defined/undefined slots and Main/panel permissions, with
+actual pinned PTU edit/save and unchanged resources/fallback/repeat/reopen proof.
+Resource selection, broader reference/object editing and complete interchange
+remain required; this partial step accepts no permanent restriction.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.
 Suitable-client/full engine proof remains open. Earlier proof

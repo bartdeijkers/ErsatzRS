@@ -219,8 +219,8 @@ fn local_object_intents_reject_external_scope_cross_family_noop_and_invalid_colu
             TeletextColumnOperation::G1Alpha {
                 code: TeletextG1AlphaCode::new(b'A').unwrap(),
             },
-            TeletextColumnOperation::G1Alpha {
-                code: TeletextG1AlphaCode::new(b'B').unwrap(),
+            TeletextColumnOperation::G1 {
+                mosaic: TeletextMosaic::new(2).unwrap(),
             },
         ),
     ] {
@@ -433,3 +433,6 @@ mod attribute_tests;
 
 #[path = "extended_operand_tests.rs"]
 mod extended_operand_tests;
+
+#[path = "remaining_glyph_operand_tests.rs"]
+mod remaining_glyph_operand_tests;

@@ -105,7 +105,8 @@ static DriverContext driverContext() {
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
     const bool foreground = mode == "single-page-foreground";
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
-    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph;
+    const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
+    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph || remainingGlyph;
     const bool suppliedGlyph = qEnvironmentVariableIsSet("ERSATZRS_QTM_GLYPH_MODE")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_GLYPH")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH")
@@ -114,21 +115,24 @@ static DriverContext driverContext() {
         qFatal("Glyph operands require explicit single-page-local-glyph mode");
     if (!extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE"))
         qFatal("Replacement glyph mode requires the fixed extended glyph trial");
-    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", extendedGlyph ? 31 : 9) : 0;
+    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", (extendedGlyph || remainingGlyph) ? 31 : 9) : 0;
     const int toGlyphMode = extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE")
         ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH_MODE", 31) : glyphMode;
     const int fromGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_FROM_GLYPH", 127) : 0;
     const int toGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH", 127) : 0;
-    if (localGlyph && !extendedGlyph && (glyphMode != 9 && glyphMode != 1))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && (glyphMode != 9 && glyphMode != 1))
         qFatal("Fixed local glyph mode must retain raw G0 mode9 or G1 mode1");
     if (localGlyph && fromGlyph == toGlyph && glyphMode == toGlyphMode)
         qFatal("Local glyph trial requires a changed glyph");
-    if (localGlyph && !extendedGlyph && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
         || (glyphMode == 1 && (fromGlyph != 33 || toGlyph != 34))))
         qFatal("Fixed local glyph trial requires G0 A-to-B or G1 0x21-to-0x22");
     if (extendedGlyph && !((glyphMode == 15 && toGlyphMode == 15 && fromGlyph == 35 && toGlyph == 66)
         || (glyphMode == 25 && toGlyphMode == 28 && fromGlyph == 65 && toGlyph == 65)))
         qFatal("Fixed extended trial requires G2 35-to-66 or A diacritic9-to12");
+    if (remainingGlyph && !((glyphMode == 1 && fromGlyph == 65 && toGlyph == 64)
+        || (glyphMode == 11 && fromGlyph == 47 && toGlyph == 95)))
+        qFatal("Fixed remaining trial requires G1 alphabetic65-to64 or G3 Level25 47-to95");
     const bool panelDay = mode == "single-page-panel-zone-q";
     const bool panelNight = mode == "single-page-panel-save";
     const bool panelProof = panelDay || panelNight;

@@ -6,8 +6,9 @@ use super::{
 };
 use ersatzrs_domain::{
     TeletextColourReference, TeletextColumnOperation, TeletextDiacriticIndex,
-    TeletextEnhancementCommand, TeletextGlyphCode, TeletextLocalObjectOperandOverlay,
-    TeletextLocalProgramOperandOverlay, TeletextMosaic, TeletextPageAddress,
+    TeletextEnhancementCommand, TeletextG1AlphaCode, TeletextG3Compatibility, TeletextGlyphCode,
+    TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextMosaic,
+    TeletextPageAddress,
 };
 use ersatzrs_ffmpeg::teletext::{
     project_encoded_teletext_display, EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService,
@@ -380,10 +381,23 @@ fn operand(
     before: u32,
     after: u32,
 ) -> Option<TeletextColumnOperation> {
-    use TeletextColumnOperation::{Attributes, Background, Foreground, G0Diacritic, G0, G1, G2};
+    use TeletextColumnOperation::{
+        Attributes, Background, Foreground, G0Diacritic, G1Alpha, G0, G1, G2, G3,
+    };
     let (mode, data) = match expected {
         G0 { code } => (9, u32::from(code.get())),
         G2 { code } => (15, u32::from(code.get())),
+        G1Alpha { code } => (1, u32::from(code.get())),
+        G3 {
+            code,
+            compatibility,
+        } => (
+            match compatibility {
+                TeletextG3Compatibility::Level15 => 2,
+                TeletextG3Compatibility::Level25 => 11,
+            },
+            u32::from(code.get()),
+        ),
         G0Diacritic { code, diacritic } => (16 | u32::from(diacritic.get()), u32::from(code.get())),
         G1 { mosaic } => {
             let blocks = u32::from(mosaic.blocks());
@@ -430,6 +444,13 @@ fn operand(
         }),
         G2 { .. } => Some(G2 {
             code: TeletextGlyphCode::new(data).ok()?,
+        }),
+        G1Alpha { .. } => Some(G1Alpha {
+            code: TeletextG1AlphaCode::new(data).ok()?,
+        }),
+        G3 { compatibility, .. } => Some(G3 {
+            code: TeletextGlyphCode::new(data).ok()?,
+            compatibility,
         }),
         G0Diacritic { .. } => Some(G0Diacritic {
             code: TeletextGlyphCode::new(data).ok()?,

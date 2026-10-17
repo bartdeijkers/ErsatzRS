@@ -157,6 +157,19 @@ Scalar validity alone does not prove a complete repertoire or editor/client
 acceptance. The V6 concept is independent of external editor-carrier versions;
 P9A-04 retains the implementation evidence and every remaining acceptance gate.
 
+Private concept version7 adds same-family G1-alphabetic and G3 intent in existing
+page-local and Local-object commands. At least one such edit is required;
+versions1–6 remain closed to these new intents and retain their serialized forms.
+G1-alphabetic codes remain in 0x40–0x5F, distinct from mosaics sharing raw mode1.
+G3 retains its original Level1.5/mode2 or Level2.5/mode11 compatibility; imports
+cannot change that mode. The existing complete compiler and assignment validation
+still reject prohibited positions even when their seven-bit scalar is valid.
+A coded, assigned blank remains an explicit glyph rather than an absent command.
+Original charset, fallback, identity, invocations and captured-region permissions
+remain authoritative. This private concept version changes neither the addon
+response nor the external editor carrier; P9A-04 owns the scoped evidence and
+remaining full editor/client/engine acceptance.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

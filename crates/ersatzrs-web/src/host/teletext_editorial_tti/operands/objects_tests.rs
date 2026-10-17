@@ -120,6 +120,17 @@ fn original_editable_commands_keep_exact_original_local_source() {
             code: TeletextGlyphCode::new(b'e').unwrap(),
             diacritic: ersatzrs_domain::TeletextDiacriticIndex::new(15).unwrap(),
         },
+        TeletextColumnOperation::G1Alpha {
+            code: ersatzrs_domain::TeletextG1AlphaCode::new(b'A').unwrap(),
+        },
+        TeletextColumnOperation::G3 {
+            code: TeletextGlyphCode::new(0x2f).unwrap(),
+            compatibility: ersatzrs_domain::TeletextG3Compatibility::Level15,
+        },
+        TeletextColumnOperation::G3 {
+            code: TeletextGlyphCode::new(0x2f).unwrap(),
+            compatibility: ersatzrs_domain::TeletextG3Compatibility::Level25,
+        },
         TeletextColumnOperation::Attributes {
             double_height: true,
             double_width: true,
@@ -139,8 +150,8 @@ fn original_editable_commands_keep_exact_original_local_source() {
 
 #[test]
 fn unsupported_original_object_family_cannot_gain_operand_edit_authority() {
-    let catalog = catalog(TeletextColumnOperation::G1Alpha {
-        code: ersatzrs_domain::TeletextG1AlphaCode::new(b'A').unwrap(),
+    let catalog = catalog(TeletextColumnOperation::DesignateCharset {
+        designation: ersatzrs_domain::TeletextEnhancementCharsetDesignation::new(0).unwrap(),
     });
     assert!(authored_operation(&catalog, owner(32), source(), location()).is_err());
 }

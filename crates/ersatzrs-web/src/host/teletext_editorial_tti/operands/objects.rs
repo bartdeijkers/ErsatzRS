@@ -80,6 +80,8 @@ fn authored_operation(
             | TeletextColumnOperation::Attributes { .. }
             | TeletextColumnOperation::G2 { .. }
             | TeletextColumnOperation::G0Diacritic { .. }
+            | TeletextColumnOperation::G1Alpha { .. }
+            | TeletextColumnOperation::G3 { .. }
     ) {
         return Err(fail());
     }

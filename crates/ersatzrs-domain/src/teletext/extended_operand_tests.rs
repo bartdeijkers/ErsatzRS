@@ -25,7 +25,7 @@ fn page_change(
         .unwrap()
 }
 
-fn extended_input() -> TeletextResolvedServiceDraft {
+pub(super) fn extended_input() -> TeletextResolvedServiceDraft {
     let mut input = input();
     let original = input.pages[0].local_program.as_ref().unwrap().commands();
     input.pages[0].local_program = Some(program(vec![
@@ -171,9 +171,9 @@ fn extended_operands_reject_reserved_scalars_cross_family_noop_and_invalid_colum
         serde_json::json!({"kind":"g0_diacritic","code":65,"diacritic":16})
     )
     .is_err());
-    let g3 = |code| TeletextColumnOperation::G3 {
+    let g3 = |code, compatibility| TeletextColumnOperation::G3 {
         code: TeletextGlyphCode::new(code).unwrap(),
-        compatibility: TeletextG3Compatibility::Level25,
+        compatibility,
     };
     for (expected, replacement) in [
         (g2(0x27), g0(b'A')),
@@ -181,7 +181,10 @@ fn extended_operands_reject_reserved_scalars_cross_family_noop_and_invalid_colum
         (g2(0x27), diacritic(b'A', 1)),
         (diacritic(b'A', 0), g0(b'A')),
         (diacritic(b'A', 1), g2(0x27)),
-        (g3(b'A'), g3(b'B')),
+        (
+            g3(b'A', TeletextG3Compatibility::Level25),
+            g3(b'B', TeletextG3Compatibility::Level15),
+        ),
     ] {
         assert_eq!(
             TeletextLocalProgramOperandOverlay::new(owner, 3, 8, expected, replacement),

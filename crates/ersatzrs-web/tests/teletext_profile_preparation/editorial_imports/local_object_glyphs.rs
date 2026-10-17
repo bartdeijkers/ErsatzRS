@@ -459,3 +459,9 @@ mod extended_glyphs;
 
 #[path = "local_object_glyphs/actual_extended_editor.rs"]
 mod actual_extended_editor;
+
+#[path = "local_object_glyphs/remaining_glyphs.rs"]
+mod remaining_glyphs;
+
+#[path = "local_object_glyphs/actual_remaining_editor.rs"]
+mod actual_remaining_editor;

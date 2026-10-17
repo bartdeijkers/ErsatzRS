@@ -21,7 +21,8 @@ pub enum TeletextLocalObjectOperandOverlayError {
 /// One same-family colour, attribute or checked glyph replacement in a local definition.
 ///
 /// Object identity/type, command order, geometry, charset, invocation targets and
-/// all other commands are immutable. G1 alpha, G3 and resource edits are absent.
+/// all other commands are immutable. G1 alphabetic edits retain their operation
+/// family, G3 retains its compatibility, and resource edits remain absent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextLocalObjectOperandOverlay {
     identity: TeletextObjectIdentity,
@@ -30,7 +31,7 @@ pub struct TeletextLocalObjectOperandOverlay {
 
 impl TeletextLocalObjectOperandOverlay {
     /// Check an exact-original local operand through the shared page validator.
-    /// Colours, attributes, G0/G1/G2 and G0-diacritic retain their own families;
+    /// Colours, attributes and checked glyphs retain their own families;
     /// attribute changes preserve both original character-size flags.
     /// # Errors
     /// Rejects nonlocal identities, other families, size changes, invalid columns and no-op edits.
