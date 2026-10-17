@@ -6,8 +6,8 @@ use super::{
     Result, TeletextEditorialEdits, TeletextEditorialEffectsFailure,
 };
 use ersatzrs_domain::{
-    TeletextAttributeSource, TeletextEnhancementSource, TeletextObjectIdentity,
-    TeletextSpatialEvent, TeletextSpatialRootSource,
+    TeletextAttributeSource, TeletextEnhancementObjectDefinition, TeletextEnhancementSource,
+    TeletextObjectIdentity, TeletextSpatialEvent, TeletextSpatialRootSource,
 };
 use ersatzrs_ffmpeg::teletext::{TeletextAuthoredServiceEncodingBudget, TeletextMainComposition};
 use std::{collections::BTreeMap, time::Instant};
@@ -30,6 +30,7 @@ type EventKey = (
 #[derive(Default)]
 pub(super) struct ProtectedLineage<'a> {
     programs: BTreeMap<TeletextObjectIdentity, Program<'a>>,
+    additions: BTreeMap<TeletextObjectIdentity, &'a TeletextEnhancementObjectDefinition>,
     events: Option<Vec<Option<usize>>>,
     calls: calls::Calls,
 }
@@ -42,6 +43,16 @@ impl<'a> ProtectedLineage<'a> {
         deadline: Instant,
     ) -> Result<Self> {
         let mut result = Self::default();
+        for addition in edits.resource_additions {
+            check_deadline(deadline)?;
+            if result
+                .additions
+                .insert(addition.identity(), addition.definition())
+                .is_some()
+            {
+                return Err(association());
+            }
+        }
         for program in programs::all(edits).filter(|program| match program {
             Program::Local(value) => value.owner() == before.owner(),
             Program::Resource(_) => true,
@@ -51,11 +62,12 @@ impl<'a> ProtectedLineage<'a> {
                 .programs
                 .insert(program.identity(), program)
                 .is_some()
+                || result.additions.contains_key(&program.identity())
             {
                 return Err(association());
             }
         }
-        if result.programs.is_empty() {
+        if result.programs.is_empty() && result.additions.is_empty() {
             return Ok(result);
         }
         let old = before.spatial_trace();
@@ -95,19 +107,7 @@ impl<'a> ProtectedLineage<'a> {
         for event in new.events() {
             check_deadline(deadline)?;
             let source = event.source();
-            if let Some(program) = source
-                .object
-                .and_then(|object| result.programs.get(&object))
-            {
-                if program
-                    .replacement()
-                    .commands()
-                    .get(source.command)
-                    .is_none()
-                {
-                    return Err(association());
-                }
-            }
+            result.check_source_command(source)?;
             events.push(
                 match result.source_at_invocation(source, event.invocation()) {
                     CanonicalSource::Inserted(_) => None,
@@ -127,7 +127,34 @@ impl<'a> ProtectedLineage<'a> {
         Ok(result)
     }
 
+    fn check_source_command(&self, source: TeletextEnhancementSource) -> Result<()> {
+        if source
+            .object
+            .and_then(|object| self.additions.get(&object))
+            .is_some_and(|definition| definition.program.commands().get(source.command).is_none())
+        {
+            return Err(association());
+        }
+        if let Some(program) = source.object.and_then(|object| self.programs.get(&object)) {
+            if program
+                .replacement()
+                .commands()
+                .get(source.command)
+                .is_none()
+            {
+                return Err(association());
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn source(&self, source: TeletextEnhancementSource) -> CanonicalSource {
+        if source
+            .object
+            .is_some_and(|object| self.additions.contains_key(&object))
+        {
+            return CanonicalSource::Inserted(source);
+        }
         let Some(program) = source.object.and_then(|object| self.programs.get(&object)) else {
             return CanonicalSource::Existing(source);
         };

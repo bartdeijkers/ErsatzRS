@@ -598,7 +598,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_operands(
 pub(super) fn compile_effective_restored_parts_with_resource_edits(
     stored: TeletextDesignRevision,
     parts: TeletextRestoredEffectiveDesignDocumentParts,
-    mut policy: TeletextChannelDocumentEncodingPolicy,
+    policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
     overlays: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
     resource_operands: &[ersatzrs_domain::TeletextResourceObjectOperandOverlay],
@@ -610,6 +610,38 @@ pub(super) fn compile_effective_restored_parts_with_resource_edits(
         !overlays.is_empty(),
         resource_operands,
         resource_programs,
+    )?;
+    compile_effective_restored_parts_with_resource_intents(
+        stored,
+        parts,
+        policy,
+        deadline,
+        overlays,
+        super::teletext_stored_designs::EditorialResourceIntents {
+            operands: resource_operands,
+            programs: resource_programs,
+            additions: &[],
+        },
+    )
+}
+
+/// Replay the complete stored intent after retained-receipt qualification.
+pub(super) fn compile_effective_restored_parts_with_resource_intents(
+    stored: TeletextDesignRevision,
+    parts: TeletextRestoredEffectiveDesignDocumentParts,
+    mut policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    overlays: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
+    resources: super::teletext_stored_designs::EditorialResourceIntents<'_>,
+) -> Result<RestoredEffectiveOriginalDesign, NativeTeletextDesignError> {
+    let resource_operands = resources.operands;
+    let resource_programs = resources.programs;
+    let resource_additions = resources.additions;
+    check_deadline(deadline)?;
+    super::teletext_stored_designs::check_authenticated_editorial_resource_intents(
+        parts.editorial_overlay.as_ref(),
+        !overlays.is_empty(),
+        resources,
     )?;
     policy.entry = parts.entry;
     policy.transmissions = parts
@@ -656,6 +688,7 @@ pub(super) fn compile_effective_restored_parts_with_resource_edits(
             programs: (overlays, operands, object_operands, bitmaps, programs),
             resource_operands,
             resource_programs,
+            resource_additions,
         },
         deadline,
         region,

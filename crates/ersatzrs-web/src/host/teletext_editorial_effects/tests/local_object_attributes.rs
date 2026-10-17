@@ -132,6 +132,7 @@ fn retained_sized_object_attributes_require_the_whole_original_lower_and_right_f
         object_operands: &changes,
         resource_operands: &[],
         resource_programs: &[],
+        resource_additions: &[],
         object_programs: &[],
         bitmaps: &[],
     };

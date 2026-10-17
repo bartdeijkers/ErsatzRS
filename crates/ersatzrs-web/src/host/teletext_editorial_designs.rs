@@ -129,8 +129,13 @@ pub enum NativeTeletextEditorialImportError {
     #[error("teletext protected edit effects: {0}")]
     Effects(Box<TeletextEditorialEffectsError>),
 }
+#[path = "teletext_editorial_designs/definition_additions.rs"]
+mod definition_additions;
 #[path = "teletext_editorial_designs/repeat.rs"]
 mod repeat;
+pub use definition_additions::{
+    add_teletext_editorial_resource_definitions, NativeTeletextResourceDefinitionAddRequest,
+};
 
 type Result<T> = std::result::Result<T, NativeTeletextEditorialImportError>;
 fn check_deadline(deadline: Instant) -> Result<()> {
@@ -314,6 +319,60 @@ fn qualify_baseline(
     })
 }
 
+fn authorize_resource_intents(
+    baseline: &QualifiedBaseline,
+    resources: super::teletext_stored_designs::EditorialResourceIntents<'_>,
+    policy: &TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<()> {
+    let encoding = &policy.encoding;
+    let tti = TeletextTtiBudget {
+        max_bytes: baseline
+            .body
+            .files
+            .iter()
+            .map(|file| file.bytes.len())
+            .max()
+            .unwrap_or(0),
+        max_records: encoding.max_units,
+    };
+    super::teletext_editorial_tti::resource_objects::authorize(
+        &baseline.body.project,
+        baseline
+            .original
+            .view()
+            .encoded()
+            .ok_or(NativeTeletextEditorialImportError::Association)?,
+        resources.operands,
+        (tti, encoding.max_units),
+        deadline,
+    )?;
+    super::teletext_editorial_tti::resource_objects::authorize_programs(
+        &baseline.body.project,
+        baseline
+            .original
+            .view()
+            .encoded()
+            .ok_or(NativeTeletextEditorialImportError::Association)?,
+        resources.operands,
+        resources.programs,
+        (tti, encoding.max_units, policy.composition.service),
+        deadline,
+    )?;
+    definition_additions::authorize(
+        &baseline.body.project,
+        baseline
+            .original
+            .view()
+            .encoded()
+            .ok_or(NativeTeletextEditorialImportError::Association)?,
+        resources.additions,
+        policy.composition.service,
+        deadline,
+    )?;
+    Ok(())
+}
+
 fn qualify_rows(
     stored: TeletextDesignRevision,
     parts: StoredDesignParts,
@@ -329,59 +388,29 @@ fn qualify_rows(
     let object_operands = overlay.local_object_operands().to_vec();
     let resource_operands = overlay.resource_object_operands().to_vec();
     let resource_programs = overlay.resource_object_program_overlays().to_vec();
+    let resource_additions = overlay.resource_object_definition_additions().to_vec();
     let bitmaps = overlay.drcs_bitmap_overlays().to_vec();
     let object_programs = overlay.local_object_glyph_program_overlays().to_vec();
     let encoding = policy.encoding;
-    let edited = if (resource_operands.is_empty() && resource_programs.is_empty())
-        || !matches!(
-            baseline.carrier,
-            TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7 | TeletextEditorCarrier::V8
-        ) {
+    let has_existing_resource_edits =
+        !resource_operands.is_empty() || !resource_programs.is_empty();
+    let edited = if (resource_additions.is_empty() && !has_existing_resource_edits)
+        || (resource_additions.is_empty()
+            && !matches!(
+                baseline.carrier,
+                TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7 | TeletextEditorCarrier::V8
+            )) {
         parts.compile(stored, policy, deadline, overlays.clone())
     } else {
         // Only the authenticated original receipt can authorize this separate
         // replay path. Generic stored compilation remains fail closed.
-        let tti = TeletextTtiBudget {
-            max_bytes: baseline
-                .body
-                .files
-                .iter()
-                .map(|file| file.bytes.len())
-                .max()
-                .unwrap_or(0),
-            max_records: encoding.max_units,
+        let resources = super::teletext_stored_designs::EditorialResourceIntents {
+            operands: &resource_operands,
+            programs: &resource_programs,
+            additions: &resource_additions,
         };
-        super::teletext_editorial_tti::resource_objects::authorize(
-            &baseline.body.project,
-            baseline
-                .original
-                .view()
-                .encoded()
-                .ok_or(NativeTeletextEditorialImportError::Association)?,
-            &resource_operands,
-            (tti, encoding.max_units),
-            deadline,
-        )?;
-        super::teletext_editorial_tti::resource_objects::authorize_programs(
-            &baseline.body.project,
-            baseline
-                .original
-                .view()
-                .encoded()
-                .ok_or(NativeTeletextEditorialImportError::Association)?,
-            &resource_operands,
-            &resource_programs,
-            (tti, encoding.max_units, policy.composition.service),
-            deadline,
-        )?;
-        parts.compile_with_resource_edits(
-            stored,
-            policy,
-            deadline,
-            overlays.clone(),
-            &resource_operands,
-            &resource_programs,
-        )
+        authorize_resource_intents(baseline, resources, &policy, deadline)?;
+        parts.compile_with_resource_intents(stored, policy, deadline, overlays.clone(), resources)
     }
     .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?;
     validate_teletext_editorial_effects_with_operands(
@@ -396,6 +425,7 @@ fn qualify_rows(
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
         TeletextEditorialEdits {
+            resource_additions: &resource_additions,
             resource_operands: &resource_operands,
             resource_programs: &resource_programs,
             rows: &overlays,
@@ -526,15 +556,7 @@ fn reconcile_files(
     if files.len() != body.files.len() {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let mut changes = TeletextEditorialChanges {
-        resource_operands: Vec::new(),
-        resource_programs: Vec::new(),
-        rows: Vec::new(),
-        operands: Vec::new(),
-        object_operands: Vec::new(),
-        object_programs: Vec::new(),
-        bitmaps: Vec::new(),
-    };
+    let mut changes = TeletextEditorialChanges::default();
     let encoded = baseline
         .original
         .view()

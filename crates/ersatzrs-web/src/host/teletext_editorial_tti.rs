@@ -34,10 +34,23 @@ pub(super) struct TeletextEditorialChanges {
     pub resource_operands: Vec<ersatzrs_domain::TeletextResourceObjectOperandOverlay>,
     pub object_programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     pub resource_programs: Vec<ersatzrs_domain::TeletextResourceObjectProgramOverlay>,
+    pub resource_additions: Vec<ersatzrs_domain::TeletextResourceObjectDefinitionAddition>,
     pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
 }
 
 impl TeletextEditorialChanges {
+    pub(super) fn edits(&self) -> super::teletext_editorial_effects::TeletextEditorialEdits<'_> {
+        super::teletext_editorial_effects::TeletextEditorialEdits {
+            rows: &self.rows,
+            operands: &self.operands,
+            object_operands: &self.object_operands,
+            object_programs: &self.object_programs,
+            resource_operands: &self.resource_operands,
+            resource_programs: &self.resource_programs,
+            resource_additions: &self.resource_additions,
+            bitmaps: &self.bitmaps,
+        }
+    }
     /// Selection changes can alter canonical selector placement without Base edits.
     pub(super) fn has_drcs_selection(&self, owner: Option<TeletextPageAddress>) -> bool {
         self.operands

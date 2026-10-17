@@ -1,6 +1,6 @@
 //! Resource packet changes must be the complete original-bound native encoding.
 use super::{check_deadline, error, Result, TeletextEditorialEffectsFailure};
-use ersatzrs_domain::TeletextEnhancementObjectCatalog;
+use ersatzrs_domain::{TeletextEnhancementObjectCatalog, TeletextResourceObjectDefinitionAddition};
 use ersatzrs_ffmpeg::teletext::{
     allocate_teletext_resource_objects, encode_teletext_object_page, EncodedTeletextAuthoredPage,
     EncodedTeletextAuthoredService, TeletextAuthoredServiceEncodingBudget,
@@ -21,13 +21,15 @@ fn structure() -> super::TeletextEditorialEffectsError {
 pub(super) struct Context<'a> {
     before: &'a TeletextEnhancementObjectCatalog,
     after: &'a TeletextEnhancementObjectCatalog,
-    allocations: TeletextResourceObjectAllocations,
+    before_allocations: TeletextResourceObjectAllocations,
+    after_allocations: TeletextResourceObjectAllocations,
     max_commands: usize,
 }
 impl<'a> Context<'a> {
     pub(super) fn new(
         original: &'a EncodedTeletextAuthoredService,
         edited: &'a EncodedTeletextAuthoredService,
+        additions: &[TeletextResourceObjectDefinitionAddition],
         budget: &TeletextAuthoredServiceEncodingBudget,
         deadline: Instant,
     ) -> Result<Self> {
@@ -39,8 +41,19 @@ impl<'a> Context<'a> {
         if before.definitions().len() > maximum
             || after.definitions().len() > maximum
             || declared.defaults().len() > maximum
+            || additions.len() > maximum
         {
             return Err(error(None, None, TeletextEditorialEffectsFailure::Budget));
+        }
+        super::definition_additions::check_incoming(before, after, additions, deadline)?;
+        super::definition_additions::check_declarations(
+            declared,
+            edited.declared(),
+            additions,
+            deadline,
+        )?;
+        if declared.defaults() != edited.declared().defaults() {
+            return Err(structure());
         }
         for catalog in [before, after] {
             let mut remaining = budget.max_commands;
@@ -56,26 +69,28 @@ impl<'a> Context<'a> {
             .iter()
             .map(ersatzrs_domain::TeletextDeclaredDefaultReservation::selection)
             .collect::<Vec<_>>();
-        let allocations = allocate_teletext_resource_objects(before, &defaults, maximum)
+        let before_allocations = allocate_teletext_resource_objects(before, &defaults, maximum)
             .map_err(|_| structure())?;
         check_deadline(deadline)?;
-        let final_allocations = allocate_teletext_resource_objects(after, &defaults, maximum)
+        let after_allocations = allocate_teletext_resource_objects(after, &defaults, maximum)
             .map_err(|_| structure())?;
         check_deadline(deadline)?;
-        if allocations != final_allocations {
+        if additions.is_empty() && before_allocations != after_allocations {
             return Err(structure());
         }
         Ok(Self {
             before,
             after,
-            allocations,
+            before_allocations,
+            after_allocations,
             max_commands: budget.max_commands,
         })
     }
 
     /// Authenticate the immutable original against complete canonical output for
     /// its existing last-subpage value, then encode only the exact edited catalogue
-    /// with the same allocation, full header and transmission parameters.
+    /// with independently authenticated allocations, full header and transmission
+    /// parameters. Only explicitly added definitions may change allocation.
     pub(super) fn check(
         &self,
         before: &EncodedTeletextAuthoredPage,
@@ -114,7 +129,7 @@ impl<'a> Context<'a> {
             let expected_original = encode_teletext_object_page(
                 header.identity(),
                 self.before,
-                &self.allocations,
+                &self.before_allocations,
                 transmission,
                 self.max_commands,
             )
@@ -126,7 +141,7 @@ impl<'a> Context<'a> {
             let expected = encode_teletext_object_page(
                 header.identity(),
                 self.after,
-                &self.allocations,
+                &self.after_allocations,
                 transmission,
                 self.max_commands,
             )

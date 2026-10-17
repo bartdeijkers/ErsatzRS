@@ -20,14 +20,14 @@ remain required.
 Private conceptsV1–18 retain original metadata, scoped operands, bitmaps, complete
 DRCS references, Flash/charset context and bounded page/Local/resource structure.
 V14 scalars, V15 glyph/style, V16 retained calls and V17 authenticated call edits
-preserve old formats, full identities and root undo. Same-column FG/BG/attribute
-values can coexist with call additions/removals through checked scalar decoding;
-changed styles receive new-writer ancestry. Exact survivors, PassiveDefault
+preserve old formats, full identities and root undo. Checked same-column FG/BG/
+attribute values compose with call additions/removals; changed styles gain
+new-writer ancestry. Exact survivors, PassiveDefault
 lineage and all protected consumers stay checked. V6/V7 capacity is preserved.
-Preparatory V18 stores checked new definitions in already declared POP/GPOP
-resources without changing originals. Explicit host edit authority, independent
-native allocations, inserted lineage and the added-definition editor/publication
-flow are not connected; native replay rejects the new intent meanwhile.
+V18 connects current-receipt native Add in existing POP/GPOP resources, separate
+allocations, inserted lineage and body folding to fresh export, preview/publication/
+reopen. Originals stay exact; generic replay stays refused. P9A-04 owns proof and
+remaining admin Add/actual new-definition QTM SaveAs.
 Actual pinned V8 compound glyph/style/column/call and V7 nonfirst-fragment native
 call add/delete saves pass unchanged-byte concepts, shared native previews,
 unpublished reopen and explicit publication/cold reopen. Actual editor controls
@@ -57,12 +57,11 @@ ACK/cycle updates and expiry preserve AV/EOF. Local888 legacy/Hybrid both-track/
 VBV, Off/stale/authored200, capacity cleanup and seek0.5s proof retain their scope.
 General source/seek/cue/charset/resource/wrap and Next policies remain open.
 
-Linux x64, Windows interop and QEMU ARM evidence is partial; native Windows/ARM
-and all six-RID operational acceptance remain required. P9A-02 owns decoder
-Health/licensing. Existing Burn/Convert/copy, carriage, HLS/browser, playback,
-activation/publication/refresh/restart and localized management gates remain.
-UCU waives none. Production TV-guide content waits for independent P9A-04
-acceptance; Phase10 waits for P9B-02.
+Linux x64, Windows interop and QEMU ARM proof is partial; native six-RID
+acceptance remains required. P9A-02 owns decoder Health/licensing. Burn/Convert/
+copy, carriage, HLS/browser, playback, publication/refresh/restart and localized
+management gates remain. UCU waives none; production guide waits for independent
+P9A-04 acceptance and Phase10 for P9B-02.
 '''
 
 [[debt]]

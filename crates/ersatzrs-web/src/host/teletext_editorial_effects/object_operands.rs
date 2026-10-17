@@ -67,12 +67,15 @@ pub(super) fn check(
     cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
 ) -> Result<()> {
+    super::definition_additions::check_catalogues(before, after, incoming, cumulative, deadline)?;
     let incoming_programs = programs::all(incoming);
     let cumulative_programs = programs::all(cumulative);
     if incoming.object_programs.is_empty()
         && incoming.resource_programs.is_empty()
         && cumulative.object_programs.is_empty()
         && cumulative.resource_programs.is_empty()
+        && incoming.resource_additions.is_empty()
+        && cumulative.resource_additions.is_empty()
     {
         return check_scalar_operands(before, after, incoming, cumulative, deadline);
     }
@@ -121,9 +124,6 @@ pub(super) fn check(
         }
     }
     check_final_operands(after, cumulative, &final_programs, deadline)?;
-    if before.definitions().len() != after.definitions().len() {
-        return Err(structure());
-    }
     for (old, new) in before.definitions().iter().zip(after.definitions()) {
         check_deadline(deadline)?;
         if old.identity != new.identity || old.object_type != new.object_type {
@@ -301,6 +301,7 @@ fn check_operands(
             object_operands,
             resource_operands: &[],
             resource_programs: &[],
+            resource_additions: &[],
             object_programs: &[],
             bitmaps: &[],
         }

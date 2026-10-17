@@ -85,7 +85,10 @@ pub(super) fn merge(
     }
     Ok((operands, programs))
 }
-fn one(programs: &[Program], identity: TeletextObjectIdentity) -> Result<Option<&Program>> {
+pub(super) fn one(
+    programs: &[Program],
+    identity: TeletextObjectIdentity,
+) -> Result<Option<&Program>> {
     let mut values = programs.iter().filter(|p| p.identity() == identity);
     let selected = values.next();
     if values.next().is_some() {
@@ -93,7 +96,7 @@ fn one(programs: &[Program], identity: TeletextObjectIdentity) -> Result<Option<
     }
     Ok(selected)
 }
-fn apply(
+pub(super) fn apply(
     program: &mut TeletextEnhancementProgram,
     identity: TeletextObjectIdentity,
     operands: &[Operand],

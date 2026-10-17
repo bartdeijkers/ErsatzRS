@@ -564,7 +564,7 @@ async fn publish_and_accept(
             edited.head().id,
             edited.head().revision,
             edited.digest().to_owned(),
-            2,
+            edited.head().revision,
             Some(flow.pending[0].id),
             designs::budget(),
             channel_documents::policy(),
@@ -590,7 +590,7 @@ async fn publish_and_accept(
             &fixture.state.application,
             TeletextGenerationTarget {
                 request: pending.request().clone(),
-                expected_design_head: 2,
+                expected_design_head: edited.head().revision,
                 expected_generation_id: Some(flow.accepted[0].generation().id),
             },
             designs::budget(),

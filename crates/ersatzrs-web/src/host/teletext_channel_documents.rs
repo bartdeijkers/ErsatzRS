@@ -47,6 +47,8 @@ pub(super) struct EditorialResourceDocuments<'a> {
     pub(super) programs: EditorialProgramDocuments<'a>,
     pub(super) resource_operands: &'a [TeletextResourceObjectOperandOverlay],
     pub(super) resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
+    pub(super) resource_additions:
+        &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
 }
 
 #[cfg(test)]
@@ -499,6 +501,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
             programs: editorial,
             resource_operands: &[],
             resource_programs: &[],
+            resource_additions: &[],
         },
         deadline,
         region,
@@ -519,6 +522,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
     if editorial.resource_operands.is_empty()
         && editorial.resource_programs.is_empty()
+        && editorial.resource_additions.is_empty()
         && editorial.programs.4.is_empty()
     {
         let (rows, page, objects, bitmaps, _) = editorial.programs;
@@ -637,6 +641,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
             programs: editorial,
             resource_operands: &[],
             resource_programs: &[],
+            resource_additions: &[],
         },
         deadline,
         region,
@@ -656,16 +661,24 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
     let resource_operands = editorial.resource_operands;
     let resource_programs = editorial.resource_programs;
+    let resource_additions = editorial.resource_additions;
     let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
     check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
-    if !resource_operands.is_empty() || !resource_programs.is_empty() {
+    if resource_additions.len() > policy.composition.service.max_objects {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    if !resource_operands.is_empty()
+        || !resource_programs.is_empty()
+        || !resource_additions.is_empty()
+    {
         check_editorial_resource_budget(
             operands.len(),
             object_operands.len(),
             programs,
             resource_operands.len(),
             resource_programs,
+            resource_additions,
             policy.composition.service.max_commands,
         )?;
     }
@@ -677,6 +690,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
             || !programs.is_empty()
             || !resource_operands.is_empty()
             || !resource_programs.is_empty()
+            || !resource_additions.is_empty()
         {
             return Err(ChannelTeletextDocumentEncodingError::Association);
         }
@@ -750,6 +764,16 @@ fn apply_editorial_operands(
 ) -> Result<ersatzrs_domain::TeletextDeclaredService, ChannelTeletextDocumentEncodingError> {
     let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
     let resource_operands = editorial.resource_operands;
+    if !editorial.resource_additions.is_empty() {
+        declared = declared
+            .with_resource_object_definition_additions(editorial.resource_additions, budget)
+            .map_err(|error| match error {
+                ersatzrs_domain::TeletextResourceObjectDefinitionAdditionApplyError::Service(
+                    reason,
+                ) => editorial_semantic_error(reason),
+                _ => ChannelTeletextDocumentEncodingError::Association,
+            })?;
+    }
     if !operands.is_empty() {
         declared = declared
             .with_local_program_operand_overlays(operands, budget)
@@ -789,6 +813,7 @@ fn check_editorial_resource_budget(
     programs: &[TeletextLocalObjectGlyphProgramOverlay],
     resource_operands: usize,
     resource_programs: &[ersatzrs_domain::TeletextResourceObjectProgramOverlay],
+    resource_additions: &[ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
     maximum: usize,
 ) -> Result<(), ChannelTeletextDocumentEncodingError> {
     let mut remaining = maximum;
@@ -805,7 +830,12 @@ fn check_editorial_resource_budget(
                 program.expected().commands().len(),
                 program.replacement().commands().len(),
             ]
-        }));
+        }))
+        .chain(
+            resource_additions
+                .iter()
+                .map(|addition| addition.definition().program.commands().len()),
+        );
     for count in counts {
         remaining = remaining.checked_sub(count).ok_or_else(|| {
             editorial_semantic_error(ersatzrs_domain::TeletextServiceError::Budget {

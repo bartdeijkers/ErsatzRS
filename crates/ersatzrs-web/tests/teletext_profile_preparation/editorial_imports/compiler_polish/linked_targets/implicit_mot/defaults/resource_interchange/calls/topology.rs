@@ -547,3 +547,6 @@ mod position_anchors;
 
 #[path = "topology/style_values.rs"]
 mod style_values;
+
+#[path = "topology/definition_additions.rs"]
+mod definition_additions;

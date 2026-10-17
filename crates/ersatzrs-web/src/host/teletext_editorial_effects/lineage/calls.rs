@@ -33,6 +33,12 @@ fn command(call: TeletextSpatialInvocation) -> TeletextEnhancementCommand {
 
 fn inserted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'_>) -> bool {
     let source = call.source();
+    if let Some(definition) = source
+        .object
+        .and_then(|object| lineage.additions.get(&object))
+    {
+        return definition.program.commands().get(source.command) == Some(&command(call));
+    }
     source
         .object
         .and_then(|object| lineage.programs.get(&object))

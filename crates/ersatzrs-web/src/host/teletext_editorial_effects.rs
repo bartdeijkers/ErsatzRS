@@ -29,6 +29,7 @@ use ersatzrs_ffmpeg::teletext::{
 
 mod charset_context;
 mod compiler_resources;
+mod definition_additions;
 mod lineage;
 mod object_operands;
 mod programs;
@@ -117,6 +118,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub object_operands: &'a [TeletextLocalObjectOperandOverlay],
     pub resource_operands: &'a [TeletextResourceObjectOperandOverlay],
     pub resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
+    pub resource_additions: &'a [ersatzrs_domain::TeletextResourceObjectDefinitionAddition],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
@@ -151,6 +153,7 @@ pub(super) fn validate_teletext_editorial_transition(
         edited,
         project,
         TeletextEditorialEdits {
+            resource_additions: &[],
             rows: incoming,
             operands: &[],
             object_operands: &[],
@@ -160,6 +163,7 @@ pub(super) fn validate_teletext_editorial_transition(
             bitmaps: &[],
         },
         TeletextEditorialEdits {
+            resource_additions: &[],
             rows: cumulative,
             operands: &[],
             object_operands: &[],
@@ -189,14 +193,20 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
 ) -> Result<()> {
     check_deadline(deadline)?;
     check_service(original, edited, incoming, cumulative, budget, deadline)?;
-    let resource_context =
-        if incoming.resource_operands.is_empty() && incoming.resource_programs.is_empty() {
-            None
-        } else {
-            Some(resource_objects::Context::new(
-                original, edited, budget, deadline,
-            )?)
-        };
+    let resource_context = if incoming.resource_operands.is_empty()
+        && incoming.resource_programs.is_empty()
+        && incoming.resource_additions.is_empty()
+    {
+        None
+    } else {
+        Some(resource_objects::Context::new(
+            original,
+            edited,
+            incoming.resource_additions,
+            budget,
+            deadline,
+        )?)
+    };
     for (before, after) in
         compiler_resources::authored_pages(original).zip(compiler_resources::authored_pages(edited))
     {
@@ -226,7 +236,8 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             .object_programs
             .iter()
             .any(|value| value.owner() == owner)
-            || !incoming.resource_programs.is_empty();
+            || !incoming.resource_programs.is_empty()
+            || !incoming.resource_additions.is_empty();
         let operand_change =
             operand_change || structural_change || !incoming.resource_operands.is_empty();
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
@@ -297,7 +308,13 @@ fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize)
             program.replacement().commands().len(),
             program.retained_commands().len(),
         ]
-    }));
+    }))
+    .chain(
+        edits
+            .resource_additions
+            .iter()
+            .map(|addition| addition.definition().program.commands().len()),
+    );
     for count in counts {
         let Some(next) = remaining.checked_sub(count) else {
             return false;
@@ -334,6 +351,8 @@ fn check_service(
         || original.unit_count() > budget.max_units
         || edited.unit_count() > budget.max_units
         || overlays.len() > budget.max_pages
+        || incoming.resource_additions.len() > budget.normalization.max_resource_objects
+        || cumulative.resource_additions.len() > budget.normalization.max_resource_objects
         || !bounded_editorial_commands(incoming, budget.max_commands)
         || !bounded_editorial_commands(cumulative, budget.max_commands)
         || incoming.bitmaps.len() > maximum_bitmaps
@@ -349,10 +368,8 @@ fn check_service(
     if original.magazine_units() != edited.magazine_units()
         || before.base() != after.base()
         || before.magazine_presentations() != after.magazine_presentations()
-        || before.object_companions() != after.object_companions()
         || old.mots() != new.mots()
         || old.selections() != new.selections()
-        || old.empty_object_pages() != new.empty_object_pages()
         || old.resolutions() != new.resolutions()
         || old.resource_inventory() != new.resource_inventory()
         || old.defaults() != new.defaults()
@@ -363,6 +380,7 @@ fn check_service(
             TeletextEditorialEffectsFailure::ProtectedStructure,
         ));
     }
+    definition_additions::check_declarations(old, new, incoming.resource_additions, deadline)?;
     object_operands::check(
         before.objects(),
         after.objects(),
@@ -505,12 +523,23 @@ fn check_resource(
     let Some(header) = before.resource_header() else {
         return Err(failure());
     };
+    if !incoming.resource_additions.is_empty()
+        && matches!(before, EncodedTeletextAuthoredPage::Object(_))
+    {
+        return resource_context
+            .ok_or_else(failure)?
+            .check(before, after, deadline);
+    }
     if incoming
         .resource_operands
         .iter()
         .any(|change| change.identity().resource() == Some(header.identity()))
         || incoming
             .resource_programs
+            .iter()
+            .any(|change| change.identity().resource() == Some(header.identity()))
+        || incoming
+            .resource_additions
             .iter()
             .any(|change| change.identity().resource() == Some(header.identity()))
     {

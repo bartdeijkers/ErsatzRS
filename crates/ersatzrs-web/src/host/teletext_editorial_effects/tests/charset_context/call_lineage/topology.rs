@@ -1,6 +1,8 @@
 //! Resource call topology grants no inherited authority to new callee writers.
 use super::*;
 
+mod definition_additions;
+
 fn native(commands: Vec<TeletextEnhancementCommand>) -> EncodedTeletextAuthoredService {
     let mut definitions = object_definitions(None);
     definitions[0].program = program(commands);
@@ -60,6 +62,7 @@ fn edits(changes: &[TeletextResourceObjectProgramOverlay]) -> TeletextEditorialE
         object_operands: &[],
         resource_operands: &[],
         resource_programs: changes,
+        resource_additions: &[],
         object_programs: &[],
         bitmaps: &[],
     }

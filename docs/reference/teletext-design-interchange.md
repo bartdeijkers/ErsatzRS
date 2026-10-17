@@ -5746,9 +5746,28 @@ Original responses, settings and authoring metadata remain immutable. Complete
 service reconstruction validates a batch, preserving contextual DRCS selection
 and replacing only matching empty-resource sentinels. Stored additions grant no
 edit, package or publication authority. Generic and legacy replay authority cannot
-authorize them. Native qualification must authenticate the exact new catalogue,
-separate old/new allocations and all inserted-writer effects before saving a
-publishable concept; explicit publication remains a separate operation.
+authorize them.
+
+The native host entrypoint
+`host::teletext_editorial_designs::add_teletext_editorial_resource_definitions`
+accepts a `NativeTeletextResourceDefinitionAddRequest`: concept name, retained
+receipt ID/digest, observed current head and complete typed definitions. Both
+the receipt revision and expected head must equal the current head; an old receipt
+cannot overwrite newer concept edits by supplying their head number. This rule
+belongs to Add and does not change historical TTI import. Only existing retained
+native POP/GPOP resource assets authorize new unused IDs. Uploaded TTI and sidecar
+content cannot infer an Add or grant broader authority.
+
+Native qualification authenticates the exact appended catalogue, separately
+encodes old/new resource allocations and checks inserted-writer ancestry through
+nested calls and all protected consumers. The existing work admission retains
+ownership through caller cancellation, and concept save uses the existing head
+CAS. Fresh exports expose the added definition; later body edits fold into that
+complete root addition, preserving other edits and exact originals. This saves an
+unpublished concept. Preview, explicit publication and reopen use the existing
+shared model. It does not modify packages, profiles or pending/accepted pointers.
+The admin Add action and actual pinned-editor proof for a new definition remain
+open under P9A-04; this native API is not full workflow acceptance.
 
 ### Original resource context companions
 

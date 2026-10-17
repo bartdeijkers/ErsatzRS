@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, BTreeSet};
 mod object_operands;
 #[path = "repeat/object_programs.rs"]
 mod object_programs;
+#[path = "repeat/resource_additions.rs"]
+mod resource_additions;
 #[path = "repeat/resource_operands.rs"]
 mod resource_operands;
 #[path = "repeat/resource_programs.rs"]
@@ -43,7 +45,7 @@ struct PreparedImport {
     files: Vec<TeletextExportFile>,
 }
 
-fn provenance(baseline: &EditorialBaseline) -> TeletextSavedEditorialProvenance {
+pub(super) fn provenance(baseline: &EditorialBaseline) -> TeletextSavedEditorialProvenance {
     TeletextSavedEditorialProvenance {
         export_receipt_id: baseline.receipt.metadata.id,
         export_receipt_digest: baseline.receipt.metadata.digest.clone(),
@@ -53,7 +55,7 @@ fn provenance(baseline: &EditorialBaseline) -> TeletextSavedEditorialProvenance 
     }
 }
 
-async fn read_root(
+pub(super) async fn read_root(
     application: &ApplicationServices,
     latest: &EditorialBaseline,
     policy: &NativeTeletextExportPolicy,
@@ -105,7 +107,7 @@ fn addresses(body: &TeletextExportReceiptBody) -> Result<Vec<TeletextPageAddress
         .collect()
 }
 
-fn qualify_latest(
+pub(super) fn qualify_latest(
     latest: EditorialBaseline,
     root: &QualifiedBaseline,
     policy: &NativeTeletextExportPolicy,
@@ -128,15 +130,8 @@ fn qualify_latest(
     if expected.bytes() != latest.original.document {
         return Err(NativeTeletextEditorialImportError::Association);
     }
-    let previous = TeletextEditorialChanges {
-        resource_operands: overlay.resource_object_operands().to_vec(),
-        resource_programs: overlay.resource_object_program_overlays().to_vec(),
-        rows: overlay.pages().to_vec(),
-        operands: overlay.local_program_operands().to_vec(),
-        object_operands: overlay.local_object_operands().to_vec(),
-        object_programs: overlay.local_object_glyph_program_overlays().to_vec(),
-        bitmaps: overlay.drcs_bitmap_overlays().to_vec(),
-    };
+    let previous = from_overlay(overlay);
+
     let original_document = latest.original.document.clone();
     let original = qualify_rows(
         latest.original,
@@ -167,6 +162,20 @@ fn qualify_latest(
         },
         previous,
     ))
+}
+
+/// Borrowed getter restoration preserves the root-relative stored addition role.
+pub(super) fn from_overlay(overlay: &TeletextSavedEditorialOverlay) -> TeletextEditorialChanges {
+    TeletextEditorialChanges {
+        resource_additions: overlay.resource_object_definition_additions().to_vec(),
+        resource_operands: overlay.resource_object_operands().to_vec(),
+        resource_programs: overlay.resource_object_program_overlays().to_vec(),
+        rows: overlay.pages().to_vec(),
+        operands: overlay.local_program_operands().to_vec(),
+        object_operands: overlay.local_object_operands().to_vec(),
+        object_programs: overlay.local_object_glyph_program_overlays().to_vec(),
+        bitmaps: overlay.drcs_bitmap_overlays().to_vec(),
+    }
 }
 
 fn merge_rows(
@@ -460,16 +469,23 @@ fn check_operand_budget(
             p.retained_commands().len(),
         ]
     });
+    let addition_work = changes
+        .resource_additions
+        .iter()
+        .flat_map(|addition| [1, addition.definition().program.commands().len()]);
     let program_work = local_work
         .chain(resource_work)
         .flatten()
+        .chain(addition_work)
         .try_fold(0usize, usize::checked_add);
     if program_work.is_none_or(|count| count > budget.max_structure_items)
         || changes
             .object_programs
             .len()
             .checked_add(changes.resource_programs.len())
+            .and_then(|count| count.checked_add(changes.resource_additions.len()))
             .is_none_or(|n| n > budget.max_records)
+        || changes.resource_additions.len() > budget.max_objects
     {
         return Err(NativeTeletextEditorialImportError::Budget);
     }
@@ -478,6 +494,14 @@ fn check_operand_budget(
         .len()
         .checked_add(changes.object_operands.len())
         .and_then(|count| count.checked_add(changes.resource_operands.len()))
+        .and_then(|count| {
+            changes
+                .resource_additions
+                .iter()
+                .try_fold(count, |count, addition| {
+                    count.checked_add(addition.definition().program.commands().len())
+                })
+        })
         .is_none_or(|count| count > budget.max_commands || count > budget.max_structure_items)
     {
         return Err(NativeTeletextEditorialImportError::Budget);
@@ -535,17 +559,34 @@ fn merge_changes(
         deadline,
     )?;
     let budget = policy.document.validation.service;
-    let (resource_operands, resource_programs) =
-        if previous.resource_programs.is_empty() && incoming.resource_programs.is_empty() {
-            (
-                resource_operands::merge(
-                    &previous.resource_operands,
-                    &incoming.resource_operands,
-                    budget,
-                    deadline,
-                )?,
-                Vec::new(),
-            )
+    if !incoming.resource_additions.is_empty() {
+        return Err(NativeTeletextEditorialImportError::Association);
+    }
+    let (resource_operands, resource_programs, resource_additions) =
+        if previous.resource_additions.is_empty() {
+            let (operands, programs) =
+                if previous.resource_programs.is_empty() && incoming.resource_programs.is_empty() {
+                    (
+                        resource_operands::merge(
+                            &previous.resource_operands,
+                            &incoming.resource_operands,
+                            budget,
+                            deadline,
+                        )?,
+                        Vec::new(),
+                    )
+                } else {
+                    let catalog = root
+                        .original
+                        .view()
+                        .encoded()
+                        .ok_or(NativeTeletextEditorialImportError::Association)?
+                        .declared()
+                        .semantic()
+                        .objects();
+                    resource_programs::merge(catalog, previous, incoming, budget, deadline)?
+                };
+            (operands, programs, Vec::new())
         } else {
             let catalog = root
                 .original
@@ -555,9 +596,10 @@ fn merge_changes(
                 .declared()
                 .semantic()
                 .objects();
-            resource_programs::merge(catalog, previous, incoming, budget, deadline)?
+            resource_additions::merge(catalog, previous, incoming, budget, deadline)?
         };
     Ok(TeletextEditorialChanges {
+        resource_additions,
         resource_operands,
         resource_programs,
         rows: merge_rows(&previous.rows, &incoming.rows, policy, deadline)?,
@@ -606,6 +648,7 @@ fn prepare(
                 )?,
                 None,
                 TeletextEditorialChanges {
+                    resource_additions: Vec::new(),
                     resource_operands: Vec::new(),
                     resource_programs: Vec::new(),
                     rows: Vec::new(),
@@ -708,15 +751,13 @@ fn glyph_family_flags(changes: &TeletextEditorialChanges) -> (bool, bool, bool) 
         )
 }
 
-fn has_flash_charset(prepared: &PreparedImport) -> bool {
-    prepared
-        .cumulative
+fn has_flash_charset(changes: &TeletextEditorialChanges) -> bool {
+    changes
         .operands
         .iter()
         .map(|operand| operand.expected())
         .chain(
-            prepared
-                .cumulative
+            changes
                 .object_operands
                 .iter()
                 .map(|operand| operand.expected()),
@@ -730,8 +771,8 @@ fn has_flash_charset(prepared: &PreparedImport) -> bool {
         })
 }
 
-fn has_object_attributes(prepared: &PreparedImport) -> bool {
-    prepared.cumulative.object_operands.iter().any(|operand| {
+fn has_object_attributes(changes: &TeletextEditorialChanges) -> bool {
+    changes.object_operands.iter().any(|operand| {
         matches!(
             operand.expected(),
             TeletextColumnOperation::Foreground { .. }
@@ -741,57 +782,60 @@ fn has_object_attributes(prepared: &PreparedImport) -> bool {
     })
 }
 
-fn program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
-    if prepared
-        .cumulative
+fn program_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    if changes
         .object_programs
         .iter()
         .any(|program| !program.is_all_glyphs_compatible())
     {
         TeletextSavedEditorialOverlay::new_with_local_object_style_programs(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
-            prepared.cumulative.object_programs.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
+            changes.object_programs.clone(),
         )
         .map_err(Into::into)
-    } else if prepared
-        .cumulative
+    } else if changes
         .object_programs
         .iter()
         .any(|program| !program.is_legacy_compatible())
     {
         TeletextSavedEditorialOverlay::new_with_all_local_object_glyph_programs(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
-            prepared.cumulative.object_programs.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
+            changes.object_programs.clone(),
         )
         .map_err(Into::into)
     } else {
         TeletextSavedEditorialOverlay::new_with_local_object_glyph_programs(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
-            prepared.cumulative.object_programs.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
+            changes.object_programs.clone(),
         )
         .map_err(Into::into)
     }
 }
 
-fn resource_program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
-    let constructor = if prepared.cumulative.resource_programs.iter().any(
+fn resource_program_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    let constructor = if changes.resource_programs.iter().any(
         ersatzrs_domain::TeletextResourceObjectProgramOverlay::has_invocation_structure_changes,
     ) {
         TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays
-    } else if prepared
-        .cumulative
+    } else if changes
         .resource_programs
         .iter()
         .any(ersatzrs_domain::TeletextResourceObjectProgramOverlay::has_invocation_changes)
@@ -801,116 +845,145 @@ fn resource_program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEd
         TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays
     };
     constructor(
-        prepared.provenance.clone(),
-        prepared.cumulative.rows.clone(),
-        prepared.cumulative.operands.clone(),
-        prepared.cumulative.object_operands.clone(),
-        prepared.cumulative.bitmaps.clone(),
-        prepared.cumulative.object_programs.clone(),
+        provenance.clone(),
+        changes.rows.clone(),
+        changes.operands.clone(),
+        changes.object_operands.clone(),
+        changes.bitmaps.clone(),
+        changes.object_programs.clone(),
         (
-            prepared.cumulative.resource_operands.clone(),
-            prepared.cumulative.resource_programs.clone(),
+            changes.resource_operands.clone(),
+            changes.resource_programs.clone(),
         ),
     )
     .map_err(Into::into)
 }
 
-fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
-    let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
+pub(super) fn cumulative_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    if changes.rows.is_empty()
+        && changes.operands.is_empty()
+        && changes.object_operands.is_empty()
+        && changes.resource_operands.is_empty()
+        && changes.resource_programs.is_empty()
+        && changes.object_programs.is_empty()
+        && changes.bitmaps.is_empty()
+        && !changes.resource_additions.is_empty()
+    {
+        return TeletextSavedEditorialOverlay::new_with_resource_object_definition_additions(
+            provenance.clone(),
+            changes.resource_additions.clone(),
+        )
+        .map_err(Into::into);
+    }
+    let overlay = body_overlay(provenance, changes)?;
+    if changes.resource_additions.is_empty() {
+        Ok(overlay)
+    } else {
+        overlay
+            .with_resource_object_definition_additions(changes.resource_additions.clone())
+            .map_err(Into::into)
+    }
+}
+
+fn body_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    let has_glyphs = changes.operands.iter().any(|operand| {
         matches!(
             operand.expected(),
             TeletextColumnOperation::G0 { .. } | TeletextColumnOperation::G1 { .. }
         )
     });
     let (has_drcs_references, has_remaining_glyphs, has_extended_glyphs) =
-        glyph_family_flags(&prepared.cumulative);
-    let overlay = if !prepared.cumulative.resource_programs.is_empty() {
-        resource_program_overlay(prepared)?
-    } else if !prepared.cumulative.resource_operands.is_empty() {
+        glyph_family_flags(changes);
+    let overlay = if !changes.resource_programs.is_empty() {
+        resource_program_overlay(provenance, changes)?
+    } else if !changes.resource_operands.is_empty() {
         TeletextSavedEditorialOverlay::new_with_resource_object_operands(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
-            prepared.cumulative.object_programs.clone(),
-            prepared.cumulative.resource_operands.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
+            changes.object_programs.clone(),
+            changes.resource_operands.clone(),
         )?
-    } else if !prepared.cumulative.object_programs.is_empty() {
-        program_overlay(prepared)?
-    } else if prepared.cumulative.has_drcs_selection(None) {
+    } else if !changes.object_programs.is_empty() {
+        program_overlay(provenance, changes)?
+    } else if changes.has_drcs_selection(None) {
         TeletextSavedEditorialOverlay::new_with_drcs_reference_selections(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
         )?
-    } else if has_flash_charset(prepared) {
+    } else if has_flash_charset(changes) {
         TeletextSavedEditorialOverlay::new_with_flash_charset_operands(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
         )?
     } else if has_drcs_references {
         TeletextSavedEditorialOverlay::new_with_drcs_reference_slots(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
         )?
     } else if has_remaining_glyphs {
         TeletextSavedEditorialOverlay::new_with_remaining_glyph_operands(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
         )?
     } else if has_extended_glyphs {
         TeletextSavedEditorialOverlay::new_with_extended_glyph_operands(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
         )?
-    } else if has_object_attributes(prepared) {
+    } else if has_object_attributes(changes) {
         TeletextSavedEditorialOverlay::new_with_local_object_attributes(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
         )?
-    } else if !prepared.cumulative.object_operands.is_empty() || has_glyphs {
+    } else if !changes.object_operands.is_empty() || has_glyphs {
         TeletextSavedEditorialOverlay::new_with_local_object_operands(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.object_operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.object_operands.clone(),
+            changes.bitmaps.clone(),
         )?
-    } else if !prepared.cumulative.bitmaps.is_empty() {
+    } else if !changes.bitmaps.is_empty() {
         TeletextSavedEditorialOverlay::new_with_drcs_bitmap_overlays(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
-            prepared.cumulative.bitmaps.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
+            changes.bitmaps.clone(),
         )?
-    } else if prepared.cumulative.operands.is_empty() {
-        TeletextSavedEditorialOverlay::new(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-        )?
+    } else if changes.operands.is_empty() {
+        TeletextSavedEditorialOverlay::new(provenance.clone(), changes.rows.clone())?
     } else {
         TeletextSavedEditorialOverlay::new_with_local_program_operands(
-            prepared.provenance.clone(),
-            prepared.cumulative.rows.clone(),
-            prepared.cumulative.operands.clone(),
+            provenance.clone(),
+            changes.rows.clone(),
+            changes.operands.clone(),
         )?
     };
     Ok(overlay)
@@ -922,6 +995,7 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
         && prepared.cumulative.object_operands.is_empty()
         && prepared.cumulative.resource_operands.is_empty()
         && prepared.cumulative.resource_programs.is_empty()
+        && prepared.cumulative.resource_additions.is_empty()
         && prepared.cumulative.object_programs.is_empty()
         && prepared.cumulative.bitmaps.is_empty()
     {
@@ -947,7 +1021,7 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
             _ => return Err(NativeTeletextEditorialImportError::Association),
         }
     } else {
-        let overlay = cumulative_overlay(prepared)?;
+        let overlay = cumulative_overlay(&prepared.provenance, &prepared.cumulative)?;
         append_overlay(
             prepared.root.original.view().document_version(),
             &prepared.root.original_document,
@@ -1004,6 +1078,7 @@ fn make_document(
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
         TeletextEditorialEdits {
+            resource_additions: &prepared.incoming.resource_additions,
             resource_operands: &prepared.incoming.resource_operands,
             resource_programs: &prepared.incoming.resource_programs,
             rows: &prepared.incoming.rows,
@@ -1013,6 +1088,7 @@ fn make_document(
             bitmaps: &prepared.incoming.bitmaps,
         },
         TeletextEditorialEdits {
+            resource_additions: &prepared.cumulative.resource_additions,
             resource_operands: &prepared.cumulative.resource_operands,
             resource_programs: &prepared.cumulative.resource_programs,
             rows: &prepared.cumulative.rows,
