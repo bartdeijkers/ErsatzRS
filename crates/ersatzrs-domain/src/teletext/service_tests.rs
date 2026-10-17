@@ -1363,3 +1363,6 @@ mod drcs_bitmap_overlay_tests;
 
 #[path = "local_object_operand_overlay_tests.rs"]
 mod local_object_operand_overlay_tests;
+
+#[path = "local_object_glyph_program_tests.rs"]
+mod local_object_glyph_program_tests;

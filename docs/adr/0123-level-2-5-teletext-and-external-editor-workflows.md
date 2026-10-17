@@ -215,6 +215,20 @@ resource interchange remain required under P9A-04, not accepted restrictions.
 Publication stays explicit; this private format changes neither the addon contract
 nor external editor carrier and does not establish complete engine acceptance.
 
+Structural preparation now has a separate exact-original Local G0/G1 program
+transformation. It binds the full Local identity, expected/replacement typed
+programs and an explicit replacement-to-original command map. Retained ordinals
+increase strictly; every non-G0/G1 command survives exactly, keeping position,
+context, attributes, calls and resources protected. Only G0/G1 commands may be
+inserted/deleted or retain their family while changing code/column. Each program
+and map has a 208-command bound, followed by original/input/result service budgets
+and complete dependency reconstruction; final X26 packing remains mandatory.
+This map records checked correspondence, not inferred editor history or edit
+authority. Host integration must authenticate original provenance and compare all
+protected consumers with the correct before/after lineage. Existing private
+concept versions1–10 and fixed-topology import remain unchanged; persistence,
+repeat composition and actual structural editor import still require qualification.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

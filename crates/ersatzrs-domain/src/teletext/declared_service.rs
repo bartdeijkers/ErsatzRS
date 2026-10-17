@@ -244,6 +244,22 @@ impl TeletextDeclaredService {
             .with_local_object_operand_overlays(overlays, budget)?;
         Ok(self)
     }
+    /// Replace checked Local glyph programs while retaining all authenticated
+    /// declarations, selections, identities, defaults and resource inventory.
+    /// Hosts must qualify compiler correspondence and every shared consumer;
+    /// this does not grant edit permission or publish the result.
+    /// # Errors
+    /// Rejects empty, duplicate, absent or stale targets and service/dependency overflow.
+    pub fn with_local_object_glyph_program_overlays(
+        mut self,
+        overlays: &[super::TeletextLocalObjectGlyphProgramOverlay],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self
+            .semantic
+            .with_local_object_glyph_program_overlays(overlays, budget)?;
+        Ok(self)
+    }
     /// Replace exact existing DRCS bitmaps while preserving authenticated MOT,
     /// inventory, defaults and display selections. No edit or publish permission
     /// is granted; shared effects still require full host compilation checks.

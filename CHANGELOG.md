@@ -44,6 +44,10 @@ release section when tagging a release.
   shared preview and reopen.
   Prohibited G2/G3 positions remain refused without changing publication; full
   editor/Level 2.5 acceptance is open.
+  The shared native model now checks exact-original Local G0/G1 insertion,
+  deletion and column changes with bounded survivor correspondence, protected
+  command anchors and full service reconstruction. Structural concept import
+  and its editor workflow remain open.
 - Import existing local teletext colour/attribute edits into versioned concepts,
   with exact command correspondence, complete native validation and protected-zone
   checks. Repeated edits, previews and reload preserve original documents and

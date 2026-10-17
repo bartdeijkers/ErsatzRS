@@ -31,6 +31,9 @@ pub use drcs_extension::*;
 #[path = "local_object_operand_service.rs"]
 mod local_object_operands;
 
+#[path = "local_object_glyph_program_service.rs"]
+mod local_object_glyph_programs;
+
 /// Explicitly resolved public/global object links, not MOT or X27 declarations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextResolvedObjectPageLinks {
@@ -212,6 +215,13 @@ pub enum TeletextServiceError {
         identity: TeletextObjectIdentity,
         command: usize,
         reason: super::TeletextLocalObjectOperandFailure,
+    },
+    #[error("teletext Local glyph program changes must not be empty")]
+    EmptyLocalObjectGlyphProgramOverlays,
+    #[error("teletext Local glyph program {identity:?}: {reason}")]
+    LocalObjectGlyphProgramOverlay {
+        identity: TeletextObjectIdentity,
+        reason: super::TeletextLocalObjectGlyphProgramFailure,
     },
     #[error("teletext physical base overlay owner {address:?} is absent or repeated (duplicate={duplicate})")]
     PhysicalBaseOverlayOwner {

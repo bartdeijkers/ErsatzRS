@@ -735,3 +735,6 @@ fn local_definition_resource_calls_preserve_scope_and_validate_display_links() {
         );
     }
 }
+
+#[path = "local_object_glyph_program_encoding_tests.rs"]
+mod glyph_program_overlays;
