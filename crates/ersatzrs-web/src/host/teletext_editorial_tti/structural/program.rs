@@ -174,7 +174,11 @@ fn cluster_command(
     ordinal: usize,
     location: Location,
 ) -> Result<bool> {
-    let command = &definition.program.commands()[ordinal];
+    let command = definition
+        .program
+        .commands()
+        .get(ordinal)
+        .ok_or_else(|| fail(location))?;
     let count = program
         .command_positions()
         .iter()
@@ -183,12 +187,13 @@ fn cluster_command(
                 && position.source().command == ordinal
         })
         .count();
-    if count > 1 || (count == 0 && !alignment::hidden_identity(command)) {
+    let hidden = alignment::hidden_position(command).is_some();
+    if (hidden && count != 0) || (!hidden && count != 1) {
         return Err(fail(location));
     }
-    // Only a sealed absent span authenticates an invisible original identity.
+    // Only a sealed absent span authenticates an invisible original position.
     // Every other nonglyph retains its exact physical anchor/span handling.
-    Ok(glyph_family(command).is_some() || (count == 0 && alignment::hidden_identity(command)))
+    Ok(glyph_family(command).is_some() || hidden)
 }
 fn original_spans(
     definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
@@ -274,7 +279,7 @@ fn anchor(
 
 #[cfg(test)]
 mod bounds_tests {
-    use super::{check_rebuilt_count, Location};
+    use super::{check_rebuilt_count, cluster_command, Location};
     use ersatzrs_domain::{
         TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
         TeletextEnhancementPosition,
@@ -314,5 +319,80 @@ mod bounds_tests {
         assert!(check_rebuilt_count(&original, &actual, location).is_err());
         actual.pop();
         assert!(check_rebuilt_count(&original, &actual, location).is_ok());
+    }
+
+    fn compiled_position(
+        row: u8,
+    ) -> (
+        ersatzrs_domain::TeletextEnhancementObjectDefinition,
+        ersatzrs_ffmpeg::teletext::EncodedTeletextLocalObjectProgram,
+    ) {
+        use ersatzrs_domain::{
+            TeletextEnhancementObjectCatalog, TeletextEnhancementObjectDefinition,
+            TeletextEnhancementProgram, TeletextGlyphCode, TeletextObjectCatalogBudget,
+            TeletextObjectId, TeletextObjectIdentity, TeletextObjectType, TeletextPageAddress,
+            TeletextPageNumber, TeletextResolvedObjectPageLinks, TeletextSubcode,
+        };
+        use ersatzrs_ffmpeg::teletext::{
+            allocate_teletext_resource_objects, compile_teletext_local_program_with_objects,
+        };
+        let owner = TeletextPageAddress {
+            page: TeletextPageNumber::new(124).unwrap(),
+            subcode: TeletextSubcode::new(32).unwrap(),
+        };
+        let budget = TeletextObjectCatalogBudget {
+            max_objects: 4,
+            max_commands: 208,
+        };
+        let definition = TeletextEnhancementObjectDefinition {
+            identity: TeletextObjectIdentity::local(owner, TeletextObjectId::new(65520)),
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![
+                TeletextEnhancementCommand::SetPosition {
+                    position: TeletextEnhancementPosition::new(row, 8).unwrap(),
+                },
+                TeletextEnhancementCommand::AtColumn {
+                    column: 8,
+                    operation: TeletextColumnOperation::G0 {
+                        code: TeletextGlyphCode::new(b'A').unwrap(),
+                    },
+                },
+            ])
+            .unwrap(),
+        };
+        let catalog =
+            TeletextEnhancementObjectCatalog::new(vec![definition.clone()], budget).unwrap();
+        let allocations = allocate_teletext_resource_objects(&catalog, &[], 4).unwrap();
+        let encoded = compile_teletext_local_program_with_objects(
+            owner,
+            &TeletextEnhancementProgram::new(vec![]).unwrap(),
+            &catalog,
+            &allocations,
+            TeletextResolvedObjectPageLinks {
+                public: None,
+                global: None,
+            },
+            budget,
+        )
+        .unwrap();
+        (definition, encoded)
+    }
+
+    #[test]
+    fn hidden_position_requires_exact_absent_original_span_and_bounded_source() {
+        let (hidden, zero_span) = compiled_position(0);
+        let (physical, real_span) = compiled_position(1);
+        let location = Location {
+            page: 124,
+            subcode: 32,
+            resource: None,
+        };
+        assert!(cluster_command(&hidden, &zero_span, 0, location).unwrap());
+        assert!(cluster_command(&hidden, &zero_span, 1, location).unwrap());
+        // Both encodings are genuine and share identity/ordinal. A different
+        // original's physical position must not authenticate an invisible one.
+        assert!(cluster_command(&hidden, &real_span, 0, location).is_err());
+        assert!(cluster_command(&physical, &zero_span, 0, location).is_err());
+        assert!(cluster_command(&hidden, &zero_span, usize::MAX, location).is_err());
     }
 }

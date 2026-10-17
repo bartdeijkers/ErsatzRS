@@ -13,6 +13,9 @@ use serde_json::{json, Value};
 #[path = "editorial_all_glyph_structure.rs"]
 mod all_glyph_structure;
 
+#[path = "editorial_local_glyph_structure/forward_anchor.rs"]
+mod forward_anchor;
+
 #[derive(Clone, Copy)]
 enum Permission {
     Free,
@@ -337,6 +340,15 @@ fn request_words(
     from: u8,
     replacement: Vec<u32>,
 ) -> NativeTeletextEditorialImportRequest {
+    request_body_words(receipt, head, service, &glyph_words(from), replacement)
+}
+fn request_body_words(
+    receipt: &TeletextDesignExportReceipt,
+    head: i64,
+    service: &EncodedTeletextAuthoredService,
+    original_body: &[u32],
+    replacement: Vec<u32>,
+) -> NativeTeletextEditorialImportRequest {
     let mut request = drcs_bitmap::from_receipt(receipt, head);
     "Synthetic Local glyph structure".clone_into(&mut request.name);
     let name = page_name(&request);
@@ -346,7 +358,7 @@ fn request_words(
     let [target, following] = definitions(service);
     assert_eq!(words[target], marker(target));
     assert_eq!(words[following], marker(following));
-    assert_eq!(&words[target + 1..following], glyph_words(from));
+    assert_eq!(&words[target + 1..following], original_body);
     let end = words.iter().position(|w| *w == word(63, 31, 5)).unwrap();
     words.truncate(end + 1);
     let moved = target + 1 + replacement.len();

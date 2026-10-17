@@ -731,10 +731,11 @@ release section when tagging a release.
   defer forward relative positions until a real column operation, preserving
   original source ordinals and pointer allocation. Uncertain cross-object context,
   unmaterialized calls and backward addressing retain validation errors.
-- Preserve original implicit AP00 teletext position anchors during structural
-  editor imports, keeping glyph provenance and shared-consumer protection intact.
-  Valid imports no longer fail because a hidden anchor moves past an edited glyph;
-  existing position-order, row-zero and command-capacity checks remain enforced.
+- Preserve original unencoded AP00 and forward row-zero teletext position anchors
+  during structural editor imports. Authenticate their original zero-word spans,
+  retain glyph correspondence across insertions/deletions and enforce shared
+  Free/Zone permissions. Concepts, re-export and undo keep original sources and
+  broadcast state intact; position-order, deadline and capacity checks remain.
 - Preserve original POP-fallback side panels and background substitution in
   standalone QTeletextMaker exports through an explicit versioned editor view.
   Receipt-bound import protects that presentation while keeping native X28/M29

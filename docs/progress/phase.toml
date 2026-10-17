@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: Local object forward anchors in TTI import'
+current_focus = 'P9A-04: Local attribute command topology'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -376,11 +376,16 @@ three types and Local/POP/GPOP; original sources, pointers, caller AP/A8 and
 fallback remain exact. Existing quota/capacity/backwards/nested-call guards pass.
 The earlier body→header same-program reset hypothesis violates AnnexA4; retain
 that refusal. Reuse prior native/editor/ordinary/client proof in its input scope.
-Next reproduce structural Local TTI import with an invisible AP(0,8) anchor:
-structural/program.rs currently accepts absent AP00 only. Preserve that original
-anchor and shared-consumer permissions through insert/delete/reposition and
-concept/shared preview. Nested unmaterialized calls, resource/default/repertoire,
-metadata/template/dynamic-field/set/client and full acceptance remain required.
+Structural Local TTI now preserves sealed zero-word forward anchors, exact source
+correspondence and shared Zone boundaries through grow/shrink/reposition/undo,
+concept preview and two reopens. P9A-04 owns66 passing host/native checks, including
+old AP00 and publication regressions. Encoder909/decoder11 evidence stays valid.
+Actual four-Romanian and three-English multi-display QTM flows already pass;
+reuse their canonical receipts. Next reproduce native insertion of a new
+foreground/background/attribute command in an original Local glyph definition,
+then extend only that bounded Free/Zone topology with shared-consumer checks. Full resource/object, metadata/templates/
+dynamic fields, authoredLevel2.5, Lua/restart/admin and playback/platform/client
+acceptance remains open; no permanent restriction is accepted.
 Production content waits for independent generic acceptance.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.

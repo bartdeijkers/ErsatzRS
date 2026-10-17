@@ -1,5 +1,5 @@
-//! Mandatory invisible AP identities share the bounded glyph correspondence DP.
-use super::{fail, glyph_family, hidden_identity, weight, Aligned, Location, Result};
+//! Mandatory invisible positions share the bounded glyph correspondence DP.
+use super::{fail, glyph_family, hidden_position, weight, Aligned, Location, Result};
 use ersatzrs_domain::TeletextEnhancementCommand;
 use std::time::Instant;
 
@@ -12,13 +12,13 @@ pub(super) fn solve(
     location.check_deadline(deadline)?;
     if old.len() > 208
         || new.len() > 208
-        || old
-            .iter()
-            .any(|(_, command)| glyph_family(command).is_none() && !hidden_identity(command))
+        || old.iter().any(|(_, command)| {
+            glyph_family(command).is_none() && hidden_position(command).is_none()
+        })
         || new.iter().any(|command| glyph_family(command).is_none())
         || old
             .iter()
-            .filter(|(_, command)| hidden_identity(command))
+            .filter(|(_, command)| hidden_position(command).is_some())
             .count()
             .checked_add(new.len())
             .is_none_or(|count| count > 208)
@@ -43,8 +43,8 @@ pub(super) fn solve(
             };
             if i != 0 {
                 let before = &old[i - 1].1;
-                if hidden_identity(before) {
-                    if at_zero(new, j) {
+                if hidden_position(before).is_some() {
+                    if at_anchor(before, new, j) {
                         score = score.max(scores[(i - 1) * width + j]);
                     }
                 } else {
@@ -64,12 +64,28 @@ pub(super) fn solve(
     trace(old, new, &scores, location, deadline)
 }
 
-fn at_zero(new: &[TeletextEnhancementCommand], boundary: usize) -> bool {
-    boundary == 0
-        || matches!(
-            new[boundary - 1],
-            TeletextEnhancementCommand::AtColumn { column: 0, .. }
-        )
+fn at_anchor(
+    anchor: &TeletextEnhancementCommand,
+    new: &[TeletextEnhancementCommand],
+    boundary: usize,
+) -> bool {
+    let Some(column) = hidden_position(anchor) else {
+        return false;
+    };
+    if boundary > new.len() {
+        return false;
+    }
+    let previous = boundary.checked_sub(1).and_then(|index| new.get(index));
+    let next = new.get(boundary);
+    // The original anchor changes no field and cannot be dropped or moved
+    // past a glyph that would make its retained AP transition go backwards.
+    previous.is_none_or(|command| {
+        matches!(command,
+        TeletextEnhancementCommand::AtColumn { column: previous, .. } if *previous <= column)
+    }) && next.is_none_or(|command| {
+        matches!(command,
+            TeletextEnhancementCommand::AtColumn { column: next, .. } if column <= *next)
+    })
 }
 
 fn trace(
@@ -88,7 +104,7 @@ fn trace(
     while i != 0 || j != 0 {
         location.check_deadline(deadline)?;
         let score = scores[i * width + j].ok_or_else(|| fail(location))?;
-        let hidden = i != 0 && hidden_identity(&old[i - 1].1);
+        let hidden = i != 0 && hidden_position(&old[i - 1].1).is_some();
         let matched = if i != 0 && j != 0 && !hidden {
             let weight = weight(&old[i - 1].1, &new[j - 1]);
             weight != 0
@@ -103,13 +119,13 @@ fn trace(
             j -= 1;
         } else if j != 0 && scores[i * width + j - 1] == Some(score) {
             // Prefer insertion over a tied hidden transition. Backtracking
-            // therefore places that identity at the earliest AP00 boundary.
+            // therefore places that position at its earliest ordered boundary.
             result.commands.push(new[j - 1]);
             result.retained.push(None);
             j -= 1;
         } else if i != 0
             && scores[(i - 1) * width + j] == Some(score)
-            && (!hidden || at_zero(new, j))
+            && (!hidden || at_anchor(&old[i - 1].1, new, j))
         {
             if hidden {
                 result.commands.push(old[i - 1].1);

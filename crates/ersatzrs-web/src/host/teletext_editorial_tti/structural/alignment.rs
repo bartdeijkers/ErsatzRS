@@ -43,9 +43,15 @@ pub(super) fn with_anchors(
     kernel::solve(old, new, location, deadline)
 }
 
-pub(super) fn hidden_identity(command: &TeletextEnhancementCommand) -> bool {
-    matches!(command, TeletextEnhancementCommand::SetPosition { position }
-        if position.row() == 0 && position.column() == 0)
+/// A possible invisible position; only the sealed baseline's absent physical
+/// span can authenticate it as an anchor in the parser.
+pub(super) fn hidden_position(command: &TeletextEnhancementCommand) -> Option<u8> {
+    match command {
+        TeletextEnhancementCommand::SetPosition { position } if position.row() == 0 => {
+            Some(position.column())
+        }
+        _ => None,
+    }
 }
 
 fn weight(old: &TeletextEnhancementCommand, new: &TeletextEnhancementCommand) -> usize {
