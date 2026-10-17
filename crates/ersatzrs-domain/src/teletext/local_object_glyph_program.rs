@@ -12,6 +12,7 @@ enum GlyphPolicy {
     Legacy,
     All,
     StyleCommands,
+    InvocationChanges,
 }
 
 /// Rejected structural intent, without retaining authored content in diagnostics.
@@ -232,6 +233,19 @@ pub(super) fn validate_style_correspondence(
     validate_correspondence(expected, replacement, retained, GlyphPolicy::StyleCommands)
 }
 
+pub(super) fn validate_invocation_correspondence(
+    expected: &TeletextEnhancementProgram,
+    replacement: &TeletextEnhancementProgram,
+    retained: &[Option<usize>],
+) -> Result<(), TeletextLocalObjectGlyphProgramOverlayError> {
+    validate_correspondence(
+        expected,
+        replacement,
+        retained,
+        GlyphPolicy::InvocationChanges,
+    )
+}
+
 fn validate_correspondence(
     expected: &TeletextEnhancementProgram,
     replacement: &TeletextEnhancementProgram,
@@ -263,6 +277,15 @@ fn validate_correspondence(
         match (glyph_family(before, policy), glyph_family(command, policy)) {
             (Some(before), Some(after)) if before == after => {}
             (None, None) if before == command => {}
+            (None, None)
+                if matches!(policy, GlyphPolicy::InvocationChanges)
+                    && matches!(
+                        (before, command),
+                        (
+                            TeletextEnhancementCommand::InvokeObject { .. },
+                            TeletextEnhancementCommand::InvokeObject { .. }
+                        )
+                    ) => {}
             _ => return Err(Error::ProtectedCommand),
         }
         next_original = ordinal + 1;
@@ -281,7 +304,7 @@ fn editable(command: &TeletextEnhancementCommand, policy: GlyphPolicy) -> bool {
         || matches!(
             (policy, command),
             (
-                GlyphPolicy::StyleCommands,
+                GlyphPolicy::StyleCommands | GlyphPolicy::InvocationChanges,
                 TeletextEnhancementCommand::AtColumn {
                     operation: TeletextColumnOperation::Foreground { .. }
                         | TeletextColumnOperation::Background { .. }

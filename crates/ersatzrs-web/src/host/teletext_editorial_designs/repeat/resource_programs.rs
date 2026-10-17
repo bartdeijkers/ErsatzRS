@@ -141,6 +141,10 @@ fn collect(
                     TeletextEnhancementCommand::AtColumn { column: a, .. },
                     TeletextEnhancementCommand::AtColumn { column: b, .. },
                 ) => a != b,
+                (
+                    TeletextEnhancementCommand::InvokeObject { .. },
+                    TeletextEnhancementCommand::InvokeObject { .. },
+                ) => a != b,
                 _ => false,
             });
     let mut operands = Vec::new();
@@ -160,13 +164,35 @@ fn collect(
         let Some(source) = *source else { continue };
         let before = original.commands().get(source).ok_or_else(fail)?;
         if !matches!(before,TeletextEnhancementCommand::AtColumn{operation,..} if operation.glyph_family().is_some())
+            && !matches!(before, TeletextEnhancementCommand::InvokeObject { .. })
         {
             push(identity, source, before, command, &mut operands)?;
             expected[source] = *command;
         }
     }
     let expected = TeletextEnhancementProgram::new(expected).map_err(|_| fail())?;
-    let program = Program::new(
+    let constructor = if replacement
+        .commands()
+        .iter()
+        .zip(retained)
+        .any(|(after, source)| {
+            source
+                .and_then(|ordinal| original.commands().get(ordinal))
+                .is_some_and(|before| {
+                    matches!(
+                        (before, after),
+                        (
+                            TeletextEnhancementCommand::InvokeObject { .. },
+                            TeletextEnhancementCommand::InvokeObject { .. }
+                        )
+                    ) && before != after
+                })
+        }) {
+        Program::new_with_invocation_changes
+    } else {
+        Program::new
+    };
+    let program = constructor(
         identity,
         expected,
         replacement.clone(),

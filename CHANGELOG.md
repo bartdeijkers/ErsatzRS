@@ -28,9 +28,11 @@ release section when tagging a release.
 - Edit original POP/GPOP teletext objects through receipt-bound QTeletextMaker
   companions, including full-capacity command fragments. Private version14 concepts
   retain scalar changes; version15 adds bounded glyph/style insertion, deletion and
-  column changes with root-relative repeat/undo. Complete native reconstruction,
-  exact resource/subpage identities and permissions for every shared consumer
-  protect generated content. Import remains separate from explicit publication;
+  column changes with root-relative repeat/undo. Version16 separately supports
+  retained object-call offsets and existing catalogue target/type changes, with
+  full dependency validation and protected-writer checks even for identical pixels.
+  Complete native reconstruction, exact resource/subpage identities and permissions
+  for every shared consumer protect generated content. Import remains separate from explicit publication;
   earlier receipts and native capacities retain their contracts. Complete dependency
   views, resource/set interchange and full Level2.5 acceptance remain open.
 - Import same-family G0 text, G1 mosaics/alphabetic characters, G2, G3, DRCS references,

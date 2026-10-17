@@ -1,6 +1,9 @@
 //! Reuse the genuine shared Public/Global/S1 service and declared fixture.
 use super::*;
 
+#[path = "resource_object_invocation_program_tests.rs"]
+mod invocations;
+
 fn change_program(global: bool, extra: usize) -> TeletextResourceObjectProgramOverlay {
     let source = input();
     let expected = source.objects[usize::from(global)].program.clone();

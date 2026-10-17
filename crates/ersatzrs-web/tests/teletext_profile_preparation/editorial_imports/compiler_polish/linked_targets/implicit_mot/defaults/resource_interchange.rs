@@ -1,6 +1,8 @@
 //! Receipt-bound POP operands, including fail-closed legacy receipt recovery.
 #[path = "resource_interchange/actual_editor_trial.rs"]
 mod actual_editor_trial;
+#[path = "resource_interchange/calls.rs"]
+mod calls;
 #[path = "resource_interchange/fragments.rs"]
 mod fragments;
 #[path = "resource_interchange/structure.rs"]

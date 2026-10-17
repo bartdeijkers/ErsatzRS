@@ -320,6 +320,20 @@ captured permissions and original writer lineage. New commands cannot impersonat
 original writers. Scalar-before-program composition and survivor correspondence
 retain root-relative repeat/undo; exact undo removes redundant structural intent.
 
+Private version16 distinguishes edits of retained POP/GPOP `InvokeObject`
+commands from version15 glyph/style structure. It reuses the same full program
+and survivor correspondence, with a separate checked constructor requiring an
+actual original call change. Earlier constructors and stored versions retain
+their closed meanings. An imported pointer resolves through the original native
+catalogue; unchanged selectors retain their exact original semantic identity,
+and a changed selector must identify one original full-scope/type allocation.
+Unknown or ambiguous selectors grant no dependency authority. Complete service
+validation still checks every target, type edge, resource selection, collected
+bound and consumer. A moved or retargeted callee and its descendants are new
+writers for protected-effect comparison, even when their pixels are identical.
+This slice does not create/remove calls or definitions; complete topology and
+set editing remain required under the existing interchange acceptance.
+
 Authenticated receipt replay applies all stored intent; generic or legacy replay
 refuses unapplied intent. Import, repeat and undo save concepts without publishing.
 Historical carriers and concept versions1–14 retain their exact original contracts;

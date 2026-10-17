@@ -13,17 +13,17 @@ use ersatzrs_domain::{
 use ersatzrs_ffmpeg::teletext::project_encoded_teletext_object;
 use std::collections::{BTreeMap, BTreeSet};
 
-type Limits = (TeletextTtiBudget, usize, TeletextServiceBudget);
+pub(super) type Limits = (TeletextTtiBudget, usize, TeletextServiceBudget);
 type Files<'a> = &'a [TeletextExportFile];
 
 pub(in crate::host) struct ResourceEdits {
     pub operands: Vec<TeletextResourceObjectOperandOverlay>,
     pub programs: Vec<TeletextResourceObjectProgramOverlay>,
 }
-struct Body {
-    before: Vec<u32>,
-    after: Vec<u32>,
-    spans: Vec<structural::Span>,
+pub(super) struct Body {
+    pub(super) before: Vec<u32>,
+    pub(super) after: Vec<u32>,
+    pub(super) spans: Vec<structural::Span>,
 }
 fn groups<'a>(
     project: &'a TeletextExportProject,
@@ -203,25 +203,29 @@ fn body(
 fn program(
     mapped: &Mapping<'_>,
     body: &Body,
+    original: &EncodedTeletextAuthoredService,
     limits: Limits,
     deadline: Instant,
 ) -> Result<TeletextResourceObjectProgramOverlay> {
-    let rebuilt = structural::parse(
-        mapped.definition,
-        &body.spans,
-        (&body.before, &body.after),
-        limits.2.max_commands,
-        mapped.location,
-        deadline,
-    )?;
-    TeletextResourceObjectProgramOverlay::new(
-        mapped.identity,
-        mapped.definition.program.clone(),
-        rebuilt.replacement,
-        rebuilt.retained,
-        limits.2,
-    )
-    .map_err(|_| mapped.location.error(Failure::Structure))
+    let legacy = (|| {
+        let rebuilt = structural::parse(
+            mapped.definition,
+            &body.spans,
+            (&body.before, &body.after),
+            limits.2.max_commands,
+            mapped.location,
+            deadline,
+        )?;
+        TeletextResourceObjectProgramOverlay::new(
+            mapped.identity,
+            mapped.definition.program.clone(),
+            rebuilt.replacement,
+            rebuilt.retained,
+            limits.2,
+        )
+        .map_err(|_| mapped.location.error(Failure::Structure))
+    })();
+    legacy.or_else(|_| super::invocations::program(mapped, body, original, limits, deadline))
 }
 
 fn scalar_group(
@@ -307,7 +311,7 @@ pub(in crate::host) fn reconcile_project(
             let mapped = mapping(group[0], project, original)?;
             result
                 .programs
-                .push(program(&mapped, &body, limits, deadline)?);
+                .push(program(&mapped, &body, original, limits, deadline)?);
         }
     }
     Ok(result)
@@ -423,14 +427,7 @@ pub(in crate::host) fn validate_applied_project(
             )
             .is_err()
         {
-            let _ = structural::parse(
-                before.definition,
-                &body.spans,
-                (&body.before, &body.after),
-                limits.2.max_commands,
-                before.location,
-                deadline,
-            )?;
+            let _ = program(&before, &body, original, limits, deadline)?;
         }
         let after = mapping_resource(
             group[0],

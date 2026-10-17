@@ -786,7 +786,17 @@ fn program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOv
 }
 
 fn resource_program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
-    TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays(
+    let constructor = if prepared
+        .cumulative
+        .resource_programs
+        .iter()
+        .any(ersatzrs_domain::TeletextResourceObjectProgramOverlay::has_invocation_changes)
+    {
+        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays
+    } else {
+        TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays
+    };
+    constructor(
         prepared.provenance.clone(),
         prepared.cumulative.rows.clone(),
         prepared.cumulative.operands.clone(),

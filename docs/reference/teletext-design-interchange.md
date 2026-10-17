@@ -5673,6 +5673,20 @@ position anchors and hidden original commands cannot be rewritten. Service budge
 bound logical commands before allocation; the native encoder independently enforces
 physical resource capacity. Local's208-word policy does not limit resource programs.
 
+Private version16 separately permits changes to retained original resource-object
+calls: checked offsets (including explicit absence), or an existing target and its
+declared type. Complete program correspondence still forbids inventing or removing
+calls, definitions or protected context anchors. Earlier formats do not gain this
+authority. An unchanged physical selector keeps its exact original full identity;
+a changed selector must resolve uniquely in the original native allocation catalogue.
+Unknown/ambiguous selectors cannot create a dependency through uploaded metadata.
+Complete native validation checks every dependency, resource selection, type edge,
+bound and shared consumer. Changed call subtrees are new writers when comparing
+Generated content, even if the resulting pixels happen to match. Root-relative
+repeat/undo and explicit publication use the existing paths. This is partial call
+interchange; complete resource/set topology and the mandatory actual editor/client
+evidence remain tracked in P9A-04.
+
 Upload the complete unchanged sidecar and named file set. Whole companion groups
 are authenticated and joined before semantic reconstruction. Missing/extra members,
 protected wrapper changes and unauthorized shared effects reject with located errors.

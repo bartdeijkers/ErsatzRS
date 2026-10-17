@@ -21,6 +21,8 @@ use ersatzrs_domain::{
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService};
 use std::{collections::BTreeSet, time::Instant};
 
+mod invocations;
+
 fn invalid() -> NativeTeletextEditorialTtiError {
     Location {
         page: 0,

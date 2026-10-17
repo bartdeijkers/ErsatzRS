@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: ordinary edited POP delivery; bounded client and complete engine gaps'
+current_focus = 'P9A-04: original object calls/dependencies; suitable-client gate open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -408,9 +408,20 @@ The compact F1–F6/V1–V6/X1–X2 map remains the sole current completion list
 V3/X1 suitable-client coverage is decisive and the bounded qualification remains
 negative: no changed positive candidate, no unchanged retry or decoder maintenance.
 Automatic resource acquisition/navigation and enlarged/panel display remain required.
-Independent next product step F1: demonstrate the exact unsupported original
-InvokeObject target/type/offset edit against its fresh receipt, then close the
-smallest typed dependency/shared-permission/lineage gap as one functional package.
+Retained resource calls now connect privateV16 to exact native concept/shared
+preview, separate publication, two reopens and root repeat/undo. Offsets and
+existing target/type changes pass with full catalogue/dependency checks and
+new-writer treatment of changed callees/descendants. Composed32 unique checks
+reuse10 domain/app and7 native passes; final15/15 includes both fixed positives
+and the protected charset boundary. Strict affected Clippy/fmt/architecture pass.
+P9A-04 owns the canonical receipt, original Structure and late-parser failures,
+shared Generated/equal-pixel/unallocated-selector negatives and complete gap map.
+Next V2: actual pinned QTM1.0 origin-modifier edit/save on this original GPOP
+companion, preserving public selectors/other files; join genuine bytes to the
+existing concept/preview/publication path and reuse exact matching native proof.
+No actual call-editor save, new ordinary call/independent decode/client, headed
+admin or full-engine acceptance yet. F1 complete topology/context, F4 retirement/
+Base/drain and V3/X1 suitable-client coverage remain open without a waiver.
 Reuse unaffected editor/delivery proof; new variants require a named open boundary.
 Complete dependency/set/template/dynamic-field and full authoredLevel2.5/fallback,
 localized headed/hydrated admin, profiles/Lua/restart, source/output/slate/playback

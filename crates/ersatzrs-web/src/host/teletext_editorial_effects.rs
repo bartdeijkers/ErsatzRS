@@ -1251,10 +1251,12 @@ fn origin_signature(
         operation: candidate.operation(),
         source: candidate.source().map(|source| {
             lineage.map_or(lineage::CanonicalSource::Existing(source), |lineage| {
-                lineage.source(source)
+                lineage.source_at_invocation(source, candidate.invocation())
             })
         }),
         root: candidate.root_source(),
-        invocation: candidate.invocation(),
+        invocation: lineage.map_or(candidate.invocation(), |lineage| {
+            lineage.canonical_invocation(candidate.invocation())
+        }),
     })
 }

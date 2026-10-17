@@ -1,6 +1,8 @@
 //! Original charset authority is stricter than equivalent painted pixels.
 use super::*;
 
+mod call_lineage;
+
 fn designation(code: u8) -> TeletextColumnOperation {
     TeletextColumnOperation::DesignateCharset {
         designation: TeletextEnhancementCharsetDesignation::new(code).unwrap(),

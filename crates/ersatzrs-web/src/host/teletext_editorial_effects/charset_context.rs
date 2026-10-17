@@ -191,7 +191,8 @@ fn same_declaration(
 ) -> bool {
     a.designation() == b.designation()
         && a.position() == b.position()
-        && lineage.same_source(a.source(), b.source())
+        && lineage.source_at_invocation(b.source(), b.invocation())
+            == super::lineage::CanonicalSource::Existing(a.source())
         && a.root_source() == b.root_source()
-        && a.invocation() == b.invocation()
+        && a.invocation() == lineage.canonical_invocation(b.invocation())
 }

@@ -1,4 +1,4 @@
-//! Closed V15 resource structure, bound to exact immutable original definitions.
+//! Closed V15/V16 resource programs, bound to exact immutable originals.
 use super::{
     failure, invalid, limit, map_only, resource_object_operands, TeletextDesignDocumentBudget,
     TeletextDesignDocumentError, TeletextDesignDocumentFailure, TeletextProfileDocument,
@@ -80,12 +80,15 @@ impl Serialize for BorrowedResourcePrograms<'_> {
 pub(super) fn check_version(
     value: &super::StoredOverlay,
 ) -> Result<(), TeletextDesignDocumentError> {
-    if value.schema_version != super::RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
-        || value
-            .resource_object_program_overlays
-            .0
-            .as_ref()
-            .is_none_or(Vec::is_empty)
+    if !matches!(
+        value.schema_version,
+        super::RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
+            | super::RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
+    ) || value
+        .resource_object_program_overlays
+        .0
+        .as_ref()
+        .is_none_or(Vec::is_empty)
         || value
             .local_program_operands
             .0
@@ -142,9 +145,33 @@ pub(super) fn distinct(
     programs: &[TeletextResourceObjectProgramOverlay],
     operands: &[TeletextResourceObjectOperandOverlay],
 ) -> Result<(), TeletextDesignDocumentError> {
-    if !programs.iter().any(structural) {
+    if programs
+        .iter()
+        .any(TeletextResourceObjectProgramOverlay::has_invocation_changes)
+        || !programs.iter().any(structural)
+    {
         return Err(invalid());
     }
+    distinct_targets(programs, operands)
+}
+
+pub(super) fn distinct_invocations(
+    programs: &[TeletextResourceObjectProgramOverlay],
+    operands: &[TeletextResourceObjectOperandOverlay],
+) -> Result<(), TeletextDesignDocumentError> {
+    if !programs
+        .iter()
+        .any(TeletextResourceObjectProgramOverlay::has_invocation_changes)
+    {
+        return Err(invalid());
+    }
+    distinct_targets(programs, operands)
+}
+
+fn distinct_targets(
+    programs: &[TeletextResourceObjectProgramOverlay],
+    operands: &[TeletextResourceObjectOperandOverlay],
+) -> Result<(), TeletextDesignDocumentError> {
     let mut identities = BTreeSet::new();
     for program in programs {
         if !identities.insert(program.identity())
@@ -171,9 +198,10 @@ pub(super) fn restore_overlay(
         Vec<resource_object_operands::StoredResourceObjectOperand>,
         Vec<StoredResourceProgram>,
         TeletextDesignDocumentBudget,
+        bool,
     ),
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
-    let (resources, programs, budget) = resource_changes;
+    let (resources, programs, budget, invocations) = resource_changes;
     let local_programs = super::local_object_glyph_programs::restore(
         local_programs,
         super::ProgramPolicy::StyleCommands,
@@ -182,7 +210,12 @@ pub(super) fn restore_overlay(
     let programs = programs
         .into_iter()
         .map(|program| {
-            TeletextResourceObjectProgramOverlay::new(
+            let constructor = if invocations && changed_invocation(&program) {
+                TeletextResourceObjectProgramOverlay::new_with_invocation_changes
+            } else {
+                TeletextResourceObjectProgramOverlay::new
+            };
+            constructor(
                 program.identity.0,
                 program.expected,
                 program.replacement,
@@ -192,7 +225,12 @@ pub(super) fn restore_overlay(
             .map_err(|_| invalid())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays(
+    let constructor = if invocations {
+        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays
+    } else {
+        TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays
+    };
+    constructor(
         provenance,
         pages,
         operands,
@@ -201,6 +239,32 @@ pub(super) fn restore_overlay(
         local_programs,
         (resources, programs),
     )
+}
+
+fn changed_invocation(program: &StoredResourceProgram) -> bool {
+    program
+        .replacement
+        .commands()
+        .iter()
+        .zip(&program.retained_commands)
+        .any(|(after, original)| {
+            original.is_some_and(|ordinal| {
+                program
+                    .expected
+                    .commands()
+                    .get(ordinal)
+                    .is_some_and(|before| {
+                        before != after
+                            && matches!(
+                                (before, after),
+                                (
+                                    TeletextEnhancementCommand::InvokeObject { .. },
+                                    TeletextEnhancementCommand::InvokeObject { .. }
+                                )
+                            )
+                    })
+            })
+        })
 }
 fn add(before: usize, amount: usize) -> Result<usize, TeletextDesignDocumentError> {
     before

@@ -39,6 +39,7 @@ const ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION: u16 = 12;
 const LOCAL_STYLE_PROGRAM_OVERLAY_VERSION: u16 = 13;
 const RESOURCE_OBJECT_OPERAND_OVERLAY_VERSION: u16 = 14;
 const RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION: u16 = 15;
+const RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 16;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -591,6 +592,40 @@ impl TeletextSavedEditorialOverlay {
         )?;
         value.resource_object_program_overlays = resource_programs;
         value.schema_version = RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION;
+        Ok(value)
+    }
+
+    /// Capture version16 changes to retained resource-object invocations.
+    /// The resource tuple retains the version15 scalar/program shape; complete
+    /// dependency reconstruction and publication authority remain host concerns.
+    /// # Errors
+    /// Rejects absent invocation changes, duplicate targets, scalar overlap and
+    /// invalid references. Attachment authenticates the exact original programs.
+    pub fn new_with_resource_object_invocation_overlays(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+        resource_changes: (
+            Vec<TeletextResourceObjectOperandOverlay>,
+            Vec<TeletextResourceObjectProgramOverlay>,
+        ),
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        let (resource_operands, resource_programs) = resource_changes;
+        resource_object_programs::distinct_invocations(&resource_programs, &resource_operands)?;
+        let mut value = Self::new_resource_parts(
+            provenance,
+            pages,
+            local_program_operands,
+            local_object_operands,
+            drcs_bitmap_overlays,
+            programs,
+            resource_operands,
+        )?;
+        value.resource_object_program_overlays = resource_programs;
+        value.schema_version = RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION;
         Ok(value)
     }
 
@@ -1203,8 +1238,10 @@ fn restore_bitmap(
 
 impl StoredOverlay {
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
-        if self.schema_version == RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
-            || self.resource_object_program_overlays.0.is_some()
+        if matches!(
+            self.schema_version,
+            RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION | RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
+        ) || self.resource_object_program_overlays.0.is_some()
         {
             return resource_object_programs::check_version(self);
         }
@@ -1294,6 +1331,7 @@ impl StoredOverlay {
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
         let policy = self.program_policy();
+        let invocations = self.schema_version == RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION;
         let operands = self.local_program_operands.0;
         let bitmaps = self.drcs_bitmap_overlays.0;
         let objects = self.local_object_operands.0;
@@ -1332,14 +1370,15 @@ impl StoredOverlay {
             RESOURCE_OBJECT_OPERAND_OVERLAY_VERSION => restore_resource_scalars(
                 provenance, pages, operands, objects, bitmaps, programs, resources,
             )?,
-            RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION => restore_resource_programs(
+            RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
+            | RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION => restore_resource_programs(
                 provenance,
                 pages,
                 operands,
                 objects,
                 bitmaps,
                 programs,
-                (resources, resource_programs, budget),
+                (resources, resource_programs, budget, invocations),
             )?,
             LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
             | ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
@@ -1824,3 +1863,7 @@ mod resource_object_operand_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/resource_object_program_tests.rs"]
 mod resource_object_program_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/resource_object_invocation_tests.rs"]
+mod resource_object_invocation_tests;

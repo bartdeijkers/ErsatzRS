@@ -1,6 +1,9 @@
 //! Checked POP/GPOP structure; catalogue identity never becomes a Local alias.
 use super::{
-    local_object_glyph_program::validate_style_correspondence, TeletextEnhancementProgram,
+    local_object_glyph_program::{
+        validate_invocation_correspondence, validate_style_correspondence,
+    },
+    TeletextEnhancementCommand, TeletextEnhancementProgram,
     TeletextLocalObjectGlyphProgramOverlayError, TeletextObjectIdentity, TeletextServiceBudget,
 };
 
@@ -11,6 +14,8 @@ pub enum TeletextResourceObjectProgramOverlayError {
     Scope,
     #[error("teletext resource program must change the original program")]
     Unchanged,
+    #[error("teletext resource invocation changes require a changed original invocation")]
+    MissingInvocationChange,
     #[error("teletext resource program exceeds the trusted command or structure budget")]
     Budget,
     #[error(transparent)]
@@ -21,7 +26,8 @@ pub enum TeletextResourceObjectProgramOverlayError {
 ///
 /// All checked glyphs and foreground/background/attribute commands may be
 /// inserted or omitted. Retained glyphs keep family and G3 compatibility;
-/// retained styles and all context/call/position anchors remain exact. Full
+/// retained styles and all context/position anchors remain exact. Calls remain
+/// exact unless the explicit invocation-change constructor is used. Full
 /// resource dependencies, native packing and every shared consumer still require
 /// complete service/host validation. This grants no edit or publication authority.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +53,51 @@ impl TeletextResourceObjectProgramOverlay {
         retained_commands: Vec<Option<usize>>,
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            budget,
+            false,
+        )
+    }
+
+    /// Change existing retained calls alongside the checked glyph/style contract.
+    ///
+    /// At least one original `InvokeObject` must change target, type or offset.
+    /// Calls cannot be inserted or omitted; every other protected anchor remains
+    /// exact. This does not validate target availability, type edges, resolved
+    /// dependencies or execution geometry: complete service reconstruction and
+    /// host provenance/effects checks remain mandatory.
+    /// # Errors
+    /// Rejects Local identities, no-ops, absent invocation changes, invalid maps,
+    /// inserted/deleted calls, changed protected anchors and exhausted budgets.
+    pub fn new_with_invocation_changes(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            budget,
+            true,
+        )
+    }
+
+    fn new_for_policy(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+        budget: TeletextServiceBudget,
+        invocations: bool,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
         use TeletextResourceObjectProgramOverlayError as Error;
         if identity.resource().is_none() {
             return Err(Error::Scope);
@@ -64,13 +115,44 @@ impl TeletextResourceObjectProgramOverlay {
         if expected == replacement {
             return Err(Error::Unchanged);
         }
-        validate_style_correspondence(&expected, &replacement, &retained_commands)?;
-        Ok(Self {
+        if invocations {
+            validate_invocation_correspondence(&expected, &replacement, &retained_commands)?;
+        } else {
+            validate_style_correspondence(&expected, &replacement, &retained_commands)?;
+        }
+        let overlay = Self {
             identity,
             expected,
             replacement,
             retained_commands,
-        })
+        };
+        if invocations && !overlay.has_invocation_changes() {
+            return Err(Error::MissingInvocationChange);
+        }
+        Ok(overlay)
+    }
+
+    /// Whether retained original calls change, without granting target authority.
+    #[must_use]
+    pub fn has_invocation_changes(&self) -> bool {
+        self.replacement
+            .commands()
+            .iter()
+            .zip(&self.retained_commands)
+            .any(|(after, original)| {
+                original.is_some_and(|ordinal| {
+                    self.expected.commands().get(ordinal).is_some_and(|before| {
+                        before != after
+                            && matches!(
+                                (before, after),
+                                (
+                                    TeletextEnhancementCommand::InvokeObject { .. },
+                                    TeletextEnhancementCommand::InvokeObject { .. }
+                                )
+                            )
+                    })
+                })
+            })
     }
 
     #[must_use]
