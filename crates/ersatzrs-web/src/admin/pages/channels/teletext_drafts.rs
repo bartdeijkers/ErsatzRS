@@ -22,6 +22,7 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "draft" => TextKey::TeletextDraftSaved,
         "editorial-limit" => TextKey::TeletextEditorLimit,
         "editorial-mismatch" => TextKey::TeletextEditorMismatch,
+        "object-copy-invalid" => TextKey::TeletextObjectCopyInvalid,
         "editorial-protected" => TextKey::TeletextEditorProtected,
         "editorial-no-changes" => TextKey::TeletextEditorNoChanges,
         "editorial-no-pages" => TextKey::TeletextPreviewAbsent,
@@ -410,6 +411,7 @@ fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
                     </button>
                 </form>
             </div>
+            {object_copy_form(data, observation)}
             {editorial_import_form(data.channel_id, observation.current_design_head)}
             <p>{tr(TextKey::TeletextEditorNoPublicationHelp)}</p>
         </section>
@@ -429,6 +431,58 @@ fn editorial_export_fields(
         {hidden("expected_design_head", observation.current_design_head.to_string())}
     }
     .into_any()
+}
+
+fn object_copy_form(
+    data: &TeletextDraftPreviewData,
+    observation: &TeletextDraftPublicationObservation,
+) -> AnyView {
+    if data.resource_objects.is_empty() {
+        return ().into_any();
+    }
+    let current = data.revision == observation.current_design_head;
+    let options = data
+        .resource_objects
+        .iter()
+        .filter_map(|identity| {
+            let resource = identity.resource()?;
+            let value = serde_json::to_string(identity).ok()?;
+            let label = format!(
+                "{:?} {:X}{:02X} S1={} · {}",
+                resource.kind(),
+                resource.page().magazine(),
+                resource.page().page(),
+                resource.logical_subpage().get(),
+                identity.object_id().get(),
+            );
+            Some(view! { <option value=value>{label}</option> })
+        })
+        .collect_view();
+    view! {
+        <form method="post" action="/admin-api/teletext/design/copy-object"
+            class=style::preview_form data-testid="teletext-object-copy-form"
+            aria-describedby="teletext-object-copy-help">
+            {editorial_export_fields(data, observation)}
+            <fieldset disabled=!current>
+                <legend>{tr(TextKey::TeletextObjectCopyTitle)}</legend>
+                <p id="teletext-object-copy-help">{tr(TextKey::TeletextObjectCopyHelp)}</p>
+                <label for="teletext-object-copy-name">{tr(TextKey::TeletextDesignName)}</label>
+                <input id="teletext-object-copy-name" name="name" required
+                    maxlength=ersatzrs_domain::MAX_TELETEXT_DESIGN_NAME_BYTES/>
+                <label for="teletext-object-copy-source">{tr(TextKey::TeletextObjectCopySource)}</label>
+                <select id="teletext-object-copy-source" name="source_object" required>{options}</select>
+                <label for="teletext-object-copy-number">{tr(TextKey::TeletextObjectCopyNumber)}</label>
+                <input id="teletext-object-copy-number" name="new_object_id" type="number"
+                    min="0" max="65535" step="1" required/>
+                <button type="submit" class=btn_class(ButtonVariant::Primary)>
+                    {tr(TextKey::TeletextObjectCopyAction)}
+                </button>
+            </fieldset>
+            <p style:display=if current { "none" } else { "" }>
+                {tr(TextKey::TeletextObjectCopyCurrentHelp)}
+            </p>
+        </form>
+    }.into_any()
 }
 
 fn editorial_import_form(channel_id: i64, current_design_head: i64) -> AnyView {
@@ -777,6 +831,7 @@ mod tests {
                 },
             }],
             diagnostics: Vec::new(),
+            resource_objects: Vec::new(),
             publication: None,
         }
     }
@@ -1161,5 +1216,47 @@ mod tests {
         assert_eq!(resource.position, None);
         resource_values.insert("error_resource", r#"{"kind":"pop","page":{"magazine":2,"page":160},"logical_subpage":3,"unknown":"<script>"}"#.to_owned());
         assert!(redirected_error_location(&resource_values).is_none());
+    }
+
+    #[test]
+    fn object_copy_form_is_server_populated_and_historical_revisions_cannot_submit() {
+        use ersatzrs_domain::{
+            TeletextObjectId, TeletextObjectIdentity, TeletextRawDataPageNumber,
+            TeletextResourceIdentity, TeletextResourceKind, TeletextResourceSubpageIndex,
+        };
+        let context = Owner::new();
+        let mut data = preview();
+        let resource = TeletextResourceIdentity::new(
+            TeletextResourceKind::Pop,
+            TeletextRawDataPageNumber::new(2, 0xc0).unwrap(),
+            TeletextResourceSubpageIndex::new(15).unwrap(),
+        )
+        .unwrap();
+        data.resource_objects
+            .push(TeletextObjectIdentity::public(resource, TeletextObjectId::new(21)).unwrap());
+        let observation = TeletextDraftPublicationObservation {
+            digest: "b".repeat(64),
+            current_design_head: data.revision,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: false,
+            can_publish: false,
+            replaces_pending: false,
+        };
+        let html = context.with(|| object_copy_form(&data, &observation).to_html());
+        assert!(html.contains("/admin-api/teletext/design/copy-object"));
+        assert!(html.contains("Pop 2C0 S1=15 · 21"));
+        assert!(html.contains("name=\"source_object\""));
+        assert!(html.contains("name=\"new_object_id\""));
+        assert!(html.contains(tr(TextKey::TeletextObjectCopyHelp)));
+        assert!(!html.contains("<fieldset disabled"));
+        data.revision -= 1;
+        let html = context.with(|| object_copy_form(&data, &observation).to_html());
+        assert!(html.contains("<fieldset disabled"));
+        assert!(html.contains(tr(TextKey::TeletextObjectCopyCurrentHelp)));
+        data.resource_objects.clear();
+        let html = context.with(|| object_copy_form(&data, &observation).to_html());
+        assert!(!html.contains("teletext-object-copy-form"));
     }
 }

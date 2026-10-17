@@ -45,6 +45,9 @@ use std::{
     time::Instant,
 };
 
+mod resource_copy;
+pub use resource_copy::copy_object;
+
 pub const MAX_TELETEXT_EDITOR_UPLOAD_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PARTS: usize = 4096;
 const MAX_ZIP_BYTES: usize = 32 * 1024 * 1024;

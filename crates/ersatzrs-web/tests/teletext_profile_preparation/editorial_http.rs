@@ -85,7 +85,12 @@ pub(super) async fn configure_authoring_policy(fixture: &Fixture) {
         .unwrap();
 }
 
-async fn post(fixture: &Fixture, route: &str, content_type: &str, bytes: Vec<u8>) -> Response {
+pub(super) async fn post(
+    fixture: &Fixture,
+    route: &str,
+    content_type: &str,
+    bytes: Vec<u8>,
+) -> Response {
     build_app(fixture.state.clone())
         .oneshot(
             Request::builder()
@@ -120,7 +125,7 @@ async fn export_response(fixture: &Fixture, fields: &BTreeMap<String, String>) -
     .await
 }
 
-fn redirect(response: &Response, channel: i64) -> BTreeMap<String, String> {
+pub(super) fn redirect(response: &Response, channel: i64) -> BTreeMap<String, String> {
     assert_eq!(response.status(), 303);
     let location = response.headers()["location"].to_str().unwrap();
     let (path, query) = location.split_once('?').unwrap();

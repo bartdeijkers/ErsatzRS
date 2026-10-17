@@ -18,9 +18,13 @@ consumer, including equal-pixel retargeting. Private concept version18 keeps exa
 originals and complete added definitions; later editor body edits fold into their
 root addition. Existing preview, explicit publication and recovery share native
 qualification. Generic and legacy replay cannot authorize the new intent. No
-package or profile authority is added. P9A-04 owns scoped verification and the
-remaining admin, actual new-definition editor, complete resource/set/context,
-suitable-client and full engine requirements.
+package or profile authority is added. The localized admin Copy action resolves
+an existing definition on the same native worker, changes only its unused ID and
+saves a concept through that shared qualification. It requires the current
+revision and head; historical previews disable Copy. A fresh export remains the
+editor boundary, and publication stays explicit. P9A-04 owns actual pinned-editor
+proof for an added definition, changed-admin evidence and the remaining complete
+resource/set/context, suitable-client and full engine requirements.
 
 The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit

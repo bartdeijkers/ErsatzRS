@@ -231,6 +231,10 @@ fn render_original(
         raster,
         navigation,
         pages,
+        resource_objects: restored
+            .encoded()
+            .map(super::resource_objects)
+            .unwrap_or_default(),
         hold,
         deadline,
     })

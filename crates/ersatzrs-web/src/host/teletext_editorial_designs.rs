@@ -134,7 +134,8 @@ mod definition_additions;
 #[path = "teletext_editorial_designs/repeat.rs"]
 mod repeat;
 pub use definition_additions::{
-    add_teletext_editorial_resource_definitions, NativeTeletextResourceDefinitionAddRequest,
+    add_teletext_editorial_resource_definitions, copy_teletext_editorial_resource_definition,
+    NativeTeletextResourceDefinitionAddRequest, NativeTeletextResourceDefinitionCopyRequest,
 };
 
 type Result<T> = std::result::Result<T, NativeTeletextEditorialImportError>;

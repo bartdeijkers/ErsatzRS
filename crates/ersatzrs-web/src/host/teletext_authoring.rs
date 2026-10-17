@@ -187,6 +187,7 @@ pub struct TeletextAuthoringPreview {
     raster: Option<TeletextRaster>,
     navigation: Vec<TeletextNavigationLink>,
     pages: Vec<TeletextPageAddress>,
+    resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
     hold: TeletextWorkHold,
     deadline: Instant,
 }
@@ -225,6 +226,11 @@ impl TeletextAuthoringPreview {
     #[must_use]
     pub fn pages(&self) -> &[TeletextPageAddress] {
         &self.pages
+    }
+    /// Bounded checked resource identities; these observations grant no edit authority.
+    #[must_use]
+    pub fn resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
+        &self.resource_objects
     }
     /// Project this owned raster off async workers under its original admission.
     /// The host callback must enforce its own derived output-storage limits.
@@ -924,9 +930,26 @@ fn render_original(
         raster: Some(raster),
         navigation,
         pages,
+        resource_objects: resource_objects(service),
         hold,
         deadline,
     })
+}
+
+// The native service already admits the complete catalogue's object budget.
+// Listing identities must not add a stricter preview condition or truncate it.
+fn resource_objects(
+    service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+) -> Vec<ersatzrs_domain::TeletextObjectIdentity> {
+    service
+        .declared()
+        .semantic()
+        .objects()
+        .definitions()
+        .iter()
+        .filter(|definition| definition.identity.resource().is_some())
+        .map(|definition| definition.identity)
+        .collect()
 }
 
 fn render_service(

@@ -234,6 +234,12 @@ pub fn build_app(app_state: AppState) -> Router {
                 )),
             )
             .route(
+                "/admin-api/teletext/design/copy-object",
+                post(api::teletext_editorial::copy_object).layer(DefaultBodyLimit::max(
+                    api::teletext::MAX_TELETEXT_FORM_BYTES,
+                )),
+            )
+            .route(
                 "/admin-api/teletext/design/import",
                 post(api::teletext_editorial::import_design).layer(DefaultBodyLimit::max(
                     api::teletext_editorial::MAX_TELETEXT_EDITOR_UPLOAD_BYTES,

@@ -5,6 +5,15 @@ use ersatzrs_web::host::teletext_editorial_designs::{
     add_teletext_editorial_resource_definitions, NativeTeletextResourceDefinitionAddRequest,
 };
 
+#[path = "definition_additions/actual_editor.rs"]
+mod actual_editor;
+
+#[path = "definition_additions/admin_copy.rs"]
+mod admin_copy;
+
+#[path = "definition_additions/copy_controls.rs"]
+mod copy_controls;
+
 #[derive(Clone, Copy)]
 enum State {
     Dormant,

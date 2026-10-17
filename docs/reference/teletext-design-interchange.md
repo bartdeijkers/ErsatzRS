@@ -5766,8 +5766,24 @@ CAS. Fresh exports expose the added definition; later body edits fold into that
 complete root addition, preserving other edits and exact originals. This saves an
 unpublished concept. Preview, explicit publication and reopen use the existing
 shared model. It does not modify packages, profiles or pending/accepted pointers.
-The admin Add action and actual pinned-editor proof for a new definition remain
-open under P9A-04; this native API is not full workflow acceptance.
+The channel admin offers Copy object definition on the current preview. Select
+a retained source and unused object number; ordinary POST/303 saves a concept.
+`POST /admin-api/teletext/design/copy-object` checks channel/revision ownership,
+creates a fresh receipt and calls
+`host::teletext_editorial_designs::copy_teletext_editorial_resource_definition`.
+Its `NativeTeletextResourceDefinitionCopyRequest` carries name, receipt ID/digest,
+expected head, source identity and new ID. The admitted native worker resolves
+the complete source and preserves resource, logical S1, type and program; Local,
+missing, identical or occupied targets reject. It shares Add qualification and
+head CAS rather than accepting an uploaded body. A refused operation can retain
+the private export receipt but cannot create a concept or publish. Source choices
+inherit the validated catalogue bound without a new preview acceptance limit.
+
+Export the new current concept before QTeletextMaker editing, then import the
+complete named set and sidecar as another concept. Preview and publish separately.
+Existing packages and profiles remain untouched. P9A-04 owns scoped actual-editor
+and changed-admin evidence. Copy is partial definition creation, not complete
+resource/set/context editing or full workflow/engine acceptance.
 
 ### Original resource context companions
 

@@ -14,6 +14,7 @@ pub struct TeletextDraftPreviewData {
     pub effective: bool,
     pub valid_until: Option<String>,
     pub pages: Vec<TeletextPageAddress>,
+    pub resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
     pub navigation: Vec<TeletextNavigationLink>,
     pub diagnostics: Vec<TeletextDraftDiagnosticData>,
     /// Unavailable observation remains distinct from observed absent pointers.
@@ -173,6 +174,7 @@ fn project_preview(
             == crate::host::teletext_authoring::TeletextAuthoringScope::Effective,
         valid_until: preview.valid_until().map(|until| until.to_rfc3339()),
         pages: preview.pages().to_vec(),
+        resource_objects: preview.resource_objects().to_vec(),
         navigation: preview.navigation().to_vec(),
         diagnostics,
         publication: preview.publication().map(project_publication),

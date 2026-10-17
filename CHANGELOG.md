@@ -27,10 +27,13 @@ release section when tagging a release.
 
 - Add receipt-bound native teletext object creation within existing POP/GPOP
   resources. Private version18 concepts retain complete added definitions and
-  their later body edits without changing originals or versions1–17. Native
-  preview, publication and recovery qualify new allocations and every protected
-  shared consumer. The admin creation action and actual new-definition editor
-  workflow remain open.
+  their later body edits without changing originals or versions1–17. The localized
+  channel admin can copy an existing definition to an unused ID as an unpublished
+  concept, preserving its resource, type and complete body. Native preview,
+  publication and recovery qualify new allocations and every protected shared
+  consumer. A pinned actual QTeletextMaker save of an added definition now passes
+  unchanged-byte import, preview, separate publication and cold reopen. Complete
+  resource/set editing and full engine acceptance remain open.
 - Edit original POP/GPOP teletext objects through receipt-bound QTeletextMaker
   companions, including full-capacity command fragments. Private version14 concepts
   retain scalar changes; version15 adds bounded glyph/style insertion, deletion and

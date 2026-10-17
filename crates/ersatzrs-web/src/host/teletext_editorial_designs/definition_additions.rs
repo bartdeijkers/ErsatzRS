@@ -10,8 +10,9 @@ use super::{
 use ersatzrs_addon_contract::TeletextResourceKindWire;
 use ersatzrs_app::teletext_export_project::{TeletextExportAssetScope, TeletextExportProject};
 use ersatzrs_domain::{
-    TeletextEnhancementObjectDefinition, TeletextResourceIdentity, TeletextResourceKind,
-    TeletextResourceObjectDefinitionAddition, TeletextServiceBudget,
+    TeletextEnhancementObjectDefinition, TeletextObjectId, TeletextObjectIdentity,
+    TeletextResourceIdentity, TeletextResourceKind, TeletextResourceObjectDefinitionAddition,
+    TeletextServiceBudget,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 
@@ -33,31 +34,122 @@ impl fmt::Debug for NativeTeletextResourceDefinitionAddRequest {
     }
 }
 
-fn preflight(
-    request: &NativeTeletextResourceDefinitionAddRequest,
-    budget: TeletextServiceBudget,
-    deadline: Instant,
-) -> Result<()> {
+/// Copy one qualified latest native definition into a new ID in the same resource.
+/// No caller-supplied program or object type participates in the copy.
+pub struct NativeTeletextResourceDefinitionCopyRequest {
+    pub name: String,
+    pub receipt_id: EntityId,
+    pub receipt_digest: String,
+    pub expected_design_head: i64,
+    pub source: TeletextObjectIdentity,
+    pub new_object_id: TeletextObjectId,
+}
+impl fmt::Debug for NativeTeletextResourceDefinitionCopyRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NativeTeletextResourceDefinitionCopyRequest")
+            .field("receipt_id", &self.receipt_id)
+            .field("expected_design_head", &self.expected_design_head)
+            .field("source", &self.source)
+            .field("new_object_id", &self.new_object_id)
+            .finish_non_exhaustive()
+    }
+}
+
+enum Action {
+    Definitions(Vec<TeletextEnhancementObjectDefinition>),
+    Copy {
+        source: TeletextObjectIdentity,
+        new_object_id: TeletextObjectId,
+    },
+}
+struct Request {
+    name: String,
+    receipt_id: EntityId,
+    receipt_digest: String,
+    expected_design_head: i64,
+    action: Action,
+}
+
+fn preflight(request: &Request, budget: TeletextServiceBudget, deadline: Instant) -> Result<()> {
     check_deadline(deadline)?;
-    if request.definitions.is_empty() {
+    if matches!(&request.action, Action::Definitions(definitions) if definitions.is_empty()) {
         return Err(NativeTeletextEditorialImportError::NoChanges);
     }
     if request.name.len() > MAX_TELETEXT_DESIGN_NAME_BYTES
         || request.receipt_id <= 0
         || request.expected_design_head <= 0
         || request.receipt_digest.len() != 64
-        || request.definitions.len() > budget.max_objects
     {
         return Err(NativeTeletextEditorialImportError::Budget);
     }
+    let definitions = match &request.action {
+        Action::Definitions(definitions) => definitions,
+        Action::Copy {
+            source,
+            new_object_id,
+        } => {
+            if budget.max_objects == 0 || budget.max_structure_items == 0 {
+                return Err(NativeTeletextEditorialImportError::Budget);
+            }
+            if source.resource().is_none() || source.object_id() == *new_object_id {
+                return Err(NativeTeletextEditorialImportError::Association);
+            }
+            return Ok(());
+        }
+    };
+    if definitions.len() > budget.max_objects {
+        return Err(NativeTeletextEditorialImportError::Budget);
+    }
     let mut remaining = budget.max_commands;
-    for definition in &request.definitions {
+    for definition in definitions {
         check_deadline(deadline)?;
         remaining = remaining
             .checked_sub(definition.program.commands().len())
             .ok_or(NativeTeletextEditorialImportError::Budget)?;
     }
     Ok(())
+}
+
+fn resolve(
+    action: Action,
+    latest: &QualifiedBaseline,
+    budget: TeletextServiceBudget,
+    deadline: Instant,
+) -> Result<Vec<TeletextEnhancementObjectDefinition>> {
+    check_deadline(deadline)?;
+    let (source, new_object_id) = match action {
+        Action::Definitions(definitions) => return Ok(definitions),
+        Action::Copy {
+            source,
+            new_object_id,
+        } => (source, new_object_id),
+    };
+    let resource = source
+        .resource()
+        .ok_or(NativeTeletextEditorialImportError::Association)?;
+    let definition = latest
+        .original
+        .view()
+        .encoded()
+        .ok_or(NativeTeletextEditorialImportError::Association)?
+        .declared()
+        .semantic()
+        .objects()
+        .definition(source)
+        .ok_or(NativeTeletextEditorialImportError::Association)?;
+    if definition.program.commands().len() > budget.max_commands {
+        return Err(NativeTeletextEditorialImportError::Budget);
+    }
+    let identity = match resource.kind() {
+        TeletextResourceKind::Pop => TeletextObjectIdentity::public(resource, new_object_id),
+        TeletextResourceKind::Gpop => TeletextObjectIdentity::global(resource, new_object_id),
+        _ => return Err(NativeTeletextEditorialImportError::Association),
+    }
+    .map_err(|_| NativeTeletextEditorialImportError::Association)?;
+    let mut copied = definition.clone();
+    copied.identity = identity;
+    check_deadline(deadline)?;
+    Ok(vec![copied])
 }
 
 fn resource_asset(project: &TeletextExportProject, resource: TeletextResourceIdentity) -> bool {
@@ -166,12 +258,14 @@ fn qualify(
 
 fn encode(
     mut baselines: Baselines,
-    definitions: Vec<TeletextEnhancementObjectDefinition>,
+    action: Action,
     revision: i64,
     policy: &NativeTeletextExportPolicy,
     deadline: Instant,
 ) -> Result<(EncodedStoredDesign, String)> {
     check_deadline(deadline)?;
+    let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
+    let definitions = resolve(action, latest, policy.document.validation.service, deadline)?;
     let additions = definitions
         .into_iter()
         .map(|definition| {
@@ -189,7 +283,6 @@ fn encode(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    let latest = baselines.latest.as_ref().unwrap_or(&baselines.root);
     authorize(
         &latest.body.project,
         latest
@@ -268,6 +361,59 @@ pub async fn add_teletext_editorial_resource_definitions(
     policy: NativeTeletextExportPolicy,
     deadline: Instant,
 ) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
+    apply(
+        application,
+        Request {
+            name: request.name,
+            receipt_id: request.receipt_id,
+            receipt_digest: request.receipt_digest,
+            expected_design_head: request.expected_design_head,
+            action: Action::Definitions(request.definitions),
+        },
+        policy,
+        deadline,
+    )
+    .await
+}
+
+/// Copy a complete latest native resource definition into an unpublished concept.
+///
+/// Resolves the source after receipt/current-head qualification in the same
+/// admitted blocking worker used by Add. Resource/S1, type and complete program
+/// are preserved; the existing unused-ID, native, permission and CAS gates apply.
+/// # Errors
+/// Rejects Local/missing sources, identical or occupied IDs, unavailable/stale
+/// receipts, bounds, dependencies, protected effects and expired deadlines.
+pub async fn copy_teletext_editorial_resource_definition(
+    application: &ApplicationServices,
+    request: NativeTeletextResourceDefinitionCopyRequest,
+    policy: NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
+    apply(
+        application,
+        Request {
+            name: request.name,
+            receipt_id: request.receipt_id,
+            receipt_digest: request.receipt_digest,
+            expected_design_head: request.expected_design_head,
+            action: Action::Copy {
+                source: request.source,
+                new_object_id: request.new_object_id,
+            },
+        },
+        policy,
+        deadline,
+    )
+    .await
+}
+
+async fn apply(
+    application: &ApplicationServices,
+    request: Request,
+    policy: NativeTeletextExportPolicy,
+    deadline: Instant,
+) -> Result<TeletextDesignMutation<SavedEditorialTeletextDesign>> {
     preflight(&request, policy.document.validation.service, deadline)?;
     let guard = super::super::teletext_work::begin(application, Some(deadline))
         .await
@@ -341,7 +487,7 @@ pub async fn add_teletext_editorial_resource_definitions(
     let (document, digest) =
         super::super::teletext_work::spawn_blocking(guard.hold_work(), move || {
             let baselines = qualify(baseline, root, &policy, deadline)?;
-            encode(baselines, request.definitions, revision, &policy, deadline)
+            encode(baselines, request.action, revision, &policy, deadline)
         })
         .await
         .map_err(|_| NativeTeletextEditorialImportError::WorkerFailed)??;
