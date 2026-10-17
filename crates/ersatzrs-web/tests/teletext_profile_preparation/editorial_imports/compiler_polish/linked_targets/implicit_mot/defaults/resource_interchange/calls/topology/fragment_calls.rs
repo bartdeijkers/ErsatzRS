@@ -4,6 +4,9 @@ use super::*;
 use ersatzrs_app::teletext_export_project::{TeletextExportAssetMapping, TeletextExportProject};
 use ersatzrs_ffmpeg::teletext::project_encoded_teletext_object;
 
+#[path = "fragment_calls/actual_editor.rs"]
+mod actual_editor;
+
 const GLYPHS: usize = 220;
 const CALL: usize = GLYPHS + 3;
 const TERMINATOR: u32 = 63 | (31 << 6) | (5 << 11);

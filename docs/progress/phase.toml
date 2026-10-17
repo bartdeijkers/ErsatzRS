@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: V7 native-call editor workflow; suitable-client gate open'
+current_focus = 'P9A-04: resource-set/context interchange; suitable-client gate open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,16 +62,17 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-V7 large-resource native call addition/deletion now reuses whole-fragment joining,
-sealed full-ID allocations and existing V17 correspondence/effects. Parser63 and
-native2 pass, including publication/reopen/rootundo/repeat and Generated125 atomic
-refusal. Strict web Clippy, fmt and architecture pass after equivalent test-only
-helper/literal corrections. P9A-04 owns canonical hashes, RED, exact reuse and the
-compact F/V/X list. Next prove actual pinned nonfirst-fragment native-call add/
-delete SaveAs using the same targets and existing handshake; reuse unchanged
-transport/client/protection evidence. QTM's208-word/page-local context limitation
-and suitable-client V3/X1 remain open; no permanent restriction or full engine
-acceptance is inferred. This checkpoint stays local.
+Resumed. Actual pinned V7 nonfirst-fragment native-call add/delete SaveAs now
+passes unchanged-byte concepts17/revisions2/3, all three previews/native units,
+unpublished reopen and explicit publication/cold recovery. P9A-04 owns the exact
+receipt and F/V/X completion list. Docker Desktop startup restored the existing
+runtime without settings or downloads. Reuse parser63/native2 Generated/rootundo/
+repeat and unaffected transport/client/admin evidence. Next product package:
+F1/X3 complete-capacity resource-set/context interchange and F2 metadata/templates;
+qualify a changed source-positive suitable client before another V3/X1 runtime
+trial. QTM native Public-target rendering/full oversized context, F6 compatible
+finite-item output and remaining authored/platform gates stay open. No milestone
+or full engine acceptance is claimed; this checkpoint stays local.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

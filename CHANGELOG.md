@@ -37,7 +37,9 @@ release section when tagging a release.
   identities, fixed anchors and every shared consumer remain checked.
   Rejoined version7 fragments now also support native resource-call addition and
   deletion in large objects, retaining complete original identities and protected
-  consumers without reducing native capacity. A pinned
+  consumers without reducing native capacity. Actual pinned editor saves now also
+  prove native call addition/deletion in a nonfirst large-object fragment through
+  unchanged-byte concepts, shared previews and explicit publication/cold reopen. A pinned
   QTeletextMaker 1.0 save combining a G0 change with a new nested call passes
   unchanged-byte concept import, shared previews, unpublished reopen and separate
   explicit publication/cold reopen. An actual compound save now also proves

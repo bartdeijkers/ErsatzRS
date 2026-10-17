@@ -93,6 +93,9 @@ struct DriverContext {
     bool deleteResourceCall = false;
     bool mixedResourceCallGlyph = false;
     bool mixedResourceCallStructure = false;
+    bool insertFragmentCall = false;
+    bool deleteFragmentCall = false;
+    int fragmentCallSelector = 0;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -143,7 +146,16 @@ static DriverContext driverContext() {
     const bool callTopology = insertResourceCall || deleteResourceCall;
     const bool resourceCallContext = mode == "resource-object-call-origin-context" || callTopology;
     const bool resourceCallOrigin = mode == "resource-object-call-origin" || mode == "resource-object-call-origin-context";
-    const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology;
+    const bool insertFragmentCall = mode == "resource-fragment-call-insert";
+    const bool deleteFragmentCall = mode == "resource-fragment-call-delete";
+    const bool fragmentCall = insertFragmentCall || deleteFragmentCall;
+    const bool suppliedFragmentSelector = qEnvironmentVariableIsSet("ERSATZRS_QTM_FRAGMENT_CALL_SELECTOR");
+    if (fragmentCall != suppliedFragmentSelector)
+        qFatal("Native fragment call selector requires exactly the explicit fragment trial");
+    const int fragmentSelector = fragmentCall ? boundedDecimal("ERSATZRS_QTM_FRAGMENT_CALL_SELECTOR", 0x3ffff) : 0;
+    if (fragmentCall && ((fragmentSelector & 0x38) != 0x30 || ((fragmentSelector >> 6) & 31) != 19))
+        qFatal("Native fragment call selector must retain authenticated Public Passive scope/type");
+    const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology || fragmentCall;
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
@@ -212,7 +224,7 @@ static DriverContext driverContext() {
     if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial && suppliedTarget)))
         qFatal("Foreground operands require explicit single-page-foreground mode");
     const int triplet = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
-    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", (drcsSelection || resourceCallOrigin || callTopology) ? 40 : 39) : 0;
+    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", (drcsSelection || resourceCallOrigin || callTopology || fragmentCall) ? 40 : 39) : 0;
     if (drcsSelection && (column != 40 || !(triplet < glyph0 && glyph0 < glyph1)))
         qFatal("Fixed DRCS prefix address40 and ordered distinct glyph indices are required");
     if ((glyphStructure || mixedGlyphStructure) && (triplet != 12 || column != 0))
@@ -223,6 +235,8 @@ static DriverContext driverContext() {
         qFatal("Fixed resource structure requires original G0P word7 and column1");
     if ((resourceCallOrigin || callTopology) && (triplet != 7 || column != 40))
         qFatal("Fixed resource call requires original OriginModifier word7 and raw address40");
+    if (fragmentCall && (triplet != 22 || column != 40))
+        qFatal("Fixed native fragment requires original OriginModifier row22 and address40");
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
     if (foreground && from == to) qFatal("Foreground trial requires a changed colour");
@@ -272,7 +286,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1691,7 +1705,7 @@ static void captureMixedResourceCallPaint(const DriverContext &context, const ch
         qFatal("Actual mixed call viewport evidence capture failed");
     std::puts("QTM mixed actual viewport: literal B left quarter in both enlarged halves; exact added P and unchanged outside B/P");
 }
-static void resourceOriginStep(QDockWidget *dock, int maximum, int from, int to, const DriverContext &context) {
+static void resourceOriginStep(QDockWidget *dock, int maximum, int from, int to, const DriverContext &context, int expectedRow = 9) {
     QSpinBox *field = nullptr;
     for (auto candidate : dock->findChildren<QSpinBox *>()) {
         if (!candidate->isVisible() || !candidate->isEnabled() || candidate->minimum() != 0
@@ -1725,9 +1739,9 @@ static void resourceOriginStep(QDockWidget *dock, int maximum, int from, int to,
     };
     observe("before-focus");
     const auto tables = dock->findChildren<QTableView *>();
-    if (tables.size() != 1 || tables.front()->currentIndex().row() != 9) {
+    if (tables.size() != 1 || tables.front()->currentIndex().row() != expectedRow) {
         observe("selection-failed");
-        qFatal("Actual inserted OriginModifier row9 is no longer selected");
+        qFatal("Actual inserted OriginModifier row%d is no longer selected", expectedRow);
     }
     // The menu's model update is synchronous. Wait for the actual popup grab to
     // disappear before restoring native activation and clicking the real input.
@@ -2027,6 +2041,89 @@ static void editResourceCallTopology(QMainWindow *main, const DriverContext &con
     std::printf("QTM actual resource call topology: action=%s modelrows=%zu; complete alias catalogue and pointers checked\n",
         context.insertResourceCall ? "InsertCopy invocation then InsertBefore OriginModifier and cooked row/column clicks" : "two single Delete clicks, not GUIUndo", expected.size());
 }
+// V7 fragments retain native Public selectors, not V8 renderable Local aliases.
+// Observe unchanged actual widget pixels without claiming external-resource decoding.
+static QImage nativeFragmentOriginalPaint;
+static std::vector<StructureTriplet> nativeFragmentTriplets(const DriverContext &context, int calls) {
+    if (calls < 0 || calls > 2) qFatal("Fixed native fragment call count differs");
+    std::vector<StructureTriplet> result{{40,17,2},{63,31,6},{40,21,2}};
+    for (int index = 0; index < 18; ++index) result.push_back({8,9,65});
+    result.push_back({10,12,0});
+    for (int call = 0; call < calls; ++call) {
+        result.push_back({40,16,call});
+        result.push_back({context.fragmentCallSelector & 63, 19, context.fragmentCallSelector >> 11});
+    }
+    result.push_back({63,31,5});
+    return result;
+}
+static void captureNativeFragmentPaint(const DriverContext &context, const char *stage, bool original) {
+    const auto paint = resourceCallViewport();
+    if (paint.size() != QSize(480,250)) qFatal("Native fragment viewport geometry differs");
+    if (original) nativeFragmentOriginalPaint = paint;
+    else if (nativeFragmentOriginalPaint.size() != paint.size() || paint != nativeFragmentOriginalPaint)
+        qFatal("Native Public call edits unexpectedly changed pinned editor viewport");
+    const QByteArray label = QByteArray("native-fragment-") + stage + "-widget";
+    if (!paint.save(QString("/work/") + context.captureName(label.constData())))
+        qFatal("Native fragment actual viewport capture failed");
+}
+static void editNativeFragmentCalls(QMainWindow *main, const DriverContext &context) {
+    if (context.insertFragmentCall == context.deleteFragmentCall || context.insertResourceCall
+        || context.deleteResourceCall || context.resourceCallContext || main->isWindowModified()
+        || context.tripletIndex != 22 || context.tripletColumn != 40)
+        qFatal("Unexpected native fragment call baseline");
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual native fragment dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800,680);
+    dock->move(main->pos() + QPoint(32,32));
+    if (!QTest::qWaitForWindowExposed(dock,5000)) qFatal("Actual native fragment dock was not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual native fragment requires one table");
+    auto table = tables.front();
+    auto model = table->model();
+    auto expected = nativeFragmentTriplets(context,context.insertFragmentCall ? 1 : 2);
+    structureCheck(model,expected);
+    captureNativeFragmentPaint(context,"before",true);
+    if (!dock->grab().save(QString("/work/") + context.captureName("native-fragment-before")))
+        qFatal("Actual native fragment baseline dock capture failed");
+    if (context.insertFragmentCall) {
+        structureSelect(table,23);
+        structureButton(dock,"Insert copy");
+        expected.insert(expected.begin()+23,expected[23]);
+        structureRelocate(expected,23,1);
+        structureCheck(model,expected);
+        structureSelect(table,24);
+        insertResourceOrigin(dock,context);
+        expected.insert(expected.begin()+24,StructureTriplet{41,16,0});
+        structureRelocate(expected,24,1);
+        structureCheck(model,expected);
+        resourceOriginStep(dock,23,1,0,context,24);
+        expected[24] = StructureTriplet{40,16,0};
+        structureCheck(model,expected);
+        resourceOriginStep(dock,71,0,1,context,24);
+        expected[24] = StructureTriplet{40,16,1};
+        structureCheck(model,expected);
+    } else {
+        // Delete the two complete native pairs through four single selections.
+        for (int row : {25,24,23,22}) {
+            structureSelect(table,row);
+            structureButton(dock,"Delete");
+            expected.erase(expected.begin()+row);
+            structureRelocate(expected,row,-1);
+            structureCheck(model,expected);
+        }
+    }
+    if (expected != nativeFragmentTriplets(context,context.insertFragmentCall ? 2 : 0)
+        || !main->isWindowModified()) qFatal("Actual native fragment final model differs");
+    captureNativeFragmentPaint(context,"edited",false);
+    if (!dock->grab().save(QString("/work/") + context.captureName("native-fragment-edited")))
+        qFatal("Actual native fragment edited dock capture failed");
+    savedGlyphStructure = expected;
+    std::printf("QTM actual V7 native fragment calls action=%s modelrows=%zu: complete Public selector model checked; viewport unchanged, no external target rendering claimed\n",
+        context.insertFragmentCall ? "InsertCopy then InsertBeforeOrigin with cooked Row1-to0 Column0-to1" : "four single Delete clicks",expected.size());
+}
+
 static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || savedGlyphStructure.size() != std::size_t(expectedCount)) qFatal("Fixed saved structure oracle absent");
@@ -2168,11 +2265,15 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             else if (context.mixedResourceCallGlyph) captureMixedResourceCallPaint(context, "saved");
             else captureResourceCallTopologyPaint(context, "saved", context.insertResourceCall, true);
         } else if (context.resourceCallContext) captureResourceCallPaint(context, "saved", true);
+        if (context.insertFragmentCall || context.deleteFragmentCall) {
+            verifySavedGlyphStructure(saved, context.insertFragmentCall ? 27 : 23);
+            captureNativeFragmentPaint(context,"saved",false);
+        }
         capture(context.captureName("saved").toUtf8().constData());
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -2222,6 +2323,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.insertResourceGlyph || context.deleteResourceGlyph) editResourceGlyphStructure(main, context);
             if (context.editResourceCallOrigin) editResourceCallOrigin(main, context);
             if (context.insertResourceCall || context.deleteResourceCall) editResourceCallTopology(main, context);
+            if (context.insertFragmentCall || context.deleteFragmentCall) editNativeFragmentCalls(main,context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));
