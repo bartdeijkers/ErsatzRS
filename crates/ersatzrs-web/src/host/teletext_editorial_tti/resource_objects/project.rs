@@ -432,7 +432,12 @@ pub(in crate::host) fn validate_applied_project(
                 deadline,
             )?;
         }
-        let after = mapping_resource(group[0], project, candidate)?;
+        let after = mapping_resource(
+            group[0],
+            project,
+            candidate,
+            before.page.resource_header().ok_or_else(invalid)?,
+        )?;
         if before.identity != after.identity
             || before.object_type != after.object_type
             || !structural::equivalent(

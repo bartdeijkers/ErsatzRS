@@ -311,7 +311,11 @@ Reconcile complete ordered original companion groups before reconstructing seman
 intent; mandatory hidden anchors stay exact. The uploaded partition need not equal
 the compiler's newly greedy fragment boundaries. Whole native re-encoding checks
 resource identity/lifecycle and canonically derived extent/pointer relocation;
-unselected resources remain exact. Every shared Main/panel consumer retains its
+unselected resources remain exact. Candidate TTI mapping normalizes only the
+native header's derived last-packet value against its authenticated original,
+using the checked metadata constructor. The original physical subcode/count,
+logical identity, counter and transmission remain exact; uploaded metadata grants
+no candidate extent or lifecycle authority. Every shared Main/panel consumer retains its
 captured permissions and original writer lineage. New commands cannot impersonate
 original writers. Scalar-before-program composition and survivor correspondence
 retain root-relative repeat/undo; exact undo removes redundant structural intent.

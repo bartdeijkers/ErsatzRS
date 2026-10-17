@@ -5679,6 +5679,10 @@ protected wrapper changes and unauthorized shared effects reject with located er
 Canonical candidate validation accepts original edited partitions without requiring
 them to equal newly greedy export boundaries. Complete native encoding authenticates
 lifecycle and regenerates only derived resource extents and following pointers.
+Original receipt subcodes and raw counts stay exact. For an encoded candidate,
+compare headers through the checked metadata constructor with only `last_packet`
+normalized to the authenticated original. This allows derived `nn` growth/shrink
+without accepting changes to full identity, S1, counter or transmission.
 
 Native preview validates every shared Main/panel consumer against captured Free/Zone/
 Generated permissions. Repeat/undo composes exact root-relative programs and scalar

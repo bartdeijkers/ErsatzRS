@@ -15,7 +15,8 @@ use ersatzrs_app::{
 };
 use ersatzrs_domain::{
     TeletextEnhancementCommand, TeletextEnhancementObjectDefinition, TeletextObjectId,
-    TeletextObjectIdentity, TeletextResourceKind, TeletextResourceObjectOperandOverlay,
+    TeletextObjectIdentity, TeletextResourceHeaderMetadata, TeletextResourceKind,
+    TeletextResourceObjectOperandOverlay,
 };
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService};
 use std::{collections::BTreeSet, time::Instant};
@@ -85,20 +86,40 @@ fn mapping<'a>(
     project: &'a TeletextExportProject,
     service: &'a EncodedTeletextAuthoredService,
 ) -> Result<Mapping<'a>> {
-    mapping_checked(asset, project, service, true)
+    mapping_checked(asset, project, service, None)
 }
 fn mapping_resource<'a>(
     asset: &'a TeletextExportAssetMapping,
     project: &'a TeletextExportProject,
     service: &'a EncodedTeletextAuthoredService,
+    original_header: TeletextResourceHeaderMetadata,
 ) -> Result<Mapping<'a>> {
-    mapping_checked(asset, project, service, false)
+    mapping_checked(asset, project, service, Some(original_header))
+}
+fn matches_header(
+    header: TeletextResourceHeaderMetadata,
+    original: Option<TeletextResourceHeaderMetadata>,
+    physical_subcode: u16,
+) -> bool {
+    let Some(original) = original else {
+        return header.physical_subcode() == physical_subcode;
+    };
+    // The original receipt remains exact; only canonical candidate body extent
+    // may change. Counter, transmission and complete logical identity stay fixed.
+    original.physical_subcode() == physical_subcode
+        && TeletextResourceHeaderMetadata::new(
+            header.identity(),
+            original.last_packet(),
+            header.update_counter(),
+            header.transmission(),
+        )
+        .is_ok_and(|normalized| normalized == original)
 }
 fn mapping_checked<'a>(
     asset: &'a TeletextExportAssetMapping,
     project: &'a TeletextExportProject,
     service: &'a EncodedTeletextAuthoredService,
-    check_count: bool,
+    original_header: Option<TeletextResourceHeaderMetadata>,
 ) -> Result<Mapping<'a>> {
     let (resource_name, object_id) = companion(asset, project)?;
     let mut raw = project
@@ -126,7 +147,7 @@ fn mapping_checked<'a>(
             ) && native.page().magazine() == identity.page.magazine
                 && native.page().page() == identity.page.page
                 && native.logical_subpage().get() == identity.subpage
-                && header.physical_subcode() == *physical_subcode
+                && matches_header(header, original_header, *physical_subcode)
         })
     });
     let page = pages
@@ -149,7 +170,7 @@ fn mapping_checked<'a>(
         _ => return Err(invalid()),
     }
     .map_err(|_| invalid())?;
-    if check_count
+    if original_header.is_none()
         && (raw.unit_count != page.data_units().len()
             || raw.unit_count.checked_mul(46) != Some(raw.bytes))
     {

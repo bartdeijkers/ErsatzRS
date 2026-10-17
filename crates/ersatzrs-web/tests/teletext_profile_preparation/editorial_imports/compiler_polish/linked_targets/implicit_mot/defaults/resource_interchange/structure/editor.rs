@@ -3,6 +3,8 @@ use super::*;
 use crate::editorial_imports::local_object_glyphs::actual_editor as editor;
 use std::path::Path;
 const CASE: &str = "original-pop-glyph-insert-copy";
+#[path = "editor/ordinary.rs"]
+mod ordinary;
 
 fn wide_response(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = response(theme, page, subcode);

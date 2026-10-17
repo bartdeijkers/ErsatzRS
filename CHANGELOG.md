@@ -733,6 +733,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Accept structural teletext resource edits that change packet extent without
+  mistaking the derived `nn` subcode for a different original resource. Candidate
+  mapping preserves exact identity, update counter and transmission; original
+  receipt metadata and complete native validation remain authoritative.
 - Support forward teletext header positions before glyphs and object calls when
   full page validation preserves authored attributes. Keep generated position
   attributes protected during TTI import and preserve source locations, fallback,

@@ -3,6 +3,9 @@ use super::super::project::{authorize_programs, reconcile_project, validate_appl
 use super::*;
 use ersatzrs_app::teletext_export_project::TeletextExportFile;
 
+#[path = "structure/extent.rs"]
+mod extent;
+
 fn bounds() -> (TeletextTtiBudget, usize, TeletextServiceBudget) {
     (
         limits().0,

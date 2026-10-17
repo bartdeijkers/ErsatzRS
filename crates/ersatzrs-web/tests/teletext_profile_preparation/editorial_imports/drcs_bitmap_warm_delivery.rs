@@ -24,13 +24,13 @@ mod headed;
 #[path = "drcs_bitmap_warm_delivery/page_presentation.rs"]
 mod page_presentation;
 
-struct Tools {
-    ffmpeg: String,
-    ffprobe: String,
-    tsanalyze: String,
+pub(super) struct Tools {
+    pub(super) ffmpeg: String,
+    pub(super) ffprobe: String,
+    pub(super) tsanalyze: String,
 }
 impl Tools {
-    async fn load() -> Self {
+    pub(super) async fn load() -> Self {
         let tools = Self {
             ffmpeg: client_capture::selected("ERSATZRS_TELETEXT_TEST_FFMPEG"),
             ffprobe: client_capture::selected("FFPROBE_PATH"),
@@ -56,6 +56,23 @@ async fn source_fixture_with_response(
     directory: &Path,
     response: fn(&str, u16, u16) -> Value,
     encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+) -> (Fixture, Flow, Vec<u8>) {
+    source_fixture_with_response_and_writer(
+        tools,
+        directory,
+        response,
+        encoding,
+        authoring_metadata::write,
+    )
+    .await
+}
+
+pub(super) async fn source_fixture_with_response_and_writer(
+    tools: &Tools,
+    directory: &Path,
+    response: fn(&str, u16, u16) -> Value,
+    encoding: fn() -> ersatzrs_web::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
+    write: fn(&Fixture, &str, &Value) -> Vec<u8>,
 ) -> (Fixture, Flow, Vec<u8>) {
     let fixture = Fixture::new_persistent().await;
     let source =
@@ -85,7 +102,10 @@ async fn source_fixture_with_response(
     ] {
         ordinary_stream_flow::setting(&fixture, key, &value).await;
     }
-    let (fixture, flow) = Box::pin(setup_with_fixture_policy(response, fixture, encoding)).await;
+    let (fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
+        response, fixture, encoding, write,
+    ))
+    .await;
     // Exactly one source reset precedes all requests. Publication below neither
     // reopens a viewer nor starts another source epoch.
     ordinary_stream_flow::reset_source_start(&fixture).await;
@@ -139,11 +159,15 @@ fn pattern(candidate: &AcceptedTeletextOutputCandidate, counter: usize) -> Patte
         .collect()
 }
 
-struct ObservedCycle {
-    end: usize,
-    units: Vec<Unit>,
+pub(super) struct ObservedCycle {
+    pub(super) end: usize,
+    pub(super) units: Vec<Unit>,
 }
-async fn wait_cycle(capture: &Capture, after: usize, expected: &Pattern) -> ObservedCycle {
+pub(super) async fn wait_cycle(
+    capture: &Capture,
+    after: usize,
+    expected: &Pattern,
+) -> ObservedCycle {
     tokio::time::timeout(Duration::from_secs(8), async {
         loop {
             let units = capture.ordered_units_after(after, MAX_UNITS);
@@ -166,7 +190,7 @@ async fn wait_cycle(capture: &Capture, after: usize, expected: &Pattern) -> Obse
     .expect("same ordinary response did not emit its exact complete resource cycle")
 }
 
-fn write_units(directory: &Path, name: &str, cycle: &ObservedCycle) {
+pub(super) fn write_units(directory: &Path, name: &str, cycle: &ObservedCycle) {
     live_tcp::write_new(
         &directory.join(name),
         &serde_json::to_vec(
@@ -404,7 +428,7 @@ async fn verify_with_decoder(
     receipts
 }
 
-async fn close(origin: &mut live_tcp::Origin, observers: &mut [live_tcp::Observer; 3]) {
+pub(super) async fn close(origin: &mut live_tcp::Origin, observers: &mut [live_tcp::Observer; 3]) {
     for observer in observers {
         observer.close().await.unwrap();
     }
