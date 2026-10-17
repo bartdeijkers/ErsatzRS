@@ -724,8 +724,9 @@ release section when tagging a release.
 
 - Allow ordered forward teletext header positions before a real column operation
   without adding colour writers or changing fallback bytes. Preserve source
-  locations, DRCS selections and packet bounds; unresolved positions before
-  object calls and later header resets still report validation errors.
+  locations, DRCS selections and packet bounds through native TTI concept import,
+  preview and explicit publication. Unresolved positions before object calls and
+  later header resets still report validation errors.
 - Preserve original implicit AP00 teletext position anchors during structural
   editor imports, keeping glyph provenance and shared-consumer protection intact.
   Valid imports no longer fail because a hidden anchor moves past an edited glyph;

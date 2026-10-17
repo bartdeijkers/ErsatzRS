@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: forward-header TTI/concept boundary'
+current_focus = 'P9A-04: authored header object invocation'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -369,11 +369,14 @@ unchanged publication and original/Night state. P9A-04 owns the new two-Rust/
 Forward header positioning now passes whole-factory columns8/39 with nonblack
 colours and complete reference-byte equality. P9A-04 owns RED/green,891 distinct
 unit cases with reused passes, sparse provenance/pointer/capacity/latch checks,
-strict lint and unchanged pinned independent dual-level4-case proof. Next prove
-the affected TTI export/concept import/shared-preview metadata boundary; rerun
-only changed integration seams. Pending-AP calls, later resets/restoration and
-standalone object definitions remain required lowering gaps. No origin-offset
-shortcut can waive AnnexA8's caller-AP interval. Page-local topology,
+strict lint and unchanged pinned independent dual-level4-case proof. Native
+Free8/Zone39 A→B TTI import/preview/reopen/explicit publication now passes two
+focused cases with retained originals/metadata/Night and atomic zone refusal;
+P9A-04 owns the exact receipt. No additional production fix was needed. Next
+reproduce whole-factory header-position/object-call RED with a nonempty object
+and exact caller-AP/attribute expectations; correct that specific seam. Later
+resets/restoration and standalone definitions remain required. An origin-offset
+shortcut cannot waive AnnexA8's caller-AP interval. Page-local topology,
 other commands/resources/objects/templates/dynamic fields/sets and all standards/
 client gates stay required; no full criterion, milestone or permanent restriction.
 Production content waits for independent generic acceptance.
