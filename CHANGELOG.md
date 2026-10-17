@@ -41,8 +41,11 @@ release section when tagging a release.
   display carriers can be repacked after authenticated resource edits; uploaded
   display words remain bound to their original export and rejected words retain
   their exact X26 location. New/retired subtrees cannot inherit protected content
-  authority. Invisible-position boundaries, full definition/set changes
-  and oversized editor context remain open.
+  authority. Original invisible row-zero position anchors now survive bounded
+  resource glyph/call edits, including leading, multiple and known-position
+  call-adjacent anchors, without inventing broadcast words. Remaining position/
+  context semantics, full definition/set changes and oversized editor context
+  remain open.
   Pinned QTeletextMaker 1.0 context companions now render nested resource objects
   through protected editor-only Local aliases. Origin-modifier edits preserve
   original native identities through concept preview, explicit publication and

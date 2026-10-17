@@ -1,5 +1,5 @@
 //! Sealed resource calls remain indivisible beside the existing raw glyph parser.
-use super::{fail, raw, style, Location, Result, Span};
+use super::{alignment, fail, raw, style, Location, Result, Span};
 use ersatzrs_domain::{
     TeletextEnhancementCommand as Command, TeletextEnhancementObjectDefinition,
     TeletextObjectScope, TeletextObjectType,
@@ -19,20 +19,18 @@ fn originals(
     location: Location,
     deadline: Instant,
 ) -> Result<Vec<CallAtom>> {
-    // Missing/zero-word semantic anchors have no proved editor-owned boundary.
-    if definition.program.commands().len() > words.len()
-        || spans.len() != definition.program.commands().len()
-    {
-        return Err(fail(location));
-    }
     let mut calls = Vec::new();
     let mut next = 0;
+    let mut seen = 0;
     for (ordinal, command) in definition.program.commands().iter().enumerate() {
         location.check_deadline(deadline)?;
-        let span = spans
-            .iter()
-            .find(|span| span.ordinal == ordinal)
-            .ok_or_else(|| fail(location))?;
+        let mut matching = spans.iter().filter(|span| span.ordinal == ordinal);
+        let span = match (matching.next(), matching.next()) {
+            (None, None) if alignment::hidden_position(command).is_some() => continue,
+            (Some(span), None) => span,
+            _ => return Err(fail(location)),
+        };
+        seen += 1;
         if span.first != next || span.first > span.word || span.word >= words.len() {
             return Err(fail(location));
         }
@@ -45,7 +43,7 @@ fn originals(
         }
         next = span.word + 1;
     }
-    if next != words.len() {
+    if next != words.len() || seen != spans.len() {
         return Err(fail(location));
     }
     Ok(calls)

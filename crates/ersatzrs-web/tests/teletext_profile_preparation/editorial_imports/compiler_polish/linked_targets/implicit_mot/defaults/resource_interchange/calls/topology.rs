@@ -538,3 +538,6 @@ mod mixed;
 
 #[path = "topology/structure.rs"]
 mod structure;
+
+#[path = "topology/position_anchors.rs"]
+mod position_anchors;

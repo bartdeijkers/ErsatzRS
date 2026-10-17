@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: position-anchor interchange; suitable-client gate open'
+current_focus = 'P9A-04: bundled structural editor proof; suitable-client gate open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -419,8 +419,8 @@ P9A-04 owns selected-POP/X27 rejection and V17 call-topology proof, actual pinne
 call saves, shared previews/publication/reopens and exact root undo. The importer
 now composes fixed-column G0/G1 values with authenticated call additions/deletions,
 reusing original correspondence, native validation and all-consumer permissions.
-Remaining compound style-value/family cases, zero-word roots and complete
-definition/set/link editing remain open. Oversized context stays X3; V6/V7 retain full content.
+Remaining compound style-value/family cases, initial/deferred-AP and other context
+cases, plus complete definition/set/link editing remain open. Oversized context stays X3; V6/V7 retain full content.
 F6 current-source qualification confirms finite-slate epoch concatenation. The
 missing prerequisite is a compatible finite-item codec/initialization/complete-
 track contract before existing admitted final-mux reuse. Preserve capacity,
@@ -432,9 +432,14 @@ compile failure. This is new evidence, not new product functionality or full V2.
 F1 bounded glyph/style structure and glyph-column changes now compose with V8
 call addition/deletion through the existing resource parser and V17 lifecycle.
 P9A-04 owns the exact RED-to-green, affected/native/protection evidence and remaining
-actual structural editor gap. Next: qualify the missing zero-word original
-position/call boundary before changing it. Reuse unaffected carriage/admin/client
-proof; no automatic complete-chain rerun or full F1/V2 acceptance.
+actual structural editor gap. Original zero-word position anchors now survive
+bounded resource glyph/call edits with physical-only DP and semantic quotas;
+parser57/native2 prove leading/multiple/known-AP adjacency, publication/reopen,
+rootundo/repeat and Generated125 atomic refusal. P9A-04 owns the canonical receipt,
+RED and exact reuse scope. Next executable V2 package: actual pinned compound
+glyph/style structure and call SaveAs through existing controls/harness, then
+unchanged-byte import/preview/publication/reopen; reuse unaffected carriage/admin/
+client and current native protection/undo proof. Full F1/V2 remain open.
 Suitable ordinary-client coverage V3/X1 remains decisive, unchanged and unqualified;
 QTM's editor-only alias rendering grants no native Public-stream/client acceptance.
 Full topology, F4 retirement/Base/drain and all end requirements remain open.

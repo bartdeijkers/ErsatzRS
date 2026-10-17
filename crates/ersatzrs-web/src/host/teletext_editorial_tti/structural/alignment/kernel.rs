@@ -27,13 +27,14 @@ pub(super) fn solve_resource_calls(
     old: &[(usize, TeletextEnhancementCommand)],
     new: &[TeletextEnhancementCommand],
     maximum: usize,
+    bounds: &[(u8, u8)],
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
     solve_matched(
         old,
         new,
-        (Mode::ResourceCalls, maximum, &[]),
+        (Mode::ResourceCalls, maximum, bounds),
         location,
         deadline,
     )
@@ -170,9 +171,43 @@ fn solve_matched(
 
 fn permits(index: usize, new: &TeletextEnhancementCommand, bounds: &[(u8, u8)]) -> bool {
     bounds.get(index).is_none_or(|(start, end)| {
-        matches!(new,
+        matches!(new, TeletextEnhancementCommand::InvokeObject { .. })
+            || matches!(new,
         TeletextEnhancementCommand::AtColumn { column, .. } if start <= column && column <= end)
     })
+}
+
+/// Only resource calls are authenticated atoms that leave the caller AP intact.
+/// A hidden position beside one must be an identity of a known emitted AP.
+pub(super) fn at_resource_anchor(
+    anchor: &TeletextEnhancementCommand,
+    new: &[TeletextEnhancementCommand],
+    boundary: usize,
+) -> bool {
+    if at_anchor(anchor, new, boundary) {
+        return true;
+    }
+    let Some(column) = hidden_position(anchor) else {
+        return false;
+    };
+    let Some((before, after)) = new.split_at_checked(boundary) else {
+        return false;
+    };
+    let call = |command: &TeletextEnhancementCommand| {
+        matches!(command, TeletextEnhancementCommand::InvokeObject { .. })
+    };
+    if !before.last().is_some_and(call) && !after.first().is_some_and(call) {
+        return false;
+    }
+    matches!(before.iter().rev().find(|command| !call(command)),
+        Some(TeletextEnhancementCommand::AtColumn { column: previous, .. }) if *previous == column)
+        && after
+            .iter()
+            .find(|command| !call(command))
+            .is_none_or(|command| {
+                matches!(command,
+                TeletextEnhancementCommand::AtColumn { column: next, .. } if column <= *next)
+            })
 }
 
 pub(super) fn at_anchor(

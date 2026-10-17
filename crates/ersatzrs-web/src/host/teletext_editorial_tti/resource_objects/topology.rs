@@ -66,15 +66,18 @@ fn original_calls(
     let fail = || mapped.location.error(Failure::Structure);
     let mut result = Vec::new();
     let mut next = 0;
+    let mut seen = 0;
     for (ordinal, command) in mapped.definition.program.commands().iter().enumerate() {
         mapped.location.check_deadline(deadline)?;
-        // Zero-word semantic positions have no editor-owned insertion boundary.
-        // Keep that ambiguity closed instead of guessing which side owns a call.
-        let span = body
-            .spans
-            .iter()
-            .find(|span| span.ordinal == ordinal)
-            .ok_or_else(fail)?;
+        let mut spans = body.spans.iter().filter(|span| span.ordinal == ordinal);
+        let span = match (spans.next(), spans.next()) {
+            (None, None) if matches!(command, Command::SetPosition { position } if position.row() == 0) => {
+                continue
+            }
+            (Some(span), None) => span,
+            _ => return Err(fail()),
+        };
+        seen += 1;
         if span.first != next || span.word < span.first || span.word >= body.before.len() {
             return Err(fail());
         }
@@ -90,7 +93,7 @@ fn original_calls(
         }
         next = span.word + 1;
     }
-    if next != body.before.len() {
+    if next != body.before.len() || seen != body.spans.len() {
         return Err(fail());
     }
     Ok(result)

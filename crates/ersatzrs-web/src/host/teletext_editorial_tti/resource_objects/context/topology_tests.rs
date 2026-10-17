@@ -4,6 +4,9 @@ use super::*;
 #[path = "mixed_structure_tests.rs"]
 mod mixed_structure_tests;
 
+#[path = "position_anchor_tests.rs"]
+mod position_anchor_tests;
+
 fn invoked(offset: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::InvokeObject {
         target: target(22),

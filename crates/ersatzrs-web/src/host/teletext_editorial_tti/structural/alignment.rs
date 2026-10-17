@@ -84,7 +84,7 @@ pub(super) fn bounded(
         })
         .collect::<Vec<_>>();
     let aligned = kernel::solve_physical(&physical, new, maximum, &bounds, location, deadline)?;
-    merge_anchors(&aligned, &anchors, maximum, location, deadline)
+    merge_anchors(&aligned, &anchors, (maximum, false), location, deadline)
 }
 
 /// Resource-only call runs use the same bounded, exact-first correspondence.
@@ -106,16 +106,53 @@ pub(super) fn resource_calls(
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
-    kernel::solve_resource_calls(old, new, maximum, location, deadline)
+    location.check_deadline(deadline)?;
+    if old.len() > maximum || new.len() > maximum || new.len() > 507 {
+        return Err(fail(location));
+    }
+    let mut anchors = Vec::new();
+    let mut physical = Vec::new();
+    for (ordinal, command) in old {
+        location.check_deadline(deadline)?;
+        if let Some(column) = hidden_position(command) {
+            anchors.push((*ordinal, *command, column));
+        } else {
+            physical.push((*ordinal, *command));
+            if physical.len() > 507 {
+                return Err(fail(location));
+            }
+        }
+    }
+    if anchors
+        .len()
+        .checked_add(new.len())
+        .is_none_or(|count| count > maximum)
+    {
+        return Err(fail(location));
+    }
+    let bounds = physical
+        .iter()
+        .map(|(ordinal, _)| {
+            let index = anchors.partition_point(|(anchor, _, _)| anchor < ordinal);
+            (
+                index.checked_sub(1).map_or(0, |index| anchors[index].2),
+                anchors.get(index).map_or(39, |anchor| anchor.2),
+            )
+        })
+        .collect::<Vec<_>>();
+    let aligned =
+        kernel::solve_resource_calls(&physical, new, maximum, &bounds, location, deadline)?;
+    merge_anchors(&aligned, &anchors, (maximum, true), location, deadline)
 }
 
 fn merge_anchors(
     aligned: &Aligned,
     anchors: &[(usize, TeletextEnhancementCommand, u8)],
-    maximum: usize,
+    policy: (usize, bool),
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
+    let (maximum, calls) = policy;
     if aligned
         .commands
         .len()
@@ -140,7 +177,13 @@ fn merge_anchors(
             .position(|source| source.is_some_and(|source| source > *ordinal))
             .unwrap_or(aligned.commands.len());
         let boundary = (lower..=upper)
-            .find(|boundary| kernel::at_anchor(command, &aligned.commands, *boundary))
+            .find(|boundary| {
+                if calls {
+                    kernel::at_resource_anchor(command, &aligned.commands, *boundary)
+                } else {
+                    kernel::at_anchor(command, &aligned.commands, *boundary)
+                }
+            })
             .ok_or_else(|| fail(location))?;
         insertions.push((boundary, *ordinal, *command));
         previous = boundary;
@@ -155,6 +198,7 @@ fn merge_anchors(
             .peek()
             .is_some_and(|(index, _, _)| *index == boundary)
         {
+            location.check_deadline(deadline)?;
             let (_, ordinal, command) = inserted.next().ok_or_else(|| fail(location))?;
             result.commands.push(command);
             result.retained.push(Some(ordinal));
