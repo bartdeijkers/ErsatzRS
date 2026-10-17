@@ -2,7 +2,8 @@
 
 use super::{check_deadline, error, Result, TeletextEditorialEffectsFailure};
 use ersatzrs_domain::{
-    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog, TeletextLocalObjectOperandOverlay,
+    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
+    TeletextLocalObjectGlyphProgramOverlay, TeletextLocalObjectOperandOverlay,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -10,6 +11,137 @@ use std::{
 };
 
 pub(super) fn check(
+    before: &TeletextEnhancementObjectCatalog,
+    after: &TeletextEnhancementObjectCatalog,
+    incoming: &[TeletextLocalObjectOperandOverlay],
+    cumulative: &[TeletextLocalObjectOperandOverlay],
+    incoming_programs: &[TeletextLocalObjectGlyphProgramOverlay],
+    cumulative_programs: &[TeletextLocalObjectGlyphProgramOverlay],
+    deadline: Instant,
+) -> Result<()> {
+    if incoming_programs.is_empty() && cumulative_programs.is_empty() {
+        return check_operands(before, after, incoming, cumulative, deadline);
+    }
+    let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
+    let structure = || {
+        error(
+            None,
+            None,
+            TeletextEditorialEffectsFailure::ProtectedStructure,
+        )
+    };
+    let mut changes = BTreeMap::new();
+    for change in incoming {
+        check_deadline(deadline)?;
+        if changes
+            .insert((change.identity(), change.command()), change)
+            .is_some()
+            || command(before, change)
+                != Some(TeletextEnhancementCommand::AtColumn {
+                    column: change.column(),
+                    operation: change.expected(),
+                })
+        {
+            return Err(association());
+        }
+    }
+    let mut programs = BTreeMap::new();
+    for program in incoming_programs {
+        check_deadline(deadline)?;
+        if programs.insert(program.identity(), program).is_some()
+            || before.definition(program.identity()).is_none()
+        {
+            return Err(association());
+        }
+    }
+    let mut final_programs = BTreeMap::new();
+    for program in cumulative_programs {
+        check_deadline(deadline)?;
+        if final_programs.insert(program.identity(), program).is_some()
+            || after
+                .definition(program.identity())
+                .map(|definition| &definition.program)
+                != Some(program.replacement())
+        {
+            return Err(association());
+        }
+    }
+    check_final_operands(after, cumulative, &final_programs, deadline)?;
+    if before.definitions().len() != after.definitions().len() {
+        return Err(structure());
+    }
+    for (old, new) in before.definitions().iter().zip(after.definitions()) {
+        check_deadline(deadline)?;
+        if old.identity != new.identity || old.object_type != new.object_type {
+            return Err(structure());
+        }
+        let has_operands = changes
+            .range((old.identity, 0)..=(old.identity, usize::MAX))
+            .next()
+            .is_some();
+        if !has_operands && !programs.contains_key(&old.identity) {
+            if old.program != new.program {
+                return Err(structure());
+            }
+            continue;
+        }
+        let mut expected = old.program.commands().to_vec();
+        for ((_, ordinal), change) in changes.range((old.identity, 0)..=(old.identity, usize::MAX))
+        {
+            check_deadline(deadline)?;
+            let value = expected.get_mut(*ordinal).ok_or_else(association)?;
+            *value = TeletextEnhancementCommand::AtColumn {
+                column: change.column(),
+                operation: change.replacement(),
+            };
+        }
+        if let Some(program) = programs.get(&old.identity) {
+            if program.expected().commands() != expected || program.replacement() != &new.program {
+                return Err(structure());
+            }
+        } else if new.program.commands() != expected {
+            return Err(structure());
+        }
+    }
+    Ok(())
+}
+
+fn check_final_operands(
+    after: &TeletextEnhancementObjectCatalog,
+    cumulative: &[TeletextLocalObjectOperandOverlay],
+    final_programs: &BTreeMap<
+        ersatzrs_domain::TeletextObjectIdentity,
+        &TeletextLocalObjectGlyphProgramOverlay,
+    >,
+    deadline: Instant,
+) -> Result<()> {
+    let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
+    let mut targets = BTreeSet::new();
+    for change in cumulative {
+        check_deadline(deadline)?;
+        let ordinal = match final_programs.get(&change.identity()) {
+            Some(program) => program
+                .replacement_command(change.command())
+                .ok_or_else(association)?,
+            None => change.command(),
+        };
+        let actual = after
+            .definition(change.identity())
+            .and_then(|definition| definition.program.commands().get(ordinal));
+        if !targets.insert((change.identity(), change.command()))
+            || actual
+                != Some(&TeletextEnhancementCommand::AtColumn {
+                    column: change.column(),
+                    operation: change.replacement(),
+                })
+        {
+            return Err(association());
+        }
+    }
+    Ok(())
+}
+
+fn check_operands(
     before: &TeletextEnhancementObjectCatalog,
     after: &TeletextEnhancementObjectCatalog,
     incoming: &[TeletextLocalObjectOperandOverlay],

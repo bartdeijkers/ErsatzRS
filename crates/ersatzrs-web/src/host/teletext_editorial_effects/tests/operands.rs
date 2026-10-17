@@ -115,6 +115,7 @@ fn edits(operands: &[TeletextLocalProgramOperandOverlay]) -> TeletextEditorialEd
         rows: &[],
         operands,
         object_operands: &[],
+        object_programs: &[],
         bitmaps: &[],
     }
 }
@@ -606,6 +607,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
             rows: &changes.rows,
             operands: &changes.operands,
             object_operands: &[],
+            object_programs: &[],
             bitmaps: &[],
         },
         &policy().encoding,
@@ -619,7 +621,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         deadline(),
         &original,
         &candidate,
-        (&changes.operands, &changes.object_operands),
+        &changes,
     )
     .unwrap();
     // A final typed command with a different replacement cannot masquerade as
@@ -631,7 +633,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         deadline(),
         &original,
         &encode(2),
-        (&changes.operands, &changes.object_operands),
+        &changes,
     )
     .unwrap_err();
     assert_eq!(mismatch.failure, NativeTeletextEditorialTtiFailure::Packet);
@@ -647,7 +649,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
         deadline(),
         &original,
         &candidate,
-        (&changes.operands, &changes.object_operands),
+        &changes,
     )
     .unwrap_err();
     assert_eq!(
@@ -708,7 +710,7 @@ fn native_tti_page_local_g0_edit_keeps_exact_word_and_captured_cell_permissions(
         deadline(),
         &original,
         &candidate,
-        (&changes.operands, &changes.object_operands),
+        &changes,
     )
     .unwrap();
     validate_teletext_editorial_effects_with_operands(

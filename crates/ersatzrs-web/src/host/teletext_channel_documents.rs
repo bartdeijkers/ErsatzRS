@@ -17,7 +17,8 @@ use ersatzrs_app::{
 use ersatzrs_core::repositories::TeletextGuideSourceFence;
 use ersatzrs_domain::{
     EntityId, TeletextChannelSelectionSnapshot, TeletextColdProducerComposition,
-    TeletextComposedProducerPage, TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextComposedProducerPage, TeletextDrcsBitmapOverlay,
+    TeletextLocalObjectGlyphProgramOverlay, TeletextLocalObjectOperandOverlay,
     TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPhysicalBaseOverlay,
     TeletextProducerCompositionBudget, TeletextProducerCompositionError,
     TeletextProducerCompositionFailure, TeletextProducerCompositionMetadata,
@@ -32,6 +33,14 @@ use ersatzrs_ffmpeg::teletext::{
 };
 
 use super::teletext_documents::{lift_base, TeletextDocumentEncodingError};
+
+type EditorialProgramDocuments<'a> = (
+    Vec<TeletextPhysicalBaseOverlay>,
+    &'a [TeletextLocalProgramOperandOverlay],
+    &'a [TeletextLocalObjectOperandOverlay],
+    &'a [TeletextDrcsBitmapOverlay],
+    &'a [TeletextLocalObjectGlyphProgramOverlay],
+);
 
 #[cfg(test)]
 mod physical_overlay_tests;
@@ -465,6 +474,48 @@ pub(super) fn encode_original_channel_documents_with_editorial_overlays(
     )
 }
 
+/// Rebuild a structural Local concept through the same producer compiler.
+pub(super) fn encode_original_channel_documents_with_editorial_programs(
+    selection: &TeletextChannelSelectionSnapshot,
+    entry_addon_id: Option<&str>,
+    documents: Vec<TeletextProfileDocument>,
+    editorial: EditorialProgramDocuments<'_>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    if editorial.4.is_empty() {
+        let (rows, page, objects, bitmaps, _) = editorial;
+        return encode_original_channel_documents_with_editorial_overlays(
+            selection,
+            entry_addon_id,
+            documents,
+            (rows, page, objects, bitmaps),
+            deadline,
+            region,
+            policy,
+        );
+    }
+    check_deadline(deadline)?;
+    if documents.len() != selection.bindings.len() {
+        return Err(ChannelTeletextDocumentEncodingError::Association);
+    }
+    let entry_producer = entry_addon_id.and_then(|addon| {
+        selection
+            .bindings
+            .iter()
+            .position(|binding| binding.addon_id == addon)
+    });
+    encode_original_producer_documents_with_editorial_programs(
+        entry_producer,
+        documents,
+        editorial,
+        deadline,
+        region,
+        policy,
+    )
+}
+
 /// Shared content compiler. Origins and producer-to-membership associations stay
 /// with the caller; an entry ordinal conveys no selection or publication authority.
 pub(super) fn encode_original_producer_documents(
@@ -523,7 +574,27 @@ pub(super) fn encode_original_producer_documents_with_editorial_overlays(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
-    let (overlays, operands, object_operands, bitmaps) = editorial;
+    let (rows, page, objects, bitmaps) = editorial;
+    encode_original_producer_documents_with_editorial_programs(
+        entry_producer,
+        documents,
+        (rows, page, objects, bitmaps, &[]),
+        deadline,
+        region,
+        policy,
+    )
+}
+
+/// Apply root-ordinal operands before checked Local programs, then encode once.
+pub(super) fn encode_original_producer_documents_with_editorial_programs(
+    entry_producer: Option<usize>,
+    documents: Vec<TeletextProfileDocument>,
+    editorial: EditorialProgramDocuments<'_>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    let (overlays, operands, object_operands, bitmaps, programs) = editorial;
     check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
     if documents.is_empty() {
@@ -531,6 +602,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_overlays(
             || !operands.is_empty()
             || !object_operands.is_empty()
             || !bitmaps.is_empty()
+            || !programs.is_empty()
         {
             return Err(ChannelTeletextDocumentEncodingError::Association);
         }
@@ -570,6 +642,11 @@ pub(super) fn encode_original_producer_documents_with_editorial_overlays(
     if !object_operands.is_empty() {
         declared = declared
             .with_local_object_operand_overlays(object_operands, policy.composition.service)
+            .map_err(editorial_semantic_error)?;
+    }
+    if !programs.is_empty() {
+        declared = declared
+            .with_local_object_glyph_program_overlays(programs, policy.composition.service)
             .map_err(editorial_semantic_error)?;
     }
     if !bitmaps.is_empty() {

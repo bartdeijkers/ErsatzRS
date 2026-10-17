@@ -89,6 +89,17 @@ impl TeletextDisplayWriter {
     pub const fn placed_position(&self) -> (u16, u16) {
         self.placed
     }
+    /// Compare every writer payload field while excluding only source identity.
+    /// Callers must independently authenticate any source correspondence. This
+    /// preserves hidden values and explicitness as well as visible coordinates.
+    #[must_use]
+    pub fn same_payload(&self, other: &Self) -> bool {
+        Self {
+            source: other.source,
+            ..*self
+        } == *other
+    }
+
     pub(super) const fn key(&self) -> Option<((u16, u16), (u16, u16))> {
         if self.explicit {
             Some((self.effective, self.placed))
@@ -404,3 +415,7 @@ impl<'a, T: Copy> TeletextDisplayAttribute<'a, T> {
             .map(|index| &self.resolution.pending[index])
     }
 }
+
+#[cfg(test)]
+#[path = "display_writer_payload_tests.rs"]
+mod writer_payload_tests;

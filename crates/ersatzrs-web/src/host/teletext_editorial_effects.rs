@@ -15,9 +15,9 @@ use ersatzrs_app::teletext_export_project::TeletextExportProject;
 use ersatzrs_domain::{
     TeletextBaseDisplayCellKind, TeletextDisplayAttribute, TeletextDisplayCell,
     TeletextDisplayFragment, TeletextDisplayGeometry, TeletextDrcsBitmapOverlay,
-    TeletextDrcsCatalog, TeletextEnhancementCommand, TeletextLocalObjectOperandOverlay,
-    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPhysicalBaseOverlay,
-    TeletextResolvedPageEnhancementDraft,
+    TeletextDrcsCatalog, TeletextEnhancementCommand, TeletextLocalObjectGlyphProgramOverlay,
+    TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
+    TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_drcs_page, project_encoded_teletext_display, project_teletext_comparison_glyph,
@@ -28,6 +28,7 @@ use ersatzrs_ffmpeg::teletext::{
 
 mod charset_context;
 mod compiler_resources;
+mod lineage;
 mod object_operands;
 #[cfg(test)]
 mod tests;
@@ -111,6 +112,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub rows: &'a [TeletextPhysicalBaseOverlay],
     pub operands: &'a [TeletextLocalProgramOperandOverlay],
     pub object_operands: &'a [TeletextLocalObjectOperandOverlay],
+    pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
 
@@ -147,12 +149,14 @@ pub(super) fn validate_teletext_editorial_transition(
             rows: incoming,
             operands: &[],
             object_operands: &[],
+            object_programs: &[],
             bitmaps: &[],
         },
         TeletextEditorialEdits {
             rows: cumulative,
             operands: &[],
             object_operands: &[],
+            object_programs: &[],
             bitmaps: &[],
         },
         budget,
@@ -192,6 +196,11 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
                 .object_operands
                 .iter()
                 .any(|value| value.owner() == owner);
+        let structural_change = incoming
+            .object_programs
+            .iter()
+            .any(|value| value.owner() == owner);
+        let operand_change = operand_change || structural_change;
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
         if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() && !compiler_links {
             if before.data_units() != after.data_units() {
@@ -209,7 +218,7 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             new_page,
             &allowed,
             operand_change,
-            overlay.is_some(),
+            overlay.is_some() || structural_change,
             budget.max_units,
             compiler_links,
         )?;
@@ -219,7 +228,9 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         check_resolved(new, budget, deadline)?;
         // Inspect every main and panel cell, including attributes extending to
         // the right and lower-row footprints. The command column is no permit.
-        compare_protected(old, new, &allowed, budget, deadline)?;
+        let lineage =
+            lineage::ProtectedLineage::new(old, new, incoming.object_programs, budget, deadline)?;
+        compare_protected(old, new, &allowed, &lineage, budget, deadline)?;
     }
     check_deadline(deadline)
 }
@@ -236,6 +247,26 @@ fn display(
         }
         EncodedTeletextAuthoredPage::Object(_) | EncodedTeletextAuthoredPage::Resource(_) => None,
     }
+}
+
+fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize) -> bool {
+    let mut remaining = maximum;
+    let counts = [edits.operands.len(), edits.object_operands.len()]
+        .into_iter()
+        .chain(edits.object_programs.iter().flat_map(|program| {
+            [
+                program.expected().commands().len(),
+                program.replacement().commands().len(),
+                program.retained_commands().len(),
+            ]
+        }));
+    for count in counts {
+        let Some(next) = remaining.checked_sub(count) else {
+            return false;
+        };
+        remaining = next;
+    }
+    true
 }
 
 fn check_service(
@@ -265,16 +296,8 @@ fn check_service(
         || original.unit_count() > budget.max_units
         || edited.unit_count() > budget.max_units
         || overlays.len() > budget.max_pages
-        || incoming
-            .operands
-            .len()
-            .checked_add(incoming.object_operands.len())
-            .is_none_or(|count| count > budget.max_commands)
-        || cumulative
-            .operands
-            .len()
-            .checked_add(cumulative.object_operands.len())
-            .is_none_or(|count| count > budget.max_commands)
+        || !bounded_editorial_commands(incoming, budget.max_commands)
+        || !bounded_editorial_commands(cumulative, budget.max_commands)
         || incoming.bitmaps.len() > maximum_bitmaps
         || cumulative.bitmaps.len() > maximum_bitmaps
     {
@@ -307,6 +330,8 @@ fn check_service(
         after.objects(),
         incoming.object_operands,
         cumulative.object_operands,
+        incoming.object_programs,
+        cumulative.object_programs,
         deadline,
     )?;
     check_bitmaps(
@@ -688,7 +713,7 @@ fn check_packets(
     new: &EncodedTeletextPage,
     allowed: &PermissionMask,
     operand_change: bool,
-    row_change: bool,
+    x26_repacking: bool,
     max_units: usize,
     compiler_links: bool,
 ) -> Result<()> {
@@ -721,13 +746,15 @@ fn check_packets(
     // check_service/check_enhancements already authenticate the retained
     // authored commands and exactly the supplied semantic overlays. A Base edit
     // can change compiler-owned repaint recipes, selectors and X26 packing even
-    // though uploaded X26 and every authored command remain unchanged. Compare
-    // all other completed packets exactly; protected cells are checked below.
+    // though uploaded X26 and every authored command remain unchanged. A checked
+    // Local program intent likewise permits native X26 repacking; exact uploaded
+    // structure was authenticated separately. Compare all other completed packets
+    // exactly; protected cells are checked below.
     // An uploaded X26 edit still needs the original TTI/operand reconciliation.
     // Generated X27/4 changes have separately matched exact private compiler
     // link descriptors; uploaded X27 stays immutable against its old receipt.
     let protected = |record: &&TeletextEncodedDisplayRecord| {
-        protected_packet(record, row_change, compiler_links)
+        protected_packet(record, x26_repacking, compiler_links)
     };
     let old_records = before.records.iter().filter(protected);
     let new_records = after.records.iter().filter(protected);
@@ -802,7 +829,7 @@ fn check_packets(
 }
 fn protected_packet(
     record: &TeletextEncodedDisplayRecord,
-    row_change: bool,
+    x26_repacking: bool,
     compiler_links: bool,
 ) -> bool {
     !((compiler_links
@@ -814,7 +841,7 @@ fn protected_packet(
                 ..
             }
         ))
-        || (row_change
+        || (x26_repacking
             && matches!(
                 record,
                 TeletextEncodedDisplayRecord::Triplets { row: 26, .. }
@@ -889,6 +916,7 @@ fn compare_protected(
     old: &TeletextMainComposition,
     new: &TeletextMainComposition,
     allowed: &PermissionMask,
+    lineage: &lineage::ProtectedLineage<'_>,
     budget: &TeletextAuthoredServiceEncodingBudget,
     deadline: Instant,
 ) -> Result<()> {
@@ -922,7 +950,7 @@ fn compare_protected(
         }
         for column in 0_u8..width {
             if !allowed.visual[usize::from(row)][usize::from(column)] {
-                compare_cell(old, new, row, column, deadline)?;
+                compare_cell(old, new, row, column, lineage, deadline)?;
             }
         }
     }
@@ -1043,31 +1071,50 @@ fn compare_base(
 fn same_attribute<T: Copy + PartialEq>(
     old: TeletextDisplayAttribute<'_, T>,
     new: TeletextDisplayAttribute<'_, T>,
+    lineage: &lineage::ProtectedLineage<'_>,
 ) -> bool {
-    old.value().is_some() && old.value() == new.value() && old.writer() == new.writer()
+    old.value().is_some()
+        && old.value() == new.value()
+        && match (old.writer(), new.writer()) {
+            (Some(a), Some(b)) => {
+                a.same_payload(b) && lineage.same_attribute_source(a.source(), b.source())
+            }
+            (None, None) => true,
+            _ => false,
+        }
 }
-fn same_attributes(old: TeletextDisplayCell<'_>, new: TeletextDisplayCell<'_>) -> bool {
+fn same_attributes(
+    old: TeletextDisplayCell<'_>,
+    new: TeletextDisplayCell<'_>,
+    lineage: &lineage::ProtectedLineage<'_>,
+) -> bool {
     let before = old.attributes();
     let after = new.attributes();
-    same_attribute(before.foreground(), after.foreground())
-        && same_attribute(before.background(), after.background())
-        && same_attribute(before.flash(), after.flash())
-        && same_attribute(before.double_height(), after.double_height())
-        && same_attribute(before.double_width(), after.double_width())
-        && same_attribute(before.boxed(), after.boxed())
-        && same_attribute(before.conceal(), after.conceal())
-        && same_attribute(before.invert(), after.invert())
+    same_attribute(before.foreground(), after.foreground(), lineage)
+        && same_attribute(before.background(), after.background(), lineage)
+        && same_attribute(before.flash(), after.flash(), lineage)
+        && same_attribute(before.double_height(), after.double_height(), lineage)
+        && same_attribute(before.double_width(), after.double_width(), lineage)
+        && same_attribute(before.boxed(), after.boxed(), lineage)
+        && same_attribute(before.conceal(), after.conceal(), lineage)
+        && same_attribute(before.invert(), after.invert(), lineage)
         && same_attribute(
             before.underline_or_separated_mosaics(),
             after.underline_or_separated_mosaics(),
+            lineage,
         )
-        && same_attribute(before.spacing_separated(), after.spacing_separated())
+        && same_attribute(
+            before.spacing_separated(),
+            after.spacing_separated(),
+            lineage,
+        )
 }
 fn compare_cell(
     old: &TeletextMainComposition,
     new: &TeletextMainComposition,
     row: u8,
     column: u8,
+    lineage: &lineage::ProtectedLineage<'_>,
     deadline: Instant,
 ) -> Result<()> {
     let owner = old.owner();
@@ -1096,13 +1143,13 @@ fn compare_cell(
             TeletextEditorialEffectsFailure::Unresolved,
         ));
     }
-    if before.fragment() != after.fragment() || !same_attributes(before, after) {
+    if before.fragment() != after.fragment() || !same_attributes(before, after, lineage) {
         return Err(mismatch());
     }
-    if origin_signature(old, before) != origin_signature(new, after) {
+    if origin_signature(old, before, None) != origin_signature(new, after, Some(lineage)) {
         return Err(mismatch());
     }
-    if !charset_context::same_cell(old, new, before, after, deadline)? {
+    if !charset_context::same_cell(old, new, before, after, lineage, deadline)? {
         return Err(mismatch());
     }
     let unresolved = || {
@@ -1127,13 +1174,14 @@ struct OriginSignature {
     position: (u16, u16),
     priority: ersatzrs_domain::TeletextGlyphPriority,
     operation: Option<ersatzrs_domain::TeletextColumnOperation>,
-    source: Option<ersatzrs_domain::TeletextEnhancementSource>,
+    source: Option<lineage::CanonicalSource>,
     root: Option<ersatzrs_domain::TeletextSpatialRootSource>,
     invocation: Option<ersatzrs_domain::TeletextSpatialInvocationId>,
 }
 fn origin_signature(
     composition: &TeletextMainComposition,
     cell: TeletextDisplayCell<'_>,
+    lineage: Option<&lineage::ProtectedLineage<'_>>,
 ) -> Option<OriginSignature> {
     let origin = composition
         .display_resolution()
@@ -1150,7 +1198,11 @@ fn origin_signature(
         position: candidate.position(),
         priority: candidate.priority(),
         operation: candidate.operation(),
-        source: candidate.source(),
+        source: candidate.source().map(|source| {
+            lineage.map_or(lineage::CanonicalSource::Existing(source), |lineage| {
+                lineage.source(source)
+            })
+        }),
         root: candidate.root_source(),
         invocation: candidate.invocation(),
     })

@@ -108,8 +108,11 @@ fn assert_old_fence_equal(old: &TeletextMainComposition, new: &TeletextMainCompo
     let a = old.display_resolution().cell(1, 9).unwrap();
     let b = new.display_resolution().cell(1, 9).unwrap();
     assert_eq!(a.fragment(), b.fragment());
-    assert!(same_attributes(a, b));
-    assert_eq!(origin_signature(old, a), origin_signature(new, b));
+    assert!(same_attributes(a, b, &lineage::ProtectedLineage::default()));
+    assert_eq!(
+        origin_signature(old, a, None),
+        origin_signature(new, b, None)
+    );
     assert_eq!(
         project_teletext_comparison_glyph(old, a).unwrap(),
         project_teletext_comparison_glyph(new, b).unwrap()
@@ -137,6 +140,7 @@ fn check(
             rows: &[],
             operands: &changes,
             object_operands: &[],
+            object_programs: &[],
             bitmaps: &[],
         },
         &policy().encoding,
@@ -232,10 +236,11 @@ fn unchanged_pending_consensus_is_preserved_but_changed_raw_contender_is_protect
     assert!(a.value().is_none());
     assert!(b.value().is_none());
     let same = super::super::charset_context::same_selection;
-    assert!(same(&old, &old, Some(a), Some(a), deadline()).unwrap());
-    assert!(!same(&old, &new, Some(a), Some(b), deadline()).unwrap());
+    let lineage = super::super::lineage::ProtectedLineage::default();
+    assert!(same(&old, &old, Some(a), Some(a), &lineage, deadline()).unwrap());
+    assert!(!same(&old, &new, Some(a), Some(b), &lineage, deadline()).unwrap());
     assert_eq!(
-        same(&old, &old, Some(a), Some(a), Instant::now())
+        same(&old, &old, Some(a), Some(a), &lineage, Instant::now())
             .unwrap_err()
             .reason,
         TeletextEditorialEffectsFailure::TimedOut

@@ -34,7 +34,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     teletext_channel_documents::{
-        encode_original_producer_documents_with_editorial_overlays, maximum_producers,
+        encode_original_producer_documents_with_editorial_programs, maximum_producers,
         EncodedChannelTeletextOriginals, TeletextChannelDocumentEncodingPolicy,
     },
     teletext_designs::NativeTeletextDesignError,
@@ -592,14 +592,17 @@ pub(super) fn compile_effective_restored_parts(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.local_object_operands());
+    let programs = parts.editorial_overlay.as_ref().map_or(&[][..], |overlay| {
+        overlay.local_object_glyph_program_overlays()
+    });
     let bitmaps = parts
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.drcs_bitmap_overlays());
-    let originals = encode_original_producer_documents_with_editorial_overlays(
+    let originals = encode_original_producer_documents_with_editorial_programs(
         entry,
         parts.documents,
-        (overlays, operands, object_operands, bitmaps),
+        (overlays, operands, object_operands, bitmaps, programs),
         deadline,
         region,
         policy,

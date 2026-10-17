@@ -1288,6 +1288,13 @@ enum Path {
     EditorialOperand,
     EditorialObjectOperands,
     EditorialObjectOperand,
+    EditorialGlyphPrograms,
+    EditorialGlyphProgram,
+    EditorialProgramDefinition,
+    EditorialProgramCommands,
+    EditorialProgramCommand,
+    EditorialRetainedCommands,
+    EditorialRetainedCommand,
     EditorialBitmaps,
     EditorialBitmap,
     EditorialBitmapRows,
@@ -1334,6 +1341,23 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::object_operands::StoredObjectOperand,
             >(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialGlyphProgram) {
+            self.inner.scan.check(storage::<
+                editorial_overlay::local_object_glyph_programs::StoredGlyphProgram,
+            >(self.count))?;
+        }
+        if matches!(self.inner.path, Path::EditorialProgramCommand) {
+            self.inner
+                .scan
+                .check(storage::<ersatzrs_domain::TeletextEnhancementCommand>(
+                    self.count,
+                ))?;
+        }
+        if matches!(self.inner.path, Path::EditorialRetainedCommand) {
+            self.inner
+                .scan
+                .check(storage::<Option<usize>>(self.count))?;
+        }
         if matches!(self.inner.path, Path::EditorialBitmap) {
             self.inner
                 .scan
@@ -1351,11 +1375,17 @@ impl Scan {
                 | Path::EditorialRow
                 | Path::EditorialOperand
                 | Path::EditorialObjectOperand
+                | Path::EditorialGlyphProgram
+                | Path::EditorialProgramCommand
+                | Path::EditorialRetainedCommand
                 | Path::EditorialBitmap
         ) {
             return Ok(());
         }
-        if matches!(path, Path::EditorialOperand | Path::EditorialObjectOperand) {
+        if matches!(
+            path,
+            Path::EditorialOperand | Path::EditorialObjectOperand | Path::EditorialProgramCommand
+        ) {
             self.editorial_operands = self
                 .editorial_operands
                 .checked_add(1)
@@ -1497,6 +1527,16 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "local_program_operands") => Path::EditorialOperands,
                 (Path::EditorialOverlay, "drcs_bitmap_overlays") => Path::EditorialBitmaps,
                 (Path::EditorialOverlay, "local_object_operands") => Path::EditorialObjectOperands,
+                (Path::EditorialOverlay, "local_object_glyph_program_overlays") => {
+                    Path::EditorialGlyphPrograms
+                }
+                (Path::EditorialGlyphProgram, "expected" | "replacement") => {
+                    Path::EditorialProgramDefinition
+                }
+                (Path::EditorialProgramDefinition, "commands") => Path::EditorialProgramCommands,
+                (Path::EditorialGlyphProgram, "retained_commands") => {
+                    Path::EditorialRetainedCommands
+                }
                 (Path::EditorialBitmap, "expected" | "replacement") => Path::EditorialBitmapRows,
                 (Path::EditorialPage, "rows") => Path::EditorialRows,
                 (Path::EditorialRow, "cells") => Path::EditorialCells,
@@ -1572,7 +1612,7 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
             Path::EditorialBitmapRows => (10, Path::Other, "editorial bitmap rows"),
             Path::EditorialRows => (25, Path::EditorialRow, "editorial rows"),
             Path::EditorialCells => (40, Path::Other, "editorial cells"),
-            _ => (MAX_BINDINGS, Path::Other, "sequence"),
+            _ => glyph_program_sequence_limits(self.path, self.scan.budget),
         };
         let mut count = 0_usize;
         loop {
@@ -1599,6 +1639,30 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
         Ok(())
     }
 }
+fn glyph_program_sequence_limits(
+    path: Path,
+    budget: TeletextDesignDocumentBudget,
+) -> (usize, Path, &'static str) {
+    match path {
+        Path::EditorialGlyphPrograms => (
+            budget.validation.service.max_objects,
+            Path::EditorialGlyphProgram,
+            "editorial glyph programs",
+        ),
+        Path::EditorialProgramCommands => (
+            budget.validation.service.max_commands.min(208),
+            Path::EditorialProgramCommand,
+            "editorial glyph program commands",
+        ),
+        Path::EditorialRetainedCommands => (
+            budget.validation.service.max_structure_items.min(208),
+            Path::EditorialRetainedCommand,
+            "editorial retained commands",
+        ),
+        _ => (MAX_BINDINGS, Path::Other, "sequence"),
+    }
+}
+
 fn preflight_json(
     bytes: &[u8],
     budget: TeletextDesignDocumentBudget,

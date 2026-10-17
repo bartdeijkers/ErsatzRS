@@ -1,6 +1,6 @@
 //! Protected original glyph context, independent of masks and registry indexes.
 
-use super::{check_deadline, Result, TeletextMainComposition};
+use super::{check_deadline, lineage::ProtectedLineage, Result, TeletextMainComposition};
 use ersatzrs_domain::{
     TeletextBaseAuthoredContent, TeletextBaseDisplayCellKind, TeletextCharsetDeclaration,
     TeletextCharsetExecution, TeletextDisplayCell, TeletextExecutedCharsetSelection,
@@ -13,6 +13,7 @@ pub(super) fn same_cell(
     new: &TeletextMainComposition,
     before: TeletextDisplayCell<'_>,
     after: TeletextDisplayCell<'_>,
+    lineage: &ProtectedLineage<'_>,
     deadline: Instant,
 ) -> Result<bool> {
     check_deadline(deadline)?;
@@ -25,6 +26,7 @@ pub(super) fn same_cell(
         new.charset_execution(),
         before.context().selection(),
         after.context().selection(),
+        lineage,
         deadline,
     )? {
         return Ok(false);
@@ -110,6 +112,7 @@ pub(super) fn same_selection(
     new: &TeletextCharsetExecution,
     before: Option<TeletextExecutedCharsetSelection>,
     after: Option<TeletextExecutedCharsetSelection>,
+    lineage: &ProtectedLineage<'_>,
     deadline: Instant,
 ) -> Result<bool> {
     let (Some(mut before), Some(mut after)) = (before, after) else {
@@ -122,7 +125,7 @@ pub(super) fn same_selection(
         match (before.pending(), after.pending()) {
             (None, None) => {
                 return Ok(before.value() == after.value()
-                    && same_known_declaration(old, new, before, after));
+                    && same_known_declaration(old, new, before, after, lineage));
             }
             (Some(a), Some(b)) => {
                 let (Some(a_record), Some(b_record)) = (old.pending().get(a), new.pending().get(b))
@@ -130,7 +133,7 @@ pub(super) fn same_selection(
                     return Ok(false);
                 };
                 if a_record.position() != b_record.position()
-                    || !same_contenders(old, new, a, b, deadline)?
+                    || !same_contenders(old, new, a, b, lineage, deadline)?
                 {
                     return Ok(false);
                 }
@@ -148,6 +151,7 @@ fn same_known_declaration(
     new: &TeletextCharsetExecution,
     before: TeletextExecutedCharsetSelection,
     after: TeletextExecutedCharsetSelection,
+    lineage: &ProtectedLineage<'_>,
 ) -> bool {
     match (before.declaration(), after.declaration()) {
         (None, None) => true,
@@ -155,7 +159,7 @@ fn same_known_declaration(
             .declarations()
             .get(a)
             .zip(new.declarations().get(b))
-            .is_some_and(|(a, b)| same_declaration(a, b)),
+            .is_some_and(|(a, b)| same_declaration(a, b, lineage)),
         _ => false,
     }
 }
@@ -165,6 +169,7 @@ fn same_contenders(
     new: &TeletextCharsetExecution,
     a: usize,
     b: usize,
+    lineage: &ProtectedLineage<'_>,
     deadline: Instant,
 ) -> Result<bool> {
     let mut before = old.pending_contenders(a);
@@ -173,16 +178,20 @@ fn same_contenders(
         check_deadline(deadline)?;
         match (before.next(), after.next()) {
             (None, None) => return Ok(true),
-            (Some(a), Some(b)) if same_declaration(a, b) => {}
+            (Some(a), Some(b)) if same_declaration(a, b, lineage) => {}
             _ => return Ok(false),
         }
     }
 }
 
-fn same_declaration(a: &TeletextCharsetDeclaration, b: &TeletextCharsetDeclaration) -> bool {
+fn same_declaration(
+    a: &TeletextCharsetDeclaration,
+    b: &TeletextCharsetDeclaration,
+    lineage: &ProtectedLineage<'_>,
+) -> bool {
     a.designation() == b.designation()
         && a.position() == b.position()
-        && a.source() == b.source()
+        && lineage.same_source(a.source(), b.source())
         && a.root_source() == b.root_source()
         && a.invocation() == b.invocation()
 }

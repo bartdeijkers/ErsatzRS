@@ -328,6 +328,7 @@ fn qualify_rows(
     let operands = overlay.local_program_operands().to_vec();
     let object_operands = overlay.local_object_operands().to_vec();
     let bitmaps = overlay.drcs_bitmap_overlays().to_vec();
+    let object_programs = overlay.local_object_glyph_program_overlays().to_vec();
     let encoding = policy.encoding;
     let edited = parts
         .compile(stored, policy, deadline, overlays.clone())
@@ -347,6 +348,7 @@ fn qualify_rows(
             rows: &overlays,
             operands: &operands,
             object_operands: &object_operands,
+            object_programs: &object_programs,
             bitmaps: &bitmaps,
         },
         &encoding,
@@ -474,6 +476,7 @@ fn reconcile_files(
         rows: Vec::new(),
         operands: Vec::new(),
         object_operands: Vec::new(),
+        object_programs: Vec::new(),
         bitmaps: Vec::new(),
     };
     let encoded = baseline
@@ -514,6 +517,7 @@ fn reconcile_files(
             changes.rows.extend(incoming.rows);
             changes.operands.extend(incoming.operands);
             changes.object_operands.extend(incoming.object_operands);
+            changes.object_programs.extend(incoming.object_programs);
         } else if let Some(mapping) = body.project.assets.iter().find(|asset| {
             asset.name == original.name
                 && super::teletext_editorial_tti::resources::supported(asset)
@@ -538,6 +542,7 @@ fn reconcile_files(
         && changes.operands.is_empty()
         && changes.object_operands.is_empty()
         && changes.bitmaps.is_empty()
+        && changes.object_programs.is_empty()
     {
         return Err(NativeTeletextEditorialImportError::NoChanges);
     }
@@ -566,6 +571,10 @@ fn validate_reconciled_files(
         };
         if incoming.rows.iter().any(|overlay| overlay.owner() == owner)
             || incoming.has_drcs_selection(Some(owner))
+            || incoming
+                .object_programs
+                .iter()
+                .any(|program| program.owner() == owner)
         {
             validate_recompiled_teletext_editorial_tti_encoding(
                 mapping,
@@ -578,7 +587,7 @@ fn validate_reconciled_files(
                     .encoded()
                     .ok_or(NativeTeletextEditorialImportError::Association)?,
                 encoded,
-                (&incoming.operands, &incoming.object_operands),
+                incoming,
             )?;
         } else {
             validate_teletext_editorial_tti_encoding(

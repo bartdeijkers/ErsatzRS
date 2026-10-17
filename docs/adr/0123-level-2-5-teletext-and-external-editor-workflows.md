@@ -224,10 +224,35 @@ inserted/deleted or retain their family while changing code/column. Each program
 and map has a 208-command bound, followed by original/input/result service budgets
 and complete dependency reconstruction; final X26 packing remains mandatory.
 This map records checked correspondence, not inferred editor history or edit
-authority. Host integration must authenticate original provenance and compare all
-protected consumers with the correct before/after lineage. Existing private
-concept versions1–10 and fixed-topology import remain unchanged; persistence,
-repeat composition and actual structural editor import still require qualification.
+authority. Private concept version11 persists a genuine Local G0/G1 structural
+intent alongside existing row, operand and bitmap intents. Versions1–10 remain
+closed and byte-compatible. Streaming preflight charges program arrays and survivor
+maps before typed allocation; exact-original association patches cumulative
+nonglyph operands first and rejects overlapping G0/G1 scalar/program ownership.
+
+The host authenticates the complete uploaded X26 stream against original compiler
+spans: definition count/type/order, marker and invocation relocation, unowned
+blocks, termination, contiguous designations and padding. Canonical monotonic
+alignment runs separately between immutable nonglyph anchors. Exact glyph/code/
+column matches dominate same-family matches; right-biased ties retain the last
+identical survivor. This is a deterministic import correspondence, not recovered
+GUI history. Repeated imports compose latest-to-root correspondence; undo removes
+redundant structural intent and retains older scalar formats where applicable.
+
+Every shared consumer still needs captured editing permission. Protected cells
+retain complete glyph, attributes, charset context and geometry. Only authenticated
+command/event source coordinates are translated; inserted commands have distinct
+provenance and cannot impersonate missing or original writers. Full native
+reconstruction qualifies the uploaded change, including relocated Local pointers
+and generated blocks; Base-derived canonical differences remain compiler-owned.
+Saving an import remains separate from explicit publication. No installed package,
+addon response, editor carrier, schema migration or runtime dependency changes.
+
+P9A-04 owns exact verified cases and remaining gaps. In particular, nonglyph anchors
+with no emitted word can leave adjacent glyph segments without a physical import
+boundary; this partial importer may reject such a change. That is an open required
+interchange gap, not an accepted product restriction. Arbitrary command/resource/
+object editing and complete editor/client/engine acceptance remain required.
 
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the

@@ -1930,3 +1930,6 @@ mod external_editor_probe {
         fixture.state.pool.close().await;
     }
 }
+
+#[path = "editorial_local_glyph_structure.rs"]
+mod editorial_local_glyph_structure;

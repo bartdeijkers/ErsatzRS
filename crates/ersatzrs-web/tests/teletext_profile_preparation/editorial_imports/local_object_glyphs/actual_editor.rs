@@ -11,7 +11,7 @@ const EDITOR_BINARY: &str = "af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a0
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct EditorSaved {
+pub(in super::super) struct EditorSaved {
     probe_version: u16,
     editor_name: String,
     editor_version: String,
@@ -20,7 +20,7 @@ pub(super) struct EditorSaved {
     saved_file: String,
 }
 
-pub(super) fn json_new(directory: &Path, name: &str, value: &impl serde::Serialize) {
+pub(in super::super) fn json_new(directory: &Path, name: &str, value: &impl serde::Serialize) {
     live_client::write_new(
         &directory.join(name),
         &serde_json::to_vec_pretty(value).unwrap(),
@@ -203,7 +203,7 @@ fn inputs(directory: &Path, name: &str, flow: &Flow, family: Family) -> Value {
     inputs_for_edit(directory, name, flow, || edit_metadata(flow, family))
 }
 
-pub(super) fn inputs_for_edit(
+pub(in super::super) fn inputs_for_edit(
     directory: &Path,
     name: &str,
     flow: &Flow,
@@ -260,7 +260,7 @@ pub(super) fn inputs_for_edit(
     ready
 }
 
-pub(super) async fn completion(directory: &Path) -> EditorSaved {
+pub(in super::super) async fn completion(directory: &Path) -> EditorSaved {
     tokio::time::timeout(Duration::from_mins(10), async {
         loop {
             if tokio::fs::try_exists(directory.join("editor-saved.json"))
@@ -287,7 +287,7 @@ pub(super) async fn completion(directory: &Path) -> EditorSaved {
     marker
 }
 
-pub(super) fn actual_request(
+pub(in super::super) fn actual_request(
     directory: &Path,
     flow: &Flow,
     bytes: &[u8],

@@ -446,7 +446,7 @@ async fn retained_local_object_all_panel_consumers_require_captured_edit_permiss
 }
 
 #[path = "local_object_glyphs/actual_editor.rs"]
-mod actual_editor;
+pub(super) mod actual_editor;
 
 #[path = "local_object_glyphs/attributes.rs"]
 mod attributes;

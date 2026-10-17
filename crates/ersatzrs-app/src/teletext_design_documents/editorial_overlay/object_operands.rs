@@ -48,7 +48,7 @@ impl<'de> Deserialize<'de> for StoredObjectOperand {
     }
 }
 #[derive(Serialize)]
-struct StoredLocalIdentity(TeletextObjectIdentity);
+pub(super) struct StoredLocalIdentity(pub(super) TeletextObjectIdentity);
 impl<'de> Deserialize<'de> for StoredLocalIdentity {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]

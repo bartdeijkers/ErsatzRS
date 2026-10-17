@@ -12,16 +12,17 @@ use ersatzrs_app::{
     },
 };
 use ersatzrs_domain::{
-    TeletextColumnOperation, TeletextDrcsBitmapOverlay, TeletextLocalObjectOperandOverlay,
-    TeletextLocalProgramOperandOverlay, TeletextPageAddress, TeletextPageNumber,
-    TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextResourceIdentity,
-    TeletextSubcode,
+    TeletextColumnOperation, TeletextDrcsBitmapOverlay, TeletextLocalObjectGlyphProgramOverlay,
+    TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
+    TeletextPageNumber, TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow,
+    TeletextResourceIdentity, TeletextSubcode,
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 
 mod operands;
 pub(super) mod resources;
+mod structural;
 
 /// Reconciled intents, without region permission or publication authority.
 #[derive(Default)]
@@ -29,6 +30,7 @@ pub(super) struct TeletextEditorialChanges {
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
     pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+    pub object_programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
 }
 
@@ -263,6 +265,17 @@ fn protected(
     deadline: Instant,
     local_operands: bool,
 ) -> Result<()> {
+    protected_with_repacking(baseline, edited, location, deadline, local_operands, false)
+}
+
+fn protected_with_repacking(
+    baseline: &Page<'_>,
+    edited: &Page<'_>,
+    location: Location,
+    deadline: Instant,
+    local_operands: bool,
+    repacking: bool,
+) -> Result<()> {
     for (same, failure) in [
         (
             baseline.status.is_some() && baseline.status == edited.status,
@@ -298,7 +311,9 @@ fn protected(
             let before = baseline.packets[usize::from(row - 26)][usize::from(designation)];
             let after = edited.packets[usize::from(row - 26)][usize::from(designation)];
             if before != after
-                && !(local_operands && row == 26 && before.is_some() && after.is_some())
+                && !(local_operands
+                    && row == 26
+                    && (repacking || (before.is_some() && after.is_some())))
             {
                 return Err(NativeTeletextEditorialTtiError {
                     row: Some(row),
@@ -393,6 +408,25 @@ pub(super) fn reconcile_teletext_editorial_tti_with_operands(
     )
 }
 
+fn structural_candidate(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    pages: (&Page<'_>, &Page<'_>),
+    location: Location,
+    deadline: Instant,
+    original: NativeTeletextEditorialTtiError,
+) -> Result<TeletextEditorialChanges> {
+    location.check_deadline(deadline)?;
+    protected_with_repacking(pages.0, pages.1, location, deadline, true, true)
+        .and_then(|()| structural::reconcile(service, owner, pages.0, pages.1, location, deadline))
+        .or_else(|_| {
+            // A rejected alternate interpretation must not erase the original
+            // precise packet diagnosis. Deadline exhaustion still takes priority.
+            location.check_deadline(deadline)?;
+            Err(original)
+        })
+}
+
 fn reconcile_changes(
     mapping: &TeletextExportPageMapping,
     baseline_bytes: &[u8],
@@ -417,12 +451,30 @@ fn reconcile_changes(
     }
     baseline.validate_header(location)?;
     edited.validate_header(location)?;
-    protected(&baseline, &edited, location, deadline, native.1.is_some())?;
-    let mut changes = match native.1 {
-        Some(service) => {
-            operands::reconcile(service, owner, &baseline, &edited, location, deadline)?
+    let ordinary =
+        protected(&baseline, &edited, location, deadline, native.1.is_some()).and_then(|()| {
+            match native.1 {
+                Some(service) => {
+                    operands::reconcile(service, owner, &baseline, &edited, location, deadline)
+                }
+                None => Ok(TeletextEditorialChanges::default()),
+            }
+        });
+    let mut changes = match ordinary {
+        Ok(changes) => changes,
+        Err(original) => {
+            let Some(service) = native.1 else {
+                return Err(original);
+            };
+            structural_candidate(
+                service,
+                owner,
+                (&baseline, &edited),
+                location,
+                deadline,
+                original,
+            )?
         }
-        None => TeletextEditorialChanges::default(),
     };
     let mut rows = Vec::new();
     // QTeletextMaker 1.0 LevelOnePage::setCharacter clears all-space packets;
@@ -486,10 +538,7 @@ pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
     deadline: Instant,
     baseline: &EncodedTeletextAuthoredService,
     service: &EncodedTeletextAuthoredService,
-    changes: (
-        &[TeletextLocalProgramOperandOverlay],
-        &[TeletextLocalObjectOperandOverlay],
-    ),
+    changes: &TeletextEditorialChanges,
 ) -> Result<()> {
     let location = Location {
         page: mapping.page.page,
@@ -499,7 +548,23 @@ pub(super) fn validate_recompiled_teletext_editorial_tti_encoding(
     let owner = owner(mapping, location)?;
     let document = location.parse(edited_bytes, budget, deadline)?;
     let page = Page::index(&document, mapping, location, deadline)?;
-    operands::check_recompiled_packets(baseline, service, owner, &page, changes, location, deadline)
+    if changes
+        .object_programs
+        .iter()
+        .any(|program| program.owner() == owner)
+    {
+        structural::qualify_recompiled(baseline, service, owner, &page, changes, location, deadline)
+    } else {
+        operands::check_recompiled_packets(
+            baseline,
+            service,
+            owner,
+            &page,
+            (&changes.operands, &changes.object_operands),
+            location,
+            deadline,
+        )
+    }
 }
 
 #[cfg(test)]

@@ -27,7 +27,7 @@ mod flash_charset;
 #[path = "operands/drcs_selection.rs"]
 mod drcs_selection;
 
-type PacketWords = [Option<[u32; 13]>; 16];
+pub(super) type PacketWords = [Option<[u32; 13]>; 16];
 
 pub(super) fn reconcile(
     service: &EncodedTeletextAuthoredService,
@@ -104,7 +104,7 @@ pub(super) fn reconcile(
     Ok(result)
 }
 
-fn compiled_program(
+pub(super) fn compiled_program(
     service: &EncodedTeletextAuthoredService,
     owner: TeletextPageAddress,
 ) -> Option<&EncodedTeletextLocalObjectProgram> {
@@ -169,7 +169,7 @@ fn located_word(location: Location, word: usize) -> NativeTeletextEditorialTtiEr
     }
 }
 
-fn packet_words(
+pub(super) fn packet_words(
     service: &EncodedTeletextAuthoredService,
     owner: TeletextPageAddress,
     location: Location,
@@ -405,7 +405,7 @@ fn check_changed_word(
 /// Table 28's exact address/mode/data fields; reserved bits stay refused. Only
 /// existing same-family operands are reconstructed, never generated carriers,
 /// unauthenticated object bodies, terminators, compatibility selectors or new commands.
-fn operand(
+pub(super) fn operand(
     column: u8,
     expected: TeletextColumnOperation,
     before: u32,

@@ -1,5 +1,5 @@
 //! Catalogue correspondence; all invocation permissions remain an outer gate.
-use super::check;
+use super::check_operands;
 use crate::host::teletext_editorial_effects::TeletextEditorialEffectsFailure;
 use ersatzrs_domain::{
     TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
@@ -73,12 +73,12 @@ fn latest_transition_and_separate_root_qualification_accept_repeat_and_exact_und
     let first = [change(b'A', b'B')];
     let incoming = [change(b'B', b'C')];
     let cumulative = [change(b'A', b'C')];
-    check(&root, &latest, &first, &first, deadline()).unwrap();
-    check(&latest, &final_service, &incoming, &cumulative, deadline()).unwrap();
-    check(&root, &final_service, &cumulative, &cumulative, deadline()).unwrap();
+    check_operands(&root, &latest, &first, &first, deadline()).unwrap();
+    check_operands(&latest, &final_service, &incoming, &cumulative, deadline()).unwrap();
+    check_operands(&root, &final_service, &cumulative, &cumulative, deadline()).unwrap();
     // Undo removes the cumulative root intent, while preserving the real
     // incoming C->A transition for latest-export permission qualification.
-    check(
+    check_operands(
         &final_service,
         &root,
         &[change(b'C', b'A')],
@@ -86,7 +86,7 @@ fn latest_transition_and_separate_root_qualification_accept_repeat_and_exact_und
         deadline(),
     )
     .unwrap();
-    check(&root, &root, &[], &[], deadline()).unwrap();
+    check_operands(&root, &root, &[], &[], deadline()).unwrap();
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn stale_duplicate_missing_and_wrong_cumulative_operands_reject() {
         vec![bad_command],
     ] {
         assert_eq!(
-            check(&before, &after, &incoming, &[valid], deadline())
+            check_operands(&before, &after, &incoming, &[valid], deadline())
                 .unwrap_err()
                 .reason,
             TeletextEditorialEffectsFailure::Association
@@ -113,7 +113,7 @@ fn stale_duplicate_missing_and_wrong_cumulative_operands_reject() {
     }
     for cumulative in [vec![valid, valid], vec![change(b'A', b'C')]] {
         assert_eq!(
-            check(&before, &after, &[valid], &cumulative, deadline())
+            check_operands(&before, &after, &[valid], &cumulative, deadline())
                 .unwrap_err()
                 .reason,
             TeletextEditorialEffectsFailure::Association
@@ -122,7 +122,7 @@ fn stale_duplicate_missing_and_wrong_cumulative_operands_reject() {
     // A forged root expectation cannot pass the independent root-to-final gate.
     let forged = [change(b'C', b'B')];
     assert_eq!(
-        check(&before, &after, &forged, &forged, deadline())
+        check_operands(&before, &after, &forged, &forged, deadline())
             .unwrap_err()
             .reason,
         TeletextEditorialEffectsFailure::Association
@@ -151,7 +151,7 @@ fn identity_type_count_order_and_unapproved_commands_stay_protected() {
     unapproved.program = TeletextEnhancementProgram::new(commands).unwrap();
     for changed in [wrong_type, extra_command, unapproved] {
         assert_eq!(
-            check(&before, &catalog(vec![changed]), &valid, &valid, deadline())
+            check_operands(&before, &catalog(vec![changed]), &valid, &valid, deadline())
                 .unwrap_err()
                 .reason,
             TeletextEditorialEffectsFailure::ProtectedStructure
@@ -162,16 +162,16 @@ fn identity_type_count_order_and_unapproved_commands_stay_protected() {
     let original = catalog(vec![definition(b'A'), other.clone()]);
     let reordered = catalog(vec![other, base]);
     assert_eq!(
-        check(&original, &reordered, &valid, &valid, deadline())
+        check_operands(&original, &reordered, &valid, &valid, deadline())
             .unwrap_err()
             .reason,
         TeletextEditorialEffectsFailure::ProtectedStructure
     );
-    assert!(check(&before, &catalog(vec![]), &[], &[], deadline()).is_err());
+    assert!(check_operands(&before, &catalog(vec![]), &[], &[], deadline()).is_err());
     let mut replaced = definition(b'A');
     replaced.identity = identity(65521);
     assert_eq!(
-        check(&before, &catalog(vec![replaced]), &[], &[], deadline())
+        check_operands(&before, &catalog(vec![replaced]), &[], &[], deadline())
             .unwrap_err()
             .reason,
         TeletextEditorialEffectsFailure::ProtectedStructure
@@ -181,7 +181,7 @@ fn identity_type_count_order_and_unapproved_commands_stay_protected() {
 #[test]
 fn expired_deadline_rejects_before_catalogue_changes_are_authorized() {
     assert_eq!(
-        check(
+        check_operands(
             &service(b'A'),
             &service(b'B'),
             &[change(b'A', b'B')],
