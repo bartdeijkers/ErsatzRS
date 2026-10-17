@@ -49,8 +49,8 @@ release section when tagging a release.
   private version 11 concepts with bounded survivor correspondence, authenticated
   marker/pointer relocation and protected shared-consumer lineage. Complete native
   reconstruction preserves original documents and keeps import separate from
-  publication. Nonglyph anchors without physical words and complete command,
-  resource/object and editor/Level 2.5 acceptance remain open.
+  publication. Complete command, resource/object and editor/Level 2.5 acceptance
+  remain open.
 - Import existing local teletext colour/attribute edits into versioned concepts,
   with exact command correspondence, complete native validation and protected-zone
   checks. Repeated edits, previews and reload preserve original documents and
@@ -718,6 +718,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve original implicit AP00 teletext position anchors during structural
+  editor imports, keeping glyph provenance and shared-consumer protection intact.
+  Valid imports no longer fail because a hidden anchor moves past an edited glyph;
+  existing position-order, row-zero and command-capacity checks remain enforced.
 - Preserve original POP-fallback side panels and background substitution in
   standalone QTeletextMaker exports through an explicit versioned editor view.
   Receipt-bound import protects that presentation while keeping native X28/M29

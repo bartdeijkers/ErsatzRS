@@ -1119,3 +1119,169 @@ async fn local_glyph_structure_native_combines_free_base_row_and_structural_conc
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
 }
+
+fn hidden_zero_program(stage: u8) -> TeletextEnhancementProgram {
+    let mut body = commands(stage);
+    body.insert(
+        if stage == 0 { 4 } else { 3 },
+        TeletextEnhancementCommand::SetPosition {
+            position: TeletextEnhancementPosition::new(0, 0).unwrap(),
+        },
+    );
+    TeletextEnhancementProgram::new(body).unwrap()
+}
+fn hidden_zero_response(theme: &str, page: u16, subcode: u16) -> Value {
+    let mut value = free(theme, page, subcode);
+    for object in value["service"]["objects"].as_array_mut().unwrap() {
+        if object["identity"]["object_id"] == 65520 && object["identity"]["owner"]["page"] == 124 {
+            object["program"] = serde_json::to_value(hidden_zero_program(0)).unwrap();
+        }
+    }
+    value
+}
+async fn assert_hidden_zero_concept(
+    fixture: &Fixture,
+    flow: &Flow,
+    concept: &SavedEditorialTeletextDesign,
+    expected: &TeletextLocalObjectGlyphProgramOverlay,
+) -> TeletextRaster {
+    let revision = drcs_bitmap::stored(fixture, concept).await;
+    let decoded = decode_teletext_design_documents(&revision.document, designs::budget()).unwrap();
+    let overlay = decoded.editorial_overlay().unwrap();
+    assert_eq!(overlay.schema_version(), 11);
+    assert_eq!(
+        overlay.local_object_glyph_program_overlays(),
+        std::slice::from_ref(expected)
+    );
+    assert!(overlay.pages().is_empty());
+    assert!(overlay.local_program_operands().is_empty());
+    assert!(overlay.local_object_operands().is_empty());
+    assert!(overlay.drcs_bitmap_overlays().is_empty());
+    assert_eq!(
+        overlay.provenance().original_digest,
+        flow.originals[0].digest
+    );
+    let mut body: Value = serde_json::from_slice(&revision.document).unwrap();
+    body.as_object_mut().unwrap().remove("editorial_overlay");
+    assert_eq!(
+        body,
+        serde_json::from_slice::<Value>(&flow.originals[0].document).unwrap()
+    );
+    let restored = drcs_bitmap::restored(fixture, concept).await;
+    let original = flow.saved[0].candidate();
+    assert_eq!(restored.selection(), original.selection());
+    assert_eq!(restored.metadata(), original.metadata());
+    assert_eq!(restored.transmissions(), original.transmissions());
+    assert_eq!(restored.sources().len(), original.sources().len());
+    for (current, saved) in restored.sources().iter().zip(original.sources()) {
+        assert_eq!(current.bytes(), saved.bytes());
+        assert_eq!(current.authoring(), saved.authoring());
+    }
+    assert_eq!(
+        restored.producers()[0].original(),
+        original.producers()[0].original()
+    );
+    let before = flow.accepted[0].service();
+    let declared = before
+        .declared()
+        .clone()
+        .with_local_object_glyph_program_overlays(
+            std::slice::from_ref(expected),
+            policy().encoding.validation.service,
+        )
+        .unwrap();
+    let after = restored.encoded().unwrap();
+    assert_eq!(after.declared(), &declared);
+    assert_rendered(before, after, 1);
+    external_editor_probe::preview_page(after, 124)
+}
+
+#[tokio::test]
+async fn local_glyph_structure_native_preserves_unemitted_zero_position_anchor() {
+    let (mut fixture, flow) = Box::pin(setup_with_fixture_policy(
+        hidden_zero_response,
+        Fixture::new_persistent().await,
+        drcs_companion::encoding_policy,
+    ))
+    .await;
+    let retained = resource_bank_admin::Retained::capture(&fixture).await;
+    let before = flow.accepted[0].service();
+    assert_eq!(
+        before
+            .declared()
+            .semantic()
+            .objects()
+            .definition(identity(65520))
+            .unwrap()
+            .program,
+        hidden_zero_program(0)
+    );
+    assert_eq!(hidden_zero_program(0).commands().len(), 10);
+    assert_eq!(definitions(before), [11, 21]);
+    let spans = encoded(before).command_positions();
+    assert!(
+        !spans
+            .iter()
+            .any(|position| position.source().object == Some(identity(65520))
+                && position.source().command == 4),
+        "the legal identity move has no physical word span"
+    );
+    for (command, word) in [(3, 15), (5, 16)] {
+        let position = spans
+            .iter()
+            .find(|position| {
+                position.source().object == Some(identity(65520))
+                    && position.source().command == command
+            })
+            .unwrap();
+        assert_eq!(position.first_word(), word);
+        assert_eq!(position.semantic_word(), word);
+    }
+    // Keep the zero-word anchor at AP00 before the surviving second A. The
+    // first A is deleted; exact right-biased correspondence retains old command5.
+    let expected = TeletextLocalObjectGlyphProgramOverlay::new(
+        identity(65520),
+        hidden_zero_program(0),
+        hidden_zero_program(1),
+        vec![
+            Some(0),
+            Some(1),
+            Some(2),
+            Some(4),
+            Some(5),
+            None,
+            None,
+            None,
+            None,
+            Some(6),
+            None,
+            None,
+            Some(7),
+            Some(8),
+            None,
+            Some(9),
+        ],
+    )
+    .unwrap();
+    let edited = request(&flow.receipts[0], 1, before, 0, 1);
+    let concept = import(&fixture, edited).await;
+    assert_eq!(concept.head().revision, 2);
+    let preview = Box::pin(assert_hidden_zero_concept(
+        &fixture, &flow, &concept, &expected,
+    ))
+    .await;
+    assert_original_pointers(&fixture, &flow).await;
+    retained.assert_unchanged(&fixture, &flow).await;
+    fixture = fixture.reopen().await;
+    assert_eq!(
+        Box::pin(assert_hidden_zero_concept(
+            &fixture, &flow, &concept, &expected
+        ))
+        .await,
+        preview
+    );
+    assert_original_pointers(&fixture, &flow).await;
+    retained.assert_unchanged(&fixture, &flow).await;
+    assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+}

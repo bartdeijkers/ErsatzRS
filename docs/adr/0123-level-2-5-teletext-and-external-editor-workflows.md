@@ -233,10 +233,17 @@ nonglyph operands first and rejects overlapping G0/G1 scalar/program ownership.
 The host authenticates the complete uploaded X26 stream against original compiler
 spans: definition count/type/order, marker and invocation relocation, unowned
 blocks, termination, contiguous designations and padding. Canonical monotonic
-alignment runs separately between immutable nonglyph anchors. Exact glyph/code/
-column matches dominate same-family matches; right-biased ties retain the last
-identical survivor. This is a deterministic import correspondence, not recovered
-GUI history. Repeated imports compose latest-to-root correspondence; undo removes
+alignment runs between immutable emitted nonglyph spans. A compiler-sealed
+original SetPosition(0,0) without a word span remains a mandatory zero-width
+transition at AP00, including leading, repeated and trailing anchors. Unknown
+missing spans do not grant edit authority. Unreachable alignment states prevent
+silent anchor deletion; equal-score anchor transitions choose the earliest
+permitted AP00 boundary. Exact glyph/code/column matches dominate same-family
+matches; right-biased glyph ties retain the last identical survivor. Original and
+rebuilt command quotas and the deadline precede allocation. Complete native
+reconstruction retains position-order and row-zero rejection; this seam does not
+implement missing row-zero lowering. This is deterministic import correspondence,
+not recovered GUI history. Repeated imports compose latest-to-root correspondence; undo removes
 redundant structural intent and retains older scalar formats where applicable.
 
 Every shared consumer still needs captured editing permission. Protected cells
@@ -248,11 +255,10 @@ and generated blocks; Base-derived canonical differences remain compiler-owned.
 Saving an import remains separate from explicit publication. No installed package,
 addon response, editor carrier, schema migration or runtime dependency changes.
 
-P9A-04 owns exact verified cases and remaining gaps. In particular, nonglyph anchors
-with no emitted word can leave adjacent glyph segments without a physical import
-boundary; this partial importer may reject such a change. That is an open required
-interchange gap, not an accepted product restriction. Arbitrary command/resource/
-object editing and complete editor/client/engine acceptance remain required.
+P9A-04 owns exact verified cases and remaining gaps, including the native
+RED-to-green AP00-anchor import and its protected-consumer boundary. General
+row-zero lowering, other command/resource/object editing and complete editor/
+client/engine acceptance remain required; no permanent restriction is accepted.
 
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the

@@ -3,46 +3,51 @@ use super::{fail, glyph_family, Location, Result};
 use ersatzrs_domain::TeletextEnhancementCommand;
 use std::time::Instant;
 
+mod kernel;
+
+pub(super) struct Aligned {
+    pub commands: Vec<TeletextEnhancementCommand>,
+    pub retained: Vec<Option<usize>>,
+}
+
 pub(super) fn align(
     old: &[(usize, TeletextEnhancementCommand)],
     new: &[TeletextEnhancementCommand],
     location: Location,
     deadline: Instant,
 ) -> Result<Vec<Option<usize>>> {
+    Ok(kernel::solve(old, new, location, deadline)?.retained)
+}
+
+pub(super) fn with_anchors(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    location.check_deadline(deadline)?;
     if old.len() > 208 || new.len() > 208 {
         return Err(fail(location));
     }
-    let width = new.len() + 1;
-    let mut scores = vec![0_usize; (old.len() + 1) * width];
-    for i in 1..=old.len() {
-        location.check_deadline(deadline)?;
-        for j in 1..=new.len() {
-            let skip = scores[(i - 1) * width + j].max(scores[i * width + j - 1]);
-            let weight = weight(&old[i - 1].1, &new[j - 1]);
-            scores[i * width + j] = if weight == 0 {
-                skip
-            } else {
-                skip.max(scores[(i - 1) * width + j - 1] + weight)
-            };
-        }
+
+    if old
+        .iter()
+        .all(|(_, command)| glyph_family(command).is_some())
+    {
+        let retained = align(old, new, location, deadline)?;
+        return Ok(Aligned {
+            commands: new.to_vec(),
+            retained,
+        });
     }
-    let mut result = vec![None; new.len()];
-    let (mut i, mut j) = (old.len(), new.len());
-    while i != 0 && j != 0 {
-        location.check_deadline(deadline)?;
-        let weight = weight(&old[i - 1].1, &new[j - 1]);
-        if weight != 0 && scores[i * width + j] == scores[(i - 1) * width + j - 1] + weight {
-            result[j - 1] = Some(old[i - 1].0);
-            i -= 1;
-            j -= 1;
-        } else if scores[(i - 1) * width + j] > scores[i * width + j - 1] {
-            i -= 1;
-        } else {
-            j -= 1;
-        }
-    }
-    Ok(result)
+    kernel::solve(old, new, location, deadline)
 }
+
+pub(super) fn hidden_identity(command: &TeletextEnhancementCommand) -> bool {
+    matches!(command, TeletextEnhancementCommand::SetPosition { position }
+        if position.row() == 0 && position.column() == 0)
+}
+
 fn weight(old: &TeletextEnhancementCommand, new: &TeletextEnhancementCommand) -> usize {
     if old == new {
         209
@@ -133,3 +138,7 @@ mod tests {
         assert!(align(&old, &new, location(), Instant::now()).is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "alignment/anchor_tests.rs"]
+mod anchor_tests;
