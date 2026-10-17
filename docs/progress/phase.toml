@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: context identity and capacity; suitable-client gate open'
+current_focus = 'P9A-04: resource call topology; suitable-client gate open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -415,10 +415,14 @@ bytes into three shared native previews, explicit publication/two reopens.
 P9A-04 owns the canonical receipt, 122 composed unique passes (8/8 final native),
 first missing-replay failures, strict app/web Clippy/fmt/architecture and complete
 F1–F6/V1–V6/X1–X3 map. Original resource/display/bank files stay byte-exact.
-Next F1: qualify the genuine distinct-resource/colliding-selector target, preserve
-legal full identities through typed intent/native/context equality, and reject
-invalid relationships precisely. Current collision edits reject without silent
-NoChanges. Oversized context remains X3 work; V6/V7 preserve full native content.
+F1 bounded collision qualification: POP1A2 is outside the retained display's
+selected POP1A0. Complete transitive validation already rejects ObjectSelection;
+changing selected metadata alone still fails until X27/4 agrees. This is new
+correct-rejection evidence, not a missing production gate. P9A-04 owns its receipt.
+Next F1 package: V8 existing-catalogue call insertion/deletion with exact typed
+intent, legacy policy and protected/shared consumer ancestry; prove affected
+import/preview/publication boundaries together. Coordinated resource/link/set
+editing remains open. Oversized context stays X3; V6/V7 preserve full native content.
 Suitable ordinary-client coverage V3/X1 remains decisive, unchanged and unqualified;
 QTM's editor-only alias rendering grants no native Public-stream/client acceptance.
 Full topology, F4 retirement/Base/drain and all end requirements remain open.

@@ -103,7 +103,7 @@ fn address() -> TeletextPageAddress {
         subcode: TeletextSubcode::new(0).unwrap(),
     }
 }
-fn links() -> TeletextX27Level25Links {
+fn links(public: u16) -> TeletextX27Level25Links {
     let absent = TeletextX27LinkDeclaration::new(
         TeletextX27LinkTarget::Unspecified {
             magazine: TeletextX27Magazine::new(1).unwrap(),
@@ -124,7 +124,7 @@ fn links() -> TeletextX27Level25Links {
         )
         .unwrap()
     };
-    TeletextX27Level25Links::new(selected(21), selected(22), absent, absent).unwrap()
+    TeletextX27Level25Links::new(selected(21), selected(public), absent, absent).unwrap()
 }
 fn native(replacement: TeletextEnhancementProgram) -> EncodedTeletextAuthoredService {
     native_fixture(replacement, false)
@@ -193,7 +193,7 @@ fn native_fixture(
         .values()
         .cloned()
         .collect::<Vec<_>>();
-    pages[0].compositional_links = Some(links());
+    pages[0].compositional_links = Some(links(22));
     pages[0].resources.objects.public = Some(target(22).resource().unwrap().page());
     pages[0].resources.objects.global = Some(target(21).resource().unwrap().page());
     pages[0].local_program = Some(program(vec![
@@ -513,5 +513,70 @@ fn context_reports_colliding_native_selector_alias_edit_instead_of_dropping_full
     assert!(
         validate_applied_project(&project, &original, &original, &after, limits(), deadline())
             .is_err()
+    );
+}
+
+#[test]
+fn colliding_full_identity_requires_selected_pop_and_matching_declaration() {
+    let original = native_fixture(root(0, 22, false), true);
+    let service = original.declared().semantic();
+    let policy = policy();
+    let mut pages = service
+        .page_enhancements()
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
+    let candidate = |pages: Vec<_>| {
+        TeletextSemanticService::new(
+            TeletextResolvedServiceDraft {
+                base: service.base().clone(),
+                pages,
+                magazines: vec![],
+                objects: definitions(root(0, 24, false), true),
+                drcs: vec![],
+            },
+            policy.validation.service,
+        )
+    };
+    let error = candidate(pages.clone()).unwrap_err();
+    let TeletextServiceError::ObjectSelection {
+        display,
+        source_location,
+        target: rejected,
+    } = error
+    else {
+        panic!("expected an unselected transitive POP target, got {error:?}");
+    };
+    assert_eq!(display, address());
+    assert_eq!(source_location.object, Some(target(21)));
+    assert_eq!(source_location.command, 1);
+    assert_eq!(rejected, target(24));
+
+    // The native call selector cannot select another POP page. Both selected
+    // metadata and its explicit compositional declaration must change together.
+    let declare = |selected| {
+        TeletextDeclaredService::new(
+            selected,
+            vec![],
+            vec![TeletextDisplayMotSelection {
+                display: address(),
+                mot: None,
+            }],
+            vec![],
+            policy.validation.declarations,
+        )
+    };
+    pages[0].resources.objects.public = Some(target(24).resource().unwrap().page());
+    // Semantic links select the target; agreement with wire declarations is
+    // deliberately checked by the separate declared-service boundary.
+    assert!(declare(candidate(pages.clone()).unwrap()).is_err());
+    pages[0].compositional_links = Some(links(24));
+    let declared = declare(candidate(pages).unwrap()).unwrap();
+    assert_eq!(
+        declared.semantic().page_enhancements()[&address()]
+            .resources
+            .objects
+            .public,
+        Some(target(24).resource().unwrap().page()),
     );
 }

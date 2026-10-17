@@ -35,7 +35,9 @@ release section when tagging a release.
   through protected editor-only Local aliases. Origin-modifier edits preserve
   original native identities through concept preview, explicit publication and
   database reopen; copied callee context remains readonly. Complete oversized
-  context and collision-preserving target editing remain open.
+  context and coordinated resource/link/set editing remain open. Cross-resource
+  targets must agree with the selected POP/GPOP links; equal native call selectors
+  do not grant authority to choose another resource page.
   Complete native reconstruction, exact resource/subpage identities and permissions
   for every shared consumer protect generated content. Import remains separate from explicit publication;
   earlier receipts and native capacities retain their contracts. Complete dependency
