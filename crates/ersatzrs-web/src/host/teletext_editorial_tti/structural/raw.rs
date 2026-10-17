@@ -1,6 +1,6 @@
 //! Definition-local DRCS latches and exact ownership of derived selector words.
 use super::super::operands::{drcs_selection, glyph_operation};
-use super::{fail, Location, Result};
+use super::{fail, style, Location, Result};
 use ersatzrs_domain::{TeletextColumnOperation, TeletextEnhancementCommand};
 use std::time::Instant;
 
@@ -9,7 +9,13 @@ pub(super) struct Entry {
     pub index: usize,
     pub word: u32,
     pub command: Option<TeletextEnhancementCommand>,
+    pub style: Option<TeletextEnhancementCommand>,
     pub selector: Option<usize>,
+}
+impl Entry {
+    pub fn editable(self, styles: bool) -> Option<TeletextEnhancementCommand> {
+        self.command.or(if styles { self.style } else { None })
+    }
 }
 pub(super) struct Selector {
     pub index: usize,
@@ -60,11 +66,27 @@ impl Body {
                 index,
                 word,
                 command,
+                style: style::decode(word),
                 selector,
             });
         }
         Ok(result)
     }
+}
+
+/// Scalar-shaped edits retain the old scalar/anchor reconciliation. Style
+/// insertion/deletion must change both semantic-entry count and style skeleton.
+pub(super) fn style_topology_changed(before: &Body, after: &Body) -> bool {
+    fn layout(body: &Body) -> impl Iterator<Item = (u8, u8)> + '_ {
+        body.entries.iter().filter_map(|entry| {
+            let command = entry.style?;
+            let TeletextEnhancementCommand::AtColumn { column, .. } = command else {
+                return None;
+            };
+            Some((style::kind(&command)?, column))
+        })
+    }
+    before.entries.len() != after.entries.len() && !layout(before).eq(layout(after))
 }
 fn decode(
     word: u32,

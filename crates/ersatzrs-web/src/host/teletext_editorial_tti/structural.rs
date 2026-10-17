@@ -12,6 +12,7 @@ mod program;
 mod qualify;
 mod raw;
 mod stream;
+mod style;
 pub(super) use qualify::check as qualify_recompiled;
 fn fail(location: Location) -> super::NativeTeletextEditorialTtiError {
     super::NativeTeletextEditorialTtiError {

@@ -1,5 +1,5 @@
-//! Glyph segments retain exact nonglyph anchors and original command ordinals.
-use super::{alignment, fail, glyph_family, raw, stream, Location, Result};
+//! Editable segments retain exact context anchors and original command ordinals.
+use super::{alignment, fail, glyph_family, raw, stream, style, Location, Result};
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementProgram,
     TeletextObjectIdentity,
@@ -28,9 +28,14 @@ pub(super) fn parse(
     if definition.program.commands().len() > 208 || actual.len() > 208 {
         return Err(fail(location));
     }
-    check_rebuilt_count(definition.program.commands(), actual, location)?;
     let before = raw::Body::read(old.body(index), location, deadline)?;
     let uploaded = raw::Body::read(actual, location, deadline)?;
+    let styles = raw::style_topology_changed(&before, &uploaded);
+    if styles {
+        check_style_count(definition.program.commands(), &uploaded, location)?;
+    } else {
+        check_rebuilt_count(definition.program.commands(), actual, location)?;
+    }
     raw::protect_fixed_families(&before, &uploaded, location)?;
     let actual = uploaded.entries.as_slice();
     let mut cursor = 0;
@@ -45,14 +50,14 @@ pub(super) fn parse(
     while ordinal < definition.program.commands().len() {
         location.check_deadline(deadline)?;
         let command = definition.program.commands()[ordinal];
-        if cluster_command(definition, program, ordinal, location)?
+        if cluster_command(definition, program, ordinal, styles, location)?
             || actual
                 .get(cursor)
-                .is_some_and(|entry| entry.command.is_some())
+                .is_some_and(|entry| entry.editable(styles).is_some())
         {
             let start = ordinal;
             while ordinal < definition.program.commands().len()
-                && cluster_command(definition, program, ordinal, location)?
+                && cluster_command(definition, program, ordinal, styles, location)?
             {
                 ordinal += 1;
             }
@@ -60,11 +65,15 @@ pub(super) fn parse(
                 .map(|i| (i, definition.program.commands()[i]))
                 .collect::<Vec<_>>();
             let mut inserted = Vec::new();
-            while let Some(command) = actual.get(cursor).and_then(|entry| entry.command) {
+            while let Some(command) = actual.get(cursor).and_then(|entry| entry.editable(styles)) {
                 inserted.push(command);
                 cursor += 1;
             }
-            let cluster = alignment::with_anchors(&original, &inserted, location, deadline)?;
+            let cluster = if styles {
+                alignment::with_styles(&original, &inserted, location, deadline)?
+            } else {
+                alignment::with_anchors(&original, &inserted, location, deadline)?
+            };
             output.retained.extend(cluster.retained);
             output.replacement.extend(cluster.commands);
         } else {
@@ -84,7 +93,7 @@ pub(super) fn parse(
     for entry in &actual[cursor..] {
         output
             .replacement
-            .push(entry.command.ok_or_else(|| fail(location))?);
+            .push(entry.editable(styles).ok_or_else(|| fail(location))?);
         output.retained.push(None);
     }
     let original = original_spans(definition, program, old.markers[index] + 1, location)?;
@@ -172,6 +181,7 @@ fn cluster_command(
     definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
     program: &EncodedTeletextLocalObjectProgram,
     ordinal: usize,
+    styles: bool,
     location: Location,
 ) -> Result<bool> {
     let command = definition
@@ -192,8 +202,31 @@ fn cluster_command(
         return Err(fail(location));
     }
     // Only a sealed absent span authenticates an invisible original position.
-    // Every other nonglyph retains its exact physical anchor/span handling.
-    Ok(glyph_family(command).is_some() || hidden)
+    // Other context commands retain exact physical anchor/span handling;
+    // editable styles still require a unique authenticated original span.
+    Ok(glyph_family(command).is_some() || (styles && style::kind(command).is_some()) || hidden)
+}
+
+fn check_style_count(
+    original: &[TeletextEnhancementCommand],
+    actual: &raw::Body,
+    location: Location,
+) -> Result<()> {
+    let mandatory = original
+        .iter()
+        .filter(|command| glyph_family(command).is_none() && style::kind(command).is_none())
+        .count();
+    if actual
+        .entries
+        .iter()
+        .filter(|entry| entry.editable(true).is_some())
+        .count()
+        .checked_add(mandatory)
+        .is_none_or(|count| count > 208)
+    {
+        return Err(fail(location));
+    }
+    Ok(())
 }
 fn original_spans(
     definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
@@ -279,7 +312,7 @@ fn anchor(
 
 #[cfg(test)]
 mod bounds_tests {
-    use super::{check_rebuilt_count, cluster_command, Location};
+    use super::{check_rebuilt_count, check_style_count, cluster_command, raw, Location};
     use ersatzrs_domain::{
         TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
         TeletextEnhancementPosition,
@@ -387,12 +420,43 @@ mod bounds_tests {
             subcode: 32,
             resource: None,
         };
-        assert!(cluster_command(&hidden, &zero_span, 0, location).unwrap());
-        assert!(cluster_command(&hidden, &zero_span, 1, location).unwrap());
+        assert!(cluster_command(&hidden, &zero_span, 0, false, location).unwrap());
+        assert!(cluster_command(&hidden, &zero_span, 1, false, location).unwrap());
         // Both encodings are genuine and share identity/ordinal. A different
         // original's physical position must not authenticate an invisible one.
-        assert!(cluster_command(&hidden, &real_span, 0, location).is_err());
-        assert!(cluster_command(&physical, &zero_span, 0, location).is_err());
-        assert!(cluster_command(&hidden, &zero_span, usize::MAX, location).is_err());
+        assert!(cluster_command(&hidden, &real_span, 0, false, location).is_err());
+        assert!(cluster_command(&physical, &zero_span, 0, false, location).is_err());
+        assert!(cluster_command(&hidden, &zero_span, usize::MAX, false, location).is_err());
+    }
+
+    #[test]
+    fn style_rebuild_limit_counts_insertions_and_every_remaining_context_anchor() {
+        let location = Location {
+            page: 124,
+            subcode: 32,
+            resource: None,
+        };
+        let position = TeletextEnhancementCommand::SetPosition {
+            position: TeletextEnhancementPosition::new(1, 8).unwrap(),
+        };
+        let foreground = TeletextEnhancementCommand::AtColumn {
+            column: 8,
+            operation: TeletextColumnOperation::Foreground {
+                colour: TeletextColourReference::new(1).unwrap(),
+            },
+        };
+        let mut original = vec![position; 2];
+        original.extend([foreground; 206]);
+        let body = |count| {
+            raw::Body::read(
+                &vec![8 | (1 << 11); count],
+                location,
+                std::time::Instant::now() + std::time::Duration::from_secs(30),
+            )
+            .unwrap()
+        };
+        assert!(check_style_count(&original, &body(207), location).is_err());
+        assert!(check_style_count(&original, &body(206), location).is_ok());
+        assert!(check_style_count(&original, &body(0), location).is_ok());
     }
 }

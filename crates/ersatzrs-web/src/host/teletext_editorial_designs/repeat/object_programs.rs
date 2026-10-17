@@ -17,6 +17,13 @@ fn legacy_glyph(command: &TeletextEnhancementCommand) -> bool {
         if matches!(operation.glyph_family(), Some(ersatzrs_domain::TeletextColumnGlyphFamily::G0 | ersatzrs_domain::TeletextColumnGlyphFamily::G1)))
 }
 
+#[derive(Clone, Copy)]
+enum ProgramPolicy {
+    Legacy,
+    AllGlyphs,
+    StyleCommands,
+}
+
 pub(super) fn merge(
     root: &TeletextEnhancementObjectCatalog,
     previous: &TeletextEditorialChanges,
@@ -174,8 +181,31 @@ fn collect(
         }
         return Ok(());
     }
-    let (program, scalar_operands) = make_program(identity, original, replacement, retained, true)
-        .or_else(|_| make_program(identity, original, replacement, retained, false))?;
+    let (program, scalar_operands) = make_program(
+        identity,
+        original,
+        replacement,
+        retained,
+        ProgramPolicy::Legacy,
+    )
+    .or_else(|_| {
+        make_program(
+            identity,
+            original,
+            replacement,
+            retained,
+            ProgramPolicy::AllGlyphs,
+        )
+    })
+    .or_else(|_| {
+        make_program(
+            identity,
+            original,
+            replacement,
+            retained,
+            ProgramPolicy::StyleCommands,
+        )
+    })?;
     operands.extend(scalar_operands);
     programs.push(program);
     Ok(())
@@ -185,7 +215,7 @@ fn make_program(
     original: &TeletextEnhancementProgram,
     replacement: &TeletextEnhancementProgram,
     retained: &[Option<usize>],
-    legacy: bool,
+    policy: ProgramPolicy,
 ) -> Result<(
     TeletextLocalObjectGlyphProgramOverlay,
     Vec<TeletextLocalObjectOperandOverlay>,
@@ -195,28 +225,21 @@ fn make_program(
     for (command, source) in replacement.commands().iter().zip(retained) {
         let Some(source) = *source else { continue };
         let before = original.commands().get(source).ok_or_else(fail)?;
-        if !glyph(before) || (legacy && !legacy_glyph(before)) {
+        if !glyph(before) || (matches!(policy, ProgramPolicy::Legacy) && !legacy_glyph(before)) {
             push_operand(identity, source, before, command, &mut operands)?;
             expected[source] = *command;
         }
     }
     let expected = TeletextEnhancementProgram::new(expected).map_err(|_| fail())?;
-    let program = if legacy {
-        TeletextLocalObjectGlyphProgramOverlay::new(
-            identity,
-            expected,
-            replacement.clone(),
-            retained.to_vec(),
-        )
-    } else {
-        TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs(
-            identity,
-            expected,
-            replacement.clone(),
-            retained.to_vec(),
-        )
-    }
-    .map_err(|_| fail())?;
+    let constructor = match policy {
+        ProgramPolicy::Legacy => TeletextLocalObjectGlyphProgramOverlay::new,
+        ProgramPolicy::AllGlyphs => TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs,
+        ProgramPolicy::StyleCommands => {
+            TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands
+        }
+    };
+    let program = constructor(identity, expected, replacement.clone(), retained.to_vec())
+        .map_err(|_| fail())?;
     Ok((program, operands))
 }
 

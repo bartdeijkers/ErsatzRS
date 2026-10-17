@@ -635,3 +635,6 @@ fn local_glyph_structure_raw_programs_and_map_have_nonzero_preallocation_bounds(
 
 #[path = "local_object_all_glyph_program_tests.rs"]
 mod all_glyphs;
+
+#[path = "local_object_style_program_tests.rs"]
+mod style_commands;

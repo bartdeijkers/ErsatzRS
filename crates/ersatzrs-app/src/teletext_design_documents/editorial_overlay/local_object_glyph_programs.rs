@@ -1,4 +1,4 @@
-//! Closed V11/V12 structure and exact-root association for retained Local glyph programs.
+//! Closed V11–V13 structure and exact-root association for retained Local programs.
 
 use super::{
     failure, invalid, limit, map_only, object_operands, unique_original_owner,
@@ -12,6 +12,13 @@ use ersatzrs_domain::{
 use object_operands::StoredLocalIdentity;
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeSet;
+
+#[derive(Clone, Copy)]
+pub(super) enum ProgramPolicy {
+    Legacy,
+    AllGlyphs,
+    StyleCommands,
+}
 
 #[derive(Serialize)]
 pub(in super::super) struct StoredGlyphProgram {
@@ -55,15 +62,19 @@ impl<'de> Deserialize<'de> for OptionalStoredGlyphPrograms {
 
 pub(super) fn restore(
     programs: Vec<StoredGlyphProgram>,
-    all_glyphs: bool,
+    policy: ProgramPolicy,
 ) -> Result<Vec<TeletextLocalObjectGlyphProgramOverlay>, TeletextDesignDocumentError> {
     programs
         .into_iter()
         .map(|program| {
-            let constructor = if all_glyphs {
-                TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs
-            } else {
-                TeletextLocalObjectGlyphProgramOverlay::new
+            let constructor = match policy {
+                ProgramPolicy::Legacy => TeletextLocalObjectGlyphProgramOverlay::new,
+                ProgramPolicy::AllGlyphs => {
+                    TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs
+                }
+                ProgramPolicy::StyleCommands => {
+                    TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands
+                }
             };
             constructor(
                 program.identity.0,
@@ -98,12 +109,25 @@ fn structural(program: &TeletextLocalObjectGlyphProgramOverlay) -> bool {
 pub(super) fn distinct(
     programs: &[TeletextLocalObjectGlyphProgramOverlay],
     operands: &[TeletextLocalObjectOperandOverlay],
-    all_glyphs: bool,
+    policy: ProgramPolicy,
 ) -> Result<(), TeletextDesignDocumentError> {
-    let has_wider_change = programs
-        .iter()
-        .any(|program| !program.is_legacy_compatible());
-    if !programs.iter().any(structural) || has_wider_change != all_glyphs {
+    let compatible = match policy {
+        ProgramPolicy::Legacy => programs
+            .iter()
+            .all(TeletextLocalObjectGlyphProgramOverlay::is_legacy_compatible),
+        ProgramPolicy::AllGlyphs => {
+            programs
+                .iter()
+                .all(TeletextLocalObjectGlyphProgramOverlay::is_all_glyphs_compatible)
+                && programs
+                    .iter()
+                    .any(|program| !program.is_legacy_compatible())
+        }
+        ProgramPolicy::StyleCommands => programs
+            .iter()
+            .any(|program| !program.is_all_glyphs_compatible()),
+    };
+    if !programs.iter().any(structural) || !compatible {
         return Err(invalid());
     }
     let mut identities = BTreeSet::new();
@@ -111,10 +135,11 @@ pub(super) fn distinct(
         if !identities.insert(program.identity())
             || operands.iter().any(|operand| {
                 operand.identity() == program.identity()
-                    && if all_glyphs {
-                        operand.expected().glyph_family().is_some()
-                    } else {
-                        object_operands::glyph(operand.expected())
+                    && match policy {
+                        ProgramPolicy::Legacy => object_operands::glyph(operand.expected()),
+                        ProgramPolicy::AllGlyphs | ProgramPolicy::StyleCommands => {
+                            operand.expected().glyph_family().is_some()
+                        }
                     }
             })
         {

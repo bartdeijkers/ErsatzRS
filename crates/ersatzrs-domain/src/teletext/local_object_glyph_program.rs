@@ -1,8 +1,8 @@
 //! Bounded exact-original glyph structure changes in retained Local definitions.
 
 use super::{
-    TeletextColumnGlyphFamily, TeletextEnhancementCommand, TeletextEnhancementProgram,
-    TeletextObjectIdentity, TeletextPageAddress,
+    TeletextColumnGlyphFamily, TeletextColumnOperation, TeletextEnhancementCommand,
+    TeletextEnhancementProgram, TeletextObjectIdentity, TeletextPageAddress,
 };
 
 const MAX_COMMANDS: usize = 16 * 13;
@@ -11,6 +11,7 @@ const MAX_COMMANDS: usize = 16 * 13;
 enum GlyphPolicy {
     Legacy,
     All,
+    StyleCommands,
 }
 
 /// Rejected structural intent, without retaining authored content in diagnostics.
@@ -95,6 +96,31 @@ impl TeletextLocalObjectGlyphProgramOverlay {
         )
     }
 
+    /// Check all glyph changes and inserted or deleted Local style commands.
+    ///
+    /// Only checked `AtColumn` foreground, background and attribute operations
+    /// may additionally be inserted or omitted. Retained style commands remain
+    /// exact, including their column and every attribute flag. Position, charset,
+    /// flash and invocation anchors remain mandatory and exact. Full service
+    /// execution and shared-consumer permissions are still host responsibilities.
+    /// # Errors
+    /// Rejects nonlocal/no-op intents, over208 inputs, invalid correspondence,
+    /// changed retained styles or protected anchors and crossed glyph families.
+    pub fn new_with_style_commands(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+    ) -> Result<Self, TeletextLocalObjectGlyphProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            GlyphPolicy::StyleCommands,
+        )
+    }
+
     fn new_for_policy(
         identity: TeletextObjectIdentity,
         expected: TeletextEnhancementProgram,
@@ -135,6 +161,21 @@ impl TeletextLocalObjectGlyphProgramOverlay {
             &self.replacement,
             &self.retained_commands,
             GlyphPolicy::Legacy,
+        )
+        .is_ok()
+    }
+
+    /// Whether the unchanged all-glyph contract accepts this correspondence.
+    ///
+    /// Borrowed validation preserves the version12 boundary without cloning or
+    /// treating an unchanged retained style as a structural style edit.
+    #[must_use]
+    pub fn is_all_glyphs_compatible(&self) -> bool {
+        validate_correspondence(
+            &self.expected,
+            &self.replacement,
+            &self.retained_commands,
+            GlyphPolicy::All,
         )
         .is_ok()
     }
@@ -196,7 +237,7 @@ fn validate_correspondence(
     let mut next_original = 0;
     for (command, original) in replacement.commands().iter().zip(retained) {
         let Some(ordinal) = *original else {
-            if glyph_family(command, policy).is_none() {
+            if !editable(command, policy) {
                 return Err(Error::ProtectedCommand);
             }
             continue;
@@ -206,7 +247,7 @@ fn validate_correspondence(
         }
         if expected.commands()[next_original..ordinal]
             .iter()
-            .any(|command| glyph_family(command, policy).is_none())
+            .any(|command| !editable(command, policy))
         {
             return Err(Error::ProtectedCommand);
         }
@@ -220,11 +261,27 @@ fn validate_correspondence(
     }
     if expected.commands()[next_original..]
         .iter()
-        .any(|command| glyph_family(command, policy).is_none())
+        .any(|command| !editable(command, policy))
     {
         return Err(Error::ProtectedCommand);
     }
     Ok(())
+}
+
+fn editable(command: &TeletextEnhancementCommand, policy: GlyphPolicy) -> bool {
+    glyph_family(command, policy).is_some()
+        || matches!(
+            (policy, command),
+            (
+                GlyphPolicy::StyleCommands,
+                TeletextEnhancementCommand::AtColumn {
+                    operation: TeletextColumnOperation::Foreground { .. }
+                        | TeletextColumnOperation::Background { .. }
+                        | TeletextColumnOperation::Attributes { .. },
+                    ..
+                }
+            )
+        )
 }
 
 fn glyph_family(

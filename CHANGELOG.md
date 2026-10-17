@@ -50,7 +50,10 @@ release section when tagging a release.
   private version 11 concepts with bounded survivor correspondence, authenticated
   marker/pointer relocation and protected shared-consumer lineage. Explicit version
   12 extends structural Local edits to G1 alphabetic, G2, G3, diacritics and DRCS
-  glyphs while preserving earlier formats. DRCS selectors retain complete checked
+  glyphs while preserving earlier formats. Version 13 adds inserted/deleted
+  foreground, background and display-attribute commands against original
+  Free/Zone permissions, retaining earlier concept contracts and shared-consumer
+  protection. DRCS selectors retain complete checked
   resource references and independent definition-local scope. Complete native
   reconstruction preserves original documents and keeps import separate from
   publication. Complete command, resource/object and editor/Level 2.5 acceptance

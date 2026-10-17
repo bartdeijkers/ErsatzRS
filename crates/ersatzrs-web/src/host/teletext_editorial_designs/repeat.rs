@@ -691,6 +691,21 @@ fn program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOv
         .cumulative
         .object_programs
         .iter()
+        .any(|program| !program.is_all_glyphs_compatible())
+    {
+        TeletextSavedEditorialOverlay::new_with_local_object_style_programs(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+            prepared.cumulative.object_programs.clone(),
+        )
+        .map_err(Into::into)
+    } else if prepared
+        .cumulative
+        .object_programs
+        .iter()
         .any(|program| !program.is_legacy_compatible())
     {
         TeletextSavedEditorialOverlay::new_with_all_local_object_glyph_programs(

@@ -6,7 +6,7 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns criteria, receipts, failures and remaining work.
+rendering/navigation. Kodi is optional. P9A-04 owns acceptance and evidence.
 
 Typed services, provenance, resource identities/defaults, physical ownership,
 X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization are
@@ -15,11 +15,11 @@ lineage/ancestry, absent/default distinctions and pending charset uncertainty
 remain protected. A7/A8/C3, row-zero/foreign-X26, full repertoire/aliases,
 resource/object/panel and suitable-client coverage remain required.
 
-Private V1–12 concepts retain immutable metadata/originals, physical rows,
+Private V1–13 concepts retain immutable metadata/originals, physical rows,
 page/Local glyphs, colours/attributes, bitmap and DRCS references, Flash and
 charset context. Native publication/reopen/repeat/undo and protected shared
-consumers pass. Genuine pinned QTM scope/subtable saves reach unpublished
-concepts/shared four-consumer preview/reopen; P9A-04 owns the bundled proof.
+consumers pass. Pinned QTM scope/subtable saves reach unpublished
+concepts/shared four-consumer preview/reopen.
 Closed V11 connects Local G0/G1 structure; V12 extends the same program/map to
 all typed glyphs, complete DRCS references and authenticated selectors. Old
 formats, AP00 anchors, resources and shared permissions remain protected.
@@ -28,9 +28,9 @@ words. Relative positions use real columns in all types and Local/POP/GPOP:909
 encoder units and11 pinned dual-level cases pass. Sources/pointers, quotas/bounds
 and uncertain cross-instance/backwards/nested-call refusals remain. Structural
 Local TTI retains sealed forward anchors through grow/shrink/undo, shared preview
-and reopen;66 host/native checks pass. Next Local attribute command insertion;
-full editor/client/resource/default/repertoire acceptance remains required.
-Prior two-theme proof retains its scope.
+and reopen;66 host/native checks pass. Explicit V13 adds bounded Local style
+insertion/deletion;252 focused checks pass, formats1–12 remain closed. Next
+actual style InsertCopy/Delete/SaveAs. Full editor/client/resources remain open.
 
 P9A-04 retains representative national-original, bank and panel QTM/native/
 ordinary-TCP/TSDuck/independent proof. Dense/padded banks join nine-culture

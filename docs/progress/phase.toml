@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: Local attribute command topology'
+current_focus = 'P9A-04: actual Local style TTI editing'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -381,11 +381,14 @@ correspondence and shared Zone boundaries through grow/shrink/reposition/undo,
 concept preview and two reopens. P9A-04 owns66 passing host/native checks, including
 old AP00 and publication regressions. Encoder909/decoder11 evidence stays valid.
 Actual four-Romanian and three-English multi-display QTM flows already pass;
-reuse their canonical receipts. Next reproduce native insertion of a new
-foreground/background/attribute command in an original Local glyph definition,
-then extend only that bounded Free/Zone topology with shared-consumer checks. Full resource/object, metadata/templates/
-dynamic fields, authoredLevel2.5, Lua/restart/admin and playback/platform/client
-acceptance remains open; no permanent restriction is accepted.
+reuse their canonical receipts. Local FG/BG/Attributes insertion/deletion now uses
+explicit schema13 with original/root correspondence, shared Free/Zone preview,
+reopen and exact undo;252 focused checks pass. Formats1–12 stay closed.
+Next use pinned QTM's existing widget/receipt handoff for an actual Local style
+InsertCopy/Delete/SaveAs, then import/preview/reopen. Reuse unaffected publication,
+ordinary-route and client proof. Full resource/object, metadata/templates/dynamic
+fields, authoredLevel2.5, Lua/restart/admin and playback/platform/client acceptance
+remains open; no permanent restriction is accepted.
 Production content waits for independent generic acceptance.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.

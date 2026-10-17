@@ -16,6 +16,9 @@ mod all_glyph_structure;
 #[path = "editorial_local_glyph_structure/forward_anchor.rs"]
 mod forward_anchor;
 
+#[path = "editorial_local_glyph_structure/style_topology.rs"]
+mod style_topology;
+
 #[derive(Clone, Copy)]
 enum Permission {
     Free,

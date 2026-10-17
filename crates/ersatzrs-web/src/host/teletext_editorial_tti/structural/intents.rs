@@ -51,15 +51,22 @@ pub(super) fn append(
         changes.object_operands.extend(anchors);
         changes.object_programs.push(legacy);
     } else {
-        changes.object_programs.push(
-            TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs(
+        let program = TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs(
+            candidate.identity,
+            candidate.expected.clone(),
+            replacement.clone(),
+            candidate.retained.clone(),
+        )
+        .or_else(|_| {
+            TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands(
                 candidate.identity,
                 candidate.expected,
                 replacement,
                 candidate.retained,
             )
-            .map_err(|_| fail(location))?,
-        );
+        })
+        .map_err(|_| fail(location))?;
+        changes.object_programs.push(program);
     }
     Ok(())
 }

@@ -35,6 +35,7 @@ const FLASH_CHARSET_OVERLAY_VERSION: u16 = 9;
 const DRCS_SELECTION_OVERLAY_VERSION: u16 = 10;
 const LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION: u16 = 11;
 const ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION: u16 = 12;
+const LOCAL_STYLE_PROGRAM_OVERLAY_VERSION: u16 = 13;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -42,7 +43,9 @@ use object_operands::{BorrowedObjectOperands, OptionalStoredObjectOperands};
 
 #[path = "editorial_overlay/local_object_glyph_programs.rs"]
 pub(super) mod local_object_glyph_programs;
-use local_object_glyph_programs::{BorrowedGlyphPrograms, OptionalStoredGlyphPrograms};
+use local_object_glyph_programs::{
+    BorrowedGlyphPrograms, OptionalStoredGlyphPrograms, ProgramPolicy,
+};
 
 /// Structural association claims. Only the native host and repository can
 /// authenticate these references against exact immutable stored bytes.
@@ -414,7 +417,11 @@ impl TeletextSavedEditorialOverlay {
         drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
         programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        local_object_glyph_programs::distinct(&programs, &local_object_operands, false)?;
+        local_object_glyph_programs::distinct(
+            &programs,
+            &local_object_operands,
+            ProgramPolicy::Legacy,
+        )?;
         let mut value = Self::new_parts_for_families(
             provenance,
             pages,
@@ -447,7 +454,11 @@ impl TeletextSavedEditorialOverlay {
         drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
         programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        local_object_glyph_programs::distinct(&programs, &local_object_operands, true)?;
+        local_object_glyph_programs::distinct(
+            &programs,
+            &local_object_operands,
+            ProgramPolicy::AllGlyphs,
+        )?;
         let mut value = Self::new_parts_for_families(
             provenance,
             pages,
@@ -458,6 +469,43 @@ impl TeletextSavedEditorialOverlay {
         )?;
         value.local_object_glyph_program_overlays = programs;
         value.schema_version = ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION;
+        Ok(value)
+    }
+
+    /// Capture version13 inserted or deleted Local foreground/background/attributes.
+    ///
+    /// At least one program must require structural style support. All checked
+    /// glyph families may accompany it; retained style commands stay exact after
+    /// independently authenticated scalar patches to original ordinals. Same-object
+    /// scalar glyph edits must be folded into the program. Immutable originals,
+    /// bounded restoration and native shared-consumer qualification still apply.
+    /// This grants no edit permission or publication authority.
+    /// # Errors
+    /// Rejects older-version aliases, repeated definitions, scalar glyph overlap,
+    /// unsupported scalar families and invalid provenance.
+    pub fn new_with_local_object_style_programs(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        local_object_glyph_programs::distinct(
+            &programs,
+            &local_object_operands,
+            ProgramPolicy::StyleCommands,
+        )?;
+        let mut value = Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
+            OperandFamilies::DrcsSelections,
+        )?;
+        value.local_object_glyph_program_overlays = programs;
+        value.schema_version = LOCAL_STYLE_PROGRAM_OVERLAY_VERSION;
         Ok(value)
     }
 
@@ -1000,7 +1048,9 @@ impl StoredOverlay {
         let programs = &self.local_object_glyph_program_overlays.0;
         if matches!(
             self.schema_version,
-            LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION | ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
+            LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
+                | ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
+                | LOCAL_STYLE_PROGRAM_OVERLAY_VERSION
         ) {
             if programs.as_ref().is_none_or(Vec::is_empty)
                 || operands.as_ref().is_some_and(Vec::is_empty)
@@ -1045,12 +1095,21 @@ impl StoredOverlay {
         Ok(())
     }
 
+    fn program_policy(&self) -> ProgramPolicy {
+        match self.schema_version {
+            LOCAL_STYLE_PROGRAM_OVERLAY_VERSION => ProgramPolicy::StyleCommands,
+            ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION => ProgramPolicy::AllGlyphs,
+            _ => ProgramPolicy::Legacy,
+        }
+    }
+
     pub(super) fn restore(
         self,
         documents: &[TeletextProfileDocument],
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
+        let policy = self.program_policy();
         let operands = self.local_program_operands.0;
         let bitmaps = self.drcs_bitmap_overlays.0;
         let objects = self.local_object_operands.0;
@@ -1081,12 +1140,19 @@ impl StoredOverlay {
             .collect::<Result<Vec<_>, _>>()?;
         let objects = object_operands::restore(objects.unwrap_or_default())?;
         let value = match self.schema_version {
-            LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION | ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION => {
-                let all_glyphs = self.schema_version == ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION;
-                let constructor = if all_glyphs {
-                    TeletextSavedEditorialOverlay::new_with_all_local_object_glyph_programs
-                } else {
-                    TeletextSavedEditorialOverlay::new_with_local_object_glyph_programs
+            LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
+            | ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
+            | LOCAL_STYLE_PROGRAM_OVERLAY_VERSION => {
+                let constructor = match policy {
+                    ProgramPolicy::StyleCommands => {
+                        TeletextSavedEditorialOverlay::new_with_local_object_style_programs
+                    }
+                    ProgramPolicy::AllGlyphs => {
+                        TeletextSavedEditorialOverlay::new_with_all_local_object_glyph_programs
+                    }
+                    ProgramPolicy::Legacy => {
+                        TeletextSavedEditorialOverlay::new_with_local_object_glyph_programs
+                    }
                 };
                 constructor(
                     provenance,
@@ -1094,7 +1160,7 @@ impl StoredOverlay {
                     operands,
                     objects,
                     bitmaps,
-                    local_object_glyph_programs::restore(programs.unwrap_or_default(), all_glyphs)?,
+                    local_object_glyph_programs::restore(programs.unwrap_or_default(), policy)?,
                 )?
             }
             DRCS_SELECTION_OVERLAY_VERSION => {
@@ -1545,3 +1611,7 @@ mod local_object_glyph_program_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/all_local_object_glyph_program_tests.rs"]
 mod all_local_object_glyph_program_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/local_object_style_program_tests.rs"]
+mod local_object_style_program_tests;

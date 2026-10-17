@@ -268,3 +268,61 @@ fn wide_same_column_scalar_can_stay_a_legacy_anchor_beside_g0_structure() {
     assert!(programs[0].is_legacy_compatible());
     assert_eq!(programs[0].expected().commands()[2], at(1, g2(0x27)));
 }
+
+#[test]
+fn style_structure_composes_inserted_and_original_scalars_then_downgrades_on_deletion() {
+    let foreground = |value| TeletextColumnOperation::Foreground {
+        colour: TeletextColourReference::new(value).unwrap(),
+    };
+    let mut commands = root().commands().to_vec();
+    commands.insert(1, at(0, foreground(18)));
+    let program = TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands(
+        identity(),
+        root(),
+        TeletextEnhancementProgram::new(commands).unwrap(),
+        vec![Some(0), None, Some(1), Some(2)],
+    )
+    .unwrap();
+    let previous = TeletextEditorialChanges {
+        object_programs: vec![program],
+        ..TeletextEditorialChanges::default()
+    };
+    let incoming = TeletextEditorialChanges {
+        object_operands: vec![
+            scalar(1, 0, foreground(18), foreground(19)),
+            scalar(2, 1, bg(0), bg(1)),
+        ],
+        ..TeletextEditorialChanges::default()
+    };
+    let (operands, programs) = merge(&catalog(), &previous, &incoming, budget(), end()).unwrap();
+    assert_eq!(operands, [scalar(1, 1, bg(0), bg(1))]);
+    assert_eq!(programs.len(), 1);
+    assert!(!programs[0].is_all_glyphs_compatible());
+    assert_eq!(
+        programs[0].replacement().commands()[1],
+        at(0, foreground(19))
+    );
+    assert_eq!(programs[0].expected().commands()[1], at(1, bg(1)));
+    let mut reverted = root().commands().to_vec();
+    reverted[1] = at(1, bg(1));
+    let incoming = TeletextEditorialChanges {
+        object_programs: vec![
+            TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands(
+                identity(),
+                programs[0].replacement().clone(),
+                TeletextEnhancementProgram::new(reverted).unwrap(),
+                vec![Some(0), Some(2), Some(3)],
+            )
+            .unwrap(),
+        ],
+        ..TeletextEditorialChanges::default()
+    };
+    let previous = TeletextEditorialChanges {
+        object_operands: operands.clone(),
+        object_programs: programs,
+        ..TeletextEditorialChanges::default()
+    };
+    let (remaining, programs) = merge(&catalog(), &previous, &incoming, budget(), end()).unwrap();
+    assert_eq!(remaining, operands);
+    assert!(programs.is_empty());
+}

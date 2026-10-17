@@ -10125,10 +10125,10 @@ gate. Engine-first delivery remains; no milestone completion or push.
 Current criterion-to-next-step map (current partial implementation; historical receipts retain their original scope):
 | Criterion | Implementation status | Valid evidence | Missing evidence / concrete blocker | Next action |
 | --- | --- | --- | --- | --- |
-| Original addon templates/themes/zones | Immutable metadata/originals and private V1–12 row, glyph, attribute, bitmap/DRCS and command-structure concepts; sealed position anchors and shared Main/panel effects enforced | Existing bank/headed/package-retention and actual DRCS/structure saves; forward-anchor native receipt below | Richer zones/dynamic fields, geometry/set semantics and full resource interchange remain open | Preserve original Free/Zone/generated boundaries; template changes retain explicit addon-version authority |
+| Original addon templates/themes/zones | Immutable metadata/originals and private V1–13 row/glyph/bitmap/DRCS/attribute concepts, bounded Local style topology and sealed anchors; full shared effects | Existing bank/headed/package-retention and actual DRCS/structure saves plus native forward-anchor/style receipts | Richer zones/dynamic fields, geometry/subpage/set semantics and full resource interchange remain open | Reuse original Free/Zone/generated checks; template changes retain explicit addon-version authority |
 | Authoritative export baseline | Versioned carrier, complete receipt and bounded file/ZIP workflow implemented | V2-V4 NOS/RE/dense/padded receipts plus actual V5 POP-fallback editor/concept/reopen and protected-import negatives above; combined test decoder now independently qualifies unchanged sparseS1=1 MAIN pixels above | General charset/resource/set/subpage fidelity and stock sparse decoding remain open; the qualified candidate now passes actual sparse-original and edited-bank client navigation | Reuse the joined padded proof; extend remaining exact repertoire/resource/set clauses without changing native identity |
 | Profile selection -> validation -> preview -> explicit Publish -> ordinary route -> client | Representative bank, national-original and implicit-MOT flows connected; full acceptance open | Existing headed/admin colour/bank receipts plus fresh Romanian, rendered-MOT-default and English two-pair QTM/native/ordinary TCP/AV/TSDuck/independent receipts above; same addon, distinct profiles/themes, unchanged Night | Romanian hydration and suitable enlarged Local-Passive client/navigation remain open; independent banks are explicit | Reuse joined00/10 and new exact-bank/fresh-receipt panel ordinary receipts plus retained failed Kodi20.5 display. Scoped exact-panel decoding now passes with explicitly supplied captured M29/banks. Actual standalone M29-inherited panel edit/save/import now passes above. POP-fallback export/editor/concept/sharedpreview/reopen now passes above; suitable-client rendering/navigation remains open without decoder repair expansion |
-| Actual pinned QTM workflow | Representative Base/local-X26/bitmap/bank/repertoire/panel/attribute and DRCS edits reach concepts/shared preview/reopen; native V11/12 structure preserves invisible positions | Canonical actual saves below plus forward-anchor native receipt; publication/delivery have separately scoped originals; Romanian/English actual multi-display saves retained | Full subpage/set/resource-object, metadata/dynamic-field/client coverage remains required; multiple display edits already pass in Romanian/English | Reproduce and correct bounded Local attribute-command insertion against original shared permissions; reuse genuine multi-display and unaffected publication/delivery/client receipts |
+| Actual pinned QTM workflow | Representative Base/local-X26/bitmap/bank/repertoire/panel/attribute/DRCS and native V11–13 topology concepts/shared preview/reopen | Canonical genuine saves plus Romanian/English multi-display saves; native anchor/style receipts; publication/delivery retain original scopes | Actual new style-topology edit, full subpage/set/resource-object, metadata/dynamic-field/client coverage remain required | Pinned QTM style InsertCopy/Delete/SaveAs to fresh concept/preview/reopen; reuse existing multi-display and unaffected publication/delivery/client proof |
 | Lua timing, errors and restart | Cursor-scoped controls, native effective preparation, scoped originals/pointers and expiry/base restoration implemented; acceptance partial | Existing175-case foundation,149 effective preparation identities, effective headed admin, actual Lua Off on unchanged ordinary URLs and native/headed expiry receipts | Full profile/On/error/restart/client/platform matrix and automatic Base redisplay remain open; client reselection and open-client host drain limitations remain explicit | Reuse cursor/transaction/rollback evidence; extend the exact remaining user-visible transition when its dependent editor/client step is connected |
 | Caption and ordinary playback safety | Shared source-bound independent initializer connected to native opening/fresh retries and HLS |322 focused passes; scanned seek0.5s both audio/VBV policies; actual legacy/Hybrid888/Off/stale/wrong-role/authored200/TSDuck/cleanup receipts; caption closeout above | General source windows, unknown clock policies, charset/resource/wrap, source/Next and six-platform acceptance remain open | Preserve these receipts; return to a specific source criterion when it blocks the requested userflow, rather than another general caption audit |
 | Authored warm magazine-to-page presentation | Bounded complete-X28/history plus representative cold and retained-client warm bank publication proven; full warm matrix open |72 output tests, real AV/TSDuck/persistent Cyrillic-to-Greek decoding, cold editor/admin flow and same-client/decoder two-theme124/125/124 with18 actual library-map barriers above | Complete lower-level/resource/Header/POP/MOT/page-retirement, broader palette/context and client/platform matrix remain required | Reuse this fixed handover; address a specific remaining lifecycle clause when it blocks its accepted feature rather than expanding decoder maintenance |
@@ -10535,11 +10535,30 @@ Existing actual multi-display editing remains valid: four-member Romanian
 (tmp/phase9-romanian-flow/identity.json) and three-member English
 (tmp/phase9-english-alias-flow/identity.json) already connect genuine saves to
 one native concept, previews and reopen. No duplicate124/125 trial is needed.
-Next product gap is Local command topology: inserting foreground/background/
-attributes between glyphs is source-confirmed as ProtectedCommand. First reproduce
-one valid native insertion refusal; then extend only the bounded original
-Free/Zone correspondence while retaining complete shared-consumer effects.
-Reuse unaffected actual editor/publication/delivery/client proof.
+Local style topology product checkpoint (partial P9A-04):
+tmp/phase9-local-style-topology/identity.json SHA256 19d5bf5c58bb3e3450e3722ee7dd18326ce4215d6e1d0b829374af92e45e5450.
+The genuine native124/0032,row26 insertion RED now reaches an unpublished V13
+concept. Explicit factories admit bounded FG/BG/Attributes insertion/deletion;
+retained styles and other context anchors stay exact. Host inference requires
+changed semantic-entry length and style-family/column skeleton; same-sized old
+scalar corruption keeps its existing TTI refusal. Formats1–12, source spans,
+208-command/deadline bounds and complete typed/shared effects remain enforced.
+Composed evidence covers252 unique passing cases:246 initial successes and74
+corrected parser/failure/regression passes. The receipt retains both initial
+failures and their corrections; no single252-case green run is claimed. Native
+Free/Zone imports prove root correspondence, shared preview, reopen/reexport and
+exact original undo. Lone FG19 has no net fixture pixels; combined styles visibly
+change both consumers. Protected second consumers and invalid styles/charset
+refuse without revision/publication mutation. Originals, other page/theme/profile,
+package/configuration and accepted/requested output remain unchanged. Strict
+three-crate all-target Clippy, format, architecture and scoped review pass.
+Reuse unchanged909 encoder/11 decoder and canonical actual multi-display/editor/
+publication/ordinary/TSDuck/client receipts within original inputs and limits.
+Next: pinned QTM1.0/cac2167 actual style InsertCopy/Delete/SaveAs through the
+existing widget/receipt handoff, then fresh concept/preview/reopen. No new actual
+editor/browser/transport/client/platform or full-CI evidence is claimed here.
+Balanced/same-count topology, full resource/object, subpage/set and template/
+dynamic-field authoring remain open; no permanent restriction is accepted.
 Unmaterialized nested calls and full resource/default/repertoire remain required.
 Full authored Level2.5, pinned editor/metadata/
 templates/zones/sets, Lua/restart, localized headed admin, independent/TSDuck/client

@@ -1,5 +1,5 @@
 //! Canonical import correspondence, not reconstruction of editor action history.
-use super::{fail, glyph_family, Location, Result};
+use super::{fail, glyph_family, style, Location, Result};
 use ersatzrs_domain::TeletextEnhancementCommand;
 use std::time::Instant;
 
@@ -16,7 +16,7 @@ pub(super) fn align(
     location: Location,
     deadline: Instant,
 ) -> Result<Vec<Option<usize>>> {
-    Ok(kernel::solve(old, new, location, deadline)?.retained)
+    Ok(kernel::solve(old, new, false, location, deadline)?.retained)
 }
 
 pub(super) fn with_anchors(
@@ -40,7 +40,20 @@ pub(super) fn with_anchors(
             retained,
         });
     }
-    kernel::solve(old, new, location, deadline)
+    kernel::solve(old, new, false, location, deadline)
+}
+
+pub(super) fn with_styles(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    kernel::solve(old, new, true, location, deadline)
+}
+
+fn editable(command: &TeletextEnhancementCommand, styles: bool) -> bool {
+    glyph_family(command).is_some() || (styles && style::kind(command).is_some())
 }
 
 /// A possible invisible position; only the sealed baseline's absent physical

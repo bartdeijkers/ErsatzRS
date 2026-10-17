@@ -105,7 +105,7 @@ fn resource(global: bool) -> TeletextResourceIdentity {
     )
     .unwrap()
 }
-fn original(expected: &TeletextEnhancementProgram) -> Vec<u8> {
+pub(super) fn original(expected: &TeletextEnhancementProgram) -> Vec<u8> {
     let mut value: Value = serde_json::from_slice(&original_with_context()).unwrap();
     let mut response: Value =
         serde_json::from_str(value["documents"][0]["response"].as_str().unwrap()).unwrap();

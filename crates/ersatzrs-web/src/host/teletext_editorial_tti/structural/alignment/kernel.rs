@@ -1,21 +1,22 @@
 //! Mandatory invisible positions share the bounded glyph correspondence DP.
-use super::{fail, glyph_family, hidden_position, weight, Aligned, Location, Result};
+use super::{editable, fail, hidden_position, weight, Aligned, Location, Result};
 use ersatzrs_domain::TeletextEnhancementCommand;
 use std::time::Instant;
 
 pub(super) fn solve(
     old: &[(usize, TeletextEnhancementCommand)],
     new: &[TeletextEnhancementCommand],
+    styles: bool,
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
     location.check_deadline(deadline)?;
     if old.len() > 208
         || new.len() > 208
-        || old.iter().any(|(_, command)| {
-            glyph_family(command).is_none() && hidden_position(command).is_none()
-        })
-        || new.iter().any(|command| glyph_family(command).is_none())
+        || old
+            .iter()
+            .any(|(_, command)| !editable(command, styles) && hidden_position(command).is_none())
+        || new.iter().any(|command| !editable(command, styles))
         || old
             .iter()
             .filter(|(_, command)| hidden_position(command).is_some())
