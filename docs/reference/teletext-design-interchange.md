@@ -5512,13 +5512,15 @@ positive/negative codec, native import and durable qualification evidence.
 ### Versioned QTeletextMaker status carrier
 
 `project.editor_profile` distinguishes `qteletextmaker-1.0` and the explicit
-`qteletextmaker-1.0-carrier-v2` through `qteletextmaker-1.0-carrier-v7` profiles.
+`qteletextmaker-1.0-carrier-v2` through `qteletextmaker-1.0-carrier-v8` profiles.
 Fresh exports select V7 when an original POP/GPOP definition exceeds the complete
 208-word editor frame; all original object definitions then use fragment mappings.
-Smaller object exports retain V6. Without object definitions, exports select V5
+Smaller object exports with resource calls select V8 when the complete original
+resource catalogue fits its208-word context frame; otherwise they retain V6.
+Without object definitions, exports select V5
 when a selected display needs original-POP panel/BBS presentation, or V4. V5 carries
 that presentation as protected editor-only X28 without inventing a native X28 or
-secondary charset. V6 and V7 inherit V5 presentation and V4 DRCS sets, adding the
+secondary charset. V6–V8 inherit V5 presentation and V4 DRCS sets, adding the
 resource-object companions described below.
 It versions the adapter for the same pinned QTeletextMaker1.0 editor, not the
 editor itself or the authored document/receipt schemas. Unknown names reject.
@@ -5700,13 +5702,41 @@ without accepting changes to full identity, S1, counter or transmission.
 
 Native preview validates every shared Main/panel consumer against captured Free/Zone/
 Generated permissions. Repeat/undo composes exact root-relative programs and scalar
-intent; an exact undo removes the program. Re-export uses the unchanged V6/V7
-carrier policy. Old schemas and receipts retain their contracts. Legacy/generic
+intent; an exact undo removes the program. Re-export applies the versioned V6/V7/V8
+carrier selection policy; stored receipts reconstruct their original carrier exactly. Old schemas and receipts retain their contracts. Legacy/generic
 restoration cannot silently omit resource intent. Saving still creates an unpublished
 concept; explicit request/publication remains separate and installed packages stay
 unchanged. See P9A-04 for actual editor/native proof and remaining acceptance.
 P9A-04 owns verified scope and outstanding evidence; implementation of this
 contract does not itself establish actual-editor, stream or client acceptance.
+
+### Original resource context companions
+
+V8 uses the closed `object_context_tti_v1` asset scope. Its fields are
+`resource_name`, `object_id`, `editor_page:256` and `editor_ordinal:0`, with
+`unit_count:0`. The named native POP/GPOP resource remains the authority for full
+identity; the selected object is the only editable definition in this file.
+The file name ends in `-context.tti`. It is an editor view, not another broadcast
+page or an installed package/template revision.
+
+Open the selected context file normally in pinned QTM1.0. It projects the selected
+root first, followed by the original resource catalogue in stable order, into a
+disposable Local namespace. This allows the editor to display dependencies that
+its decoder otherwise skips. Original native identities/types/offsets survive;
+no uploaded alias list or Local identity can replace them. Other definitions are
+readonly context, including currently uninvoked targets. Edit those only in their
+own original companion, keeping copied context in every sibling file unchanged.
+
+Save the edited file and import the complete original sidecar/named set as a
+concept. Native validation regenerates the original map, checks protected context
+and derived pointer relocation, restores native calls and validates every shared
+consumer. Use the native preview for the complete display and publish explicitly.
+Ambiguous native-selector retargeting rejects rather than disappearing as an
+unchanged import. Complete oversized context and collision-preserving retargeting
+remain required work; V6/V7 command views preserve content when a complete V8 view
+cannot fit. No native capacity is reduced and no content is truncated. Historical
+carriers retain their exact contracts. See ADR0123 for the projection boundary and
+P9A-04 for actual verification and open acceptance.
 
 ### Receipt-bound native concept import
 

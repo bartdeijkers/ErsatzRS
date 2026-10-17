@@ -3,7 +3,7 @@ use super::*;
 use crate::editorial_imports::local_object_glyphs::actual_editor as editor;
 use std::path::Path;
 
-const CASE: &str = "original-gpop-call-origin-column";
+const CASE: &str = "original-gpop-call-origin-column-context";
 
 fn word(records: &[TeletextTtiRecord], index: usize) -> u32 {
     let mut words = records.iter().filter_map(|record| match record {
@@ -24,6 +24,10 @@ fn stage(directory: &Path, flow: &Flow) -> Value {
     let original = directory.join("original");
     std::fs::create_dir(&original).unwrap();
     let exported = &flow.exported[0];
+    assert_eq!(
+        exported.sidecar().project.editor_profile,
+        "qteletextmaker-1.0-carrier-v8"
+    );
     let sidecar = write_teletext_export_sidecar(exported.sidecar(), policy().project).unwrap();
     live_client::write_new(&original.join("project.ersatzrs.json"), &sidecar).unwrap();
     for file in exported.files() {
@@ -48,7 +52,7 @@ fn stage(directory: &Path, flow: &Flow) -> Value {
         "page":{"page":0x100,"subcode":0},"editor_geometry":{"left_columns":0,"right_columns":0,"total_columns":40},
         "edit":{"kind":"resource_call_origin","identity":seed::target(20),"source_command":4,
             "target":seed::target(21),"object_type":"passive","editor_word":7,"mode":16,"address":40,
-            "from":0,"to":1,"invocation_word":8,"invocation_value":invocation,"invocation_unchanged":true,"consumers":[124,125,126]},
+            "from":0,"to":1,"invocation_word":8,"invocation_value":invocation,"invocation_unchanged":true,"protected_context":true,"consumers":[124,125,126]},
         "save_as":"edited.tti","completion":"editor-saved.json","timeout_seconds":600,
         "editor":{"name":"QTeletextMaker","version":"1.0","source_commit":"cac2167bac933a6160cca45a45d5d4ee95355898","binary_sha256":"af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a"},
         "publication":"unpublished concept and restart first; separate explicit request and acceptance afterwards"});
@@ -108,7 +112,7 @@ fn actual_request(
     assert_eq!(word(after.records(), 7), 0x28 | (0x10 << 6) | (1 << 11));
     assert_eq!(word(before.records(), 8), word(after.records(), 8));
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
-    "Actual QTM existing GPOP call origin column".clone_into(&mut request.name);
+    "Actual QTM contextual GPOP call origin column".clone_into(&mut request.name);
     request
         .files
         .iter_mut()
@@ -206,9 +210,9 @@ async fn assert_concept(
 
 #[tokio::test]
 #[ignore = "requires pinned headed QTM Origin Modifier driver and a fresh explicit proof directory"]
-async fn actual_qtm_resource_call_origin_save_import_preview_publish_and_two_reopens() {
+async fn actual_qtm_resource_context_origin_save_import_preview_publish_and_two_reopens() {
     let root = std::path::PathBuf::from(crate::client_capture::selected(
-        "ERSATZRS_TELETEXT_RESOURCE_CALL_EDITOR_DIR",
+        "ERSATZRS_TELETEXT_RESOURCE_CONTEXT_EDITOR_DIR",
     ));
     assert!(root.is_absolute());
     std::fs::create_dir(&root).expect("fresh resource call editor proof root");

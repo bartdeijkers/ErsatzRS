@@ -84,7 +84,7 @@ async fn existing_resource_call_offset_cannot_move_a_generated_shared_consumer()
 }
 
 #[tokio::test]
-async fn resource_call_cannot_select_an_unallocated_valid_table28_pointer() {
+async fn resource_call_cannot_select_an_unallocated_native_or_context_pointer() {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
         original_response,
         Fixture::new_persistent().await,
@@ -122,7 +122,17 @@ async fn resource_call_cannot_select_an_unallocated_valid_table28_pointer() {
         })
         .unwrap();
     assert_eq!((words[8] >> 6) & 31, 19, "original Passive invocation");
-    assert_eq!(words[8] & 0x3c, 0x30, "original Public scope");
+    let expected_scope =
+        if flow.exported[0].sidecar().project.editor_profile == "qteletextmaker-1.0-carrier-v8" {
+            0x28
+        } else {
+            0x30
+        };
+    assert_eq!(
+        words[8] & 0x3c,
+        expected_scope,
+        "original authenticated carrier scope"
+    );
     // Nine-bit pointer511 is legal Table28 syntax but has no original allocation.
     // The original resource/page/type and origin modifier remain unchanged.
     words[8] = (words[8] & !(3 | (127 << 11))) | 3 | (127 << 11);
@@ -154,5 +164,77 @@ async fn resource_call_cannot_select_an_unallocated_valid_table28_pointer() {
     assert_no_mutation(&fixture, &flow).await;
     retained.assert_unchanged(&fixture, &flow).await;
     assert!(fixture.playout.try_recv().is_err());
+    fixture.state.pool.close().await;
+}
+
+#[tokio::test]
+async fn contextual_resource_views_keep_referenced_and_uninvoked_callees_readonly() {
+    let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
+        original_response,
+        Fixture::new_persistent().await,
+        seed::encoding,
+        authoring_metadata::write_compact,
+    ))
+    .await;
+    assert_eq!(
+        flow.exported[0].sidecar().project.editor_profile,
+        "qteletextmaker-1.0-carrier-v8"
+    );
+    let retained = resource_bank_admin::Retained::capture(&fixture).await;
+    for (index, expected, replacement) in [
+        // A context copy of Passive21 cannot become its editing authority.
+        (
+            19,
+            1 | (0x09 << 6) | (0x50 << 11),
+            1 | (0x09 << 6) | (0x51 << 11),
+        ),
+        // Adaptive22 is available for retargeting but uninvoked in this wrapper.
+        // Its definition remains protected even without an editor-pixel change.
+        (12, 0x09 | (0x0c << 6), 0x09 | (0x0c << 6) | (1 << 11)),
+    ] {
+        let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
+        let file = request
+            .files
+            .iter_mut()
+            .find(|f| f.name == companion(&flow.exported[0]))
+            .unwrap();
+        let mut records = parse_teletext_tti(&file.bytes, policy().tti)
+            .unwrap()
+            .records()
+            .to_vec();
+        let words = records
+            .iter_mut()
+            .find_map(|r| match r {
+                TeletextTtiRecord::Packet {
+                    row: 26,
+                    designation,
+                    words,
+                } if usize::from(*designation) == index / 13 => Some(words),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(words[index % 13], expected);
+        words[index % 13] = replacement;
+        file.bytes = write_teletext_tti(
+            &TeletextTtiDocument::checked_from_records(records, policy().tti).unwrap(),
+            policy().tti,
+        )
+        .unwrap();
+        let error = import_teletext_editorial_design(
+            &fixture.state.application,
+            request,
+            policy(),
+            designs::deadline(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, NativeTeletextEditorialImportError::Tti(_)),
+            "derived context is never an editable original definition: {error:?}"
+        );
+        assert_no_mutation(&fixture, &flow).await;
+        retained.assert_unchanged(&fixture, &flow).await;
+        assert!(fixture.playout.try_recv().is_err());
+    }
     fixture.state.pool.close().await;
 }

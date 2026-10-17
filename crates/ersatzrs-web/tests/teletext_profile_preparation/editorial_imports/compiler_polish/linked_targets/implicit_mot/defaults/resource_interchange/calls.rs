@@ -3,6 +3,8 @@ use super::*;
 
 #[path = "calls/actual_editor.rs"]
 mod actual_editor;
+#[path = "calls/context_scalars.rs"]
+mod context_scalars;
 #[path = "calls/lifecycle.rs"]
 mod lifecycle;
 #[path = "calls/negatives.rs"]
@@ -48,6 +50,7 @@ fn companion(exported: &ExportedOriginalTeletextDesign) -> &str {
     let resource = protected_file(exported, TeletextResourceKindWire::Gpop, 0xd0);
     &exported.sidecar().project.assets.iter().find(|asset| matches!(&asset.scope,
         TeletextExportAssetScope::ObjectTtiV1 {resource_name,object_id:20,editor_page:256,editor_ordinal:0}
+        | TeletextExportAssetScope::ObjectContextTtiV1 {resource_name,object_id:20,editor_page:256,editor_ordinal:0}
         if resource_name == resource)).unwrap().name
 }
 

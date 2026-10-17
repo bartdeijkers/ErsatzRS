@@ -40,6 +40,29 @@ pub(in super::super) fn carrier(
         }
     }
     if has_objects {
+        let encoded = original
+            .encoded()
+            .ok_or(NativeTeletextExportProjectError::Association)?;
+        // A contextual view is an explicit newer convention, selected only when
+        // the complete original resource catalogue fits. It never truncates the native body.
+        let has_calls = encoded
+            .declared()
+            .semantic()
+            .objects()
+            .definitions()
+            .iter()
+            .any(|definition| {
+                definition.identity.resource().is_some()
+                    && definition.program.commands().iter().any(|command| {
+                        matches!(
+                            command,
+                            ersatzrs_domain::TeletextEnhancementCommand::InvokeObject { .. }
+                        )
+                    })
+            });
+        if has_calls && contexts_fit(encoded, deadline)? {
+            return Ok(TeletextEditorCarrier::V8);
+        }
         return Ok(TeletextEditorCarrier::V6);
     }
     Ok(
@@ -62,7 +85,10 @@ pub(super) fn projection(
 ) -> Result<Option<(TeletextExportEditorPresentation, [u32; 13])>> {
     if !matches!(
         carrier,
-        TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7
+        TeletextEditorCarrier::V5
+            | TeletextEditorCarrier::V6
+            | TeletextEditorCarrier::V7
+            | TeletextEditorCarrier::V8
     ) || has_encoded_presentation
         || !needed(presentation)
     {
@@ -92,4 +118,35 @@ pub(super) fn projection(
         mapping,
         encode_teletext_presentation_words(&editor_defaults),
     )))
+}
+
+/// This editor-only preflight is bounded by the existing208-word Local compiler.
+/// Oversized catalogues retain the older command views and remain a recorded gap.
+fn contexts_fit(
+    encoded: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    deadline: std::time::Instant,
+) -> Result<bool> {
+    let tti = ersatzrs_app::teletext_tti::TeletextTtiBudget {
+        max_bytes: 65536,
+        max_records: 22,
+    };
+    for page in encoded.pages() {
+        super::check_deadline(deadline)?;
+        if let ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredPage::Object(page) = page {
+            for position in page.definition_positions() {
+                match super::resource_objects::build_context(
+                    encoded,
+                    position.target(),
+                    encoded.unit_count(),
+                    tti,
+                    deadline,
+                ) {
+                    Ok(_) => {}
+                    Err(NativeTeletextExportProjectError::Budget) => return Ok(false),
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+    }
+    Ok(true)
 }

@@ -283,6 +283,16 @@ pub enum TeletextExportAssetScope {
         editor_page: u16,
         editor_ordinal: u64,
     },
+    /// V8 editor-only Local aliases for the selected original root and its
+    /// protected transitive object closure. Only the selected root is editable.
+    /// The host regenerates the complete closure and alias identities from the
+    /// authenticated original; these descriptive fields grant no context authority.
+    ObjectContextTtiV1 {
+        resource_name: String,
+        object_id: u16,
+        editor_page: u16,
+        editor_ordinal: u64,
+    },
     /// Ordered bounded editor fragments of one unchanged native resource object.
     /// Ranges are descriptive claims; the host regenerates exact provenance.
     ObjectTtiFragmentV1 {
@@ -308,44 +318,51 @@ impl fmt::Debug for TeletextExportAssetScope {
         f.write_str("TeletextExportAssetScope(<redacted>)")
     }
 }
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum TeletextExportAssetFields {
+    Resource {
+        identity: TeletextResourceIdentityWire,
+        physical_subcode: u16,
+    },
+    Magazine {
+        magazine: u8,
+    },
+    DrcsTti {
+        resource_name: String,
+        editor_ordinal: u64,
+    },
+    DrcsTtiSet {
+        resource_names: Vec<Option<String>>,
+    },
+    ObjectTtiV1 {
+        resource_name: String,
+        object_id: u16,
+        editor_page: u16,
+        editor_ordinal: u64,
+    },
+    ObjectContextTtiV1 {
+        resource_name: String,
+        object_id: u16,
+        editor_page: u16,
+        editor_ordinal: u64,
+    },
+    ObjectTtiFragmentV1 {
+        resource_name: String,
+        object_id: u16,
+        fragment_index: u16,
+        fragment_count: u16,
+        command_start: u64,
+        command_end: u64,
+        native_word_start: u16,
+        native_word_end: u16,
+        editor_page: u16,
+        editor_ordinal: u64,
+    },
+}
 impl<'de> Deserialize<'de> for TeletextExportAssetScope {
     fn deserialize<D: Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-        enum Fields {
-            Resource {
-                identity: TeletextResourceIdentityWire,
-                physical_subcode: u16,
-            },
-            Magazine {
-                magazine: u8,
-            },
-            DrcsTti {
-                resource_name: String,
-                editor_ordinal: u64,
-            },
-            DrcsTtiSet {
-                resource_names: Vec<Option<String>>,
-            },
-            ObjectTtiV1 {
-                resource_name: String,
-                object_id: u16,
-                editor_page: u16,
-                editor_ordinal: u64,
-            },
-            ObjectTtiFragmentV1 {
-                resource_name: String,
-                object_id: u16,
-                fragment_index: u16,
-                fragment_count: u16,
-                command_start: u64,
-                command_end: u64,
-                native_word_start: u16,
-                native_word_end: u16,
-                editor_page: u16,
-                editor_ordinal: u64,
-            },
-        }
+        use TeletextExportAssetFields as Fields;
         Ok(match map_only(d)? {
             Fields::Resource {
                 identity,
@@ -369,6 +386,17 @@ impl<'de> Deserialize<'de> for TeletextExportAssetScope {
                 editor_page,
                 editor_ordinal,
             } => Self::ObjectTtiV1 {
+                resource_name,
+                object_id,
+                editor_page,
+                editor_ordinal,
+            },
+            Fields::ObjectContextTtiV1 {
+                resource_name,
+                object_id,
+                editor_page,
+                editor_ordinal,
+            } => Self::ObjectContextTtiV1 {
                 resource_name,
                 object_id,
                 editor_page,
@@ -583,6 +611,7 @@ fn validate_pages(project: &TeletextExportProject, b: TeletextExportProjectBudge
                     "qteletextmaker-1.0-carrier-v5"
                         | "qteletextmaker-1.0-carrier-v6"
                         | "qteletextmaker-1.0-carrier-v7"
+                        | "qteletextmaker-1.0-carrier-v8"
                 ) || !presentation.valid()
             })
         {
@@ -710,16 +739,34 @@ fn object_companion_key(
     index: usize,
 ) -> Result<String> {
     use TeletextExportProjectFailure as K;
-    let TeletextExportAssetScope::ObjectTtiV1 {
-        resource_name,
-        object_id,
-        editor_page,
-        editor_ordinal,
-    } = &asset.scope
-    else {
-        return Err(indexed(K::Mapping, index));
+    let (profile, resource_name, object_id, editor_page, editor_ordinal) = match &asset.scope {
+        TeletextExportAssetScope::ObjectTtiV1 {
+            resource_name,
+            object_id,
+            editor_page,
+            editor_ordinal,
+        } => (
+            "qteletextmaker-1.0-carrier-v6",
+            resource_name,
+            object_id,
+            editor_page,
+            editor_ordinal,
+        ),
+        TeletextExportAssetScope::ObjectContextTtiV1 {
+            resource_name,
+            object_id,
+            editor_page,
+            editor_ordinal,
+        } => (
+            "qteletextmaker-1.0-carrier-v8",
+            resource_name,
+            object_id,
+            editor_page,
+            editor_ordinal,
+        ),
+        _ => return Err(indexed(K::Mapping, index)),
     };
-    if project.editor_profile != "qteletextmaker-1.0-carrier-v6"
+    if project.editor_profile != profile
         || !flat_name(resource_name)
         || asset.unit_count != 0
         || *editor_page != 0x100
@@ -895,6 +942,7 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
                         | "qteletextmaker-1.0-carrier-v5"
                         | "qteletextmaker-1.0-carrier-v6"
                         | "qteletextmaker-1.0-carrier-v7"
+                        | "qteletextmaker-1.0-carrier-v8"
                 ) || a.unit_count != 0
                 {
                     return Err(indexed(K::Mapping, i));
@@ -906,7 +954,10 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
                     bank.kind, bank.page.magazine, bank.page.page
                 )
             }
-            TeletextExportAssetScope::ObjectTtiV1 { .. } => object_companion_key(project, a, i)?,
+            TeletextExportAssetScope::ObjectTtiV1 { .. }
+            | TeletextExportAssetScope::ObjectContextTtiV1 { .. } => {
+                object_companion_key(project, a, i)?
+            }
             TeletextExportAssetScope::ObjectTtiFragmentV1 { .. } => {
                 object_fragment_key(project, a, i)?
             }
@@ -916,6 +967,7 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
             TeletextExportAssetScope::DrcsTti { .. }
                 | TeletextExportAssetScope::DrcsTtiSet { .. }
                 | TeletextExportAssetScope::ObjectTtiV1 { .. }
+                | TeletextExportAssetScope::ObjectContextTtiV1 { .. }
                 | TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
         );
         if !flat_name(&a.name)
@@ -1159,6 +1211,11 @@ impl TeletextExportReceiptBody {
                         ..
                     }
                     | TeletextExportAssetScope::ObjectTtiFragmentV1 {
+                        editor_page,
+                        editor_ordinal,
+                        ..
+                    }
+                    | TeletextExportAssetScope::ObjectContextTtiV1 {
                         editor_page,
                         editor_ordinal,
                         ..

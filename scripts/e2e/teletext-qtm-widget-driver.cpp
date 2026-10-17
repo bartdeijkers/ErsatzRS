@@ -88,6 +88,7 @@ struct DriverContext {
     bool insertResourceGlyph = false;
     bool deleteResourceGlyph = false;
     bool editResourceCallOrigin = false;
+    bool resourceCallContext = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -131,7 +132,8 @@ static DriverContext driverContext() {
     const bool resourceInsert = mode == "resource-object-g0-insert-copy";
     const bool resourceDelete = mode == "resource-object-g0-delete";
     const bool resourceStructure = resourceInsert || resourceDelete;
-    const bool resourceCallOrigin = mode == "resource-object-call-origin";
+    const bool resourceCallContext = mode == "resource-object-call-origin-context";
+    const bool resourceCallOrigin = mode == "resource-object-call-origin" || resourceCallContext;
     const bool resourceTrial = resourceStructure || resourceCallOrigin;
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
@@ -261,7 +263,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1439,6 +1441,65 @@ static void editResourceGlyphStructure(QMainWindow *main, const DriverContext &c
     std::printf("QTM actual resource-object G0P %s: original9 model rows, final%zu, original command4/editor word7, complete wrapper retained\n",
         context.insertResourceGlyph ? "InsertCopy then second glyph Column1-to2" : "Delete", expected.size());
 }
+// Observed Qt paint only, never decoder/model input. A no-panel QTM widget can
+// retain additional layout proxy space; this captures its explicit480x250 page
+// viewport. The independent native raster remains the full-service authority.
+static QImage resourceCallOriginalPaint;
+static QImage resourceCallViewport() {
+    auto main = window();
+    auto view = editor();
+    if (!main || !main->isVisible() || !main->windowHandle() || !main->windowHandle()->isExposed()
+        || !view || !view->isVisible() || view->width() < 480 || view->height() < 250)
+        qFatal("Actual resource context viewport must be visible at480x250");
+    const QImage painted = view->grab(QRect(0, 0, 480, 250)).toImage();
+    if (painted.size() != QSize(480, 250)) qFatal("Actual resource context viewport capture failed");
+    return painted;
+}
+static int resourceCallGreen(const QImage &painted, int column) {
+    int count = 0;
+    for (int y = 50; y < 60; ++y)
+        for (int x = column * 12; x < (column + 1) * 12; ++x)
+            count += painted.pixelColor(x, y) == QColor(0, 255, 0);
+    return count;
+}
+static void captureResourceCallPaint(const DriverContext &context, const char *stage, bool edited) {
+    if (!context.resourceCallContext) qFatal("Resource paint requires the explicit context mode");
+    const int destination = edited ? 12 : 11;
+    if (!QTest::qWaitFor([destination] {
+        const QImage painted = resourceCallViewport();
+        return resourceCallGreen(painted, destination) > 0
+            && resourceCallGreen(painted, destination == 11 ? 12 : 11) == 0;
+    }, 3000)) qFatal("Actual nested green P did not occupy the expected origin cell");
+    const QImage painted = resourceCallViewport();
+    if (!edited) {
+        int white = 0;
+        for (int y = 10; y < 30; ++y)
+            for (int x = 8 * 12; x < 10 * 12; ++x)
+                white += painted.pixelColor(x, y) == QColor(255, 255, 255);
+        if (white == 0) qFatal("Actual context parent enlarged white A is absent");
+        resourceCallOriginalPaint = painted;
+    } else {
+        if (resourceCallOriginalPaint.size() != QSize(480, 250))
+            qFatal("Actual original context viewport oracle absent");
+        for (int y = 0; y < 250; ++y)
+            for (int x = 0; x < 480; ++x) {
+                QColor expected = resourceCallOriginalPaint.pixelColor(x, y);
+                if (y >= 50 && y < 60) {
+                    if (x >= 11 * 12 && x < 12 * 12) expected = QColor(0, 0, 0);
+                    if (x >= 12 * 12 && x < 13 * 12)
+                        expected = resourceCallOriginalPaint.pixelColor(x - 12, y);
+                }
+                if (painted.pixelColor(x, y) != expected)
+                    qFatal("Actual context paint changed outside exact one-cell P translation");
+            }
+    }
+    const QByteArray label = QByteArray("resource-call-") + stage + "-widget";
+    if (!painted.save(QString("/work/") + context.captureName(label.constData())))
+        qFatal("Actual resource context viewport evidence capture failed");
+    std::printf("QTM actual resource context viewport480x250: stage=%s greenPcolumn=%d greenpixels=%d comparison=%s\n",
+        stage, destination, resourceCallGreen(painted, destination),
+        edited ? "exact translated P; every other pixel unchanged" : "original P and enlarged white A observed");
+}
 // Pinned cac2167 x26dockwidget.cpp920-928 exposes the OriginModifier's cooked
 // +Column spinbox0..71. x26model.cpp605-611 commits this as undoable ETdata,
 // preserving raw address40, mode16 and the following allocated call selector.
@@ -1462,11 +1523,25 @@ static void editResourceCallOrigin(QMainWindow *main, const DriverContext &conte
     auto model = table->model();
     // Exact Active20 editor-only Local wrapper and native body. Public Passive21
     // is allocated pointer0; the editor wrapper never changes its native identity.
-    std::vector<StructureTriplet> expected{
-        {40,17,2}, {63,31,6}, {40,21,2}, {41,4,8}, {8,12,65},
-        {8,9,65}, {10,12,0}, {40,16,0}, {48,19,0}, {63,31,5}
-    };
+    std::vector<StructureTriplet> expected;
+    if (context.resourceCallContext) {
+        // Root-first original catalogue order is Active20, Adaptive22, Passive21.
+        // Disposable Local aliases at markers9/14 retain both original targets,
+        // including the currently uninvoked Adaptive22. Native IDs stay original.
+        expected = {
+            {40,17,2}, {63,31,6}, {40,21,2}, {41,4,8}, {8,12,65},
+            {8,9,65}, {10,12,0}, {40,16,0}, {40,19,17}, {40,22,9},
+            {41,4,7}, {7,12,64}, {9,12,0}, {9,9,88}, {40,23,17},
+            {44,4,1}, {1,12,0}, {1,0,2}, {1,3,0}, {1,9,80}, {63,31,5}
+        };
+    } else {
+        expected = {
+            {40,17,2}, {63,31,6}, {40,21,2}, {41,4,8}, {8,12,65},
+            {8,9,65}, {10,12,0}, {40,16,0}, {48,19,0}, {63,31,5}
+        };
+    }
     structureCheck(model, expected);
+    if (context.resourceCallContext) captureResourceCallPaint(context, "before", false);
     if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-before")))
         qFatal("Actual resource call baseline capture failed");
     structureSelect(table, 7);
@@ -1508,10 +1583,14 @@ static void editResourceCallOrigin(QMainWindow *main, const DriverContext &conte
     if (!QTest::qWaitFor([column, main] { return column->value() == 1 && main->isWindowModified(); }, 3000))
         qFatal("Actual OriginModifier +Column did not step0-to1");
     structureCheck(model, expected);
+    if (context.resourceCallContext) captureResourceCallPaint(context, "edited", true);
     if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-edited")))
         qFatal("Actual resource call edited control capture failed");
     savedGlyphStructure = expected;
-    std::puts("QTM actual resource call origin: cooked +Column step-up (40,16,0)-to-(40,16,1); exact allocated invocation word8 and complete10-row wrapper retained");
+    if (context.resourceCallContext)
+        std::puts("QTM actual resource call context: cooked +Column step-up (40,16,0)-to-(40,16,1); Local alias selector17 and complete21-row protected catalogue retained");
+    else
+        std::puts("QTM actual resource call origin: cooked +Column step-up (40,16,0)-to-(40,16,1); exact allocated invocation word8 and complete10-row wrapper retained");
 }
 static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
@@ -1646,7 +1725,8 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.editLocalStyleStructure) verifySavedGlyphStructure(saved, 27);
         if (context.insertResourceGlyph || context.deleteResourceGlyph)
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
-        if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, 10);
+        if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, context.resourceCallContext ? 21 : 10);
+        if (context.resourceCallContext) captureResourceCallPaint(context, "saved", true);
         capture(context.captureName("saved").toUtf8().constData());
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {

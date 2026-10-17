@@ -2,7 +2,7 @@
 use super::{fail, Location, Page, Result};
 use std::time::Instant;
 const FINAL: u32 = 63 | (31 << 6) | (5 << 11);
-pub(super) struct Image {
+pub(in super::super) struct Image {
     pub words: Vec<u32>,
     pub markers: Vec<usize>,
     pub end: usize,
@@ -57,7 +57,12 @@ impl Image {
         &self.words[start..end]
     }
 }
-pub(super) fn relocate(word: u32, old: &Image, new: &Image, location: Location) -> Result<u32> {
+pub(in super::super) fn relocate(
+    word: u32,
+    old: &Image,
+    new: &Image,
+    location: Location,
+) -> Result<u32> {
     let address = word & 63;
     let mode = (word >> 6) & 31;
     if address >= 40 && (17..=19).contains(&mode) && address & 0x18 == 8 {
@@ -78,7 +83,7 @@ pub(super) fn relocate(word: u32, old: &Image, new: &Image, location: Location) 
         Ok(word)
     }
 }
-pub(super) fn marker(word: u32, index: usize, location: Location) -> Result<u32> {
+pub(in super::super) fn marker(word: u32, index: usize, location: Location) -> Result<u32> {
     let address = (word & 0x38) | u32::from(index >= 104);
     let data = u32::try_from(((index / 13) & 7) * 16 + index % 13).map_err(|_| fail(location))?;
     Ok(address | (word & (31 << 6)) | (data << 11))

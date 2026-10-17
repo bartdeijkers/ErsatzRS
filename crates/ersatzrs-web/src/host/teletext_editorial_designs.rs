@@ -335,7 +335,7 @@ fn qualify_rows(
     let edited = if (resource_operands.is_empty() && resource_programs.is_empty())
         || !matches!(
             baseline.carrier,
-            TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7
+            TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7 | TeletextEditorCarrier::V8
         ) {
         parts.compile(stored, policy, deadline, overlays.clone())
     } else {
@@ -587,6 +587,7 @@ fn reconcile_files(
             changes.object_programs.extend(incoming.object_programs);
         } else if body.project.assets.iter().any(|asset| {
             asset.name==original.name && matches!(asset.scope,
+                ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectContextTtiV1{..} |
                 ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1{..} |
                 ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiFragmentV1{..})
         }) {
@@ -686,7 +687,12 @@ fn validate_reconciled_files(
     incoming: &TeletextEditorialChanges,
     service_budget: ersatzrs_domain::TeletextServiceBudget,
 ) -> Result<()> {
-    if !incoming.resource_programs.is_empty() {
+    // Context files keep original callee snapshots even when a sibling's
+    // qualified scalar edit changes that definition in the native candidate.
+    let validate_resource_groups = !incoming.resource_programs.is_empty()
+        || (baseline.carrier == TeletextEditorCarrier::V8
+            && !incoming.resource_operands.is_empty());
+    if validate_resource_groups {
         super::teletext_editorial_tti::resource_objects::validate_applied_project(
             &baseline.body.project,
             baseline
@@ -704,13 +710,13 @@ fn validate_reconciled_files(
     for mapping in &baseline.body.project.assets {
         if matches!(
             mapping.scope,
-            ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1 { .. } | ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
+            ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectContextTtiV1 { .. } | ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1 { .. } | ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
         ) {
             let edited = files
                 .iter()
                 .find(|file| file.name == mapping.name)
                 .ok_or(NativeTeletextEditorialImportError::Association)?;
-            if !incoming.resource_programs.is_empty() { continue; }
+            if validate_resource_groups { continue; }
             super::teletext_editorial_tti::resource_objects::validate_applied(
                 mapping,
                 &baseline.body.project,

@@ -19,6 +19,10 @@ use std::ops::Range;
 
 mod fragments;
 pub(in super::super) use fragments::{build_fragment, plan_fragments, ObjectEditorFragmentPlan};
+mod context;
+pub(in super::super) use context::{
+    build_context, build_context_with_root, ObjectEditorContextFrame,
+};
 
 /// Carrier selection uses the native body range and the same real wrapper as V6.
 /// Full fragment validation still runs before any editor body is allocated.

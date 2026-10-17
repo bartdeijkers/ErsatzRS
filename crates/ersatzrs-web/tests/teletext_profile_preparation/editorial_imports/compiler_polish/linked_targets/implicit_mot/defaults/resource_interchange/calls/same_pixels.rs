@@ -109,13 +109,36 @@ fn without_origin_request(
         19,
         "original Passive invocation remains exact"
     );
-    let final_termination = 63 | (31 << 6) | (5 << 11);
-    assert_eq!(words[12], final_termination);
-    let mut shortened = words.to_vec();
-    assert_eq!(shortened.remove(7), 0x28 | (16 << 6));
-    shortened.push(final_termination);
-    *words = shortened.try_into().unwrap();
-    assert_eq!(records,target,"only omission of the original explicit zero offset matches the independently compiled target");
+    if flow.exported[0].sidecar().project.editor_profile == "qteletextmaker-1.0-carrier-v8" {
+        // The separately compiled target also relocates every protected Local
+        // definition/pointer after removing the origin word. Native context
+        // reconciliation authenticates these derived moves before effects.
+        let target_word = target
+            .iter()
+            .find_map(|r| match r {
+                TeletextTtiRecord::Packet {
+                    row: 26,
+                    designation: 0,
+                    words,
+                } => Some(words[7]),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(
+            (target_word >> 6) & 31,
+            19,
+            "the original Passive call follows directly"
+        );
+        records = target.to_vec();
+    } else {
+        let final_termination = 63 | (31 << 6) | (5 << 11);
+        assert_eq!(words[12], final_termination);
+        let mut shortened = words.to_vec();
+        assert_eq!(shortened.remove(7), 0x28 | (16 << 6));
+        shortened.push(final_termination);
+        *words = shortened.try_into().unwrap();
+        assert_eq!(records,target,"only omission of the original explicit zero offset matches the independently compiled target");
+    }
     file.bytes = write_teletext_tti(
         &TeletextTtiDocument::checked_from_records(records, policy().tti).unwrap(),
         policy().tti,

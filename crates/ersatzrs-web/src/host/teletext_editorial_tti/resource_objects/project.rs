@@ -44,6 +44,7 @@ fn groups<'a>(
             asset.scope,
             TeletextExportAssetScope::ObjectTtiV1 { .. }
                 | TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
+                | TeletextExportAssetScope::ObjectContextTtiV1 { .. }
         ) {
             let mapped = mapping(asset, project, service)?;
             groups.entry(mapped.identity).or_default().push(asset);
@@ -83,7 +84,7 @@ fn file<'a>(files: Files<'a>, asset: &TeletextExportAssetMapping) -> Result<&'a 
         .ok_or_else(invalid)?;
     Ok(&value.bytes)
 }
-fn without_x26<'a>(page: &Page<'a>) -> Page<'a> {
+pub(super) fn without_x26<'a>(page: &Page<'a>) -> Page<'a> {
     let mut packets = page.packets;
     packets[0] = [None; 16];
     Page {
@@ -154,6 +155,21 @@ fn body(
 ) -> Result<Body> {
     let first = group.first().ok_or_else(invalid)?;
     let mapped = mapping(first, project, service)?;
+    if matches!(
+        first.scope,
+        TeletextExportAssetScope::ObjectContextTtiV1 { .. }
+    ) {
+        if group.len() != 1 {
+            return Err(invalid());
+        }
+        return super::context::body(
+            &mapped,
+            files.0.map(|files| file(files, first)).transpose()?,
+            file(files.1, first)?,
+            limits,
+            deadline,
+        );
+    }
     let mut output = Body {
         before: vec![],
         after: vec![],
@@ -171,22 +187,31 @@ fn body(
         append(&mut output.before, &before, maximum)?;
         append(&mut output.after, &after, maximum)?;
     }
+    output.spans = native_spans(&mapped, limits, deadline)?;
+    Ok(output)
+}
+pub(super) fn native_spans(
+    mapped: &Mapping<'_>,
+    limits: Limits,
+    deadline: Instant,
+) -> Result<Vec<structural::Span>> {
     let plans = plan_fragments(mapped.page, mapped.definition, limits.1, deadline)
         .map_err(|_| invalid())?;
     let start = usize::from(plans.first().ok_or_else(invalid)?.native_word_start);
     let EncodedTeletextAuthoredPage::Object(page) = mapped.page else {
         return Err(invalid());
     };
+    let mut spans = Vec::new();
     for position in page
         .command_positions()
         .iter()
         .filter(|position| position.source().object == Some(mapped.identity))
     {
         mapped.location.check_deadline(deadline)?;
-        if output.spans.len() >= limits.2.max_commands {
+        if spans.len() >= limits.2.max_commands {
             return Err(invalid());
         }
-        output.spans.push(structural::Span {
+        spans.push(structural::Span {
             ordinal: position.source().command,
             first: position
                 .first_word()
@@ -198,7 +223,7 @@ fn body(
                 .ok_or_else(invalid)?,
         });
     }
-    Ok(output)
+    Ok(spans)
 }
 fn program(
     mapped: &Mapping<'_>,
@@ -373,7 +398,11 @@ pub(in crate::host) fn authorize_programs(
     }
     Ok(())
 }
-fn native_body(mapped: &Mapping<'_>, limits: Limits, deadline: Instant) -> Result<Vec<u32>> {
+pub(super) fn native_body(
+    mapped: &Mapping<'_>,
+    limits: Limits,
+    deadline: Instant,
+) -> Result<Vec<u32>> {
     let plans = plan_fragments(mapped.page, mapped.definition, limits.1, deadline)
         .map_err(|_| invalid())?;
     let start = plans.first().ok_or_else(invalid)?.native_word_start;
@@ -446,6 +475,18 @@ pub(in crate::host) fn validate_applied_project(
             )?
         {
             return Err(invalid());
+        }
+        if matches!(
+            group[0].scope,
+            TeletextExportAssetScope::ObjectContextTtiV1 { .. }
+        ) {
+            super::context::validate_applied(
+                &before,
+                &after,
+                file(edited_files, group[0])?,
+                limits,
+                deadline,
+            )?;
         }
     }
     Ok(())

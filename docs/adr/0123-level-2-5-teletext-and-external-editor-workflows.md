@@ -334,6 +334,39 @@ writers for protected-effect comparison, even when their pixels are identical.
 This slice does not create/remove calls or definitions; complete topology and
 set editing remain required under the existing interchange acceptance.
 
+QTM carrier version8 adds `object_context_tti_v1`, a separately named editor-only
+view. It is regenerated from the complete original resource catalogue: the
+selected root is alias0, followed by every other original resource definition in
+original catalogue order. Full native scope, resource kind/page/logical S1 and
+object IDs never become Local native identities. Only the disposable editor view
+uses Local aliases, because pinned QTM1.0 skips native Public/Global calls.
+Every alias retains its original type, program and explicit/absent offsets.
+Unused original targets remain available; editing a root call does not reorder
+or delete aliases. Original Local definitions are not invented as legal resource
+callees. The existing Local compiler owns all markers, call pointers and capacity.
+
+The sealed original regenerates alias correspondence; uploaded metadata contains
+no authoritative alias map. Only the selected root is editable. Main invocation,
+context definitions, types, metadata and every non-X26 record remain protected;
+only compiler-derived marker/pointer relocation may move with root structure.
+Context pointers must resolve and round-trip through the exact original map.
+Root calls translate to original native allocations before existing V16
+reconstruction, full service validation and shared-consumer effect checks. A
+context alias intent that collapses to an indistinguishable native selector must
+reject explicitly; it cannot silently become an unchanged import. Complete
+collision-preserving target editing remains required work.
+
+Final comparison recompiles the qualified root against the frozen original
+catalogue context. Other definitions may be changed only through their own
+receipt-owned companion, never through a copied context block. Simultaneous
+qualified edits are still checked against the complete native candidate. New
+exports choose V8 for resource calls only when the complete catalogue fits the
+editor's208-word physical frame. Otherwise V6/V7 command views preserve all native
+content; complete oversized context is still unimplemented acceptance work, not
+a truncation, a native capacity reduction or an accepted permanent restriction.
+Historical carriers1–7 retain their exact meanings and bytes. This editor-only
+projection does not qualify QTM as an ordinary-stream acceptance client.
+
 Authenticated receipt replay applies all stored intent; generic or legacy replay
 refuses unapplied intent. Import, repeat and undo save concepts without publishing.
 Historical carriers and concept versions1–14 retain their exact original contracts;
