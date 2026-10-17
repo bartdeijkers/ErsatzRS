@@ -30,6 +30,7 @@ const GLYPH_OVERLAY_VERSION: u16 = 4;
 const OBJECT_ATTRIBUTE_OVERLAY_VERSION: u16 = 5;
 const EXTENDED_GLYPH_OVERLAY_VERSION: u16 = 6;
 const REMAINING_GLYPH_OVERLAY_VERSION: u16 = 7;
+const DRCS_REFERENCE_OVERLAY_VERSION: u16 = 8;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -279,6 +280,41 @@ impl TeletextSavedEditorialOverlay {
         )
     }
 
+    /// Capture version 8 slot changes in existing page-local or local-object DRCS references.
+    ///
+    /// At least one reference must change its slot while retaining the original
+    /// Normal/Global table and logical subtable. Known version1–7 intents may
+    /// accompany the change. Catalog resolution and all protected display effects
+    /// still require native validation; this grants no publication authority.
+    /// # Errors
+    /// Rejects missing DRCS slot intent, changed table/subtable, unsupported or
+    /// crossed families, invalid provenance and repeated original targets.
+    pub fn new_with_drcs_reference_slots(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if !local_program_operands
+            .iter()
+            .any(|operand| same_drcs_reference_slots(operand.expected(), operand.replacement()))
+            && !local_object_operands
+                .iter()
+                .any(|operand| same_drcs_reference_slots(operand.expected(), operand.replacement()))
+        {
+            return Err(invalid());
+        }
+        Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
+            OperandFamilies::DrcsReferences,
+        )
+    }
+
     fn new_parts(
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
@@ -396,6 +432,7 @@ enum OperandFamilies {
     Legacy,
     Extended,
     Remaining,
+    DrcsReferences,
 }
 impl OperandFamilies {
     fn supports(
@@ -405,8 +442,10 @@ impl OperandFamilies {
     ) -> bool {
         supported_family(expected, replacement)
             || (!matches!(self, Self::Legacy) && same_extended_glyph_family(expected, replacement))
-            || (matches!(self, Self::Remaining)
+            || (matches!(self, Self::Remaining | Self::DrcsReferences)
                 && same_remaining_glyph_family(expected, replacement))
+            || (matches!(self, Self::DrcsReferences)
+                && same_drcs_reference_slots(expected, replacement))
     }
 }
 fn inferred_schema_version(
@@ -422,7 +461,9 @@ fn inferred_schema_version(
                 .iter()
                 .any(|operand| family(operand.expected(), operand.replacement()))
     };
-    if any_family(same_remaining_glyph_family) {
+    if any_family(same_drcs_reference_slots) {
+        DRCS_REFERENCE_OVERLAY_VERSION
+    } else if any_family(same_remaining_glyph_family) {
         REMAINING_GLYPH_OVERLAY_VERSION
     } else if any_family(same_extended_glyph_family) {
         EXTENDED_GLYPH_OVERLAY_VERSION
@@ -525,6 +566,24 @@ fn same_remaining_glyph_family(
                 ..
             },
         ) => original == changed,
+        _ => false,
+    }
+}
+fn same_drcs_reference_slots(
+    expected: TeletextColumnOperation,
+    replacement: TeletextColumnOperation,
+) -> bool {
+    match (expected, replacement) {
+        (
+            TeletextColumnOperation::Drcs {
+                reference: original,
+            },
+            TeletextColumnOperation::Drcs { reference: changed },
+        ) => {
+            original.table == changed.table
+                && original.subtable == changed.subtable
+                && original.slot != changed.slot
+        }
         _ => false,
     }
 }
@@ -686,6 +745,24 @@ impl<'de> Deserialize<'de> for Cells {
     }
 }
 
+fn restore_page(
+    page: StoredPage,
+) -> Result<TeletextPhysicalBaseOverlay, TeletextDesignDocumentError> {
+    let rows = page
+        .rows
+        .into_iter()
+        .map(|row| TeletextPhysicalBaseRow::new(row.row, row.cells.0).map_err(|_| invalid()))
+        .collect::<Result<Vec<_>, _>>()?;
+    TeletextPhysicalBaseOverlay::new(
+        TeletextPageAddress {
+            page: page.owner.page,
+            subcode: page.owner.subcode,
+        },
+        rows,
+    )
+    .map_err(|_| invalid())
+}
+
 impl StoredOverlay {
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
         let operands = &self.local_program_operands.0;
@@ -697,7 +774,9 @@ impl StoredOverlay {
             (DRCS_OVERLAY_VERSION, operands, Some(bitmaps), None)
                 if !bitmaps.is_empty() && operands.as_ref().is_none_or(|v| !v.is_empty()) => {}
             (
-                EXTENDED_GLYPH_OVERLAY_VERSION | REMAINING_GLYPH_OVERLAY_VERSION,
+                EXTENDED_GLYPH_OVERLAY_VERSION
+                | REMAINING_GLYPH_OVERLAY_VERSION
+                | DRCS_REFERENCE_OVERLAY_VERSION,
                 operands,
                 bitmaps,
                 objects,
@@ -739,23 +818,7 @@ impl StoredOverlay {
         let pages = self
             .pages
             .into_iter()
-            .map(|page| {
-                let rows = page
-                    .rows
-                    .into_iter()
-                    .map(|row| {
-                        TeletextPhysicalBaseRow::new(row.row, row.cells.0).map_err(|_| invalid())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                TeletextPhysicalBaseOverlay::new(
-                    TeletextPageAddress {
-                        page: page.owner.page,
-                        subcode: page.owner.subcode,
-                    },
-                    rows,
-                )
-                .map_err(|_| invalid())
-            })
+            .map(restore_page)
             .collect::<Result<Vec<_>, _>>()?;
         let operands = operands
             .unwrap_or_default()
@@ -789,6 +852,11 @@ impl StoredOverlay {
             .collect::<Result<Vec<_>, _>>()?;
         let objects = object_operands::restore(objects.unwrap_or_default())?;
         let value = match self.schema_version {
+            DRCS_REFERENCE_OVERLAY_VERSION => {
+                TeletextSavedEditorialOverlay::new_with_drcs_reference_slots(
+                    provenance, pages, operands, objects, bitmaps,
+                )?
+            }
             REMAINING_GLYPH_OVERLAY_VERSION => {
                 TeletextSavedEditorialOverlay::new_with_remaining_glyph_operands(
                     provenance, pages, operands, objects, bitmaps,
@@ -1188,3 +1256,7 @@ mod extended_glyph_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/remaining_glyph_tests.rs"]
 mod remaining_glyph_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/drcs_reference_tests.rs"]
+mod drcs_reference_tests;

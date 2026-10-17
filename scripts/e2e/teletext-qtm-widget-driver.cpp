@@ -12,6 +12,9 @@
 #include <QMainWindow>
 #include <QMenu>
 #include <QRadioButton>
+#include <QSpinBox>
+#include <QStyle>
+#include <QStyleOptionSpinBox>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QProcess>
@@ -67,6 +70,7 @@ struct DriverContext {
     int fromGlyph = 0;
     int toGlyph = 0;
     int toGlyphMode = 0;
+    bool editLocalDrcsSlot = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -106,7 +110,8 @@ static DriverContext driverContext() {
     const bool foreground = mode == "single-page-foreground";
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
-    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph || remainingGlyph;
+    const bool drcsSlot = mode == "single-page-local-drcs-slot";
+    const bool localGlyph = mode == "single-page-local-glyph" || extendedGlyph || remainingGlyph || drcsSlot;
     const bool suppliedGlyph = qEnvironmentVariableIsSet("ERSATZRS_QTM_GLYPH_MODE")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_GLYPH")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH")
@@ -115,16 +120,16 @@ static DriverContext driverContext() {
         qFatal("Glyph operands require explicit single-page-local-glyph mode");
     if (!extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE"))
         qFatal("Replacement glyph mode requires the fixed extended glyph trial");
-    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", (extendedGlyph || remainingGlyph) ? 31 : 9) : 0;
+    const int glyphMode = localGlyph ? boundedDecimal("ERSATZRS_QTM_GLYPH_MODE", (extendedGlyph || remainingGlyph || drcsSlot) ? 31 : 9) : 0;
     const int toGlyphMode = extendedGlyph && qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_GLYPH_MODE")
         ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH_MODE", 31) : glyphMode;
     const int fromGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_FROM_GLYPH", 127) : 0;
     const int toGlyph = localGlyph ? boundedDecimal("ERSATZRS_QTM_TO_GLYPH", 127) : 0;
-    if (localGlyph && !extendedGlyph && !remainingGlyph && (glyphMode != 9 && glyphMode != 1))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && (glyphMode != 9 && glyphMode != 1))
         qFatal("Fixed local glyph mode must retain raw G0 mode9 or G1 mode1");
     if (localGlyph && fromGlyph == toGlyph && glyphMode == toGlyphMode)
         qFatal("Local glyph trial requires a changed glyph");
-    if (localGlyph && !extendedGlyph && !remainingGlyph && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
+    if (localGlyph && !extendedGlyph && !remainingGlyph && !drcsSlot && ((glyphMode == 9 && (fromGlyph != 65 || toGlyph != 66))
         || (glyphMode == 1 && (fromGlyph != 33 || toGlyph != 34))))
         qFatal("Fixed local glyph trial requires G0 A-to-B or G1 0x21-to-0x22");
     if (extendedGlyph && !((glyphMode == 15 && toGlyphMode == 15 && fromGlyph == 35 && toGlyph == 66)
@@ -133,6 +138,8 @@ static DriverContext driverContext() {
     if (remainingGlyph && !((glyphMode == 1 && fromGlyph == 65 && toGlyph == 64)
         || (glyphMode == 11 && fromGlyph == 47 && toGlyph == 95)))
         qFatal("Fixed remaining trial requires G1 alphabetic65-to64 or G3 Level25 47-to95");
+    if (drcsSlot && (glyphMode != 13 || fromGlyph != 64 || toGlyph != 65))
+        qFatal("Fixed DRCS reference trial requires Normal mode13 slot0-to1");
     const bool panelDay = mode == "single-page-panel-zone-q";
     const bool panelNight = mode == "single-page-panel-save";
     const bool panelProof = panelDay || panelNight;
@@ -190,7 +197,7 @@ static DriverContext driverContext() {
     if (localGlyph && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -364,6 +371,55 @@ static void editDiacriticMode(QDockWidget *dock, const DriverContext &context) {
     });
     QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
 }
+// QTM's existing mode13 PTU editor writes only the low six data bits. Click
+// its visible step-up button, retaining Normal scope and every selection word.
+static void editDrcsSlot(QMainWindow *main, QDockWidget *dock,
+    QAbstractItemModel *model, const DriverContext &context) {
+    if (!context.editLocalDrcsSlot || context.glyphMode != 13
+        || context.fromGlyph != 64 || context.toGlyph != 65 || main->isWindowModified())
+        qFatal("Unexpected fixed original DRCS slot trial");
+    QSpinBox *slot = nullptr;
+    for (QSpinBox *candidate : dock->findChildren<QSpinBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled()
+            || candidate->minimum() != 0 || candidate->maximum() != 47) continue;
+        if (slot) qFatal("Ambiguous actual DRCS PTU spinbox");
+        slot = candidate;
+    }
+    if (!slot || slot->value() != 0) qFatal("Actual original DRCS PTU0 editor absent");
+    if (slot->isReadOnly() || slot->buttonSymbols() == QAbstractSpinBox::NoButtons)
+        qFatal("Actual DRCS PTU step buttons are unavailable");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-glyph-before")))
+        qFatal("Actual DRCS slot baseline dock capture failed");
+    captureLocalGlyphWidget(context, "before");
+    // Use the existing visible step-up control, not keyboard focus or a setter.
+    QStyleOptionSpinBox option;
+    option.initFrom(slot);
+    option.frame = slot->hasFrame();
+    option.buttonSymbols = slot->buttonSymbols();
+    option.stepEnabled = QAbstractSpinBox::StepUpEnabled | QAbstractSpinBox::StepDownEnabled;
+    option.subControls = QStyle::SC_SpinBoxEditField | QStyle::SC_SpinBoxUp | QStyle::SC_SpinBoxDown;
+    if (slot->style()->styleHint(QStyle::SH_SpinBox_ButtonsInsideFrame, nullptr, slot))
+        option.subControls |= QStyle::SC_SpinBoxFrame;
+    const QRect up = slot->style()->subControlRect(QStyle::CC_SpinBox, &option, QStyle::SC_SpinBoxUp, slot);
+    if (!up.isValid() || !slot->rect().contains(up.center())
+        || slot->style()->hitTestComplexControl(QStyle::CC_SpinBox, &option, up.center(), slot) != QStyle::SC_SpinBoxUp)
+        qFatal("Actual visible DRCS PTU step-up button is not clickable");
+    if (!slot->grab().save(QString("/work/") + context.captureName("local-glyph-step-up")))
+        qFatal("Actual DRCS PTU button capture failed");
+    QTest::mouseMove(slot, up.center());
+    QTest::mouseClick(slot, Qt::LeftButton, Qt::NoModifier, up.center());
+    if (!QTest::qWaitFor([slot, main, model, context] {
+        return slot->value() == 1 && main->isWindowModified()
+            && model->data(model->index(context.tripletIndex, 0), Qt::UserRole).toInt() == context.tripletColumn
+            && model->data(model->index(context.tripletIndex, 1), Qt::UserRole).toInt() == 13
+            && model->data(model->index(context.tripletIndex, 2), Qt::UserRole).toInt() == 65;
+    }, 3000)) qFatal("Actual DRCS PTU edit did not retain Normal mode13 and select slot1");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-glyph-edited")))
+        qFatal("Actual DRCS slot edited dock capture failed");
+    captureLocalGlyphWidget(context, "edited");
+    std::printf("QTM actual Local DRCS PTU visible step-up click: triplet=%d column=%d mode13 Normal slot0-to1 raw64-to65\n",
+        context.tripletIndex, context.tripletColumn);
+}
 static void editForeground(QMainWindow *main, const DriverContext &context) {
     const int expectedMode = context.editLocalGlyph ? context.glyphMode : 0;
     const int expectedFrom = context.editLocalGlyph ? context.fromGlyph : context.fromColour;
@@ -408,6 +464,10 @@ static void editForeground(QMainWindow *main, const DriverContext &context) {
     QTest::mouseClick(table->viewport(), Qt::LeftButton, Qt::NoModifier, table->visualRect(target).center());
     if (table->currentIndex().row() != context.tripletIndex)
         qFatal("Actual X/26 row selection failed");
+    if (context.editLocalDrcsSlot) {
+        editDrcsSlot(main, dock, model, context);
+        return;
+    }
     QComboBox *colour = nullptr;
     for (QComboBox *candidate : dock->findChildren<QComboBox *>()) {
         if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != comboSize) continue;

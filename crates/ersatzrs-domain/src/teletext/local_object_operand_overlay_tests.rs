@@ -436,3 +436,6 @@ mod extended_operand_tests;
 
 #[path = "remaining_glyph_operand_tests.rs"]
 mod remaining_glyph_operand_tests;
+
+#[path = "drcs_reference_operand_tests.rs"]
+mod drcs_reference_operand_tests;

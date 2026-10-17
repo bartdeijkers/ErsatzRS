@@ -131,6 +131,13 @@ fn original_editable_commands_keep_exact_original_local_source() {
             code: TeletextGlyphCode::new(0x2f).unwrap(),
             compatibility: ersatzrs_domain::TeletextG3Compatibility::Level25,
         },
+        TeletextColumnOperation::Drcs {
+            reference: ersatzrs_domain::TeletextDrcsGlyphReference {
+                table: ersatzrs_domain::TeletextDrcsTableScope::Normal,
+                subtable: ersatzrs_domain::TeletextDrcsSubtableIndex::new(3).unwrap(),
+                slot: ersatzrs_domain::TeletextDrcsGlyphSlot::new(47).unwrap(),
+            },
+        },
         TeletextColumnOperation::Attributes {
             double_height: true,
             double_width: true,
@@ -201,4 +208,65 @@ fn final_definition_marker_type_presence_and_word_span_are_authenticated() {
     assert!(retained_word(&encoded, definition, source(), &words, location(), deadline).is_err());
     words[0] = None;
     assert!(retained_word(&encoded, definition, source(), &words, location(), deadline).is_err());
+}
+
+#[test]
+fn drcs_selector_is_protected_while_its_exact_final_glyph_word_retains_source() {
+    use ersatzrs_domain::{
+        TeletextDrcsGlyphReference, TeletextDrcsGlyphSlot, TeletextDrcsSubtableIndex,
+        TeletextDrcsTableScope,
+    };
+    let catalog = catalog(TeletextColumnOperation::Drcs {
+        reference: TeletextDrcsGlyphReference {
+            table: TeletextDrcsTableScope::Normal,
+            subtable: TeletextDrcsSubtableIndex::new(3).unwrap(),
+            slot: TeletextDrcsGlyphSlot::new(0).unwrap(),
+        },
+    });
+    let main = TeletextEnhancementProgram::new(vec![]).unwrap();
+    let allocations = allocate_teletext_resource_objects(&catalog, &[], 1).unwrap();
+    let encoded = compile_teletext_local_program_with_objects(
+        owner(32),
+        &main,
+        &catalog,
+        &allocations,
+        TeletextResolvedObjectPageLinks {
+            public: None,
+            global: None,
+        },
+        budget(),
+    )
+    .unwrap();
+    let position = encoded
+        .command_positions()
+        .iter()
+        .find(|position| position.source() == source())
+        .unwrap();
+    assert_eq!((position.first_word(), position.semantic_word()), (2, 3));
+    let mut packets: PacketWords = [None; 16];
+    let mut words = [0; 13];
+    words[1] = 0x0de8; // Original Passive definition marker, local object number1.
+    words[2] = 0x28 | (24 << 6) | (0x53 << 11); // Normal subtable3, separate selection.
+    words[3] = (13 << 6) | (0x40 << 11); // Original Normal slot0 semantic glyph.
+    packets[0] = Some(words);
+    let deadline = Instant::now().checked_add(Duration::from_secs(30)).unwrap();
+    assert_eq!(
+        retained_word(
+            &encoded,
+            catalog.definition(identity()).unwrap(),
+            source(),
+            &packets,
+            location(),
+            deadline
+        )
+        .unwrap(),
+        3
+    );
+    assert!(super::super::position_at_word(Some(&encoded), 2, location(), deadline).is_err());
+    assert_eq!(
+        super::super::position_at_word(Some(&encoded), 3, location(), deadline)
+            .unwrap()
+            .source(),
+        source()
+    );
 }

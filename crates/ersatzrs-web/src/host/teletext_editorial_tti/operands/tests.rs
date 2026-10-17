@@ -8,6 +8,9 @@ mod extended_glyphs;
 #[path = "tests/remaining_glyphs.rs"]
 mod remaining_glyphs;
 
+#[path = "tests/drcs_references.rs"]
+mod drcs_references;
+
 fn g0(code: u8) -> TeletextColumnOperation {
     TeletextColumnOperation::G0 {
         code: TeletextGlyphCode::new(code).unwrap(),

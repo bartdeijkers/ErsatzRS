@@ -465,3 +465,9 @@ mod remaining_glyphs;
 
 #[path = "local_object_glyphs/actual_remaining_editor.rs"]
 mod actual_remaining_editor;
+
+#[path = "local_object_glyphs/drcs_references.rs"]
+mod drcs_references;
+
+#[path = "local_object_glyphs/actual_drcs_reference_editor.rs"]
+mod actual_drcs_reference_editor;

@@ -553,7 +553,7 @@ fn prepare(
     Ok(prepared)
 }
 
-fn glyph_family_flags(changes: &TeletextEditorialChanges) -> (bool, bool) {
+fn glyph_family_flags(changes: &TeletextEditorialChanges) -> (bool, bool, bool) {
     changes
         .operands
         .iter()
@@ -564,22 +564,26 @@ fn glyph_family_flags(changes: &TeletextEditorialChanges) -> (bool, bool) {
                 .iter()
                 .map(|operand| operand.expected()),
         )
-        .fold((false, false), |(remaining, extended), operation| {
-            (
-                remaining
-                    || matches!(
-                        operation,
-                        TeletextColumnOperation::G1Alpha { .. }
-                            | TeletextColumnOperation::G3 { .. }
-                    ),
-                extended
-                    || matches!(
-                        operation,
-                        TeletextColumnOperation::G2 { .. }
-                            | TeletextColumnOperation::G0Diacritic { .. }
-                    ),
-            )
-        })
+        .fold(
+            (false, false, false),
+            |(drcs, remaining, extended), operation| {
+                (
+                    drcs || matches!(operation, TeletextColumnOperation::Drcs { .. }),
+                    remaining
+                        || matches!(
+                            operation,
+                            TeletextColumnOperation::G1Alpha { .. }
+                                | TeletextColumnOperation::G3 { .. }
+                        ),
+                    extended
+                        || matches!(
+                            operation,
+                            TeletextColumnOperation::G2 { .. }
+                                | TeletextColumnOperation::G0Diacritic { .. }
+                        ),
+                )
+            },
+        )
 }
 
 fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
@@ -597,8 +601,17 @@ fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditoria
                 | TeletextColumnOperation::Attributes { .. }
         )
     });
-    let (has_remaining_glyphs, has_extended_glyphs) = glyph_family_flags(&prepared.cumulative);
-    let overlay = if has_remaining_glyphs {
+    let (has_drcs_references, has_remaining_glyphs, has_extended_glyphs) =
+        glyph_family_flags(&prepared.cumulative);
+    let overlay = if has_drcs_references {
+        TeletextSavedEditorialOverlay::new_with_drcs_reference_slots(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+        )?
+    } else if has_remaining_glyphs {
         TeletextSavedEditorialOverlay::new_with_remaining_glyph_operands(
             prepared.provenance.clone(),
             prepared.cumulative.rows.clone(),

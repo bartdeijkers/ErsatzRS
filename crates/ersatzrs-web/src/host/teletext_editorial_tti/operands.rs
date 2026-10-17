@@ -6,6 +6,7 @@ use super::{
 };
 use ersatzrs_domain::{
     TeletextColourReference, TeletextColumnOperation, TeletextDiacriticIndex,
+    TeletextDrcsGlyphReference, TeletextDrcsGlyphSlot, TeletextDrcsTableScope,
     TeletextEnhancementCommand, TeletextG1AlphaCode, TeletextG3Compatibility, TeletextGlyphCode,
     TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextMosaic,
     TeletextPageAddress,
@@ -421,6 +422,9 @@ fn operand(
                 | (u32::from(underline_or_separated_mosaics) << 5)
                 | (u32::from(double_width) << 6),
         ),
+        TeletextColumnOperation::Drcs { reference } => {
+            return drcs_slot_operand(column, reference, before, after);
+        }
         _ => return None,
     };
     let edited_mode = (after >> 6) & 31;
@@ -475,6 +479,33 @@ fn operand(
         }),
         _ => None,
     }
+}
+
+// The compiler emits a separate mode24 selection when needed. Only its retained
+// final mode13 glyph word is editable; logical scope/subtable stay authenticated.
+fn drcs_slot_operand(
+    column: u8,
+    reference: TeletextDrcsGlyphReference,
+    before: u32,
+    after: u32,
+) -> Option<TeletextColumnOperation> {
+    let scope = match reference.table {
+        TeletextDrcsTableScope::Normal => 0x40,
+        TeletextDrcsTableScope::Global => 0,
+    };
+    let data = u32::from(scope | reference.slot.get());
+    if column > 39
+        || before != u32::from(column) | (13 << 6) | (data << 11)
+        || after > 0x3ffff
+        || after & 0x7ff != before & 0x7ff
+        || (after >> 11) & 0x40 != u32::from(scope)
+    {
+        return None;
+    }
+    let slot = TeletextDrcsGlyphSlot::new(u8::try_from((after >> 11) & 0x3f).ok()?).ok()?;
+    Some(TeletextColumnOperation::Drcs {
+        reference: TeletextDrcsGlyphReference { slot, ..reference },
+    })
 }
 
 #[cfg(test)]

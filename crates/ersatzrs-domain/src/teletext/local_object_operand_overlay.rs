@@ -22,7 +22,8 @@ pub enum TeletextLocalObjectOperandOverlayError {
 ///
 /// Object identity/type, command order, geometry, charset, invocation targets and
 /// all other commands are immutable. G1 alphabetic edits retain their operation
-/// family, G3 retains its compatibility, and resource edits remain absent.
+/// family and G3 retains its compatibility. DRCS slot changes retain their original
+/// table/subtable; resource declarations and bitmap contents remain immutable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextLocalObjectOperandOverlay {
     identity: TeletextObjectIdentity,

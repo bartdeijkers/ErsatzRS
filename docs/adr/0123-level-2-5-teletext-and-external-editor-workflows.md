@@ -170,6 +170,19 @@ remain authoritative. This private concept version changes neither the addon
 response nor the external editor carrier; P9A-04 owns the scoped evidence and
 remaining full editor/client/engine acceptance.
 
+Private concept version8 adds slot changes in existing page-local and Local-object
+DRCS references. At least one slot change is required; versions1–7 remain closed
+to this intent and retain their bytes. Original Normal/Global scope and logical
+subtable stay immutable, together with resource identities, catalogs, bitmaps and
+selection words. Reconciliation authenticates the compiler's final semantic
+mode13 word; a preceding mode24 selection belongs to the same command range but
+grants no edit authority. Complete service reconstruction must resolve the new
+glyph in the original selected resource, retain the two-subtable/24-distinct-glyph
+limits, and check every affected consumer against captured permissions before
+storing a concept. Publication remains explicit. This does not change the addon
+response or external editor-carrier format; broader resource/reference editing
+and complete editor/client/engine acceptance remain required under P9A-04.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.
