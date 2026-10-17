@@ -280,6 +280,31 @@ impl TeletextDeclaredService {
         Ok(self)
     }
 
+    /// Add checked definitions within authenticated existing POP/GPOP resources.
+    ///
+    /// Existing declarations, inventory, defaults and resolutions remain exact.
+    /// Only matching empty-page sentinels disappear when that resource becomes
+    /// populated. Full semantic validation grants no edit or publish authority;
+    /// hosts must still authenticate intent, effects and native capacity.
+    /// # Errors
+    /// Rejects empty, duplicate, occupied, absent-resource or invalid additions
+    /// and complete service dependency, selection and budget failures.
+    pub fn with_resource_object_definition_additions(
+        mut self,
+        additions: &[super::TeletextResourceObjectDefinitionAddition],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextResourceObjectDefinitionAdditionApplyError> {
+        self.semantic = self
+            .semantic
+            .with_resource_object_definition_additions(additions, budget)?;
+        self.empty_object_pages.retain(|resource| {
+            !additions
+                .iter()
+                .any(|addition| addition.identity().resource() == Some(*resource))
+        });
+        Ok(self)
+    }
+
     /// Replace checked Local glyph programs while retaining all authenticated
     /// declarations, selections, identities, defaults and resource inventory.
     /// Hosts must qualify compiler correspondence and every shared consumer;

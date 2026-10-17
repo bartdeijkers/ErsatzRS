@@ -17,13 +17,17 @@ pending charset uncertainty stay protected. Remaining A7/A8/C3, row-zero/foreign
 X26, repertoire/aliases, resource/object/panel and independent client coverage
 remain required.
 
-Private conceptsV1–17 retain original metadata, scoped operands, bitmaps, complete
+Private conceptsV1–18 retain original metadata, scoped operands, bitmaps, complete
 DRCS references, Flash/charset context and bounded page/Local/resource structure.
 V14 scalars, V15 glyph/style, V16 retained calls and V17 authenticated call edits
 preserve old formats, full identities and root undo. Same-column FG/BG/attribute
 values can coexist with call additions/removals through checked scalar decoding;
 changed styles receive new-writer ancestry. Exact survivors, PassiveDefault
 lineage and all protected consumers stay checked. V6/V7 capacity is preserved.
+Preparatory V18 stores checked new definitions in already declared POP/GPOP
+resources without changing originals. Explicit host edit authority, independent
+native allocations, inserted lineage and the added-definition editor/publication
+flow are not connected; native replay rejects the new intent meanwhile.
 Actual pinned V8 compound glyph/style/column/call and V7 nonfirst-fragment native
 call add/delete saves pass unchanged-byte concepts, shared native previews,
 unpublished reopen and explicit publication/cold reopen. Actual editor controls

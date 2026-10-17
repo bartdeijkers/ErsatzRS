@@ -559,6 +559,7 @@ pub(super) fn compile_effective_restored_parts(
     if parts.editorial_overlay.as_ref().is_some_and(|overlay| {
         !overlay.resource_object_operands().is_empty()
             || !overlay.resource_object_program_overlays().is_empty()
+            || !overlay.resource_object_definition_additions().is_empty()
     }) {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }

@@ -37,6 +37,9 @@ mod resource_object_operands;
 #[path = "resource_object_program_service.rs"]
 mod resource_object_programs;
 
+#[path = "resource_object_definition_addition_service.rs"]
+mod resource_object_definition_additions;
+
 #[path = "local_object_glyph_program_service.rs"]
 mod local_object_glyph_programs;
 

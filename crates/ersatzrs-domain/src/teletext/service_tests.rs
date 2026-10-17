@@ -1369,3 +1369,6 @@ mod local_object_glyph_program_tests;
 
 #[path = "resource_object_operand_tests.rs"]
 mod resource_object_operand_tests;
+
+#[path = "resource_object_definition_addition_tests.rs"]
+mod resource_object_definition_addition_tests;

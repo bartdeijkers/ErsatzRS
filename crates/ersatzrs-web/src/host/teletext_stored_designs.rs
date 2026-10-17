@@ -120,6 +120,7 @@ pub(super) fn check_authenticated_editorial_resource_replay(
             TeletextSavedEditorialOverlay::resource_object_program_overlays,
         ) != resource_programs
         || overlay.is_some_and(|overlay| !overlay.pages().is_empty() && !has_physical_rows)
+        || overlay.is_some_and(|overlay| !overlay.resource_object_definition_additions().is_empty())
     {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
@@ -239,3 +240,7 @@ impl<'a> OriginalDesignView<'a> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "teletext_stored_designs/addition_tests.rs"]
+mod addition_tests;

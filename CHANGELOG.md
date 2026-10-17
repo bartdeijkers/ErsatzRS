@@ -25,6 +25,11 @@ release section when tagging a release.
 
 ### Added
 
+- Add checked teletext object-definition additions within existing POP/GPOP
+  resources and private version18 concept storage. Originals and versions1–17
+  remain unchanged; native replay rejects additions until explicit edit authority,
+  packing and protected-consumer qualification are connected. This preparatory
+  component does not yet expose a completed object-creation workflow.
 - Edit original POP/GPOP teletext objects through receipt-bound QTeletextMaker
   companions, including full-capacity command fragments. Private version14 concepts
   retain scalar changes; version15 adds bounded glyph/style insertion, deletion and

@@ -15,7 +15,8 @@ use ersatzrs_domain::{
     TeletextDrcsGlyphSlot, TeletextEnhancementCommand, TeletextLocalObjectGlyphProgramOverlay,
     TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
     TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextResourceIdentity,
-    TeletextResourceObjectOperandOverlay, TeletextResourceObjectProgramOverlay,
+    TeletextResourceObjectDefinitionAddition, TeletextResourceObjectOperandOverlay,
+    TeletextResourceObjectProgramOverlay,
 };
 use serde::{
     de::{SeqAccess, Visitor},
@@ -41,6 +42,7 @@ const RESOURCE_OBJECT_OPERAND_OVERLAY_VERSION: u16 = 14;
 const RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION: u16 = 15;
 const RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 16;
 const RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 17;
+const RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION: u16 = 18;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -59,6 +61,10 @@ use resource_object_programs::{
     restore_overlay as restore_resource_programs, BorrowedResourcePrograms,
     OptionalStoredResourcePrograms,
 };
+
+#[path = "editorial_overlay/resource_object_additions.rs"]
+pub(super) mod resource_object_additions;
+use resource_object_additions::{BorrowedDefinitionAdditions, OptionalStoredDefinitionAdditions};
 
 #[path = "editorial_overlay/local_object_glyph_programs.rs"]
 pub(super) mod local_object_glyph_programs;
@@ -98,6 +104,7 @@ pub struct TeletextSavedEditorialOverlay {
     local_object_glyph_program_overlays: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     resource_object_operands: Vec<TeletextResourceObjectOperandOverlay>,
     resource_object_program_overlays: Vec<TeletextResourceObjectProgramOverlay>,
+    resource_object_definition_additions: Vec<TeletextResourceObjectDefinitionAddition>,
     schema_version: u16,
 }
 impl TeletextSavedEditorialOverlay {
@@ -667,6 +674,35 @@ impl TeletextSavedEditorialOverlay {
         Ok(value)
     }
 
+    /// Capture explicit definitions for already declared POP/GPOP resources.
+    /// Native packing, consumer permissions and publication remain separate.
+    /// # Errors
+    /// Rejects invalid provenance, empty additions and duplicate identities.
+    pub fn new_with_resource_object_definition_additions(
+        provenance: TeletextSavedEditorialProvenance,
+        additions: Vec<TeletextResourceObjectDefinitionAddition>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        resource_object_additions::empty_body(provenance)?
+            .with_resource_object_definition_additions(additions)
+    }
+
+    /// Compose additions with existing intents without rewriting original bytes.
+    /// Body changes to a new identity must be folded into its definition first.
+    /// # Errors
+    /// Rejects empty/duplicate batches, repeated attachment and overlapping edits.
+    pub fn with_resource_object_definition_additions(
+        mut self,
+        additions: Vec<TeletextResourceObjectDefinitionAddition>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if !self.resource_object_definition_additions.is_empty() {
+            return Err(invalid());
+        }
+        self.resource_object_definition_additions = additions;
+        resource_object_additions::distinct(&self)?;
+        self.schema_version = RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
+        Ok(self)
+    }
+
     fn new_resource_parts(
         provenance: TeletextSavedEditorialProvenance,
         pages: Vec<TeletextPhysicalBaseOverlay>,
@@ -774,8 +810,16 @@ impl TeletextSavedEditorialOverlay {
             local_object_glyph_program_overlays: Vec::new(),
             resource_object_operands: Vec::new(),
             resource_object_program_overlays: Vec::new(),
+            resource_object_definition_additions: Vec::new(),
             schema_version,
         })
+    }
+    /// New definitions belong to the concept, never the immutable source package.
+    #[must_use]
+    pub fn resource_object_definition_additions(
+        &self,
+    ) -> &[TeletextResourceObjectDefinitionAddition] {
+        &self.resource_object_definition_additions
     }
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
@@ -840,6 +884,10 @@ impl fmt::Debug for TeletextSavedEditorialOverlay {
             .field(
                 "resource_object_program_overlays",
                 &self.resource_object_program_overlays.len(),
+            )
+            .field(
+                "resource_object_definition_additions",
+                &self.resource_object_definition_additions.len(),
             )
             .finish_non_exhaustive()
     }
@@ -1135,6 +1183,8 @@ closed_map!(StoredOverlay {
     resource_object_operands: OptionalStoredResourceObjectOperands,
     #[serde(default, skip_serializing_if = "OptionalStoredResourcePrograms::is_absent")]
     resource_object_program_overlays: OptionalStoredResourcePrograms,
+    #[serde(default, skip_serializing_if = "OptionalStoredDefinitionAdditions::is_absent")]
+    resource_object_definition_additions: OptionalStoredDefinitionAdditions,
 });
 closed_map!(StoredPage { owner: super::Entry, rows: Vec<StoredRow> });
 closed_map!(StoredRow {
@@ -1276,6 +1326,11 @@ fn restore_bitmap(
 
 impl StoredOverlay {
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        if self.schema_version == RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION
+            || self.resource_object_definition_additions.0.is_some()
+        {
+            return resource_object_additions::check_version(self);
+        }
         if matches!(
             self.schema_version,
             RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
@@ -1370,6 +1425,18 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
+        if self.schema_version == RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION {
+            resource_object_additions::restore_stored(self, documents, budget)
+        } else {
+            self.restore_original_overlays(documents, budget)
+        }
+    }
+
+    fn restore_original_overlays(
+        self,
+        documents: &[TeletextProfileDocument],
+        budget: TeletextDesignDocumentBudget,
+    ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         let policy = self.program_policy();
         let operands = self.local_program_operands.0;
         let bitmaps = self.drcs_bitmap_overlays.0;
@@ -1537,6 +1604,7 @@ pub(super) fn validate_association(
         budget.validation.service.max_structure_items,
         "editorial structure items",
     )?;
+    resource_object_additions::validate_association(overlay, documents, budget)?;
     validate_bitmap_association(&overlay.drcs_bitmap_overlays, documents)?;
     object_operands::validate_association(&overlay.local_object_operands, documents)?;
     resource_object_operands::validate_association(&overlay.resource_object_operands, documents)?;
@@ -1647,6 +1715,8 @@ struct BorrowedOverlay<'a> {
     resource_object_operands: Option<BorrowedResourceObjectOperands<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     resource_object_program_overlays: Option<BorrowedResourcePrograms<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resource_object_definition_additions: Option<BorrowedDefinitionAdditions<'a>>,
 }
 struct BorrowedBitmaps<'a>(&'a [TeletextDrcsBitmapOverlay]);
 impl Serialize for BorrowedBitmaps<'_> {
@@ -1841,6 +1911,12 @@ fn write_appended(
             .then_some(BorrowedResourcePrograms(
                 &overlay.resource_object_program_overlays,
             )),
+            resource_object_definition_additions: (!overlay
+                .resource_object_definition_additions
+                .is_empty())
+            .then_some(BorrowedDefinitionAdditions(
+                &overlay.resource_object_definition_additions,
+            )),
         },
     )?;
     writer
@@ -1907,3 +1983,7 @@ mod resource_object_program_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/resource_object_invocation_tests.rs"]
 mod resource_object_invocation_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/resource_object_addition_tests.rs"]
+mod resource_object_addition_tests;

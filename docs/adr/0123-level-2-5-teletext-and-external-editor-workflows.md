@@ -10,7 +10,17 @@ playback, output, profile/Lua and engine-first obligations remain in force.
 
 ## Implementation
 
-Partial — the localized channel admin now connects static selected profiles to validation,
+Partial — checked definition additions now target unused full object identities inside
+existing POP/GPOP resources. Complete semantic reconstruction retains existing
+catalogues, declarations, defaults, physical overlays and contextual DRCS rules;
+only matching empty-resource sentinels are retired. Private concept version18
+stores these additions separately from immutable source documents and old
+versions. This grants no package, edit or publication authority. Native replay
+rejects the new intent until explicit host authority, independent old/new resource
+allocations and inserted-writer lineage are connected. P9A-04 owns the scoped
+verification and remaining complete definition/set/editor workflow.
+
+The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit
 trusted authoring bounds are separate from per-channel entry/region/resource
 inputs. Original and preview workers retain one shared admission/deadline;

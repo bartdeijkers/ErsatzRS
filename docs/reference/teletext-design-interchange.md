@@ -5731,6 +5731,25 @@ unchanged. See P9A-04 for actual editor/native proof and remaining acceptance.
 P9A-04 owns verified scope and outstanding evidence; implementation of this
 contract does not itself establish actual-editor, stream or client acceptance.
 
+### Private resource definition additions
+
+Private concept version18 requires a nonempty, bounded
+`resource_object_definition_additions` array. Each closed item contains exactly
+`identity`, `object_type` and `program`. Full Public/Global identities retain the
+resource purpose, raw page, logical S1 and object ID. The resource must already
+have one declared owner; an addition cannot shadow an existing definition or
+also carry a separate operand/program overlay for the same new ID. Its complete
+definition carries subsequent body edits. Versions1–17 reject the new field,
+including empty or null values, and retain their original serialization.
+
+Original responses, settings and authoring metadata remain immutable. Complete
+service reconstruction validates a batch, preserving contextual DRCS selection
+and replacing only matching empty-resource sentinels. Stored additions grant no
+edit, package or publication authority. Generic and legacy replay authority cannot
+authorize them. Native qualification must authenticate the exact new catalogue,
+separate old/new allocations and all inserted-writer effects before saving a
+publishable concept; explicit publication remains a separate operation.
+
 ### Original resource context companions
 
 V8 uses the closed `object_context_tti_v1` asset scope. Its fields are

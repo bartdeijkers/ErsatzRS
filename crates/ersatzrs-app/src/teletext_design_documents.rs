@@ -1292,6 +1292,8 @@ enum Path {
     EditorialResourceOperand,
     EditorialGlyphPrograms,
     EditorialGlyphProgram,
+    EditorialDefinitionAdditions,
+    EditorialDefinitionAddition,
     EditorialResourcePrograms,
     EditorialResourceProgram,
     EditorialResourceProgramDefinition,
@@ -1361,6 +1363,11 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::local_object_glyph_programs::StoredGlyphProgram,
             >(self.count))?;
         }
+        if matches!(self.inner.path, Path::EditorialDefinitionAddition) {
+            self.inner.scan.check(storage::<
+                editorial_overlay::resource_object_additions::StoredDefinitionAddition,
+            >(self.count))?;
+        }
         if matches!(self.inner.path, Path::EditorialResourceProgram) {
             self.inner.scan.check(storage::<
                 editorial_overlay::resource_object_programs::StoredResourceProgram,
@@ -1404,6 +1411,7 @@ impl Scan {
                 | Path::EditorialResourceOperand
                 | Path::EditorialGlyphProgram
                 | Path::EditorialResourceProgram
+                | Path::EditorialDefinitionAddition
                 | Path::EditorialProgramCommand
                 | Path::EditorialResourceProgramCommand
                 | Path::EditorialRetainedCommand
@@ -1432,7 +1440,9 @@ impl Scan {
         }
         if matches!(
             path,
-            Path::EditorialGlyphProgram | Path::EditorialResourceProgram
+            Path::EditorialGlyphProgram
+                | Path::EditorialResourceProgram
+                | Path::EditorialDefinitionAddition
         ) {
             self.editorial_programs = self
                 .editorial_programs
@@ -1581,10 +1591,14 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "local_object_glyph_program_overlays") => {
                     Path::EditorialGlyphPrograms
                 }
+                (Path::EditorialOverlay, "resource_object_definition_additions") => {
+                    Path::EditorialDefinitionAdditions
+                }
                 (Path::EditorialOverlay, "resource_object_program_overlays") => {
                     Path::EditorialResourcePrograms
                 }
-                (Path::EditorialResourceProgram, "expected" | "replacement") => {
+                (Path::EditorialDefinitionAddition, "program")
+                | (Path::EditorialResourceProgram, "expected" | "replacement") => {
                     Path::EditorialResourceProgramDefinition
                 }
                 (Path::EditorialResourceProgramDefinition, "commands") => {
@@ -1716,6 +1730,11 @@ fn glyph_program_sequence_limits(
             budget.validation.service.max_objects,
             Path::EditorialGlyphProgram,
             "editorial glyph programs",
+        ),
+        Path::EditorialDefinitionAdditions => (
+            budget.validation.service.max_objects,
+            Path::EditorialDefinitionAddition,
+            "editorial definition additions",
         ),
         Path::EditorialResourcePrograms => (
             budget.validation.service.max_objects,

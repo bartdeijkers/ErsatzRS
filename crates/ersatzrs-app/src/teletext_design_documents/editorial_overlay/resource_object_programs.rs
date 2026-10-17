@@ -184,7 +184,7 @@ pub(super) fn distinct_invocation_structure(
     distinct_targets(programs, operands)
 }
 
-fn distinct_targets(
+pub(super) fn distinct_targets(
     programs: &[TeletextResourceObjectProgramOverlay],
     operands: &[TeletextResourceObjectOperandOverlay],
 ) -> Result<(), TeletextDesignDocumentError> {
@@ -223,11 +223,37 @@ pub(super) fn restore_overlay(
         super::ProgramPolicy::StyleCommands,
     )?;
     let resources = resource_object_operands::restore(resources)?;
-    let programs = programs
+    let programs = restore_programs(programs, budget, version)?;
+    let constructor = match version {
+        super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION => {
+            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays
+        }
+        super::RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION => {
+            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays
+        }
+        _ => TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays,
+    };
+    constructor(
+        provenance,
+        pages,
+        operands,
+        objects,
+        bitmaps,
+        local_programs,
+        (resources, programs),
+    )
+}
+
+pub(super) fn restore_programs(
+    programs: Vec<StoredResourceProgram>,
+    budget: TeletextDesignDocumentBudget,
+    version: u16,
+) -> Result<Vec<TeletextResourceObjectProgramOverlay>, TeletextDesignDocumentError> {
+    programs
         .into_iter()
         .map(|program| {
             let constructor = if version
-                == super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+                >= super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
                 && invocation_structure(&program)
             {
                 TeletextResourceObjectProgramOverlay::new_with_invocation_structure
@@ -247,25 +273,7 @@ pub(super) fn restore_overlay(
             )
             .map_err(|_| invalid())
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    let constructor = match version {
-        super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION => {
-            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays
-        }
-        super::RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION => {
-            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays
-        }
-        _ => TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays,
-    };
-    constructor(
-        provenance,
-        pages,
-        operands,
-        objects,
-        bitmaps,
-        local_programs,
-        (resources, programs),
-    )
+        .collect::<Result<Vec<_>, _>>()
 }
 
 fn invocation_structure(program: &StoredResourceProgram) -> bool {
@@ -330,13 +338,26 @@ pub(super) fn reserve_budgets(
     let programs = &overlay.resource_object_program_overlays;
     limit(
         add(
-            programs.len(),
+            add(
+                programs.len(),
+                overlay.resource_object_definition_additions.len(),
+            )?,
             overlay.local_object_glyph_program_overlays.len(),
         )?,
         budget.validation.service.max_objects,
         "editorial object programs",
     )?;
     let mut commands = overlay.resource_object_operands.len();
+    for addition in &overlay.resource_object_definition_additions {
+        let count = addition.definition().program.commands().len();
+        commands = add(commands, count)?;
+        items = add(items, add(1, count)?)?;
+        limit(
+            items,
+            budget.validation.service.max_structure_items,
+            "editorial structure items",
+        )?;
+    }
     for program in programs {
         let count = add(
             program.expected().commands().len(),
@@ -360,7 +381,10 @@ pub(super) fn reserve_budgets(
         "editorial operands",
     )?;
     remaining.validation.service.max_commands -= commands;
-    remaining.validation.service.max_objects -= programs.len();
+    remaining.validation.service.max_objects -= add(
+        programs.len(),
+        overlay.resource_object_definition_additions.len(),
+    )?;
     Ok((items, remaining))
 }
 
@@ -370,7 +394,11 @@ pub(super) fn validate_association(
     budget: TeletextDesignDocumentBudget,
 ) -> Result<(), TeletextDesignDocumentError> {
     if overlay.resource_object_program_overlays.is_empty() {
-        return Ok(());
+        return if overlay.resource_object_definition_additions.is_empty() {
+            Ok(())
+        } else {
+            validate_result_budgets(overlay, documents, budget)
+        };
     }
     for program in &overlay.resource_object_program_overlays {
         let mut originals = documents.iter().filter_map(|document| {
@@ -426,6 +454,15 @@ fn validate_result_budgets(
             }
         }
         let mut candidate = original;
+        for addition in &overlay.resource_object_definition_additions {
+            if addition
+                .identity()
+                .resource()
+                .is_some_and(|resource| service.resource_inventory().contains(&resource))
+            {
+                candidate = add(candidate, addition.definition().program.commands().len())?;
+            }
+        }
         for definition in service.semantic().objects().definitions() {
             original = add(original, definition.program.commands().len())?;
             let resource = overlay
