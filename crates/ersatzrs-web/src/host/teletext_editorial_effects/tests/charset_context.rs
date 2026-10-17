@@ -140,6 +140,7 @@ fn check(
             rows: &[],
             operands: &changes,
             object_operands: &[],
+            resource_operands: &[],
             object_programs: &[],
             bitmaps: &[],
         },

@@ -21,6 +21,7 @@ mod charset_context;
 mod compiler_resources;
 mod local_object_attributes;
 mod operands;
+mod resource_operands;
 
 const ADDON: &str = "org.ersatzrs.synthetic-editor-effects";
 fn address(page: u16) -> TeletextPageAddress {

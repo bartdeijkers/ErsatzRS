@@ -1,6 +1,9 @@
 //! Synthetic selection snapshots exercise the shared compiler, not installation,
 //! import permission, storage, client acceptance or publication/playback state.
 
+#[path = "resource_operand_tests.rs"]
+mod resource_operand_tests;
+
 use std::time::{Duration, Instant};
 
 use ersatzrs_app::teletext_design_documents::{

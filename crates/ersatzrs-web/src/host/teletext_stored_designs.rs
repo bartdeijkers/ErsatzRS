@@ -3,10 +3,12 @@
 use super::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
     teletext_designs::{
-        compile_restored_parts, NativeTeletextDesignError, RestoredOriginalTeletextDesign,
+        compile_restored_parts, compile_restored_parts_with_resource_operands,
+        NativeTeletextDesignError, RestoredOriginalTeletextDesign,
     },
     teletext_effective_designs::{
-        compile_effective_restored_parts, RestoredEffectiveOriginalDesign,
+        compile_effective_restored_parts, compile_effective_restored_parts_with_resource_operands,
+        RestoredEffectiveOriginalDesign,
     },
 };
 use ersatzrs_app::teletext_design_documents::{
@@ -17,7 +19,7 @@ use ersatzrs_app::teletext_design_documents::{
 };
 use ersatzrs_domain::{
     TeletextDesignRevision, TeletextPhysicalBaseOverlay, TeletextProducerCompositionMetadata,
-    TeletextProducerPresentation,
+    TeletextProducerPresentation, TeletextResourceObjectOperandOverlay,
 };
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextEncodingRegion};
 use std::time::Instant;
@@ -66,6 +68,55 @@ impl StoredDesignParts {
             }
         }
     }
+
+    /// Dispatch only the exact resource intent already authenticated by the caller.
+    /// This method does not establish receipt or protected-effect authority.
+    pub(super) fn compile_with_resource_operands(
+        self,
+        stored: TeletextDesignRevision,
+        policy: TeletextChannelDocumentEncodingPolicy,
+        deadline: Instant,
+        overlays: Vec<TeletextPhysicalBaseOverlay>,
+        resource_operands: &[TeletextResourceObjectOperandOverlay],
+    ) -> Result<RestoredStoredTeletextDesign, NativeTeletextDesignError> {
+        match self {
+            Self::Base(parts) => compile_restored_parts_with_resource_operands(
+                stored,
+                parts,
+                policy,
+                deadline,
+                overlays,
+                resource_operands,
+            )
+            .map(RestoredStoredTeletextDesign::Base),
+            Self::Effective(parts) => compile_effective_restored_parts_with_resource_operands(
+                stored,
+                parts,
+                policy,
+                deadline,
+                overlays,
+                resource_operands,
+            )
+            .map(RestoredStoredTeletextDesign::Effective),
+        }
+    }
+}
+
+/// Match plaintext replay input to captured intent; qualification remains external.
+pub(super) fn check_authenticated_editorial_replay(
+    overlay: Option<&TeletextSavedEditorialOverlay>,
+    has_physical_rows: bool,
+    resource_operands: &[TeletextResourceObjectOperandOverlay],
+) -> Result<(), NativeTeletextDesignError> {
+    if overlay.map_or(
+        &[][..],
+        TeletextSavedEditorialOverlay::resource_object_operands,
+    ) != resource_operands
+        || overlay.is_some_and(|overlay| !overlay.pages().is_empty() && !has_physical_rows)
+    {
+        return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
+    }
+    Ok(())
 }
 
 pub(super) enum RestoredStoredTeletextDesign {

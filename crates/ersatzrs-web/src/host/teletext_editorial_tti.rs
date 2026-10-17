@@ -21,6 +21,7 @@ use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use std::time::Instant;
 
 mod operands;
+pub(super) mod resource_objects;
 pub(super) mod resources;
 mod structural;
 
@@ -30,6 +31,7 @@ pub(super) struct TeletextEditorialChanges {
     pub rows: Vec<TeletextPhysicalBaseOverlay>,
     pub operands: Vec<TeletextLocalProgramOperandOverlay>,
     pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+    pub resource_operands: Vec<ersatzrs_domain::TeletextResourceObjectOperandOverlay>,
     pub object_programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
 }
@@ -45,6 +47,13 @@ impl TeletextEditorialChanges {
                 self.object_operands
                     .iter()
                     .filter(|value| owner.is_none_or(|owner| value.owner() == owner))
+                    .map(|value| (value.expected(), value.replacement())),
+            )
+            // A resource has no display owner; changed selectors can affect any
+            // consumer of the shared definition, including side panels/defaults.
+            .chain(
+                self.resource_operands
+                    .iter()
                     .map(|value| (value.expected(), value.replacement())),
             )
             .any(|(expected, replacement)| match (expected, replacement) {

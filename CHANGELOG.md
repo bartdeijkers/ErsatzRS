@@ -25,11 +25,13 @@ release section when tagging a release.
 
 ### Added
 
-- Prepare exact-original POP/GPOP teletext object edits with full resource/subpage
-  identity, bounded versioned concept storage and lossless native packet
-  projection. Native replay rejects these intents until receipt-bound editor
-  import and shared-consumer validation are connected; resource-object editing
-  and full Level 2.5 acceptance remain open.
+- Edit scalar operands in original POP/GPOP teletext objects through receipt-bound
+  QTeletextMaker carrier-version-6 companions and private version-14 concepts.
+  Full resource/subpage identity, exact native reconstruction and permissions for
+  every shared consumer protect generated content. Import, repeat and undo remain
+  separate from explicit publication. Earlier receipts keep their original
+  contracts. Larger-object, structural/resource-set and full Level 2.5 acceptance
+  remain open.
 - Import same-family G0 text, G1 mosaics/alphabetic characters, G2, G3, DRCS references,
   flash/charset settings and G0-with-diacritic changes in existing page-local and
   Local-object teletext commands into versioned concepts. Local colours/attributes

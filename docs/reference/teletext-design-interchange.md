@@ -5356,7 +5356,7 @@ True absence has no display to export and shows the localized absence status,
 with no editor forms. A direct absent export returns `editorial-no-pages`.
 
 Effective exports use `project.schema_version:2` with `original.document_version:2`
-and the existing `qteletextmaker-1.0-carrier-v4`. Outer sidecar and receipt schemas
+and the same original-selected versioned carrier as base exports. Outer sidecar and receipt schemas
 remain1; valid base schema1 JSON bytes remain unchanged. `effective_scope` retains
 the complete original binding count and required-nullable `valid_until`: pure
 base scope keeps null, while Scripted scope keeps its original UTC boundary.
@@ -5511,10 +5511,13 @@ positive/negative codec, native import and durable qualification evidence.
 
 ### Versioned QTeletextMaker status carrier
 
-Schema1 `project.editor_profile` distinguishes the retained
-`qteletextmaker-1.0` carrier from V2 `qteletextmaker-1.0-carrier-v2` exports
-retained V3 `qteletextmaker-1.0-carrier-v3` receipts and fresh V4
-`qteletextmaker-1.0-carrier-v4` exports.
+`project.editor_profile` distinguishes `qteletextmaker-1.0` and the explicit
+`qteletextmaker-1.0-carrier-v2` through `qteletextmaker-1.0-carrier-v6` profiles.
+Fresh exports select V6 when an original native POP/GPOP has definitions;
+otherwise they select V5 when a selected display needs original-POP panel/BBS
+presentation, or V4. V5 carries that presentation as protected editor-only X28
+without inventing a native X28 or secondary charset. V6 inherits V5 presentation
+and V4 DRCS sets, adding the resource-object companions described below.
 It versions the adapter for the same pinned QTeletextMaker1.0 editor, not the
 editor itself or the authored document/receipt schemas. Unknown names reject.
 Stored receipts select reconstruction; uploaded metadata cannot select another
@@ -5543,8 +5546,8 @@ and resource/page-set proof remains open in its complete acceptance map.
 
 ### Protected DRCS editor dependencies
 
-Fresh exports use `qteletextmaker-1.0-carrier-v4`, retaining the V2 display/NOS
-mapping. Stored Legacy/V2/V3 receipts select their original exact factory;
+Carriers V4–V6 retain the V2 display/NOS mapping and the following DRCS sets.
+Stored Legacy/V2/V3 receipts select their original exact factory;
 companions do not renumber or replace original DVB assets. Schemas remain1.
 
 A V4 `drcs_tti_set` asset holds `resource_names`, an ordered array of one through
@@ -5601,6 +5604,34 @@ resource/enhancement editing remain required work, with no permanent restriction
 accepted. P9A-04 owns actual editor, native stream and independent decoding proof;
 the structured agent workflow uses these same versioned files, immutable receipt,
 validation, preview and separate publication actions.
+
+### Original POP/GPOP object companions
+
+V6 adds one `object_tti_v1` asset per original definition. Its closed scope has
+`resource_name`, the original semantic `object_id`, fixed `editor_page:256`
+(TTI PN100) and `editor_ordinal:0`. `resource_name` refers to one protected
+POP/GPOP `.dvb` asset whose complete identity and physical header remain
+authoritative. The companion has `unit_count:0`; it adds no transmitted page.
+
+Open that companion normally in the pinned QTM editor. The disposable Local
+invocation and definition preserve the original object type and exact body.
+They are editor syntax, not a new owner or replacement resource identity. The
+canonical wrapper includes PS C000, RE0, CT20,T and an empty header. Only an
+authenticated original scalar word can change. Metadata, hidden prefixes,
+invocations, markers, padding and protected native files cannot be edited.
+Import uses private concept version 14, exact full-resource/S1/ID correspondence,
+complete native re-encoding and captured permissions for every shared consumer.
+Repeated imports retain root-relative intent; undo does not publish.
+
+The current single companion includes at most 208 X26 words, including its
+wrapper. Larger native objects explicitly reject export before body copying;
+no object is cut, renumbered or emitted partly. Native capacities of 507/494/481 words
+remain intact. Continuation interchange and complete nested-dependency editor
+preview remain required implementation gaps, not accepted standard restrictions.
+Use the native shared-model preview to validate the complete consumer context;
+a wrapper view alone does not establish that context. Historical V1–V5 receipts
+keep their exact original reconstruction and cannot acquire V6 edit authority.
+P9A-04 owns verified scope and remaining acceptance.
 
 ### Receipt-bound native concept import
 

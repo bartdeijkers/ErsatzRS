@@ -283,6 +283,22 @@ RED-to-green AP00-anchor import and its protected-consumer boundary. General
 row-zero lowering, other command/resource/object editing and complete editor/
 client/engine acceptance remain required; no permanent restriction is accepted.
 
+Original Public/Global object scalar intents use private concept version 14 and
+QTM carrier version 6; these version spaces remain independent. An `object_tti_v1`
+companion refers to exactly one protected native POP/GPOP file and original
+semantic object ID. Its disposable Local wrapper at editor page 100/ordinal 0 is
+editor syntax only: it never substitutes a display owner for the original full
+resource kind, raw page, logical S1 and object identity. Original protected files,
+wrapper invocations, definition markers, hidden prefixes and padding stay exact.
+Only an original semantic scalar word may change, followed by full re-encoding
+and permission checks on every shared consumer. Authenticated receipt replay
+applies all stored intent; generic or legacy replay refuses unapplied intent.
+Import, repeat and undo save concepts without publishing. Carrier versions 1–5
+retain their original reconstruction. A one-frame companion does not reduce the
+native capacities of 507/494/481 words or accept a permanent editor restriction:
+larger-object continuations, dependencies and full resource/set interchange remain
+required work. P9A-04 owns implementation status, evidence and remaining gaps.
+
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the
 changed literal bitmap. Loading an attachment alone does not edit or persist it.

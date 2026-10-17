@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, BTreeSet};
 mod object_operands;
 #[path = "repeat/object_programs.rs"]
 mod object_programs;
+#[path = "repeat/resource_operands.rs"]
+mod resource_operands;
 
 struct PreparedImport {
     root: QualifiedBaseline,
@@ -125,6 +127,7 @@ fn qualify_latest(
         return Err(NativeTeletextEditorialImportError::Association);
     }
     let previous = TeletextEditorialChanges {
+        resource_operands: overlay.resource_object_operands().to_vec(),
         rows: overlay.pages().to_vec(),
         operands: overlay.local_program_operands().to_vec(),
         object_operands: overlay.local_object_operands().to_vec(),
@@ -456,6 +459,7 @@ fn check_operand_budget(
         .operands
         .len()
         .checked_add(changes.object_operands.len())
+        .and_then(|count| count.checked_add(changes.resource_operands.len()))
         .is_none_or(|count| count > budget.max_commands || count > budget.max_structure_items)
     {
         return Err(NativeTeletextEditorialImportError::Budget);
@@ -513,6 +517,12 @@ fn merge_changes(
         deadline,
     )?;
     Ok(TeletextEditorialChanges {
+        resource_operands: resource_operands::merge(
+            &previous.resource_operands,
+            &incoming.resource_operands,
+            policy.document.validation.service,
+            deadline,
+        )?,
         rows: merge_rows(&previous.rows, &incoming.rows, policy, deadline)?,
         operands: merge_operands(
             &previous.operands,
@@ -559,6 +569,7 @@ fn prepare(
                 )?,
                 None,
                 TeletextEditorialChanges {
+                    resource_operands: Vec::new(),
                     rows: Vec::new(),
                     operands: Vec::new(),
                     object_operands: Vec::new(),
@@ -739,7 +750,17 @@ fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditoria
     });
     let (has_drcs_references, has_remaining_glyphs, has_extended_glyphs) =
         glyph_family_flags(&prepared.cumulative);
-    let overlay = if !prepared.cumulative.object_programs.is_empty() {
+    let overlay = if !prepared.cumulative.resource_operands.is_empty() {
+        TeletextSavedEditorialOverlay::new_with_resource_object_operands(
+            prepared.provenance.clone(),
+            prepared.cumulative.rows.clone(),
+            prepared.cumulative.operands.clone(),
+            prepared.cumulative.object_operands.clone(),
+            prepared.cumulative.bitmaps.clone(),
+            prepared.cumulative.object_programs.clone(),
+            prepared.cumulative.resource_operands.clone(),
+        )?
+    } else if !prepared.cumulative.object_programs.is_empty() {
         program_overlay(prepared)?
     } else if prepared.cumulative.has_drcs_selection(None) {
         TeletextSavedEditorialOverlay::new_with_drcs_reference_selections(
@@ -823,6 +844,7 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
     let document = if prepared.cumulative.rows.is_empty()
         && prepared.cumulative.operands.is_empty()
         && prepared.cumulative.object_operands.is_empty()
+        && prepared.cumulative.resource_operands.is_empty()
         && prepared.cumulative.object_programs.is_empty()
         && prepared.cumulative.bitmaps.is_empty()
     {
@@ -905,6 +927,7 @@ fn make_document(
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &baseline.body.project,
         TeletextEditorialEdits {
+            resource_operands: &prepared.incoming.resource_operands,
             rows: &prepared.incoming.rows,
             operands: &prepared.incoming.operands,
             object_operands: &prepared.incoming.object_operands,
@@ -912,6 +935,7 @@ fn make_document(
             bitmaps: &prepared.incoming.bitmaps,
         },
         TeletextEditorialEdits {
+            resource_operands: &prepared.cumulative.resource_operands,
             rows: &prepared.cumulative.rows,
             operands: &prepared.cumulative.operands,
             object_operands: &prepared.cumulative.object_operands,

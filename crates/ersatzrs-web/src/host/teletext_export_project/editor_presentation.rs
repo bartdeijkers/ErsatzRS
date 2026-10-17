@@ -27,6 +27,14 @@ pub(in super::super) fn carrier(
     original: OriginalDesignView<'_>,
     selected: Option<&[TeletextPageAddress]>,
 ) -> TeletextEditorCarrier {
+    if original.encoded().is_some_and(|encoded| {
+        encoded.pages().iter().any(|page| {
+            matches!(page, ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredPage::Object(page)
+            if !page.definition_positions().is_empty())
+        })
+    }) {
+        return TeletextEditorCarrier::V6;
+    }
     if original.producers().iter().any(|producer| {
         producer.pages().iter().any(|page| {
             selected.is_none_or(|owners| owners.contains(&page.address())) && needed(page)
@@ -43,7 +51,12 @@ pub(super) fn projection(
     carrier: TeletextEditorCarrier,
     has_encoded_presentation: bool,
 ) -> Result<Option<(TeletextExportEditorPresentation, [u32; 13])>> {
-    if carrier != TeletextEditorCarrier::V5 || has_encoded_presentation || !needed(presentation) {
+    if !matches!(
+        carrier,
+        TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6
+    ) || has_encoded_presentation
+        || !needed(presentation)
+    {
         return Ok(None);
     }
     let TeletextProducerPresentationSource::MotFallback {

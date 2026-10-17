@@ -34,8 +34,9 @@ use sha2::{Digest, Sha256};
 
 use super::{
     teletext_channel_documents::{
-        encode_original_producer_documents_with_editorial_programs, maximum_producers,
-        EncodedChannelTeletextOriginals, TeletextChannelDocumentEncodingPolicy,
+        encode_original_producer_documents_with_editorial_resources, maximum_producers,
+        EditorialResourceDocuments, EncodedChannelTeletextOriginals,
+        TeletextChannelDocumentEncodingPolicy,
     },
     teletext_designs::NativeTeletextDesignError,
     teletext_effective_channel_documents::EncodedEffectiveChannelTeletextDocumentCandidate,
@@ -549,19 +550,45 @@ async fn restore_parts(
 pub(super) fn compile_effective_restored_parts(
     stored: TeletextDesignRevision,
     parts: TeletextRestoredEffectiveDesignDocumentParts,
-    mut policy: TeletextChannelDocumentEncodingPolicy,
+    policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
     overlays: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
 ) -> Result<RestoredEffectiveOriginalDesign, NativeTeletextDesignError> {
     check_deadline(deadline)?;
-    // Resource-object intent cannot be silently omitted while its native
-    // receipt/effects adapter is still unavailable.
-    if parts.editorial_overlay.as_ref().is_some_and(|overlay| {
-        (!overlay.pages().is_empty() && overlays.is_empty())
-            || !overlay.resource_object_operands().is_empty()
-    }) {
+    // The raw entry point never authorizes stored resource-object intent.
+    if parts
+        .editorial_overlay
+        .as_ref()
+        .is_some_and(|overlay| !overlay.resource_object_operands().is_empty())
+    {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
+    compile_effective_restored_parts_with_resource_operands(
+        stored,
+        parts,
+        policy,
+        deadline,
+        overlays,
+        &[],
+    )
+}
+
+/// Replay exact authenticated resource intent without changing effective origins.
+/// Receipt, scoped freshness and all shared-effect qualification remain caller duties.
+pub(super) fn compile_effective_restored_parts_with_resource_operands(
+    stored: TeletextDesignRevision,
+    parts: TeletextRestoredEffectiveDesignDocumentParts,
+    mut policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    overlays: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
+    resource_operands: &[ersatzrs_domain::TeletextResourceObjectOperandOverlay],
+) -> Result<RestoredEffectiveOriginalDesign, NativeTeletextDesignError> {
+    check_deadline(deadline)?;
+    super::teletext_stored_designs::check_authenticated_editorial_replay(
+        parts.editorial_overlay.as_ref(),
+        !overlays.is_empty(),
+        resource_operands,
+    )?;
     policy.entry = parts.entry;
     policy.transmissions = parts
         .resource_transmissions
@@ -600,10 +627,13 @@ pub(super) fn compile_effective_restored_parts(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.drcs_bitmap_overlays());
-    let originals = encode_original_producer_documents_with_editorial_programs(
+    let originals = encode_original_producer_documents_with_editorial_resources(
         entry,
         parts.documents,
-        (overlays, operands, object_operands, bitmaps, programs),
+        EditorialResourceDocuments {
+            programs: (overlays, operands, object_operands, bitmaps, programs),
+            resource_operands,
+        },
         deadline,
         region,
         policy,

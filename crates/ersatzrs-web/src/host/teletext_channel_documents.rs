@@ -23,7 +23,7 @@ use ersatzrs_domain::{
     TeletextProducerCompositionBudget, TeletextProducerCompositionError,
     TeletextProducerCompositionFailure, TeletextProducerCompositionMetadata,
     TeletextProducerPresentation, TeletextProducerPresentationBudget,
-    TeletextProducerPresentationError,
+    TeletextProducerPresentationError, TeletextResourceObjectOperandOverlay,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service_before, EncodedTeletextAuthoredService,
@@ -41,6 +41,12 @@ type EditorialProgramDocuments<'a> = (
     &'a [TeletextDrcsBitmapOverlay],
     &'a [TeletextLocalObjectGlyphProgramOverlay],
 );
+
+/// Trusted replay inputs; receipt and shared-effect qualification stay with callers.
+pub(super) struct EditorialResourceDocuments<'a> {
+    pub(super) programs: EditorialProgramDocuments<'a>,
+    pub(super) resource_operands: &'a [TeletextResourceObjectOperandOverlay],
+}
 
 #[cfg(test)]
 mod physical_overlay_tests;
@@ -484,8 +490,33 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
-    if editorial.4.is_empty() {
-        let (rows, page, objects, bitmaps, _) = editorial;
+    encode_original_channel_documents_with_editorial_resources(
+        selection,
+        entry_addon_id,
+        documents,
+        EditorialResourceDocuments {
+            programs: editorial,
+            resource_operands: &[],
+        },
+        deadline,
+        region,
+        policy,
+    )
+}
+
+/// Replay exact resource scalars without changing original producer ownership.
+/// Callers must authenticate original receipts and qualify all shared effects.
+pub(super) fn encode_original_channel_documents_with_editorial_resources(
+    selection: &TeletextChannelSelectionSnapshot,
+    entry_addon_id: Option<&str>,
+    documents: Vec<TeletextProfileDocument>,
+    editorial: EditorialResourceDocuments<'_>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    if editorial.resource_operands.is_empty() && editorial.programs.4.is_empty() {
+        let (rows, page, objects, bitmaps, _) = editorial.programs;
         return encode_original_channel_documents_with_editorial_overlays(
             selection,
             entry_addon_id,
@@ -506,7 +537,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
             .iter()
             .position(|binding| binding.addon_id == addon)
     });
-    encode_original_producer_documents_with_editorial_programs(
+    encode_original_producer_documents_with_editorial_resources(
         entry_producer,
         documents,
         editorial,
@@ -594,15 +625,49 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
-    let (overlays, operands, object_operands, bitmaps, programs) = editorial;
+    encode_original_producer_documents_with_editorial_resources(
+        entry_producer,
+        documents,
+        EditorialResourceDocuments {
+            programs: editorial,
+            resource_operands: &[],
+        },
+        deadline,
+        region,
+        policy,
+    )
+}
+
+/// Replay resource edits through complete composition and authored encoding.
+/// No resource, package, producer receipt or publication authority is created.
+pub(super) fn encode_original_producer_documents_with_editorial_resources(
+    entry_producer: Option<usize>,
+    documents: Vec<TeletextProfileDocument>,
+    mut editorial: EditorialResourceDocuments<'_>,
+    deadline: Instant,
+    region: Option<TeletextEncodingRegion>,
+    policy: TeletextChannelDocumentEncodingPolicy,
+) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
+    let resource_operands = editorial.resource_operands;
+    let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
     check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
+    if !resource_operands.is_empty() {
+        check_editorial_resource_budget(
+            operands.len(),
+            object_operands.len(),
+            programs,
+            resource_operands.len(),
+            policy.composition.service.max_commands,
+        )?;
+    }
     if documents.is_empty() {
-        if !overlays.is_empty()
+        if !editorial.programs.0.is_empty()
             || !operands.is_empty()
             || !object_operands.is_empty()
             || !bitmaps.is_empty()
             || !programs.is_empty()
+            || !resource_operands.is_empty()
         {
             return Err(ChannelTeletextDocumentEncodingError::Association);
         }
@@ -628,32 +693,16 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
     let mut composition =
         TeletextColdProducerComposition::new(producers, metadata, policy.composition)
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
-    if !overlays.is_empty() {
+    if !editorial.programs.0.is_empty() {
         composition = composition
-            .with_physical_base_overlays(overlays, policy.composition)
+            .with_physical_base_overlays(
+                std::mem::take(&mut editorial.programs.0),
+                policy.composition,
+            )
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
     }
-    let (producers, provenance, metadata, mut declared) = composition.into_parts();
-    if !operands.is_empty() {
-        declared = declared
-            .with_local_program_operand_overlays(operands, policy.composition.service)
-            .map_err(editorial_semantic_error)?;
-    }
-    if !object_operands.is_empty() {
-        declared = declared
-            .with_local_object_operand_overlays(object_operands, policy.composition.service)
-            .map_err(editorial_semantic_error)?;
-    }
-    if !programs.is_empty() {
-        declared = declared
-            .with_local_object_glyph_program_overlays(programs, policy.composition.service)
-            .map_err(editorial_semantic_error)?;
-    }
-    if !bitmaps.is_empty() {
-        declared = declared
-            .with_drcs_bitmap_overlays(bitmaps, policy.composition.service)
-            .map_err(editorial_semantic_error)?;
-    }
+    let (producers, provenance, metadata, declared) = composition.into_parts();
+    let declared = apply_editorial_operands(declared, &editorial, policy.composition.service)?;
     check_deadline(deadline)?;
     let encoded = encode_teletext_authored_service_before(
         declared,
@@ -683,6 +732,68 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
         descriptor: Some(descriptor),
         transmissions: policy.transmissions,
     })
+}
+
+fn apply_editorial_operands(
+    mut declared: ersatzrs_domain::TeletextDeclaredService,
+    editorial: &EditorialResourceDocuments<'_>,
+    budget: ersatzrs_domain::TeletextServiceBudget,
+) -> Result<ersatzrs_domain::TeletextDeclaredService, ChannelTeletextDocumentEncodingError> {
+    let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
+    let resource_operands = editorial.resource_operands;
+    if !operands.is_empty() {
+        declared = declared
+            .with_local_program_operand_overlays(operands, budget)
+            .map_err(editorial_semantic_error)?;
+    }
+    if !object_operands.is_empty() {
+        declared = declared
+            .with_local_object_operand_overlays(object_operands, budget)
+            .map_err(editorial_semantic_error)?;
+    }
+    if !programs.is_empty() {
+        declared = declared
+            .with_local_object_glyph_program_overlays(programs, budget)
+            .map_err(editorial_semantic_error)?;
+    }
+    if !resource_operands.is_empty() {
+        declared = declared
+            .with_resource_object_operand_overlays(resource_operands, budget)
+            .map_err(editorial_semantic_error)?;
+    }
+    if !bitmaps.is_empty() {
+        declared = declared
+            .with_drcs_bitmap_overlays(bitmaps, budget)
+            .map_err(editorial_semantic_error)?;
+    }
+    Ok(declared)
+}
+
+fn check_editorial_resource_budget(
+    page_operands: usize,
+    object_operands: usize,
+    programs: &[TeletextLocalObjectGlyphProgramOverlay],
+    resource_operands: usize,
+    maximum: usize,
+) -> Result<(), ChannelTeletextDocumentEncodingError> {
+    let mut remaining = maximum;
+    let counts = [page_operands, object_operands, resource_operands]
+        .into_iter()
+        .chain(programs.iter().flat_map(|program| {
+            [
+                program.expected().commands().len(),
+                program.replacement().commands().len(),
+            ]
+        }));
+    for count in counts {
+        remaining = remaining.checked_sub(count).ok_or_else(|| {
+            editorial_semantic_error(ersatzrs_domain::TeletextServiceError::Budget {
+                dimension: "authored command",
+                maximum,
+            })
+        })?;
+    }
+    Ok(())
 }
 
 fn editorial_semantic_error(

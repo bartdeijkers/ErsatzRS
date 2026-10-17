@@ -18,6 +18,7 @@ use ersatzrs_domain::{
     TeletextDrcsCatalog, TeletextEnhancementCommand, TeletextLocalObjectGlyphProgramOverlay,
     TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
     TeletextPhysicalBaseOverlay, TeletextResolvedPageEnhancementDraft,
+    TeletextResourceObjectOperandOverlay,
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_drcs_page, project_encoded_teletext_display, project_teletext_comparison_glyph,
@@ -30,6 +31,7 @@ mod charset_context;
 mod compiler_resources;
 mod lineage;
 mod object_operands;
+mod resource_objects;
 #[cfg(test)]
 mod tests;
 
@@ -112,6 +114,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub rows: &'a [TeletextPhysicalBaseOverlay],
     pub operands: &'a [TeletextLocalProgramOperandOverlay],
     pub object_operands: &'a [TeletextLocalObjectOperandOverlay],
+    pub resource_operands: &'a [TeletextResourceObjectOperandOverlay],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
@@ -149,6 +152,7 @@ pub(super) fn validate_teletext_editorial_transition(
             rows: incoming,
             operands: &[],
             object_operands: &[],
+            resource_operands: &[],
             object_programs: &[],
             bitmaps: &[],
         },
@@ -156,6 +160,7 @@ pub(super) fn validate_teletext_editorial_transition(
             rows: cumulative,
             operands: &[],
             object_operands: &[],
+            resource_operands: &[],
             object_programs: &[],
             bitmaps: &[],
         },
@@ -180,13 +185,27 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
 ) -> Result<()> {
     check_deadline(deadline)?;
     check_service(original, edited, incoming, cumulative, budget, deadline)?;
+    let resource_context = if incoming.resource_operands.is_empty() {
+        None
+    } else {
+        Some(resource_objects::Context::new(
+            original, edited, budget, deadline,
+        )?)
+    };
     for (before, after) in
         compiler_resources::authored_pages(original).zip(compiler_resources::authored_pages(edited))
     {
         check_deadline(deadline)?;
         let (Some((old_page, old)), Some((new_page, new))) = (display(before), display(after))
         else {
-            check_resource(before, after, edited, incoming.bitmaps, deadline)?;
+            check_resource(
+                before,
+                after,
+                edited,
+                incoming,
+                resource_context.as_ref(),
+                deadline,
+            )?;
             continue;
         };
         let owner = old.owner();
@@ -200,7 +219,8 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             .object_programs
             .iter()
             .any(|value| value.owner() == owner);
-        let operand_change = operand_change || structural_change;
+        let operand_change =
+            operand_change || structural_change || !incoming.resource_operands.is_empty();
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
         if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() && !compiler_links {
             if before.data_units() != after.data_units() {
@@ -251,15 +271,19 @@ fn display(
 
 fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize) -> bool {
     let mut remaining = maximum;
-    let counts = [edits.operands.len(), edits.object_operands.len()]
-        .into_iter()
-        .chain(edits.object_programs.iter().flat_map(|program| {
-            [
-                program.expected().commands().len(),
-                program.replacement().commands().len(),
-                program.retained_commands().len(),
-            ]
-        }));
+    let counts = [
+        edits.operands.len(),
+        edits.object_operands.len(),
+        edits.resource_operands.len(),
+    ]
+    .into_iter()
+    .chain(edits.object_programs.iter().flat_map(|program| {
+        [
+            program.expected().commands().len(),
+            program.replacement().commands().len(),
+            program.retained_commands().len(),
+        ]
+    }));
     for count in counts {
         let Some(next) = remaining.checked_sub(count) else {
             return false;
@@ -328,10 +352,8 @@ fn check_service(
     object_operands::check(
         before.objects(),
         after.objects(),
-        incoming.object_operands,
-        cumulative.object_operands,
-        incoming.object_programs,
-        cumulative.object_programs,
+        incoming,
+        cumulative,
         deadline,
     )?;
     check_bitmaps(
@@ -451,7 +473,8 @@ fn check_resource(
     before: &EncodedTeletextAuthoredPage,
     after: &EncodedTeletextAuthoredPage,
     edited: &EncodedTeletextAuthoredService,
-    incoming: &[TeletextDrcsBitmapOverlay],
+    incoming: TeletextEditorialEdits<'_>,
+    resource_context: Option<&resource_objects::Context<'_>>,
     deadline: Instant,
 ) -> Result<()> {
     check_deadline(deadline)?;
@@ -470,7 +493,17 @@ fn check_resource(
     let Some(header) = before.resource_header() else {
         return Err(failure());
     };
+    if incoming
+        .resource_operands
+        .iter()
+        .any(|change| change.identity().resource() == Some(header.identity()))
+    {
+        return resource_context
+            .ok_or_else(failure)?
+            .check(before, after, deadline);
+    }
     if !incoming
+        .bitmaps
         .iter()
         .any(|change| change.identity() == header.identity())
     {

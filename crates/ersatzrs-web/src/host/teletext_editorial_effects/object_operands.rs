@@ -1,26 +1,74 @@
 //! Exact original definition changes; every invocation still needs permission.
 
-use super::{check_deadline, error, Result, TeletextEditorialEffectsFailure};
+use super::{
+    check_deadline, error, Result, TeletextEditorialEdits, TeletextEditorialEffectsFailure,
+};
 use ersatzrs_domain::{
-    TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
+    TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
     TeletextLocalObjectGlyphProgramOverlay, TeletextLocalObjectOperandOverlay,
+    TeletextObjectIdentity, TeletextResourceObjectOperandOverlay,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
     time::Instant,
 };
 
+#[derive(Clone, Copy)]
+enum Operand<'a> {
+    Local(&'a TeletextLocalObjectOperandOverlay),
+    Resource(&'a TeletextResourceObjectOperandOverlay),
+}
+impl Operand<'_> {
+    fn identity(self) -> TeletextObjectIdentity {
+        match self {
+            Self::Local(value) => value.identity(),
+            Self::Resource(value) => value.identity(),
+        }
+    }
+    fn command(self) -> usize {
+        match self {
+            Self::Local(value) => value.command(),
+            Self::Resource(value) => value.command(),
+        }
+    }
+    fn column(self) -> u8 {
+        match self {
+            Self::Local(value) => value.column(),
+            Self::Resource(value) => value.column(),
+        }
+    }
+    fn expected(self) -> TeletextColumnOperation {
+        match self {
+            Self::Local(value) => value.expected(),
+            Self::Resource(value) => value.expected(),
+        }
+    }
+    fn replacement(self) -> TeletextColumnOperation {
+        match self {
+            Self::Local(value) => value.replacement(),
+            Self::Resource(value) => value.replacement(),
+        }
+    }
+}
+fn operands(edits: TeletextEditorialEdits<'_>) -> impl Iterator<Item = Operand<'_>> {
+    edits
+        .object_operands
+        .iter()
+        .map(Operand::Local)
+        .chain(edits.resource_operands.iter().map(Operand::Resource))
+}
+
 pub(super) fn check(
     before: &TeletextEnhancementObjectCatalog,
     after: &TeletextEnhancementObjectCatalog,
-    incoming: &[TeletextLocalObjectOperandOverlay],
-    cumulative: &[TeletextLocalObjectOperandOverlay],
-    incoming_programs: &[TeletextLocalObjectGlyphProgramOverlay],
-    cumulative_programs: &[TeletextLocalObjectGlyphProgramOverlay],
+    incoming: TeletextEditorialEdits<'_>,
+    cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
 ) -> Result<()> {
+    let incoming_programs = incoming.object_programs;
+    let cumulative_programs = cumulative.object_programs;
     if incoming_programs.is_empty() && cumulative_programs.is_empty() {
-        return check_operands(before, after, incoming, cumulative, deadline);
+        return check_scalar_operands(before, after, incoming, cumulative, deadline);
     }
     let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
     let structure = || {
@@ -31,7 +79,7 @@ pub(super) fn check(
         )
     };
     let mut changes = BTreeMap::new();
-    for change in incoming {
+    for change in operands(incoming) {
         check_deadline(deadline)?;
         if changes
             .insert((change.identity(), change.command()), change)
@@ -108,7 +156,7 @@ pub(super) fn check(
 
 fn check_final_operands(
     after: &TeletextEnhancementObjectCatalog,
-    cumulative: &[TeletextLocalObjectOperandOverlay],
+    cumulative: TeletextEditorialEdits<'_>,
     final_programs: &BTreeMap<
         ersatzrs_domain::TeletextObjectIdentity,
         &TeletextLocalObjectGlyphProgramOverlay,
@@ -117,7 +165,7 @@ fn check_final_operands(
 ) -> Result<()> {
     let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
     let mut targets = BTreeSet::new();
-    for change in cumulative {
+    for change in operands(cumulative) {
         check_deadline(deadline)?;
         let ordinal = match final_programs.get(&change.identity()) {
             Some(program) => program
@@ -141,11 +189,11 @@ fn check_final_operands(
     Ok(())
 }
 
-fn check_operands(
+fn check_scalar_operands(
     before: &TeletextEnhancementObjectCatalog,
     after: &TeletextEnhancementObjectCatalog,
-    incoming: &[TeletextLocalObjectOperandOverlay],
-    cumulative: &[TeletextLocalObjectOperandOverlay],
+    incoming: TeletextEditorialEdits<'_>,
+    cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
 ) -> Result<()> {
     let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
@@ -157,7 +205,7 @@ fn check_operands(
         )
     };
     let mut changes = BTreeMap::new();
-    for change in incoming {
+    for change in operands(incoming) {
         check_deadline(deadline)?;
         if changes
             .insert((change.identity(), change.command()), change)
@@ -172,7 +220,7 @@ fn check_operands(
         }
     }
     let mut targets = BTreeSet::new();
-    for change in cumulative {
+    for change in operands(cumulative) {
         check_deadline(deadline)?;
         if !targets.insert((change.identity(), change.command()))
             || command(after, change)
@@ -221,7 +269,7 @@ fn check_operands(
 
 fn command(
     catalog: &TeletextEnhancementObjectCatalog,
-    change: &TeletextLocalObjectOperandOverlay,
+    change: Operand<'_>,
 ) -> Option<TeletextEnhancementCommand> {
     catalog
         .definition(change.identity())?
@@ -234,3 +282,24 @@ fn command(
 #[cfg(test)]
 #[path = "object_operands_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+fn check_operands(
+    before: &TeletextEnhancementObjectCatalog,
+    after: &TeletextEnhancementObjectCatalog,
+    incoming: &[TeletextLocalObjectOperandOverlay],
+    cumulative: &[TeletextLocalObjectOperandOverlay],
+    deadline: Instant,
+) -> Result<()> {
+    fn edits(object_operands: &[TeletextLocalObjectOperandOverlay]) -> TeletextEditorialEdits<'_> {
+        TeletextEditorialEdits {
+            rows: &[],
+            operands: &[],
+            object_operands,
+            resource_operands: &[],
+            object_programs: &[],
+            bitmaps: &[],
+        }
+    }
+    check_scalar_operands(before, after, edits(incoming), edits(cumulative), deadline)
+}

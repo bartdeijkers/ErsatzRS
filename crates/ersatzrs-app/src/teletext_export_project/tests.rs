@@ -5,6 +5,8 @@ use serde_json::{json, Value};
 mod editor_presentation_tests;
 #[path = "effective_tests.rs"]
 mod effective_tests;
+#[path = "object_companion_tests.rs"]
+mod object_companion_tests;
 
 fn budget() -> TeletextExportProjectBudget {
     TeletextExportProjectBudget {
@@ -148,7 +150,7 @@ fn v2_editor_profile_round_trips_without_changing_receipt_schema_or_raw_controls
 }
 #[test]
 fn unknown_editor_carrier_profiles_are_rejected() {
-    for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v6"] {
+    for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v7"] {
         let mut value = valid_project();
         value.editor_profile = profile.into();
         assert_eq!(

@@ -32,9 +32,11 @@ use ersatzrs_ffmpeg::teletext::{
 use sha2::{Digest, Sha256};
 
 use super::teletext_channel_documents::{
-    encode_original_channel_documents_with_editorial_programs, maximum_producers,
-    ChannelTeletextDocumentEncodingError, EncodedChannelTeletextDocumentCandidate,
-    EncodedChannelTeletextOriginals, TeletextChannelDocumentEncodingPolicy,
+    encode_original_channel_documents_with_editorial_programs,
+    encode_original_channel_documents_with_editorial_resources, maximum_producers,
+    ChannelTeletextDocumentEncodingError, EditorialResourceDocuments,
+    EncodedChannelTeletextDocumentCandidate, EncodedChannelTeletextOriginals,
+    TeletextChannelDocumentEncodingPolicy,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -446,21 +448,38 @@ pub(super) async fn reload_original_teletext_design_revision_with_hold(
 pub(super) fn compile_restored_parts(
     stored: TeletextDesignRevision,
     parts: TeletextRestoredDesignDocumentParts,
-    mut policy: TeletextChannelDocumentEncodingPolicy,
+    policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
     overlays: Vec<TeletextPhysicalBaseOverlay>,
 ) -> Result<RestoredOriginalTeletextDesign, NativeTeletextDesignError> {
     check_deadline(deadline)?;
-    // Stored physical rows require the caller's authenticated reconstruction;
-    // operand-only concepts legitimately have no physical-row overlays.
-    // Resource-object intent still requires a native receipt/effects adapter;
-    // never replay an unchanged service under an edited concept's digest.
-    if parts.editorial_overlay.as_ref().is_some_and(|overlay| {
-        (!overlay.pages().is_empty() && overlays.is_empty())
-            || !overlay.resource_object_operands().is_empty()
-    }) {
+    // The raw entry point never authorizes stored resource-object intent.
+    if parts
+        .editorial_overlay
+        .as_ref()
+        .is_some_and(|overlay| !overlay.resource_object_operands().is_empty())
+    {
         return Err(NativeTeletextDesignError::EditorialValidationUnavailable);
     }
+    compile_restored_parts_with_resource_operands(stored, parts, policy, deadline, overlays, &[])
+}
+
+/// Replay an explicitly authenticated exact resource slice alongside historical inputs.
+/// The caller retains original-receipt and all shared-effect qualification duties.
+pub(super) fn compile_restored_parts_with_resource_operands(
+    stored: TeletextDesignRevision,
+    parts: TeletextRestoredDesignDocumentParts,
+    mut policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+    overlays: Vec<TeletextPhysicalBaseOverlay>,
+    resource_operands: &[ersatzrs_domain::TeletextResourceObjectOperandOverlay],
+) -> Result<RestoredOriginalTeletextDesign, NativeTeletextDesignError> {
+    check_deadline(deadline)?;
+    super::teletext_stored_designs::check_authenticated_editorial_replay(
+        parts.editorial_overlay.as_ref(),
+        !overlays.is_empty(),
+        resource_operands,
+    )?;
     policy.entry = parts.entry;
     policy.transmissions = parts
         .resource_transmissions
@@ -493,15 +512,31 @@ pub(super) fn compile_restored_parts(
         .editorial_overlay
         .as_ref()
         .map_or(&[][..], |overlay| overlay.drcs_bitmap_overlays());
-    let originals = encode_original_channel_documents_with_editorial_programs(
-        &parts.selection,
-        parts.entry_addon_id.as_deref(),
-        parts.documents,
-        (overlays, operands, object_operands, bitmaps, programs),
-        deadline,
-        region,
-        policy,
-    )
+    let editorial = (overlays, operands, object_operands, bitmaps, programs);
+    let originals = if resource_operands.is_empty() {
+        encode_original_channel_documents_with_editorial_programs(
+            &parts.selection,
+            parts.entry_addon_id.as_deref(),
+            parts.documents,
+            editorial,
+            deadline,
+            region,
+            policy,
+        )
+    } else {
+        encode_original_channel_documents_with_editorial_resources(
+            &parts.selection,
+            parts.entry_addon_id.as_deref(),
+            parts.documents,
+            EditorialResourceDocuments {
+                programs: editorial,
+                resource_operands,
+            },
+            deadline,
+            region,
+            policy,
+        )
+    }
     .map_err(|error| NativeTeletextDesignError::Encoding(Box::new(error)))?;
     check_deadline(deadline)?;
     Ok(RestoredOriginalTeletextDesign {

@@ -22,7 +22,9 @@ use super::{
     EncodedTeletextResourcePage, TeletextResourceTransmissionMode,
 };
 
+mod local_objects;
 mod object;
+pub use local_objects::project_encoded_teletext_local_objects;
 pub use object::{
     project_encoded_teletext_object, TeletextEncodedObjectPacket, TeletextEncodedObjectProjection,
 };

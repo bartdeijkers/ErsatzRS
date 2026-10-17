@@ -270,6 +270,15 @@ pub enum TeletextExportAssetScope {
         resource_name: String,
         editor_ordinal: u64,
     },
+    /// Editor-only program companion linked to one protected original POP/GPOP
+    /// resource. Object ID is a descriptive claim; only native provenance can
+    /// authenticate its definition, commands and shared display permissions.
+    ObjectTtiV1 {
+        resource_name: String,
+        object_id: u16,
+        editor_page: u16,
+        editor_ordinal: u64,
+    },
     /// Ordered bank through its highest authored S1. Null is protected,
     /// editor-only undefined padding; it never creates a native resource.
     DrcsTtiSet {
@@ -300,6 +309,12 @@ impl<'de> Deserialize<'de> for TeletextExportAssetScope {
             DrcsTtiSet {
                 resource_names: Vec<Option<String>>,
             },
+            ObjectTtiV1 {
+                resource_name: String,
+                object_id: u16,
+                editor_page: u16,
+                editor_ordinal: u64,
+            },
         }
         Ok(match map_only(d)? {
             Fields::Resource {
@@ -318,6 +333,17 @@ impl<'de> Deserialize<'de> for TeletextExportAssetScope {
                 editor_ordinal,
             },
             Fields::DrcsTtiSet { resource_names } => Self::DrcsTtiSet { resource_names },
+            Fields::ObjectTtiV1 {
+                resource_name,
+                object_id,
+                editor_page,
+                editor_ordinal,
+            } => Self::ObjectTtiV1 {
+                resource_name,
+                object_id,
+                editor_page,
+                editor_ordinal,
+            },
         })
     }
 }
@@ -499,7 +525,10 @@ fn validate_pages(project: &TeletextExportProject, b: TeletextExportProjectBudge
             || p.materialized_magazine
                 .is_some_and(|m| !(1..=8).contains(&m) || u16::from(m) != p.page.page / 100)
             || p.editor_presentation.as_ref().is_some_and(|presentation| {
-                project.editor_profile != "qteletextmaker-1.0-carrier-v5" || !presentation.valid()
+                !matches!(
+                    project.editor_profile.as_str(),
+                    "qteletextmaker-1.0-carrier-v5" | "qteletextmaker-1.0-carrier-v6"
+                ) || !presentation.valid()
             })
         {
             return Err(indexed(K::Mapping, i));
@@ -593,6 +622,54 @@ fn linked_drcs_set_bank<'a>(
     Some(bank)
 }
 
+fn object_companion_key(
+    project: &TeletextExportProject,
+    asset: &TeletextExportAssetMapping,
+    index: usize,
+) -> Result<String> {
+    use TeletextExportProjectFailure as K;
+    let TeletextExportAssetScope::ObjectTtiV1 {
+        resource_name,
+        object_id,
+        editor_page,
+        editor_ordinal,
+    } = &asset.scope
+    else {
+        return Err(indexed(K::Mapping, index));
+    };
+    let mut resources = project
+        .assets
+        .iter()
+        .filter(|candidate| candidate.name == *resource_name);
+    let resource = resources.next().ok_or_else(|| indexed(K::Mapping, index))?;
+    let TeletextExportAssetScope::Resource { identity, .. } = &resource.scope else {
+        return Err(indexed(K::Mapping, index));
+    };
+    let checked_resource =
+        ersatzrs_domain::TeletextRawDataPageNumber::new(identity.page.magazine, identity.page.page)
+            .ok()
+            .zip(ersatzrs_domain::TeletextResourceSubpageIndex::new(identity.subpage).ok())
+            .and_then(|(page, subpage)| {
+                let kind = match identity.kind {
+                    TeletextResourceKindWire::Pop => ersatzrs_domain::TeletextResourceKind::Pop,
+                    TeletextResourceKindWire::Gpop => ersatzrs_domain::TeletextResourceKind::Gpop,
+                    _ => return None,
+                };
+                ersatzrs_domain::TeletextResourceIdentity::new(kind, page, subpage).ok()
+            });
+    if project.editor_profile != "qteletextmaker-1.0-carrier-v6"
+        || !flat_name(resource_name)
+        || resources.next().is_some()
+        || asset.unit_count != 0
+        || *editor_page != 0x100
+        || *editor_ordinal != 0
+        || checked_resource.is_none()
+    {
+        return Err(indexed(K::Mapping, index));
+    }
+    Ok(format!("o:{resource_name}:{object_id}"))
+}
+
 fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudget) -> Result<()> {
     use TeletextExportProjectFailure as K;
     let mut names: BTreeSet<_> = project.pages.iter().map(|p| p.name.as_str()).collect();
@@ -645,7 +722,9 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
             TeletextExportAssetScope::DrcsTtiSet { resource_names } => {
                 if !matches!(
                     project.editor_profile.as_str(),
-                    "qteletextmaker-1.0-carrier-v4" | "qteletextmaker-1.0-carrier-v5"
+                    "qteletextmaker-1.0-carrier-v4"
+                        | "qteletextmaker-1.0-carrier-v5"
+                        | "qteletextmaker-1.0-carrier-v6"
                 ) || a.unit_count != 0
                 {
                     return Err(indexed(K::Mapping, i));
@@ -657,10 +736,13 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
                     bank.kind, bank.page.magazine, bank.page.page
                 )
             }
+            TeletextExportAssetScope::ObjectTtiV1 { .. } => object_companion_key(project, a, i)?,
         };
         let raw_units = !matches!(
             &a.scope,
-            TeletextExportAssetScope::DrcsTti { .. } | TeletextExportAssetScope::DrcsTtiSet { .. }
+            TeletextExportAssetScope::DrcsTti { .. }
+                | TeletextExportAssetScope::DrcsTtiSet { .. }
+                | TeletextExportAssetScope::ObjectTtiV1 { .. }
         );
         if !flat_name(&a.name)
             || !names.insert(a.name.as_str())
@@ -896,6 +978,13 @@ impl TeletextExportReceiptBody {
                             b,
                             i,
                         )?;
+                    }
+                    TeletextExportAssetScope::ObjectTtiV1 {
+                        editor_page,
+                        editor_ordinal,
+                        ..
+                    } => {
+                        validate_tti_identity(&file.bytes, *editor_page, *editor_ordinal, b, i)?;
                     }
                     TeletextExportAssetScope::Resource { .. }
                     | TeletextExportAssetScope::Magazine { .. } => {}

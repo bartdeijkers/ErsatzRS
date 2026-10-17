@@ -115,6 +115,7 @@ fn edits(operands: &[TeletextLocalProgramOperandOverlay]) -> TeletextEditorialEd
         rows: &[],
         operands,
         object_operands: &[],
+        resource_operands: &[],
         object_programs: &[],
         bitmaps: &[],
     }
@@ -607,6 +608,7 @@ fn mixed_base_and_operand_final_encoding_checks_exact_intent_and_unapproved_word
             rows: &changes.rows,
             operands: &changes.operands,
             object_operands: &[],
+            resource_operands: &[],
             object_programs: &[],
             bitmaps: &[],
         },

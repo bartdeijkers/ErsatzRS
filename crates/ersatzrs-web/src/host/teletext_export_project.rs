@@ -42,6 +42,7 @@ use super::teletext_stored_designs::OriginalDesignView;
 
 mod drcs_sets;
 pub(super) mod editor_presentation;
+pub(super) mod resource_objects;
 
 /// Located failures without original text, settings or file bodies.
 #[derive(Debug, thiserror::Error)]
@@ -93,6 +94,7 @@ pub(super) enum TeletextEditorCarrier {
     V3,
     V4,
     V5,
+    V6,
 }
 impl TeletextEditorCarrier {
     pub(super) fn from_profile(profile: &str) -> Option<Self> {
@@ -102,6 +104,7 @@ impl TeletextEditorCarrier {
             "qteletextmaker-1.0-carrier-v3" => Some(Self::V3),
             "qteletextmaker-1.0-carrier-v4" => Some(Self::V4),
             "qteletextmaker-1.0-carrier-v5" => Some(Self::V5),
+            "qteletextmaker-1.0-carrier-v6" => Some(Self::V6),
             _ => None,
         }
     }
@@ -112,6 +115,7 @@ impl TeletextEditorCarrier {
             Self::V3 => "qteletextmaker-1.0-carrier-v3",
             Self::V4 => "qteletextmaker-1.0-carrier-v4",
             Self::V5 => "qteletextmaker-1.0-carrier-v5",
+            Self::V6 => "qteletextmaker-1.0-carrier-v6",
         }
     }
     /// Keep native flags separate from QTM's single effective primary NOS.
@@ -126,7 +130,7 @@ impl TeletextEditorCarrier {
             // Its C12 means numeric NOS bit 0, unlike compact native bit 8.
             // Use the resolved X28/M29/header primary; retain native flags in
             // the mapping, including an independently authored fallback NOS.
-            Self::V2 | Self::V3 | Self::V4 | Self::V5 => {
+            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 => {
                 let primary = u16::from(effective_primary);
                 ((primary & 1) << 9) | ((primary & 2) << 7) | ((primary & 4) << 5)
             }
@@ -332,6 +336,29 @@ fn selected_inventory<'a>(
         .filter_map(display_page)
         .filter(|page| selected.is_none() || wanted.contains(&page.address()))
         .count();
+    let asset_count = asset_count(encoded, carrier, deadline)?;
+    if selected_count == 0
+        || selected.is_some_and(|pages| selected_count != pages.len())
+        || selected_count
+            .checked_add(asset_count)
+            .is_none_or(|n| n > project_budget.max_files)
+    {
+        return Err(NativeTeletextExportProjectError::Association);
+    }
+    Ok(ExportInventory {
+        encoded,
+        wanted,
+        selected: selected.is_some(),
+        selected_count,
+        asset_count,
+    })
+}
+
+fn asset_count(
+    encoded: &EncodedTeletextAuthoredService,
+    carrier: TeletextEditorCarrier,
+    deadline: Instant,
+) -> Result<usize> {
     let asset_count = encoded
         .pages()
         .iter()
@@ -350,7 +377,7 @@ fn selected_inventory<'a>(
         .ok_or(NativeTeletextExportProjectError::Budget)?;
     let asset_count = if matches!(
         carrier,
-        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5
+        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6
     ) {
         asset_count
             .checked_add(drcs_sets::count_banks(encoded, deadline)?)
@@ -358,21 +385,84 @@ fn selected_inventory<'a>(
     } else {
         asset_count
     };
-    if selected_count == 0
-        || selected.is_some_and(|pages| selected_count != pages.len())
-        || selected_count
-            .checked_add(asset_count)
-            .is_none_or(|n| n > project_budget.max_files)
-    {
-        return Err(NativeTeletextExportProjectError::Association);
+    let asset_count = if carrier == TeletextEditorCarrier::V6 {
+        asset_count
+            .checked_add(object_companion_count(encoded, deadline)?)
+            .ok_or(NativeTeletextExportProjectError::Budget)?
+    } else {
+        asset_count
+    };
+    Ok(asset_count)
+}
+
+fn object_companion_count(
+    encoded: &EncodedTeletextAuthoredService,
+    deadline: Instant,
+) -> Result<usize> {
+    let mut count = 0usize;
+    for page in encoded.pages() {
+        check_deadline(deadline)?;
+        if let EncodedTeletextAuthoredPage::Object(page) = page {
+            count = count
+                .checked_add(page.definition_positions().len())
+                .ok_or(NativeTeletextExportProjectError::Budget)?;
+        }
     }
-    Ok(ExportInventory {
-        encoded,
-        wanted,
-        selected: selected.is_some(),
-        selected_count,
-        asset_count,
-    })
+    Ok(count)
+}
+
+fn append_object_companions(
+    page: &EncodedTeletextAuthoredPage,
+    resource_name: &str,
+    files: &mut Files,
+    assets: &mut Vec<TeletextExportAssetMapping>,
+    tti: TeletextTtiBudget,
+    deadline: Instant,
+) -> Result<()> {
+    let EncodedTeletextAuthoredPage::Object(object_page) = page else {
+        return Ok(());
+    };
+    for position in object_page.definition_positions() {
+        check_deadline(deadline)?;
+        if files.values.len() >= files.budget.max_files {
+            return Err(NativeTeletextExportProjectError::Budget);
+        }
+        let budget = TeletextTtiBudget {
+            max_bytes: tti
+                .max_bytes
+                .min(files.budget.max_file_bytes)
+                .min(files.remaining),
+            max_records: tti.max_records.min(files.budget.max_units),
+        };
+        let frame = resource_objects::build_frame(
+            page,
+            position.target(),
+            files.budget.max_units,
+            budget,
+            deadline,
+        )?;
+        let bytes = write_teletext_tti(&frame.document, budget)?;
+        let object_id = position.target().object_id().get();
+        let name = format!(
+            "{}-object-{object_id:05}.tti",
+            resource_name.trim_end_matches(".dvb")
+        );
+        let mapping = TeletextExportAssetMapping {
+            name: name.clone(),
+            scope: TeletextExportAssetScope::ObjectTtiV1 {
+                resource_name: resource_name.to_owned(),
+                object_id,
+                editor_page: 0x100,
+                editor_ordinal: 0,
+            },
+            unit_count: 0,
+            bytes: bytes.len(),
+            sha256: sha256(&bytes),
+        };
+        files.append(name, bytes)?;
+        assets.push(mapping);
+    }
+    Ok(())
 }
 
 // The current native DRCS model authors monochrome mode 0, with F for sparse
@@ -870,6 +960,16 @@ fn assemble_files(
                 },
                 page.data_units(),
             )?);
+            if carrier == TeletextEditorCarrier::V6 {
+                append_object_companions(
+                    page,
+                    &resource_name,
+                    &mut files,
+                    &mut assets,
+                    tti_budget,
+                    deadline,
+                )?;
+            }
             if drcs_companion_eligible(page, carrier) {
                 assets.push(append_drcs_companion(
                     page,
@@ -882,7 +982,7 @@ fn assemble_files(
     }
     if matches!(
         carrier,
-        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5
+        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6
     ) {
         drcs_sets::append_sets(encoded, &mut assets, &mut files, tti_budget, deadline)?;
     }
@@ -1017,13 +1117,14 @@ mod tests {
             TeletextEditorCarrier::V3,
             TeletextEditorCarrier::V4,
             TeletextEditorCarrier::V5,
+            TeletextEditorCarrier::V6,
         ] {
             assert_eq!(
                 TeletextEditorCarrier::from_profile(carrier.profile()),
                 Some(carrier)
             );
         }
-        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v6"] {
+        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v7"] {
             assert_eq!(TeletextEditorCarrier::from_profile(profile), None);
         }
     }
@@ -1044,6 +1145,7 @@ mod tests {
                 legacy
             );
             assert_eq!(TeletextEditorCarrier::V2.status(controls, primary), v2);
+            assert_eq!(TeletextEditorCarrier::V6.status(controls, primary), v2);
         }
         // Independent native fallback NOS 1 and enhanced primary NOS 4.
         assert_eq!(TeletextEditorCarrier::Legacy.status(0x0481, 4), 0xc0c0);
@@ -1124,5 +1226,156 @@ mod tests {
         assert!(io::Write::write_all(&mut counter, b"abc").is_ok());
         assert!(io::Write::write_all(&mut counter, b"d").is_err());
         assert_eq!(counter.remaining, 0);
+    }
+
+    fn object_page(kind: TeletextResourceKind) -> EncodedTeletextAuthoredPage {
+        use ersatzrs_domain::{
+            TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
+            TeletextEnhancementObjectCatalog, TeletextEnhancementObjectDefinition,
+            TeletextEnhancementProgram, TeletextObjectCatalogBudget, TeletextObjectId,
+            TeletextObjectIdentity, TeletextObjectType, TeletextRawDataPageNumber,
+            TeletextResourceSubpageIndex, TeletextResourceUpdateCounter,
+        };
+        use ersatzrs_ffmpeg::teletext::{
+            allocate_teletext_resource_objects, encode_teletext_object_page,
+            TeletextObjectPageTransmission, TeletextResourceFullUpdate,
+            TeletextResourceTransmissionMode,
+        };
+        let resource = TeletextResourceIdentity::new(
+            kind,
+            TeletextRawDataPageNumber::new(2, 0xa0).unwrap(),
+            TeletextResourceSubpageIndex::new(15).unwrap(),
+        )
+        .unwrap();
+        let identity = if kind == TeletextResourceKind::Pop {
+            TeletextObjectIdentity::public(resource, TeletextObjectId::new(19))
+        } else {
+            TeletextObjectIdentity::global(resource, TeletextObjectId::new(19))
+        }
+        .unwrap();
+        let catalog = TeletextEnhancementObjectCatalog::new(
+            vec![TeletextEnhancementObjectDefinition {
+                identity,
+                object_type: TeletextObjectType::Passive,
+                program: TeletextEnhancementProgram::new(vec![
+                    TeletextEnhancementCommand::AtColumn {
+                        column: 0,
+                        operation: TeletextColumnOperation::Foreground {
+                            colour: TeletextColourReference::new(2).unwrap(),
+                        },
+                    },
+                ])
+                .unwrap(),
+            }],
+            TeletextObjectCatalogBudget {
+                max_objects: 4,
+                max_commands: 16,
+            },
+        )
+        .unwrap();
+        let allocations = allocate_teletext_resource_objects(&catalog, &[], 4).unwrap();
+        EncodedTeletextAuthoredPage::Object(
+            encode_teletext_object_page(
+                resource,
+                &catalog,
+                &allocations,
+                TeletextObjectPageTransmission {
+                    counter: TeletextResourceUpdateCounter::new(1).unwrap(),
+                    update: TeletextResourceFullUpdate::Changed,
+                    mode: TeletextResourceTransmissionMode::Serial,
+                    last_subpage: true,
+                },
+                16,
+            )
+            .unwrap(),
+        )
+    }
+
+    fn object_files() -> Files {
+        Files {
+            carrier: TeletextEditorCarrier::V6,
+            values: vec![],
+            remaining: 65_536,
+            budget: TeletextExportProjectBudget {
+                max_bytes: 65_536,
+                max_files: 8,
+                max_producers: 2,
+                max_file_bytes: 32_768,
+                max_units: 128,
+            },
+        }
+    }
+
+    #[test]
+    fn v6_object_companions_preserve_raw_resources_and_seal_exact_semantic_identity() {
+        for kind in [TeletextResourceKind::Pop, TeletextResourceKind::Gpop] {
+            let page = object_page(kind);
+            let raw = page
+                .data_units()
+                .iter()
+                .flat_map(|unit| unit.iter().copied())
+                .collect::<Vec<_>>();
+            let mut files = object_files();
+            let name = "resource-0000.dvb";
+            let header = page.resource_header().unwrap();
+            let mut assets = vec![files
+                .asset(
+                    name.to_owned(),
+                    TeletextExportAssetScope::Resource {
+                        identity: resource_identity(header.identity()),
+                        physical_subcode: header.physical_subcode(),
+                    },
+                    page.data_units(),
+                )
+                .unwrap()];
+            append_object_companions(
+                &page,
+                name,
+                &mut files,
+                &mut assets,
+                TeletextTtiBudget {
+                    max_bytes: 32_768,
+                    max_records: 32,
+                },
+                Instant::now() + std::time::Duration::from_secs(30),
+            )
+            .unwrap();
+            assert_eq!(files.values.len(), 2);
+            assert_eq!(files.values[0].bytes, raw);
+            let companion = &assets[1];
+            assert_eq!(companion.name, "resource-0000-object-00019.tti");
+            assert!(
+                matches!(&companion.scope,TeletextExportAssetScope::ObjectTtiV1 {
+                resource_name,object_id:19,editor_page:0x100,editor_ordinal:0} if resource_name==name)
+            );
+            assert_eq!(companion.unit_count, 0);
+            assert_eq!(companion.bytes, files.values[1].bytes.len());
+            assert_eq!(companion.sha256, sha256(&files.values[1].bytes));
+        }
+    }
+
+    #[test]
+    fn v6_object_companions_respect_file_admission_before_building_or_appending() {
+        let page = object_page(TeletextResourceKind::Pop);
+        let mut files = object_files();
+        files.budget.max_files = 0;
+        let mut assets = vec![];
+        assert!(matches!(
+            append_object_companions(
+                &page,
+                "resource-0000.dvb",
+                &mut files,
+                &mut assets,
+                TeletextTtiBudget {
+                    max_bytes: 32_768,
+                    max_records: 32
+                },
+                Instant::now() + std::time::Duration::from_secs(30)
+            ),
+            Err(NativeTeletextExportProjectError::Budget)
+        ));
+        assert!(assets.is_empty());
+        assert!(files.values.is_empty());
+        assert_eq!(files.remaining, 65_536);
     }
 }
