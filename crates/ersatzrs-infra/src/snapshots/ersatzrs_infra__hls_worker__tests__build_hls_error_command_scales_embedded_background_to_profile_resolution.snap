@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-infra/src/hls_worker.rs
+assertion_line: 10149
+expression: arguments
+---
+-nostdin -hide_banner -nostats -loglevel error -fflags +genpts+discardcorrupt+igndts -loop 1 -i synthetic-background.png -f lavfi -readrate 1.05 -i anullsrc=channel_layout=stereo:sample_rate=48000 -filter_complex [0:0]scale=492:250:flags=fast_bilinear,setsar=1,loop=-1:1,realtime,subtitles=synthetic.ass:fontsdir=synthetic-fonts[v];[1:0]aresample=async=1,apad[a] -map [v] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v libx264 -profile:v high -preset:v veryfast -pix_fmt yuv420p -codec:a aac -b:a 192k -maxrate:a 192k -bufsize:a 384k -ar 48k -r 25/1 -fps_mode:v cfr -video_track_timescale 90000 -b:v 8000k -maxrate:v 8000k -bufsize:v 16000k -map_metadata -1 -t 00:00:04.0000000 -g 50 -keyint_min 50 -force_key_frames expr:gte(t,n_forced*2) -f hls -hls_time 4 -hls_list_size 0 -segment_list_flags +live -hls_segment_filename live%06d.ts -hls_segment_type mpegts -hls_segment_options mpegts_flags=+initial_discontinuity:muxrate=9830400:pcr_period=20 -hls_flags program_date_time+omit_endlist+append_list+independent_segments live.m3u8

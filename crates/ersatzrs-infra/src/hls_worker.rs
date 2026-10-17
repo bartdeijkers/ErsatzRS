@@ -113,6 +113,8 @@ const PCR_LEAP_TOLERANCE_TICKS: i128 = 27_000_000;
 static HLS_WORK_AHEAD_COUNT: AtomicI32 = AtomicI32::new(0);
 
 const ERROR_BACKGROUND_PNG: &[u8] = include_bytes!("../../../assets/_background.png");
+// Source dimensions belong to the embedded PNG, not the selected output profile.
+const ERROR_BACKGROUND_FRAME_SIZE: FrameSize = FrameSize::new(1920, 1080);
 pub const ALL_STREAMS_IN_USE_SLATE_MESSAGE: &str =
     "All streams are in use. Playback will start when a stream is available.";
 
@@ -4527,7 +4529,7 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
     let mut desired = DesiredVideoState::from_profile(
         &request.playback_profile.profile,
         &request.playback_profile.resolution,
-        Some(&generated_error_video_stream(frame_size, frame_rate)),
+        Some(&generated_error_video_stream(frame_rate)),
         request.target_frame_rate,
         StreamingMode::HttpLiveStreamingSegmenter,
     );
@@ -4552,7 +4554,7 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
         inputs: vec![video_input, audio_input, subtitle_input],
         state: ersatzrs_ffmpeg::FfmpegState::default(),
         desired,
-        source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
+        source_video_stream: Some(generated_error_video_stream(frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
         ffmpeg_executable: request
             .runtime_capabilities
@@ -4634,7 +4636,7 @@ fn build_mpeg_ts_slate_command_from_assets(
     let mut desired = DesiredVideoState::from_profile(
         &request.playback_profile.profile,
         &request.playback_profile.resolution,
-        Some(&generated_error_video_stream(frame_size, frame_rate)),
+        Some(&generated_error_video_stream(frame_rate)),
         request.target_frame_rate,
         StreamingMode::TransportStream,
     );
@@ -4657,7 +4659,7 @@ fn build_mpeg_ts_slate_command_from_assets(
         inputs: vec![video_input, audio_input, subtitle_input],
         state: ersatzrs_ffmpeg::FfmpegState::default(),
         desired,
-        source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
+        source_video_stream: Some(generated_error_video_stream(frame_rate)),
         source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
         ffmpeg_executable: request
             .runtime_capabilities
@@ -4713,8 +4715,8 @@ fn generated_slug_video_stream(frame_size: FrameSize, frame_rate: FrameRate) -> 
     stream
 }
 
-fn generated_error_video_stream(frame_size: FrameSize, frame_rate: FrameRate) -> SourceVideoStream {
-    let mut stream = generated_slug_video_stream(frame_size, frame_rate);
+fn generated_error_video_stream(frame_rate: FrameRate) -> SourceVideoStream {
+    let mut stream = generated_slug_video_stream(ERROR_BACKGROUND_FRAME_SIZE, frame_rate);
     stream.is_still_image = true;
     stream
 }
@@ -10096,6 +10098,74 @@ mod tests {
             "-hls_flags program_date_time+omit_endlist+append_list+discont_start+independent_segments"
         ));
         assert!(!arguments.contains("mpegts_flags=+initial_discontinuity"));
+    }
+
+    #[test]
+    fn generated_error_video_stream_matches_embedded_background_dimensions() {
+        // PNG's first chunk is IHDR; its first eight data bytes are the actual
+        // image width and height. Keep source metadata tied to the shipped asset.
+        assert_eq!(&ERROR_BACKGROUND_PNG[..8], b"\x89PNG\r\n\x1a\n");
+        assert_eq!(&ERROR_BACKGROUND_PNG[12..16], b"IHDR");
+        let dimensions = FrameSize::new(
+            u32::from_be_bytes(ERROR_BACKGROUND_PNG[16..20].try_into().unwrap()),
+            u32::from_be_bytes(ERROR_BACKGROUND_PNG[20..24].try_into().unwrap()),
+        );
+        assert_eq!(dimensions, ERROR_BACKGROUND_FRAME_SIZE);
+        let source = generated_error_video_stream(FrameRate::new(25, 1));
+        assert_eq!(source.frame_size, Some(dimensions));
+        assert!(source.is_still_image);
+    }
+
+    fn slate_snapshot_arguments(command: &FfmpegCommand) -> String {
+        // Redact only the machine-local font cache; preserve the complete final
+        // argv order, scaling graph and subtitle filter in both output paths.
+        let original =
+            ersatzrs_ffmpeg::subtitles_filter("synthetic.ass", Some(&subtitle_fonts_dir()));
+        let replacement =
+            ersatzrs_ffmpeg::subtitles_filter("synthetic.ass", Some("synthetic-fonts"));
+        command.arguments.join(" ").replace(&original, &replacement)
+    }
+
+    #[test]
+    fn build_hls_error_command_scales_embedded_background_to_profile_resolution() {
+        let mut profile = playback_profile();
+        profile.resolution.width = 492;
+        profile.resolution.height = 250;
+        let command = build_hls_error_command_from_assets(HlsErrorCommandRequest {
+            background_path: Path::new("synthetic-background.png"),
+            subtitle_path: Path::new("synthetic.ass"),
+            output_format: OutputFormat::Hls,
+            is_first_transcode: true,
+            hls_realtime: true,
+            duration: Duration::from_secs(4),
+            output_ts_offset: None,
+            playback_profile: &profile,
+            target_frame_rate: Some(FrameRate::new(25, 1)),
+            metadata: OutputMetadata::default(),
+            runtime_capabilities: FfmpegCapabilityReport::default(),
+        });
+        let arguments = slate_snapshot_arguments(&command);
+        assert!(arguments.contains("scale=492:250:"), "{arguments}");
+        insta::assert_snapshot!(arguments);
+    }
+
+    #[test]
+    fn build_mpeg_ts_slate_command_scales_embedded_background_to_profile_resolution() {
+        let mut profile = playback_profile();
+        profile.resolution.width = 492;
+        profile.resolution.height = 250;
+        let command = build_mpeg_ts_slate_command_from_assets(MpegTsSlateCommandAssetRequest {
+            background_path: Path::new("synthetic-background.png"),
+            subtitle_path: Path::new("synthetic.ass"),
+            duration: Duration::from_secs(4),
+            playback_profile: &profile,
+            target_frame_rate: Some(FrameRate::new(25, 1)),
+            metadata: OutputMetadata::default(),
+            runtime_capabilities: FfmpegCapabilityReport::default(),
+        });
+        let arguments = slate_snapshot_arguments(&command);
+        assert!(arguments.contains("scale=492:250:"), "{arguments}");
+        insta::assert_snapshot!(arguments);
     }
 
     #[test]

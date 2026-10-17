@@ -775,6 +775,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Scale generated capacity-wait and HLS error screens to the configured channel
+  resolution using the embedded background image's actual dimensions.
 - Accept structural teletext resource edits that change packet extent without
   mistaking the derived `nn` subcode for a different original resource. Candidate
   mapping preserves exact identity, update counter and transmission; original

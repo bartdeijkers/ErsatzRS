@@ -10696,7 +10696,7 @@ Missing product functionality:
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4, singleton bitmap warm/client and scoped expiry/native Base proof retained; ordinary POP edit/growth/shrink, per-owner updates, unchanged Night and reopened cold output now pass6d495364 | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
 | F5 — source acquisition and accepted output policies | P9A-03 Local descriptors/header windows and source ownership; ordinary Local888 legacy/Hybrid/seek0.5s/audio/VBV proof retained | Discover/select complete page/charset/provenance across supported providers and use all accepted native/Next Burn/Convert/copy/HLS/browser combinations | Persist distinct source/version/stream/page identities through rescan/replacement; implement remaining exact policies/timing/handoff/cancellation, with visible unsupported results and no caption loss, engine switch or double source consumption |
-| F6 — ordinary playback safety defect | Current default2 runtime reproduces Legacy wait/programme clock and PMT breaks; default-timeout Hybrid delays the response until release then fails authored null-packet admission. Bounded fixture stop drains both; no product correction yet | Wait for capacity then enter programme output on one stable clock/topology | Establish a compatible finite-item codec/initialization/complete-track contract without premature source opens, then reuse admitted final mux; prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio and cleanup without bypass |
+| F6 — ordinary playback safety defect | Actual slate source dimensions corrected; Legacy wait/programme now both492x250. Default2 still fails Legacy clocks/PMT and Hybrid delayed readiness/null-window admission; bounded explicit cleanup drains both | Wait for capacity then enter programme output on one stable clock/topology | Establish a compatible finite-item codec/initialization/complete-track contract without premature source opens, then reuse admitted final mux; prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio and cleanup without bypass |
 
 Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
@@ -10788,15 +10788,33 @@ close before final assertions. This proves bounded explicit cleanup, not new
 spontaneous-disconnect/source-opening coverage. Reuse the9 unchanged ownership/
 held-SQLite cancellation passes in tmp/phase9-wrapper-selection/identity.json
 (run b5d1a36f-3eb2-42a4-988f-eb715a53b198) and previously recorded private-route
-source fences for their exact scope. Production wait/wrapper/mux sources and
-historical tmp/phase9-mixed-resource-calls/capacity-qualification.json plus
- tmp/phase9-live-editor-flow/identity.json remain hash-identical; editor,
-publication and channel-isolation evidence is unchanged.
-Next F6 action: qualify the smallest existing-path finite-item/output contract
-covering initialization, full track mapping and a common clock before connecting
-wait output to the admitted final mux. Address Hybrid readiness/null-budget
-failure within that boundary. A timestamp-only patch, extra outer copy mux,
-track omission, capacity increase or reconnect is not accepted. Maintainer
+source fences for their exact scope. Unchanged wait/wrapper code and historical
+ tmp/phase9-mixed-resource-calls/capacity-qualification.json plus
+ tmp/phase9-live-editor-flow/identity.json retain their scoped proof; the narrow
+hls_worker correction follows. Editor/publication/channel-isolation is unchanged.
+F6 slate-resolution correction: tmp/phase9-f6-slate-dimensions/identity.json
+follows evidence checkpoint090f1653. Both builders now supply the actual1920x1080
+PNG source dimensions, preserving the configured output size. Eight focused tests,
+including the PNG-IHDR invariant and two reviewed complete argv snapshots, pass.
+Ordinary default2 Legacy prefix and programme tail independently probe492x250,
+H264 level2.1/AAC; the tail retains Dutch audio and authored teletext. Caption888
+and selected660Hz presence pass again. The unchanged acceptance probe still fails
+8PTS/4PCR/1PMT breaks; strict TSDuck remains6/22 failed with51pct delivery.
+Default60s Hybrid again withholds output until release (~14.1s), then fails:
+7null packets needed,4available in the short window. This disproves resolution
+as a sufficient fix for its burst shortage; average configured CBR is present.
+Both probes retain peak2, unchanged addon/generation and complete bounded explicit
+fixture-stop cleanup. They are negative F6 acceptance evidence, not green runtime
+acceptance. Ownership/source-opening and unaffected editor/publication/isolation
+proof above is reused; no suitable-client or six-RID acceptance is added.
+Next F6 action: keep one response-owned output epoch across wait/programme children,
+with common PCR/PTS/DTS, continuity and complete changed PSI/codec initialization;
+existing read-only timestamp and PCR-only HLS helpers cannot perform that join.
+Preserve current admission/supervision, payloads and full track inventory. Move
+Hybrid's capacity wait ahead of HLS readiness and continue slates during admitted
+warmup using existing readiness mechanisms; isolate the remaining short-window
+null shortage. A timestamp-only patch, extra outer copy mux, track omission,
+capacity increase or reconnect is not accepted. Maintainer
 continuation is authorized; keep F6 first, continue independent accepted work
 when specifically blocked, and do not push or publish. All F/V/X criteria stay open.
 Complete oversized context (X3), remaining call/definition/set topology and remaining F2/V2
