@@ -8,7 +8,7 @@ ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
 rendering/navigation. Kodi is optional. P9A-04 owns acceptance and evidence.
 
-Typed services, provenance, resource identities/defaults, physical ownership,
+Typed services, provenance, resource IDs/defaults, physical ownership,
 X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization are
 implemented with incomplete conformance. Original bytes, fallback, IDs,
 lineage/ancestry, absent/default distinctions and pending charset uncertainty
@@ -29,11 +29,12 @@ encoder units and11 pinned dual-level cases pass. Sources/pointers, quotas/bound
 and uncertain cross-instance/backwards/nested-call refusals remain. Structural
 Local TTI retains sealed forward anchors through grow/shrink/undo, shared preview
 and reopen;66 host/native checks pass. Explicit V13 adds bounded Local style
-insertion/deletion;252 focused checks pass, formats1–12 remain closed. Next
-actual style InsertCopy/Delete/SaveAs. Full editor/client/resources remain open.
+insertion/deletion;252 focused checks pass, formats1–12 remain closed. Actual
+pinned style SaveAs/concept/preview/reopen passes2 Rust/12 refusal cases. Next
+resource-object TTI import; full editor/client/resources remain open.
 
-P9A-04 retains representative national-original, bank and panel QTM/native/
-ordinary-TCP/TSDuck/independent proof. Dense/padded banks join nine-culture
+National/bank/panel QTM/native/TCP/TSDuck/independent proof passes.
+Dense/padded banks join nine-culture
 headed SSR, explicit publication, fallback and two-theme client navigation.
 Raw English primary10 preserves its original alias; Polish/Turkish/Romanian,
 MOT defaults and inherited panels have scoped receipts. Banks/defaults may be

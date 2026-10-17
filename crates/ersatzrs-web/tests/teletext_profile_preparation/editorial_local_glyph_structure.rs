@@ -741,7 +741,7 @@ mod actual_editor_trial {
     use super::*;
     use std::path::{Path, PathBuf};
 
-    fn metadata(flow: &Flow) -> Value {
+    pub(super) fn metadata(flow: &Flow) -> Value {
         let service = flow.accepted[0].service();
         let packed = encoded(service);
         let [target, following] = definitions(service);

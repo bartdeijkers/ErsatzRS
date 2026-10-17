@@ -84,6 +84,7 @@ struct DriverContext {
     QByteArray globalDrcsName;
     bool editLocalGlyphStructure = false;
     bool editLocalMixedGlyphStructure = false;
+    bool editLocalStyleStructure = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -123,6 +124,7 @@ static DriverContext driverContext() {
     const bool foreground = mode == "single-page-foreground";
     const bool glyphStructure = mode == "single-page-local-glyph-structure";
     const bool mixedGlyphStructure = mode == "single-page-local-mixed-glyph-structure";
+    const bool styleStructure = mode == "single-page-local-style-structure";
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
@@ -188,14 +190,16 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_COLUMN");
     const bool suppliedForeground = qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_COLOUR")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_COLOUR");
-    if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && !mixedGlyphStructure && suppliedTarget)))
+    if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && suppliedTarget)))
         qFatal("Foreground operands require explicit single-page-foreground mode");
-    const int triplet = (foreground || localGlyph || glyphStructure || mixedGlyphStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
-    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", drcsSelection ? 40 : 39) : 0;
+    const int triplet = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
+    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", drcsSelection ? 40 : 39) : 0;
     if (drcsSelection && (column != 40 || !(triplet < glyph0 && glyph0 < glyph1)))
         qFatal("Fixed DRCS prefix address40 and ordered distinct glyph indices are required");
     if ((glyphStructure || mixedGlyphStructure) && (triplet != 12 || column != 0))
         qFatal("Fixed Local structure trial requires body word12 and column0");
+    if (styleStructure && (triplet != 17 || column != 1))
+        qFatal("Fixed Local style structure requires original mosaic word17 and column1");
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
     if (foreground && from == to) qFatal("Foreground trial requires a changed colour");
@@ -212,7 +216,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -238,10 +242,10 @@ static DriverContext driverContext() {
         qFatal("Edited DRCS verification requires the synthetic S1=0 companion");
     if (panelProof && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed panel proof requires left4/right12 and actual Normal S1=0 companion");
-    if ((localGlyph || glyphStructure || mixedGlyphStructure) && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
+    if ((localGlyph || glyphStructure || mixedGlyphStructure || styleStructure) && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1199,9 +1203,145 @@ static void editLocalMixedGlyphStructure(QMainWindow *main, const DriverContext 
     savedGlyphStructure = expected;
     std::puts("QTM actual mixed Local glyph structure: DeleteNormalGlyph21 keepOriginalSelector InsertCopyG2at16 Column1-to0 full32-row model checked; raw39-word padding is checked externally");
 }
-static void verifySavedGlyphStructure(QMainWindow *main) {
+// Fixed style insertion: the selected original mosaic is copied through the
+// real button, then the copy's cooked mode and colour are chosen by mouse.
+static void styleForegroundMode(QDockWidget *dock, const DriverContext &context) {
+    QPushButton *button = nullptr;
+    for (QPushButton *candidate : dock->findChildren<QPushButton *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || !candidate->menu()
+            || candidate->text() != "G1 block mosaic") continue;
+        if (button) qFatal("Ambiguous fixed style cooked-mode button");
+        button = candidate;
+    }
+    if (!button) qFatal("Actual fixed style mosaic mode button absent");
+    QMenu *menu = button->menu();
+    QTimer::singleShot(150, qApp, [menu, context] {
+        const auto actionNamed = [](QMenu *parent, const char *text) {
+            QAction *found = nullptr;
+            for (QAction *action : parent->actions()) {
+                if (action->text() != text || !action->isVisible() || !action->isEnabled()) continue;
+                if (found) qFatal("Ambiguous fixed style mode action");
+                found = action;
+            }
+            if (!found) qFatal("Actual fixed style mode action absent");
+            return found;
+        };
+        if (!QTest::qWaitFor([menu] { return menu->isVisible(); }, 3000))
+            qFatal("Actual fixed style mode menu did not open");
+        QAction *column = actionNamed(menu, "Column triplet");
+        QMenu *child = column->menu();
+        const QPoint columnPoint = menu->actionGeometry(column).center();
+        if (!child || !menu->rect().contains(columnPoint))
+            qFatal("Actual fixed style column submenu is not clickable");
+        QTest::mouseMove(menu, columnPoint);
+        if (!QTest::qWaitFor([menu, column, child] {
+            return menu->activeAction() == column && child->isVisible();
+        }, 3000)) qFatal("Actual fixed style column submenu did not receive hover");
+        QAction *foreground = actionNamed(child, "Foreground colour");
+        const QPoint point = child->actionGeometry(foreground).center();
+        if (foreground->menu() || !child->rect().contains(point))
+            qFatal("Actual fixed style foreground action is not clickable");
+        QTest::mouseMove(child, point);
+        if (!QTest::qWaitFor([child, foreground] {
+            return child->isVisible() && child->activeAction() == foreground;
+        }, 3000)) qFatal("Actual fixed style foreground action did not receive hover");
+        if (!child->grab().save(QString("/work/") + context.captureName("local-style-mode-popup")))
+            qFatal("Actual fixed style mode popup capture failed");
+        QTest::mouseClick(child, Qt::LeftButton, Qt::NoModifier, point);
+    });
+    QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
+}
+static void styleColour19(QDockWidget *dock, const DriverContext &context) {
+    QComboBox *colour = nullptr;
+    for (QComboBox *candidate : dock->findChildren<QComboBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->count() != 32) continue;
+        if (colour) qFatal("Ambiguous fixed style colour selector");
+        colour = candidate;
+    }
+    if (!colour || colour->currentIndex() != 1)
+        qFatal("Actual fixed style copied mosaic did not become foreground1");
+    QTest::mouseClick(colour, Qt::LeftButton, Qt::NoModifier, colour->rect().center());
+    auto popup = colour->view();
+    if (!QTest::qWaitFor([popup] { return popup->isVisible(); }, 3000))
+        qFatal("Actual fixed style colour popup did not open");
+    const QModelIndex choice = popup->model()->index(19, colour->modelColumn(), colour->rootModelIndex());
+    popup->scrollTo(choice, QAbstractItemView::PositionAtCenter);
+    if (!QTest::qWaitFor([popup, choice] {
+        return choice.isValid() && popup->viewport()->rect().contains(popup->visualRect(choice).center());
+    }, 3000)) qFatal("Actual fixed style colour19 is not clickable");
+    const QPoint point = popup->visualRect(choice).center();
+    QTest::mouseMove(popup->viewport(), point);
+    if (!QTest::qWaitFor([popup, choice, point] {
+        return popup->isVisible() && popup->indexAt(point) == choice && popup->currentIndex() == choice;
+    }, 3000)) qFatal("Actual fixed style colour19 did not receive hover");
+    if (!popup->window()->grab().save(QString("/work/") + context.captureName("local-style-colour-popup")))
+        qFatal("Actual fixed style colour popup capture failed");
+    QTest::mouseClick(popup->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+    if (!QTest::qWaitFor([colour] { return colour->currentIndex() == 19; }, 3000))
+        qFatal("Actual fixed style foreground19 was not activated");
+}
+static void editLocalStyleStructure(QMainWindow *main, const DriverContext &context) {
+    if (!context.editLocalStyleStructure || context.tripletIndex != 17 || context.tripletColumn != 1
+        || main->isWindowModified()) qFatal("Unexpected fixed style structure baseline");
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
-    if (!dock || savedGlyphStructure.size() != 32) qFatal("Fixed saved structure oracle absent");
+    if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual style X/26 dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000)) qFatal("Actual style dock was not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual style trial requires one X/26 table");
+    auto table = tables.front();
+    auto model = table->model();
+    // The two complete input packets contain26 meaningful words. One actual
+    // insertion grows the model to27; saved TTI packet padding is checked by
+    // the native handoff, never synthesized into this editor document.
+    if (!model || model->rowCount() != 26 || model->columnCount() != 4)
+        qFatal("Fixed style original must contain26 model triplets");
+    const std::array<StructureTriplet, 9> original{{
+        {0,0,18}, {0,3,0}, {0,8,0}, {0,9,65}, {0,9,65}, {1,1,33}, {2,12,32}, {2,9,66}, {3,9,67}
+    }};
+    std::vector<StructureTriplet> expected;
+    for (int row = 0; row < 26; ++row) expected.push_back(structureTriplet(model, row));
+    for (int offset = 0; offset < 9; ++offset)
+        if (expected[12 + offset] != original[offset]) qFatal("Original fixed style body differs");
+    if (expected[11] != StructureTriplet{40,23,11} || expected[21] != StructureTriplet{40,23,24}
+        || expected[22] != StructureTriplet{0,8,0} || expected[23] != StructureTriplet{0,12,16}
+        || expected[24] != StructureTriplet{0,9,80} || expected[25] != StructureTriplet{63,31,5})
+        qFatal("Fixed style original markers/protected following program differ");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-style-before")))
+        qFatal("Actual style baseline dock capture failed");
+    DriverContext paint = context; paint.editLocalGlyph = true;
+    captureLocalGlyphWidget(paint, "before");
+    structureSelect(table, 17);
+    structureButton(dock, "Insert copy");
+    expected.insert(expected.begin() + 17, StructureTriplet{1,1,33});
+    structureRelocate(expected, 17, 1);
+    structureCheck(model, expected);
+    structureSelect(table, 17);
+    styleForegroundMode(dock, context);
+    // Pinned x26model.cpp's real cooked-mode transition clears data0x60,
+    // so G1 data33 becomes valid foreground1 while preserving address1.
+    expected[17] = StructureTriplet{1,0,1};
+    structureCheck(model, expected);
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-style-mode-edited")))
+        qFatal("Actual style cooked mode dock capture failed");
+    styleColour19(dock, context);
+    expected[17] = StructureTriplet{1,0,19};
+    structureCheck(model, expected);
+    if (!main->isWindowModified() || expected.size() != 27
+        || expected[18] != StructureTriplet{1,1,33} || expected[22] != StructureTriplet{40,23,25})
+        qFatal("Fixed style final insertion/modified state/following marker differs");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-style-edited")))
+        qFatal("Actual style edited dock capture failed");
+    captureLocalGlyphWidget(paint, "edited");
+    savedGlyphStructure = expected;
+    std::puts("QTM actual Local style structure: InsertCopy17 mosaic1/1/33, cooked Foreground1, colour19; exact26-to27 model and marker21-to22 checked");
+}
+static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || savedGlyphStructure.size() != std::size_t(expectedCount)) qFatal("Fixed saved structure oracle absent");
     const auto tables = dock->findChildren<QTableView *>();
     if (tables.size() != 1) qFatal("Saved structure table absent");
     structureCheck(tables.front()->model(), savedGlyphStructure);
@@ -1329,11 +1469,12 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             || savedFile.isSymLink() || savedFile.size() <= 0)
             qFatal("Actual Save As did not complete");
         if (context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure) verifySavedGlyphStructure(saved);
+        if (context.editLocalStyleStructure) verifySavedGlyphStructure(saved, 27);
         capture(context.captureName("saved").toUtf8().constData());
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -1379,6 +1520,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.editForeground || context.editLocalGlyph) editForeground(main, context);
             if (context.editLocalGlyphStructure) editLocalGlyphStructure(main, context);
             if (context.editLocalMixedGlyphStructure) editLocalMixedGlyphStructure(main, context);
+            if (context.editLocalStyleStructure) editLocalStyleStructure(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));

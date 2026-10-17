@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: actual Local style TTI editing'
+current_focus = 'P9A-04: resource-object TTI interchange'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -384,11 +384,15 @@ Actual four-Romanian and three-English multi-display QTM flows already pass;
 reuse their canonical receipts. Local FG/BG/Attributes insertion/deletion now uses
 explicit schema13 with original/root correspondence, shared Free/Zone preview,
 reopen and exact undo;252 focused checks pass. Formats1–12 stay closed.
-Next use pinned QTM's existing widget/receipt handoff for an actual Local style
-InsertCopy/Delete/SaveAs, then import/preview/reopen. Reuse unaffected publication,
-ordinary-route and client proof. Full resource/object, metadata/templates/dynamic
-fields, authoredLevel2.5, Lua/restart/admin and playback/platform/client acceptance
-remains open; no permanent restriction is accepted.
+Pinned actual QTM InsertCopy/cooked-mode/colour/SaveAs now reaches a fresh V13
+concept/shared preview/reopen; two Rust and12 context-refusal cases pass, with
+four inspected GUI images. This is new interoperability evidence, not new
+product functionality or full engine acceptance. Reuse unaffected delivery/client
+proof. Next reproduce one exact-original POP/GPOP resource-object edit against
+captured Free/Zone consumers; current resource mapping admits DRCS companions
+only. Identify the precise export/import refusal before extending that boundary.
+Full resource/object, metadata/templates/dynamic fields, authoredLevel2.5,
+Lua/restart/admin and playback/platform/client acceptance remains open.
 Production content waits for independent generic acceptance.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.

@@ -41,7 +41,7 @@ release section when tagging a release.
   pinned
   QTeletextMaker G0/G1/G2/G3 glyph, diacritic-selector, Normal DRCS slot,
   Local foreground, flash/charset, DRCS scope/subtable, Local G0/G1 structure
-  and mixed DRCS deletion/G2 insertion saves
+  mixed DRCS deletion/G2 insertion and Local foreground-command insertion saves
   pass concept import,
   shared preview and reopen.
   Prohibited G2/G3 positions remain refused without changing publication; full

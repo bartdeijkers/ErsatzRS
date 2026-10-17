@@ -1,6 +1,9 @@
 //! Existing Local styling gains a new non-spacing boundary inside its free zone.
 use super::*;
 
+#[path = "style_topology/actual_editor.rs"]
+mod actual_editor;
+
 fn inserted_words() -> Vec<u32> {
     let mut words = glyph_words(0);
     // Original FG/BG/charset, A, A, then the new foreground before mosaic@1.
