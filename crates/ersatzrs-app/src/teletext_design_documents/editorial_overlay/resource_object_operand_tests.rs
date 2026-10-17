@@ -12,7 +12,7 @@ use ersatzrs_domain::{
 };
 use serde_json::{json, Value};
 
-fn identity(global: bool, subpage: u8) -> TeletextObjectIdentity {
+pub(super) fn identity(global: bool, subpage: u8) -> TeletextObjectIdentity {
     let resource = TeletextResourceIdentity::new(
         if global {
             TeletextResourceKind::Gpop
@@ -43,7 +43,7 @@ fn operand(global: bool, subpage: u8) -> TeletextResourceObjectOperandOverlay {
     )
     .unwrap()
 }
-fn local_program() -> TeletextLocalObjectGlyphProgramOverlay {
+pub(super) fn local_program() -> TeletextLocalObjectGlyphProgramOverlay {
     let program = |column| {
         TeletextEnhancementProgram::new(vec![TeletextEnhancementCommand::AtColumn {
             column,
@@ -59,7 +59,7 @@ fn local_program() -> TeletextLocalObjectGlyphProgramOverlay {
     )
     .unwrap()
 }
-fn original(mixed: bool) -> Vec<u8> {
+pub(super) fn original(mixed: bool) -> Vec<u8> {
     let mut value: Value = serde_json::from_slice(&original_with_context()).unwrap();
     let mut response: Value =
         serde_json::from_str(value["documents"][0]["response"].as_str().unwrap()).unwrap();

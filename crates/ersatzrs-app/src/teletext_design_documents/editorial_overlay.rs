@@ -15,7 +15,7 @@ use ersatzrs_domain::{
     TeletextDrcsGlyphSlot, TeletextEnhancementCommand, TeletextLocalObjectGlyphProgramOverlay,
     TeletextLocalObjectOperandOverlay, TeletextLocalProgramOperandOverlay, TeletextPageAddress,
     TeletextPhysicalBaseOverlay, TeletextPhysicalBaseRow, TeletextResourceIdentity,
-    TeletextResourceObjectOperandOverlay,
+    TeletextResourceObjectOperandOverlay, TeletextResourceObjectProgramOverlay,
 };
 use serde::{
     de::{SeqAccess, Visitor},
@@ -38,6 +38,7 @@ const LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION: u16 = 11;
 const ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION: u16 = 12;
 const LOCAL_STYLE_PROGRAM_OVERLAY_VERSION: u16 = 13;
 const RESOURCE_OBJECT_OPERAND_OVERLAY_VERSION: u16 = 14;
+const RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION: u16 = 15;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -46,7 +47,15 @@ use object_operands::{BorrowedObjectOperands, OptionalStoredObjectOperands};
 #[path = "editorial_overlay/resource_object_operands.rs"]
 pub(super) mod resource_object_operands;
 use resource_object_operands::{
-    BorrowedResourceObjectOperands, OptionalStoredResourceObjectOperands,
+    restore_overlay as restore_resource_scalars, BorrowedResourceObjectOperands,
+    OptionalStoredResourceObjectOperands,
+};
+
+#[path = "editorial_overlay/resource_object_programs.rs"]
+pub(super) mod resource_object_programs;
+use resource_object_programs::{
+    restore_overlay as restore_resource_programs, BorrowedResourcePrograms,
+    OptionalStoredResourcePrograms,
 };
 
 #[path = "editorial_overlay/local_object_glyph_programs.rs"]
@@ -86,6 +95,7 @@ pub struct TeletextSavedEditorialOverlay {
     local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     local_object_glyph_program_overlays: Vec<TeletextLocalObjectGlyphProgramOverlay>,
     resource_object_operands: Vec<TeletextResourceObjectOperandOverlay>,
+    resource_object_program_overlays: Vec<TeletextResourceObjectProgramOverlay>,
     schema_version: u16,
 }
 impl TeletextSavedEditorialOverlay {
@@ -536,11 +546,66 @@ impl TeletextSavedEditorialOverlay {
         programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
         resource_operands: Vec<TeletextResourceObjectOperandOverlay>,
     ) -> Result<Self, TeletextDesignDocumentError> {
-        if resource_operands.is_empty()
-            || resource_operands.iter().any(|operand| {
-                !OperandFamilies::DrcsSelections.supports(operand.expected(), operand.replacement())
-            })
-        {
+        if resource_operands.is_empty() {
+            return Err(invalid());
+        }
+        Self::new_resource_parts(
+            provenance,
+            pages,
+            local_program_operands,
+            local_object_operands,
+            drcs_bitmap_overlays,
+            programs,
+            resource_operands,
+        )
+    }
+
+    /// Capture version15 resource-object program structure against exact originals.
+    /// The resource tuple contains scalar intentions followed by program intentions.
+    /// No identity, package, region or publication authority is added.
+    /// # Errors
+    /// Rejects empty or duplicate programs, scalar glyph overlap, unsupported
+    /// scalar families and invalid references. Attachment authenticates originals.
+    pub fn new_with_resource_object_program_overlays(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+        resource_changes: (
+            Vec<TeletextResourceObjectOperandOverlay>,
+            Vec<TeletextResourceObjectProgramOverlay>,
+        ),
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        let (resource_operands, resource_programs) = resource_changes;
+        resource_object_programs::distinct(&resource_programs, &resource_operands)?;
+        let mut value = Self::new_resource_parts(
+            provenance,
+            pages,
+            local_program_operands,
+            local_object_operands,
+            drcs_bitmap_overlays,
+            programs,
+            resource_operands,
+        )?;
+        value.resource_object_program_overlays = resource_programs;
+        value.schema_version = RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION;
+        Ok(value)
+    }
+
+    fn new_resource_parts(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+        resource_operands: Vec<TeletextResourceObjectOperandOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        if resource_operands.iter().any(|operand| {
+            !OperandFamilies::DrcsSelections.supports(operand.expected(), operand.replacement())
+        }) {
             return Err(invalid());
         }
         resource_object_operands::distinct(&resource_operands)?;
@@ -635,6 +700,7 @@ impl TeletextSavedEditorialOverlay {
             local_object_operands,
             local_object_glyph_program_overlays: Vec::new(),
             resource_object_operands: Vec::new(),
+            resource_object_program_overlays: Vec::new(),
             schema_version,
         })
     }
@@ -670,6 +736,11 @@ impl TeletextSavedEditorialOverlay {
     pub fn resource_object_operands(&self) -> &[TeletextResourceObjectOperandOverlay] {
         &self.resource_object_operands
     }
+    /// Exact-original resource programs and retained-command correspondence.
+    #[must_use]
+    pub fn resource_object_program_overlays(&self) -> &[TeletextResourceObjectProgramOverlay] {
+        &self.resource_object_program_overlays
+    }
     /// Exact-original resource bitmap changes; no edit/publication authority.
     #[must_use]
     pub fn drcs_bitmap_overlays(&self) -> &[TeletextDrcsBitmapOverlay] {
@@ -692,6 +763,10 @@ impl fmt::Debug for TeletextSavedEditorialOverlay {
             .field(
                 "resource_object_operands",
                 &self.resource_object_operands.len(),
+            )
+            .field(
+                "resource_object_program_overlays",
+                &self.resource_object_program_overlays.len(),
             )
             .finish_non_exhaustive()
     }
@@ -985,6 +1060,8 @@ closed_map!(StoredOverlay {
     local_object_glyph_program_overlays: OptionalStoredGlyphPrograms,
     #[serde(default, skip_serializing_if = "OptionalStoredResourceObjectOperands::is_absent")]
     resource_object_operands: OptionalStoredResourceObjectOperands,
+    #[serde(default, skip_serializing_if = "OptionalStoredResourcePrograms::is_absent")]
+    resource_object_program_overlays: OptionalStoredResourcePrograms,
 });
 closed_map!(StoredPage { owner: super::Entry, rows: Vec<StoredRow> });
 closed_map!(StoredRow {
@@ -1126,6 +1203,11 @@ fn restore_bitmap(
 
 impl StoredOverlay {
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        if self.schema_version == RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
+            || self.resource_object_program_overlays.0.is_some()
+        {
+            return resource_object_programs::check_version(self);
+        }
         let operands = &self.local_program_operands.0;
         let bitmaps = &self.drcs_bitmap_overlays.0;
         let objects = &self.local_object_operands.0;
@@ -1219,7 +1301,8 @@ impl StoredOverlay {
             .local_object_glyph_program_overlays
             .0
             .unwrap_or_default();
-        let resources = self.resource_object_operands.0;
+        let resources = self.resource_object_operands.0.unwrap_or_default();
+        let resource_programs = self.resource_object_program_overlays.0.unwrap_or_default();
         let provenance = TeletextSavedEditorialProvenance {
             export_receipt_id: self.export_receipt_id,
             export_receipt_digest: self.export_receipt_digest,
@@ -1246,21 +1329,18 @@ impl StoredOverlay {
             .collect::<Result<Vec<_>, _>>()?;
         let objects = object_operands::restore(objects.unwrap_or_default())?;
         let value = match self.schema_version {
-            RESOURCE_OBJECT_OPERAND_OVERLAY_VERSION => {
-                // The broadest existing policy restores each typed Local program;
-                // the V14 constructor then selects and enforces the exact group policy.
-                let programs =
-                    local_object_glyph_programs::restore(programs, ProgramPolicy::StyleCommands)?;
-                TeletextSavedEditorialOverlay::new_with_resource_object_operands(
-                    provenance,
-                    pages,
-                    operands,
-                    objects,
-                    bitmaps,
-                    programs,
-                    resource_object_operands::restore(resources.unwrap_or_default())?,
-                )?
-            }
+            RESOURCE_OBJECT_OPERAND_OVERLAY_VERSION => restore_resource_scalars(
+                provenance, pages, operands, objects, bitmaps, programs, resources,
+            )?,
+            RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION => restore_resource_programs(
+                provenance,
+                pages,
+                operands,
+                objects,
+                bitmaps,
+                programs,
+                (resources, resource_programs, budget),
+            )?,
             LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
             | ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
             | LOCAL_STYLE_PROGRAM_OVERLAY_VERSION => restore_overlay(
@@ -1381,11 +1461,9 @@ pub(super) fn validate_association(
     validate_bitmap_association(&overlay.drcs_bitmap_overlays, documents)?;
     object_operands::validate_association(&overlay.local_object_operands, documents)?;
     resource_object_operands::validate_association(&overlay.resource_object_operands, documents)?;
-    // The unchanged Local helper counts Local scalar and program commands. Reserve
-    // resource scalars from the same command budget before that combined check.
-    let mut local_budget = budget;
-    local_budget.validation.service.max_commands -= overlay.resource_object_operands.len();
+    let (items, local_budget) = resource_object_programs::reserve_budgets(overlay, items, budget)?;
     local_object_glyph_programs::validate_budgets(overlay, items, local_budget)?;
+    resource_object_programs::validate_association(overlay, documents, budget)?;
     local_object_glyph_programs::validate_association(
         &overlay.local_object_glyph_program_overlays,
         &overlay.local_object_operands,
@@ -1488,6 +1566,8 @@ struct BorrowedOverlay<'a> {
     local_object_glyph_program_overlays: Option<BorrowedGlyphPrograms<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     resource_object_operands: Option<BorrowedResourceObjectOperands<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resource_object_program_overlays: Option<BorrowedResourcePrograms<'a>>,
 }
 struct BorrowedBitmaps<'a>(&'a [TeletextDrcsBitmapOverlay]);
 impl Serialize for BorrowedBitmaps<'_> {
@@ -1676,6 +1756,12 @@ fn write_appended(
             resource_object_operands: (!overlay.resource_object_operands.is_empty()).then_some(
                 BorrowedResourceObjectOperands(&overlay.resource_object_operands),
             ),
+            resource_object_program_overlays: (!overlay
+                .resource_object_program_overlays
+                .is_empty())
+            .then_some(BorrowedResourcePrograms(
+                &overlay.resource_object_program_overlays,
+            )),
         },
     )?;
     writer
@@ -1734,3 +1820,7 @@ mod local_object_style_program_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/resource_object_operand_tests.rs"]
 mod resource_object_operand_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/resource_object_program_tests.rs"]
+mod resource_object_program_tests;

@@ -328,10 +328,11 @@ fn qualify_rows(
     let operands = overlay.local_program_operands().to_vec();
     let object_operands = overlay.local_object_operands().to_vec();
     let resource_operands = overlay.resource_object_operands().to_vec();
+    let resource_programs = overlay.resource_object_program_overlays().to_vec();
     let bitmaps = overlay.drcs_bitmap_overlays().to_vec();
     let object_programs = overlay.local_object_glyph_program_overlays().to_vec();
     let encoding = policy.encoding;
-    let edited = if resource_operands.is_empty()
+    let edited = if (resource_operands.is_empty() && resource_programs.is_empty())
         || !matches!(
             baseline.carrier,
             TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7
@@ -361,12 +362,25 @@ fn qualify_rows(
             (tti, encoding.max_units),
             deadline,
         )?;
-        parts.compile_with_resource_operands(
+        super::teletext_editorial_tti::resource_objects::authorize_programs(
+            &baseline.body.project,
+            baseline
+                .original
+                .view()
+                .encoded()
+                .ok_or(NativeTeletextEditorialImportError::Association)?,
+            &resource_operands,
+            &resource_programs,
+            (tti, encoding.max_units, policy.composition.service),
+            deadline,
+        )?;
+        parts.compile_with_resource_edits(
             stored,
             policy,
             deadline,
             overlays.clone(),
             &resource_operands,
+            &resource_programs,
         )
     }
     .map_err(|error| NativeTeletextEditorialImportError::Design(Box::new(error)))?;
@@ -383,6 +397,7 @@ fn qualify_rows(
         &baseline.body.project,
         TeletextEditorialEdits {
             resource_operands: &resource_operands,
+            resource_programs: &resource_programs,
             rows: &overlays,
             operands: &operands,
             object_operands: &object_operands,
@@ -504,6 +519,7 @@ fn reconcile_files(
     baseline: &QualifiedBaseline,
     files: &[TeletextExportFile],
     tti: TeletextTtiBudget,
+    service_budget: ersatzrs_domain::TeletextServiceBudget,
     deadline: Instant,
 ) -> Result<TeletextEditorialChanges> {
     let body = &baseline.body;
@@ -512,6 +528,7 @@ fn reconcile_files(
     }
     let mut changes = TeletextEditorialChanges {
         resource_operands: Vec::new(),
+        resource_programs: Vec::new(),
         rows: Vec::new(),
         operands: Vec::new(),
         object_operands: Vec::new(),
@@ -523,6 +540,17 @@ fn reconcile_files(
         .view()
         .encoded()
         .ok_or(NativeTeletextEditorialImportError::Association)?;
+    let resource_edits: super::teletext_editorial_tti::resource_objects::ResourceEdits =
+        super::teletext_editorial_tti::resource_objects::reconcile_project(
+            &body.project,
+            encoded,
+            &body.files,
+            files,
+            (tti, encoded.unit_count(), service_budget),
+            deadline,
+        )?;
+    changes.resource_operands = resource_edits.operands;
+    changes.resource_programs = resource_edits.programs;
     for original in &body.files {
         check_deadline(deadline)?;
         let edited = files
@@ -557,16 +585,12 @@ fn reconcile_files(
             changes.operands.extend(incoming.operands);
             changes.object_operands.extend(incoming.object_operands);
             changes.object_programs.extend(incoming.object_programs);
-        } else if let Some(mapping) = body.project.assets.iter().find(|asset| {
-            asset.name == original.name
-                && matches!(asset.scope, ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1 { .. } | ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiFragmentV1 { .. })
+        } else if body.project.assets.iter().any(|asset| {
+            asset.name==original.name && matches!(asset.scope,
+                ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1{..} |
+                ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiFragmentV1{..})
         }) {
-            changes.resource_operands.extend(
-                super::teletext_editorial_tti::resource_objects::reconcile(
-                    mapping, &body.project, encoded, &original.bytes, &edited.bytes,
-                    (tti, encoded.unit_count()), deadline,
-                )?
-            );
+            // The complete original object group was authenticated above.
         } else if let Some(mapping) = body.project.assets.iter().find(|asset| {
             asset.name == original.name
                 && super::teletext_editorial_tti::resources::supported(asset)
@@ -593,13 +617,14 @@ fn reconcile_files(
         && changes.resource_operands.is_empty()
         && changes.bitmaps.is_empty()
         && changes.object_programs.is_empty()
+        && changes.resource_programs.is_empty()
     {
         return Err(NativeTeletextEditorialImportError::NoChanges);
     }
     Ok(changes)
 }
 
-fn validate_reconciled_files(
+fn validate_reconciled_display_files(
     baseline: &QualifiedBaseline,
     files: &[TeletextExportFile],
     tti: TeletextTtiBudget,
@@ -649,6 +674,33 @@ fn validate_reconciled_files(
             )?;
         }
     }
+    Ok(())
+}
+
+fn validate_reconciled_files(
+    baseline: &QualifiedBaseline,
+    files: &[TeletextExportFile],
+    tti: TeletextTtiBudget,
+    deadline: Instant,
+    encoded: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+    incoming: &TeletextEditorialChanges,
+    service_budget: ersatzrs_domain::TeletextServiceBudget,
+) -> Result<()> {
+    if !incoming.resource_programs.is_empty() {
+        super::teletext_editorial_tti::resource_objects::validate_applied_project(
+            &baseline.body.project,
+            baseline
+                .original
+                .view()
+                .encoded()
+                .ok_or(NativeTeletextEditorialImportError::Association)?,
+            encoded,
+            files,
+            (tti, encoded.unit_count(), service_budget),
+            deadline,
+        )?;
+    }
+    validate_reconciled_display_files(baseline, files, tti, deadline, encoded, incoming)?;
     for mapping in &baseline.body.project.assets {
         if matches!(
             mapping.scope,
@@ -658,6 +710,7 @@ fn validate_reconciled_files(
                 .iter()
                 .find(|file| file.name == mapping.name)
                 .ok_or(NativeTeletextEditorialImportError::Association)?;
+            if !incoming.resource_programs.is_empty() { continue; }
             super::teletext_editorial_tti::resource_objects::validate_applied(
                 mapping,
                 &baseline.body.project,

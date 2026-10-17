@@ -85,6 +85,21 @@ fn mapping<'a>(
     project: &'a TeletextExportProject,
     service: &'a EncodedTeletextAuthoredService,
 ) -> Result<Mapping<'a>> {
+    mapping_checked(asset, project, service, true)
+}
+fn mapping_resource<'a>(
+    asset: &'a TeletextExportAssetMapping,
+    project: &'a TeletextExportProject,
+    service: &'a EncodedTeletextAuthoredService,
+) -> Result<Mapping<'a>> {
+    mapping_checked(asset, project, service, false)
+}
+fn mapping_checked<'a>(
+    asset: &'a TeletextExportAssetMapping,
+    project: &'a TeletextExportProject,
+    service: &'a EncodedTeletextAuthoredService,
+    check_count: bool,
+) -> Result<Mapping<'a>> {
     let (resource_name, object_id) = companion(asset, project)?;
     let mut raw = project
         .assets
@@ -134,8 +149,9 @@ fn mapping<'a>(
         _ => return Err(invalid()),
     }
     .map_err(|_| invalid())?;
-    if raw.unit_count != page.data_units().len()
-        || raw.unit_count.checked_mul(46) != Some(raw.bytes)
+    if check_count
+        && (raw.unit_count != page.data_units().len()
+            || raw.unit_count.checked_mul(46) != Some(raw.bytes))
     {
         return Err(location.error(Failure::Mapping));
     }
@@ -499,6 +515,11 @@ pub(in crate::host) fn validate_applied(
     let edited = Page::index_identity(&edited, 0x100, 0, mapping.location, deadline)?;
     compare(&expected, &edited, mapping.location, false, deadline)
 }
+
+mod project;
+pub(in crate::host) use project::{
+    authorize_programs, reconcile_project, validate_applied_project, ResourceEdits,
+};
 
 #[cfg(test)]
 mod tests;

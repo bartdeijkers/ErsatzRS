@@ -33,6 +33,7 @@ pub(super) struct TeletextEditorialChanges {
     pub object_operands: Vec<TeletextLocalObjectOperandOverlay>,
     pub resource_operands: Vec<ersatzrs_domain::TeletextResourceObjectOperandOverlay>,
     pub object_programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    pub resource_programs: Vec<ersatzrs_domain::TeletextResourceObjectProgramOverlay>,
     pub bitmaps: Vec<TeletextDrcsBitmapOverlay>,
 }
 

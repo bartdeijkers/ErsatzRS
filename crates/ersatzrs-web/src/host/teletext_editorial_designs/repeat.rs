@@ -27,6 +27,8 @@ mod object_operands;
 mod object_programs;
 #[path = "repeat/resource_operands.rs"]
 mod resource_operands;
+#[path = "repeat/resource_programs.rs"]
+mod resource_programs;
 
 struct PreparedImport {
     root: QualifiedBaseline,
@@ -128,6 +130,7 @@ fn qualify_latest(
     }
     let previous = TeletextEditorialChanges {
         resource_operands: overlay.resource_object_operands().to_vec(),
+        resource_programs: overlay.resource_object_program_overlays().to_vec(),
         rows: overlay.pages().to_vec(),
         operands: overlay.local_program_operands().to_vec(),
         object_operands: overlay.local_object_operands().to_vec(),
@@ -443,17 +446,30 @@ fn check_operand_budget(
     changes: &TeletextEditorialChanges,
     budget: TeletextServiceBudget,
 ) -> Result<()> {
-    let program_work = changes
-        .object_programs
-        .iter()
-        .try_fold(0usize, |count, program| {
-            count
-                .checked_add(program.expected().commands().len())?
-                .checked_add(program.replacement().commands().len())?
-                .checked_add(program.retained_commands().len())
-        });
+    let local_work = changes.object_programs.iter().map(|p| {
+        [
+            p.expected().commands().len(),
+            p.replacement().commands().len(),
+            p.retained_commands().len(),
+        ]
+    });
+    let resource_work = changes.resource_programs.iter().map(|p| {
+        [
+            p.expected().commands().len(),
+            p.replacement().commands().len(),
+            p.retained_commands().len(),
+        ]
+    });
+    let program_work = local_work
+        .chain(resource_work)
+        .flatten()
+        .try_fold(0usize, usize::checked_add);
     if program_work.is_none_or(|count| count > budget.max_structure_items)
-        || changes.object_programs.len() > budget.max_records
+        || changes
+            .object_programs
+            .len()
+            .checked_add(changes.resource_programs.len())
+            .is_none_or(|n| n > budget.max_records)
     {
         return Err(NativeTeletextEditorialImportError::Budget);
     }
@@ -518,13 +534,32 @@ fn merge_changes(
         policy.document.validation.service,
         deadline,
     )?;
+    let budget = policy.document.validation.service;
+    let (resource_operands, resource_programs) =
+        if previous.resource_programs.is_empty() && incoming.resource_programs.is_empty() {
+            (
+                resource_operands::merge(
+                    &previous.resource_operands,
+                    &incoming.resource_operands,
+                    budget,
+                    deadline,
+                )?,
+                Vec::new(),
+            )
+        } else {
+            let catalog = root
+                .original
+                .view()
+                .encoded()
+                .ok_or(NativeTeletextEditorialImportError::Association)?
+                .declared()
+                .semantic()
+                .objects();
+            resource_programs::merge(catalog, previous, incoming, budget, deadline)?
+        };
     Ok(TeletextEditorialChanges {
-        resource_operands: resource_operands::merge(
-            &previous.resource_operands,
-            &incoming.resource_operands,
-            policy.document.validation.service,
-            deadline,
-        )?,
+        resource_operands,
+        resource_programs,
         rows: merge_rows(&previous.rows, &incoming.rows, policy, deadline)?,
         operands: merge_operands(
             &previous.operands,
@@ -572,6 +607,7 @@ fn prepare(
                 None,
                 TeletextEditorialChanges {
                     resource_operands: Vec::new(),
+                    resource_programs: Vec::new(),
                     rows: Vec::new(),
                     operands: Vec::new(),
                     object_operands: Vec::new(),
@@ -600,7 +636,13 @@ fn prepare(
         return Err(NativeTeletextEditorialImportError::Association);
     }
     // NoChanges compares latest files, before cumulative merge/root effects.
-    let incoming = reconcile_files(baseline, &request.files, tti, deadline)?;
+    let incoming = reconcile_files(
+        baseline,
+        &request.files,
+        tti,
+        policy.encoding.composition.service,
+        deadline,
+    )?;
     for changes in [&previous, &incoming] {
         check_operand_budget(changes, policy.document.validation.service)?;
     }
@@ -743,6 +785,22 @@ fn program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOv
     }
 }
 
+fn resource_program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
+    TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays(
+        prepared.provenance.clone(),
+        prepared.cumulative.rows.clone(),
+        prepared.cumulative.operands.clone(),
+        prepared.cumulative.object_operands.clone(),
+        prepared.cumulative.bitmaps.clone(),
+        prepared.cumulative.object_programs.clone(),
+        (
+            prepared.cumulative.resource_operands.clone(),
+            prepared.cumulative.resource_programs.clone(),
+        ),
+    )
+    .map_err(Into::into)
+}
+
 fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
     let has_glyphs = prepared.cumulative.operands.iter().any(|operand| {
         matches!(
@@ -752,7 +810,9 @@ fn cumulative_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditoria
     });
     let (has_drcs_references, has_remaining_glyphs, has_extended_glyphs) =
         glyph_family_flags(&prepared.cumulative);
-    let overlay = if !prepared.cumulative.resource_operands.is_empty() {
+    let overlay = if !prepared.cumulative.resource_programs.is_empty() {
+        resource_program_overlay(prepared)?
+    } else if !prepared.cumulative.resource_operands.is_empty() {
         TeletextSavedEditorialOverlay::new_with_resource_object_operands(
             prepared.provenance.clone(),
             prepared.cumulative.rows.clone(),
@@ -847,6 +907,7 @@ fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredD
         && prepared.cumulative.operands.is_empty()
         && prepared.cumulative.object_operands.is_empty()
         && prepared.cumulative.resource_operands.is_empty()
+        && prepared.cumulative.resource_programs.is_empty()
         && prepared.cumulative.object_programs.is_empty()
         && prepared.cumulative.bitmaps.is_empty()
     {
@@ -930,6 +991,7 @@ fn make_document(
         &baseline.body.project,
         TeletextEditorialEdits {
             resource_operands: &prepared.incoming.resource_operands,
+            resource_programs: &prepared.incoming.resource_programs,
             rows: &prepared.incoming.rows,
             operands: &prepared.incoming.operands,
             object_operands: &prepared.incoming.object_operands,
@@ -938,6 +1000,7 @@ fn make_document(
         },
         TeletextEditorialEdits {
             resource_operands: &prepared.cumulative.resource_operands,
+            resource_programs: &prepared.cumulative.resource_programs,
             rows: &prepared.cumulative.rows,
             operands: &prepared.cumulative.operands,
             object_operands: &prepared.cumulative.object_operands,
@@ -958,6 +1021,7 @@ fn make_document(
             .encoded()
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &prepared.incoming,
+        prepared.policy.encoding.composition.service,
     )?;
     check_deadline(deadline)?;
     Ok((document, document_digest))

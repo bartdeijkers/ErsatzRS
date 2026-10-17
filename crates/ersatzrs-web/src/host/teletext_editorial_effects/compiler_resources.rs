@@ -172,14 +172,33 @@ pub(super) fn check(
             changed_generated(original, edited, resource, rows)?;
         }
     }
-    // Only descriptor-owned supplements may change the emitted page inventory.
-    if !authored_pages(original)
-        .map(EncodedTeletextAuthoredPage::inventory_record)
-        .eq(authored_pages(edited).map(EncodedTeletextAuthoredPage::inventory_record))
-    {
-        return Err(failure());
+    check_authored_inventory(original, edited)
+}
+
+fn check_authored_inventory(
+    original: &EncodedTeletextAuthoredService,
+    edited: &EncodedTeletextAuthoredService,
+) -> Result<()> {
+    let mut before = authored_pages(original);
+    let mut after = authored_pages(edited);
+    loop {
+        let equal = match (before.next(), after.next()) {
+            (None, None) => return Ok(()),
+            (
+                Some(EncodedTeletextAuthoredPage::Object(old)),
+                Some(EncodedTeletextAuthoredPage::Object(new)),
+            ) => {
+                // Object extents are derived from the edited commands. The
+                // resource check authenticates their full canonical headers.
+                old.header().identity() == new.header().identity()
+            }
+            (Some(old), Some(new)) => old.inventory_record() == new.inventory_record(),
+            _ => false,
+        };
+        if !equal {
+            return Err(failure());
+        }
     }
-    Ok(())
 }
 
 fn links(

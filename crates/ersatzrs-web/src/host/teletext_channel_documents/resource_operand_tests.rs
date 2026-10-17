@@ -181,6 +181,7 @@ fn edits(
     EditorialResourceDocuments {
         programs: (vec![], &[], &[], &[], &[]),
         resource_operands,
+        resource_programs: &[],
     }
 }
 fn replay(
@@ -370,6 +371,7 @@ fn resource_replay_bounds_combined_raw_operands_before_producer_allocation() {
         EditorialResourceDocuments {
             programs: (vec![], &local, &[], &[], &[]),
             resource_operands: &resource,
+            resource_programs: &[],
         },
         deadline(),
         None,

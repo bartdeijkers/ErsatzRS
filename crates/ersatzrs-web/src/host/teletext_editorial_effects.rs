@@ -31,6 +31,7 @@ mod charset_context;
 mod compiler_resources;
 mod lineage;
 mod object_operands;
+mod programs;
 mod resource_objects;
 #[cfg(test)]
 mod tests;
@@ -115,6 +116,7 @@ pub(super) struct TeletextEditorialEdits<'a> {
     pub operands: &'a [TeletextLocalProgramOperandOverlay],
     pub object_operands: &'a [TeletextLocalObjectOperandOverlay],
     pub resource_operands: &'a [TeletextResourceObjectOperandOverlay],
+    pub resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     pub object_programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
     pub bitmaps: &'a [TeletextDrcsBitmapOverlay],
 }
@@ -153,6 +155,7 @@ pub(super) fn validate_teletext_editorial_transition(
             operands: &[],
             object_operands: &[],
             resource_operands: &[],
+            resource_programs: &[],
             object_programs: &[],
             bitmaps: &[],
         },
@@ -161,6 +164,7 @@ pub(super) fn validate_teletext_editorial_transition(
             operands: &[],
             object_operands: &[],
             resource_operands: &[],
+            resource_programs: &[],
             object_programs: &[],
             bitmaps: &[],
         },
@@ -185,13 +189,14 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
 ) -> Result<()> {
     check_deadline(deadline)?;
     check_service(original, edited, incoming, cumulative, budget, deadline)?;
-    let resource_context = if incoming.resource_operands.is_empty() {
-        None
-    } else {
-        Some(resource_objects::Context::new(
-            original, edited, budget, deadline,
-        )?)
-    };
+    let resource_context =
+        if incoming.resource_operands.is_empty() && incoming.resource_programs.is_empty() {
+            None
+        } else {
+            Some(resource_objects::Context::new(
+                original, edited, budget, deadline,
+            )?)
+        };
     for (before, after) in
         compiler_resources::authored_pages(original).zip(compiler_resources::authored_pages(edited))
     {
@@ -219,8 +224,10 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
             .object_programs
             .iter()
             .any(|value| value.owner() == owner);
-        let operand_change =
-            operand_change || structural_change || !incoming.resource_operands.is_empty();
+        let operand_change = operand_change
+            || structural_change
+            || !incoming.resource_operands.is_empty()
+            || !incoming.resource_programs.is_empty();
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
         if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() && !compiler_links {
             if before.data_units() != after.data_units() {
@@ -248,8 +255,7 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
         check_resolved(new, budget, deadline)?;
         // Inspect every main and panel cell, including attributes extending to
         // the right and lower-row footprints. The command column is no permit.
-        let lineage =
-            lineage::ProtectedLineage::new(old, new, incoming.object_programs, budget, deadline)?;
+        let lineage = lineage::ProtectedLineage::new(old, new, incoming, budget, deadline)?;
         compare_protected(old, new, &allowed, &lineage, budget, deadline)?;
     }
     check_deadline(deadline)
@@ -278,6 +284,13 @@ fn bounded_editorial_commands(edits: TeletextEditorialEdits<'_>, maximum: usize)
     ]
     .into_iter()
     .chain(edits.object_programs.iter().flat_map(|program| {
+        [
+            program.expected().commands().len(),
+            program.replacement().commands().len(),
+            program.retained_commands().len(),
+        ]
+    }))
+    .chain(edits.resource_programs.iter().flat_map(|program| {
         [
             program.expected().commands().len(),
             program.replacement().commands().len(),
@@ -485,9 +498,7 @@ fn check_resource(
             TeletextEditorialEffectsFailure::ProtectedStructure,
         )
     };
-    if std::mem::discriminant(before) != std::mem::discriminant(after)
-        || before.resource_header() != after.resource_header()
-    {
+    if std::mem::discriminant(before) != std::mem::discriminant(after) {
         return Err(failure());
     }
     let Some(header) = before.resource_header() else {
@@ -497,10 +508,17 @@ fn check_resource(
         .resource_operands
         .iter()
         .any(|change| change.identity().resource() == Some(header.identity()))
+        || incoming
+            .resource_programs
+            .iter()
+            .any(|change| change.identity().resource() == Some(header.identity()))
     {
         return resource_context
             .ok_or_else(failure)?
             .check(before, after, deadline);
+    }
+    if before.resource_header() != after.resource_header() {
+        return Err(failure());
     }
     if !incoming
         .bitmaps

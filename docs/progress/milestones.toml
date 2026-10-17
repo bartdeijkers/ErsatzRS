@@ -10202,6 +10202,32 @@ notation is lint-only. Earlier encoder/delivery/client evidence retains scope.
 No new ordinary-stream, independent/client, browser, platform or full-engine
 acceptance. The current closure list below separates every remaining category.
 
+2026-10-17 original resource structure (partial P9A-04/F1):
+Original POP/GPOP glyph/style insertion, deletion and column changes now retain
+real resource/S1/object identity, whole V6/V7 groups, hidden anchors, root-relative
+V15 intent and every shared Main/panel permission. Canonical native checks allow
+only derived pointer/extent relocation; lifecycle and unselected resources stay
+protected. Import, repeat and undo remain separate from explicit publication.
+
+Canonical source, failure, check and eight GUI-capture receipt:
+tmp/phase9-resource-structure/identity.json SHA256 718f327871def8cb1d6522d2faa404287868b33dec544c246feda1f32f0c5b3d.
+Composed green evidence covers323 normal cases plus one actual pinned editor
+case, not one all-green324 run:193c381d passes319/323; d413fc08 passes88/88,
+including the four corrected cases and the genuine QTM1.0/cac2167/af7cb save.
+The63.901s actual trial uses InsertCopy and Column1->2, unchanged saved bytes,
+a V15 concept, exact fixed P masks/all other pixels on three672x250 previews,
+separate publication/reopen and untouched Night. Four of eight captures inspected.
+Initial RED captures valid native insert/delete targets refused by old slots8/7.
+Scoped review fixed premature full-header inventory rejection of derived extent;
+following-pointer and lifecycle/no-authority negatives pass. The first suite
+also exposed a real hidden-AP/following-AP parser bug; exact original anchors now
+take priority with unchanged oracles. The fourth failure was a false malformed-map
+fixture: preserve valid delete/reinsert[null,null], reject actual wrong-length[0].
+Final strict four-crate all-target Clippy, formatting and architecture pass.
+Earlier unchanged encoder909/context11 and delivery/client receipts retain scope.
+No new ordinary POP, independent acquisition, suitable-client, browser, platform
+or full-engine acceptance. The closure list below remains authoritative.
+
 9A completion list (P9A-01 through P9A-04; replaces the former current map):
 All existing acceptance clauses and historical receipts retain their scope.
 A row closes only when its condition is implemented AND its mandatory evidence
@@ -10210,7 +10236,7 @@ exists; a representative success or source assessment is not full acceptance.
 Missing product functionality:
 | ID / accepted requirement | Implementation and reusable evidence | User action still blocked | Closure condition |
 | --- | --- | --- | --- |
-| F1 — complete resource/editor interchange | V6/V14 original scalars and V7 full-capacity fragments above; bounded Local glyph/style topology, native507/494/481 capacity retained | Insert/delete/reposition resource glyph/style commands, round-trip resource structure/sets, or obtain complete nested dependency/context views | Bounded lossless continuation/dependency and structural import semantics preserve full identities, references, protected consumers and old receipts; no native truncation or installed-package edits. Bundle related scalar/style/resource variants |
+| F1 — complete resource/editor interchange | V6/V14 original scalars, V7 full-capacity fragments and V15 resource glyph/style structure above; canonical extent/pointer and shared-lineage checks | Add/remove resource/object definitions, round-trip remaining call/dependency and resource-set structure, or obtain complete nested dependency/context views | Complete bounded lossless resource/set/dependency semantics preserve full identities, references, protected consumers and old receipts; no native truncation or installed-package edits. Bundle related variants |
 | F2 — metadata, templates, themes and zones | Immutable originals/sidecars, scoped profiles, captured Main/panel permissions and shared preview implemented; actual Local/style/bank/POP saves retained | Round-trip remaining dynamic-field/template/zone bindings, supported geometry/subpage/set changes and explicit template revisions | Versioned metadata and closed import semantics preserve supported identities/navigation/attributes; enforce Free/Zone/Generated boundaries and explicit addon-version authority. Reuse already proven multi-display saves |
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4 and singleton bitmap same-response warm/client proof retained; scoped expiry/native Base return proved | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
@@ -10221,7 +10247,7 @@ Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
 | --- | --- | --- | --- |
 | V1 — complete authored EN300706 Level2.5 | Existing normative wire/model/raster and independent decoder receipts, including encoder909/context11 | Depend on every required Table4/A7/A8/C3, palette/repertoire/alias, non-spacing attribute, DRCS/object/panel and fallback combination | Complete the remaining named conformance/dependency/bounds/update/atomic-rejection coverage through design, validation, encoding, publication and display; independent decoding and TSDuck complement a suitable client |
-| V2 — pinned editor work packages | Actual Base/local-X26/glyph/style/bank/national/panel/POP and V7 nonfirst-fragment saves; native drafts, conflicts, repeat/undo/publication/reopens | Rely on the remaining resource/set/subpage/template/dynamic-field interchange as a whole | After F1/F2, prove one representative actual pinned editor workflow per functional package; preserve supported content/attributes/IDs/navigation, targeted Level3.5/ambiguous rejection and the agent file/validation/preview contract. Repeat only changed boundaries; new resource cold/warm delivery is still unproven |
+| V2 — pinned editor work packages | Actual Base/local-X26/glyph/style/bank/national/panel/POP scalar, V7 nonfirst-fragment and V15 visible structural saves; native drafts, repeat/undo/publication/reopens | Rely on remaining resource/set/subpage/template/dynamic-field interchange as a whole, including ordinary edited POP delivery | After F1/F2, prove a representative actual pinned workflow per functional package; preserve content/attributes/IDs/navigation, targeted Level3.5/ambiguous rejection and agent workflow. Reuse unchanged boundaries; new resource cold/warm delivery remains unproven |
 | V3 — suitable-client display and navigation | Scoped VLC MAIN successes, actual Kodi20.5 enlarged-glyph failure and pinned21.3 source-only assessment; independent actual-panel decoding with supplied context/banks | View enlarged Local/DRCS, panels, resource/default acquisition and page/subpage navigation reliably | A demonstrably suitable pinned runtime must display/navigate the required cases with exact settings/functions/limitations. Stop a candidate on a fixed-oracle failure; no unlimited decoder repair. Existing transport/independent proof does not establish client rendering |
 | V4 — localized headed management | Existing nine-culture/light-dark/SSR/hydrated/no-JS receipts retain original scope; native V6 resource flow now passes | Complete newly supported resource upload/preview/publication and remaining changed admin flows in every culture | Headed Chromium/Firefox light/dark and hydrated/no-JS proof covers the changed boundaries, same validated broadcast model, located errors, pending/applied state and Health. Reuse unaffected UI evidence; do not rerun every variant |
 | V5 — profiles, Lua and restart | Same-addon/two-channel themes/isolation, cursor controls, finite Off/expiry/restart and transactional rollback foundations retained | Trust the complete multi-binding/mirror/shared-profile, profile/On/error/Continue/Refresh/Reset/restart and automatic Base matrix | Prove intervals and precedence, failures/restart inside and after scope, invalid/deleted/wrong-addon/unavailable profiles, no package activation and ordinary playback safety; browser/stream generations must match. Production addon themes remain post-engine work |
@@ -10247,19 +10273,22 @@ The retained actual4+12-panel captures and fixed masks remain the next candidate
 input/oracle (panel ordinary/independent receipts above); do not regenerate them
 merely to assess a candidate.
 
-Selected next product package: F1 resource text/style structure. Large scalar
-export now works, but users still cannot insert/delete/reposition glyph/style
-commands in original POP/GPOP definitions. First capture one valid insertion/
-deletion refusal through the existing V7 project, then extend existing versioned
-intent/correspondence and complete-service effects with the smallest correction.
-Keep full identities, shared Generated protection and immutable originals exact.
-New proof: one representative genuine pinned structural save, exact typed
-reconstruction/re-export/reopen and shared-consumer negatives. Reuse framing,
-scalar/editor and unchanged delivery evidence; repeat publication/stream/client
-boundaries only when changed or their mandatory end proof is still missing.
-Complete dependency views and F2–F6/V1–V6/X1–X2 remain open. Existing bounded
-client qualification has no changed positive candidate; no retry/decoder repair.
-All milestones remain open; production guide waits for generic engine acceptance.
+Selected next work package: F4/V2 ordinary edited POP/GPOP delivery. The user
+still cannot rely on a published V15 object reaching cold and already-open
+ordinary responses with correct receiver lifecycle. Reuse the existing three-viewer
+DRCS warm fixture/source/Origin/cycle machinery and the genuine visible
+column1->2 POP save above; do not repeat unrelated editor/admin variants.
+Concrete tool gap: drcs_bitmap_warm_delivery::pattern deliberately refuses POP/GPOP
+and assumes shared bitmap counters. Extend only the necessary exact full-identity,
+per-resource lifecycle/body/pointer checks. Prove accepted/pending offsets, cold
+attachment and unchanged open responses with TSDuck, full source AV, exact closed
+cycles, immutable originals/Night and reopened accepted artifacts. The current
+native relocation test is not ordinary packet-extent proof. Existing supplied-
+object/fresh independent decoders do not prove automatic or persistent POP
+acquisition; retain that missing gate and X1/V3 until a suitable candidate exists.
+No client retry/repair, new general audit or production content starts.
+F1 dependency/set views, F2–F6/V1–V6/X1–X2 remain open; no criterion or necessary
+limitation is waived. Production guide waits for independent generic acceptance.
 
 Direct panel text/mosaic product checkpoint (P9A-04, partial criterion): exact
 same-family G0/G1 edits in existing page-local and original Local definitions now

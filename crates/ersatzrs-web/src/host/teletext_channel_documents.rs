@@ -46,6 +46,7 @@ type EditorialProgramDocuments<'a> = (
 pub(super) struct EditorialResourceDocuments<'a> {
     pub(super) programs: EditorialProgramDocuments<'a>,
     pub(super) resource_operands: &'a [TeletextResourceObjectOperandOverlay],
+    pub(super) resource_programs: &'a [ersatzrs_domain::TeletextResourceObjectProgramOverlay],
 }
 
 #[cfg(test)]
@@ -497,6 +498,7 @@ pub(super) fn encode_original_channel_documents_with_editorial_programs(
         EditorialResourceDocuments {
             programs: editorial,
             resource_operands: &[],
+            resource_programs: &[],
         },
         deadline,
         region,
@@ -515,7 +517,10 @@ pub(super) fn encode_original_channel_documents_with_editorial_resources(
     region: Option<TeletextEncodingRegion>,
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
-    if editorial.resource_operands.is_empty() && editorial.programs.4.is_empty() {
+    if editorial.resource_operands.is_empty()
+        && editorial.resource_programs.is_empty()
+        && editorial.programs.4.is_empty()
+    {
         let (rows, page, objects, bitmaps, _) = editorial.programs;
         return encode_original_channel_documents_with_editorial_overlays(
             selection,
@@ -631,6 +636,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_programs(
         EditorialResourceDocuments {
             programs: editorial,
             resource_operands: &[],
+            resource_programs: &[],
         },
         deadline,
         region,
@@ -649,15 +655,17 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     policy: TeletextChannelDocumentEncodingPolicy,
 ) -> Result<EncodedChannelTeletextOriginals, ChannelTeletextDocumentEncodingError> {
     let resource_operands = editorial.resource_operands;
+    let resource_programs = editorial.resource_programs;
     let (_, operands, object_operands, bitmaps, programs) = &editorial.programs;
     check_deadline(deadline)?;
     check_producer_budget(documents.len(), &policy)?;
-    if !resource_operands.is_empty() {
+    if !resource_operands.is_empty() || !resource_programs.is_empty() {
         check_editorial_resource_budget(
             operands.len(),
             object_operands.len(),
             programs,
             resource_operands.len(),
+            resource_programs,
             policy.composition.service.max_commands,
         )?;
     }
@@ -668,6 +676,7 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
             || !bitmaps.is_empty()
             || !programs.is_empty()
             || !resource_operands.is_empty()
+            || !resource_programs.is_empty()
         {
             return Err(ChannelTeletextDocumentEncodingError::Association);
         }
@@ -761,6 +770,11 @@ fn apply_editorial_operands(
             .with_resource_object_operand_overlays(resource_operands, budget)
             .map_err(editorial_semantic_error)?;
     }
+    if !editorial.resource_programs.is_empty() {
+        declared = declared
+            .with_resource_object_program_overlays(editorial.resource_programs, budget)
+            .map_err(editorial_semantic_error)?;
+    }
     if !bitmaps.is_empty() {
         declared = declared
             .with_drcs_bitmap_overlays(bitmaps, budget)
@@ -774,12 +788,19 @@ fn check_editorial_resource_budget(
     object_operands: usize,
     programs: &[TeletextLocalObjectGlyphProgramOverlay],
     resource_operands: usize,
+    resource_programs: &[ersatzrs_domain::TeletextResourceObjectProgramOverlay],
     maximum: usize,
 ) -> Result<(), ChannelTeletextDocumentEncodingError> {
     let mut remaining = maximum;
     let counts = [page_operands, object_operands, resource_operands]
         .into_iter()
         .chain(programs.iter().flat_map(|program| {
+            [
+                program.expected().commands().len(),
+                program.replacement().commands().len(),
+            ]
+        }))
+        .chain(resource_programs.iter().flat_map(|program| {
             [
                 program.expected().commands().len(),
                 program.replacement().commands().len(),

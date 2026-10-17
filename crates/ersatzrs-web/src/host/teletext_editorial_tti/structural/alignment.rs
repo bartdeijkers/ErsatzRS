@@ -52,6 +52,99 @@ pub(super) fn with_styles(
     kernel::solve(old, new, true, location, deadline)
 }
 
+pub(super) fn bounded(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    if old.len() > maximum || new.len() > maximum {
+        return Err(fail(location));
+    }
+    let anchors = old
+        .iter()
+        .filter_map(|(ordinal, command)| {
+            hidden_position(command).map(|column| (*ordinal, *command, column))
+        })
+        .collect::<Vec<_>>();
+    let physical = old
+        .iter()
+        .filter(|(_, command)| hidden_position(command).is_none())
+        .copied()
+        .collect::<Vec<_>>();
+    let bounds = physical
+        .iter()
+        .map(|(ordinal, _)| {
+            let index = anchors.partition_point(|(anchor, _, _)| anchor < ordinal);
+            (
+                index.checked_sub(1).map_or(0, |index| anchors[index].2),
+                anchors.get(index).map_or(39, |anchor| anchor.2),
+            )
+        })
+        .collect::<Vec<_>>();
+    let aligned = kernel::solve_physical(&physical, new, maximum, &bounds, location, deadline)?;
+    merge_anchors(&aligned, &anchors, maximum, location, deadline)
+}
+
+fn merge_anchors(
+    aligned: &Aligned,
+    anchors: &[(usize, TeletextEnhancementCommand, u8)],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    if aligned
+        .commands
+        .len()
+        .checked_add(anchors.len())
+        .is_none_or(|count| count > maximum)
+    {
+        return Err(fail(location));
+    }
+    let mut insertions = Vec::new();
+    let mut previous = 0;
+    for (ordinal, command, _) in anchors {
+        location.check_deadline(deadline)?;
+        let lower = aligned
+            .retained
+            .iter()
+            .rposition(|source| source.is_some_and(|source| source < *ordinal))
+            .map_or(0, |index| index + 1)
+            .max(previous);
+        let upper = aligned
+            .retained
+            .iter()
+            .position(|source| source.is_some_and(|source| source > *ordinal))
+            .unwrap_or(aligned.commands.len());
+        let boundary = (lower..=upper)
+            .find(|boundary| kernel::at_anchor(command, &aligned.commands, *boundary))
+            .ok_or_else(|| fail(location))?;
+        insertions.push((boundary, *ordinal, *command));
+        previous = boundary;
+    }
+    let mut result = Aligned {
+        commands: Vec::new(),
+        retained: Vec::new(),
+    };
+    let mut inserted = insertions.into_iter().peekable();
+    for boundary in 0..=aligned.commands.len() {
+        while inserted
+            .peek()
+            .is_some_and(|(index, _, _)| *index == boundary)
+        {
+            let (_, ordinal, command) = inserted.next().ok_or_else(|| fail(location))?;
+            result.commands.push(command);
+            result.retained.push(Some(ordinal));
+        }
+        if let Some(command) = aligned.commands.get(boundary) {
+            result.commands.push(*command);
+            result.retained.push(aligned.retained[boundary]);
+        }
+    }
+    Ok(result)
+}
+
 fn editable(command: &TeletextEnhancementCommand, styles: bool) -> bool {
     glyph_family(command).is_some() || (styles && style::kind(command).is_some())
 }
@@ -67,9 +160,13 @@ pub(super) fn hidden_position(command: &TeletextEnhancementCommand) -> Option<u8
     }
 }
 
-fn weight(old: &TeletextEnhancementCommand, new: &TeletextEnhancementCommand) -> usize {
+fn weight(
+    old: &TeletextEnhancementCommand,
+    new: &TeletextEnhancementCommand,
+    exact: usize,
+) -> usize {
     if old == new {
-        209
+        exact
     } else {
         usize::from(glyph_family(old) == glyph_family(new) && glyph_family(old).is_some())
     }

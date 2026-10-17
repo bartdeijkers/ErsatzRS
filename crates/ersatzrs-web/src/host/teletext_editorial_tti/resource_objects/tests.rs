@@ -599,3 +599,6 @@ fn resource_tti_identity_limits_and_original_deadline_remain_enforced() {
 
 #[path = "tests/fragments.rs"]
 mod fragments;
+
+#[path = "tests/structure.rs"]
+mod structure;

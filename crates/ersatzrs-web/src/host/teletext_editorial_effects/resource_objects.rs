@@ -90,7 +90,9 @@ impl<'a> Context<'a> {
         else {
             return Err(structure());
         };
-        if before.header() != after.header()
+        // Canonical old/new encodings below authenticate derived last-packet
+        // extents and pointer relocation; identity/lifecycle are not upload authority.
+        if before.header().identity() != after.header().identity()
             || before.transmission_mode() != after.transmission_mode()
         {
             return Err(structure());

@@ -141,6 +141,7 @@ fn check(
             operands: &changes,
             object_operands: &[],
             resource_operands: &[],
+            resource_programs: &[],
             object_programs: &[],
             bitmaps: &[],
         },

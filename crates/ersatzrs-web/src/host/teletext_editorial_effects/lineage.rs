@@ -1,9 +1,13 @@
 //! Exact before/after source correspondence for checked Local glyph structure.
 //! Inserted commands never become missing provenance or an original source.
-use super::{check_deadline, error, Result, TeletextEditorialEffectsFailure};
+use super::{
+    check_deadline, error,
+    programs::{self, Program},
+    Result, TeletextEditorialEdits, TeletextEditorialEffectsFailure,
+};
 use ersatzrs_domain::{
-    TeletextAttributeSource, TeletextEnhancementSource, TeletextLocalObjectGlyphProgramOverlay,
-    TeletextObjectIdentity, TeletextSpatialEvent, TeletextSpatialRootSource,
+    TeletextAttributeSource, TeletextEnhancementSource, TeletextObjectIdentity,
+    TeletextSpatialEvent, TeletextSpatialRootSource,
 };
 use ersatzrs_ffmpeg::teletext::{TeletextAuthoredServiceEncodingBudget, TeletextMainComposition};
 use std::{collections::BTreeMap, time::Instant};
@@ -23,22 +27,22 @@ type EventKey = (
 
 #[derive(Default)]
 pub(super) struct ProtectedLineage<'a> {
-    programs: BTreeMap<TeletextObjectIdentity, &'a TeletextLocalObjectGlyphProgramOverlay>,
+    programs: BTreeMap<TeletextObjectIdentity, Program<'a>>,
     events: Option<Vec<Option<usize>>>,
 }
 impl<'a> ProtectedLineage<'a> {
     pub(super) fn new(
         before: &TeletextMainComposition,
         after: &TeletextMainComposition,
-        programs: &'a [TeletextLocalObjectGlyphProgramOverlay],
+        edits: TeletextEditorialEdits<'a>,
         budget: &TeletextAuthoredServiceEncodingBudget,
         deadline: Instant,
     ) -> Result<Self> {
         let mut result = Self::default();
-        for program in programs
-            .iter()
-            .filter(|program| program.owner() == before.owner())
-        {
+        for program in programs::all(edits).filter(|program| match program {
+            Program::Local(value) => value.owner() == before.owner(),
+            Program::Resource(_) => true,
+        }) {
             check_deadline(deadline)?;
             if result
                 .programs

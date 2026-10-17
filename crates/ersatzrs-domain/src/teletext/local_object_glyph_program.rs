@@ -224,6 +224,14 @@ impl TeletextLocalObjectGlyphProgramOverlay {
     }
 }
 
+pub(super) fn validate_style_correspondence(
+    expected: &TeletextEnhancementProgram,
+    replacement: &TeletextEnhancementProgram,
+    retained: &[Option<usize>],
+) -> Result<(), TeletextLocalObjectGlyphProgramOverlayError> {
+    validate_correspondence(expected, replacement, retained, GlyphPolicy::StyleCommands)
+}
+
 fn validate_correspondence(
     expected: &TeletextEnhancementProgram,
     replacement: &TeletextEnhancementProgram,

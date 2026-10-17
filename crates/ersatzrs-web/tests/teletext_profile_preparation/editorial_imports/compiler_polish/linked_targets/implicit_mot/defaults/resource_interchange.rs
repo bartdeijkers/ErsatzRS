@@ -3,6 +3,8 @@
 mod actual_editor_trial;
 #[path = "resource_interchange/fragments.rs"]
 mod fragments;
+#[path = "resource_interchange/structure.rs"]
+mod structure;
 
 use super::*;
 use ersatzrs_app::teletext_design_documents::{

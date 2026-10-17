@@ -2,6 +2,9 @@
 use super::*;
 use serde_json::{json, Value};
 
+#[path = "resource_object_program_tests.rs"]
+mod programs;
+
 fn op(value: Value) -> TeletextColumnOperation {
     serde_json::from_value(value).unwrap()
 }

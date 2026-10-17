@@ -301,15 +301,28 @@ kind, raw page, logical S1 and object identity. Protected V7 descriptions identi
 command fragments and direct the user to native preview for full context. Earlier
 AP, charset, colour, DRCS and nested dependency context is not fabricated in an
 isolated editor member. Original protected files, wrapper invocations, definition
-markers, hidden prefixes and padding stay exact. Only an authenticated original
-semantic scalar word may change, followed by full re-encoding and permission
-checks on every shared consumer. Authenticated receipt replay applies all stored
-intent; generic or legacy replay refuses unapplied intent. Import, repeat and undo
-save concepts without publishing. Historical carriers retain their exact original
-reconstruction; an uploaded project cannot upgrade its receipt. Resource
-structural edits, complete dependency views and full resource/set interchange
-remain required work. P9A-04 owns verification and remaining acceptance; this
-contract update does not claim a completed runtime or external-editor trial.
+markers, hidden prefixes and padding stay exact. Authenticated original scalar
+changes use version14. Private version15 adds ordered resource glyph/style
+insertion, deletion and column changes, using the existing Local correspondence
+validator with the real Public/Global identity and trusted service budgets.
+Logical invisible commands are not capped at the physical507-word capacity.
+
+Reconcile complete ordered original companion groups before reconstructing semantic
+intent; mandatory hidden anchors stay exact. The uploaded partition need not equal
+the compiler's newly greedy fragment boundaries. Whole native re-encoding checks
+resource identity/lifecycle and canonically derived extent/pointer relocation;
+unselected resources remain exact. Every shared Main/panel consumer retains its
+captured permissions and original writer lineage. New commands cannot impersonate
+original writers. Scalar-before-program composition and survivor correspondence
+retain root-relative repeat/undo; exact undo removes redundant structural intent.
+
+Authenticated receipt replay applies all stored intent; generic or legacy replay
+refuses unapplied intent. Import, repeat and undo save concepts without publishing.
+Historical carriers and concept versions1–14 retain their exact original contracts;
+an uploaded project cannot upgrade its receipt. Complete dependency views,
+resource/set structure and full interchange remain required work. P9A-04 owns
+actual verification and remaining acceptance; this contract alone grants no
+runtime, editor, suitable-client or complete-engine acceptance.
 
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the

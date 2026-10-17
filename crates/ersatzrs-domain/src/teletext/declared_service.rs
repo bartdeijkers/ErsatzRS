@@ -263,6 +263,23 @@ impl TeletextDeclaredService {
         Ok(self)
     }
 
+    /// Replace exact existing POP/GPOP structure while retaining authenticated
+    /// MOT/default selections, resource inventory, identities and declarations.
+    /// Full semantic reconstruction validates dependencies; host edit permission,
+    /// physical packing and explicit publication remain separate gates.
+    /// # Errors
+    /// Rejects empty, duplicate, absent or stale changes and service/collector limits.
+    pub fn with_resource_object_program_overlays(
+        mut self,
+        overlays: &[super::TeletextResourceObjectProgramOverlay],
+        budget: super::TeletextServiceBudget,
+    ) -> Result<Self, super::TeletextServiceError> {
+        self.semantic = self
+            .semantic
+            .with_resource_object_program_overlays(overlays, budget)?;
+        Ok(self)
+    }
+
     /// Replace checked Local glyph programs while retaining all authenticated
     /// declarations, selections, identities, defaults and resource inventory.
     /// Hosts must qualify compiler correspondence and every shared consumer;

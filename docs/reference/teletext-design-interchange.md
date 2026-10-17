@@ -5619,9 +5619,10 @@ Open that companion normally in the pinned QTM editor. The disposable Local
 invocation and definition preserve the original object type and exact body.
 They are editor syntax, not a new owner or replacement resource identity. The
 canonical wrapper includes PS C000, RE0, CT20,T and an empty header. Only an
-authenticated original scalar word can change. Metadata, hidden prefixes,
-invocations, markers, padding and protected native files cannot be edited.
-Import uses private concept version 14, exact full-resource/S1/ID correspondence,
+authenticated original scalar word can change under concept version14; version15
+also permits bounded glyph/style insertion, deletion and column changes as described
+below. Metadata, hidden prefixes, invocations, markers, padding and protected native
+files cannot be edited. Scalar import uses private concept version14, exact full-resource/S1/ID correspondence,
 complete native re-encoding and captured permissions for every shared consumer.
 Repeated imports retain root-relative intent; undo does not publish.
 
@@ -5657,11 +5658,35 @@ V7 includes the protected description `Object command fragment N/M; use native
 preview for full context.` It labels a command-edit view, not an independently
 executing resource. Earlier AP, charset, colour and DRCS state, plus nested
 resource dependencies, are not invented inside a fragment. Use the native shared
-model to preview the complete consumer context. Only the same authenticated
-original scalar edits supported by V6 are accepted; resource command insertion,
-deletion or repositioning, complete nested-dependency editor views and full
-resource/set interchange remain open requirements. Historical receipts keep their
-exact original carrier and cannot acquire V7 authority through uploaded metadata.
+model to preview the complete consumer context. V6/V7 original resource groups
+also accept the version15 structural intentions below. Complete nested-dependency
+editor views and full resource/set interchange remain open requirements. Historical
+receipts keep their exact original carrier and cannot acquire V7 authority through
+uploaded metadata.
+
+Private concept version15 records an original full resource/object identity,
+expected/replacement typed programs and ordered retained-command correspondence.
+It extends the shared checked glyph/style semantics to Public POP and Global GPOP:
+insert/delete glyphs and foreground/background/attribute commands, or change their
+columns. Retained glyph families and G3 compatibility stay exact; context, calls,
+position anchors and hidden original commands cannot be rewritten. Service budgets
+bound logical commands before allocation; the native encoder independently enforces
+physical resource capacity. Local's208-word policy does not limit resource programs.
+
+Upload the complete unchanged sidecar and named file set. Whole companion groups
+are authenticated and joined before semantic reconstruction. Missing/extra members,
+protected wrapper changes and unauthorized shared effects reject with located errors.
+Canonical candidate validation accepts original edited partitions without requiring
+them to equal newly greedy export boundaries. Complete native encoding authenticates
+lifecycle and regenerates only derived resource extents and following pointers.
+
+Native preview validates every shared Main/panel consumer against captured Free/Zone/
+Generated permissions. Repeat/undo composes exact root-relative programs and scalar
+intent; an exact undo removes the program. Re-export uses the unchanged V6/V7
+carrier policy. Old schemas and receipts retain their contracts. Legacy/generic
+restoration cannot silently omit resource intent. Saving still creates an unpublished
+concept; explicit request/publication remains separate and installed packages stay
+unchanged. See P9A-04 for actual editor/native proof and remaining acceptance.
 P9A-04 owns verified scope and outstanding evidence; implementation of this
 contract does not itself establish actual-editor, stream or client acceptance.
 

@@ -1,7 +1,7 @@
 //! Fragment authority stays on the original full object and command ordinals.
 use super::*;
 
-fn large_service() -> EncodedTeletextAuthoredService {
+pub(super) fn large_service() -> EncodedTeletextAuthoredService {
     let mut commands = original_commands(2, b'A');
     commands.extend((0..440).map(|_| TeletextEnhancementCommand::AtColumn {
         column: 8,
@@ -9,7 +9,7 @@ fn large_service() -> EncodedTeletextAuthoredService {
     }));
     compile_commands(false, 2, b'A', TeletextObjectType::Passive, Some(commands))
 }
-fn fragment_project(service: &EncodedTeletextAuthoredService) -> TeletextExportProject {
+pub(super) fn fragment_project(service: &EncodedTeletextAuthoredService) -> TeletextExportProject {
     let mut project = project(service, false);
     "qteletextmaker-1.0-carrier-v7".clone_into(&mut project.editor_profile);
     project.assets.pop();

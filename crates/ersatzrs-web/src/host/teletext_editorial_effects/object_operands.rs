@@ -1,12 +1,14 @@
 //! Exact original definition changes; every invocation still needs permission.
 
 use super::{
-    check_deadline, error, Result, TeletextEditorialEdits, TeletextEditorialEffectsFailure,
+    check_deadline, error,
+    programs::{self, Program},
+    Result, TeletextEditorialEdits, TeletextEditorialEffectsFailure,
 };
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
-    TeletextLocalObjectGlyphProgramOverlay, TeletextLocalObjectOperandOverlay,
-    TeletextObjectIdentity, TeletextResourceObjectOperandOverlay,
+    TeletextLocalObjectOperandOverlay, TeletextObjectIdentity,
+    TeletextResourceObjectOperandOverlay,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -65,9 +67,13 @@ pub(super) fn check(
     cumulative: TeletextEditorialEdits<'_>,
     deadline: Instant,
 ) -> Result<()> {
-    let incoming_programs = incoming.object_programs;
-    let cumulative_programs = cumulative.object_programs;
-    if incoming_programs.is_empty() && cumulative_programs.is_empty() {
+    let incoming_programs = programs::all(incoming);
+    let cumulative_programs = programs::all(cumulative);
+    if incoming.object_programs.is_empty()
+        && incoming.resource_programs.is_empty()
+        && cumulative.object_programs.is_empty()
+        && cumulative.resource_programs.is_empty()
+    {
         return check_scalar_operands(before, after, incoming, cumulative, deadline);
     }
     let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
@@ -157,10 +163,7 @@ pub(super) fn check(
 fn check_final_operands(
     after: &TeletextEnhancementObjectCatalog,
     cumulative: TeletextEditorialEdits<'_>,
-    final_programs: &BTreeMap<
-        ersatzrs_domain::TeletextObjectIdentity,
-        &TeletextLocalObjectGlyphProgramOverlay,
-    >,
+    final_programs: &BTreeMap<TeletextObjectIdentity, Program<'_>>,
     deadline: Instant,
 ) -> Result<()> {
     let association = || error(None, None, TeletextEditorialEffectsFailure::Association);
@@ -297,6 +300,7 @@ fn check_operands(
             operands: &[],
             object_operands,
             resource_operands: &[],
+            resource_programs: &[],
             object_programs: &[],
             bitmaps: &[],
         }

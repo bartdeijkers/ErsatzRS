@@ -33,8 +33,16 @@ pub(super) struct Body {
 }
 impl Body {
     pub fn read(words: &[u32], location: Location, deadline: Instant) -> Result<Self> {
+        Self::read_bounded(words, 208, location, deadline)
+    }
+    pub(super) fn read_bounded(
+        words: &[u32],
+        maximum: usize,
+        location: Location,
+        deadline: Instant,
+    ) -> Result<Self> {
         location.check_deadline(deadline)?;
-        if words.len() > 208 {
+        if words.len() > maximum {
             return Err(fail(location));
         }
         let mut result = Self {

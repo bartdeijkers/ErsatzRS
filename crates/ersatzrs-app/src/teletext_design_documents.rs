@@ -1292,6 +1292,13 @@ enum Path {
     EditorialResourceOperand,
     EditorialGlyphPrograms,
     EditorialGlyphProgram,
+    EditorialResourcePrograms,
+    EditorialResourceProgram,
+    EditorialResourceProgramDefinition,
+    EditorialResourceProgramCommands,
+    EditorialResourceProgramCommand,
+    EditorialResourceRetainedCommands,
+    EditorialResourceRetainedCommand,
     EditorialProgramDefinition,
     EditorialProgramCommands,
     EditorialProgramCommand,
@@ -1308,6 +1315,7 @@ struct Scan {
     context: usize,
     editorial_items: usize,
     editorial_operands: usize,
+    editorial_programs: usize,
     editorial_bytes: usize,
     error: Option<TeletextDesignDocumentError>,
 }
@@ -1353,14 +1361,25 @@ impl<'de> DeserializeSeed<'de> for CountedSeed<'_> {
                 editorial_overlay::local_object_glyph_programs::StoredGlyphProgram,
             >(self.count))?;
         }
-        if matches!(self.inner.path, Path::EditorialProgramCommand) {
+        if matches!(self.inner.path, Path::EditorialResourceProgram) {
+            self.inner.scan.check(storage::<
+                editorial_overlay::resource_object_programs::StoredResourceProgram,
+            >(self.count))?;
+        }
+        if matches!(
+            self.inner.path,
+            Path::EditorialProgramCommand | Path::EditorialResourceProgramCommand
+        ) {
             self.inner
                 .scan
                 .check(storage::<ersatzrs_domain::TeletextEnhancementCommand>(
                     self.count,
                 ))?;
         }
-        if matches!(self.inner.path, Path::EditorialRetainedCommand) {
+        if matches!(
+            self.inner.path,
+            Path::EditorialRetainedCommand | Path::EditorialResourceRetainedCommand
+        ) {
             self.inner
                 .scan
                 .check(storage::<Option<usize>>(self.count))?;
@@ -1384,8 +1403,11 @@ impl Scan {
                 | Path::EditorialObjectOperand
                 | Path::EditorialResourceOperand
                 | Path::EditorialGlyphProgram
+                | Path::EditorialResourceProgram
                 | Path::EditorialProgramCommand
+                | Path::EditorialResourceProgramCommand
                 | Path::EditorialRetainedCommand
+                | Path::EditorialResourceRetainedCommand
                 | Path::EditorialBitmap
         ) {
             return Ok(());
@@ -1396,6 +1418,7 @@ impl Scan {
                 | Path::EditorialObjectOperand
                 | Path::EditorialResourceOperand
                 | Path::EditorialProgramCommand
+                | Path::EditorialResourceProgramCommand
         ) {
             self.editorial_operands = self
                 .editorial_operands
@@ -1405,6 +1428,20 @@ impl Scan {
                 self.editorial_operands,
                 self.budget.validation.service.max_commands,
                 "editorial operands",
+            ))?;
+        }
+        if matches!(
+            path,
+            Path::EditorialGlyphProgram | Path::EditorialResourceProgram
+        ) {
+            self.editorial_programs = self
+                .editorial_programs
+                .checked_add(1)
+                .ok_or_else(|| E::custom("saved program count overflow"))?;
+            self.check(limit(
+                self.editorial_programs,
+                self.budget.validation.service.max_objects,
+                "editorial object programs",
             ))?;
         }
         self.editorial_items = self
@@ -1544,6 +1581,18 @@ impl<'de> Visitor<'de> for ScanSeed<'_> {
                 (Path::EditorialOverlay, "local_object_glyph_program_overlays") => {
                     Path::EditorialGlyphPrograms
                 }
+                (Path::EditorialOverlay, "resource_object_program_overlays") => {
+                    Path::EditorialResourcePrograms
+                }
+                (Path::EditorialResourceProgram, "expected" | "replacement") => {
+                    Path::EditorialResourceProgramDefinition
+                }
+                (Path::EditorialResourceProgramDefinition, "commands") => {
+                    Path::EditorialResourceProgramCommands
+                }
+                (Path::EditorialResourceProgram, "retained_commands") => {
+                    Path::EditorialResourceRetainedCommands
+                }
                 (Path::EditorialGlyphProgram, "expected" | "replacement") => {
                     Path::EditorialProgramDefinition
                 }
@@ -1668,6 +1717,21 @@ fn glyph_program_sequence_limits(
             Path::EditorialGlyphProgram,
             "editorial glyph programs",
         ),
+        Path::EditorialResourcePrograms => (
+            budget.validation.service.max_objects,
+            Path::EditorialResourceProgram,
+            "editorial resource programs",
+        ),
+        Path::EditorialResourceProgramCommands => (
+            budget.validation.service.max_commands,
+            Path::EditorialResourceProgramCommand,
+            "editorial resource program commands",
+        ),
+        Path::EditorialResourceRetainedCommands => (
+            budget.validation.service.max_structure_items,
+            Path::EditorialResourceRetainedCommand,
+            "editorial resource retained commands",
+        ),
         Path::EditorialProgramCommands => (
             budget.validation.service.max_commands.min(208),
             Path::EditorialProgramCommand,
@@ -1705,6 +1769,7 @@ fn preflight_json_for_format(
         context: 0,
         editorial_items: 0,
         editorial_operands: 0,
+        editorial_programs: 0,
         editorial_bytes: 0,
         error: None,
     };

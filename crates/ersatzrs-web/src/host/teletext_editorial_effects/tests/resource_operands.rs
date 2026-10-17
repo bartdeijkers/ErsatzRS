@@ -85,7 +85,17 @@ fn links(global: bool) -> TeletextX27Level25Links {
     )
     .unwrap()
 }
+#[path = "resource_operands/programs.rs"]
+mod programs;
+
 fn compile(fixture: Fixture) -> EncodedTeletextAuthoredService {
+    compile_with_program(fixture, None, false)
+}
+fn compile_with_program(
+    fixture: Fixture,
+    program: Option<TeletextEnhancementProgram>,
+    same_resource: bool,
+) -> EncodedTeletextAuthoredService {
     let policy = policy();
     let lifted = ersatzrs_ffmpeg::teletext::lift_teletext_v1_page_set(
         draft("ASCII"),
@@ -119,14 +129,20 @@ fn compile(fixture: Fixture) -> EncodedTeletextAuthoredService {
         TeletextEnhancementObjectDefinition {
             identity: target(fixture.global, fixture.object_id),
             object_type: TeletextObjectType::Passive,
-            program: TeletextEnhancementProgram::new(vec![
-                at(0, foreground(fixture.colour)),
-                at(0, glyph(fixture.code)),
-            ])
-            .unwrap(),
+            program: program.unwrap_or_else(|| {
+                TeletextEnhancementProgram::new(vec![
+                    at(0, foreground(fixture.colour)),
+                    at(0, glyph(fixture.code)),
+                ])
+                .unwrap()
+            }),
         },
         TeletextEnhancementObjectDefinition {
-            identity: target(!fixture.global, 1),
+            identity: if same_resource {
+                target(fixture.global, 65521)
+            } else {
+                target(!fixture.global, 1)
+            },
             object_type: TeletextObjectType::Passive,
             program: TeletextEnhancementProgram::new(vec![at(0, glyph(fixture.other_code))])
                 .unwrap(),
@@ -207,6 +223,7 @@ fn edits(resource_operands: &[TeletextResourceObjectOperandOverlay]) -> Teletext
         operands: &[],
         object_operands: &[],
         resource_operands,
+        resource_programs: &[],
         object_programs: &[],
         bitmaps: &[],
     }

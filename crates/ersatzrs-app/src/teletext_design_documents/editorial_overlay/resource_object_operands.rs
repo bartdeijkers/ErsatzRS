@@ -42,7 +42,7 @@ impl<'de> Deserialize<'de> for StoredResourceObjectOperand {
 }
 
 #[derive(Serialize)]
-struct StoredResourceObjectIdentity(TeletextObjectIdentity);
+pub(super) struct StoredResourceObjectIdentity(pub(super) TeletextObjectIdentity);
 impl<'de> Deserialize<'de> for StoredResourceObjectIdentity {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
@@ -187,4 +187,27 @@ impl Serialize for BorrowedResourceObjectOperands<'_> {
         }
         sequence.end()
     }
+}
+
+/// Restore the unchanged V14 ordering before the common attachment check.
+pub(super) fn restore_overlay(
+    provenance: super::TeletextSavedEditorialProvenance,
+    pages: Vec<ersatzrs_domain::TeletextPhysicalBaseOverlay>,
+    operands: Vec<ersatzrs_domain::TeletextLocalProgramOperandOverlay>,
+    objects: Vec<ersatzrs_domain::TeletextLocalObjectOperandOverlay>,
+    bitmaps: Vec<ersatzrs_domain::TeletextDrcsBitmapOverlay>,
+    programs: Vec<super::local_object_glyph_programs::StoredGlyphProgram>,
+    resources: Vec<StoredResourceObjectOperand>,
+) -> Result<super::TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+    let programs =
+        super::local_object_glyph_programs::restore(programs, super::ProgramPolicy::StyleCommands)?;
+    super::TeletextSavedEditorialOverlay::new_with_resource_object_operands(
+        provenance,
+        pages,
+        operands,
+        objects,
+        bitmaps,
+        programs,
+        restore(resources)?,
+    )
 }

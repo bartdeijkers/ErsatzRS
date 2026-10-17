@@ -10,9 +10,43 @@ pub(super) fn solve(
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
+    solve_bounded(old, new, styles, 208, location, deadline)
+}
+
+pub(super) fn solve_bounded(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    styles: bool,
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    solve_matched(old, new, (styles, maximum, &[]), location, deadline)
+}
+
+pub(super) fn solve_physical(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    maximum: usize,
+    bounds: &[(u8, u8)],
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    solve_matched(old, new, (true, maximum, bounds), location, deadline)
+}
+
+fn solve_matched(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    policy: (bool, usize, &[(u8, u8)]),
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    let (styles, maximum, bounds) = policy;
     location.check_deadline(deadline)?;
-    if old.len() > 208
-        || new.len() > 208
+    if (!bounds.is_empty() && bounds.len() != old.len())
+        || old.len() > maximum
+        || new.len() > maximum
         || old
             .iter()
             .any(|(_, command)| !editable(command, styles) && hidden_position(command).is_none())
@@ -22,14 +56,24 @@ pub(super) fn solve(
             .filter(|(_, command)| hidden_position(command).is_some())
             .count()
             .checked_add(new.len())
-            .is_none_or(|count| count > 208)
+            .is_none_or(|count| count > maximum)
     {
         return Err(fail(location));
     }
     let width = new.len() + 1;
     // None is unreachable: a mandatory anchor cannot disappear through an
     // uninitialized zero-score cell or a skip-old transition.
-    let mut scores = vec![None; (old.len() + 1) * width];
+    let cells = old
+        .len()
+        .checked_add(1)
+        .and_then(|height| height.checked_mul(width))
+        .ok_or_else(|| fail(location))?;
+    let mut scores = Vec::<Option<usize>>::new();
+    scores
+        .try_reserve_exact(cells)
+        .map_err(|_| fail(location))?;
+    scores.resize(cells, None);
+    let exact = maximum.checked_add(1).ok_or_else(|| fail(location))?;
     scores[0] = Some(0);
     for i in 0..=old.len() {
         location.check_deadline(deadline)?;
@@ -51,10 +95,16 @@ pub(super) fn solve(
                 } else {
                     score = score.max(scores[(i - 1) * width + j]);
                     if j != 0 {
-                        let weight = weight(before, &new[j - 1]);
+                        let weight = if permits(i - 1, &new[j - 1], bounds) {
+                            weight(before, &new[j - 1], exact)
+                        } else {
+                            0
+                        };
                         if weight != 0 {
-                            score = score
-                                .max(scores[(i - 1) * width + j - 1].map(|value| value + weight));
+                            score = score.max(
+                                scores[(i - 1) * width + j - 1]
+                                    .and_then(|value| value.checked_add(weight)),
+                            );
                         }
                     }
                 }
@@ -62,10 +112,17 @@ pub(super) fn solve(
             scores[i * width + j] = score;
         }
     }
-    trace(old, new, &scores, location, deadline)
+    trace(old, new, &scores, (maximum, bounds), location, deadline)
 }
 
-fn at_anchor(
+fn permits(index: usize, new: &TeletextEnhancementCommand, bounds: &[(u8, u8)]) -> bool {
+    bounds.get(index).is_none_or(|(start, end)| {
+        matches!(new,
+        TeletextEnhancementCommand::AtColumn { column, .. } if start <= column && column <= end)
+    })
+}
+
+pub(super) fn at_anchor(
     anchor: &TeletextEnhancementCommand,
     new: &[TeletextEnhancementCommand],
     boundary: usize,
@@ -93,9 +150,11 @@ fn trace(
     old: &[(usize, TeletextEnhancementCommand)],
     new: &[TeletextEnhancementCommand],
     scores: &[Option<usize>],
+    policy: (usize, &[(u8, u8)]),
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
+    let (maximum, bounds) = policy;
     let width = new.len() + 1;
     let (mut i, mut j) = (old.len(), new.len());
     let mut result = Aligned {
@@ -107,9 +166,11 @@ fn trace(
         let score = scores[i * width + j].ok_or_else(|| fail(location))?;
         let hidden = i != 0 && hidden_position(&old[i - 1].1).is_some();
         let matched = if i != 0 && j != 0 && !hidden {
-            let weight = weight(&old[i - 1].1, &new[j - 1]);
-            weight != 0
-                && scores[(i - 1) * width + j - 1].map(|value| value + weight) == Some(score)
+            let weight = weight(&old[i - 1].1, &new[j - 1], maximum + 1);
+            permits(i - 1, &new[j - 1], bounds)
+                && weight != 0
+                && scores[(i - 1) * width + j - 1].and_then(|value| value.checked_add(weight))
+                    == Some(score)
         } else {
             false
         };
@@ -136,7 +197,7 @@ fn trace(
         } else {
             return Err(fail(location));
         }
-        if result.commands.len() > 208 {
+        if result.commands.len() > maximum {
             return Err(fail(location));
         }
     }

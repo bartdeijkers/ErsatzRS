@@ -34,6 +34,9 @@ mod local_object_operands;
 #[path = "resource_object_operand_service.rs"]
 mod resource_object_operands;
 
+#[path = "resource_object_program_service.rs"]
+mod resource_object_programs;
+
 #[path = "local_object_glyph_program_service.rs"]
 mod local_object_glyph_programs;
 
@@ -226,6 +229,13 @@ pub enum TeletextServiceError {
         identity: TeletextObjectIdentity,
         command: usize,
         reason: super::TeletextResourceObjectOperandFailure,
+    },
+    #[error("teletext resource object program overlays must not be empty")]
+    EmptyResourceObjectProgramOverlays,
+    #[error("teletext resource object program {identity:?}: {reason}")]
+    ResourceObjectProgramOverlay {
+        identity: TeletextObjectIdentity,
+        reason: super::TeletextResourceObjectProgramFailure,
     },
     #[error("teletext Local glyph program changes must not be empty")]
     EmptyLocalObjectGlyphProgramOverlays,
