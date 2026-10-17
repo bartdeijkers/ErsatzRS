@@ -31,6 +31,9 @@ release section when tagging a release.
   column changes with root-relative repeat/undo. Version16 separately supports
   retained object-call offsets and existing catalogue target/type changes, with
   full dependency validation and protected-writer checks even for identical pixels.
+  Pinned QTeletextMaker 1.0 origin-modifier edits preserve call selectors through
+  concept preview, explicit publication and database reopen; complete nested
+  dependency previews in the external editor remain open.
   Complete native reconstruction, exact resource/subpage identities and permissions
   for every shared consumer protect generated content. Import remains separate from explicit publication;
   earlier receipts and native capacities retain their contracts. Complete dependency

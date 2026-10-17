@@ -1,6 +1,8 @@
 //! Existing resource calls: independently compiled full targets precede import.
 use super::*;
 
+#[path = "calls/actual_editor.rs"]
+mod actual_editor;
 #[path = "calls/lifecycle.rs"]
 mod lifecycle;
 #[path = "calls/negatives.rs"]

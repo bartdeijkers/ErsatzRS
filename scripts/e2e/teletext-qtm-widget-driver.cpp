@@ -87,6 +87,7 @@ struct DriverContext {
     bool editLocalStyleStructure = false;
     bool insertResourceGlyph = false;
     bool deleteResourceGlyph = false;
+    bool editResourceCallOrigin = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -130,6 +131,8 @@ static DriverContext driverContext() {
     const bool resourceInsert = mode == "resource-object-g0-insert-copy";
     const bool resourceDelete = mode == "resource-object-g0-delete";
     const bool resourceStructure = resourceInsert || resourceDelete;
+    const bool resourceCallOrigin = mode == "resource-object-call-origin";
+    const bool resourceTrial = resourceStructure || resourceCallOrigin;
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
@@ -195,10 +198,10 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_COLUMN");
     const bool suppliedForeground = qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_COLOUR")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_COLOUR");
-    if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceStructure && suppliedTarget)))
+    if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial && suppliedTarget)))
         qFatal("Foreground operands require explicit single-page-foreground mode");
-    const int triplet = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
-    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", drcsSelection ? 40 : 39) : 0;
+    const int triplet = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
+    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", (drcsSelection || resourceCallOrigin) ? 40 : 39) : 0;
     if (drcsSelection && (column != 40 || !(triplet < glyph0 && glyph0 < glyph1)))
         qFatal("Fixed DRCS prefix address40 and ordered distinct glyph indices are required");
     if ((glyphStructure || mixedGlyphStructure) && (triplet != 12 || column != 0))
@@ -207,6 +210,8 @@ static DriverContext driverContext() {
         qFatal("Fixed Local style structure requires original mosaic word17 and column1");
     if (resourceStructure && (triplet != 7 || column != 1))
         qFatal("Fixed resource structure requires original G0P word7 and column1");
+    if (resourceCallOrigin && (triplet != 7 || column != 40))
+        qFatal("Fixed resource call requires original OriginModifier word7 and raw address40");
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
     if (foreground && from == to) qFatal("Foreground trial requires a changed colour");
@@ -223,7 +228,7 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceStructure) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
@@ -251,12 +256,12 @@ static DriverContext driverContext() {
         qFatal("Fixed panel proof requires left4/right12 and actual Normal S1=0 companion");
     if ((localGlyph || glyphStructure || mixedGlyphStructure || styleStructure) && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
-    if (resourceStructure && (left != 0 || right != 0
+    if (resourceTrial && (left != 0 || right != 0
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1434,6 +1439,80 @@ static void editResourceGlyphStructure(QMainWindow *main, const DriverContext &c
     std::printf("QTM actual resource-object G0P %s: original9 model rows, final%zu, original command4/editor word7, complete wrapper retained\n",
         context.insertResourceGlyph ? "InsertCopy then second glyph Column1-to2" : "Delete", expected.size());
 }
+// Pinned cac2167 x26dockwidget.cpp920-928 exposes the OriginModifier's cooked
+// +Column spinbox0..71. x26model.cpp605-611 commits this as undoable ETdata,
+// preserving raw address40, mode16 and the following allocated call selector.
+static void editResourceCallOrigin(QMainWindow *main, const DriverContext &context) {
+    if (!context.editResourceCallOrigin || context.tripletIndex != 7 || context.tripletColumn != 40
+        || context.leftPanelColumns != 0 || context.rightPanelColumns != 0
+        || !context.drcsName.isEmpty() || main->isWindowModified())
+        qFatal("Unexpected fixed resource call origin baseline");
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets")
+        qFatal("Actual resource call X/26 dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000))
+        qFatal("Actual resource call dock was not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual resource call requires one X/26 table");
+    auto table = tables.front();
+    auto model = table->model();
+    // Exact Active20 editor-only Local wrapper and native body. Public Passive21
+    // is allocated pointer0; the editor wrapper never changes its native identity.
+    std::vector<StructureTriplet> expected{
+        {40,17,2}, {63,31,6}, {40,21,2}, {41,4,8}, {8,12,65},
+        {8,9,65}, {10,12,0}, {40,16,0}, {48,19,0}, {63,31,5}
+    };
+    structureCheck(model, expected);
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-before")))
+        qFatal("Actual resource call baseline capture failed");
+    structureSelect(table, 7);
+    QCheckBox *raw = nullptr;
+    for (auto candidate : dock->findChildren<QCheckBox *>()) {
+        if (!candidate->isVisible() || candidate->text() != "Raw values") continue;
+        if (raw) qFatal("Ambiguous resource call Raw values checkbox");
+        raw = candidate;
+    }
+    if (!raw || raw->isChecked()) qFatal("Resource call must use original cooked controls");
+    QSpinBox *column = nullptr;
+    for (auto candidate : dock->findChildren<QSpinBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled()
+            || candidate->minimum() != 0 || candidate->maximum() != 71
+            || candidate->prefix() != "+") continue;
+        if (column) qFatal("Ambiguous actual OriginModifier +Column spinbox");
+        column = candidate;
+    }
+    if (!column || column->value() != 0)
+        qFatal("Original OriginModifier +Column0 control absent");
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-selected")))
+        qFatal("Actual resource call selected control capture failed");
+    QStyleOptionSpinBox style;
+    style.initFrom(column);
+    style.rect = column->rect();
+    style.subControls = QStyle::SC_All;
+    style.stepEnabled = QAbstractSpinBox::StepUpEnabled;
+    style.frame = column->hasFrame();
+    style.buttonSymbols = column->buttonSymbols();
+    const QRect step = column->style()->subControlRect(QStyle::CC_SpinBox, &style,
+        QStyle::SC_SpinBoxUp, column);
+    if (!step.isValid() || !column->rect().contains(step.center())
+        || column->style()->hitTestComplexControl(QStyle::CC_SpinBox, &style, step.center(), column)
+            != QStyle::SC_SpinBoxUp)
+        qFatal("Actual OriginModifier +Column step-up must be clickable");
+    QTest::mouseMove(column, step.center());
+    QTest::mouseClick(column, Qt::LeftButton, Qt::NoModifier, step.center());
+    expected[7] = StructureTriplet{40,16,1};
+    if (!QTest::qWaitFor([column, main] { return column->value() == 1 && main->isWindowModified(); }, 3000))
+        qFatal("Actual OriginModifier +Column did not step0-to1");
+    structureCheck(model, expected);
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-edited")))
+        qFatal("Actual resource call edited control capture failed");
+    savedGlyphStructure = expected;
+    std::puts("QTM actual resource call origin: cooked +Column step-up (40,16,0)-to-(40,16,1); exact allocated invocation word8 and complete10-row wrapper retained");
+}
 static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || savedGlyphStructure.size() != std::size_t(expectedCount)) qFatal("Fixed saved structure oracle absent");
@@ -1567,11 +1646,12 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.editLocalStyleStructure) verifySavedGlyphStructure(saved, 27);
         if (context.insertResourceGlyph || context.deleteResourceGlyph)
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
+        if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, 10);
         capture(context.captureName("saved").toUtf8().constData());
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -1619,6 +1699,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.editLocalMixedGlyphStructure) editLocalMixedGlyphStructure(main, context);
             if (context.editLocalStyleStructure) editLocalStyleStructure(main, context);
             if (context.insertResourceGlyph || context.deleteResourceGlyph) editResourceGlyphStructure(main, context);
+            if (context.editResourceCallOrigin) editResourceCallOrigin(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));
