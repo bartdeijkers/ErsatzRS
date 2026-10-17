@@ -1,4 +1,4 @@
-//! V8 call topology from sealed aliases and checked fixed-position glyph edits.
+//! V8 call topology and resource structure retain sealed identities and anchors.
 use super::{project, Failure, Mapping, Result};
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand as Command, TeletextEnhancementProgram,
@@ -6,11 +6,7 @@ use ersatzrs_domain::{
 };
 use std::{collections::BTreeMap, time::Instant};
 
-pub(super) struct Call {
-    pub first: usize,
-    pub word: usize,
-    pub command: Command,
-}
+pub(super) use super::super::structural::resource::CallAtom as Call;
 struct Layout {
     words: Vec<u32>,
     calls: BTreeMap<usize, Vec<(usize, Command)>>,
@@ -200,7 +196,7 @@ fn noncall_commands(
     Ok(rebuilt.replacement.commands().to_vec())
 }
 
-pub(super) fn program(
+fn fixed_program(
     mapped: &Mapping<'_>,
     body: &project::Body,
     limits: project::Limits,
@@ -260,6 +256,44 @@ pub(super) fn program(
         mapped.definition.program.clone(),
         TeletextEnhancementProgram::new(commands).map_err(|_| fail())?,
         retained,
+        limits.2,
+    )
+    .map_err(|_| fail())
+}
+
+pub(super) fn program(
+    mapped: &Mapping<'_>,
+    body: &project::Body,
+    limits: project::Limits,
+    deadline: Instant,
+) -> Result<TeletextResourceObjectProgramOverlay> {
+    match fixed_program(mapped, body, limits, deadline) {
+        Ok(program) => return Ok(program),
+        Err(error) if error.failure == Failure::TimedOut => return Err(error),
+        Err(_) => {}
+    }
+    mapped.location.check_deadline(deadline)?;
+    let fail = || mapped.location.error(Failure::Structure);
+    let calls = body.context_calls.as_ref().ok_or_else(fail)?;
+    // Keep the new structural route scoped to the existing V8 call-topology
+    // boundary. Equal-count retained-call edits retain their earlier policy.
+    if original_calls(mapped, body, deadline)?.len() == calls.len() {
+        return Err(fail());
+    }
+    let rebuilt = super::super::structural::resource::parse_with_calls(
+        mapped.definition,
+        &body.spans,
+        (&body.before, &body.after),
+        calls,
+        limits.2.max_commands,
+        mapped.location,
+        deadline,
+    )?;
+    TeletextResourceObjectProgramOverlay::new_with_invocation_structure(
+        mapped.identity,
+        mapped.definition.program.clone(),
+        rebuilt.replacement,
+        rebuilt.retained,
         limits.2,
     )
     .map_err(|_| fail())

@@ -98,6 +98,17 @@ pub(super) fn calls(
     kernel::solve_calls(old, new, maximum, location, deadline)
 }
 
+/// Only the resource parser supplies indivisible, authenticated invocation atoms.
+pub(super) fn resource_calls(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    kernel::solve_resource_calls(old, new, maximum, location, deadline)
+}
+
 fn merge_anchors(
     aligned: &Aligned,
     anchors: &[(usize, TeletextEnhancementCommand, u8)],

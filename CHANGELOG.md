@@ -32,15 +32,17 @@ release section when tagging a release.
   retained object-call offsets and existing catalogue target/type changes, with
   full dependency validation and protected-writer checks even for identical pixels.
   Version17 separately records inserted/omitted resource calls. Receipt-bound V8
-  import also accepts existing same-family G0/G1 glyph value changes at unchanged
-  columns alongside call addition/deletion, preserving complete callee identities
-  and every other command. A pinned QTeletextMaker 1.0 save combining a G0 change
+  import combines call addition/deletion with bounded glyph/style insertion and
+  deletion, glyph column changes and same-family G0/G1 value edits. Complete callee
+  identities, fixed anchors and every shared consumer remain checked. A pinned
+  QTeletextMaker 1.0 save combining a G0 change
   with a new nested call now passes unchanged-byte concept import, shared previews,
-  unpublished reopen and separate explicit publication/cold reopen. Dependent display
-  carriers are regenerated while
-  uploaded display words remain bound to their original export; rejected words
-  retain their exact X26 location. New/retired subtrees cannot inherit protected content authority. General mixed glyph/style topology and invisible-position boundaries
-  remain open.
+  unpublished reopen and separate explicit publication/cold reopen. Dependent
+  display carriers can be repacked after authenticated resource edits; uploaded
+  display words remain bound to their original export and rejected words retain
+  their exact X26 location. New/retired subtrees cannot inherit protected content
+  authority. Invisible-position boundaries, full definition/set changes
+  and oversized editor context remain open.
   Pinned QTeletextMaker 1.0 context companions now render nested resource objects
   through protected editor-only Local aliases. Origin-modifier edits preserve
   original native identities through concept preview, explicit publication and

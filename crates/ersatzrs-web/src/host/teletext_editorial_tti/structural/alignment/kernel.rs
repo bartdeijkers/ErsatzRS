@@ -8,14 +8,35 @@ enum Mode {
     Glyphs,
     Styles,
     Calls,
+    ResourceCalls,
 }
 impl Mode {
     fn editable(self, command: &TeletextEnhancementCommand) -> bool {
         match self {
             Self::Calls => matches!(command, TeletextEnhancementCommand::InvokeObject { .. }),
+            Self::ResourceCalls => {
+                editable(command, true)
+                    || matches!(command, TeletextEnhancementCommand::InvokeObject { .. })
+            }
             Self::Glyphs | Self::Styles => editable(command, matches!(self, Self::Styles)),
         }
     }
+}
+
+pub(super) fn solve_resource_calls(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    solve_matched(
+        old,
+        new,
+        (Mode::ResourceCalls, maximum, &[]),
+        location,
+        deadline,
+    )
 }
 
 pub(super) fn solve_calls(

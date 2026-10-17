@@ -220,14 +220,15 @@ pub(super) fn validate_teletext_editorial_transition_with_operands(
                 .object_operands
                 .iter()
                 .any(|value| value.owner() == owner);
+        // A checked resource program can change compiler-owned repaint packing
+        // for every consumer; uploaded words and protected cells remain checked.
         let structural_change = incoming
             .object_programs
             .iter()
-            .any(|value| value.owner() == owner);
-        let operand_change = operand_change
-            || structural_change
-            || !incoming.resource_operands.is_empty()
+            .any(|value| value.owner() == owner)
             || !incoming.resource_programs.is_empty();
+        let operand_change =
+            operand_change || structural_change || !incoming.resource_operands.is_empty();
         let compiler_links = compiler_resources::links_changed(original, edited, owner)?;
         if overlay.is_none() && !operand_change && incoming.bitmaps.is_empty() && !compiler_links {
             if before.data_units() != after.data_units() {
@@ -798,7 +799,7 @@ fn check_packets(
     // authored commands and exactly the supplied semantic overlays. A Base edit
     // can change compiler-owned repaint recipes, selectors and X26 packing even
     // though uploaded X26 and every authored command remain unchanged. A checked
-    // Local program intent likewise permits native X26 repacking; exact uploaded
+    // Local/resource program intent likewise permits native X26 repacking; uploaded
     // structure was authenticated separately. Compare all other completed packets
     // exactly; protected cells are checked below.
     // An uploaded X26 edit still needs the original TTI/operand reconciliation.

@@ -46,7 +46,7 @@ fn capture_glyph(mut value: Value) -> Value {
     }
     value
 }
-fn original(theme: &str, page: u16, subcode: u16) -> Value {
+pub(super) fn original(theme: &str, page: u16, subcode: u16) -> Value {
     capture_glyph(super::response(theme, page, subcode))
 }
 fn mixed(theme: &str, page: u16, subcode: u16, shape: Shape) -> Value {
@@ -71,7 +71,7 @@ fn added_b(theme: &str, page: u16, subcode: u16) -> Value {
 fn removed_b(theme: &str, page: u16, subcode: u16) -> Value {
     mixed(theme, page, subcode, Shape::Removed)
 }
-fn assert_b(rasters: &[TeletextRaster]) {
+pub(super) fn assert_b(rasters: &[TeletextRaster]) {
     assert_eq!(rasters.len(), 3);
     for (page, raster) in (124..127).zip(rasters) {
         // Main column8 has visual column12 with the original left4 panel. Its

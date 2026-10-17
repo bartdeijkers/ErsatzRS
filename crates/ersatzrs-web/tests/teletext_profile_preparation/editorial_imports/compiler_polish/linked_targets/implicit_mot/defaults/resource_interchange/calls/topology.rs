@@ -535,3 +535,6 @@ async fn v8_inserted_calls_reject_unknown_context_alias_and_reserved_origin() {
 
 #[path = "topology/mixed.rs"]
 mod mixed;
+
+#[path = "topology/structure.rs"]
+mod structure;

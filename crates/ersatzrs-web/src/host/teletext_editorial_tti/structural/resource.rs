@@ -6,6 +6,10 @@ use ersatzrs_domain::{
 };
 use std::time::Instant;
 
+mod call_atoms;
+
+pub(in super::super) use call_atoms::CallAtom;
+
 pub(in super::super) struct Span {
     pub ordinal: usize,
     pub first: usize,
@@ -30,8 +34,10 @@ pub(in super::super) fn image(
         image.body(0).to_vec(),
     ))
 }
-fn editable(command: &TeletextEnhancementCommand) -> bool {
-    super::glyph_family(command).is_some() || style::kind(command).is_some()
+fn editable(command: &TeletextEnhancementCommand, calls: bool) -> bool {
+    super::glyph_family(command).is_some()
+        || style::kind(command).is_some()
+        || (calls && matches!(command, TeletextEnhancementCommand::InvokeObject { .. }))
 }
 fn derived_prefix(entries: &[raw::Entry], cursor: usize) -> bool {
     let Some(entry) = entries.get(cursor) else {
@@ -40,9 +46,39 @@ fn derived_prefix(entries: &[raw::Entry], cursor: usize) -> bool {
     let address = entry.word & 63;
     let mode = (entry.word >> 6) & 31;
     ((mode == 4 && address >= 40) || (mode == 7 && address == 63 && entry.word >> 11 < 32))
-        && entries
-            .get(cursor + 1)
-            .is_some_and(|next| next.editable(true).is_some())
+        && entries.get(cursor + 1).is_some_and(|next| {
+            next.editable(true).is_some_and(|command| {
+                !matches!(command, TeletextEnhancementCommand::InvokeObject { .. })
+            })
+        })
+}
+
+#[derive(Clone, Copy)]
+struct Input<'a> {
+    words: (&'a [u32], &'a [u32]),
+    calls: Option<&'a [CallAtom]>,
+}
+
+impl Input<'_> {
+    fn read(
+        self,
+        definition: &TeletextEnhancementObjectDefinition,
+        spans: &[Span],
+        maximum: usize,
+        location: Location,
+        deadline: Instant,
+    ) -> Result<(raw::Body, raw::Body)> {
+        if let Some(atoms) = self.calls {
+            call_atoms::read(
+                definition, spans, self.words, atoms, maximum, location, deadline,
+            )
+        } else {
+            Ok((
+                raw::Body::read_bounded(self.words.0, maximum, location, deadline)?,
+                raw::Body::read_bounded(self.words.1, maximum, location, deadline)?,
+            ))
+        }
+    }
 }
 
 pub(in super::super) fn parse(
@@ -53,6 +89,50 @@ pub(in super::super) fn parse(
     location: Location,
     deadline: Instant,
 ) -> Result<Program> {
+    parse_inner(
+        definition,
+        spans,
+        Input { words, calls: None },
+        maximum,
+        location,
+        deadline,
+    )
+}
+
+/// The caller authenticates full invocation identities before native selectors.
+/// Every other raw command and selector retains the existing parser's ownership.
+pub(in super::super) fn parse_with_calls(
+    definition: &TeletextEnhancementObjectDefinition,
+    spans: &[Span],
+    words: (&[u32], &[u32]),
+    calls: &[CallAtom],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Program> {
+    parse_inner(
+        definition,
+        spans,
+        Input {
+            words,
+            calls: Some(calls),
+        },
+        maximum,
+        location,
+        deadline,
+    )
+}
+
+fn parse_inner(
+    definition: &TeletextEnhancementObjectDefinition,
+    spans: &[Span],
+    input: Input<'_>,
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Program> {
+    let words = input.words;
+    let calls = input.calls.is_some();
     location.check_deadline(deadline)?;
     if definition.program.commands().len() > maximum || spans.len() > maximum {
         return Err(fail(location));
@@ -61,17 +141,18 @@ pub(in super::super) fn parse(
         .checked_mul(2)
         .ok_or_else(|| fail(location))?
         .min(507);
-    let before = raw::Body::read_bounded(words.0, raw_maximum, location, deadline)?;
-    let after = raw::Body::read_bounded(words.1, raw_maximum, location, deadline)?;
+    let (before, after) = input.read(definition, spans, raw_maximum, location, deadline)?;
     raw::protect_fixed_families(&before, &after, location)?;
-    validate_original(definition, spans, words.0, &before, location, deadline)?;
+    validate_original(
+        definition, spans, words.0, &before, calls, location, deadline,
+    )?;
     let mut commands = Vec::new();
     let mut retained = Vec::new();
     let (mut ordinal, mut cursor) = (0, 0);
     while ordinal < definition.program.commands().len() {
         location.check_deadline(deadline)?;
         let command = definition.program.commands()[ordinal];
-        if editable(&command)
+        if editable(&command, calls)
             || alignment::hidden_position(&command).is_some()
             || after
                 .entries
@@ -82,7 +163,7 @@ pub(in super::super) fn parse(
         {
             let start = ordinal;
             while ordinal < definition.program.commands().len()
-                && (editable(&definition.program.commands()[ordinal])
+                && (editable(&definition.program.commands()[ordinal], calls)
                     || alignment::hidden_position(&definition.program.commands()[ordinal])
                         .is_some())
             {
@@ -95,7 +176,7 @@ pub(in super::super) fn parse(
                 &original,
                 &after.entries,
                 &mut cursor,
-                maximum,
+                (maximum, calls),
                 location,
                 deadline,
                 (ordinal, spans, words.0),
@@ -171,11 +252,12 @@ fn cluster(
     original: &[(usize, TeletextEnhancementCommand)],
     entries: &[raw::Entry],
     cursor: &mut usize,
-    maximum: usize,
+    policy: (usize, bool),
     location: Location,
     deadline: Instant,
     next_anchor: (usize, &[Span], &[u32]),
 ) -> Result<alignment::Aligned> {
+    let (maximum, calls) = policy;
     let mut inserted = Vec::new();
     loop {
         // A real following AP can look like a derived compatibility prefix.
@@ -198,7 +280,11 @@ fn cluster(
         inserted.push(command);
         *cursor += 1;
     }
-    alignment::bounded(original, &inserted, maximum, location, deadline)
+    if calls {
+        alignment::resource_calls(original, &inserted, maximum, location, deadline)
+    } else {
+        alignment::bounded(original, &inserted, maximum, location, deadline)
+    }
 }
 fn consume_anchor(
     source: (usize, &[Span], &[u32]),
@@ -272,6 +358,7 @@ fn validate_original(
     spans: &[Span],
     words: &[u32],
     body: &raw::Body,
+    calls: bool,
     location: Location,
     deadline: Instant,
 ) -> Result<()> {
@@ -291,7 +378,7 @@ fn validate_original(
         if span.first != next || span.word < span.first || span.word >= words.len() {
             return Err(fail(location));
         }
-        if editable(command)
+        if editable(command, calls)
             && body
                 .entries
                 .iter()

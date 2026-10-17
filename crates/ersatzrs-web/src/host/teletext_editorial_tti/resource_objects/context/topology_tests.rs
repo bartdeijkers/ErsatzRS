@@ -1,6 +1,9 @@
 //! Full authenticated aliases survive call topology before native-selector erasure.
 use super::*;
 
+#[path = "mixed_structure_tests.rs"]
+mod mixed_structure_tests;
+
 fn invoked(offset: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::InvokeObject {
         target: target(22),
@@ -165,7 +168,7 @@ fn context_g1_scalar_with_call_add_and_delete_keeps_native_family_and_original_i
 }
 
 #[test]
-fn context_call_topology_keeps_wrong_family_moved_column_and_fixed_anchors_closed() {
+fn context_call_topology_keeps_wrong_family_style_values_and_fixed_anchors_closed() {
     let foreground = |colour| TeletextEnhancementCommand::AtColumn {
         column: 0,
         operation: TeletextColumnOperation::Foreground {
@@ -183,7 +186,6 @@ fn context_call_topology_keeps_wrong_family_moved_column_and_fixed_anchors_close
     };
     for (before, after) in [
         (glyph(0, b'A'), mosaic(1)),
-        (glyph(0, b'A'), glyph(1, b'B')),
         (foreground(2), foreground(3)),
         (position(1), position(2)),
         (charset(0), charset(1)),
