@@ -25,6 +25,12 @@ release section when tagging a release.
 
 ### Added
 
+- Export full-capacity POP/GPOP teletext objects as receipt-bound QTeletextMaker
+  carrier-version-7 command fragments when one editor frame is insufficient.
+  Exact original identities, complete fragment membership and shared-consumer
+  permissions protect scalar edits; small exports and historical receipts keep
+  their existing carriers. Full native preview remains authoritative for context;
+  structural resource editing and complete dependency views remain open.
 - Edit scalar operands in original POP/GPOP teletext objects through receipt-bound
   QTeletextMaker carrier-version-6 companions and private version-14 concepts.
   Full resource/subpage identity, exact native reconstruction and permissions for

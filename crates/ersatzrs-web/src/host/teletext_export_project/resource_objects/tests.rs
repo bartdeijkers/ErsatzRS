@@ -10,6 +10,9 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextResourceTransmissionMode,
 };
 
+#[path = "fragments/tests.rs"]
+mod fragments;
+
 fn budget() -> TeletextTtiBudget {
     TeletextTtiBudget {
         max_bytes: 65536,

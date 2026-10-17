@@ -1,6 +1,8 @@
 //! Receipt-bound POP operands, including fail-closed legacy receipt recovery.
 #[path = "resource_interchange/actual_editor_trial.rs"]
 mod actual_editor_trial;
+#[path = "resource_interchange/fragments.rs"]
+mod fragments;
 
 use super::*;
 use ersatzrs_app::teletext_design_documents::{
@@ -59,6 +61,12 @@ impl ersatzrs_app::teletext_designs::TeletextOriginalDesignValidator
 }
 
 fn original_resource_operand(flow: &Flow) -> TeletextResourceObjectOperandOverlay {
+    original_resource_operand_at(flow, 2)
+}
+fn original_resource_operand_at(
+    flow: &Flow,
+    command: usize,
+) -> TeletextResourceObjectOperandOverlay {
     let target = seed::target(21);
     let definition = flow.accepted[0]
         .service()
@@ -69,7 +77,7 @@ fn original_resource_operand(flow: &Flow) -> TeletextResourceObjectOperandOverla
         .unwrap();
     assert_eq!(definition.object_type, TeletextObjectType::Passive);
     assert_eq!(
-        definition.program.commands()[2],
+        definition.program.commands()[command],
         TeletextEnhancementCommand::AtColumn {
             column: 1,
             operation: TeletextColumnOperation::Foreground {
@@ -91,7 +99,7 @@ fn original_resource_operand(flow: &Flow) -> TeletextResourceObjectOperandOverla
     let colour = |value| TeletextColumnOperation::Foreground {
         colour: TeletextColourReference::new(value).unwrap(),
     };
-    TeletextResourceObjectOperandOverlay::new(target, 2, 1, colour(2), colour(3)).unwrap()
+    TeletextResourceObjectOperandOverlay::new(target, command, 1, colour(2), colour(3)).unwrap()
 }
 
 // Application-only witness for an authentic retained pre-v6 server receipt.
@@ -349,7 +357,12 @@ fn resource_request(
         .iter_mut()
         .find(|file| file.name == asset.name)
         .unwrap();
-    let original = parse_teletext_tti(&file.bytes, policy().tti).unwrap();
+    file.bytes = edit_foreground_file(&file.bytes, from, to);
+    request
+}
+
+fn edit_foreground_file(bytes: &[u8], from: u8, to: u8) -> Vec<u8> {
+    let original = parse_teletext_tti(bytes, policy().tti).unwrap();
     let mut records = original.records().to_vec();
     // Literal X26 column1, mode0: only the authenticated foreground value moves.
     let old = 1 | (u32::from(from) << 11);
@@ -382,12 +395,11 @@ fn resource_request(
     };
     words[index] = old;
     assert_eq!(reverted, original.records());
-    file.bytes = write_teletext_tti(
+    write_teletext_tti(
         &TeletextTtiDocument::checked_from_records(records, policy().tti).unwrap(),
         policy().tti,
     )
-    .unwrap();
-    request
+    .unwrap()
 }
 
 async fn assert_resource_concept(
@@ -395,6 +407,19 @@ async fn assert_resource_concept(
     flow: &Flow,
     concept: &SavedEditorialTeletextDesign,
     colour: u8,
+) -> Vec<TeletextRaster> {
+    Box::pin(assert_resource_concept_at(
+        fixture, flow, concept, colour, 2,
+    ))
+    .await
+}
+
+async fn assert_resource_concept_at(
+    fixture: &Fixture,
+    flow: &Flow,
+    concept: &SavedEditorialTeletextDesign,
+    colour: u8,
+    command: usize,
 ) -> Vec<TeletextRaster> {
     let stored = drcs_bitmap::stored(fixture, concept).await;
     let decoded = decode_teletext_design_documents(&stored.document, designs::budget()).unwrap();
@@ -410,7 +435,7 @@ async fn assert_resource_concept(
         assert!(overlay.local_object_operands().is_empty());
         assert!(overlay.local_object_glyph_program_overlays().is_empty());
         assert!(overlay.drcs_bitmap_overlays().is_empty());
-        let changes = vec![original_resource_operand(flow)];
+        let changes = vec![original_resource_operand_at(flow, command)];
         assert_eq!(overlay.resource_object_operands(), changes);
         changes
     };

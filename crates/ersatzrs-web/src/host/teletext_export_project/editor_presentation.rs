@@ -21,29 +21,38 @@ fn needed(presentation: &TeletextProducerPagePresentation) -> bool {
     ) && (defaults.panels.left || defaults.panels.right || defaults.black_background_substitution)
 }
 
-/// New exports opt in only when a selected original needs the fallback carrier.
+/// New exports choose complete resource views before presentation-only carriers.
 /// Historical receipt reconstruction continues to use its stored carrier.
 pub(in super::super) fn carrier(
     original: OriginalDesignView<'_>,
     selected: Option<&[TeletextPageAddress]>,
-) -> TeletextEditorCarrier {
-    if original.encoded().is_some_and(|encoded| {
-        encoded.pages().iter().any(|page| {
-            matches!(page, ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredPage::Object(page)
-            if !page.definition_positions().is_empty())
-        })
-    }) {
-        return TeletextEditorCarrier::V6;
+    deadline: std::time::Instant,
+) -> Result<TeletextEditorCarrier> {
+    let mut has_objects = false;
+    if let Some(encoded) = original.encoded() {
+        for page in encoded.pages() {
+            super::check_deadline(deadline)?;
+            if super::resource_objects::requires_fragments(page, deadline)? {
+                return Ok(TeletextEditorCarrier::V7);
+            }
+            has_objects |= matches!(page, ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredPage::Object(page)
+                if !page.definition_positions().is_empty());
+        }
     }
-    if original.producers().iter().any(|producer| {
-        producer.pages().iter().any(|page| {
-            selected.is_none_or(|owners| owners.contains(&page.address())) && needed(page)
-        })
-    }) {
-        TeletextEditorCarrier::V5
-    } else {
-        TeletextEditorCarrier::V4
+    if has_objects {
+        return Ok(TeletextEditorCarrier::V6);
     }
+    Ok(
+        if original.producers().iter().any(|producer| {
+            producer.pages().iter().any(|page| {
+                selected.is_none_or(|owners| owners.contains(&page.address())) && needed(page)
+            })
+        }) {
+            TeletextEditorCarrier::V5
+        } else {
+            TeletextEditorCarrier::V4
+        },
+    )
 }
 
 pub(super) fn projection(
@@ -53,7 +62,7 @@ pub(super) fn projection(
 ) -> Result<Option<(TeletextExportEditorPresentation, [u32; 13])>> {
     if !matches!(
         carrier,
-        TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6
+        TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7
     ) || has_encoded_presentation
         || !needed(presentation)
     {

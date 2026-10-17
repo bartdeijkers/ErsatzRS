@@ -323,7 +323,9 @@ pub async fn export_original_teletext_design(
                 super::teletext_export_project::editor_presentation::carrier(
                     original.view(),
                     request.pages.as_deref(),
-                ),
+                    deadline,
+                )
+                .map_err(|error| NativeTeletextExportError::Mapping(Box::new(error)))?,
             )
             .map_err(|error| NativeTeletextExportError::Mapping(Box::new(error)))?;
             let receipt = write_teletext_export_receipt_body(&body, project_budget)?;

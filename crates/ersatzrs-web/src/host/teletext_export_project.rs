@@ -42,6 +42,7 @@ use super::teletext_stored_designs::OriginalDesignView;
 
 mod drcs_sets;
 pub(super) mod editor_presentation;
+mod object_fragments;
 pub(super) mod resource_objects;
 
 /// Located failures without original text, settings or file bodies.
@@ -95,6 +96,7 @@ pub(super) enum TeletextEditorCarrier {
     V4,
     V5,
     V6,
+    V7,
 }
 impl TeletextEditorCarrier {
     pub(super) fn from_profile(profile: &str) -> Option<Self> {
@@ -105,6 +107,7 @@ impl TeletextEditorCarrier {
             "qteletextmaker-1.0-carrier-v4" => Some(Self::V4),
             "qteletextmaker-1.0-carrier-v5" => Some(Self::V5),
             "qteletextmaker-1.0-carrier-v6" => Some(Self::V6),
+            "qteletextmaker-1.0-carrier-v7" => Some(Self::V7),
             _ => None,
         }
     }
@@ -116,6 +119,7 @@ impl TeletextEditorCarrier {
             Self::V4 => "qteletextmaker-1.0-carrier-v4",
             Self::V5 => "qteletextmaker-1.0-carrier-v5",
             Self::V6 => "qteletextmaker-1.0-carrier-v6",
+            Self::V7 => "qteletextmaker-1.0-carrier-v7",
         }
     }
     /// Keep native flags separate from QTM's single effective primary NOS.
@@ -130,7 +134,7 @@ impl TeletextEditorCarrier {
             // Its C12 means numeric NOS bit 0, unlike compact native bit 8.
             // Use the resolved X28/M29/header primary; retain native flags in
             // the mapping, including an independently authored fallback NOS.
-            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 => {
+            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 | Self::V7 => {
                 let primary = u16::from(effective_primary);
                 ((primary & 1) << 9) | ((primary & 2) << 7) | ((primary & 4) << 5)
             }
@@ -336,7 +340,7 @@ fn selected_inventory<'a>(
         .filter_map(display_page)
         .filter(|page| selected.is_none() || wanted.contains(&page.address()))
         .count();
-    let asset_count = asset_count(encoded, carrier, deadline)?;
+    let asset_count = asset_count(encoded, carrier, project_budget.max_units, deadline)?;
     if selected_count == 0
         || selected.is_some_and(|pages| selected_count != pages.len())
         || selected_count
@@ -357,6 +361,7 @@ fn selected_inventory<'a>(
 fn asset_count(
     encoded: &EncodedTeletextAuthoredService,
     carrier: TeletextEditorCarrier,
+    max_units: usize,
     deadline: Instant,
 ) -> Result<usize> {
     let asset_count = encoded
@@ -377,7 +382,10 @@ fn asset_count(
         .ok_or(NativeTeletextExportProjectError::Budget)?;
     let asset_count = if matches!(
         carrier,
-        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6
+        TeletextEditorCarrier::V4
+            | TeletextEditorCarrier::V5
+            | TeletextEditorCarrier::V6
+            | TeletextEditorCarrier::V7
     ) {
         asset_count
             .checked_add(drcs_sets::count_banks(encoded, deadline)?)
@@ -388,6 +396,13 @@ fn asset_count(
     let asset_count = if carrier == TeletextEditorCarrier::V6 {
         asset_count
             .checked_add(object_companion_count(encoded, deadline)?)
+            .ok_or(NativeTeletextExportProjectError::Budget)?
+    } else {
+        asset_count
+    };
+    let asset_count = if carrier == TeletextEditorCarrier::V7 {
+        asset_count
+            .checked_add(object_fragments::count(encoded, max_units, deadline)?)
             .ok_or(NativeTeletextExportProjectError::Budget)?
     } else {
         asset_count
@@ -901,6 +916,26 @@ struct ExportFiles {
     assets: Vec<TeletextExportAssetMapping>,
     files: Vec<TeletextExportFile>,
 }
+
+fn append_drcs_sets(
+    encoded: &EncodedTeletextAuthoredService,
+    assets: &mut Vec<TeletextExportAssetMapping>,
+    files: &mut Files,
+    tti_budget: TeletextTtiBudget,
+    deadline: Instant,
+) -> Result<()> {
+    if matches!(
+        files.carrier,
+        TeletextEditorCarrier::V4
+            | TeletextEditorCarrier::V5
+            | TeletextEditorCarrier::V6
+            | TeletextEditorCarrier::V7
+    ) {
+        drcs_sets::append_sets(encoded, assets, files, tti_budget, deadline)?;
+    }
+    Ok(())
+}
+
 fn assemble_files(
     original: OriginalDesignView<'_>,
     inventory: ExportInventory<'_>,
@@ -970,6 +1005,17 @@ fn assemble_files(
                     deadline,
                 )?;
             }
+            if carrier == TeletextEditorCarrier::V7 {
+                object_fragments::append(
+                    encoded,
+                    page,
+                    &resource_name,
+                    &mut files,
+                    &mut assets,
+                    tti_budget,
+                    deadline,
+                )?;
+            }
             if drcs_companion_eligible(page, carrier) {
                 assets.push(append_drcs_companion(
                     page,
@@ -980,12 +1026,7 @@ fn assemble_files(
             }
         }
     }
-    if matches!(
-        carrier,
-        TeletextEditorCarrier::V4 | TeletextEditorCarrier::V5 | TeletextEditorCarrier::V6
-    ) {
-        drcs_sets::append_sets(encoded, &mut assets, &mut files, tti_budget, deadline)?;
-    }
+    append_drcs_sets(encoded, &mut assets, &mut files, tti_budget, deadline)?;
     for (magazine, unit) in magazines.iter().zip(encoded.magazine_units()) {
         check_deadline(deadline)?;
         charge_units(&mut units, 1, project_budget.max_units)?;
@@ -1118,13 +1159,14 @@ mod tests {
             TeletextEditorCarrier::V4,
             TeletextEditorCarrier::V5,
             TeletextEditorCarrier::V6,
+            TeletextEditorCarrier::V7,
         ] {
             assert_eq!(
                 TeletextEditorCarrier::from_profile(carrier.profile()),
                 Some(carrier)
             );
         }
-        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v7"] {
+        for profile in ["", "qteletextmaker-1.1", "qteletextmaker-1.0-carrier-v8"] {
             assert_eq!(TeletextEditorCarrier::from_profile(profile), None);
         }
     }
@@ -1146,6 +1188,7 @@ mod tests {
             );
             assert_eq!(TeletextEditorCarrier::V2.status(controls, primary), v2);
             assert_eq!(TeletextEditorCarrier::V6.status(controls, primary), v2);
+            assert_eq!(TeletextEditorCarrier::V7.status(controls, primary), v2);
         }
         // Independent native fallback NOS 1 and enhanced primary NOS 4.
         assert_eq!(TeletextEditorCarrier::Legacy.status(0x0481, 4), 0xc0c0);

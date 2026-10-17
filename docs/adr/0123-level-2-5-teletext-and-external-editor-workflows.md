@@ -283,21 +283,33 @@ RED-to-green AP00-anchor import and its protected-consumer boundary. General
 row-zero lowering, other command/resource/object editing and complete editor/
 client/engine acceptance remain required; no permanent restriction is accepted.
 
-Original Public/Global object scalar intents use private concept version 14 and
-QTM carrier version 6; these version spaces remain independent. An `object_tti_v1`
-companion refers to exactly one protected native POP/GPOP file and original
-semantic object ID. Its disposable Local wrapper at editor page 100/ordinal 0 is
-editor syntax only: it never substitutes a display owner for the original full
-resource kind, raw page, logical S1 and object identity. Original protected files,
-wrapper invocations, definition markers, hidden prefixes and padding stay exact.
-Only an original semantic scalar word may change, followed by full re-encoding
-and permission checks on every shared consumer. Authenticated receipt replay
-applies all stored intent; generic or legacy replay refuses unapplied intent.
-Import, repeat and undo save concepts without publishing. Carrier versions 1–5
-retain their original reconstruction. A one-frame companion does not reduce the
-native capacities of 507/494/481 words or accept a permanent editor restriction:
-larger-object continuations, dependencies and full resource/set interchange remain
-required work. P9A-04 owns implementation status, evidence and remaining gaps.
+Original Public/Global object scalar intents use private concept version 14,
+independently of QTM carrier versions 6 and 7. Fresh exports retain V6
+`object_tti_v1` companions when every original definition fits its 208-word editor
+frame. An overflowing definition selects V7 for the complete original object
+inventory, including small and empty definitions. Each `object_tti_fragment_v1`
+member retains its protected native resource file, semantic object ID, exact
+command and FIRST-X3 native-word ranges, and ordered complete group membership.
+Complete fragment membership is counted against the existing file quota before
+editor-body allocation. Protected native assets retain before-copy byte checks;
+remaining file/byte quotas bound fragment construction and serialization. No
+three-fragment ceiling or reduced native 507/494/481 capacity is introduced.
+
+The disposable same-type Local wrapper at editor page 100/ordinal 0 is editor
+syntax only: it never substitutes a display owner for the original full resource
+kind, raw page, logical S1 and object identity. Protected V7 descriptions identify
+command fragments and direct the user to native preview for full context. Earlier
+AP, charset, colour, DRCS and nested dependency context is not fabricated in an
+isolated editor member. Original protected files, wrapper invocations, definition
+markers, hidden prefixes and padding stay exact. Only an authenticated original
+semantic scalar word may change, followed by full re-encoding and permission
+checks on every shared consumer. Authenticated receipt replay applies all stored
+intent; generic or legacy replay refuses unapplied intent. Import, repeat and undo
+save concepts without publishing. Historical carriers retain their exact original
+reconstruction; an uploaded project cannot upgrade its receipt. Resource
+structural edits, complete dependency views and full resource/set interchange
+remain required work. P9A-04 owns verification and remaining acceptance; this
+contract update does not claim a completed runtime or external-editor trial.
 
 The pinned editor now also proves a genuine ordinary MAIN-document DRCS bitmap
 byte edit and Save As, followed by a fresh attachment/render trial against the

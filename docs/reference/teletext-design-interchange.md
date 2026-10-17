@@ -5512,12 +5512,14 @@ positive/negative codec, native import and durable qualification evidence.
 ### Versioned QTeletextMaker status carrier
 
 `project.editor_profile` distinguishes `qteletextmaker-1.0` and the explicit
-`qteletextmaker-1.0-carrier-v2` through `qteletextmaker-1.0-carrier-v6` profiles.
-Fresh exports select V6 when an original native POP/GPOP has definitions;
-otherwise they select V5 when a selected display needs original-POP panel/BBS
-presentation, or V4. V5 carries that presentation as protected editor-only X28
-without inventing a native X28 or secondary charset. V6 inherits V5 presentation
-and V4 DRCS sets, adding the resource-object companions described below.
+`qteletextmaker-1.0-carrier-v2` through `qteletextmaker-1.0-carrier-v7` profiles.
+Fresh exports select V7 when an original POP/GPOP definition exceeds the complete
+208-word editor frame; all original object definitions then use fragment mappings.
+Smaller object exports retain V6. Without object definitions, exports select V5
+when a selected display needs original-POP panel/BBS presentation, or V4. V5 carries
+that presentation as protected editor-only X28 without inventing a native X28 or
+secondary charset. V6 and V7 inherit V5 presentation and V4 DRCS sets, adding the
+resource-object companions described below.
 It versions the adapter for the same pinned QTeletextMaker1.0 editor, not the
 editor itself or the authored document/receipt schemas. Unknown names reject.
 Stored receipts select reconstruction; uploaded metadata cannot select another
@@ -5546,7 +5548,7 @@ and resource/page-set proof remains open in its complete acceptance map.
 
 ### Protected DRCS editor dependencies
 
-Carriers V4–V6 retain the V2 display/NOS mapping and the following DRCS sets.
+Carriers V4–V7 retain the V2 display/NOS mapping and the following DRCS sets.
 Stored Legacy/V2/V3 receipts select their original exact factory;
 companions do not renumber or replace original DVB assets. Schemas remain1.
 
@@ -5623,15 +5625,45 @@ Import uses private concept version 14, exact full-resource/S1/ID correspondence
 complete native re-encoding and captured permissions for every shared consumer.
 Repeated imports retain root-relative intent; undo does not publish.
 
-The current single companion includes at most 208 X26 words, including its
-wrapper. Larger native objects explicitly reject export before body copying;
-no object is cut, renumbered or emitted partly. Native capacities of 507/494/481 words
-remain intact. Continuation interchange and complete nested-dependency editor
-preview remain required implementation gaps, not accepted standard restrictions.
-Use the native shared-model preview to validate the complete consumer context;
-a wrapper view alone does not establish that context. Historical V1–V5 receipts
-keep their exact original reconstruction and cannot acquire V6 edit authority.
-P9A-04 owns verified scope and remaining acceptance.
+V6 single companions contain at most 208 X26 words including the wrapper. Fresh
+exports use V7 if any original definition needs more space. Every definition in
+that export, including small and empty definitions, then uses the closed
+`object_tti_fragment_v1` scope:
+
+| Field | Meaning |
+| --- | --- |
+| `resource_name`, `object_id` | Exact protected POP/GPOP asset and unchanged semantic object ID |
+| `fragment_index`, `fragment_count` | Zero-based membership in one complete ordered object group; count1–507 |
+| `command_start`, `command_end` | Half-open original semantic command range; the first begins at0 and adjacent ranges meet |
+| `native_word_start`, `native_word_end` | Half-open absolute FIRST-X3 word range, within1–507; adjacent ranges meet |
+| `editor_page`, `editor_ordinal` | Fixed256 (PN100) and0, with SC0000; these are editor coordinates |
+
+Each member has `unit_count:0` and its own distinct file name. A singleton may
+retain an empty emitted body, including hidden-only original commands. Multi-member
+command and native ranges are positive. Missing, duplicated, overlapping,
+discontinuous, mixed-version or inconsistent groups reject. Uploaded ranges grant
+no authority: the host regenerates exact partitions and command correspondence
+from the retained original definition and final native compiler provenance.
+
+The existing file-count quota covers the complete planned export before editor
+bodies are copied. Protected raw assets retain per-file and aggregate byte checks
+before allocation/copying. Each fragment receives the minimum of the trusted TTI,
+per-file and remaining aggregate byte budgets for construction and serialization;
+TTI records, native units and the original deadline retain their existing limits. No fixed three-member cap applies. Whole commands and their
+lowering prefixes remain together, each editor frame stays within208 words, and
+the native507/494/481 capacities and protected resource files remain unchanged.
+
+V7 includes the protected description `Object command fragment N/M; use native
+preview for full context.` It labels a command-edit view, not an independently
+executing resource. Earlier AP, charset, colour and DRCS state, plus nested
+resource dependencies, are not invented inside a fragment. Use the native shared
+model to preview the complete consumer context. Only the same authenticated
+original scalar edits supported by V6 are accepted; resource command insertion,
+deletion or repositioning, complete nested-dependency editor views and full
+resource/set interchange remain open requirements. Historical receipts keep their
+exact original carrier and cannot acquire V7 authority through uploaded metadata.
+P9A-04 owns verified scope and outstanding evidence; implementation of this
+contract does not itself establish actual-editor, stream or client acceptance.
 
 ### Receipt-bound native concept import
 
@@ -5656,8 +5688,10 @@ Captured main-area Free/Zone rectangles authorize cell edits; Generated and
 omitted regions stay protected. Complete native compilation then compares byte
 roles, spacing attributes, suppression/size footprints, enhanced geometry,
 selected glyph masks and latent effects in protected cells. Identical screen
-colour alone cannot authorize a spacing-code escape. Protected resource and
-magazine output remain exact. X27/0's38 control/link nibbles stay exact; its two
+colour alone cannot authorize a spacing-code escape. Magazine output and resources
+without qualified original bitmap/object intent remain exact. Changed resources
+must match complete native re-encoding with retained identity, lifecycle and
+allocation provenance. X27/0's38 control/link nibbles stay exact; its two
 page-data CRC bytes may change only through the trusted encoder's recalculation.
 
 The qualified private overlay is appended alongside byte-exact original producer,

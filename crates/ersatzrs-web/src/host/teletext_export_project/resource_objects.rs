@@ -17,6 +17,34 @@ use ersatzrs_ffmpeg::teletext::{
 };
 use std::ops::Range;
 
+mod fragments;
+pub(in super::super) use fragments::{build_fragment, plan_fragments, ObjectEditorFragmentPlan};
+
+/// Carrier selection uses the native body range and the same real wrapper as V6.
+/// Full fragment validation still runs before any editor body is allocated.
+pub(in super::super) fn requires_fragments(
+    page: &EncodedTeletextAuthoredPage,
+    deadline: Instant,
+) -> Result<bool> {
+    check_deadline(deadline)?;
+    let EncodedTeletextAuthoredPage::Object(resource) = page else {
+        return Ok(false);
+    };
+    for position in resource.definition_positions() {
+        check_deadline(deadline)?;
+        let (kind, body) = body_range(resource, position.target(), deadline)?;
+        let (marker, _) = wrapper(kind)?;
+        let words = marker
+            .checked_add(2)
+            .and_then(|value| value.checked_add(body.len()))
+            .ok_or(Error::Budget)?;
+        if words.div_ceil(13).checked_mul(13).ok_or(Error::Budget)? > 208 {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Correspondence is regenerated from the immutable resource, never uploaded.
 pub(in super::super) struct ObjectEditorCommandPosition {
     pub command: usize,

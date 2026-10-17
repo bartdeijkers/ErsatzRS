@@ -17,7 +17,11 @@ use serde::{
     de::{DeserializeOwned, DeserializeSeed, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize,
 };
-use std::{cell::Cell, collections::BTreeSet, fmt, io};
+use std::{
+    cell::Cell,
+    collections::{BTreeMap, BTreeSet},
+    fmt, io,
+};
 
 #[path = "teletext_export_project/effective.rs"]
 mod effective;
@@ -279,6 +283,20 @@ pub enum TeletextExportAssetScope {
         editor_page: u16,
         editor_ordinal: u64,
     },
+    /// Ordered bounded editor fragments of one unchanged native resource object.
+    /// Ranges are descriptive claims; the host regenerates exact provenance.
+    ObjectTtiFragmentV1 {
+        resource_name: String,
+        object_id: u16,
+        fragment_index: u16,
+        fragment_count: u16,
+        command_start: u64,
+        command_end: u64,
+        native_word_start: u16,
+        native_word_end: u16,
+        editor_page: u16,
+        editor_ordinal: u64,
+    },
     /// Ordered bank through its highest authored S1. Null is protected,
     /// editor-only undefined padding; it never creates a native resource.
     DrcsTtiSet {
@@ -315,6 +333,18 @@ impl<'de> Deserialize<'de> for TeletextExportAssetScope {
                 editor_page: u16,
                 editor_ordinal: u64,
             },
+            ObjectTtiFragmentV1 {
+                resource_name: String,
+                object_id: u16,
+                fragment_index: u16,
+                fragment_count: u16,
+                command_start: u64,
+                command_end: u64,
+                native_word_start: u16,
+                native_word_end: u16,
+                editor_page: u16,
+                editor_ordinal: u64,
+            },
         }
         Ok(match map_only(d)? {
             Fields::Resource {
@@ -341,6 +371,29 @@ impl<'de> Deserialize<'de> for TeletextExportAssetScope {
             } => Self::ObjectTtiV1 {
                 resource_name,
                 object_id,
+                editor_page,
+                editor_ordinal,
+            },
+            Fields::ObjectTtiFragmentV1 {
+                resource_name,
+                object_id,
+                fragment_index,
+                fragment_count,
+                command_start,
+                command_end,
+                native_word_start,
+                native_word_end,
+                editor_page,
+                editor_ordinal,
+            } => Self::ObjectTtiFragmentV1 {
+                resource_name,
+                object_id,
+                fragment_index,
+                fragment_count,
+                command_start,
+                command_end,
+                native_word_start,
+                native_word_end,
                 editor_page,
                 editor_ordinal,
             },
@@ -527,7 +580,9 @@ fn validate_pages(project: &TeletextExportProject, b: TeletextExportProjectBudge
             || p.editor_presentation.as_ref().is_some_and(|presentation| {
                 !matches!(
                     project.editor_profile.as_str(),
-                    "qteletextmaker-1.0-carrier-v5" | "qteletextmaker-1.0-carrier-v6"
+                    "qteletextmaker-1.0-carrier-v5"
+                        | "qteletextmaker-1.0-carrier-v6"
+                        | "qteletextmaker-1.0-carrier-v7"
                 ) || !presentation.valid()
             })
         {
@@ -622,6 +677,33 @@ fn linked_drcs_set_bank<'a>(
     Some(bank)
 }
 
+fn linked_object_resource(project: &TeletextExportProject, resource_name: &str) -> bool {
+    let mut resources = project
+        .assets
+        .iter()
+        .filter(|candidate| candidate.name == resource_name);
+    let Some(TeletextExportAssetMapping {
+        scope: TeletextExportAssetScope::Resource { identity, .. },
+        ..
+    }) = resources.next()
+    else {
+        return false;
+    };
+    let checked_resource =
+        ersatzrs_domain::TeletextRawDataPageNumber::new(identity.page.magazine, identity.page.page)
+            .ok()
+            .zip(ersatzrs_domain::TeletextResourceSubpageIndex::new(identity.subpage).ok())
+            .and_then(|(page, subpage)| {
+                let kind = match identity.kind {
+                    TeletextResourceKindWire::Pop => ersatzrs_domain::TeletextResourceKind::Pop,
+                    TeletextResourceKindWire::Gpop => ersatzrs_domain::TeletextResourceKind::Gpop,
+                    _ => return None,
+                };
+                ersatzrs_domain::TeletextResourceIdentity::new(kind, page, subpage).ok()
+            });
+    resources.next().is_none() && checked_resource.is_some()
+}
+
 fn object_companion_key(
     project: &TeletextExportProject,
     asset: &TeletextExportAssetMapping,
@@ -637,37 +719,124 @@ fn object_companion_key(
     else {
         return Err(indexed(K::Mapping, index));
     };
-    let mut resources = project
-        .assets
-        .iter()
-        .filter(|candidate| candidate.name == *resource_name);
-    let resource = resources.next().ok_or_else(|| indexed(K::Mapping, index))?;
-    let TeletextExportAssetScope::Resource { identity, .. } = &resource.scope else {
-        return Err(indexed(K::Mapping, index));
-    };
-    let checked_resource =
-        ersatzrs_domain::TeletextRawDataPageNumber::new(identity.page.magazine, identity.page.page)
-            .ok()
-            .zip(ersatzrs_domain::TeletextResourceSubpageIndex::new(identity.subpage).ok())
-            .and_then(|(page, subpage)| {
-                let kind = match identity.kind {
-                    TeletextResourceKindWire::Pop => ersatzrs_domain::TeletextResourceKind::Pop,
-                    TeletextResourceKindWire::Gpop => ersatzrs_domain::TeletextResourceKind::Gpop,
-                    _ => return None,
-                };
-                ersatzrs_domain::TeletextResourceIdentity::new(kind, page, subpage).ok()
-            });
     if project.editor_profile != "qteletextmaker-1.0-carrier-v6"
         || !flat_name(resource_name)
-        || resources.next().is_some()
         || asset.unit_count != 0
         || *editor_page != 0x100
         || *editor_ordinal != 0
-        || checked_resource.is_none()
+        || !linked_object_resource(project, resource_name)
     {
         return Err(indexed(K::Mapping, index));
     }
     Ok(format!("o:{resource_name}:{object_id}"))
+}
+
+#[derive(Clone, Copy)]
+struct ObjectFragment {
+    index: u16,
+    count: u16,
+    command_start: u64,
+    command_end: u64,
+    native_start: u16,
+    native_end: u16,
+}
+fn object_fragment(scope: &TeletextExportAssetScope) -> Option<(&str, u16, ObjectFragment)> {
+    let TeletextExportAssetScope::ObjectTtiFragmentV1 {
+        resource_name,
+        object_id,
+        fragment_index,
+        fragment_count,
+        command_start,
+        command_end,
+        native_word_start,
+        native_word_end,
+        ..
+    } = scope
+    else {
+        return None;
+    };
+    Some((
+        resource_name,
+        *object_id,
+        ObjectFragment {
+            index: *fragment_index,
+            count: *fragment_count,
+            command_start: *command_start,
+            command_end: *command_end,
+            native_start: *native_word_start,
+            native_end: *native_word_end,
+        },
+    ))
+}
+fn object_fragment_key(
+    project: &TeletextExportProject,
+    asset: &TeletextExportAssetMapping,
+    index: usize,
+) -> Result<String> {
+    let Some((resource_name, object_id, fragment)) = object_fragment(&asset.scope) else {
+        return Err(indexed(TeletextExportProjectFailure::Mapping, index));
+    };
+    if project.editor_profile != "qteletextmaker-1.0-carrier-v7"
+        || !matches!(
+            asset.scope,
+            TeletextExportAssetScope::ObjectTtiFragmentV1 {
+                editor_page: 0x100,
+                editor_ordinal: 0,
+                ..
+            }
+        )
+        || asset.unit_count != 0
+        || !flat_name(resource_name)
+        || !linked_object_resource(project, resource_name)
+        || !(1..=507).contains(&fragment.count)
+        || fragment.index >= fragment.count
+        || fragment.command_start > fragment.command_end
+        || fragment.native_start == 0
+        || fragment.native_end > 507
+        || fragment.native_start > fragment.native_end
+        || (fragment.count > 1
+            && (fragment.native_start == fragment.native_end
+                || fragment.command_start == fragment.command_end))
+    {
+        return Err(indexed(TeletextExportProjectFailure::Mapping, index));
+    }
+    Ok(format!("f:{resource_name}:{object_id}:{}", fragment.index))
+}
+fn validate_object_fragments(project: &TeletextExportProject) -> Result<()> {
+    // Existing max_files validation precedes this allocation; indices are a
+    // checked partition, never permission to allocate the claimed count.
+    let mut groups = BTreeMap::new();
+    for (index, asset) in project.assets.iter().enumerate() {
+        let Some((name, id, fragment)) = object_fragment(&asset.scope) else {
+            continue;
+        };
+        let group = groups.entry((name, id)).or_insert_with(BTreeMap::new);
+        if group.insert(fragment.index, (index, fragment)).is_some() {
+            return Err(indexed(TeletextExportProjectFailure::Mapping, index));
+        }
+    }
+    for group in groups.values() {
+        let Some(&(index, first)) = group.values().next() else {
+            continue;
+        };
+        if group.len() != usize::from(first.count) || first.command_start != 0 {
+            return Err(indexed(TeletextExportProjectFailure::Mapping, index));
+        }
+        let mut command_end = 0;
+        let mut native_end = first.native_start;
+        for (expected, (&ordinal, &(index, fragment))) in group.iter().enumerate() {
+            if usize::from(ordinal) != expected
+                || fragment.count != first.count
+                || fragment.command_start != command_end
+                || fragment.native_start != native_end
+            {
+                return Err(indexed(TeletextExportProjectFailure::Mapping, index));
+            }
+            command_end = fragment.command_end;
+            native_end = fragment.native_end;
+        }
+    }
+    Ok(())
 }
 
 fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudget) -> Result<()> {
@@ -725,6 +894,7 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
                     "qteletextmaker-1.0-carrier-v4"
                         | "qteletextmaker-1.0-carrier-v5"
                         | "qteletextmaker-1.0-carrier-v6"
+                        | "qteletextmaker-1.0-carrier-v7"
                 ) || a.unit_count != 0
                 {
                     return Err(indexed(K::Mapping, i));
@@ -737,12 +907,16 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
                 )
             }
             TeletextExportAssetScope::ObjectTtiV1 { .. } => object_companion_key(project, a, i)?,
+            TeletextExportAssetScope::ObjectTtiFragmentV1 { .. } => {
+                object_fragment_key(project, a, i)?
+            }
         };
         let raw_units = !matches!(
             &a.scope,
             TeletextExportAssetScope::DrcsTti { .. }
                 | TeletextExportAssetScope::DrcsTtiSet { .. }
                 | TeletextExportAssetScope::ObjectTtiV1 { .. }
+                | TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
         );
         if !flat_name(&a.name)
             || !names.insert(a.name.as_str())
@@ -756,7 +930,7 @@ fn validate_assets(project: &TeletextExportProject, b: TeletextExportProjectBudg
             return Err(indexed(K::Mapping, i));
         }
     }
-    Ok(())
+    validate_object_fragments(project)
 }
 fn parse_bounded_tti(
     bytes: &[u8],
@@ -980,6 +1154,11 @@ impl TeletextExportReceiptBody {
                         )?;
                     }
                     TeletextExportAssetScope::ObjectTtiV1 {
+                        editor_page,
+                        editor_ordinal,
+                        ..
+                    }
+                    | TeletextExportAssetScope::ObjectTtiFragmentV1 {
                         editor_page,
                         editor_ordinal,
                         ..

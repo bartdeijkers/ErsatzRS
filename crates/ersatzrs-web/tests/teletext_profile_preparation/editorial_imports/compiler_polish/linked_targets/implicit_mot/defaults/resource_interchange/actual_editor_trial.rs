@@ -5,7 +5,11 @@ use std::path::Path;
 
 const CASE: &str = "original-pop-foreground";
 
-fn companion(flow: &Flow) -> &str {
+fn companion(flow: &Flow, command: usize) -> &str {
+    if command == fragments::FOREGROUND_COMMAND {
+        return &fragments::selected_asset(&flow.exported[0].sidecar().project).name;
+    }
+    assert_eq!(command, 2);
     let resource = protected_file(&flow.exported[0], TeletextResourceKindWire::Pop, 0xc0);
     &flow.exported[0]
         .sidecar()
@@ -21,8 +25,8 @@ fn companion(flow: &Flow) -> &str {
         .name
 }
 
-fn edit(flow: &Flow, bytes: &[u8]) -> Value {
-    let target = original_resource_operand(flow).identity();
+fn edit(flow: &Flow, bytes: &[u8], command: usize) -> Value {
+    let target = original_resource_operand_at(flow, command).identity();
     let original = flow.accepted[0]
         .service()
         .pages()
@@ -37,7 +41,7 @@ fn edit(flow: &Flow, bytes: &[u8]) -> Value {
         })
         .unwrap();
     let mut positions = original.command_positions().iter().filter(|position| {
-        position.source().object == Some(target) && position.source().command == 2
+        position.source().object == Some(target) && position.source().command == command
     });
     let position = positions.next().unwrap();
     assert!(positions.next().is_none());
@@ -61,13 +65,13 @@ fn edit(flow: &Flow, bytes: &[u8]) -> Value {
         })
         .collect();
     assert_eq!(words.len(), 1);
-    json!({"kind":"resource_foreground", "identity":target,"source_command":2,
+    json!({"kind":"resource_foreground", "identity":target,"source_command":command,
         "native_first_word":position.first_word(),"native_semantic_word":position.semantic_word(),
         "semantic_word":words[0],"column":1,"mode":0,"from":2,"to":3,
         "expected_word":0x1001,"replacement_word":0x1801,"consumers":[124,125,126]})
 }
 
-fn stage(directory: &Path, flow: &Flow) -> Value {
+fn stage(directory: &Path, flow: &Flow, case: &str, command: usize) -> Value {
     std::fs::create_dir(directory).expect("fresh editor case directory");
     let original = directory.join("original");
     std::fs::create_dir(&original).unwrap();
@@ -77,13 +81,13 @@ fn stage(directory: &Path, flow: &Flow) -> Value {
     for file in exported.files() {
         live_client::write_new(&original.join(&file.name), &file.bytes).unwrap();
     }
-    let name = companion(flow);
+    let name = companion(flow, command);
     let file = exported
         .files()
         .iter()
         .find(|file| file.name == name)
         .unwrap();
-    let ready = json!({"probe_version":1,"case":CASE,"editor_profile":exported.sidecar().project.editor_profile,
+    let ready = json!({"probe_version":1,"case":case,"editor_profile":exported.sidecar().project.editor_profile,
         "design_id":flow.saved[0].head().id,"design_revision":1,"design_digest":flow.saved[0].digest(),
         "receipt_id":flow.receipts[0].metadata.id,"receipt_digest":flow.receipts[0].metadata.digest,
         "input":format!("original/{name}"),"input_sha256":drcs_bitmap::hash(&file.bytes),
@@ -91,11 +95,17 @@ fn stage(directory: &Path, flow: &Flow) -> Value {
         "files":exported.files().iter().map(|file|json!({"name":file.name,
             "bytes":file.bytes.len(),"sha256":drcs_bitmap::hash(&file.bytes)})).collect::<Vec<_>>(),
         "page":{"page":0x100,"subcode":0},"editor_geometry":{"left_columns":0,"right_columns":0,"total_columns":40},
-        "edit":edit(flow,&file.bytes),"save_as":"edited.tti","completion":"editor-saved.json","timeout_seconds":600,
+        "edit":edit(flow,&file.bytes,command),"save_as":"edited.tti","completion":"editor-saved.json","timeout_seconds":600,
         "editor":{"name":"QTeletextMaker","version":"1.0",
             "source_commit":"cac2167bac933a6160cca45a45d5d4ee95355898",
             "binary_sha256":"af7cb11220a411011917db0739f27a35b5c6ab725552b52b8a09bc01e296568a"},
         "publication":"import is an unpublished concept; explicit publication follows native validation"});
+    let mut ready = ready;
+    if command == fragments::FOREGROUND_COMMAND {
+        ready["resource_scope"] =
+            serde_json::to_value(&fragments::selected_asset(&exported.sidecar().project).scope)
+                .unwrap();
+    }
     editor::json_new(directory, "ready.json", &ready);
     ready
 }
@@ -104,6 +114,7 @@ fn actual_request(
     directory: &Path,
     flow: &Flow,
     saved: &[u8],
+    command: usize,
 ) -> NativeTeletextEditorialImportRequest {
     let exported = &flow.exported[0];
     let original = directory.join("original");
@@ -122,19 +133,18 @@ fn actual_request(
             file.bytes
         );
     }
-    let name = companion(flow);
-    let oracle = resource_request(&flow.receipts[0], 1, 2, 3);
-    let expected = &oracle
-        .files
+    let name = companion(flow, command);
+    let file = exported
+        .files()
         .iter()
         .find(|file| file.name == name)
-        .unwrap()
-        .bytes;
+        .unwrap();
+    let expected = edit_foreground_file(&file.bytes, 2, 3);
     let mut actual = parse_teletext_tti(saved, policy().tti)
         .unwrap()
         .records()
         .to_vec();
-    let expected = parse_teletext_tti(expected, policy().tti).unwrap();
+    let expected = parse_teletext_tti(&expected, policy().tti).unwrap();
     assert_eq!(actual.len(), expected.records().len());
     for record in expected.records() {
         let index = actual
@@ -160,35 +170,61 @@ fn actual_request(
 #[tokio::test]
 #[ignore = "requires the pinned headed QTM resource controller and a fresh explicit proof directory"]
 async fn actual_qtm_resource_foreground_save_as_import_preview_publish_reopen() {
+    Box::pin(run_case(CASE, 2, response)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires the pinned headed QTM fragment controller and a fresh explicit proof directory"]
+async fn actual_qtm_resource_fragment_foreground_save_as_import_preview_publish_reopen() {
+    Box::pin(run_case(
+        "original-pop-fragment-foreground",
+        fragments::FOREGROUND_COMMAND,
+        fragments::response,
+    ))
+    .await;
+}
+
+async fn run_case(case: &str, command: usize, factory: fn(&str, u16, u16) -> Value) {
     let root = std::path::PathBuf::from(crate::client_capture::selected(
         "ERSATZRS_TELETEXT_RESOURCE_EDITOR_DIR",
     ));
     assert!(root.is_absolute());
     std::fs::create_dir(&root).expect("proof root must be create-new");
-    let directory = root.join(CASE);
+    let directory = root.join(case);
+    let encoding = if command == fragments::FOREGROUND_COMMAND {
+        fragments::encoding
+    } else {
+        seed::encoding
+    };
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
-        response,
+        factory,
         Fixture::new_persistent().await,
-        seed::encoding,
+        encoding,
         authoring_metadata::write_compact,
     ))
     .await;
     let retained = resource_bank_admin::Retained::capture(&fixture).await;
-    let ready = stage(&directory, &flow);
+    let ready = stage(&directory, &flow, case, command);
     let completion = editor::completion(&directory).await;
     let saved =
         live_client::read_bounded(&directory.join("edited.tti"), policy().tti.max_bytes).unwrap();
-    let concept = import(&fixture, actual_request(&directory, &flow, &saved)).await;
+    let concept = import(&fixture, actual_request(&directory, &flow, &saved, command)).await;
     assert_eq!(
         (concept.head().id, concept.head().revision),
         (flow.saved[0].head().id, 2)
     );
-    let previews = Box::pin(assert_resource_concept(&fixture, &flow, &concept, 3)).await;
+    let previews = Box::pin(assert_resource_concept_at(
+        &fixture, &flow, &concept, 3, command,
+    ))
+    .await;
     assert_original_pointers(&fixture, &flow).await;
     retained.assert_unchanged(&fixture, &flow).await;
     fixture = fixture.reopen().await;
     assert_eq!(
-        Box::pin(assert_resource_concept(&fixture, &flow, &concept, 3)).await,
+        Box::pin(assert_resource_concept_at(
+            &fixture, &flow, &concept, 3, command
+        ))
+        .await,
         previews
     );
     assert_original_pointers(&fixture, &flow).await;
@@ -208,7 +244,7 @@ async fn actual_qtm_resource_foreground_save_as_import_preview_publish_reopen() 
     editor::json_new(
         &directory,
         "success.json",
-        &json!({"probe_version":1,"case":CASE,
+        &json!({"probe_version":1,"case":case,
         "editor":completion,"ready_sha256":drcs_bitmap::hash(&serde_json::to_vec_pretty(&ready).unwrap()),
         "saved_sha256":drcs_bitmap::hash(&saved),"concept_revision":2,"schema_version":14,
         "all_three_shared_consumers_exact":true,"protected_artifacts_and_other_channel_unchanged":true,

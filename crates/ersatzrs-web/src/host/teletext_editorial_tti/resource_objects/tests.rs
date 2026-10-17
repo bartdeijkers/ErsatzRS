@@ -60,6 +60,15 @@ fn compile(
     code: u8,
     kind: TeletextObjectType,
 ) -> EncodedTeletextAuthoredService {
+    compile_commands(global, colour, code, kind, None)
+}
+fn compile_commands(
+    global: bool,
+    colour: u8,
+    code: u8,
+    kind: TeletextObjectType,
+    custom: Option<Vec<TeletextEnhancementCommand>>,
+) -> EncodedTeletextAuthoredService {
     let mut value: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../tests/fixtures/teletext-output-policy-v1.json"
     ))
@@ -97,22 +106,7 @@ fn compile(
         policy.validation.service,
     )
     .unwrap();
-    let commands = vec![
-        TeletextEnhancementCommand::SetPosition {
-            position: TeletextEnhancementPosition::new(0, 0).unwrap(),
-        },
-        TeletextEnhancementCommand::SetPosition {
-            position: TeletextEnhancementPosition::new(4, 8).unwrap(),
-        },
-        TeletextEnhancementCommand::AtColumn {
-            column: 8,
-            operation: foreground(colour),
-        },
-        TeletextEnhancementCommand::AtColumn {
-            column: 8,
-            operation: glyph(code),
-        },
-    ];
+    let commands = custom.unwrap_or_else(|| original_commands(colour, code));
     let semantic = TeletextSemanticService::new(
         TeletextResolvedServiceDraft {
             base: lifted.base().clone(),
@@ -147,6 +141,24 @@ fn compile(
     }];
     encode_teletext_authored_service_before(declared, &transmissions, &policy.encoding, deadline())
         .unwrap()
+}
+fn original_commands(colour: u8, code: u8) -> Vec<TeletextEnhancementCommand> {
+    vec![
+        TeletextEnhancementCommand::SetPosition {
+            position: TeletextEnhancementPosition::new(0, 0).unwrap(),
+        },
+        TeletextEnhancementCommand::SetPosition {
+            position: TeletextEnhancementPosition::new(4, 8).unwrap(),
+        },
+        TeletextEnhancementCommand::AtColumn {
+            column: 8,
+            operation: foreground(colour),
+        },
+        TeletextEnhancementCommand::AtColumn {
+            column: 8,
+            operation: glyph(code),
+        },
+    ]
 }
 fn project(service: &EncodedTeletextAuthoredService, global: bool) -> TeletextExportProject {
     let resource = identity(global).resource().unwrap();
@@ -584,3 +596,6 @@ fn resource_tti_identity_limits_and_original_deadline_remain_enforced() {
         );
     }
 }
+
+#[path = "tests/fragments.rs"]
+mod fragments;

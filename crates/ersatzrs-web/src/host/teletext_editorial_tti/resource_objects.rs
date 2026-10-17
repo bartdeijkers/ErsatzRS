@@ -3,7 +3,9 @@ use super::{
     operands, Location, NativeTeletextEditorialTtiError,
     NativeTeletextEditorialTtiFailure as Failure, Page, Result,
 };
-use crate::host::teletext_export_project::resource_objects::{build_frame, ObjectEditorFrame};
+use crate::host::teletext_export_project::resource_objects::{
+    build_fragment, build_frame, plan_fragments, ObjectEditorFragmentPlan, ObjectEditorFrame,
+};
 use ersatzrs_addon_contract::TeletextResourceKindWire;
 use ersatzrs_app::{
     teletext_export_project::{
@@ -12,8 +14,8 @@ use ersatzrs_app::{
     teletext_tti::TeletextTtiBudget,
 };
 use ersatzrs_domain::{
-    TeletextEnhancementCommand, TeletextObjectId, TeletextObjectIdentity, TeletextResourceKind,
-    TeletextResourceObjectOperandOverlay,
+    TeletextEnhancementCommand, TeletextEnhancementObjectDefinition, TeletextObjectId,
+    TeletextObjectIdentity, TeletextResourceKind, TeletextResourceObjectOperandOverlay,
 };
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService};
 use std::{collections::BTreeSet, time::Instant};
@@ -31,19 +33,29 @@ struct Mapping<'a> {
     object_type: ersatzrs_domain::TeletextObjectType,
     page: &'a EncodedTeletextAuthoredPage,
     location: Location,
+    asset: &'a TeletextExportAssetMapping,
+    project: &'a TeletextExportProject,
+    definition: &'a TeletextEnhancementObjectDefinition,
 }
 fn companion<'a>(
     asset: &'a TeletextExportAssetMapping,
     project: &TeletextExportProject,
 ) -> Result<(&'a str, u16)> {
-    let TeletextExportAssetScope::ObjectTtiV1 {
-        resource_name,
-        object_id,
-        editor_page: 0x100,
-        editor_ordinal: 0,
-    } = &asset.scope
-    else {
-        return Err(invalid());
+    let (resource_name, object_id, profile) = match &asset.scope {
+        TeletextExportAssetScope::ObjectTtiV1 {
+            resource_name,
+            object_id,
+            editor_page: 0x100,
+            editor_ordinal: 0,
+        } => (resource_name, object_id, "qteletextmaker-1.0-carrier-v6"),
+        TeletextExportAssetScope::ObjectTtiFragmentV1 {
+            resource_name,
+            object_id,
+            editor_page: 0x100,
+            editor_ordinal: 0,
+            ..
+        } => (resource_name, object_id, "qteletextmaker-1.0-carrier-v7"),
+        _ => return Err(invalid()),
     };
     let exact = project
         .assets
@@ -59,18 +71,18 @@ fn companion<'a>(
         } if name == resource_name && id == object_id)
         })
         .count();
-    if project.editor_profile != "qteletextmaker-1.0-carrier-v6"
+    if project.editor_profile != profile
         || asset.unit_count != 0
         || exact != 1
-        || targets != 1
+        || (profile == "qteletextmaker-1.0-carrier-v6" && targets != 1)
     {
         return Err(invalid());
     }
     Ok((resource_name, *object_id))
 }
 fn mapping<'a>(
-    asset: &TeletextExportAssetMapping,
-    project: &TeletextExportProject,
+    asset: &'a TeletextExportAssetMapping,
+    project: &'a TeletextExportProject,
     service: &'a EncodedTeletextAuthoredService,
 ) -> Result<Mapping<'a>> {
     let (resource_name, object_id) = companion(asset, project)?;
@@ -127,18 +139,20 @@ fn mapping<'a>(
     {
         return Err(location.error(Failure::Mapping));
     }
-    let object_type = service
+    let definition = service
         .declared()
         .semantic()
         .objects()
         .definition(identity)
-        .ok_or_else(|| location.error(Failure::Mapping))?
-        .object_type;
+        .ok_or_else(|| location.error(Failure::Mapping))?;
     Ok(Mapping {
         identity,
-        object_type,
+        object_type: definition.object_type,
         page,
         location,
+        asset,
+        project,
+        definition,
     })
 }
 fn frame(
@@ -147,15 +161,100 @@ fn frame(
     deadline: Instant,
 ) -> Result<ObjectEditorFrame> {
     mapping.location.check_deadline(deadline)?;
-    let frame = build_frame(mapping.page, mapping.identity, limits.1, limits.0, deadline)
-        .map_err(|error| mapping.location.error(match error {
-            crate::host::teletext_export_project::NativeTeletextExportProjectError::TimedOut => Failure::TimedOut,
+    let result = if matches!(
+        mapping.asset.scope,
+        TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
+    ) {
+        let plan = fragment_plan(mapping, limits.1, deadline)?;
+        build_fragment(
+            mapping.page,
+            mapping.definition,
+            &plan,
+            limits.1,
+            limits.0,
+            deadline,
+        )
+    } else {
+        build_frame(mapping.page, mapping.identity, limits.1, limits.0, deadline)
+    };
+    let frame = result.map_err(|error| {
+        mapping.location.error(match error {
+            crate::host::teletext_export_project::NativeTeletextExportProjectError::TimedOut => {
+                Failure::TimedOut
+            }
             _ => Failure::Structure,
-        }))?;
+        })
+    })?;
     if frame.identity != mapping.identity || frame.object_type != mapping.object_type {
         return Err(mapping.location.error(Failure::Structure));
     }
     Ok(frame)
+}
+
+fn fragment_plan(
+    mapping: &Mapping<'_>,
+    max_units: usize,
+    deadline: Instant,
+) -> Result<ObjectEditorFragmentPlan> {
+    let plans = plan_fragments(mapping.page, mapping.definition, max_units, deadline)
+        .map_err(|error| mapping.location.error(match error {
+            crate::host::teletext_export_project::NativeTeletextExportProjectError::TimedOut => Failure::TimedOut,
+            _ => Failure::Structure,
+        }))?;
+    let TeletextExportAssetScope::ObjectTtiFragmentV1 {
+        resource_name,
+        object_id,
+        fragment_index,
+        ..
+    } = &mapping.asset.scope
+    else {
+        return Err(invalid());
+    };
+    let mut matched = BTreeSet::new();
+    for asset in &mapping.project.assets {
+        mapping.location.check_deadline(deadline)?;
+        match &asset.scope {
+            TeletextExportAssetScope::ObjectTtiV1 {
+                resource_name: name,
+                object_id: id,
+                ..
+            } if name == resource_name && id == object_id => return Err(invalid()),
+            TeletextExportAssetScope::ObjectTtiFragmentV1 {
+                resource_name: name,
+                object_id: id,
+                fragment_index: index,
+                ..
+            } if name == resource_name && id == object_id => {
+                let plan = plans.get(usize::from(*index)).ok_or_else(invalid)?;
+                if usize::from(*index) != matched.len()
+                    || !matched.insert(*index)
+                    || asset.unit_count != 0
+                    || !matches_plan(&asset.scope, plan)
+                {
+                    return Err(invalid());
+                }
+            }
+            _ => {}
+        }
+    }
+    if matched.len() != plans.len() {
+        return Err(invalid());
+    }
+    plans
+        .into_iter()
+        .nth(usize::from(*fragment_index))
+        .ok_or_else(invalid)
+}
+
+fn matches_plan(scope: &TeletextExportAssetScope, plan: &ObjectEditorFragmentPlan) -> bool {
+    matches!(scope, TeletextExportAssetScope::ObjectTtiFragmentV1 {
+        fragment_index, fragment_count, command_start, command_end, native_word_start, native_word_end,
+        editor_page: 0x100, editor_ordinal: 0, ..
+    } if *fragment_index == plan.fragment_index && *fragment_count == plan.fragment_count
+        && *command_start == plan.command_start
+        && *command_end == plan.command_end
+        && *native_word_start == plan.native_word_start
+        && *native_word_end == plan.native_word_end)
 }
 fn word_error(location: Location, word: usize) -> NativeTeletextEditorialTtiError {
     NativeTeletextEditorialTtiError {
@@ -307,19 +406,25 @@ pub(in crate::host) fn authorize(
     if changes.is_empty() {
         return Ok(());
     }
-    if project.editor_profile != "qteletextmaker-1.0-carrier-v6"
-        || project
-            .assets
-            .len()
-            .checked_mul(208)
-            .is_none_or(|maximum| changes.len() > maximum)
+    if !matches!(
+        project.editor_profile.as_str(),
+        "qteletextmaker-1.0-carrier-v6" | "qteletextmaker-1.0-carrier-v7"
+    ) || project
+        .assets
+        .len()
+        .checked_mul(208)
+        .is_none_or(|maximum| changes.len() > maximum)
     {
         return Err(invalid());
     }
     let mut targets = BTreeSet::new();
     let mut matched = 0usize;
     for asset in &project.assets {
-        if !matches!(asset.scope, TeletextExportAssetScope::ObjectTtiV1 { .. }) {
+        if !matches!(
+            asset.scope,
+            TeletextExportAssetScope::ObjectTtiV1 { .. }
+                | TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
+        ) {
             continue;
         }
         let mapping = mapping(asset, project, service)?;
@@ -338,7 +443,7 @@ pub(in crate::host) fn authorize(
             .objects()
             .definition(mapping.identity)
             .ok_or_else(invalid)?;
-        for change in selected() {
+        for change in selected().filter(|change| owns_command(&asset.scope, change.command())) {
             mapping.location.check_deadline(deadline)?;
             if !targets.insert((change.identity(), change.command()))
                 || definition.program.commands().get(change.command())
@@ -362,6 +467,19 @@ pub(in crate::host) fn authorize(
         return Err(invalid());
     }
     Ok(())
+}
+
+fn owns_command(scope: &TeletextExportAssetScope, command: usize) -> bool {
+    match scope {
+        TeletextExportAssetScope::ObjectTtiV1 { .. } => true,
+        TeletextExportAssetScope::ObjectTtiFragmentV1 {
+            command_start,
+            command_end,
+            ..
+        } => u64::try_from(command)
+            .is_ok_and(|command| (*command_start..*command_end).contains(&command)),
+        _ => false,
+    }
 }
 
 /// The applied candidate must re-encode to every edited record, including all

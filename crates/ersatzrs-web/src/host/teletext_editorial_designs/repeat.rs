@@ -428,7 +428,9 @@ fn extend_root_export(
             super::super::teletext_export_project::editor_presentation::carrier(
                 root.original.view(),
                 Some(&owners),
-            ),
+                deadline,
+            )
+            .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?,
         )
         .map_err(|error| NativeTeletextEditorialImportError::Mapping(Box::new(error)))?;
         root.body = body.clone();

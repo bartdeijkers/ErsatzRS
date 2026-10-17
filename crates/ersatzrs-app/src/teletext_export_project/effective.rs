@@ -116,6 +116,7 @@ pub(super) fn validate_schema(project: &TeletextExportProject) -> Result<()> {
                     | "qteletextmaker-1.0-carrier-v4"
                     | "qteletextmaker-1.0-carrier-v5"
                     | "qteletextmaker-1.0-carrier-v6"
+                    | "qteletextmaker-1.0-carrier-v7"
             ) && project.effective_scope.is_none() =>
         {
             Ok(())
@@ -126,6 +127,7 @@ pub(super) fn validate_schema(project: &TeletextExportProject) -> Result<()> {
                 "qteletextmaker-1.0-carrier-v4"
                     | "qteletextmaker-1.0-carrier-v5"
                     | "qteletextmaker-1.0-carrier-v6"
+                    | "qteletextmaker-1.0-carrier-v7"
             ) && project.effective_scope.is_some() =>
         {
             Ok(())

@@ -331,7 +331,11 @@ fn qualify_rows(
     let bitmaps = overlay.drcs_bitmap_overlays().to_vec();
     let object_programs = overlay.local_object_glyph_program_overlays().to_vec();
     let encoding = policy.encoding;
-    let edited = if resource_operands.is_empty() || baseline.carrier != TeletextEditorCarrier::V6 {
+    let edited = if resource_operands.is_empty()
+        || !matches!(
+            baseline.carrier,
+            TeletextEditorCarrier::V6 | TeletextEditorCarrier::V7
+        ) {
         parts.compile(stored, policy, deadline, overlays.clone())
     } else {
         // Only the authenticated original receipt can authorize this separate
@@ -555,7 +559,7 @@ fn reconcile_files(
             changes.object_programs.extend(incoming.object_programs);
         } else if let Some(mapping) = body.project.assets.iter().find(|asset| {
             asset.name == original.name
-                && matches!(asset.scope, ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1 { .. })
+                && matches!(asset.scope, ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1 { .. } | ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiFragmentV1 { .. })
         }) {
             changes.resource_operands.extend(
                 super::teletext_editorial_tti::resource_objects::reconcile(
@@ -648,7 +652,7 @@ fn validate_reconciled_files(
     for mapping in &baseline.body.project.assets {
         if matches!(
             mapping.scope,
-            ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1 { .. }
+            ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiV1 { .. } | ersatzrs_app::teletext_export_project::TeletextExportAssetScope::ObjectTtiFragmentV1 { .. }
         ) {
             let edited = files
                 .iter()
