@@ -11,6 +11,8 @@ mod lifecycle;
 mod negatives;
 #[path = "calls/same_pixels.rs"]
 mod same_pixels;
+#[path = "calls/topology.rs"]
+mod topology;
 
 fn response_with_offset(theme: &str, page: u16, subcode: u16, offset: u8) -> Value {
     let mut value = super::response(theme, page, subcode);

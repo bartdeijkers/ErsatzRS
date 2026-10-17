@@ -580,3 +580,6 @@ fn colliding_full_identity_requires_selected_pop_and_matching_declaration() {
         Some(target(24).resource().unwrap().page()),
     );
 }
+
+#[path = "topology_tests.rs"]
+mod topology_tests;

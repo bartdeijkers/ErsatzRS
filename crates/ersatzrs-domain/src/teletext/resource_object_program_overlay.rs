@@ -1,7 +1,8 @@
 //! Checked POP/GPOP structure; catalogue identity never becomes a Local alias.
 use super::{
     local_object_glyph_program::{
-        validate_invocation_correspondence, validate_style_correspondence,
+        validate_invocation_correspondence, validate_invocation_structure_correspondence,
+        validate_style_correspondence,
     },
     TeletextEnhancementCommand, TeletextEnhancementProgram,
     TeletextLocalObjectGlyphProgramOverlayError, TeletextObjectIdentity, TeletextServiceBudget,
@@ -16,6 +17,8 @@ pub enum TeletextResourceObjectProgramOverlayError {
     Unchanged,
     #[error("teletext resource invocation changes require a changed original invocation")]
     MissingInvocationChange,
+    #[error("teletext resource invocation structure requires an inserted or omitted invocation")]
+    MissingInvocationStructure,
     #[error("teletext resource program exceeds the trusted command or structure budget")]
     Budget,
     #[error(transparent)]
@@ -36,6 +39,13 @@ pub struct TeletextResourceObjectProgramOverlay {
     expected: TeletextEnhancementProgram,
     replacement: TeletextEnhancementProgram,
     retained_commands: Vec<Option<usize>>,
+}
+
+#[derive(Clone, Copy)]
+enum InvocationPolicy {
+    Protected,
+    Retained,
+    Structure,
 }
 
 impl TeletextResourceObjectProgramOverlay {
@@ -59,7 +69,7 @@ impl TeletextResourceObjectProgramOverlay {
             replacement,
             retained_commands,
             budget,
-            false,
+            InvocationPolicy::Protected,
         )
     }
 
@@ -86,7 +96,34 @@ impl TeletextResourceObjectProgramOverlay {
             replacement,
             retained_commands,
             budget,
-            true,
+            InvocationPolicy::Retained,
+        )
+    }
+
+    /// Insert or omit resource calls while retaining exact original correspondence.
+    ///
+    /// At least one call must be inserted or omitted. Retained calls may also
+    /// change target, type or offset. All other protected anchors remain exact;
+    /// this does not grant target, consumer, package or publication authority.
+    /// Complete service reconstruction still validates every graph/type edge,
+    /// selected resource, expanded consumer and native packing limit.
+    /// # Errors
+    /// Rejects Local identities, no-ops, missing call structure, invalid maps,
+    /// changed noncall anchors, crossed glyph families and exhausted budgets.
+    pub fn new_with_invocation_structure(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            budget,
+            InvocationPolicy::Structure,
         )
     }
 
@@ -96,7 +133,7 @@ impl TeletextResourceObjectProgramOverlay {
         replacement: TeletextEnhancementProgram,
         retained_commands: Vec<Option<usize>>,
         budget: TeletextServiceBudget,
-        invocations: bool,
+        invocations: InvocationPolicy,
     ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
         use TeletextResourceObjectProgramOverlayError as Error;
         if identity.resource().is_none() {
@@ -115,10 +152,18 @@ impl TeletextResourceObjectProgramOverlay {
         if expected == replacement {
             return Err(Error::Unchanged);
         }
-        if invocations {
-            validate_invocation_correspondence(&expected, &replacement, &retained_commands)?;
-        } else {
-            validate_style_correspondence(&expected, &replacement, &retained_commands)?;
+        match invocations {
+            InvocationPolicy::Protected => {
+                validate_style_correspondence(&expected, &replacement, &retained_commands)?;
+            }
+            InvocationPolicy::Retained => {
+                validate_invocation_correspondence(&expected, &replacement, &retained_commands)?;
+            }
+            InvocationPolicy::Structure => validate_invocation_structure_correspondence(
+                &expected,
+                &replacement,
+                &retained_commands,
+            )?,
         }
         let overlay = Self {
             identity,
@@ -126,8 +171,13 @@ impl TeletextResourceObjectProgramOverlay {
             replacement,
             retained_commands,
         };
-        if invocations && !overlay.has_invocation_changes() {
+        if matches!(invocations, InvocationPolicy::Retained) && !overlay.has_invocation_changes() {
             return Err(Error::MissingInvocationChange);
+        }
+        if matches!(invocations, InvocationPolicy::Structure)
+            && !overlay.has_invocation_structure_changes()
+        {
+            return Err(Error::MissingInvocationStructure);
         }
         Ok(overlay)
     }
@@ -153,6 +203,35 @@ impl TeletextResourceObjectProgramOverlay {
                     })
                 })
             })
+    }
+
+    /// Whether validated correspondence inserts or omits an original call.
+    /// This linear scan does not broaden retained-call change semantics or grant
+    /// permission for an invocation's target, effects or consuming displays.
+    #[must_use]
+    pub fn has_invocation_structure_changes(&self) -> bool {
+        let mut originals = self.expected.commands().iter().enumerate();
+        for (after, original) in self
+            .replacement
+            .commands()
+            .iter()
+            .zip(&self.retained_commands)
+        {
+            if let Some(ordinal) = original {
+                for (index, command) in originals.by_ref() {
+                    if index == *ordinal {
+                        break;
+                    }
+                    if matches!(command, TeletextEnhancementCommand::InvokeObject { .. }) {
+                        return true;
+                    }
+                }
+            } else if matches!(after, TeletextEnhancementCommand::InvokeObject { .. }) {
+                return true;
+            }
+        }
+        originals
+            .any(|(_, command)| matches!(command, TeletextEnhancementCommand::InvokeObject { .. }))
     }
 
     #[must_use]

@@ -40,6 +40,7 @@ const LOCAL_STYLE_PROGRAM_OVERLAY_VERSION: u16 = 13;
 const RESOURCE_OBJECT_OPERAND_OVERLAY_VERSION: u16 = 14;
 const RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION: u16 = 15;
 const RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 16;
+const RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 17;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -626,6 +627,43 @@ impl TeletextSavedEditorialOverlay {
         )?;
         value.resource_object_program_overlays = resource_programs;
         value.schema_version = RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION;
+        Ok(value)
+    }
+
+    /// Capture version17 inserted or omitted resource-object invocations.
+    /// The resource tuple retains the existing scalar/program wire shape.
+    /// Full graph, consumer, native packing and publication checks remain separate.
+    /// # Errors
+    /// Rejects absent call structure, duplicate targets, scalar overlap and invalid
+    /// references. Attachment authenticates all exact original programs.
+    pub fn new_with_resource_object_invocation_structure_overlays(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+        resource_changes: (
+            Vec<TeletextResourceObjectOperandOverlay>,
+            Vec<TeletextResourceObjectProgramOverlay>,
+        ),
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        let (resource_operands, resource_programs) = resource_changes;
+        resource_object_programs::distinct_invocation_structure(
+            &resource_programs,
+            &resource_operands,
+        )?;
+        let mut value = Self::new_resource_parts(
+            provenance,
+            pages,
+            local_program_operands,
+            local_object_operands,
+            drcs_bitmap_overlays,
+            programs,
+            resource_operands,
+        )?;
+        value.resource_object_program_overlays = resource_programs;
+        value.schema_version = RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION;
         Ok(value)
     }
 
@@ -1240,7 +1278,9 @@ impl StoredOverlay {
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
         if matches!(
             self.schema_version,
-            RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION | RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
+            RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
+                | RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
+                | RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
         ) || self.resource_object_program_overlays.0.is_some()
         {
             return resource_object_programs::check_version(self);
@@ -1331,7 +1371,6 @@ impl StoredOverlay {
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
         let policy = self.program_policy();
-        let invocations = self.schema_version == RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION;
         let operands = self.local_program_operands.0;
         let bitmaps = self.drcs_bitmap_overlays.0;
         let objects = self.local_object_operands.0;
@@ -1371,14 +1410,15 @@ impl StoredOverlay {
                 provenance, pages, operands, objects, bitmaps, programs, resources,
             )?,
             RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
-            | RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION => restore_resource_programs(
+            | RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
+            | RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION => restore_resource_programs(
                 provenance,
                 pages,
                 operands,
                 objects,
                 bitmaps,
                 programs,
-                (resources, resource_programs, budget, invocations),
+                (resources, resource_programs, budget, self.schema_version),
             )?,
             LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION
             | ALL_LOCAL_GLYPH_PROGRAM_OVERLAY_VERSION

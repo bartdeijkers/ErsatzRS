@@ -7,7 +7,10 @@ use super::{
 use crate::host::teletext_export_project::resource_objects::{
     build_context, build_context_with_root, ObjectEditorCommandPosition, ObjectEditorContextFrame,
 };
-use ersatzrs_domain::{TeletextObjectScope, TeletextObjectType};
+use ersatzrs_domain::{
+    TeletextEnhancementCommand, TeletextObjectIdentity, TeletextObjectOffset, TeletextObjectScope,
+    TeletextObjectType,
+};
 use ersatzrs_ffmpeg::teletext::allocate_teletext_resource_objects;
 use std::{collections::BTreeMap, time::Instant};
 
@@ -162,12 +165,17 @@ fn protect_words(
     Ok(())
 }
 
+struct NativeTarget {
+    word: u32,
+    identity: TeletextObjectIdentity,
+    object_type: TeletextObjectType,
+}
 fn native_targets(
     mapped: &Mapping<'_>,
     images: &Images,
     limits: project::Limits,
     deadline: Instant,
-) -> Result<BTreeMap<u32, u32>> {
+) -> Result<BTreeMap<u32, NativeTarget>> {
     let fail = || mapped.location.error(Failure::Structure);
     let declared = mapped.service.declared();
     let defaults = declared
@@ -211,7 +219,17 @@ fn native_targets(
         // The checked native Local compiler owns every alias marker/pointer.
         // Invocation modes are exactly four less than definition modes.
         let editor = marker.checked_sub(4 << 6).ok_or_else(fail)?;
-        if result.insert(editor, native).is_some() {
+        if result
+            .insert(
+                editor,
+                NativeTarget {
+                    word: native,
+                    identity: target,
+                    object_type,
+                },
+            )
+            .is_some()
+        {
             return Err(fail());
         }
     }
@@ -220,30 +238,59 @@ fn native_targets(
 fn translate(
     words: &[u32],
     images: (&stream::Image, &stream::Image),
-    targets: &BTreeMap<u32, u32>,
+    targets: &BTreeMap<u32, NativeTarget>,
     location: Location,
     deadline: Instant,
-) -> Result<Vec<u32>> {
+) -> Result<(Vec<u32>, Vec<super::topology::Call>)> {
     let mut result = Vec::new();
+    let mut calls = Vec::new();
     result
         .try_reserve_exact(words.len())
         .map_err(|_| invalid())?;
-    for &word in words {
+    for (index, &word) in words.iter().enumerate() {
         location.check_deadline(deadline)?;
         let value = if word & 63 >= 40 && (17..=19).contains(&((word >> 6) & 31)) {
             let original = stream::relocate(word, images.1, images.0, location)?;
             if stream::relocate(original, images.0, images.1, location)? != word {
                 return Err(location.error(Failure::Structure));
             }
-            *targets
+            let target = targets
                 .get(&original)
-                .ok_or_else(|| location.error(Failure::Structure))?
+                .ok_or_else(|| location.error(Failure::Structure))?;
+            let first =
+                if index > 0 && words[index - 1] & 63 >= 40 && (words[index - 1] >> 6) & 31 == 16 {
+                    index - 1
+                } else {
+                    index
+                };
+            let offset = if first == index {
+                None
+            } else {
+                let row = u8::try_from((words[first] & 63) - 40)
+                    .map_err(|_| location.error(Failure::Structure))?;
+                let column = u8::try_from(words[first] >> 11)
+                    .map_err(|_| location.error(Failure::Structure))?;
+                Some(
+                    TeletextObjectOffset::new(row, column)
+                        .map_err(|_| location.error(Failure::Structure))?,
+                )
+            };
+            calls.push(super::topology::Call {
+                first,
+                word: index,
+                command: TeletextEnhancementCommand::InvokeObject {
+                    target: target.identity,
+                    object_type: target.object_type,
+                    offset,
+                },
+            });
+            target.word
         } else {
             word
         };
         result.push(value);
     }
-    Ok(result)
+    Ok((result, calls))
 }
 pub(super) fn body(
     mapped: &Mapping<'_>,
@@ -255,7 +302,7 @@ pub(super) fn body(
     let images = images(mapped, baseline, uploaded, (limits.0, limits.1), deadline)?;
     let targets = native_targets(mapped, &images, limits, deadline)?;
     let before = project::native_body(mapped, limits, deadline)?;
-    let original = translate(
+    let (original, _) = translate(
         images.before.body(0),
         (&images.before, &images.before),
         &targets,
@@ -265,7 +312,7 @@ pub(super) fn body(
     if before != original {
         return Err(mapped.location.error(Failure::Structure));
     }
-    let after = translate(
+    let (after, context_calls) = translate(
         images.after.body(0),
         (&images.before, &images.after),
         &targets,
@@ -283,6 +330,7 @@ pub(super) fn body(
         before,
         after,
         spans,
+        context_calls: Some(context_calls),
     })
 }
 pub(super) fn validate_applied(

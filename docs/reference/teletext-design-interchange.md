@@ -5689,6 +5689,20 @@ repeat/undo and explicit publication use the existing paths. This is partial cal
 interchange; complete resource/set topology and the mandatory actual editor/client
 evidence remain tracked in P9A-04.
 
+Private version17 adds inserted/omitted resource-object calls, retaining the
+same bounded program/map shape. It requires actual call topology; V15/V16 stay
+closed. The initial V8 importer authenticates full callee identities/types through
+sealed original aliases before translating native selectors. Calls (with an
+optional owned origin modifier) align at original non-call command boundaries;
+all other native words and semantic anchors remain exact. Calls cannot split a
+compound prefix, invent a target or change copied context. New/retired subtrees
+have no original protected-writer or charset authority. Native reconstruction,
+selected links/type/graph validation and every shared consumer's permissions are
+still mandatory before concept save. Repeat/undo selects V17 only while genuine
+root-relative call insertion/deletion remains. Combined glyph/style/topology,
+zero-word anchor ambiguity and complete set/definition editing remain open under
+P9A-04, alongside the mandatory actual editor/client proof.
+
 Upload the complete unchanged sidecar and named file set. Whole companion groups
 are authenticated and joined before semantic reconstruction. Missing/extra members,
 protected wrapper changes and unauthorized shared effects reject with located errors.

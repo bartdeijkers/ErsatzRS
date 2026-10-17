@@ -1,6 +1,9 @@
 //! Existing resource call edits reuse complete closure and consumer validation.
 use super::*;
 
+#[path = "resource_object_invocation_structure_tests.rs"]
+mod structure;
+
 fn call(
     target: TeletextObjectIdentity,
     object_type: TeletextObjectType,

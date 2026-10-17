@@ -31,6 +31,59 @@ fn command(call: TeletextSpatialInvocation) -> TeletextEnhancementCommand {
     }
 }
 
+fn inserted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'_>) -> bool {
+    let source = call.source();
+    source
+        .object
+        .and_then(|object| lineage.programs.get(&object))
+        .is_some_and(|program| match program {
+            super::Program::Resource(resource) => {
+                resource.has_invocation_structure_changes()
+                    && resource.original_command(source.command).is_none()
+                    && resource.replacement().commands().get(source.command) == Some(&command(call))
+            }
+            super::Program::Local(_) => false,
+        })
+}
+
+fn omitted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'_>) -> bool {
+    let source = call.source();
+    source
+        .object
+        .and_then(|object| lineage.programs.get(&object))
+        .is_some_and(|program| match program {
+            super::Program::Resource(resource) => {
+                resource.has_invocation_structure_changes()
+                    && resource.replacement_command(source.command).is_none()
+                    && resource.expected().commands().get(source.command) == Some(&command(call))
+            }
+            super::Program::Local(_) => false,
+        })
+}
+
+fn check_retired(
+    before: &TeletextSpatialTrace,
+    used: &BTreeSet<usize>,
+    retired: &mut BTreeSet<usize>,
+    lineage: &ProtectedLineage<'_>,
+    deadline: Instant,
+) -> Result<()> {
+    for call in before.invocations() {
+        check_deadline(deadline)?;
+        if call
+            .parent()
+            .is_some_and(|parent| retired.contains(&parent.get()))
+            || (!used.contains(&call.id().get()) && omitted_source(*call, lineage))
+        {
+            retired.insert(call.id().get());
+        }
+        if !used.contains(&call.id().get()) && !retired.contains(&call.id().get()) {
+            return Err(association());
+        }
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 pub(super) struct Calls {
     originals: BTreeMap<usize, TeletextSpatialInvocationId>,
@@ -85,8 +138,13 @@ impl Calls {
                 ),
                 None => None,
             };
-            let CanonicalSource::Existing(source) = lineage.source(call.source()) else {
-                return Err(association());
+            let source = match lineage.source(call.source()) {
+                CanonicalSource::Existing(source) => source,
+                CanonicalSource::Inserted(_) if inserted_source(*call, lineage) => {
+                    result.inserted.insert(call.id().get());
+                    continue;
+                }
+                CanonicalSource::Inserted(_) => return Err(association()),
             };
             let key = (
                 parent,
@@ -125,18 +183,7 @@ impl Calls {
             result.inserted.insert(call.id().get());
             retired.insert(original.id().get());
         }
-        for call in before.invocations() {
-            check_deadline(deadline)?;
-            if call
-                .parent()
-                .is_some_and(|parent| retired.contains(&parent.get()))
-            {
-                retired.insert(call.id().get());
-            }
-            if !used.contains(&call.id().get()) && !retired.contains(&call.id().get()) {
-                return Err(association());
-            }
-        }
+        check_retired(before, &used, &mut retired, lineage, deadline)?;
         Ok(result)
     }
 }

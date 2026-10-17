@@ -1,4 +1,4 @@
-//! Closed V15/V16 resource programs, bound to exact immutable originals.
+//! Closed V15/V16/V17 resource programs, bound to exact immutable originals.
 use super::{
     failure, invalid, limit, map_only, resource_object_operands, TeletextDesignDocumentBudget,
     TeletextDesignDocumentError, TeletextDesignDocumentFailure, TeletextProfileDocument,
@@ -84,6 +84,7 @@ pub(super) fn check_version(
         value.schema_version,
         super::RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
             | super::RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
+            | super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
     ) || value
         .resource_object_program_overlays
         .0
@@ -145,10 +146,9 @@ pub(super) fn distinct(
     programs: &[TeletextResourceObjectProgramOverlay],
     operands: &[TeletextResourceObjectOperandOverlay],
 ) -> Result<(), TeletextDesignDocumentError> {
-    if programs
-        .iter()
-        .any(TeletextResourceObjectProgramOverlay::has_invocation_changes)
-        || !programs.iter().any(structural)
+    if programs.iter().any(|program| {
+        program.has_invocation_changes() || program.has_invocation_structure_changes()
+    }) || !programs.iter().any(structural)
     {
         return Err(invalid());
     }
@@ -159,9 +159,25 @@ pub(super) fn distinct_invocations(
     programs: &[TeletextResourceObjectProgramOverlay],
     operands: &[TeletextResourceObjectOperandOverlay],
 ) -> Result<(), TeletextDesignDocumentError> {
+    if programs
+        .iter()
+        .any(TeletextResourceObjectProgramOverlay::has_invocation_structure_changes)
+        || !programs
+            .iter()
+            .any(TeletextResourceObjectProgramOverlay::has_invocation_changes)
+    {
+        return Err(invalid());
+    }
+    distinct_targets(programs, operands)
+}
+
+pub(super) fn distinct_invocation_structure(
+    programs: &[TeletextResourceObjectProgramOverlay],
+    operands: &[TeletextResourceObjectOperandOverlay],
+) -> Result<(), TeletextDesignDocumentError> {
     if !programs
         .iter()
-        .any(TeletextResourceObjectProgramOverlay::has_invocation_changes)
+        .any(TeletextResourceObjectProgramOverlay::has_invocation_structure_changes)
     {
         return Err(invalid());
     }
@@ -198,10 +214,10 @@ pub(super) fn restore_overlay(
         Vec<resource_object_operands::StoredResourceObjectOperand>,
         Vec<StoredResourceProgram>,
         TeletextDesignDocumentBudget,
-        bool,
+        u16,
     ),
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
-    let (resources, programs, budget, invocations) = resource_changes;
+    let (resources, programs, budget, version) = resource_changes;
     let local_programs = super::local_object_glyph_programs::restore(
         local_programs,
         super::ProgramPolicy::StyleCommands,
@@ -210,7 +226,14 @@ pub(super) fn restore_overlay(
     let programs = programs
         .into_iter()
         .map(|program| {
-            let constructor = if invocations && changed_invocation(&program) {
+            let constructor = if version
+                == super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+                && invocation_structure(&program)
+            {
+                TeletextResourceObjectProgramOverlay::new_with_invocation_structure
+            } else if version >= super::RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
+                && changed_invocation(&program)
+            {
                 TeletextResourceObjectProgramOverlay::new_with_invocation_changes
             } else {
                 TeletextResourceObjectProgramOverlay::new
@@ -225,10 +248,14 @@ pub(super) fn restore_overlay(
             .map_err(|_| invalid())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let constructor = if invocations {
-        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays
-    } else {
-        TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays
+    let constructor = match version {
+        super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION => {
+            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays
+        }
+        super::RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION => {
+            TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays
+        }
+        _ => TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays,
     };
     constructor(
         provenance,
@@ -239,6 +266,30 @@ pub(super) fn restore_overlay(
         local_programs,
         (resources, programs),
     )
+}
+
+fn invocation_structure(program: &StoredResourceProgram) -> bool {
+    let mut originals = program.expected.commands().iter().enumerate();
+    for (after, original) in program
+        .replacement
+        .commands()
+        .iter()
+        .zip(&program.retained_commands)
+    {
+        if let Some(ordinal) = original {
+            for (index, command) in originals.by_ref() {
+                if index == *ordinal {
+                    break;
+                }
+                if matches!(command, TeletextEnhancementCommand::InvokeObject { .. }) {
+                    return true;
+                }
+            }
+        } else if matches!(after, TeletextEnhancementCommand::InvokeObject { .. }) {
+            return true;
+        }
+    }
+    originals.any(|(_, command)| matches!(command, TeletextEnhancementCommand::InvokeObject { .. }))
 }
 
 fn changed_invocation(program: &StoredResourceProgram) -> bool {

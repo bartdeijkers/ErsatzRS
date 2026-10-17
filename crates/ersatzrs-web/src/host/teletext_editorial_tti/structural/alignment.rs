@@ -87,6 +87,17 @@ pub(super) fn bounded(
     merge_anchors(&aligned, &anchors, maximum, location, deadline)
 }
 
+/// Resource-only call runs use the same bounded, exact-first correspondence.
+pub(super) fn calls(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    kernel::solve_calls(old, new, maximum, location, deadline)
+}
+
 fn merge_anchors(
     aligned: &Aligned,
     anchors: &[(usize, TeletextEnhancementCommand, u8)],
@@ -167,6 +178,14 @@ fn weight(
 ) -> usize {
     if old == new {
         exact
+    } else if matches!(
+        (old, new),
+        (
+            TeletextEnhancementCommand::InvokeObject { .. },
+            TeletextEnhancementCommand::InvokeObject { .. }
+        )
+    ) {
+        1
     } else {
         usize::from(glyph_family(old) == glyph_family(new) && glyph_family(old).is_some())
     }

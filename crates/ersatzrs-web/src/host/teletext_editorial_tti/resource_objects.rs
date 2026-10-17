@@ -23,6 +23,7 @@ use std::{collections::BTreeSet, time::Instant};
 
 mod context;
 mod invocations;
+mod topology;
 
 fn invalid() -> NativeTeletextEditorialTtiError {
     Location {

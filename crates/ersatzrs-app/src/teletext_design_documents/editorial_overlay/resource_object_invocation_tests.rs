@@ -11,6 +11,9 @@ use ersatzrs_domain::{
 };
 use serde_json::{json, Value};
 
+#[path = "resource_object_invocation_structure_tests.rs"]
+mod structure;
+
 fn foreground(colour: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::AtColumn {
         column: 1,

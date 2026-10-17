@@ -170,6 +170,14 @@ impl<'a> ProtectedLineage<'a> {
         before: TeletextAttributeSource,
         after: TeletextAttributeSource,
     ) -> bool {
+        if let (
+            TeletextAttributeSource::PassiveDefault { invocation: before },
+            TeletextAttributeSource::PassiveDefault { invocation: after },
+        ) = (before, after)
+        {
+            return !self.calls.inserted(Some(after))
+                && Some(before) == self.canonical_invocation(Some(after));
+        }
         let (
             TeletextAttributeSource::Enhancement {
                 event_ordinal: a_event,

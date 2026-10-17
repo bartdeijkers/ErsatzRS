@@ -3,6 +3,9 @@ use super::*;
 use crate::editorial_imports::local_object_glyphs::actual_editor as editor;
 use std::path::Path;
 
+#[path = "actual_topology.rs"]
+mod actual_topology;
+
 const CASE: &str = "original-gpop-call-origin-column-context";
 
 fn word(records: &[TeletextTtiRecord], index: usize) -> u32 {

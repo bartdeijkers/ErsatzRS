@@ -24,6 +24,7 @@ pub(super) struct Body {
     pub(super) before: Vec<u32>,
     pub(super) after: Vec<u32>,
     pub(super) spans: Vec<structural::Span>,
+    pub(super) context_calls: Option<Vec<super::topology::Call>>,
 }
 fn groups<'a>(
     project: &'a TeletextExportProject,
@@ -174,6 +175,7 @@ fn body(
         before: vec![],
         after: vec![],
         spans: vec![],
+        context_calls: None,
     };
     let maximum = limits
         .2
@@ -250,7 +252,9 @@ fn program(
         )
         .map_err(|_| mapped.location.error(Failure::Structure))
     })();
-    legacy.or_else(|_| super::invocations::program(mapped, body, original, limits, deadline))
+    legacy
+        .or_else(|_| super::invocations::program(mapped, body, original, limits, deadline))
+        .or_else(|_| super::topology::program(mapped, body, limits, deadline))
 }
 
 fn scalar_group(

@@ -8,6 +8,8 @@ use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service_before, TeletextServiceResourceTransmission,
 };
 
+mod topology;
+
 fn resource() -> TeletextResourceIdentity {
     TeletextResourceIdentity::new(
         TeletextResourceKind::Pop,
@@ -105,6 +107,11 @@ fn object_definitions(
     .collect()
 }
 fn native_service(offset: Option<TeletextObjectOffset>) -> EncodedTeletextAuthoredService {
+    native_with_definitions(object_definitions(offset))
+}
+fn native_with_definitions(
+    objects: Vec<TeletextEnhancementObjectDefinition>,
+) -> EncodedTeletextAuthoredService {
     let policy = policy();
     let lifted = ersatzrs_ffmpeg::teletext::lift_teletext_v1_page_set(
         draft("ASCII"),
@@ -128,7 +135,6 @@ fn native_service(offset: Option<TeletextObjectOffset>) -> EncodedTeletextAuthor
             page
         })
         .collect();
-    let objects = object_definitions(offset);
     let semantic = TeletextSemanticService::new(
         TeletextResolvedServiceDraft {
             base: lifted.base().clone(),

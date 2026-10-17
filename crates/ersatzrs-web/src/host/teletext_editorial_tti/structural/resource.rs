@@ -337,3 +337,19 @@ pub(in super::super) fn equivalent(
                 _ => left.word == right.word,
             }))
 }
+
+/// Align only authenticated resource invocation atoms; no new raw-word parser.
+pub(in super::super) fn align_calls(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Program> {
+    let aligned = alignment::calls(old, new, maximum, location, deadline)?;
+    Ok(Program {
+        replacement: TeletextEnhancementProgram::new(aligned.commands)
+            .map_err(|_| fail(location))?,
+        retained: aligned.retained,
+    })
+}

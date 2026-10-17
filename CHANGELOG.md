@@ -31,6 +31,10 @@ release section when tagging a release.
   column changes with root-relative repeat/undo. Version16 separately supports
   retained object-call offsets and existing catalogue target/type changes, with
   full dependency validation and protected-writer checks even for identical pixels.
+  Version17 separately records inserted/omitted resource calls. Receipt-bound V8
+  import keeps the other commands exact and preserves complete callee identities;
+  new/retired subtrees cannot inherit protected content authority. Combined
+  glyph/style/topology and invisible-position boundaries remain open.
   Pinned QTeletextMaker 1.0 context companions now render nested resource objects
   through protected editor-only Local aliases. Origin-modifier edits preserve
   original native identities through concept preview, explicit publication and

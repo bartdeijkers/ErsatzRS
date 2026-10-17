@@ -13,6 +13,7 @@ enum GlyphPolicy {
     All,
     StyleCommands,
     InvocationChanges,
+    InvocationStructure,
 }
 
 /// Rejected structural intent, without retaining authored content in diagnostics.
@@ -246,6 +247,19 @@ pub(super) fn validate_invocation_correspondence(
     )
 }
 
+pub(super) fn validate_invocation_structure_correspondence(
+    expected: &TeletextEnhancementProgram,
+    replacement: &TeletextEnhancementProgram,
+    retained: &[Option<usize>],
+) -> Result<(), TeletextLocalObjectGlyphProgramOverlayError> {
+    validate_correspondence(
+        expected,
+        replacement,
+        retained,
+        GlyphPolicy::InvocationStructure,
+    )
+}
+
 fn validate_correspondence(
     expected: &TeletextEnhancementProgram,
     replacement: &TeletextEnhancementProgram,
@@ -278,14 +292,16 @@ fn validate_correspondence(
             (Some(before), Some(after)) if before == after => {}
             (None, None) if before == command => {}
             (None, None)
-                if matches!(policy, GlyphPolicy::InvocationChanges)
-                    && matches!(
-                        (before, command),
-                        (
-                            TeletextEnhancementCommand::InvokeObject { .. },
-                            TeletextEnhancementCommand::InvokeObject { .. }
-                        )
-                    ) => {}
+                if matches!(
+                    policy,
+                    GlyphPolicy::InvocationChanges | GlyphPolicy::InvocationStructure
+                ) && matches!(
+                    (before, command),
+                    (
+                        TeletextEnhancementCommand::InvokeObject { .. },
+                        TeletextEnhancementCommand::InvokeObject { .. }
+                    )
+                ) => {}
             _ => return Err(Error::ProtectedCommand),
         }
         next_original = ordinal + 1;
@@ -304,7 +320,16 @@ fn editable(command: &TeletextEnhancementCommand, policy: GlyphPolicy) -> bool {
         || matches!(
             (policy, command),
             (
-                GlyphPolicy::StyleCommands | GlyphPolicy::InvocationChanges,
+                GlyphPolicy::InvocationStructure,
+                TeletextEnhancementCommand::InvokeObject { .. }
+            )
+        )
+        || matches!(
+            (policy, command),
+            (
+                GlyphPolicy::StyleCommands
+                    | GlyphPolicy::InvocationChanges
+                    | GlyphPolicy::InvocationStructure,
                 TeletextEnhancementCommand::AtColumn {
                     operation: TeletextColumnOperation::Foreground { .. }
                         | TeletextColumnOperation::Background { .. }

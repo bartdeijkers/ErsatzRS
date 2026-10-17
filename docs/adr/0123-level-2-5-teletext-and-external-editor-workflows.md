@@ -334,6 +334,18 @@ writers for protected-effect comparison, even when their pixels are identical.
 This slice does not create/remove calls or definitions; complete topology and
 set editing remain required under the existing interchange acceptance.
 
+Private version17 separately records inserted/omitted resource calls through
+an explicit checked correspondence policy; retained-call changes may coexist.
+Versions15/16 retain their closed policies and bytes. Exact inserted calls and
+retired original calls authorize only their own new/retired descendants; no
+inherited writer or charset authority survives a new subtree. Full native
+service validation, selected links, consumer permissions and explicit publication
+remain mandatory. The initial V8 importer keeps every non-call native word and
+semantic anchor exact, binds new calls to authenticated original command
+boundaries and rejects invisible-anchor ambiguity. Mixed glyph/style/topology,
+zero-word-position boundaries and complete resource/set editing remain required
+work, not accepted permanent restrictions.
+
 QTM carrier version8 adds `object_context_tti_v1`, a separately named editor-only
 view. It is regenerated from the complete original resource catalogue: the
 selected root is alias0, followed by every other original resource definition in
@@ -353,8 +365,9 @@ Context pointers must resolve and round-trip through the exact original map.
 Root calls translate to original native allocations before existing V16
 reconstruction, full service validation and shared-consumer effect checks. A
 context alias intent that collapses to an indistinguishable native selector must
-reject explicitly; it cannot silently become an unchanged import. Complete
-collision-preserving target editing remains required work.
+reject explicitly; it cannot silently become an unchanged import. Coordinated
+resource/link changes and dormant full-target intent remain required work; an
+executed cross-POP target outside the selected link is already invalid.
 
 Final comparison recompiles the qualified root against the frozen original
 catalogue context. Other definitions may be changed only through their own

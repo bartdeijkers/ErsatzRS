@@ -171,7 +171,9 @@ fn collect(
         }
     }
     let expected = TeletextEnhancementProgram::new(expected).map_err(|_| fail())?;
-    let constructor = if replacement
+    let constructor = if call_topology(original, replacement, retained) {
+        Program::new_with_invocation_structure
+    } else if replacement
         .commands()
         .iter()
         .zip(retained)
@@ -187,7 +189,8 @@ fn collect(
                         )
                     ) && before != after
                 })
-        }) {
+        })
+    {
         Program::new_with_invocation_changes
     } else {
         Program::new
@@ -201,6 +204,36 @@ fn collect(
     )
     .map_err(|_| fail())?;
     Ok((operands, Some(program)))
+}
+fn call_topology(
+    original: &TeletextEnhancementProgram,
+    replacement: &TeletextEnhancementProgram,
+    retained: &[Option<usize>],
+) -> bool {
+    let call = |command: &TeletextEnhancementCommand| {
+        matches!(command, TeletextEnhancementCommand::InvokeObject { .. })
+    };
+    let mut next = 0;
+    for (command, ordinal) in replacement.commands().iter().zip(retained) {
+        let Some(ordinal) = *ordinal else {
+            if call(command) {
+                return true;
+            }
+            continue;
+        };
+        if original
+            .commands()
+            .get(next..ordinal)
+            .is_some_and(|slice| slice.iter().any(call))
+        {
+            return true;
+        }
+        next = ordinal.saturating_add(1);
+    }
+    original
+        .commands()
+        .get(next..)
+        .is_some_and(|slice| slice.iter().any(call))
 }
 fn push(
     identity: TeletextObjectIdentity,

@@ -3,6 +3,31 @@ use super::{editable, fail, hidden_position, weight, Aligned, Location, Result};
 use ersatzrs_domain::TeletextEnhancementCommand;
 use std::time::Instant;
 
+#[derive(Clone, Copy)]
+enum Mode {
+    Glyphs,
+    Styles,
+    Calls,
+}
+impl Mode {
+    fn editable(self, command: &TeletextEnhancementCommand) -> bool {
+        match self {
+            Self::Calls => matches!(command, TeletextEnhancementCommand::InvokeObject { .. }),
+            Self::Glyphs | Self::Styles => editable(command, matches!(self, Self::Styles)),
+        }
+    }
+}
+
+pub(super) fn solve_calls(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    solve_matched(old, new, (Mode::Calls, maximum, &[]), location, deadline)
+}
+
 pub(super) fn solve(
     old: &[(usize, TeletextEnhancementCommand)],
     new: &[TeletextEnhancementCommand],
@@ -21,7 +46,8 @@ pub(super) fn solve_bounded(
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
-    solve_matched(old, new, (styles, maximum, &[]), location, deadline)
+    let mode = if styles { Mode::Styles } else { Mode::Glyphs };
+    solve_matched(old, new, (mode, maximum, &[]), location, deadline)
 }
 
 pub(super) fn solve_physical(
@@ -32,25 +58,31 @@ pub(super) fn solve_physical(
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
-    solve_matched(old, new, (true, maximum, bounds), location, deadline)
+    solve_matched(
+        old,
+        new,
+        (Mode::Styles, maximum, bounds),
+        location,
+        deadline,
+    )
 }
 
 fn solve_matched(
     old: &[(usize, TeletextEnhancementCommand)],
     new: &[TeletextEnhancementCommand],
-    policy: (bool, usize, &[(u8, u8)]),
+    policy: (Mode, usize, &[(u8, u8)]),
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
-    let (styles, maximum, bounds) = policy;
+    let (mode, maximum, bounds) = policy;
     location.check_deadline(deadline)?;
     if (!bounds.is_empty() && bounds.len() != old.len())
         || old.len() > maximum
         || new.len() > maximum
         || old
             .iter()
-            .any(|(_, command)| !editable(command, styles) && hidden_position(command).is_none())
-        || new.iter().any(|command| !editable(command, styles))
+            .any(|(_, command)| !mode.editable(command) && hidden_position(command).is_none())
+        || new.iter().any(|command| !mode.editable(command))
         || old
             .iter()
             .filter(|(_, command)| hidden_position(command).is_some())

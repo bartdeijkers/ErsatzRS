@@ -786,7 +786,11 @@ fn program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOv
 }
 
 fn resource_program_overlay(prepared: &PreparedImport) -> Result<TeletextSavedEditorialOverlay> {
-    let constructor = if prepared
+    let constructor = if prepared.cumulative.resource_programs.iter().any(
+        ersatzrs_domain::TeletextResourceObjectProgramOverlay::has_invocation_structure_changes,
+    ) {
+        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays
+    } else if prepared
         .cumulative
         .resource_programs
         .iter()

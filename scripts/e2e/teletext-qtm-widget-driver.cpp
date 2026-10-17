@@ -89,6 +89,8 @@ struct DriverContext {
     bool deleteResourceGlyph = false;
     bool editResourceCallOrigin = false;
     bool resourceCallContext = false;
+    bool insertResourceCall = false;
+    bool deleteResourceCall = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -132,9 +134,12 @@ static DriverContext driverContext() {
     const bool resourceInsert = mode == "resource-object-g0-insert-copy";
     const bool resourceDelete = mode == "resource-object-g0-delete";
     const bool resourceStructure = resourceInsert || resourceDelete;
-    const bool resourceCallContext = mode == "resource-object-call-origin-context";
-    const bool resourceCallOrigin = mode == "resource-object-call-origin" || resourceCallContext;
-    const bool resourceTrial = resourceStructure || resourceCallOrigin;
+    const bool insertResourceCall = mode == "resource-object-call-insert-context";
+    const bool deleteResourceCall = mode == "resource-object-call-delete-context";
+    const bool callTopology = insertResourceCall || deleteResourceCall;
+    const bool resourceCallContext = mode == "resource-object-call-origin-context" || callTopology;
+    const bool resourceCallOrigin = mode == "resource-object-call-origin" || mode == "resource-object-call-origin-context";
+    const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology;
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
@@ -203,7 +208,7 @@ static DriverContext driverContext() {
     if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && !mixedGlyphStructure && !styleStructure && !resourceTrial && suppliedTarget)))
         qFatal("Foreground operands require explicit single-page-foreground mode");
     const int triplet = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
-    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", (drcsSelection || resourceCallOrigin) ? 40 : 39) : 0;
+    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure || styleStructure || resourceTrial) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", (drcsSelection || resourceCallOrigin || callTopology) ? 40 : 39) : 0;
     if (drcsSelection && (column != 40 || !(triplet < glyph0 && glyph0 < glyph1)))
         qFatal("Fixed DRCS prefix address40 and ordered distinct glyph indices are required");
     if ((glyphStructure || mixedGlyphStructure) && (triplet != 12 || column != 0))
@@ -212,7 +217,7 @@ static DriverContext driverContext() {
         qFatal("Fixed Local style structure requires original mosaic word17 and column1");
     if (resourceStructure && (triplet != 7 || column != 1))
         qFatal("Fixed resource structure requires original G0P word7 and column1");
-    if (resourceCallOrigin && (triplet != 7 || column != 40))
+    if ((resourceCallOrigin || callTopology) && (triplet != 7 || column != 40))
         qFatal("Fixed resource call requires original OriginModifier word7 and raw address40");
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
@@ -263,7 +268,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1444,6 +1449,20 @@ static void editResourceGlyphStructure(QMainWindow *main, const DriverContext &c
 // Observed Qt paint only, never decoder/model input. A no-panel QTM widget can
 // retain additional layout proxy space; this captures its explicit480x250 page
 // viewport. The independent native raster remains the full-service authority.
+static std::vector<StructureTriplet> resourceCallContextTriplets(bool added) {
+    std::vector<StructureTriplet> expected{
+        {40,17,2}, {63,31,6}, {40,21,2}, {41,4,8}, {8,12,65},
+        {8,9,65}, {10,12,0}, {40,16,0}, {40,19,17}, {40,22,9},
+        {41,4,7}, {7,12,64}, {9,12,0}, {9,9,88}, {40,23,17},
+        {44,4,1}, {1,12,0}, {1,0,2}, {1,3,0}, {1,9,80}, {63,31,5}
+    };
+    if (added) {
+        expected.insert(expected.begin() + 9, StructureTriplet{40,16,1});
+        expected.insert(expected.begin() + 10, StructureTriplet{40,19,17});
+        structureRelocate(expected, 9, 2);
+    }
+    return expected;
+}
 static QImage resourceCallOriginalPaint;
 static QImage resourceCallViewport() {
     auto main = window();
@@ -1528,12 +1547,7 @@ static void editResourceCallOrigin(QMainWindow *main, const DriverContext &conte
         // Root-first original catalogue order is Active20, Adaptive22, Passive21.
         // Disposable Local aliases at markers9/14 retain both original targets,
         // including the currently uninvoked Adaptive22. Native IDs stay original.
-        expected = {
-            {40,17,2}, {63,31,6}, {40,21,2}, {41,4,8}, {8,12,65},
-            {8,9,65}, {10,12,0}, {40,16,0}, {40,19,17}, {40,22,9},
-            {41,4,7}, {7,12,64}, {9,12,0}, {9,9,88}, {40,23,17},
-            {44,4,1}, {1,12,0}, {1,0,2}, {1,3,0}, {1,9,80}, {63,31,5}
-        };
+        expected = resourceCallContextTriplets(false);
     } else {
         expected = {
             {40,17,2}, {63,31,6}, {40,21,2}, {41,4,8}, {8,12,65},
@@ -1591,6 +1605,230 @@ static void editResourceCallOrigin(QMainWindow *main, const DriverContext &conte
         std::puts("QTM actual resource call context: cooked +Column step-up (40,16,0)-to-(40,16,1); Local alias selector17 and complete21-row protected catalogue retained");
     else
         std::puts("QTM actual resource call origin: cooked +Column step-up (40,16,0)-to-(40,16,1); exact allocated invocation word8 and complete10-row wrapper retained");
+}
+static QImage resourceCallTopologyOriginalPaint;
+static void captureResourceCallTopologyPaint(const DriverContext &context, const char *stage, bool added, bool edited) {
+    if (context.insertResourceCall == context.deleteResourceCall)
+        qFatal("Call topology paint requires exactly one fixed action");
+    if (!QTest::qWaitFor([added] {
+        const auto painted = resourceCallViewport();
+        return resourceCallGreen(painted, 11) > 0 && (resourceCallGreen(painted, 12) > 0) == added;
+    }, 3000)) qFatal("Actual topology P cells do not match the fixed call count");
+    const auto painted = resourceCallViewport();
+    if (!edited) {
+        int white = 0;
+        for (int y = 10; y < 30; ++y)
+            for (int x = 96; x < 120; ++x)
+                white += painted.pixelColor(x, y) == QColor(255, 255, 255);
+        if (white == 0) qFatal("Actual topology original parent A is absent");
+        resourceCallTopologyOriginalPaint = painted;
+    } else {
+        if (resourceCallTopologyOriginalPaint.size() != QSize(480, 250))
+            qFatal("Actual topology original viewport oracle absent");
+        for (int y = 0; y < 250; ++y)
+            for (int x = 0; x < 480; ++x) {
+                QColor expected = resourceCallTopologyOriginalPaint.pixelColor(x, y);
+                if (y >= 50 && y < 60 && x >= 144 && x < 156)
+                    expected = added ? resourceCallTopologyOriginalPaint.pixelColor(x - 12, y) : QColor(0, 0, 0);
+                if (painted.pixelColor(x, y) != expected)
+                    qFatal("Actual topology viewport changed outside the added/removed P cell");
+            }
+    }
+    const QByteArray label = QByteArray("resource-call-pair-") + stage + "-widget";
+    if (!painted.save(QString("/work/") + context.captureName(label.constData())))
+        qFatal("Actual call topology viewport capture failed");
+}
+static void resourceOriginStep(QDockWidget *dock, int maximum, int from, int to, const DriverContext &context) {
+    QSpinBox *field = nullptr;
+    for (auto candidate : dock->findChildren<QSpinBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled() || candidate->minimum() != 0
+            || candidate->maximum() != maximum || candidate->prefix() != "+") continue;
+        if (field) qFatal("Ambiguous actual OriginModifier cooked coordinate");
+        field = candidate;
+    }
+    if (!field || field->value() != from || (to - from != 1 && from - to != 1))
+        qFatal("Actual OriginModifier coordinate source differs");
+    const auto observe = [dock, field, maximum, from, to, context](const char *stage) {
+        auto focus = QApplication::focusWidget();
+        auto active = QApplication::activeWindow();
+        auto popup = QApplication::activePopupWidget();
+        auto modal = QApplication::activeModalWidget();
+        const auto tables = dock->findChildren<QTableView *>();
+        const int row = tables.size() == 1 ? tables.front()->currentIndex().row() : -1;
+        StructureTriplet tuple{-1,-1,-1};
+        if (tables.size() == 1 && row >= 0) tuple = structureTriplet(tables.front()->model(), row);
+        const QByteArray label = QByteArray("resource-call-pair-coordinate-")
+            + QByteArray::number(maximum) + "-" + stage;
+        const bool captured = dock->isVisible()
+            && dock->grab().save(QString("/work/") + context.captureName(label.constData()));
+        std::fprintf(stderr,
+            "QTM OriginModifier step stage=%s maximum=%d from=%d to=%d current=%d min=%d max=%d prefix=%s visible=%d enabled=%d dock_active=%d field_focus=%d focus_class=%s active_class=%s popup_class=%s modal_class=%s selected_row=%d raw=(%d,%d,%d) capture=%d\n",
+            stage, maximum, from, to, field->value(), field->minimum(), field->maximum(), field->prefix().toUtf8().constData(),
+            field->isVisible(), field->isEnabled(), dock->isActiveWindow(), field->hasFocus(),
+            focus ? focus->metaObject()->className() : "none", active ? active->metaObject()->className() : "none",
+            popup ? popup->metaObject()->className() : "none", modal ? modal->metaObject()->className() : "none",
+            row, tuple[0], tuple[1], tuple[2], captured);
+        std::fflush(stderr);
+    };
+    observe("before-focus");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1 || tables.front()->currentIndex().row() != 9) {
+        observe("selection-failed");
+        qFatal("Actual inserted OriginModifier row9 is no longer selected");
+    }
+    // The menu's model update is synchronous. Wait for the actual popup grab to
+    // disappear before restoring native activation and clicking the real input.
+    if (!QTest::qWaitFor([] {
+        return QApplication::activePopupWidget() == nullptr && QApplication::activeModalWidget() == nullptr;
+    }, 3000)) {
+        observe("popup-failed");
+        qFatal("OriginModifier insertion popup did not release its grab");
+    }
+    dock->raise();
+    dock->activateWindow();
+    if (auto handle = dock->windowHandle()) handle->requestActivate();
+    if (!QTest::qWaitForWindowActive(dock, 5000)) {
+        observe("activation-failed");
+        qFatal("Actual OriginModifier coordinate dock did not become active");
+    }
+    auto input = field->findChild<QLineEdit *>();
+    if (!input || !input->isVisible() || !input->isEnabled())
+        qFatal("Actual OriginModifier coordinate text input absent");
+    QTest::mouseMove(input, input->rect().center());
+    QTest::mouseClick(input, Qt::LeftButton, Qt::NoModifier, input->rect().center());
+    if (!QTest::qWaitFor([field] {
+        auto focus = QApplication::focusWidget();
+        return focus && (focus == field || field->isAncestorOf(focus));
+    }, 3000)) {
+        observe("focus-failed");
+        qFatal("Actual OriginModifier coordinate input did not receive focus");
+    }
+    observe("focused");
+    if (field->value() != from) qFatal("Actual coordinate focus click changed its original value");
+    QStyleOptionSpinBox style;
+    style.initFrom(field);
+    style.rect = field->rect();
+    style.frame = field->hasFrame();
+    style.buttonSymbols = field->buttonSymbols();
+    style.subControls = QStyle::SC_All;
+    style.stepEnabled = QAbstractSpinBox::StepDownEnabled | QAbstractSpinBox::StepUpEnabled;
+    const auto control = to > from ? QStyle::SC_SpinBoxUp : QStyle::SC_SpinBoxDown;
+    const auto step = field->style()->subControlRect(QStyle::CC_SpinBox, &style, control, field);
+    if (!step.isValid() || !field->rect().contains(step.center())
+        || field->style()->hitTestComplexControl(QStyle::CC_SpinBox, &style, step.center(), field) != control)
+        qFatal("Actual OriginModifier coordinate step is not clickable");
+    QTest::mouseMove(field, step.center());
+    QTest::mouseClick(field, Qt::LeftButton, Qt::NoModifier, step.center());
+    if (!QTest::qWaitFor([field, to] { return field->value() == to; }, 3000)) {
+        observe("step-failed");
+        qFatal("Actual OriginModifier coordinate did not step exactly once");
+    }
+    observe("stepped");
+}
+static void insertResourceOrigin(QDockWidget *dock, const DriverContext &context) {
+    QPushButton *button = nullptr;
+    for (auto candidate : dock->findChildren<QPushButton *>()) {
+        QString text = candidate->text(); text.remove('&');
+        if (text != "Insert before" || !candidate->isVisible() || !candidate->isEnabled() || !candidate->menu()) continue;
+        if (button) qFatal("Ambiguous actual Insert before button");
+        button = candidate;
+    }
+    if (!button) qFatal("Actual Insert before menu button absent");
+    auto menu = button->menu();
+    QTimer::singleShot(150, qApp, [menu, context] {
+        const auto named = [](QMenu *parent, const char *name) {
+            QAction *found = nullptr;
+            for (auto action : parent->actions()) {
+                if (action->text() != name || !action->isVisible() || !action->isEnabled()) continue;
+                if (found) qFatal("Ambiguous actual OriginModifier insertion action");
+                found = action;
+            }
+            if (!found) qFatal("Actual OriginModifier insertion action absent");
+            return found;
+        };
+        if (!QTest::qWaitFor([menu] { return menu->isVisible(); }, 3000))
+            qFatal("Actual Insert before menu did not open");
+        auto object = named(menu, "Object");
+        auto child = object->menu();
+        const auto point = menu->actionGeometry(object).center();
+        if (!child || !menu->rect().contains(point)) qFatal("Actual Object submenu is not clickable");
+        QTest::mouseMove(menu, point);
+        if (!QTest::qWaitFor([menu, object, child] { return menu->activeAction() == object && child->isVisible(); }, 3000))
+            qFatal("Actual Object submenu did not receive hover");
+        auto origin = named(child, "Origin modifier");
+        const auto target = child->actionGeometry(origin).center();
+        if (origin->menu() || !child->rect().contains(target)) qFatal("Actual OriginModifier action is not clickable");
+        QTest::mouseMove(child, target);
+        if (!QTest::qWaitFor([child, origin] { return child->isVisible() && child->activeAction() == origin; }, 3000))
+            qFatal("Actual OriginModifier action did not receive hover");
+        if (!child->grab().save(QString("/work/") + context.captureName("resource-call-pair-insert-menu")))
+            qFatal("Actual OriginModifier insertion menu capture failed");
+        QTest::mouseClick(child, Qt::LeftButton, Qt::NoModifier, target);
+    });
+    QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
+}
+static void editResourceCallTopology(QMainWindow *main, const DriverContext &context) {
+    if (context.insertResourceCall == context.deleteResourceCall || !context.resourceCallContext
+        || context.tripletIndex != 7 || context.tripletColumn != 40 || main->isWindowModified())
+        qFatal("Unexpected fixed call topology baseline");
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual call topology dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000)) qFatal("Actual call topology dock was not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual call topology requires one table");
+    auto table = tables.front();
+    auto model = table->model();
+    auto expected = resourceCallContextTriplets(context.deleteResourceCall);
+    structureCheck(model, expected);
+    captureResourceCallTopologyPaint(context, "before", context.deleteResourceCall, false);
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-before")))
+        qFatal("Actual topology baseline dock capture failed");
+    if (context.insertResourceCall) {
+        structureSelect(table, 8);
+        if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-selected")))
+            qFatal("Actual original invocation selection capture failed");
+        structureButton(dock, "Insert copy");
+        expected.insert(expected.begin() + 8, expected[8]);
+        structureRelocate(expected, 8, 1);
+        structureCheck(model, expected);
+        if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-copied")))
+            qFatal("Actual copied call capture failed");
+        structureSelect(table, 9);
+        insertResourceOrigin(dock, context);
+        expected.insert(expected.begin() + 9, StructureTriplet{41,16,0});
+        structureRelocate(expected, 9, 1);
+        structureCheck(model, expected);
+        resourceOriginStep(dock, 23, 1, 0, context);
+        expected[9] = StructureTriplet{40,16,0};
+        structureCheck(model, expected);
+        resourceOriginStep(dock, 71, 0, 1, context);
+        expected[9] = StructureTriplet{40,16,1};
+    } else {
+        // Single-selection Delete twice avoids pinned QTM's multirow undo bug.
+        for (int deletion = 0; deletion < 2; ++deletion) {
+            structureSelect(table, 9);
+            if (deletion == 0 && !dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-selected")))
+                qFatal("Actual added pair selection capture failed");
+            structureButton(dock, "Delete");
+            expected.erase(expected.begin() + 9);
+            structureRelocate(expected, 9, -1);
+            structureCheck(model, expected);
+        }
+    }
+    if (expected != resourceCallContextTriplets(context.insertResourceCall))
+        qFatal("Actual topology final expected catalogue differs");
+    structureCheck(model, expected);
+    if (!main->isWindowModified()) qFatal("Actual call topology did not modify the document");
+    captureResourceCallTopologyPaint(context, "edited", context.insertResourceCall, true);
+    if (!dock->grab().save(QString("/work/") + context.captureName("resource-call-pair-edited")))
+        qFatal("Actual topology edited dock capture failed");
+    savedGlyphStructure = expected;
+    std::printf("QTM actual resource call topology: action=%s modelrows=%zu; complete alias catalogue and pointers checked\n",
+        context.insertResourceCall ? "InsertCopy invocation then InsertBefore OriginModifier and cooked row/column clicks" : "two single Delete clicks, not GUIUndo", expected.size());
 }
 static void verifySavedGlyphStructure(QMainWindow *main, int expectedCount = 32) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
@@ -1726,12 +1964,15 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.insertResourceGlyph || context.deleteResourceGlyph)
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
         if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, context.resourceCallContext ? 21 : 10);
-        if (context.resourceCallContext) captureResourceCallPaint(context, "saved", true);
+        if (context.insertResourceCall || context.deleteResourceCall) {
+            verifySavedGlyphStructure(saved, context.insertResourceCall ? 23 : 21);
+            captureResourceCallTopologyPaint(context, "saved", context.insertResourceCall, true);
+        } else if (context.resourceCallContext) captureResourceCallPaint(context, "saved", true);
         capture(context.captureName("saved").toUtf8().constData());
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -1780,6 +2021,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.editLocalStyleStructure) editLocalStyleStructure(main, context);
             if (context.insertResourceGlyph || context.deleteResourceGlyph) editResourceGlyphStructure(main, context);
             if (context.editResourceCallOrigin) editResourceCallOrigin(main, context);
+            if (context.insertResourceCall || context.deleteResourceCall) editResourceCallTopology(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));
