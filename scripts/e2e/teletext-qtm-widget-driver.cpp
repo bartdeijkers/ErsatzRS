@@ -83,6 +83,7 @@ struct DriverContext {
     int drcsGlyph1Index = 0;
     QByteArray globalDrcsName;
     bool editLocalGlyphStructure = false;
+    bool editLocalMixedGlyphStructure = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -121,6 +122,7 @@ static DriverContext driverContext() {
     const QByteArray output = qgetenv("ERSATZRS_QTM_OUTPUT_BASENAME");
     const bool foreground = mode == "single-page-foreground";
     const bool glyphStructure = mode == "single-page-local-glyph-structure";
+    const bool mixedGlyphStructure = mode == "single-page-local-mixed-glyph-structure";
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
@@ -133,8 +135,9 @@ static DriverContext driverContext() {
     const bool suppliedDrcsIndices = qEnvironmentVariableIsSet("ERSATZRS_QTM_DRCS_GLYPH0_INDEX")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_DRCS_GLYPH1_INDEX");
     const QByteArray globalDrcs = qgetenv("ERSATZRS_QTM_GLOBAL_DRCS_BASENAME");
-    if (!drcsSelection && (suppliedDrcsIndices
+    if ((!drcsSelection && !mixedGlyphStructure && (suppliedDrcsIndices
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_GLOBAL_DRCS_BASENAME")))
+        || (mixedGlyphStructure && suppliedDrcsIndices))
         qFatal("DRCS selection indices/Global companion require a fixed selection trial");
     const int glyph0 = drcsSelection ? boundedDecimal("ERSATZRS_QTM_DRCS_GLYPH0_INDEX", 207) : 0;
     const int glyph1 = drcsSelection ? boundedDecimal("ERSATZRS_QTM_DRCS_GLYPH1_INDEX", 207) : 0;
@@ -185,13 +188,13 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TRIPLET_COLUMN");
     const bool suppliedForeground = qEnvironmentVariableIsSet("ERSATZRS_QTM_FROM_COLOUR")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_TO_COLOUR");
-    if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && suppliedTarget)))
+    if (!foreground && (suppliedForeground || (!localGlyph && !glyphStructure && !mixedGlyphStructure && suppliedTarget)))
         qFatal("Foreground operands require explicit single-page-foreground mode");
-    const int triplet = (foreground || localGlyph || glyphStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
-    const int column = (foreground || localGlyph || glyphStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", drcsSelection ? 40 : 39) : 0;
+    const int triplet = (foreground || localGlyph || glyphStructure || mixedGlyphStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_INDEX", 207) : 0;
+    const int column = (foreground || localGlyph || glyphStructure || mixedGlyphStructure) ? boundedDecimal("ERSATZRS_QTM_TRIPLET_COLUMN", drcsSelection ? 40 : 39) : 0;
     if (drcsSelection && (column != 40 || !(triplet < glyph0 && glyph0 < glyph1)))
         qFatal("Fixed DRCS prefix address40 and ordered distinct glyph indices are required");
-    if (glyphStructure && (triplet != 12 || column != 0))
+    if ((glyphStructure || mixedGlyphStructure) && (triplet != 12 || column != 0))
         qFatal("Fixed Local structure trial requires body word12 and column0");
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
@@ -209,14 +212,14 @@ static DriverContext driverContext() {
     const bool resourceSet = mode == "resource-set-drcs-bit";
     const bool drcsEdit = mode == "single-page-drcs-bit" || resourceSet;
     const bool drcsVerify = mode == "single-page-drcs-verify";
-    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure) || !safeTtiBasename(input) || !safeTtiBasename(output)
+    if ((mode != "single-page-zone-q" && mode != "single-page-save" && !foreground && !drcsEdit && !drcsVerify && !panelProof && !localGlyph && !glyphStructure && !mixedGlyphStructure) || !safeTtiBasename(input) || !safeTtiBasename(output)
         || input == output) qFatal("Invalid explicit synthetic single-page driver context");
     const int left = panelColumns("ERSATZRS_QTM_LEFT_PANEL_COLUMNS");
     const int right = panelColumns("ERSATZRS_QTM_RIGHT_PANEL_COLUMNS");
     const QByteArray drcs = qgetenv("ERSATZRS_QTM_NORMAL_DRCS_BASENAME");
     if (!drcs.isEmpty() && (!safeTtiBasename(drcs) || drcs == input || drcs == output))
         qFatal("Invalid explicit protected Normal DRCS companion name");
-    if (drcsSelection && (!safeTtiBasename(globalDrcs) || globalDrcs == input
+    if ((drcsSelection || mixedGlyphStructure) && (!safeTtiBasename(globalDrcs) || globalDrcs == input
         || globalDrcs == output || globalDrcs == drcs))
         qFatal("Fixed selection requires a distinct safe Global DRCS companion basename");
     if (left + right > 16) qFatal("Native Level 2.5 panel counts exceed sixteen columns");
@@ -235,10 +238,10 @@ static DriverContext driverContext() {
         qFatal("Edited DRCS verification requires the synthetic S1=0 companion");
     if (panelProof && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed panel proof requires left4/right12 and actual Normal S1=0 companion");
-    if ((localGlyph || glyphStructure) && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
+    if ((localGlyph || glyphStructure || mixedGlyphStructure) && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1095,6 +1098,107 @@ static void editLocalGlyphStructure(QMainWindow *main, const DriverContext &cont
     savedGlyphStructure = expected;
     std::puts("QTM actual Local glyph structure: Delete1 InsertCopy7 G0/G1 popup edits column3-to2 original9 final15 followingmarker21-to27 fullmodelchecked");
 }
+// This second fixed trial retains the exact original DRCS selection prefix
+// after deleting its glyph. Its unused-prefix normalization belongs to the
+// native importer, never this driver or the actual editor's document model.
+static void structureColumnOneToZero(QDockWidget *dock) {
+    QSpinBox *column = nullptr;
+    for (QSpinBox *candidate : dock->findChildren<QSpinBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled()
+            || candidate->minimum() != 0 || candidate->maximum() != 39) continue;
+        if (column) qFatal("Ambiguous fixed mixed structure Column spinbox");
+        column = candidate;
+    }
+    if (!column || column->value() != 1) qFatal("Fixed mixed structure original column1 differs");
+    QStyleOptionSpinBox style;
+    style.initFrom(column);
+    style.subControls = QStyle::SC_All;
+    style.stepEnabled = QAbstractSpinBox::StepDownEnabled | QAbstractSpinBox::StepUpEnabled;
+    style.frame = column->hasFrame();
+    style.buttonSymbols = column->buttonSymbols();
+    const QRect step = column->style()->subControlRect(QStyle::CC_SpinBox, &style,
+        QStyle::SC_SpinBoxDown, column);
+    if (!step.isValid() || !column->rect().contains(step.center()))
+        qFatal("Actual mixed structure Column step-down is not clickable");
+    QTest::mouseClick(column, Qt::LeftButton, Qt::NoModifier, step.center());
+    if (!QTest::qWaitFor([column] { return column->value() == 0; }, 3000))
+        qFatal("Actual mixed structure Column did not step1-to0");
+}
+static void editLocalMixedGlyphStructure(QMainWindow *main, const DriverContext &context) {
+    if (!context.editLocalMixedGlyphStructure || context.tripletIndex != 12
+        || context.tripletColumn != 0 || main->isWindowModified()
+        || context.globalDrcsName.isEmpty()) qFatal("Unexpected fixed mixed Local structure baseline");
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual mixed structure X/26 dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000)) qFatal("Actual mixed structure dock was not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual mixed structure requires exactly one X/26 table");
+    auto table = tables.front();
+    auto model = table->model();
+    // Pinned PageX26Base trims repeated final padding on load: the TTI has
+    // three packets/39 physical words, while this model has32 meaningful rows.
+    if (!model || model->rowCount() != 32 || model->columnCount() != 4)
+        qFatal("Fixed mixed structure requires exactly32 meaningful model triplets");
+    const std::array<StructureTriplet, 15> original{{
+        {0,0,18}, {0,3,0}, {0,8,0}, {0,1,65}, {1,15,35}, {2,2,47}, {3,11,47},
+        {4,17,65}, {40,24,80}, {5,13,64}, {40,24,16}, {6,13,0}, {7,9,66}, {7,12,32}, {7,9,67}
+    }};
+    const std::array<StructureTriplet, 15> final{{
+        {0,0,18}, {0,3,0}, {0,8,0}, {0,1,65}, {0,15,35}, {1,15,35}, {2,2,47},
+        {3,11,47}, {4,17,65}, {40,24,80}, {40,24,16}, {6,13,0}, {7,9,66}, {7,12,32}, {7,9,67}
+    }};
+    std::vector<StructureTriplet> expected;
+    for (int row = 0; row < 32; ++row) expected.push_back(structureTriplet(model, row));
+    for (int offset = 0; offset < 15; ++offset)
+        if (expected[12 + offset] != original[offset]) qFatal("Original mixed Local body differs");
+    if (expected[11] != StructureTriplet{40,23,11} || expected[27] != StructureTriplet{40,23,33}
+        || expected[28] != StructureTriplet{0,8,0} || expected[29] != StructureTriplet{0,12,16}
+        || expected[30] != StructureTriplet{0,9,80} || expected[31] != StructureTriplet{63,31,5})
+        qFatal("Original mixed target/following markers or protected program differ");
+    int targetCalls = 0, followingCalls = 0;
+    for (int row = 0; row < 11; ++row) {
+        if (expected[row] == StructureTriplet{40,19,11}) ++targetCalls;
+        if (expected[row] == StructureTriplet{40,19,33}) ++followingCalls;
+    }
+    if (expected[10] != StructureTriplet{63,31,6} || targetCalls != 2 || followingCalls != 1)
+        qFatal("Original mixed Main termination and exact Local invocation counts differ");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-mixed-structure-before")))
+        qFatal("Actual mixed structure before dock capture failed");
+    DriverContext paint = context; paint.editLocalGlyph = true;
+    captureLocalGlyphWidget(paint, "before");
+    structureSelect(table, 21);
+    structureButton(dock, "Delete");
+    expected.erase(expected.begin() + 21);
+    structureRelocate(expected, 21, -1);
+    structureCheck(model, expected);
+    if (expected[20] != StructureTriplet{40,24,80} || expected[26] != StructureTriplet{40,23,32})
+        qFatal("Actual mixed Delete did not preserve the original unused selector");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-mixed-structure-deleted")))
+        qFatal("Actual mixed structure Delete capture failed");
+    structureSelect(table, 16);
+    structureButton(dock, "Insert copy");
+    expected.insert(expected.begin() + 16, StructureTriplet{1,15,35});
+    structureRelocate(expected, 16, 1);
+    structureCheck(model, expected);
+    structureSelect(table, 16);
+    structureColumnOneToZero(dock);
+    expected[16][0] = 0;
+    structureCheck(model, expected);
+    for (int offset = 0; offset < 15; ++offset)
+        if (expected[12 + offset] != final[offset]) qFatal("Fixed final mixed Local body differs");
+    if (!main->isWindowModified() || expected[21] != StructureTriplet{40,24,80}
+        || expected[27] != StructureTriplet{40,23,33})
+        qFatal("Actual mixed structure selector, modified state or following marker differs");
+    if (!dock->grab().save(QString("/work/") + context.captureName("local-mixed-structure-edited")))
+        qFatal("Actual mixed structure edited dock capture failed");
+    captureLocalGlyphWidget(paint, "edited");
+    savedGlyphStructure = expected;
+    std::puts("QTM actual mixed Local glyph structure: DeleteNormalGlyph21 keepOriginalSelector InsertCopyG2at16 Column1-to0 full32-row model checked; raw39-word padding is checked externally");
+}
 static void verifySavedGlyphStructure(QMainWindow *main) {
     auto dock = main->findChild<QDockWidget *>("x26DockWidget");
     if (!dock || savedGlyphStructure.size() != 32) qFatal("Fixed saved structure oracle absent");
@@ -1224,12 +1328,12 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             || saved->isWindowModified() || !savedFile.isFile()
             || savedFile.isSymLink() || savedFile.size() <= 0)
             qFatal("Actual Save As did not complete");
-        if (context.editLocalGlyphStructure) verifySavedGlyphStructure(saved);
+        if (context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure) verifySavedGlyphStructure(saved);
         capture(context.captureName("saved").toUtf8().constData());
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -1274,6 +1378,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
                 view->width(), view->height(), context.leftPanelColumns, context.rightPanelColumns);
             if (context.editForeground || context.editLocalGlyph) editForeground(main, context);
             if (context.editLocalGlyphStructure) editLocalGlyphStructure(main, context);
+            if (context.editLocalMixedGlyphStructure) editLocalMixedGlyphStructure(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));

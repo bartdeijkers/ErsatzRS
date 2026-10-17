@@ -40,7 +40,8 @@ release section when tagging a release.
   charset context is checked even when a change produces identical pixels. Actual
   pinned
   QTeletextMaker G0/G1/G2/G3 glyph, diacritic-selector, Normal DRCS slot,
-  Local foreground, flash/charset, DRCS scope/subtable and Local G0/G1 structure saves
+  Local foreground, flash/charset, DRCS scope/subtable, Local G0/G1 structure
+  and mixed DRCS deletion/G2 insertion saves
   pass concept import,
   shared preview and reopen.
   Prohibited G2/G3 positions remain refused without changing publication; full

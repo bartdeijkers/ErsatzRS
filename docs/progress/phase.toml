@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: mixed Local/DRCS structural QTM SaveAs'
+current_focus = 'P9A-04: authored forward row-zero/header lowering'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -362,13 +362,19 @@ legacy intent. Mandatory AP00 anchors, resource association and all-consumer
 permissions remain protected. Domain/storage102, host63 and native26 cases pass
 (191 unique, with20+5+1 native evidence reuse); strict domain/app/web all-target and changed-native-test lint
 pass. P9A-04 owns the canonical receipt, corrected fixture premises and reuse
-limits. The checkpoint does not accept the full criterion. Next product proof:
-one actual pinned QTM Normal-DRCS Delete plus G2 InsertCopy/column1→0 SaveAs,
-original orphan-selector normalization, concept/shared preview/reopen. Reuse
-existing controls and unchanged ordinary/client evidence within its original
-limits. Page-local topology, other commands/resources/objects/templates/dynamic
-fields/sets and all standards/client gates remain required; no milestone or
-permanent restriction. Production content waits for independent generic acceptance.
+limits. Actual pinned mixed Normal-DRCS Delete/G2 InsertCopy/Column1→0 SaveAs now
+passes raw-orphan verification, canonical V12 concept/shared preview/reopen,
+unchanged publication and original/Night state. P9A-04 owns the new two-Rust/
+16-driver-case receipt; previous ordinary/client proof retains its original scope.
+Next product blocker: valid authored forward header SetPosition(0,8) still
+fails before normalization. Reproduce whole-factory RED using the existing
+nonblack-header semantic fixture, then extend existing context-aware packing/
+LoweringState with deferred forward AP and explicit invocation handling. Preserve
+original00 bytes, colour/reset rules, latches, provenance/bounds and backwards-row
+negatives. Prove affected encoding before a fresh editor chain. Page-local topology,
+other commands/resources/objects/templates/dynamic fields/sets and all standards/
+client gates stay required; no full criterion, milestone or permanent restriction.
+Production content waits for independent generic acceptance.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.
 Suitable-client/full engine proof remains open. Earlier proof

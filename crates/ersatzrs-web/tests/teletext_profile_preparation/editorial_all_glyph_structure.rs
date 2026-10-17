@@ -4,6 +4,9 @@ use super::super::local_object_glyphs;
 use super::*;
 use ersatzrs_ffmpeg::teletext::TeletextMainComposition;
 
+#[path = "editorial_all_glyph_structure/actual_editor.rs"]
+mod actual_editor;
+
 fn family(index: usize, inserted: bool) -> TeletextColumnOperation {
     let value = match index {
         0 => json!({"kind":"g1_alpha","code":if inserted {66} else {65}}),
