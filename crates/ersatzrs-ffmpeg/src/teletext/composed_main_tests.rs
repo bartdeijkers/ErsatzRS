@@ -360,14 +360,82 @@ fn final_capacity_counts_restoration_before_any_packet_bodies_are_returned() {
 }
 
 #[test]
-fn explicit_header_position_error_retains_original_page_ordinal() {
-    let service = Fixture::new(vec![position(0, 8)]).build();
+fn deferred_header_columns_keep_final_pointers_sparse_sources_and_capacity_exact() {
+    let build = |count: usize| {
+        let glyph = TeletextEnhancementCommand::AtColumn {
+            column: 8,
+            operation: TeletextColumnOperation::G0 {
+                code: TeletextGlyphCode::new(b'A').unwrap(),
+            },
+        };
+        let mut main = Vec::new();
+        for _ in 0..count {
+            main.extend([position(0, 8), glyph]);
+        }
+        main.push(invoke(local()));
+        let mut fixture = Fixture::new(main);
+        fixture.objects = vec![definition(local())];
+        fixture.build()
+    };
+    let result = compile(&build(1)).unwrap();
+    let encoded = result.encoded();
+    assert_eq!(
+        &words(encoded.packet_bodies())[..6],
+        &[
+            (63, 7, 0),
+            (8, 9, 65),
+            (40, 19, 4),
+            (63, 31, 6),
+            (40, 23, 4),
+            (63, 31, 5)
+        ]
+    );
+    let sources = encoded.command_positions();
+    assert_eq!(sources.len(), 2);
+    assert_eq!(sources[0].source().command, 1);
+    assert_eq!(
+        (sources[0].first_word(), sources[0].semantic_word()),
+        (0, 1)
+    );
+    assert_eq!(sources[1].source().command, 2);
+    assert_eq!(
+        (sources[1].first_word(), sources[1].semantic_word()),
+        (2, 2)
+    );
+
+    let exact = compile(&build(203)).unwrap();
+    assert_eq!(exact.encoded().packet_bodies().len(), 16);
+    assert_eq!(exact.encoded().main_triplet_count(), 205);
+    assert_eq!(
+        exact.encoded().definition_positions()[0].absolute_index(),
+        206
+    );
+    let service = build(204);
+    let saved = service.clone();
+    assert!(matches!(
+        compile(&service).unwrap_err(),
+        TeletextComposedMainEncodingError::Packing(TeletextComposedMainPackingError {
+            reason: PackingFailure::Capacity {
+                count: 209,
+                maximum: 208
+            },
+            ..
+        })
+    ));
+    assert_eq!(service, saved);
+}
+
+#[test]
+fn deferred_header_call_error_retains_original_page_ordinal() {
+    let mut fixture = Fixture::new(vec![position(0, 8), invoke(local())]);
+    fixture.objects = vec![definition(local())];
+    let service = fixture.build();
     let before = service.clone();
     let error = compile(&service).unwrap_err();
     assert!(matches!(
         error,
         TeletextComposedMainEncodingError::Packing(TeletextComposedMainPackingError {
-            location: Some(TeletextMainCompositionSource::OriginalPage { command: 0 }),
+            location: Some(TeletextMainCompositionSource::OriginalPage { command: 1 }),
             reason: PackingFailure::Lowering(LoweringFailure::NeedsRowZeroLowering { .. }),
             ..
         })

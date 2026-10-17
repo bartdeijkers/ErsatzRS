@@ -293,6 +293,118 @@ fn identity_uses_enhanced_ap_and_keeps_header_colour_and_both_drcs_latches() {
 }
 
 #[test]
+fn forward_header_positions_preserve_logical_order_and_restore_only_the_emitted_ap() {
+    for column in [8, 39] {
+        let mut state = LoweringState::new_with_compatibility(colour(11));
+        assert!(lower(&mut state, position(0, column)).is_empty());
+        assert!(lower(&mut state, position(0, column)).is_empty());
+        assert_eq!(lower(&mut state, screen()), [(41, 0, 5)]);
+        assert_eq!(
+            state.lower(glyph(column - 1), None).err().unwrap(),
+            TeletextLocalProgramEncodingFailure::ActivePositionOrder {
+                previous: (0, column),
+                requested: (0, column - 1),
+            }
+        );
+        assert_eq!(
+            lower(
+                &mut state,
+                at(
+                    column,
+                    TeletextColumnOperation::G2 {
+                        code: TeletextGlyphCode::new(0x23).unwrap(),
+                    }
+                ),
+            ),
+            [(63, 7, 11), (u32::from(column), 15, 0x23)]
+        );
+        assert!(lower(&mut state, position(0, column)).is_empty());
+        assert_eq!(
+            lower(&mut state, glyph(column)),
+            [(u32::from(column), 9, 65)]
+        );
+    }
+}
+
+#[test]
+fn deferred_header_row_colour_checks_authored_order_before_resetting_both_positions() {
+    let row_colour = |row| TeletextEnhancementCommand::SetRowColour {
+        row,
+        colour: colour(3),
+        following_rows: false,
+    };
+    let mut state = LoweringState::new_with_compatibility(colour(11));
+    assert!(lower(&mut state, position(0, 8)).is_empty());
+    assert_eq!(
+        state.lower(row_colour(0), None).err().unwrap(),
+        TeletextLocalProgramEncodingFailure::ActivePositionOrder {
+            previous: (0, 8),
+            requested: (0, 0),
+        }
+    );
+    assert_eq!(lower(&mut state, row_colour(1)), [(41, 1, 3)]);
+    assert_eq!(lower(&mut state, glyph(0)), [(0, 9, 65)]);
+    assert_eq!(
+        state.lower(position(0, 8), None).err().unwrap(),
+        TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
+            position: TeletextEnhancementPosition::new(0, 8).unwrap(),
+        }
+    );
+    assert_eq!(lower(&mut state, glyph(1)), [(1, 9, 65)]);
+}
+
+#[test]
+fn deferred_header_keeps_drcs_latches_and_never_invents_a_late_header_reset() {
+    let mut state = LoweringState::new_with_compatibility(colour(11));
+    assert!(lower(&mut state, position(0, 8)).is_empty());
+    let at_column = |column, table| {
+        let TeletextEnhancementCommand::AtColumn { operation, .. } = drcs(table) else {
+            unreachable!()
+        };
+        at(column, operation)
+    };
+    assert_eq!(
+        lower(&mut state, at_column(8, TeletextDrcsTableScope::Normal)),
+        [(40, 24, 0x57), (8, 13, 0x6f)]
+    );
+    assert!(lower(&mut state, position(0, 9)).is_empty());
+    assert_eq!(
+        lower(&mut state, at_column(9, TeletextDrcsTableScope::Global)),
+        [(40, 24, 0x17), (9, 13, 47)]
+    );
+    assert!(lower(&mut state, position(0, 10)).is_empty());
+    assert_eq!(
+        lower(&mut state, at_column(10, TeletextDrcsTableScope::Normal)),
+        [(10, 13, 0x6f)]
+    );
+    assert_eq!(
+        lower(&mut state, at_column(10, TeletextDrcsTableScope::Global)),
+        [(10, 13, 47)]
+    );
+    assert_eq!(lower(&mut state, screen()), [(41, 0, 5)]);
+    assert!(lower(&mut state, position(0, 11)).is_empty());
+    assert_eq!(
+        state
+            .lower(
+                at(
+                    11,
+                    TeletextColumnOperation::G2 {
+                        code: TeletextGlyphCode::new(0x23).unwrap(),
+                    }
+                ),
+                None
+            )
+            .err()
+            .unwrap(),
+        TeletextLocalProgramEncodingFailure::NeedsCompatibilityRowLowering { position: (0, 11) }
+    );
+    assert_eq!(
+        lower(&mut state, at_column(11, TeletextDrcsTableScope::Normal)),
+        [(11, 13, 0x6f)]
+    );
+}
+
+#[test]
 fn other_row_zero_moves_remain_located_and_failure_keeps_state() {
     let mut state = LoweringState::new();
     for column in [1, 39] {

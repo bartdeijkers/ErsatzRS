@@ -1144,7 +1144,24 @@ fn contextual_cases() -> Vec<serde_json::Value> {
         &[cell(0, 8, pound, pound), cell(0, 9, white, white)],
         true,
     );
-    vec![body, header]
+    let mut cases = vec![body, header];
+    for column in [8, 39] {
+        cases.push(encoded_case_with_context(
+            &format!("context_forward_header_{column}"),
+            vec![text(0, column, "£"), text(1, 8, "Z")],
+            vec![
+                position(0, column),
+                position(0, column),
+                TeletextEnhancementCommand::SetScreenColour {
+                    colour: TeletextColourReference::new(1).unwrap(),
+                },
+            ],
+            vec![],
+            &[cell(0, column, pound, pound), cell(1, 8, white, white)],
+            true,
+        ));
+    }
+    cases
 }
 
 #[tokio::test]
@@ -1173,7 +1190,7 @@ async fn contextual_main_program_decodes_with_pinned_independent_teletextimager(
         serde_json::json!({
             "decoder":"teletextimager", "decoder_version":"0.2.0",
             "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317",
-            "cases_passed":2, "levels":["1.5","2.5"]
+            "cases_passed":4, "levels":["1.5","2.5"]
         })
     );
 }

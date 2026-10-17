@@ -83,8 +83,9 @@ impl EncodedTeletextComposedMainProgram {
 ///
 /// # Errors
 /// Returns bounded composition or provenance-mapped packing errors without partial
-/// output. Explicit row-zero positions and complex header-row restoration still
-/// need semantic normalization. Final object/base priority, attribute/geometry,
+/// output. Forward header positions can await a real column operation; a call
+/// while the authored and emitted AP differ, later row-zero resets and complex
+/// header-row restoration still need semantic normalization. Final object/base priority, attribute/geometry,
 /// default realization and full service/publication acceptance remain open.
 pub fn compile_teletext_composed_main_program(
     service: &TeletextSemanticService,

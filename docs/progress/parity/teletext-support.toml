@@ -6,8 +6,7 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns the exact criterion map,
-canonical receipts, failures and remaining acceptance; no complete engine claim.
+rendering/navigation. Kodi is optional. P9A-04 owns criteria, receipts, failures and remaining work.
 
 Typed services, provenance, resource identities/defaults, physical ownership,
 X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization are
@@ -24,12 +23,13 @@ concepts/shared four-consumer preview/reopen; P9A-04 owns the bundled proof.
 Closed V11 connects Local G0/G1 structure; V12 extends the same program/map to
 all typed glyphs, complete DRCS references and authenticated selectors. Old
 formats, AP00 anchors, resources and shared permissions remain protected.
-191 foundation cases retain passing proof; pinned mixed DRCS Delete/G2 copy/
-column SaveAs now passes genuine raw-orphan validation and canonical V12 concept/
-preview/reopen (2 Rust cases,16 driver refusals). P9A-04 owns exact receipts and
-reuse limits. Next fix valid forward header positioning rejected before packing/
-normalization, preserving source/colour/latches/bounds and backwards negatives.
-Full editor/client interchange stays open; no new delivery or engine acceptance.
+P9A-04 owns191 foundation cases and pinned mixed DRCS/G2 structural SaveAs,
+raw-orphan validation and V12 concept/preview/reopen (2 Rust,16 refusals),
+including exact receipts and reuse limits. Forward main-header positions now pass whole-factory8/39 and
+unchanged pinned dual-level decoding. P9A-04 owns891 distinct unit passes,
+provenance/latch/pointer/capacity negatives and exact receipt. Next prove affected
+TTI/concept/preview metadata. Pending-AP calls, resets and definition lowering
+remain required; no full editor/client or engine acceptance.
 
 P9A-04 retains representative national-original, bank and panel QTM/native/
 ordinary-TCP/TSDuck/independent proof. Dense/padded banks join nine-culture

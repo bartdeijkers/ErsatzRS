@@ -360,6 +360,10 @@ impl CommandWords {
 #[derive(Clone, Copy)]
 pub(super) struct LoweringState {
     active_position: (u8, u8),
+    // A forward header position can be deferred until a real column operation.
+    // Ordering still uses the authored AP; compatibility selectors use the AP
+    // actually emitted. Never substitute one for the other at an invocation.
+    emitted_position: (u8, u8),
     global_s1: Option<u8>,
     normal_s1: Option<u8>,
     invocations: [u8; 3],
@@ -376,6 +380,7 @@ impl LoweringState {
     pub(super) const fn new() -> Self {
         Self {
             active_position: (0, 0),
+            emitted_position: (0, 0),
             global_s1: None,
             normal_s1: None,
             invocations: [0; 3],
@@ -434,11 +439,16 @@ impl LoweringState {
                     if position.column() == 0 && self.active_position == (0, 0) {
                         return Ok(CommandWords::none());
                     }
+                    if self.compatibility.is_some() && self.active_position.0 == 0 {
+                        self.move_to((0, position.column()))?;
+                        return Ok(CommandWords::none());
+                    }
                     return Err(TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
                         position,
                     });
                 }
                 self.move_to((position.row(), position.column()))?;
+                self.emitted_position = self.active_position;
                 word(row_address(position.row()), 4, position.column())
             }
             TeletextEnhancementCommand::SetScreenColour { colour } => {
@@ -451,6 +461,7 @@ impl LoweringState {
                 following_rows,
             } => {
                 self.move_to((row, 0))?;
+                self.emitted_position = self.active_position;
                 let data = colour.get() | if following_rows { 0x60 } else { 0 };
                 if row == 0 {
                     word(63, 7, data)
@@ -459,10 +470,11 @@ impl LoweringState {
                 }
             }
             TeletextEnhancementCommand::AtColumn { column, operation } => {
-                let previous = self.active_position;
-                self.move_to((previous.0, column))?;
+                let previous = self.emitted_position;
+                self.move_to((self.active_position.0, column))?;
                 let selector = self.compatibility_selector(previous, column, operation)?;
                 let words = self.column(column, operation);
+                self.emitted_position = self.active_position;
                 // A compatible glyph lowers to one word. An initial header
                 // DRCS pair is kept atomic: its selector would immediately
                 // disturb the compatibility row even after a header prefix.
@@ -480,6 +492,18 @@ impl LoweringState {
                 object_type,
                 offset,
             } => {
+                if self.active_position != self.emitted_position {
+                    // Adjusting only the origin modifier would preserve the
+                    // object's origin but change Annex A.8's caller-AP interval.
+                    // Keep that normalization obligation explicit and located.
+                    return Err(TeletextLocalProgramEncodingFailure::NeedsRowZeroLowering {
+                        position: TeletextEnhancementPosition::new(
+                            self.active_position.0,
+                            self.active_position.1,
+                        )
+                        .expect("active position comes from checked commands"),
+                    });
+                }
                 return self.invoke(target, object_type, offset, context);
             }
         };

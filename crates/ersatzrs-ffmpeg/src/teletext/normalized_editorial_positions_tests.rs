@@ -172,6 +172,62 @@ fn shifted_carrier_positions_retain_original_local_ordinal_and_physical_source()
 }
 
 #[test]
+fn forward_header_positions_pass_the_authored_factory_without_changing_transmission() {
+    use super::authored_service_tests::{declared, transmissions};
+
+    for column in [8, 39] {
+        let make = |explicit_position: bool| {
+            let mut draft = input();
+            draft.base.pages[0].rows.push(TeletextRow {
+                row: 0,
+                runs: vec![TeletextRun {
+                    column,
+                    style: TeletextStyle::default(),
+                    content: TeletextRunContent::Text { text: "£".into() },
+                }],
+            });
+            let mut commands = vec![
+                TeletextEnhancementCommand::SetScreenColour {
+                    colour: TeletextColourReference::new(5).unwrap(),
+                },
+                TeletextEnhancementCommand::SetRowColour {
+                    row: 0,
+                    colour: TeletextColourReference::new(3).unwrap(),
+                    following_rows: false,
+                },
+            ];
+            if explicit_position {
+                commands.extend([position(0, column), position(0, column)]);
+            }
+            commands.push(TeletextEnhancementCommand::AtColumn {
+                column,
+                operation: TeletextColumnOperation::G2 {
+                    code: TeletextGlyphCode::new(0x23).unwrap(),
+                },
+            });
+            draft.pages[0].local_program = Some(TeletextEnhancementProgram::new(commands).unwrap());
+            declared(draft)
+        };
+        let original = make(true);
+        let saved = original.clone();
+        let actual =
+            encode_teletext_authored_service(original, &transmissions(&saved), &limits()).unwrap();
+        let reference = make(false);
+        let expected = encode_teletext_authored_service(
+            reference.clone(),
+            &transmissions(&reference),
+            &limits(),
+        )
+        .unwrap();
+        assert_eq!(actual.unit_count(), expected.unit_count());
+        for (actual, expected) in actual.pages().iter().zip(expected.pages()) {
+            assert_eq!(actual.data_units(), expected.data_units());
+        }
+        assert_eq!(saved, make(true));
+    }
+}
+
+#[test]
 fn initial_header_prefix_points_to_semantic_operand_and_omits_identity_move() {
     let service = fixture(
         Some(vec![position(0, 0), foreground(8, 4), glyph(8)]),

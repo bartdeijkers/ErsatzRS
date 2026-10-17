@@ -222,13 +222,16 @@ fn late_header_error_is_exact_and_failed_command_does_not_advance_state() {
         lower(&mut state, g3(8, TeletextG3Compatibility::Level25)),
         [(8, 11, 0x21)]
     );
-    let position = TeletextEnhancementPosition::new(0, 9).unwrap();
+    let position = TeletextEnhancementPosition::new(0, 7).unwrap();
     assert_eq!(
         state
             .lower(TeletextEnhancementCommand::SetPosition { position }, None)
             .err()
             .unwrap(),
-        Failure::NeedsRowZeroLowering { position }
+        Failure::ActivePositionOrder {
+            previous: (0, 8),
+            requested: (0, 7),
+        }
     );
 }
 
