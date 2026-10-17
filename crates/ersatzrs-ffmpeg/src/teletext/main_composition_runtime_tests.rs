@@ -1167,25 +1167,54 @@ fn contextual_cases() -> Vec<serde_json::Value> {
 
 fn contextual_header_objects() -> Vec<serde_json::Value> {
     let mut cases = Vec::new();
-    for column in [8, 39] {
+    for (column, foregrounds) in [
+        (8, &[][..]),
+        (39, &[][..]),
+        (9, &[1, 2][..]),
+        (9, &[2, 1][..]),
+    ] {
         let owner = super::transport_tests::draft(200, 0, false).address;
         let target = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
+        let mut main = vec![TeletextEnhancementCommand::SetRowColour {
+            row: 0,
+            colour: TeletextColourReference::new(3).unwrap(),
+            following_rows: false,
+        }];
+        main.extend(foregrounds.iter().map(|&value| {
+            at(
+                8,
+                TeletextColumnOperation::Foreground {
+                    colour: TeletextColourReference::new(value).unwrap(),
+                },
+            )
+        }));
+        main.extend([
+            position(0, column),
+            TeletextEnhancementCommand::InvokeObject {
+                target,
+                object_type: TeletextObjectType::Passive,
+                offset: None,
+            },
+        ]);
+        let rows = vec![
+            text(0, column, if foregrounds.is_empty() { "Z" } else { "ZZ" }),
+            text(1, 8, "B"),
+        ];
+        let mut cells = vec![
+            cell(0, column, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0]),
+            cell(1, 8, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
+        ];
+        if let Some(&value) = foregrounds.last() {
+            cells.push(cell(0, 10, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, value, 0]));
+        }
         cases.push(encoded_case_with_encoding(
-            &format!("context_header_object_{column}"),
-            vec![text(0, column, "Z"), text(1, 8, "B")],
-            vec![
-                TeletextEnhancementCommand::SetRowColour {
-                    row: 0,
-                    colour: TeletextColourReference::new(3).unwrap(),
-                    following_rows: false,
-                },
-                position(0, column),
-                TeletextEnhancementCommand::InvokeObject {
-                    target,
-                    object_type: TeletextObjectType::Passive,
-                    offset: None,
-                },
-            ],
+            &if foregrounds.is_empty() {
+                format!("context_header_object_{column}")
+            } else {
+                format!("context_header_c2_{}{}", foregrounds[0], foregrounds[1])
+            },
+            rows,
+            main,
             vec![TeletextEnhancementObjectDefinition {
                 identity: target,
                 object_type: TeletextObjectType::Passive,
@@ -1205,10 +1234,7 @@ fn contextual_header_objects() -> Vec<serde_json::Value> {
                 ])
                 .unwrap(),
             }],
-            &[
-                cell(0, column, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0]),
-                cell(1, 8, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
-            ],
+            &cells,
             MainEncoding::Normalized,
         ));
     }
@@ -1241,7 +1267,7 @@ async fn contextual_main_program_decodes_with_pinned_independent_teletextimager(
         serde_json::json!({
             "decoder":"teletextimager", "decoder_version":"0.2.0",
             "decoder_commit":"2b0125b778c45ffdfa2df0b196870c093361f317",
-            "cases_passed":6, "levels":["1.5","2.5"]
+            "cases_passed":8, "levels":["1.5","2.5"]
         })
     );
 }

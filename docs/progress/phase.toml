@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: header caller C2 foreground settlement'
+current_focus = 'P9A-04: authored header reset and restoration'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -369,13 +369,16 @@ unchanged publication and original/Night state. P9A-04 owns the new two-Rust/
 Forward header positions and qualified nonempty object calls now use real typed
 HeaderPosition writers inside the validated physical program. Original target,
 private source binding, fallback and exact A8 caller intervals are retained.
-P9A-04 owns897 encoder-unit passes,6 unchanged pinned dual-level decoder cases,
-and native two-theme TTI concept/preview/reopen/publication with protected derived
-writers and unchanged Night. Full source/receipt/reuse limits are canonical there.
-Next reproduce valid MainFG8=1/FG8=2→AP9→call whole-factory failure and settle
-original C2 word evidence before materialization. No colour is guessed. Later
-resets/restoration, standalone definitions and full resource/default/repertoire,
-metadata/template/dynamic-field/set/client and other acceptance remain required.
+P9A-04 owns905 encoder-unit passes and8 pinned dual-level contextual decoder
+cases. Original Main C2 colour conflicts now settle through actual lowerable
+prefix words, checked against final packing before full qualification. Multiple
+calls, uncertain cross-instance refusal, final correspondence, shared quota and
+208/209-word bounds pass. Reuse existing native two-theme TTI concept/preview/
+reopen/publication and protected-writer proof within its known-context scope.
+Next reproduce Main body-row→header8 before a nonempty Passive call and correct
+physical reset/restoration without changing caller AP/A8 or fallback. Standalone
+definitions, resource/default/repertoire, metadata/template/dynamic-field/set/
+client and remaining full acceptance stay required; no restriction is accepted.
 Production content waits for independent generic acceptance.
 Full resource/object, repertoire, dynamic-field/template/set and suitable-client
 requirements remain open, with no permanent restriction.

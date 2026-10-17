@@ -175,8 +175,8 @@ fn shifted_carrier_positions_retain_original_local_ordinal_and_physical_source()
 fn header_position_before_nonempty_object_passes_the_authored_factory() {
     use super::authored_service_tests::{declared, transmissions};
 
-    for defined_foreground in [false, true] {
-        let column = if defined_foreground { 9 } else { 8 };
+    for foregrounds in [&[][..], &[7][..], &[1, 2][..], &[2, 1][..]] {
+        let column = if foregrounds.is_empty() { 8 } else { 9 };
         let mut draft = input();
         let owner = draft.base.pages[0].address;
         let target = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
@@ -185,9 +185,7 @@ fn header_position_before_nonempty_object_passes_the_authored_factory() {
             colour: TeletextColourReference::new(3).unwrap(),
             following_rows: false,
         }];
-        if defined_foreground {
-            commands.push(foreground(8, 7));
-        }
+        commands.extend(foregrounds.iter().map(|&value| foreground(8, value)));
         commands.extend([
             position(0, column),
             TeletextEnhancementCommand::InvokeObject {
@@ -210,6 +208,21 @@ fn header_position_before_nonempty_object_passes_the_authored_factory() {
         let EncodedTeletextAuthoredPage::CompiledDisplay(display) = &encoded.pages()[0] else {
             panic!("nonempty header object must retain authored display ownership")
         };
+        let original = display.normalized().original();
+        let setters = original
+            .program()
+            .commands()
+            .iter()
+            .zip(original.provenance())
+            .filter_map(|(command, source)| {
+                matches!(source, TeletextMainCompositionSource::HeaderPosition { .. })
+                    .then_some(*command)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            setters,
+            [foreground(column, foregrounds.last().copied().unwrap_or(7))]
+        );
         let fallback = encode_teletext_page(
             &saved.semantic().base().pages[0],
             TeletextEncodingRegion::WesternLatin,

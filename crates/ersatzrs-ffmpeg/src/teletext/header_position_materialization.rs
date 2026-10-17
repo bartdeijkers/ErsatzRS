@@ -22,20 +22,73 @@ struct Setter {
     foreground: TeletextColourReference,
 }
 
-/// Called only by the normalized factory, which subsequently compares the real
-/// typed candidate against this original target. Legacy composed-only callers
-/// retain their existing located unresolved-lowering failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct UnsettledHeaderPosition {
+    /// Unresolved call index in the returned, already materialized candidate.
+    pub before: usize,
+    pub column: u8,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScanEnd {
+    Complete,
+    Unsettled(UnsettledHeaderPosition),
+    Unsupported,
+}
+
+struct Plan {
+    setters: Vec<Setter>,
+    end: ScanEnd,
+}
+
+/// Legacy all-or-nothing planner policy, retained for its focused regressions.
+#[cfg(test)]
 pub(super) fn materialize(
     composition: TeletextMainComposition,
     service: &TeletextSemanticService,
     budget: TeletextMainCompositionBudget,
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<TeletextMainComposition, TeletextMainCompositionError> {
-    let Some(setters) = plan(&composition, budget)? else {
+    let plan = plan(&composition, budget)?;
+    if plan.end != ScanEnd::Complete {
         // Unknown context or an unsupported position stays an explicit native
         // lowering failure. Do not guess a colour or return a partial recipe.
         return Ok(composition);
+    }
+    apply(composition, service, budget, context, &plan.setters)
+}
+
+/// Apply only known setters preceding the first unresolved original foreground.
+/// The caller may settle sparse, authenticated prefix evidence and resume. This
+/// helper never chooses a pending writer or grants partial output authority.
+pub(super) fn materialize_until_unsettled(
+    composition: TeletextMainComposition,
+    service: &TeletextSemanticService,
+    budget: TeletextMainCompositionBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<(TeletextMainComposition, Option<UnsettledHeaderPosition>), TeletextMainCompositionError>
+{
+    let plan = plan(&composition, budget)?;
+    let boundary = match plan.end {
+        ScanEnd::Unsettled(mut boundary) => {
+            // Every admitted setter precedes the boundary; the complete new
+            // command count was checked before allocating the recipe.
+            boundary.before += plan.setters.len();
+            Some(boundary)
+        }
+        ScanEnd::Complete | ScanEnd::Unsupported => None,
     };
+    let composition = apply(composition, service, budget, context, &plan.setters)?;
+    Ok((composition, boundary))
+}
+
+fn apply(
+    composition: TeletextMainComposition,
+    service: &TeletextSemanticService,
+    budget: TeletextMainCompositionBudget,
+    context: &mut TeletextCompileContext<'_, '_>,
+    setters: &[Setter],
+) -> Result<TeletextMainComposition, TeletextMainCompositionError> {
     if setters.is_empty() {
         return Ok(composition);
     }
@@ -78,10 +131,10 @@ pub(super) fn materialize(
 fn plan(
     composition: &TeletextMainComposition,
     budget: TeletextMainCompositionBudget,
-) -> Result<Option<Vec<Setter>>, TeletextMainCompositionError> {
+) -> Result<Plan, TeletextMainCompositionError> {
     let mut count = 0_usize;
     // Count and validate the complete recipe before allocating any candidate.
-    if !visit_setters(composition, |_, command, _, _| {
+    let end = visit_setters(composition, |_, command, _, _| {
         count = count
             .checked_add(1)
             .ok_or_else(|| output_error(composition, budget, command))?;
@@ -95,11 +148,9 @@ fn plan(
             return Err(output_error(composition, budget, command));
         }
         Ok(())
-    })? {
-        return Ok(None);
-    }
+    })?;
     let mut setters = Vec::with_capacity(count);
-    if !visit_setters(composition, |before, command, column, foreground| {
+    visit_setters(composition, |before, command, column, foreground| {
         setters.push(Setter {
             before,
             command,
@@ -107,10 +158,8 @@ fn plan(
             foreground,
         });
         Ok(())
-    })? {
-        return Ok(None);
-    }
-    Ok(Some(setters))
+    })?;
+    Ok(Plan { setters, end })
 }
 
 fn visit_setters(
@@ -121,7 +170,7 @@ fn visit_setters(
         u8,
         TeletextColourReference,
     ) -> Result<(), TeletextMainCompositionError>,
-) -> Result<bool, TeletextMainCompositionError> {
+) -> Result<ScanEnd, TeletextMainCompositionError> {
     let mut logical = (0, 0);
     let mut emitted = (0, 0);
     let mut source = None;
@@ -150,13 +199,16 @@ fn visit_setters(
             }
             TeletextEnhancementCommand::InvokeObject { .. } if logical != emitted => {
                 if logical.0 != 0 || emitted.0 != 0 || logical.1 < 8 {
-                    return Ok(false);
+                    return Ok(ScanEnd::Unsupported);
                 }
                 let Some(TeletextMainCompositionSource::OriginalPage { command }) = source else {
-                    return Ok(false);
+                    return Ok(ScanEnd::Unsupported);
                 };
                 let Some(foreground) = foreground(composition, logical.1) else {
-                    return Ok(false);
+                    return Ok(ScanEnd::Unsettled(UnsettledHeaderPosition {
+                        before: index,
+                        column: logical.1,
+                    }));
                 };
                 visit(index, command, logical.1, foreground)?;
                 emitted = logical;
@@ -165,10 +217,10 @@ fn visit_setters(
             | TeletextEnhancementCommand::InvokeObject { .. } => {}
         }
     }
-    Ok(true)
+    Ok(ScanEnd::Complete)
 }
 
-fn foreground(
+pub(super) fn foreground(
     composition: &TeletextMainComposition,
     column: u8,
 ) -> Option<TeletextColourReference> {
@@ -198,3 +250,5 @@ fn output_error(
 
 #[cfg(test)]
 mod tests;
+
+pub(super) mod settlement;

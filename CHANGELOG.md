@@ -726,7 +726,9 @@ release section when tagging a release.
   full page validation preserves authored attributes. Keep generated position
   attributes protected during TTI import and preserve source locations, fallback,
   DRCS selections and packet bounds through concept preview and publication.
-  Unsettled attribute context and later header resets still report validation errors.
+  Resolve same-Main header colour conflicts from actual encoded writer order before
+  positioning an object call; retain uncertain cross-object context and later
+  header resets as validation errors.
 - Preserve original implicit AP00 teletext position anchors during structural
   editor imports, keeping glyph provenance and shared-consumer protection intact.
   Valid imports no longer fail because a hidden anchor moves past an edited glyph;

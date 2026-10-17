@@ -158,39 +158,26 @@ fn compile_composed_with_policy(
     }
     let composition =
         compose_teletext_main_program_with_context(service, owner, composition_budget, context)?;
-    let composition = if header_positions {
-        super::header_position_materialization::materialize(
+    let (composition, prefix) = if header_positions {
+        super::header_position_materialization::settlement::prepare(
             composition,
             service,
+            allocations,
             composition_budget,
+            packing_budget,
             context,
         )?
     } else {
-        composition
+        (composition, Vec::new())
     };
-    let links = service.page_enhancements().get(&owner).map_or(
-        TeletextResolvedObjectPageLinks {
-            public: None,
-            global: None,
-        },
-        |page| page.resources.objects,
-    );
-    let encoded = compile_with_context(
-        owner,
+    let encoded = pack_composition_program(
+        service,
+        &composition,
         composition.program(),
-        service.objects(),
         allocations,
-        links,
         packing_budget,
-        Some(composition.colour_context().row_colours()[0]),
-    )
-    .map_err(|error| TeletextComposedMainPackingError {
-        owner: error.owner,
-        location: error
-            .location
-            .and_then(|location| composition.source_location(location)),
-        reason: error.reason,
-    })?;
+    )?;
+    super::header_position_materialization::settlement::verify(&composition, &encoded, &prefix)?;
     let transmission = transmission_evidence(
         &composition,
         &encoded,
@@ -206,6 +193,41 @@ fn compile_composed_with_policy(
     Ok(EncodedTeletextComposedMainProgram {
         composition,
         encoded,
+    })
+}
+
+/// Identical packing policy for a lowerable Main prefix and the final Main.
+/// Prefix-packed definitions never supply transmission authority.
+pub(super) fn pack_composition_program(
+    service: &TeletextSemanticService,
+    composition: &TeletextMainComposition,
+    program: &TeletextEnhancementProgram,
+    allocations: &TeletextResourceObjectAllocations,
+    packing_budget: TeletextObjectCatalogBudget,
+) -> Result<EncodedTeletextLocalObjectProgram, TeletextComposedMainPackingError> {
+    let owner = composition.owner();
+    let links = service.page_enhancements().get(&owner).map_or(
+        TeletextResolvedObjectPageLinks {
+            public: None,
+            global: None,
+        },
+        |page| page.resources.objects,
+    );
+    compile_with_context(
+        owner,
+        program,
+        service.objects(),
+        allocations,
+        links,
+        packing_budget,
+        Some(composition.colour_context().row_colours()[0]),
+    )
+    .map_err(|error| TeletextComposedMainPackingError {
+        owner: error.owner,
+        location: error
+            .location
+            .and_then(|location| composition.source_location(location)),
+        reason: error.reason,
     })
 }
 

@@ -199,6 +199,144 @@ fn header_materialization_does_not_guess_unsettled_foreground() {
 }
 
 #[test]
+fn header_materialization_partial_boundary_keeps_first_unknown_candidate_exact() {
+    let service = fixture(vec![fg(8, 1), fg(8, 2)], 9);
+    let budget = limits().normalization.composition;
+    let original =
+        compose_teletext_main_program(&service, service.base().pages[0].address, budget).unwrap();
+    let saved = original.clone();
+    let (actual, boundary) = materialize_until_unsettled(
+        original,
+        &service,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
+    .unwrap();
+    assert_eq!(actual, saved);
+    assert_eq!(
+        boundary,
+        Some(UnsettledHeaderPosition {
+            before: 3,
+            column: 9
+        })
+    );
+    assert!(foreground(&actual, 9).is_none());
+    assert!(matches!(
+        actual.program().commands()[3],
+        TeletextEnhancementCommand::InvokeObject { .. }
+    ));
+}
+
+#[test]
+fn header_materialization_partial_preserves_multiple_known_setters_before_unknown() {
+    let (service, call) = multiple_call_fixture();
+    let owner = service.base().pages[0].address;
+    let budget = limits().normalization.composition;
+    let original = compose_teletext_main_program(&service, owner, budget).unwrap();
+    assert_eq!(foreground(&original, 8), Some(colour(7)));
+    assert_eq!(foreground(&original, 9), Some(colour(7)));
+    assert!(foreground(&original, 11).is_none());
+    let saved = original.clone();
+    let (actual, boundary) = materialize_until_unsettled(
+        original.clone(),
+        &service,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
+    .unwrap();
+    assert_eq!(actual.spatial_trace(), saved.spatial_trace());
+    assert_eq!(actual.attribute_execution(), saved.attribute_execution());
+    assert_eq!(
+        boundary,
+        Some(UnsettledHeaderPosition {
+            before: 9,
+            column: 11
+        })
+    );
+    assert_eq!(actual.program().commands()[9], call);
+    assert_eq!(
+        actual.provenance()[9],
+        TeletextMainCompositionSource::OriginalPage { command: 7 }
+    );
+    let generated: Vec<_> = actual
+        .program()
+        .commands()
+        .iter()
+        .zip(actual.provenance())
+        .filter_map(|(command, source)| match source {
+            TeletextMainCompositionSource::HeaderPosition { command: original } => {
+                Some((*original, *command))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(generated, [(0, fg(8, 7)), (2, fg(9, 7))]);
+    let retained: Vec<_> = actual
+        .program()
+        .commands()
+        .iter()
+        .zip(actual.provenance())
+        .filter_map(|(command, source)| {
+            (!matches!(source, TeletextMainCompositionSource::HeaderPosition { .. }))
+                .then_some(*command)
+        })
+        .collect();
+    assert_eq!(retained, saved.program().commands());
+    // The legacy helper remains all-or-nothing, including earlier known setters.
+    let legacy = materialize(
+        original,
+        &service,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
+    .unwrap();
+    assert_eq!(legacy, saved);
+}
+
+fn multiple_call_fixture() -> (TeletextSemanticService, TeletextEnhancementCommand) {
+    let owner = input().base.pages[0].address;
+    let call = TeletextEnhancementCommand::InvokeObject {
+        target: TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535)),
+        object_type: TeletextObjectType::Passive,
+        offset: None,
+    };
+    let position = |column| TeletextEnhancementCommand::SetPosition {
+        position: TeletextEnhancementPosition::new(0, column).unwrap(),
+    };
+    let service = fixture(
+        vec![position(8), call, position(9), call, fg(10, 1), fg(10, 2)],
+        11,
+    );
+    (service, call)
+}
+
+#[test]
+fn header_materialization_partial_counts_all_known_setters_before_allocation() {
+    let (service, _) = multiple_call_fixture();
+    let owner = service.base().pages[0].address;
+    let mut budget = limits().normalization.composition;
+    let original = compose_teletext_main_program(&service, owner, budget).unwrap();
+    budget.max_output_commands = original.program().commands().len() + 1;
+    let error = materialize_until_unsettled(
+        original,
+        &service,
+        budget,
+        &mut TeletextCompileContext::new(None, None, None),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.location,
+        Some(TeletextMainCompositionSource::HeaderPosition { command: 2 })
+    );
+    assert_eq!(
+        error.reason,
+        TeletextMainCompositionFailure::OutputBudget {
+            maximum: budget.max_output_commands
+        }
+    );
+}
+
+#[test]
 fn header_materialization_full_replay_detects_copied_passive_colour_on_base_tail() {
     let service = fixture(vec![], 8);
     let budget = limits().normalization;
