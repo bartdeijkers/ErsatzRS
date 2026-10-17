@@ -1,4 +1,5 @@
 //! Sealed resource calls remain indivisible beside the existing raw glyph parser.
+use super::super::super::operands;
 use super::{alignment, fail, raw, style, Location, Result, Span};
 use ersatzrs_domain::{
     TeletextEnhancementCommand as Command, TeletextEnhancementObjectDefinition,
@@ -130,16 +131,33 @@ fn protect_noncalls(
     let before = raw::Body::read_bounded(&old, maximum, location, deadline)?;
     let after = raw::Body::read_bounded(&new, maximum, location, deadline)?;
     raw::protect_fixed_families(&before, &after, location)?;
-    // A changed call count cannot turn a same-position style scalar edit into
-    // structural deletion/insertion. Actual style topology must change first.
-    if style_layout(&before).eq(style_layout(&after))
-        && !before
+    // Same-position style values follow the existing checked scalar decoder.
+    // Alignment then omits the old writer and inserts a new one; it never grants
+    // the changed style the original command's inherited display authority.
+    if style_layout(&before).eq(style_layout(&after)) {
+        for (old, new) in before
             .entries
             .iter()
-            .filter_map(|entry| entry.style)
-            .eq(after.entries.iter().filter_map(|entry| entry.style))
-    {
-        return Err(fail(location));
+            .filter(|entry| entry.style.is_some())
+            .zip(after.entries.iter().filter(|entry| entry.style.is_some()))
+        {
+            location.check_deadline(deadline)?;
+            let Some(Command::AtColumn { column, operation }) = old.style else {
+                return Err(fail(location));
+            };
+            let Some(Command::AtColumn {
+                column: new_column,
+                operation: replacement,
+            }) = new.style
+            else {
+                return Err(fail(location));
+            };
+            if column != new_column
+                || operands::operand(column, operation, old.word, new.word) != Some(replacement)
+            {
+                return Err(fail(location));
+            }
+        }
     }
     Ok(())
 }

@@ -544,3 +544,6 @@ pub(super) mod structure;
 
 #[path = "topology/position_anchors.rs"]
 mod position_anchors;
+
+#[path = "topology/style_values.rs"]
+mod style_values;

@@ -7,6 +7,9 @@ mod mixed_structure_tests;
 #[path = "position_anchor_tests.rs"]
 mod position_anchor_tests;
 
+#[path = "style_value_tests.rs"]
+mod style_value_tests;
+
 fn invoked(offset: u8) -> TeletextEnhancementCommand {
     TeletextEnhancementCommand::InvokeObject {
         target: target(22),
@@ -171,13 +174,7 @@ fn context_g1_scalar_with_call_add_and_delete_keeps_native_family_and_original_i
 }
 
 #[test]
-fn context_call_topology_keeps_wrong_family_style_values_and_fixed_anchors_closed() {
-    let foreground = |colour| TeletextEnhancementCommand::AtColumn {
-        column: 0,
-        operation: TeletextColumnOperation::Foreground {
-            colour: TeletextColourReference::new(colour).unwrap(),
-        },
-    };
+fn context_call_topology_keeps_wrong_family_and_fixed_anchors_closed() {
     let position = |row| TeletextEnhancementCommand::SetPosition {
         position: TeletextEnhancementPosition::new(row, 0).unwrap(),
     };
@@ -189,7 +186,6 @@ fn context_call_topology_keeps_wrong_family_style_values_and_fixed_anchors_close
     };
     for (before, after) in [
         (glyph(0, b'A'), mosaic(1)),
-        (foreground(2), foreground(3)),
         (position(1), position(2)),
         (charset(0), charset(1)),
     ] {

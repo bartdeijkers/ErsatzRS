@@ -343,7 +343,10 @@ service validation, selected links, consumer permissions and explicit publicatio
 remain mandatory. The V8 importer binds new calls to authenticated original
 command boundaries and rejects invisible-anchor ambiguity. Existing same-family
 G0/G1 values and bounded glyph/style insertion, deletion and glyph column changes
-may coexist with call topology through the same structural validator. Original
+may coexist with call topology through the same structural validator. Checked
+same-family, same-column foreground/background/attribute value changes may also
+coexist through the existing scalar decoder. Changed styles have new-writer
+ancestry; exact unchanged styles and calls retain their authenticated sources. Original
 zero-word positions remain mandatory authenticated anchors; only qualified
 resource call-adjacent active positions are restored. Fixed lowering/context
 anchors and all protected-consumer permissions remain exact.

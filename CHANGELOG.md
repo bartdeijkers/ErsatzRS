@@ -35,6 +35,8 @@ release section when tagging a release.
   import combines call addition/deletion with bounded glyph/style insertion and
   deletion, glyph column changes and same-family G0/G1 value edits. Complete callee
   identities, fixed anchors and every shared consumer remain checked.
+  Existing foreground/background/attribute values can also change beside call
+  additions/removals; changed styles retain no protected-writer authority.
   Rejoined version7 fragments now also support native resource-call addition and
   deletion in large objects, retaining complete original identities and protected
   consumers without reducing native capacity. Actual pinned editor saves now also
