@@ -8,6 +8,11 @@ use super::super::super::{
 use super::{base_wire, bases, cold, on_for, recover_base, retained, Base, Scoped};
 use chrono::Utc;
 use ersatzrs_app::teletext_design_documents::decode_teletext_effective_design_documents;
+use ersatzrs_core::repositories::{
+    TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION, TELETEXT_GENERATION_ARTIFACT_VERSION,
+    TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION,
+};
 use ersatzrs_domain::{TeletextAcceptedGeneration, TeletextEffectiveBindingSnapshot};
 use futures_util::FutureExt as _;
 use serde::{Deserialize, Serialize};
@@ -24,7 +29,18 @@ const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_EXPIRY_CLIENT_DIR";
 const MAX_SOURCE: usize = 48 * 1024 * 1024;
 
 fn current(generation: &TeletextAcceptedGeneration, version: u16, q: bool) -> Value {
-    assert_eq!(generation.artifact_version, version);
+    // Document role and compiled resource-lifecycle framing are distinct.
+    assert!(matches!(
+        (version, generation.artifact_version),
+        (
+            1,
+            TELETEXT_GENERATION_ARTIFACT_VERSION | TELETEXT_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+        ) | (
+            2,
+            TELETEXT_EFFECTIVE_GENERATION_ARTIFACT_VERSION
+                | TELETEXT_EFFECTIVE_LIFECYCLE_GENERATION_ARTIFACT_VERSION
+        )
+    ));
     let request = &generation.request;
     json!({"channel_id":request.channel_id,"generation_id":generation.id,"request_id":request.id,
         "design_id":request.design_id,"design_revision":request.revision,"design_digest":request.digest,

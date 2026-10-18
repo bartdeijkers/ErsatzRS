@@ -608,3 +608,6 @@ fn failed_withdrawal_is_terminal_instead_of_rejecting_and_continuing_old_output(
         );
     }
 }
+
+#[path = "teletext_control_tests/expiry.rs"]
+mod expiry;

@@ -120,6 +120,32 @@ that boundary before a potentially blocked reread. Recover the independently
 accepted base only after current authority and native checks permit it. Response
 ownership and actual worker admission survive cancellation as before.
 
+One response may prepare the independently accepted Base artifact before the
+original scoped boundary, using the existing native work admission and deadline.
+Keep the result in a private prepared type without service/output access. Attempt
+it at most once per original scoped generation and boundary; retain no dormant
+work lease. Compilation, immutable-original checks and artifact equality grant
+no current-role authority. After expiry, a fresh Base-role/identity observation
+and the existing transactional Base confirmation must still reject any active
+Scripted interval, changed bindings, revision or accepted pointer before yielding
+an accepted candidate. Missing, failed or late preparation uses normal recovery.
+
+Keep withdrawal before every post-expiry await. A freshly confirmed successor
+may supersede that proposal in the existing bounded latest-state slot before
+the same qualified sink acknowledgement; the existing same-descriptor gate can
+then replace content without withdrawing its PMT entry. This is a coalescing
+opportunity, not an extra authorization interval or a guarantee under failed or
+slow recovery. Once withdrawal is installed, retain its normal PSI acknowledgement
+before reactivation. If a coalesced expiry successor is rejected nonterminally,
+withdraw using that same valid acknowledgement before another window, preserving
+the successor's rejection status. Retain this obligation across all superseding
+proposals until the exact current replacement or withdrawal is acknowledged as
+applied; Waiting, rejection and obsolete acknowledgements cannot clear it.
+EOF also retains withdrawal without activating
+or reporting the rejected successor as applied. Invalid withdrawal/ownership
+faults remain terminal. Ordinary replacement and same-role handover contracts
+remain unchanged; automatic client redisplay requires actual display evidence.
+
 Actual source EOF closes new activation in that response: reject an uninstalled
 replacement before it can announce a service with no complete future cycle. Keep
 requested withdrawal, installed-action acknowledgements, physical AV, deadlines

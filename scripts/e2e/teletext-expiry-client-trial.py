@@ -23,7 +23,9 @@ W = runpy.run_path(str(HELPER))
 H = W["H"]
 PROVENANCE = Path(__file__).with_name("teletext-expiry-provenance.py")
 utc_ns = runpy.run_path(str(PROVENANCE))["utc_ns"]
-PINNED_WARM = "0f86c4da04371f450c0cdb4d06d47ba3c03bc2a172b5acfb7e7901ec9e733335"
+# Imported capture/ownership functions retain their receipted implementations;
+# expiry readiness independently restricts the shared loader to this protocol.
+PINNED_WARM = "807ca2360265964eb56c569e96b31a322c400d87361c19d116903243fec57b37"
 STATES = ["base", "scoped_q", "expired_base"]
 CHANNEL_KEYS = {"channel_id", "theme", "url", "addon_id", "profile_id", "profile_revision",
                 "base_generation_id", "base_request_id", "base_design_id", "base_design_revision",

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 V5 Continue checkpoint; F4 automatic Base redisplay next, X3/V3 remain open'
+current_focus = 'P9A-04 F4 automatic Base MAIN checkpoint; V3/X1 and broader lifecycle remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -180,21 +180,32 @@ accepted-generation/stream/client/whole-process restart claim follows.
 Strict web all-target lint and final fmt/progress/architecture pass for the
 explicit owned-only local evidence checkpoint. Reuse valid actual On/reopen and Off/expiry
 flows; Refresh/Reset/error/full restart and remaining V5 matrix stay open.
-Next F4 user action: keep the same selected MAIN page/client/HTTP body open and
-automatically redisplay/navigate Base after original scope expiry. Existing
-negative and original captures remain at tmp/phase9-headed-expiry/identity.json.
-Its base_redisplay_wire_followup now confirms via existing TSDuck all-sections
-that Day PMT removes/reannounces the teletext PID around the original captured
-expiry while Night stays stable; capture SHA256 values still match originals.
-This correlates decoder inactivity, not causation or a new client success.
-The existing same-role handover cannot bypass old expiry for Effective→Base.
-Next implement the missing private prepared/fresh-confirmed Base successor and
-pump-owned immutable expiry fallback through existing update/safe-boundary
-paths, then one changed-path MAIN display/navigation trial. Missing/stale/Off/failed recovery
-must still withdraw; immutable expiry, no stale grace or reconnect remain gates.
-Full rowzero/foreign-X26, complete QTM context/editor, suitable-client enlarged/
-panels, Lua/lifecycle and platform requirements stay open. Unused-object removal
-remains deferred. No decoder maintenance, scope waiver, push or publication.
+F4 MAIN expiry now passes the unchanged original-response visual oracle.
+Canonical tmp/phase9-headed-expiry/identity.json/prepared_base_followup owns
+private bounded native Base preparation, fresh transactional role/identity
+confirmation and same-ACK rejection withdrawal. Original expiry and withdrawal
+before blocked reads remain intact; no new timer, grace or producer invocation.
+Native47443fb7 passes genuine35s scope on60s source, both original URLs/PIDs,
+automatic red/blue Base200 before controls, active decoders and200→201→200.
+All12 actual images are root-inspected. TSDuck PMTs preserve teletext through
+expiry in both Day owners; Night stays unchanged. Native clock/AV/independent
+page decoding, immutable state, source bytes and cleanup pass. Earlier GUI-pin
+and document/artifact-role fixture failures remain negative, not product defects.
+The original retained automatic-Base negative stays at the same canonical path.
+Focused38 control/monitor tests and the actual Base-active-scope SQL negative
+pass. Strict lint/fmt/progress/architecture pass. Ordinary disabled-teletext
+smoke and the single-successor client trial remain valid after the final ACK
+latch correction; the38 tests cover superseding unacknowledged proposals.
+This closes the representative automatic MAIN Base/display gap; slow/failing
+recovery safely withdraws. Automatic Off→Base, wider resource retirement and
+client acceptance remain open. Reuse owner-qualified ACK, unchanged editor/publication/isolation,
+localized admin and F6 track/lease evidence only in their established scope.
+Next qualify a concrete source-positive V3/X1 client option against fixed
+required enlarged/panel functions, bounded by existing tools. If unavailable,
+record the exact capability gap and continue independent F1 coordinated-state
+undo; do not restart a known-negative decoder repair. Full authored standards,
+QTM context, Lua/restart and platform gates remain open. Unused-object removal
+stays deferred; no scope waiver, new push or publication.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

@@ -24,6 +24,10 @@ use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextServiceD
 use tokio::{sync::watch, task::JoinHandle, time::Instant};
 use tracing::Instrument;
 
+#[path = "teletext_expiry_preparation.rs"]
+mod expiry_preparation;
+use expiry_preparation::ExpiryPreparation;
+
 use crate::host::teletext_channel_documents::TeletextChannelDocumentEncodingPolicy;
 
 use crate::transport::iptv::{
@@ -144,6 +148,7 @@ pub(super) fn start_accepted_updates(
         run_monitor(
             NativeBackend {
                 trace_id,
+                expiry_preparation: Mutex::new(None),
                 next_transition: Mutex::new(
                     initial
                         .as_ref()
@@ -232,12 +237,21 @@ trait UpdateBackend: Send + Sync + 'static {
         deadline: Instant,
     ) -> Result<bool, ReadFailure>;
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure>;
+    // Optional native work only; preparation never authorizes a proposal.
+    async fn prepare_expiry(
+        &self,
+        _candidate: &Self::Candidate,
+        _deadline: Instant,
+    ) -> Result<(), ReadFailure> {
+        Ok(())
+    }
 }
 
 struct NativeBackend {
     trace_id: uuid::Uuid,
     context: TeletextAcceptedUpdatesContext,
     next_transition: Mutex<Option<Instant>>,
+    expiry_preparation: Mutex<Option<ExpiryPreparation>>,
 }
 
 #[async_trait::async_trait]
@@ -310,6 +324,9 @@ impl UpdateBackend for NativeBackend {
     }
 
     async fn recover(&self, deadline: Instant) -> Result<Option<Self::Candidate>, ReadFailure> {
+        if let Some(candidate) = self.recover_prepared_expiry(deadline).await? {
+            return Ok(Some(candidate));
+        }
         let candidate = load_selected_teletext_output_candidate(
             &self.context.application,
             self.context.channel_id,
@@ -324,6 +341,14 @@ impl UpdateBackend for NativeBackend {
         }
         Ok(candidate)
     }
+
+    async fn prepare_expiry(
+        &self,
+        candidate: &Self::Candidate,
+        deadline: Instant,
+    ) -> Result<(), ReadFailure> {
+        self.prepare_native_expiry(candidate, deadline).await
+    }
 }
 
 struct MonitorState<C> {
@@ -335,6 +360,9 @@ struct MonitorState<C> {
     // Seeded content is already installed. Later proposals gain this witness
     // only through Applied for their exact sequence, never cached/Waiting state.
     handover_confirmed: bool,
+    // The expiry withdrawal can be coalesced by the bounded latest-state slot.
+    // Unacknowledged successors must withdraw at the same ACK if rejected.
+    expiry_replacement: bool,
 }
 
 impl<C> MonitorState<C> {
@@ -346,6 +374,7 @@ impl<C> MonitorState<C> {
             sequence: 0,
             proposal: None,
             rejected: None,
+            expiry_replacement: false,
         }
     }
 
@@ -387,7 +416,12 @@ impl<C> MonitorState<C> {
         else {
             return false;
         };
-        let Ok(update) = TeletextOutputUpdate::replace(sequence, service) else {
+        let update = if self.expiry_replacement {
+            TeletextOutputUpdate::replace_after_expiry(sequence, service)
+        } else {
+            TeletextOutputUpdate::replace(sequence, service)
+        };
+        let Ok(update) = update else {
             return false;
         };
         self.sequence = sequence;
@@ -414,12 +448,14 @@ impl<C> MonitorState<C> {
         channel_id: i64,
     ) -> bool {
         if let Some((sequence, TeletextOutputTransitionPhase::Applied)) = status {
-            if self
-                .proposal
-                .as_ref()
-                .is_some_and(|(proposed, identity)| *proposed == sequence && identity.is_some())
-            {
-                self.handover_confirmed = true;
+            if let Some((proposed, identity)) = &self.proposal {
+                if *proposed == sequence {
+                    // Submission, obsolete ACKs and rejection cannot retire the
+                    // expired service. Keep fallback on every superseding
+                    // proposal until this exact replacement/removal is applied.
+                    self.expiry_replacement = false;
+                    self.handover_confirmed = identity.is_some();
+                }
             }
             return true;
         }
@@ -660,6 +696,7 @@ async fn run_monitor<B: UpdateBackend>(
             );
             // Withdraw first; a blocked read cannot extend the previous scope.
             state.cached = None;
+            state.expiry_replacement = true;
             if !state.withdraw(&updates) {
                 break;
             }
@@ -674,6 +711,22 @@ async fn run_monitor<B: UpdateBackend>(
         if !reconcile(&backend, &mut state, &updates, channel_id, deadline).await {
             state.withdraw(&updates);
             break;
+        }
+        if let Some(candidate) = &state.cached {
+            let preparation_deadline = B::original_transition(candidate)
+                .map_or(deadline, |boundary| deadline.min(boundary));
+            if Instant::now() < preparation_deadline
+                && bounded(
+                    &updates,
+                    preparation_deadline,
+                    backend.prepare_expiry(candidate, preparation_deadline),
+                )
+                .await
+                .is_none()
+            {
+                state.withdraw(&updates);
+                break;
+            }
         }
         let Some(mut next) = Instant::now().checked_add(timing.poll_interval) else {
             state.withdraw(&updates);
@@ -762,6 +815,8 @@ mod tests {
         recovering: Arc<AtomicUsize>,
         handover_checks: Arc<AtomicUsize>,
         transition: Arc<Mutex<Option<Instant>>>,
+        preparation_release: Arc<Mutex<Option<Arc<Notify>>>>,
+        preparation_entered: Arc<Notify>,
     }
 
     impl Backend {
@@ -785,6 +840,8 @@ mod tests {
                 recovering: Arc::new(AtomicUsize::new(0)),
                 handover_checks: Arc::new(AtomicUsize::new(0)),
                 transition: Arc::new(Mutex::new(None)),
+                preparation_release: Arc::new(Mutex::new(None)),
+                preparation_entered: Arc::new(Notify::new()),
             }
         }
     }
@@ -810,6 +867,21 @@ mod tests {
         }
         fn original_transition(candidate: &Candidate) -> Option<Instant> {
             candidate.original_transition
+        }
+
+        async fn prepare_expiry(
+            &self,
+            candidate: &Candidate,
+            _deadline: Instant,
+        ) -> Result<(), ReadFailure> {
+            if candidate.original_transition.is_some() {
+                let release = self.preparation_release.lock().unwrap().clone();
+                self.preparation_entered.notify_one();
+                if let Some(release) = release {
+                    release.notified().await;
+                }
+            }
+            Ok(())
         }
 
         async fn confirm_successor_selection(
@@ -1207,5 +1279,8 @@ mod tests {
     }
     mod handover {
         include!("tests/handover.rs");
+    }
+    mod expiry_preparation {
+        include!("tests/expiry_preparation.rs");
     }
 }

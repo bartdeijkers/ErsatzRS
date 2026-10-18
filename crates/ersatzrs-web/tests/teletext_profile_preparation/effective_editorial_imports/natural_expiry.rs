@@ -497,6 +497,25 @@ async fn verify_after_ack(directory: &Path, ffmpeg: &str, views: &[Capture; 3], 
 async fn genuine_trimmed_scope_and_continue_tail_preserve_fresh_accepted_bases() {
     let base = bases(cold::fixture().await).await;
     let scoped = short_on(&base).await;
+    // Artifact preparation must not turn a retained Base pointer into current
+    // output while this channel's genuine Scripted scope is still active.
+    assert!(reload_accepted_teletext_generation(
+        &base.fixture.fixture.state.application,
+        1,
+        designs::budget(),
+        channel_documents::policy(),
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+    .is_none());
+    assert!(Utc::now() < scoped.finish);
+    let unaffected = recover_base(&base.fixture.fixture, 2).await;
+    assert_eq!(unaffected.generation(), base.accepted[1].generation());
+    assert_eq!(
+        designs::units(unaffected.service()),
+        designs::units(base.accepted[1].service())
+    );
     for (index, expected) in base.accepted.iter().enumerate() {
         // Active Lua blocks current base admission; its independent accepted
         // history must remain retained for recovery after the genuine expiry.

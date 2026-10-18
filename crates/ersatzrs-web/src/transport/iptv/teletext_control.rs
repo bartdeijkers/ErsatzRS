@@ -20,6 +20,8 @@ enum Action {
 pub struct TeletextOutputUpdate {
     sequence: NonZeroU64,
     action: Action,
+    withdraw_if_rejected: bool,
+    rejected: Option<TeletextOutputTransitionRejection>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("teletext output update sequence must be positive")]
@@ -36,7 +38,19 @@ impl TeletextOutputUpdate {
         Ok(Self {
             sequence: NonZeroU64::new(sequence).ok_or(TeletextOutputUpdateError)?,
             action: Action::Replace(service),
+            withdraw_if_rejected: false,
+            rejected: None,
         })
+    }
+    /// A freshly confirmed post-expiry successor must never leave expired
+    /// payload running when its native replacement is rejected at the ACK.
+    pub(in crate::transport::iptv) fn replace_after_expiry(
+        sequence: u64,
+        service: Arc<EncodedTeletextAuthoredService>,
+    ) -> Result<Self, TeletextOutputUpdateError> {
+        let mut update = Self::replace(sequence, service)?;
+        update.withdraw_if_rejected = true;
+        Ok(update)
     }
     /// Propose descriptor withdrawal after an acknowledged full-cycle boundary.
     /// # Errors
@@ -45,6 +59,8 @@ impl TeletextOutputUpdate {
         Ok(Self {
             sequence: NonZeroU64::new(sequence).ok_or(TeletextOutputUpdateError)?,
             action: Action::Withdraw,
+            withdraw_if_rejected: false,
+            rejected: None,
         })
     }
     #[must_use]
@@ -57,7 +73,7 @@ impl fmt::Debug for TeletextOutputUpdate {
         f.debug_struct("TeletextOutputUpdate")
             .field("sequence", &self.sequence())
             .field("replacement", &matches!(self.action, Action::Replace(_)))
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -322,7 +338,14 @@ impl PumpControl {
         if let Some(update) = &self.desired {
             if matches!(update.action, Action::Replace(_)) {
                 let sequence = update.sequence;
-                self.desired = None;
+                if update.withdraw_if_rejected {
+                    let mut fallback = update.clone();
+                    fallback.action = Action::Withdraw;
+                    fallback.rejected = Some(TeletextOutputTransitionRejection::SourceEnded);
+                    self.desired = Some(fallback);
+                } else {
+                    self.desired = None;
+                }
                 self.publish(
                     sequence,
                     TeletextOutputTransitionPhase::Rejected(
@@ -396,9 +419,12 @@ impl PumpControl {
             }
             Action::Withdraw => gate.withdraw_at_acknowledged_boundary(receipt, now),
         };
+        self.withdraw_rejected_expiry(gate, receipt, now, &update, &result)?;
         if result.is_ok() {
             self.trace_transition(
-                if already_withdrawn {
+                if update.rejected.is_some() {
+                    "expiry_replacement_fallback"
+                } else if already_withdrawn {
                     "transition_applied"
                 } else {
                     "transition_installed"
@@ -415,6 +441,30 @@ impl PumpControl {
         }
         self.finish_proposal(update, result, already_withdrawn)
     }
+    fn withdraw_rejected_expiry(
+        &mut self,
+        gate: &mut TeletextOutputGate,
+        receipt: &TeletextOutputAcknowledgement,
+        now: Duration,
+        update: &TeletextOutputUpdate,
+        result: &Result<(), TeletextOutputError>,
+    ) -> Result<(), TeletextOutputError> {
+        if update.withdraw_if_rejected && result.as_ref().err().and_then(rejection).is_some() {
+            // Native rejection preserves this receipt and the old gate state.
+            // Remove expired payload synchronously before another window; any
+            // withdrawal failure is terminal, never a recoverable Base refusal.
+            gate.withdraw_at_acknowledged_boundary(receipt, now)?;
+            self.trace_transition(
+                "expiry_replacement_fallback",
+                update.sequence,
+                InstalledAction::Withdraw,
+                receipt,
+                now,
+            );
+            self.trace_active_sequence = update.sequence();
+        }
+        Ok(())
+    }
     fn finish_proposal(
         &mut self,
         update: TeletextOutputUpdate,
@@ -423,6 +473,16 @@ impl PumpControl {
     ) -> Result<(), TeletextOutputError> {
         match result {
             Ok(()) => {
+                if let Some(reason) = update.rejected {
+                    // EOF converted only the physical action to withdrawal.
+                    // The rejected successor never gains an installed/Applied
+                    // replacement status under its original sequence.
+                    self.publish(
+                        update.sequence,
+                        TeletextOutputTransitionPhase::Rejected(reason),
+                    );
+                    return Ok(());
+                }
                 if already_withdrawn {
                     // The gate verified this fresh receipt and requires already
                     // acknowledged withdrawal PSI before accepting the no-op.
@@ -446,20 +506,8 @@ impl PumpControl {
             // emitting content whose removal the caller already requested.
             Err(error) if matches!(update.action, Action::Withdraw) => return Err(error),
             Err(error) => {
-                let reason = match error {
-                    TeletextOutputError::Transport(TeletextTransportError::ResourceUpdate {
-                        ..
-                    }) => TeletextOutputTransitionRejection::ResourceUpdate,
-                    TeletextOutputError::CacheReconciliationRequired => {
-                        TeletextOutputTransitionRejection::CacheReconciliation
-                    }
-                    TeletextOutputError::Configuration
-                    | TeletextOutputError::Transport(_)
-                    | TeletextOutputError::Pmt(
-                        TeletextPmtInstallError::Reconfiguration
-                        | TeletextPmtInstallError::Multiplex(TeletextMultiplexError::SectionCapacity),
-                    ) => TeletextOutputTransitionRejection::Proposal,
-                    _ => return Err(error),
+                let Some(reason) = rejection(&error) else {
+                    return Err(error);
                 };
                 self.publish(
                     update.sequence,
@@ -468,6 +516,25 @@ impl PumpControl {
             }
         }
         Ok(())
+    }
+}
+
+// Keep ordinary replacement classification and expiry fallback identical.
+fn rejection(error: &TeletextOutputError) -> Option<TeletextOutputTransitionRejection> {
+    match error {
+        TeletextOutputError::Transport(TeletextTransportError::ResourceUpdate { .. }) => {
+            Some(TeletextOutputTransitionRejection::ResourceUpdate)
+        }
+        TeletextOutputError::CacheReconciliationRequired => {
+            Some(TeletextOutputTransitionRejection::CacheReconciliation)
+        }
+        TeletextOutputError::Configuration
+        | TeletextOutputError::Transport(_)
+        | TeletextOutputError::Pmt(
+            TeletextPmtInstallError::Reconfiguration
+            | TeletextPmtInstallError::Multiplex(TeletextMultiplexError::SectionCapacity),
+        ) => Some(TeletextOutputTransitionRejection::Proposal),
+        _ => None,
     }
 }
 

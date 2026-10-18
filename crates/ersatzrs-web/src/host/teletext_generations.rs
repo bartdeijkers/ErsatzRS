@@ -94,6 +94,53 @@ impl fmt::Debug for AcceptedTeletextOutputCandidate {
     }
 }
 
+/// Artifact-validated Base bytes awaiting fresh runtime selection authority.
+/// Preparation can run during a Scripted scope, but never yields gate input.
+pub(crate) struct PreparedTeletextOutputCandidate {
+    generation: TeletextAcceptedGeneration,
+    selection: TeletextChannelSelectionSnapshot,
+    service: Arc<EncodedTeletextAuthoredService>,
+}
+
+impl PreparedTeletextOutputCandidate {
+    pub(crate) const fn generation(&self) -> &TeletextAcceptedGeneration {
+        &self.generation
+    }
+
+    /// Convert only after the existing transaction checks current Base identity,
+    /// absence of active Scripted intervals, original revision and exact binding
+    /// selection. Compiled bytes alone cannot authorize an early fallback.
+    pub(crate) async fn confirm(
+        self,
+        application: &ApplicationServices,
+        maximum: usize,
+        deadline: Instant,
+    ) -> Result<Option<AcceptedTeletextOutputCandidate>, NativeTeletextGenerationError> {
+        check_deadline(deadline)?;
+        let confirmed = application
+            .confirm_current_teletext_generation(&self.generation, &self.selection, maximum)
+            .await?;
+        check_deadline(deadline)?;
+        if !matches!(confirmed, M::Accepted(())) {
+            return Ok(None);
+        }
+        Ok(Some(AcceptedTeletextOutputCandidate {
+            generation: self.generation,
+            selection: self.selection,
+            service: self.service,
+        }))
+    }
+}
+
+impl fmt::Debug for PreparedTeletextOutputCandidate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PreparedTeletextOutputCandidate")
+            .field("generation", &self.generation)
+            .field("binding_count", &self.selection.bindings.len())
+            .finish_non_exhaustive()
+    }
+}
+
 fn check_deadline(deadline: Instant) -> Result<(), NativeTeletextGenerationError> {
     if Instant::now() >= deadline {
         Err(NativeTeletextDesignError::TimedOut.into())
@@ -440,6 +487,27 @@ pub async fn reload_accepted_teletext_generation(
     policy: TeletextChannelDocumentEncodingPolicy,
     deadline: Instant,
 ) -> Result<Option<AcceptedTeletextOutputCandidate>, NativeTeletextGenerationError> {
+    let Some(prepared) =
+        prepare_accepted_teletext_generation(application, channel_id, budget, policy, deadline)
+            .await?
+    else {
+        return Ok(None);
+    };
+    prepared
+        .confirm(application, budget.max_serialized_bytes, deadline)
+        .await
+}
+
+/// Reconstruct one independent accepted Base artifact without runtime admission.
+/// The actual native workers retain the existing bounded work holds; only a
+/// later fresh confirmation can turn the private result into accepted output.
+pub(crate) async fn prepare_accepted_teletext_generation(
+    application: &ApplicationServices,
+    channel_id: EntityId,
+    budget: TeletextDesignDocumentBudget,
+    policy: TeletextChannelDocumentEncodingPolicy,
+    deadline: Instant,
+) -> Result<Option<PreparedTeletextOutputCandidate>, NativeTeletextGenerationError> {
     check_deadline(deadline)?;
     let guard = super::teletext_work::begin(application, Some(deadline))
         .await
@@ -477,20 +545,9 @@ pub async fn reload_accepted_teletext_generation(
     if actual != generation.artifact_digest {
         return Err(NativeTeletextGenerationError::ArtifactMismatch);
     }
-    let confirmed = application
-        .confirm_current_teletext_generation(
-            &generation,
-            design.selection(),
-            budget.max_serialized_bytes,
-        )
-        .await?;
-    check_deadline(deadline)?;
-    if !matches!(confirmed, M::Accepted(())) {
-        return Ok(None);
-    }
     let selection = design.selection().clone();
     check_deadline(deadline)?;
-    Ok(Some(AcceptedTeletextOutputCandidate {
+    Ok(Some(PreparedTeletextOutputCandidate {
         generation,
         selection,
         service: Arc::new(
