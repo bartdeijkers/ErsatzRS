@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1 complete resource/set authoring; Off-to-Base client negative retained'
+current_focus = 'P9A-04 F5 source teletext delivery matrix; explicit-version resources proven'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -218,21 +218,26 @@ reopen, existing undo and executed Generated125 atomic refusal. Canonical
 Actual pinned QTM AP2/R6/interior proof retains scope; no new GUI/stream/client
 claim. Strict domain/web all-target lint, fmt and architecture pass. Broader
 coordinated-state/position, resource/set and context work remain.
-F4 now has composed same-response Off→Base evidence, not full acceptance.
-Canonical tmp/phase9-headed-expiry/identity.json/off_base_followup retains one
-actual35s Off/60s source runfdad6f2b: runtime/state/cleanup/post-Base decoding
-completed, then the old Q-only external verifier failed. Explicit original-only
-replay7159f6eb passes all three unchanged captures: clock/TSDuck/sourceAV and
-pages200/201/noQ/noR. Earlier run stays failed, never upgraded to green.
-Independent PMT replay proves Day/Observer1present→2absent→3present and zero
-PID512 packets throughout their real absent windows; Night remains1present.
-All12 actual images inspected: OffDayAV/NightblueAZ; automatic expiredDayAV with
-inactive decoder, Night200 blueAZ. Explicit Day reselection then200→201→200
-works on both original URLs/PIDs. Automatic Off→Base display stays OPEN; no
-client repair, fake Off descriptor or weakened oracle. On-schema replay and15
-negative Off-schema mutations pass. No production source changed. Next independent
-product gap: complete resource/set authoring (F1), first pin the missing resource
-creation action and existing authority boundary before choosing a correction.
+F4 local checkpoint1154c009 adds same-response Off→Base emission evidence;
+canonical tmp/phase9-headed-expiry/identity.json/off_base_followup owns exact
+captures/PMT/clock/AV and all12 inspected images. Actual nativefdad6f2b stays
+failed at its late Q-only check; original-only offline7159f6eb verifies the same
+bytes. Automatic Day display stays negative/inactive until explicit reselection;
+Night remains unchanged. No client repair or acceptance waiver.
+F1/F2 explicit r1→r2 resource introduction now passes nativec0f53f5f. Canonical
+ tmp/phase9-f2-template-version/work.json/resource_introduction_followup owns
+complete new POP/GPOP identities/selected links/nested P atMain3/6, native export
+receipts, separate fresh publication and cold historical/current recovery. The
+first wrong-owner helper negative stays retained; literal mask/theme oracles are
+unchanged. Existing profile/install/CAS/stale-authority/metadata guards pass.
+This proves NEW-original producer resource authoring, not same-design Add/import
+or new executed admin/GUI/editor/stream/client behavior. Existing localized admin
+resource_transmissions input remains source-qualified; lifecycle input grants no
+resource-body authority. Remaining F1/F2 and suitable-client gates stay open.
+Next concrete gap F5: pin one remaining selected source-teletext native/Next
+Burn/Convert/copy policy using the existing matrix/fixtures, then qualify only
+its missing integration seam. No repeat of known-negative client trials or new
+infrastructure; further product work must follow an exact open case/defect.
 Full authored standards, QTM context, Lua/restart and platform gates remain open.
 Unused-object removal stays deferred; no scope waiver, new push or publication.
 

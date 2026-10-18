@@ -6,7 +6,7 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns acceptance and the F/V/X completion list. Representative flows do not establish full acceptance.
+rendering/navigation. Kodi is optional. P9A-04 owns acceptance/F/V/X. Representative flows are not full acceptance.
 
 Typed services, provenance, complete resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
@@ -31,8 +31,8 @@ structure/call actual saves retain their scoped unchanged-byte lifecycle proof.
 Genuine interior QTM SaveAs qualifies Added18 and exact-input Original19 reuse
 with separate receipts. Unqualified styles/initial/deferred/coordinated positions
 and complete resource/link/set/context remain open.
-QTM metadata/r1/r2 proofs retain scope. Editor controls do not prove native
-Public-target or suitable-client rendering.
+r1→r2 creates resources in new originals; same-design creation stays open.
+Editor controls do not prove native Public-target or suitable-client rendering.
 No truncation or silent editor restriction is accepted.
 
 Main/Local header context has scoped final-body/C2/fallback proof (P9A-04/F3).

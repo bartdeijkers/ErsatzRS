@@ -1,6 +1,8 @@
 //! Historical originals and current publication authority remain separate.
 use super::*;
-use ersatzrs_domain::{TeletextDesignRevision, TeletextProfileAvailability};
+use ersatzrs_domain::{
+    TeletextDesignExportReceipt, TeletextDesignRevision, TeletextProfileAvailability,
+};
 
 pub(super) type Settings = Vec<(String, Option<String>, Option<String>, Option<String>)>;
 
@@ -10,6 +12,7 @@ pub(super) struct Captured {
     source: Vec<u8>,
     metadata: Value,
     units: OriginalTransport,
+    export: TeletextDesignExportReceipt,
 }
 pub(super) async fn capture(
     fixture: &Fixture,
@@ -17,7 +20,20 @@ pub(super) async fn capture(
     revision: u8,
     theme: &str,
 ) -> Captured {
-    let candidate = super::super::candidate(fixture, channel).await;
+    let candidate = if revision == 1 {
+        super::super::candidate(fixture, channel).await
+    } else {
+        prepare_channel_teletext_document_candidate(
+            &fixture.state.application,
+            channel,
+            Some(ADDON),
+            &guide(&[]),
+            resources::policy(revision),
+        )
+        .await
+        .unwrap()
+    };
+    resources::check(&candidate, revision, theme);
     assert_eq!(candidate.sources()[0].contract(), TeletextPageContract::V3);
     let source = candidate.sources()[0].bytes().to_vec();
     let metadata = package::response(revision, theme)["authoring"].clone();
@@ -34,15 +50,18 @@ pub(super) async fn capture(
         .await
         .unwrap()
         .unwrap();
+    let export = Box::pin(resource_exports::capture(fixture, &design, revision)).await;
     Captured {
         design,
         revision: stored,
         source,
         metadata,
         units,
+        export,
     }
 }
 pub(super) async fn verify(fixture: &Fixture, captured: &Captured) {
+    resource_exports::verify(fixture, &captured.export).await;
     assert_eq!(
         fixture
             .state

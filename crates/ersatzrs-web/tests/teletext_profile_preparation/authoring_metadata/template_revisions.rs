@@ -7,6 +7,10 @@ use ersatzrs_web::host::teletext_designs::request_original_teletext_design_publi
 mod history;
 #[path = "template_revisions/package.rs"]
 mod package;
+#[path = "template_revisions/resource_exports.rs"]
+mod resource_exports;
+#[path = "template_revisions/resources.rs"]
+mod resources;
 
 async fn revalidate(fixture: &Fixture, profile: &TeletextProfile) -> TeletextProfile {
     let installation = fixture

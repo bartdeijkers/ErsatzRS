@@ -28,6 +28,7 @@ pub(super) fn response(revision: u8, theme: &str) -> Value {
         value["authoring"]["pages"][0]["regions"][1]["id"] = json!("custom-zone-r2");
         value["authoring"]["pages"][0]["regions"][1]["width"] = json!(18);
         value["authoring"]["pages"][0]["dynamic_fields"][0]["binding"] = json!("guide.subtitle");
+        resources::introduce(&mut value);
     }
     value
 }
