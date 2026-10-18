@@ -61,32 +61,48 @@ pub(in crate::teletext) fn prepare(
         })?;
         let encoded =
             pack_composition_program(service, &composition, &prefix, allocations, packing)?;
-        for witness in prefix_witnesses(&composition, &encoded)? {
-            if let Some(previous) = witnesses.get(&witness.position.event_ordinal) {
-                if previous != &witness {
-                    return Err(state_error(&composition).into());
-                }
+        // Preserve existing Main-only successes: an unrelated nested Local
+        // pointer can move when the later setter moves its definition.
+        // Only unresolved foreground needs provisional Local body constraints.
+        for local in [false, true] {
+            let discovered = if local {
+                local_definition::witnesses(&composition, &encoded)?
             } else {
-                witnesses.insert(witness.position.event_ordinal, witness);
+                prefix_witnesses(&composition, &encoded)?
+            };
+            if local && discovered.is_empty() {
+                break;
+            }
+            for witness in discovered {
+                if let Some(previous) = witnesses.get(&witness.position.event_ordinal) {
+                    if previous != &witness {
+                        return Err(state_error(&composition).into());
+                    }
+                } else {
+                    witnesses.insert(witness.position.event_ordinal, witness);
+                }
+            }
+            let positions: Vec<_> = witnesses.values().map(|witness| witness.position).collect();
+            let evidence = TeletextAttributeTransmissionEvidence::new(
+                composition.spatial_trace(),
+                &positions,
+                budget.collection.max_commands,
+            )
+            .map_err(|reason| TeletextMainCompositionError {
+                owner: composition.owner(),
+                location: None,
+                reason: reason.into(),
+            })?;
+            composition = composition.with_transmission_context(
+                service,
+                &evidence,
+                budget.collection.max_commands,
+                context,
+            )?;
+            if super::foreground(&composition, unsettled.column).is_some() {
+                break;
             }
         }
-        let positions: Vec<_> = witnesses.values().map(|witness| witness.position).collect();
-        let evidence = TeletextAttributeTransmissionEvidence::new(
-            composition.spatial_trace(),
-            &positions,
-            budget.collection.max_commands,
-        )
-        .map_err(|reason| TeletextMainCompositionError {
-            owner: composition.owner(),
-            location: None,
-            reason: reason.into(),
-        })?;
-        composition = composition.with_transmission_context(
-            service,
-            &evidence,
-            budget.collection.max_commands,
-            context,
-        )?;
         if super::foreground(&composition, unsettled.column).is_none() {
             // A different executing instance cannot gain invented time order.
             // Final packing retains the original located lowering refusal.
@@ -135,7 +151,6 @@ fn prefix_witnesses(
             });
         }
     }
-    witnesses.extend(local_definition::witnesses(composition, encoded)?);
     Ok(witnesses)
 }
 
@@ -147,7 +162,8 @@ pub(in crate::teletext) fn verify(
     if witnesses.is_empty() {
         return Ok(());
     }
-    let actual = prefix_witnesses(composition, encoded)?;
+    let mut actual = prefix_witnesses(composition, encoded)?;
+    actual.extend(local_definition::witnesses(composition, encoded)?);
     if witnesses.iter().any(|expected| !actual.contains(expected)) {
         return Err(state_error(composition));
     }

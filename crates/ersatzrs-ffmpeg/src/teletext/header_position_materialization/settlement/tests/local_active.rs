@@ -288,3 +288,68 @@ fn local_body_prefix_does_not_bypass_final_208_word_capacity() {
         }
     }
 }
+
+#[test]
+fn main_header_settlement_does_not_pin_irrelevant_nested_local_pointer_bytes() {
+    let owner = input().base.pages[0].address;
+    let adaptive = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65533));
+    let empty = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65532));
+    let mut draft = fixture_draft_with_active_body(
+        |passive, _| {
+            vec![
+                fg(8, 1),
+                fg(8, 2),
+                TeletextEnhancementCommand::InvokeObject {
+                    target: adaptive,
+                    object_type: TeletextObjectType::Adaptive,
+                    offset: None,
+                },
+                position(9),
+                passive,
+            ]
+        },
+        vec![],
+    );
+    draft.objects.extend([
+        TeletextEnhancementObjectDefinition {
+            identity: adaptive,
+            object_type: TeletextObjectType::Adaptive,
+            program: TeletextEnhancementProgram::new(vec![
+                TeletextEnhancementCommand::AtColumn {
+                    column: 0,
+                    operation: TeletextColumnOperation::G0 {
+                        code: TeletextGlyphCode::new(b'D').unwrap(),
+                    },
+                },
+                TeletextEnhancementCommand::InvokeObject {
+                    target: empty,
+                    object_type: TeletextObjectType::Passive,
+                    offset: None,
+                },
+            ])
+            .unwrap(),
+        },
+        TeletextEnhancementObjectDefinition {
+            identity: empty,
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![]).unwrap(),
+        },
+    ]);
+    let service = TeletextSemanticService::new(draft, semantic_limits()).unwrap();
+    let saved = service.clone();
+    let normalized =
+        compile_teletext_normalized_main_program(&service, owner, limits().normalization).unwrap();
+    let setters: Vec<_> = normalized
+        .original()
+        .program()
+        .commands()
+        .iter()
+        .zip(normalized.original().provenance())
+        .filter_map(|(command, source)| {
+            matches!(source, TeletextMainCompositionSource::HeaderPosition { .. })
+                .then_some(*command)
+        })
+        .collect();
+    assert_eq!(setters, [fg(9, 2)]);
+    assert_eq!(service, saved);
+}

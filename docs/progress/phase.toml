@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F3: local Active header context; V5 Continue lifecycle next, X3/V3 remain open'
+current_focus = 'P9A-04 V5: durable Lua Continue proof; F3 Main-prefix preservation check, X3/V3 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -176,11 +176,23 @@ All923 teletext regressions, independent dual-level decoding, strict FFmpeg
 all-target Clippy and final fmt/progress/architecture pass for the owned-only
 local checkpoint. A test-only final semicolon satisfies lint; no oracle or
 production change follows the passing regressions. No whole-engine claim.
-Next V5: genuine Lua Continue after reopening an active profile-On build must
-start from current Base, preserve the prior interval/channel2 and retain package
-configuration. Existing adapter-only Continue and SQL-only seams leave this
-application/SQL boundary unproven. Reuse actual On/reopen and Off/expiry flows;
-no new client search or external decoder maintenance. Full rowzero/foreign-X26,
+F3 is locally checkpointed afe3d84e. Its concrete Main-prefix followup is now
+confirmed: unrelated Adaptive→empty-Passive pointers relocated after a setter
+but unneeded Local body witnesses falsely rejected the page with SelectionState.
+Main-first settlement corrects the fixed regression and26 focused controls pass;
+required Local witnesses retain full final-body/source/instance equality and
+all resolution uses the same quota/deadline. All924 teletext regressions, ten
+byte-identical prior pinned independent cases and strict affected lint/fmt/
+architecture/progress pass. Canonical tmp/phase9-header-c2/identity.json/
+main_prefix_preservation_followup owns results and the next local checkpoint.
+V5 source is prepared at phase9-lua-intervals identity.json/
+continue_reopen_followup: genuine Continue after profile-On/reopen must start at
+current Base with stored checkpoints, exact interval prefix/channel2/config and
+no activation. First native build72339 stopped on attributed child-module path;
+explicit path is fixed, no runtime result exists. Run the corrected one-case
+native proof after the F3 preservation checkpoint; old On/reopen/Offexpiry
+receipts remain scoped and reused.
+No new client search or external decoder maintenance. Full rowzero/foreign-X26,
 X3/V3 and remaining9A acceptance stay open. Unused-object removal stays deferred.
 No push/publication or scope waiver.
 
