@@ -1,0 +1,40 @@
+{
+  "upstream_repository": "ErsatzTV/next",
+  "upstream_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
+  "source_archive_sha256": "2b3108b5b5d4d40ae243c6e98ce018f939ac17953dec0383fe664c8e49212742",
+  "source_lock_sha256": "3ef515507bbaf4e75043f59ecee515abad16fb4a4be5c2c53f0e7b097dc37fbb",
+  "distribution_version": "0.2.2-4a0b59a-ersatzrs.2",
+  "adr": "0117",
+  "patches": [
+    {
+      "file": "0001-bound-live-rtsp-shortest-buffer.patch",
+      "sha256": "591244c915ca42ff09b332be731751454c88edd3f84bed304c6a231c0aab2aee",
+      "retire_when": "Unpatched upstream passes the existing live RTSP startup and EOF/handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
+      "unpatched_regression": "Official released v0.2.2 fails the unchanged actual HTTP/RTSP source-clock regression (33.36s); the patched022 candidate passes (28.04s). No equivalent upstream correction is present.",
+      "evidence": "plans/upstream-catch-up.md"
+    },
+    {
+      "file": "0002-repeat-programme-images.patch",
+      "sha256": "0c4e9cafa2436d2846ae3d306560b29e6c59b85d2d759fc977a3e7c78d873176",
+      "retire_when": "Unpatched upstream passes static WebP and complete finite/infinite GIF/WebP seek, repeat, cancellation and schedule-boundary handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
+      "unpatched_regression": "Official released v0.2.2 fails the unchanged actual scheduled WebP picture/silent-audio regression (0.95s); the patched022 candidate passes. No equivalent upstream correction is present.",
+      "evidence": "docs/adr/0117-temporary-next-compatibility-corrections.md"
+    },
+    {
+      "file": "0003-preserve-caption-source-outpoint.patch",
+      "sha256": "bb33b50bbfef7edf6b8677cfdbd707cf05aeb717af80ac0a3da774cdc3a27fc2",
+      "retire_when": "Unpatched upstream passes the unchanged ordinary-SRT and source-teletext original-source-outpoint regressions with copied video and selected alternate audio, plus active-cue, pass-edge, compatibility and platform acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
+      "unpatched_regression": "Official checksum-verified Next0.2.2/tag4a0b59a reproduces exact FINAL source-out extension (f7b8af64); candidate passes unchanged ordinary-SRT8d16a912 and late-source-teletext7dac0380 controls, plus25 focused timing/playlist tests. Current upstream2ed7266d retains the same shifted-out block; no equivalent correction located.",
+      "evidence": "docs/progress/milestones.toml (P9A-04/F5); canonical tmp/phase9-next-local-teletext/work.json/shared_copy_sourceout_followup"
+    }
+  ],
+  "publication": "Unpublished Phase9A F5 source-out candidate only. Managed runtime adoption, compatibility/platform acceptance and package publication are separate gates; no publication authorized.",
+  "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/4a0b59a66bef93b908e5eb2086847418492e2555",
+  "windows_companions_sha256": {
+    "libvpl.dll": "3c439318d55285631aaea66b1d3701d4dba19e6c679561bebb71ace9ed521a08",
+    "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677"
+  }
+}

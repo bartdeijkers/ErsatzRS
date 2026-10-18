@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 late first-header intent and proven-absence playback safety; source-out gap open'
+current_focus = 'P9A-04 F5 Next source-out candidate verified; package compatibility and adoption open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -336,7 +336,7 @@ client build, decoder repair, new adapter or acceptance waiver.
 F5 verified local ee9b2e38 fixes the identical20MB source refusal with a complete
 owned text snapshot; reuse its40 focused/3 pinned native receipts and strict gates.
 Canonical tmp/phase9-next-local-teletext/work.json/large_finite_followup owns proof.
-The current first_header_followup closes the private selection gap for889 whose
+Verified local ad51b056/first_header_followup closes the private selection gap for889 whose
 first header lies beyond the stored888-only prefix; descriptor intent is never
 scanner-observed readiness. Exact independent text/cache proof is retained.
 A complete validated source with no889 header now yields opaque, PSI-matched
@@ -353,11 +353,19 @@ Next d38aa682 programme delivery. Strict affected all-target Clippy, format,
 architecture and progress pass. This is a verified partial local checkpoint;
 full F5 and9A are not accepted. Canonical first_header_followup owns commit,
 source hashes, preserved negatives, exact tool pins and all four final run IDs.
-Remaining concrete product gap: shared pinnedNextCopy in/out alignment exceeds
-the original caption sourceout. Retained native04179ca0 and ordinarySRT control
-284a72f0 independently reproduce it; no cue tolerance, filtering or waiver.
-Next correct that exact shared boundary through existing Next integration after
-this checkpoint; reuse all unaffected editor/publication/isolation/F6 evidence.
+Shared Next Copy sourceout is now confirmed against official unpatched0.2.2/
+tag4a0b59a f7b8af64, with upstream assetdigest verified. Currentupstream2ed7266d
+retains that defect. An opt-in thirdpatch preserves shifted mapping/pass edges
+and caps the original independent caption sourceout.25 focused plus unchanged
+actual ordinarySRT8d16a912 and late8897dac0380 pass on identical source bytes,
+including exact cues, independent copiedAV clocks/DutchAAC, seek/clear/cache and
+cleanup. Existing tooling reproduces the whole source tree and lock exactly.
+Strict candidate all-target Clippy and scoped format pass. Canonical
+work.json/shared_copy_sourceout_followup owns all source/binary/patch/pin proof.
+This is isolated source/debug-candidate proof: the managedruntime still contains
+the defect. Next prepare local replacement package and compatibility evidence
+through existing tooling; six-RID/native gates remain before adoption. No package
+publication or push authority. Reuse unaffected editor/publication/isolation/F6.
 Broader F5 sources/outputs/charset/unknownEOF and full F/V/X remain open. X1 needs
 suitable HTTP/TS/resource-lifecycle/navigation client capability; X2 needs
 accepted platform artifacts/native environments; X3 needs a lossless editor

@@ -1,0 +1,204 @@
+diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-channel/src/channel_session.rs
+--- a/crates/ersatztv-channel/src/channel_session.rs
++++ b/crates/ersatztv-channel/src/channel_session.rs
+@@ -1072,6 +1072,23 @@
+             return None;
+         }
+ 
++        let subtitle_timing = if let Some(input) = input_settings.subtitle_input.as_ref() {
++            // Keep the caption's own source coordinates: an independent sidecar
++            // need not start at the video's source origin.
++            let subtitle_source = Self::resolve_source(current_item, |t| t.subtitle.as_ref());
++            let (_, original_out_ms) = source_points_ms(
++                current_item,
++                subtitle_source.as_ref().unwrap_or(video_source),
++            );
++            Some(copy_subtitle_timing(
++                (input.in_point, input.out_point),
++                target,
++                plan.in_point,
++                Duration::from_millis(original_out_ms),
++            )?)
++        } else {
++            None
++        };
+         for input in [
+             &mut input_settings.video_input,
+             &mut input_settings.audio_input,
+@@ -1079,17 +1096,13 @@
+             input.in_point = plan.in_point;
+             input.out_point = plan.in_point + plan.duration;
+         }
+-        // sidecar subtitles must follow the shifted video
+-        if let Some(subtitle_input) = input_settings.subtitle_input.as_mut() {
+-            let shift = |t: Duration| {
+-                if plan.in_point >= target {
+-                    t + (plan.in_point - target)
+-                } else {
+-                    t.saturating_sub(target - plan.in_point)
+-                }
+-            };
+-            subtitle_input.in_point = shift(subtitle_input.in_point);
+-            subtitle_input.out_point = shift(subtitle_input.out_point);
++        // The shifted start is also the subtitle-to-copied-AV mapping cursor.
++        // A shifted pass edge must never extend the original caption out point.
++        if let (Some(input), Some((start, end))) =
++            (input_settings.subtitle_input.as_mut(), subtitle_timing)
++        {
++            input.in_point = start;
++            input.out_point = end;
+         }
+         input_settings.video_copy_seek = Some(plan.seek);
+ 
+@@ -1945,6 +1958,24 @@
+     (finish - reached > SHORTFALL_TOLERANCE).then_some(reached)
+ }
+ 
++/// Shift the caption mapping cursor and pass edge with copied AV, retaining
++/// the caption source's original exclusive trim boundary.
++fn copy_subtitle_timing(
++    (start, end): (Duration, Duration),
++    target: Duration,
++    landing: Duration,
++    original_out: Duration,
++) -> Option<(Duration, Duration)> {
++    let shift = |value: Duration| {
++        if landing >= target {
++            value.checked_add(landing - target)
++        } else {
++            Some(value.saturating_sub(target - landing))
++        }
++    };
++    Some((shift(start)?, shift(end)?.min(original_out)))
++}
++
+ /// Without an out point, the source runs for the scheduled duration.
+ fn source_points_ms(item: &PlayoutItem, source: &PlayoutItemSource) -> (u64, u64) {
+     let item_duration_ms = (item.finish - item.start).whole_milliseconds() as u64;
+@@ -2080,6 +2111,126 @@
+     }
+ 
+     #[test]
++    fn copied_subtitle_landing_keeps_cursor_but_not_extended_source_out() {
++        let ms = Duration::from_millis;
++        assert_eq!(
++            copy_subtitle_timing((ms(2131), ms(9200)), ms(2131), ms(2559), ms(9200)),
++            Some((ms(2559), ms(9200)))
++        );
++    }
++
++    #[test]
++    fn copied_subtitle_negative_landing_delta_retains_shifted_pass_edge() {
++        let ms = Duration::from_millis;
++        assert_eq!(
++            copy_subtitle_timing((ms(2559), ms(9200)), ms(2559), ms(2131), ms(9200)),
++            Some((ms(2131), ms(8772)))
++        );
++        assert_eq!(
++            copy_subtitle_timing((ms(100), ms(9200)), ms(2559), ms(2131), ms(9200)),
++            Some((Duration::ZERO, ms(8772)))
++        );
++    }
++
++    #[test]
++    fn copied_subtitle_partial_pass_stays_before_original_final_out() {
++        let ms = Duration::from_millis;
++        assert_eq!(
++            copy_subtitle_timing((ms(2131), ms(6000)), ms(2131), ms(2559), ms(9200)),
++            Some((ms(2559), ms(6428)))
++        );
++    }
++
++    #[test]
++    fn copied_subtitle_independent_origin_is_not_replaced_by_video_origin() {
++        let ms = Duration::from_millis;
++        assert_eq!(
++            copy_subtitle_timing((ms(100131), ms(107200)), ms(2131), ms(2559), ms(107200)),
++            Some((ms(100559), ms(107200)))
++        );
++    }
++
++    #[test]
++    fn copied_subtitle_boundary_uses_selected_source_then_existing_source_fallback() {
++        let start = datetime!(2026-01-01 12:00 UTC);
++        let mut item = PlayoutItem::new(
++            String::from("caption-boundary"),
++            start,
++            start + time::Duration::seconds(8),
++            Some(Duration::from_millis(2131)),
++            Some(Duration::from_millis(9200)),
++            Path::new("fixture/video.ts"),
++        )
++        .unwrap();
++        let video = item.source.clone().unwrap();
++        item.tracks = Some(PlayoutItemTracks {
++            audio: None,
++            video: None,
++            subtitle: Some(TrackSelection {
++                source: Some(PlayoutItemSource::Local {
++                    path: String::from("fixture/captions.srt"),
++                    in_point_ms: Some(100131),
++                    out_point_ms: Some(107200),
++                    probe_hint: None,
++                }),
++                stream_index: Some(0),
++            }),
++        });
++        let selected = ChannelSession::resolve_source(&item, |t| t.subtitle.as_ref());
++        assert_eq!(
++            source_points_ms(&item, selected.as_ref().unwrap_or(&video)),
++            (100131, 107200)
++        );
++        item.tracks
++            .as_mut()
++            .unwrap()
++            .subtitle
++            .as_mut()
++            .unwrap()
++            .source = None;
++        let inherited = ChannelSession::resolve_source(&item, |t| t.subtitle.as_ref());
++        assert_eq!(
++            source_points_ms(&item, inherited.as_ref().unwrap_or(&video)),
++            (2131, 9200)
++        );
++        item.source = None;
++        let absent = ChannelSession::resolve_source(&item, |t| t.subtitle.as_ref());
++        assert!(absent.is_none());
++        assert_eq!(
++            source_points_ms(&item, absent.as_ref().unwrap_or(&video)),
++            (2131, 9200)
++        );
++    }
++
++    #[test]
++    fn copied_subtitle_empty_or_past_end_landing_does_not_invent_a_new_cursor() {
++        let ms = Duration::from_millis;
++        assert_eq!(
++            copy_subtitle_timing((ms(9200), ms(9200)), ms(9200), ms(9200), ms(9200)),
++            Some((ms(9200), ms(9200)))
++        );
++        // An end at/before the real cursor yields no eligible cue in the
++        // existing renderer; moving the cursor back would change AV mapping.
++        assert_eq!(
++            copy_subtitle_timing((ms(9000), ms(9200)), ms(9000), ms(9500), ms(9200)),
++            Some((ms(9500), ms(9200)))
++        );
++    }
++
++    #[test]
++    fn copied_subtitle_timing_overflow_refuses_before_input_mutation() {
++        assert_eq!(
++            copy_subtitle_timing(
++                (Duration::MAX, Duration::MAX),
++                Duration::ZERO,
++                Duration::from_secs(1),
++                Duration::MAX,
++            ),
++            None
++        );
++    }
++
++    #[test]
+     fn fallback_duration_is_at_least_the_retry_budget() {
+         let minute = Duration::from_mins(1);
+         assert_eq!(fallback_duration(minute, Duration::ZERO), minute);

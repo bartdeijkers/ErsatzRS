@@ -551,6 +551,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Provide an opt-in Next source candidate that caps copied-video captions at the
+  original subtitle source outpoint while retaining keyframe and pass alignment.
+  Managed-runtime adoption still requires verified replacement packages.
 - Clarify the [Phase 9A/9B authoring boundary](docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary)
   and F2 scope while preserving all generic engine acceptance requirements.
 
