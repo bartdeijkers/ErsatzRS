@@ -36,6 +36,7 @@ struct PreparedImport {
     root: QualifiedBaseline,
     latest: Option<QualifiedBaseline>,
     incoming: TeletextEditorialChanges,
+    first_body_additions: Vec<ersatzrs_domain::TeletextResourceObjectDefinitionAddition>,
     cumulative: TeletextEditorialChanges,
     provenance: TeletextSavedEditorialProvenance,
     root_export: Option<TeletextExportReceiptBody>,
@@ -683,7 +684,10 @@ fn prepare(
         baseline,
         &request.files,
         tti,
-        policy.encoding.composition.service,
+        (
+            policy.encoding.composition.service,
+            &previous.resource_additions,
+        ),
         deadline,
     )?;
     for changes in [&previous, &incoming] {
@@ -702,6 +706,7 @@ fn prepare(
         root,
         latest,
         incoming,
+        first_body_additions: previous.resource_additions,
         cumulative,
         provenance,
         root_export,
@@ -1111,7 +1116,10 @@ fn make_document(
             .encoded()
             .ok_or(NativeTeletextEditorialImportError::Association)?,
         &prepared.incoming,
-        prepared.policy.encoding.composition.service,
+        (
+            prepared.policy.encoding.composition.service,
+            &prepared.first_body_additions,
+        ),
     )?;
     check_deadline(deadline)?;
     Ok((document, document_digest))

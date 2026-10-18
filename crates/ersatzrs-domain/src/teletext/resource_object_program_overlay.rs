@@ -1,8 +1,8 @@
 //! Checked POP/GPOP structure; catalogue identity never becomes a Local alias.
 use super::{
     local_object_glyph_program::{
-        validate_invocation_correspondence, validate_invocation_structure_correspondence,
-        validate_style_correspondence,
+        validate_inserted_position_correspondence, validate_invocation_correspondence,
+        validate_invocation_structure_correspondence, validate_style_correspondence,
     },
     TeletextEnhancementCommand, TeletextEnhancementProgram,
     TeletextLocalObjectGlyphProgramOverlayError, TeletextObjectIdentity, TeletextServiceBudget,
@@ -19,6 +19,8 @@ pub enum TeletextResourceObjectProgramOverlayError {
     MissingInvocationChange,
     #[error("teletext resource invocation structure requires an inserted or omitted invocation")]
     MissingInvocationStructure,
+    #[error("teletext resource position insertion requires a new position command")]
+    MissingInsertedPosition,
     #[error("teletext resource program exceeds the trusted command or structure budget")]
     Budget,
     #[error(transparent)]
@@ -46,6 +48,7 @@ enum InvocationPolicy {
     Protected,
     Retained,
     Structure,
+    InsertedPositions,
 }
 
 impl TeletextResourceObjectProgramOverlay {
@@ -127,6 +130,32 @@ impl TeletextResourceObjectProgramOverlay {
         )
     }
 
+    /// Reconstruct inserted positions for a server-authenticated added definition.
+    ///
+    /// Existing position and context anchors remain mandatory and exact. This is
+    /// transient intent: hosts must authenticate the added identity and fold the
+    /// replacement into its complete definition before storing a concept. Legacy
+    /// resource-program overlay formats do not support this intent.
+    /// # Errors
+    /// Rejects absent inserted positions, changed or omitted anchors, invalid
+    /// correspondence, crossed glyph families, Local identities and budget excess.
+    pub fn new_with_inserted_positions(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            budget,
+            InvocationPolicy::InsertedPositions,
+        )
+    }
+
     fn new_for_policy(
         identity: TeletextObjectIdentity,
         expected: TeletextEnhancementProgram,
@@ -153,6 +182,13 @@ impl TeletextResourceObjectProgramOverlay {
             return Err(Error::Unchanged);
         }
         match invocations {
+            InvocationPolicy::InsertedPositions => {
+                validate_inserted_position_correspondence(
+                    &expected,
+                    &replacement,
+                    &retained_commands,
+                )?;
+            }
             InvocationPolicy::Protected => {
                 validate_style_correspondence(&expected, &replacement, &retained_commands)?;
             }
@@ -179,7 +215,25 @@ impl TeletextResourceObjectProgramOverlay {
         {
             return Err(Error::MissingInvocationStructure);
         }
+        if matches!(invocations, InvocationPolicy::InsertedPositions)
+            && !overlay.has_inserted_positions()
+        {
+            return Err(Error::MissingInsertedPosition);
+        }
         Ok(overlay)
+    }
+
+    /// Whether correspondence inserts a position, independently of storage policy.
+    #[must_use]
+    pub fn has_inserted_positions(&self) -> bool {
+        self.replacement
+            .commands()
+            .iter()
+            .zip(&self.retained_commands)
+            .any(|(command, original)| {
+                original.is_none()
+                    && matches!(command, TeletextEnhancementCommand::SetPosition { .. })
+            })
     }
 
     /// Whether retained original calls change, without granting target authority.

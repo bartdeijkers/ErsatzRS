@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F6: capacity-wait handoff correctness; engine acceptance open'
+current_focus = 'P9A-04 F1/F3: authored object bodies; F6 and engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,22 +62,25 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F1 first empty-definition Add is verified in existing POP/GPOP resources through
-the existing receipt/CAS/Add-V18 path.48 focused lib and three combined native
-cases, strict Clippy/fmt/hydration and two headed browser specs pass: four actual
-Add actions, nine cultures, light/dark, JS/no-JS,320/1920/200%, native export/cold
-reopen and unchanged publication/profile/package/pixels. Canonical evidence:
-tmp/phase9-f1-first-definition/work.json; checkpoint SHA in post-commit.json.
-F2 checkpoint0ac45cac captured editing-boundary proof remains valid at
-tmp/phase9-f2-boundary-preview/work.json. Broader F1/F2/V4 stay open.
-Next F1/F3 product action: native RED for a first row-position command in a new
-empty object body; existing trailing reconstruction admits glyph/style only.
-Apply the smallest checked correction and use existing pinned QTM tools for
-actual first-body editing/import/preview/reopen. Source support for first glyphs
-is not runtime/editor proof. X1/V3 still requires bounded source-positive client
-qualification before dependent acceptance; no unchanged failed retry or external
-maintenance program. No new resource/package editing or automatic publication;
-unused-object removal stays deferred.
+F1/F3 first authored-body row positions now pass through authenticated empty
+V18 Add definitions, exact native output, repeat/cold reopen and explicit
+publication. Canonical tmp/phase9-f1-first-position/work.json/source-context.json
+retain the native RED,31 unit/native passes and an actual pinned QTM1.0 menu edit,
+SaveAs, unchanged-byte import, preview and separate publication/recovery pass.
+Checkpoint SHA belongs to post-commit.json. New positions in populated added or
+original objects remain open; no permanent limitation is accepted.
+Next F1/F3 product action: confirm the new-position insertion failure on a filled
+added definition with a focused native RED, then extend only that necessary
+reconstruction/folding boundary. Reuse this initial-body/editor evidence where
+unchanged; do not replay the whole AV/client chain for every row variant.
+F1 localized Add/Copy and F2 boundary UI proofs remain valid at
+tmp/phase9-f1-first-definition/work.json and
+tmp/phase9-f2-boundary-preview/work.json. Full resource/set, metadata/template and
+client acceptance remain open. X1/V3 bounded Tuxtxt source qualification rejects
+its pinned Local/DRCS and panel implementation; canonical
+tmp/phase9-tuxtxt-client-qualification/identity.json. No build/runtime/adapter or
+repair; require a distinct source-positive suitable runtime before dependent
+acceptance. Unused-object removal stays deferred. No push/publication.
 F6 remains open for selected active-caption initialization when copying video.
 Checkpoint cd61a7fa safely refuses invalid filter+Copy; prior H264/AAC, AC3,
 default2 same-response transport and actual disconnect/idle receipts retain scope.

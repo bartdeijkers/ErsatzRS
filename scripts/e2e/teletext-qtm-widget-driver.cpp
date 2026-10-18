@@ -96,6 +96,7 @@ struct DriverContext {
     bool insertFragmentCall = false;
     bool deleteFragmentCall = false;
     int fragmentCallSelector = 0;
+    bool addFirstDefinitionPosition = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -139,6 +140,7 @@ static DriverContext driverContext() {
     const bool resourceInsert = mode == "resource-object-g0-insert-copy";
     const bool resourceDelete = mode == "resource-object-g0-delete";
     const bool resourceStructure = resourceInsert || resourceDelete;
+    const bool firstDefinitionPosition = mode == "new-empty-definition-position";
     const bool mixedResourceCallGlyph = mode == "resource-object-call-insert-glyph-context";
     const bool mixedResourceCallStructure = mode == "resource-object-call-insert-structure-context";
     const bool insertResourceCall = mode == "resource-object-call-insert-context" || mixedResourceCallGlyph || mixedResourceCallStructure;
@@ -155,7 +157,7 @@ static DriverContext driverContext() {
     const int fragmentSelector = fragmentCall ? boundedDecimal("ERSATZRS_QTM_FRAGMENT_CALL_SELECTOR", 0x3ffff) : 0;
     if (fragmentCall && ((fragmentSelector & 0x38) != 0x30 || ((fragmentSelector >> 6) & 31) != 19))
         qFatal("Native fragment call selector must retain authenticated Public Passive scope/type");
-    const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology || fragmentCall;
+    const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology || fragmentCall || firstDefinitionPosition;
     const bool extendedGlyph = mode == "single-page-local-extended-glyph";
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
@@ -237,6 +239,8 @@ static DriverContext driverContext() {
         qFatal("Fixed resource call requires original OriginModifier word7 and raw address40");
     if (fragmentCall && (triplet != 22 || column != 40))
         qFatal("Fixed native fragment requires original OriginModifier row22 and address40");
+    if (firstDefinitionPosition && (triplet != 3 || column != 8))
+        qFatal("Fixed empty definition requires first word3 and new glyph column8");
     const int from = foreground ? boundedDecimal("ERSATZRS_QTM_FROM_COLOUR", 31) : 0;
     const int to = foreground ? boundedDecimal("ERSATZRS_QTM_TO_COLOUR", 31) : 0;
     if (foreground && from == to) qFatal("Foreground trial requires a changed colour");
@@ -286,7 +290,7 @@ static DriverContext driverContext() {
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -1464,6 +1468,123 @@ static void editResourceGlyphStructure(QMainWindow *main, const DriverContext &c
     std::printf("QTM actual resource-object G0P %s: original9 model rows, final%zu, original command4/editor word7, complete wrapper retained\n",
         context.insertResourceGlyph ? "InsertCopy then second glyph Column1-to2" : "Delete", expected.size());
 }
+// Pinned x26menus.h names and x26dockwidget.cpp insertion defaults. Both
+// additions go through the real Insert before menu; no tuple/model is assigned.
+static void insertFirstDefinitionWord(QDockWidget *dock, const DriverContext &context, bool glyph) {
+    QPushButton *button = nullptr;
+    for (auto candidate : dock->findChildren<QPushButton *>()) {
+        QString label = candidate->text(); label.remove('&');
+        if (label != "Insert before" || !candidate->isVisible() || !candidate->isEnabled()
+            || !candidate->menu()) continue;
+        if (button) qFatal("Ambiguous first-definition Insert before button");
+        button = candidate;
+    }
+    if (!button) qFatal("Actual first-definition Insert before menu absent");
+    auto menu = button->menu();
+    QTimer::singleShot(150, qApp, [menu, context, glyph] {
+        const auto named = [](QMenu *parent, const char *label) {
+            QAction *found = nullptr;
+            for (auto action : parent->actions()) {
+                if (action->text() != label || !action->isVisible() || !action->isEnabled()) continue;
+                if (found) qFatal("Ambiguous first-definition insertion action");
+                found = action;
+            }
+            if (!found) qFatal("Actual first-definition insertion action absent");
+            return found;
+        };
+        if (!QTest::qWaitFor([menu] { return menu->isVisible(); }, 3000))
+            qFatal("Actual first-definition insertion menu did not open");
+        QMenu *targetMenu = menu;
+        if (glyph) {
+            auto column = named(menu, "Column triplet");
+            auto child = column->menu();
+            const QPoint point = menu->actionGeometry(column).center();
+            if (!child || !menu->rect().contains(point)) qFatal("Actual column submenu is not clickable");
+            QTest::mouseMove(menu, point);
+            if (!QTest::qWaitFor([menu, column, child] {
+                return menu->activeAction() == column && child->isVisible();
+            }, 3000)) qFatal("Actual first-definition column submenu did not receive hover");
+            targetMenu = child;
+        }
+        auto action = named(targetMenu, glyph ? "G0 character" : "Set Active Position");
+        const QPoint target = targetMenu->actionGeometry(action).center();
+        if (action->menu() || !targetMenu->rect().contains(target))
+            qFatal("Actual first-definition insertion target is not clickable");
+        QTest::mouseMove(targetMenu, target);
+        if (!QTest::qWaitFor([targetMenu, action] {
+            return targetMenu->isVisible() && targetMenu->activeAction() == action;
+        }, 3000)) qFatal("Actual first-definition insertion target did not receive hover");
+        if (!targetMenu->grab().save(QString("/work/") + context.captureName(
+            glyph ? "first-definition-glyph-menu" : "first-definition-position-menu")))
+            qFatal("Actual first-definition insertion menu capture failed");
+        QTest::mouseClick(targetMenu, Qt::LeftButton, Qt::NoModifier, target);
+    });
+    QTest::mouseClick(button, Qt::LeftButton, Qt::NoModifier, button->rect().center());
+}
+static void editFirstDefinitionPosition(QMainWindow *main, const DriverContext &context) {
+    if (!context.addFirstDefinitionPosition || context.tripletIndex != 3
+        || context.tripletColumn != 8 || main->isWindowModified())
+        qFatal("Unexpected fixed empty-definition baseline");
+    auto dock = main->findChild<QDockWidget *>("x26DockWidget");
+    if (!dock || dock->windowTitle() != "X/26 triplets") qFatal("Actual first-definition dock absent");
+    if (!dock->isVisible()) dock->toggleViewAction()->trigger();
+    dock->setFloating(true);
+    dock->resize(800, 680);
+    dock->move(main->pos() + QPoint(32, 32));
+    if (!QTest::qWaitForWindowExposed(dock, 5000)) qFatal("Actual first-definition dock not exposed");
+    const auto tables = dock->findChildren<QTableView *>();
+    if (tables.size() != 1) qFatal("Actual first-definition X26 table is ambiguous");
+    auto table = tables.front();
+    auto model = table->model();
+    std::vector<StructureTriplet> expected{
+        {40,19,2}, {63,31,6}, {40,23,2}, {63,31,5}
+    };
+    structureCheck(model, expected);
+    if (!dock->grab().save(QString("/work/") + context.captureName("first-definition-before")))
+        qFatal("Actual empty definition baseline capture failed");
+    structureSelect(table, 3);
+    insertFirstDefinitionWord(dock, context, false);
+    expected.insert(expected.begin() + 3, StructureTriplet{41,4,0});
+    structureCheck(model, expected);
+    structureSelect(table, 4);
+    insertFirstDefinitionWord(dock, context, true);
+    expected.insert(expected.begin() + 4, StructureTriplet{0,9,32});
+    structureCheck(model, expected);
+    structureSelect(table, 4);
+    QSpinBox *column = nullptr;
+    for (auto candidate : dock->findChildren<QSpinBox *>()) {
+        if (!candidate->isVisible() || !candidate->isEnabled()
+            || candidate->minimum() != 0 || candidate->maximum() != 39) continue;
+        if (column) qFatal("Ambiguous first-definition cooked Column control");
+        column = candidate;
+    }
+    if (!column || column->value() != 0) qFatal("Actual first-definition G0 column must begin zero");
+    QStyleOptionSpinBox style;
+    style.initFrom(column);
+    style.subControls = QStyle::SC_All;
+    style.stepEnabled = QAbstractSpinBox::StepDownEnabled | QAbstractSpinBox::StepUpEnabled;
+    style.frame = column->hasFrame();
+    style.buttonSymbols = column->buttonSymbols();
+    const QRect step = column->style()->subControlRect(QStyle::CC_SpinBox, &style,
+        QStyle::SC_SpinBoxUp, column);
+    if (!step.isValid() || !column->rect().contains(step.center()))
+        qFatal("Actual first-definition Column step is not clickable");
+    for (int next = 1; next <= 8; ++next) {
+        QTest::mouseClick(column, Qt::LeftButton, Qt::NoModifier, step.center());
+        if (!QTest::qWaitFor([column, next] { return column->value() == next; }, 3000))
+            qFatal("Actual first-definition Column did not advance once");
+        expected[4][0] = next;
+        structureCheck(model, expected);
+    }
+    structureCode(dock, context, 4, 32, 80);
+    expected[4][2] = 80;
+    structureCheck(model, expected);
+    if (!main->isWindowModified()) qFatal("Actual first-definition edits did not mark document modified");
+    if (!dock->grab().save(QString("/work/") + context.captureName("first-definition-edited")))
+        qFatal("Actual first-definition edited capture failed");
+    savedGlyphStructure = expected;
+    std::puts("QTM actual first definition: InsertBefore SetActivePosition41/4/0, InsertBefore G0space, Column0-to8, actual character popup P80; full six-row model checked");
+}
 // Observed Qt paint only, never decoder/model input. A no-panel QTM widget can
 // retain additional layout proxy space; this captures its explicit480x250 page
 // viewport. The independent native raster remains the full-service authority.
@@ -2255,6 +2376,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
             qFatal("Actual Save As did not complete");
         if (context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure) verifySavedGlyphStructure(saved);
         if (context.editLocalStyleStructure) verifySavedGlyphStructure(saved, 27);
+        if (context.addFirstDefinitionPosition) verifySavedGlyphStructure(saved, 6);
         if (context.insertResourceGlyph || context.deleteResourceGlyph)
             verifySavedGlyphStructure(saved, context.insertResourceGlyph ? 10 : 8);
         if (context.editResourceCallOrigin) verifySavedGlyphStructure(saved, context.resourceCallContext ? 21 : 10);
@@ -2273,7 +2395,7 @@ static void saveAs(QMainWindow *main, const DriverContext &context) {
         if (context.panelProof) capturePanelPaint(context, "saved");
         if (context.singlePage) {
             std::printf("QTM actual single-page widget/Save As complete: edited=%d input=%s output=%s\n",
-                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall), context.inputName.constData(), context.outputName.constData());
+                (context.editZone || context.editForeground || context.editDrcs || context.editLocalGlyph || context.editLocalGlyphStructure || context.editLocalMixedGlyphStructure || context.editLocalStyleStructure || context.insertResourceGlyph || context.deleteResourceGlyph || context.editResourceCallOrigin || context.insertResourceCall || context.deleteResourceCall || context.insertFragmentCall || context.deleteFragmentCall || context.addFirstDefinitionPosition), context.inputName.constData(), context.outputName.constData());
         } else std::puts("QTM actual widget edit/navigation/Save As complete");
         std::fflush(stdout);
         qApp->quit();
@@ -2324,6 +2446,7 @@ extern "C" int _ZN16QCoreApplication4execEv() {
             if (context.editResourceCallOrigin) editResourceCallOrigin(main, context);
             if (context.insertResourceCall || context.deleteResourceCall) editResourceCallTopology(main, context);
             if (context.insertFragmentCall || context.deleteFragmentCall) editNativeFragmentCalls(main,context);
+            if (context.addFirstDefinitionPosition) editFirstDefinitionPosition(main, context);
             if (context.editZone) {
                 QTest::mouseClick(view, Qt::LeftButton, Qt::NoModifier,
                     QPoint((context.leftPanelColumns + 8) * 12 + 6, 2 * 10 + 5));

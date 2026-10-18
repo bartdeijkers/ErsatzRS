@@ -278,3 +278,63 @@ fn v18_definition_additions_reject_shadow_missing_resource_overlap_and_storage_l
         "bounded streaming preflight must reject before owned definition allocation: {error:?}"
     );
 }
+
+#[test]
+fn transient_first_body_positions_cannot_be_written_as_old_or_mixed_overlay_roles() {
+    let expected = TeletextEnhancementProgram::new(vec![]).unwrap();
+    let replacement = TeletextEnhancementProgram::new(vec![
+        serde_json::from_value(json!({"kind":"set_position","position":{"row":1,"column":0}}))
+            .unwrap(),
+        glyph(80),
+    ])
+    .unwrap();
+    let transient = TeletextResourceObjectProgramOverlay::new_with_inserted_positions(
+        identity(false, 15),
+        expected,
+        replacement,
+        vec![None, None],
+        budget().validation.service,
+    )
+    .unwrap();
+    for constructor in [
+        TeletextSavedEditorialOverlay::new_with_resource_object_program_overlays,
+        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_overlays,
+        TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays,
+    ] {
+        assert!(constructor(
+            provenance(),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            (vec![], vec![transient.clone()])
+        )
+        .is_err());
+    }
+    // The shared guard is also used by V18 when carrying older program roles.
+    assert!(super::resource_object_programs::distinct_targets(
+        std::slice::from_ref(&transient),
+        &[]
+    )
+    .is_err());
+    let folded = TeletextResourceObjectDefinitionAddition::new(
+        TeletextEnhancementObjectDefinition {
+            identity: new_identity(false, 15),
+            object_type: TeletextObjectType::Passive,
+            program: transient.replacement().clone(),
+        },
+        budget().validation.service,
+    )
+    .unwrap();
+    let overlay = TeletextSavedEditorialOverlay::new_with_resource_object_definition_additions(
+        provenance(),
+        vec![folded],
+    )
+    .unwrap();
+    let encoded =
+        append_teletext_design_editorial_overlay(&original(false), &overlay, budget()).unwrap();
+    let restored = decode_teletext_design_documents(encoded.bytes(), budget()).unwrap();
+    assert_eq!(restored.editorial_overlay(), Some(&overlay));
+    assert!(overlay.resource_object_program_overlays().is_empty());
+}

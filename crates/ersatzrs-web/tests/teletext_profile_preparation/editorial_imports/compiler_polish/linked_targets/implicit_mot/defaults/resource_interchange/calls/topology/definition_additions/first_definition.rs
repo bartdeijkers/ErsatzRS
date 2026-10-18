@@ -15,6 +15,9 @@ use std::collections::BTreeMap;
 #[path = "first_definition/actual_admin.rs"]
 mod actual_admin;
 
+#[path = "first_definition/body_positions.rs"]
+mod body_positions;
+
 const ADD: &str = "/admin-api/teletext/design/add-object";
 const NEW_IDS: [u16; 4] = [25, 26, 27, 28];
 const TYPES: [&str; 4] = ["passive", "active", "adaptive", "passive"];

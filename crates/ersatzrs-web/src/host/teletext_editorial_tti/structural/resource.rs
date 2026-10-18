@@ -2,7 +2,7 @@
 use super::{alignment, fail, raw, stream, style, Location, Page, Result};
 use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementObjectDefinition,
-    TeletextEnhancementProgram,
+    TeletextEnhancementPosition, TeletextEnhancementProgram,
 };
 use std::time::Instant;
 
@@ -97,6 +97,56 @@ pub(in super::super) fn parse(
         location,
         deadline,
     )
+}
+
+/// Only a server-authenticated, still-empty added definition may gain its first
+/// explicit row positions. Existing programs retain the unchanged parser policy.
+pub(in super::super) fn parse_first_body(
+    definition: &TeletextEnhancementObjectDefinition,
+    spans: &[Span],
+    words: (&[u32], &[u32]),
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Program> {
+    location.check_deadline(deadline)?;
+    if !definition.program.commands().is_empty() || !spans.is_empty() || !words.0.is_empty() {
+        return Err(fail(location));
+    }
+    let raw_maximum = maximum
+        .checked_mul(2)
+        .ok_or_else(|| fail(location))?
+        .min(507);
+    let after = raw::Body::read_bounded(words.1, raw_maximum, location, deadline)?;
+    let mut commands = Vec::new();
+    let mut retained = Vec::new();
+    for entry in &after.entries {
+        location.check_deadline(deadline)?;
+        if commands.len() >= maximum {
+            return Err(fail(location));
+        }
+        let address = entry.word & 63;
+        let mode = (entry.word >> 6) & 31;
+        let column = entry.word >> 11;
+        let command = if mode == 4 && address >= 40 && column < 40 {
+            let row = if address == 40 { 24 } else { address - 40 };
+            TeletextEnhancementCommand::SetPosition {
+                position: TeletextEnhancementPosition::new(
+                    u8::try_from(row).map_err(|_| fail(location))?,
+                    u8::try_from(column).map_err(|_| fail(location))?,
+                )
+                .map_err(|_| fail(location))?,
+            }
+        } else {
+            entry.editable(true).ok_or_else(|| fail(location))?
+        };
+        commands.push(command);
+        retained.push(None);
+    }
+    Ok(Program {
+        replacement: TeletextEnhancementProgram::new(commands).map_err(|_| fail(location))?,
+        retained,
+    })
 }
 
 /// The caller authenticates full invocation identities before native selectors.
@@ -439,4 +489,85 @@ pub(in super::super) fn align_calls(
             .map_err(|_| fail(location))?,
         retained: aligned.retained,
     })
+}
+
+#[cfg(test)]
+mod first_body_tests {
+    use super::*;
+    use ersatzrs_domain::{
+        TeletextObjectId, TeletextObjectIdentity, TeletextObjectType, TeletextPageAddress,
+        TeletextPageNumber, TeletextSubcode,
+    };
+    use std::time::Duration;
+
+    fn empty() -> TeletextEnhancementObjectDefinition {
+        TeletextEnhancementObjectDefinition {
+            identity: TeletextObjectIdentity::local(
+                TeletextPageAddress {
+                    page: TeletextPageNumber::new(0x100).unwrap(),
+                    subcode: TeletextSubcode::new(0).unwrap(),
+                },
+                TeletextObjectId::new(0),
+            ),
+            object_type: TeletextObjectType::Passive,
+            program: TeletextEnhancementProgram::new(vec![]).unwrap(),
+        }
+    }
+    fn word(address: u32, mode: u32, data: u32) -> u32 {
+        address | (mode << 6) | (data << 11)
+    }
+    fn location() -> Location {
+        Location {
+            page: 0,
+            subcode: 0,
+            resource: None,
+        }
+    }
+
+    #[test]
+    fn first_body_preserves_real_row_positions_and_bounded_command_correspondence() {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let words = [
+            word(41, 4, 0),
+            word(8, 9, 80),
+            word(42, 4, 0),
+            word(4, 9, 81),
+            word(40, 4, 39),
+            word(39, 9, 82),
+        ];
+        let parsed =
+            parse_first_body(&empty(), &[], (&[], &words), 6, location(), deadline).unwrap();
+        assert_eq!(parsed.retained, [None; 6]);
+        for (ordinal, row, column) in [(0, 1, 0), (2, 2, 0), (4, 24, 39)] {
+            assert_eq!(
+                parsed.replacement.commands()[ordinal],
+                TeletextEnhancementCommand::SetPosition {
+                    position: TeletextEnhancementPosition::new(row, column).unwrap(),
+                }
+            );
+        }
+        assert!(parse_first_body(&empty(), &[], (&[], &words), 5, location(), deadline).is_err());
+        assert!(
+            parse_first_body(&empty(), &[], (&[], &words), 6, location(), Instant::now()).is_err()
+        );
+        let mut populated = empty();
+        populated.program = parsed.replacement;
+        assert!(parse_first_body(&populated, &[], (&[], &words), 6, location(), deadline).is_err());
+    }
+
+    #[test]
+    fn first_body_rejects_unrepresented_positions_reserved_columns_and_context_words() {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        for prefix in [
+            word(39, 4, 0),
+            word(41, 4, 40),
+            word(63, 7, 0),
+            word(40, 16, 0),
+        ] {
+            let words = [prefix, word(8, 9, 80)];
+            assert!(
+                parse_first_body(&empty(), &[], (&[], &words), 6, location(), deadline).is_err()
+            );
+        }
+    }
 }

@@ -441,3 +441,86 @@ fn resource_program_declared_wrapper_preserves_authentication_and_full_resource_
         original.semantic().physical_base_overlays()
     );
 }
+
+#[test]
+fn transient_resource_positions_keep_legacy_policies_and_retained_anchors_exact() {
+    let position = |row, column| TeletextEnhancementCommand::SetPosition {
+        position: TeletextEnhancementPosition::new(row, column).unwrap(),
+    };
+    let expected = program(vec![position(1, 0), at(8, glyph(b'P'))]);
+    let replacement = program(vec![
+        position(1, 0),
+        at(8, glyph(b'P')),
+        position(2, 0),
+        at(4, glyph(b'Q')),
+    ]);
+    let retained = vec![Some(0), Some(1), None, None];
+    let change = TeletextResourceObjectProgramOverlay::new_with_inserted_positions(
+        target(false, 1),
+        expected.clone(),
+        replacement.clone(),
+        retained.clone(),
+        budget(),
+    )
+    .unwrap();
+    assert!(change.has_inserted_positions());
+    assert!(!change.has_invocation_changes());
+    assert!(!change.has_invocation_structure_changes());
+    for constructor in [
+        TeletextResourceObjectProgramOverlay::new,
+        TeletextResourceObjectProgramOverlay::new_with_invocation_changes,
+        TeletextResourceObjectProgramOverlay::new_with_invocation_structure,
+    ] {
+        assert!(constructor(
+            target(false, 1),
+            expected.clone(),
+            replacement.clone(),
+            retained.clone(),
+            budget()
+        )
+        .is_err());
+    }
+    for (replacement, retained) in [
+        (
+            program(vec![at(8, glyph(b'P')), position(2, 0)]),
+            vec![Some(1), None],
+        ),
+        (
+            program(vec![position(1, 1), at(8, glyph(b'P')), position(2, 0)]),
+            vec![Some(0), Some(1), None],
+        ),
+    ] {
+        assert!(
+            TeletextResourceObjectProgramOverlay::new_with_inserted_positions(
+                target(false, 1),
+                expected.clone(),
+                replacement,
+                retained,
+                budget(),
+            )
+            .is_err()
+        );
+    }
+    assert_eq!(
+        TeletextResourceObjectProgramOverlay::new_with_inserted_positions(
+            target(false, 1),
+            expected.clone(),
+            program(vec![position(1, 0), at(8, glyph(b'Q'))]),
+            vec![Some(0), Some(1)],
+            budget(),
+        ),
+        Err(TeletextResourceObjectProgramOverlayError::MissingInsertedPosition)
+    );
+    let mut bounded = budget();
+    bounded.max_commands = 5;
+    assert_eq!(
+        TeletextResourceObjectProgramOverlay::new_with_inserted_positions(
+            target(false, 1),
+            expected,
+            replacement,
+            retained,
+            bounded,
+        ),
+        Err(TeletextResourceObjectProgramOverlayError::Budget)
+    );
+}

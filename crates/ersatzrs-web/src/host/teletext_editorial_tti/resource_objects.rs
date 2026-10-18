@@ -563,7 +563,8 @@ pub(in crate::host) fn validate_applied(
 
 mod project;
 pub(in crate::host) use project::{
-    authorize_programs, reconcile_project, validate_applied_project, ResourceEdits,
+    authorize_programs, reconcile_project, reconcile_project_with_added_positions,
+    validate_applied_project, validate_applied_project_with_added_positions, ResourceEdits,
 };
 
 #[cfg(test)]

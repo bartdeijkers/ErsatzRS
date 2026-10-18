@@ -190,7 +190,8 @@ pub(super) fn distinct_targets(
 ) -> Result<(), TeletextDesignDocumentError> {
     let mut identities = BTreeSet::new();
     for program in programs {
-        if !identities.insert(program.identity())
+        if program.has_inserted_positions()
+            || !identities.insert(program.identity())
             || operands.iter().any(|operand| {
                 operand.identity() == program.identity()
                     && (operand.expected().glyph_family().is_some()

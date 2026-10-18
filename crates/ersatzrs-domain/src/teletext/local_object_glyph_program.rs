@@ -14,6 +14,7 @@ enum GlyphPolicy {
     StyleCommands,
     InvocationChanges,
     InvocationStructure,
+    InsertedPositions,
 }
 
 /// Rejected structural intent, without retaining authored content in diagnostics.
@@ -260,6 +261,19 @@ pub(super) fn validate_invocation_structure_correspondence(
     )
 }
 
+pub(super) fn validate_inserted_position_correspondence(
+    expected: &TeletextEnhancementProgram,
+    replacement: &TeletextEnhancementProgram,
+    retained: &[Option<usize>],
+) -> Result<(), TeletextLocalObjectGlyphProgramOverlayError> {
+    validate_correspondence(
+        expected,
+        replacement,
+        retained,
+        GlyphPolicy::InsertedPositions,
+    )
+}
+
 fn validate_correspondence(
     expected: &TeletextEnhancementProgram,
     replacement: &TeletextEnhancementProgram,
@@ -273,7 +287,10 @@ fn validate_correspondence(
     let mut next_original = 0;
     for (command, original) in replacement.commands().iter().zip(retained) {
         let Some(ordinal) = *original else {
-            if !editable(command, policy) {
+            if !(editable(command, policy)
+                || (matches!(policy, GlyphPolicy::InsertedPositions)
+                    && matches!(command, TeletextEnhancementCommand::SetPosition { .. })))
+            {
                 return Err(Error::ProtectedCommand);
             }
             continue;
@@ -329,7 +346,8 @@ fn editable(command: &TeletextEnhancementCommand, policy: GlyphPolicy) -> bool {
             (
                 GlyphPolicy::StyleCommands
                     | GlyphPolicy::InvocationChanges
-                    | GlyphPolicy::InvocationStructure,
+                    | GlyphPolicy::InvocationStructure
+                    | GlyphPolicy::InsertedPositions,
                 TeletextEnhancementCommand::AtColumn {
                     operation: TeletextColumnOperation::Foreground { .. }
                         | TeletextColumnOperation::Background { .. }

@@ -36,6 +36,9 @@ release section when tagging a release.
   channel admin can create a first empty definition in an existing POP/GPOP
   resource with an explicit type and new ID, or copy an existing definition while
   preserving its resource, type and complete body. Both save unpublished concepts.
+  A first empty added definition can now receive explicit row positions and
+  glyphs through a pinned QTeletextMaker save, retaining exact complete native
+  output through concept import, repeat edits, reopen and separate publication.
   Native preview,
   publication and recovery qualify new allocations and every protected shared
   consumer. A pinned actual QTeletextMaker save of an added definition now passes
