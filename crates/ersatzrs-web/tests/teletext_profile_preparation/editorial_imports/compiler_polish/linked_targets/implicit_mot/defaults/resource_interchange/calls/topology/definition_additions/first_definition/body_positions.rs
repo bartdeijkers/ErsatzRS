@@ -15,6 +15,9 @@ mod actual_editor;
 #[path = "body_positions/forward_boundaries.rs"]
 mod forward_boundaries;
 
+#[path = "body_positions/extended_body.rs"]
+mod extended_body;
+
 fn glyph(code: u8) -> u32 {
     8 | (9 << 6) | (u32::from(code) << 11)
 }

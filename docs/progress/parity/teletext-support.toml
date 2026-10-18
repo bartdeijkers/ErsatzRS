@@ -26,6 +26,7 @@ new-writer ancestry. Exact survivors, PassiveDefault
 lineage and all protected consumers stay checked. V6/V7 capacity is preserved.
 V18 Add/Copy and first-empty-body AP/glyph QTM saves qualify existing POP/GPOP
 through concepts, native previews, explicit publication and cold reopen.
+Later saved-body row appends retain exact original commands and anchors.
 Localized Add/Copy/boundary UI has headed proof; old formats/anchors remain exact.
 Pinned V8 compound glyph/style/column/call and V7 nonfirst-fragment native
 call add/delete saves pass unchanged-byte concepts, shared native previews,

@@ -113,11 +113,69 @@ pub(in super::super) fn parse_first_body(
     if !definition.program.commands().is_empty() || !spans.is_empty() || !words.0.is_empty() {
         return Err(fail(location));
     }
+    inserted_body(words.1, maximum, location, deadline)
+}
+
+/// Append only after the exact complete native body of an authenticated saved Add.
+/// A missing prefix or absent new AP leaves the unchanged legacy route in charge.
+pub(in super::super) fn parse_appended_body(
+    definition: &TeletextEnhancementObjectDefinition,
+    spans: &[Span],
+    words: (&[u32], &[u32]),
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Option<Program>> {
+    location.check_deadline(deadline)?;
+    let original_count = definition.program.commands().len();
     let raw_maximum = maximum
         .checked_mul(2)
         .ok_or_else(|| fail(location))?
         .min(507);
-    let after = raw::Body::read_bounded(words.1, raw_maximum, location, deadline)?;
+    if original_count > maximum
+        || spans.len() > maximum
+        || words.0.len() > raw_maximum
+        || words.1.len() > raw_maximum
+        || spans.iter().any(|span| span.ordinal >= original_count)
+    {
+        return Err(fail(location));
+    }
+    let Some(suffix) = words.1.strip_prefix(words.0) else {
+        return Ok(None);
+    };
+    if !suffix
+        .iter()
+        .any(|word| (word >> 6) & 31 == 4 && word & 63 >= 40 && word >> 11 < 40)
+    {
+        return Ok(None);
+    }
+    let before = raw::Body::read_bounded(words.0, raw_maximum, location, deadline)?;
+    validate_original(
+        definition, spans, words.0, &before, false, location, deadline,
+    )?;
+    let appended = inserted_body(suffix, maximum - original_count, location, deadline)?;
+    let mut commands = definition.program.commands().to_vec();
+    commands.extend_from_slice(appended.replacement.commands());
+    let mut retained = (0..original_count).map(Some).collect::<Vec<_>>();
+    retained.extend(appended.retained);
+    location.check_deadline(deadline)?;
+    Ok(Some(Program {
+        replacement: TeletextEnhancementProgram::new(commands).map_err(|_| fail(location))?,
+        retained,
+    }))
+}
+
+fn inserted_body(
+    words: &[u32],
+    maximum: usize,
+    location: Location,
+    deadline: Instant,
+) -> Result<Program> {
+    let raw_maximum = maximum
+        .checked_mul(2)
+        .ok_or_else(|| fail(location))?
+        .min(507);
+    let after = raw::Body::read_bounded(words, raw_maximum, location, deadline)?;
     let mut commands = Vec::new();
     let mut retained = Vec::new();
     for entry in &after.entries {
@@ -500,7 +558,7 @@ mod first_body_tests {
     };
     use std::time::Duration;
 
-    fn empty() -> TeletextEnhancementObjectDefinition {
+    pub(super) fn empty() -> TeletextEnhancementObjectDefinition {
         TeletextEnhancementObjectDefinition {
             identity: TeletextObjectIdentity::local(
                 TeletextPageAddress {
@@ -513,10 +571,10 @@ mod first_body_tests {
             program: TeletextEnhancementProgram::new(vec![]).unwrap(),
         }
     }
-    fn word(address: u32, mode: u32, data: u32) -> u32 {
+    pub(super) fn word(address: u32, mode: u32, data: u32) -> u32 {
         address | (mode << 6) | (data << 11)
     }
-    fn location() -> Location {
+    pub(super) fn location() -> Location {
         Location {
             page: 0,
             subcode: 0,
@@ -571,3 +629,7 @@ mod first_body_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "resource/appended_body_tests.rs"]
+mod appended_body_tests;

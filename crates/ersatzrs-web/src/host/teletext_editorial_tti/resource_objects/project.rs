@@ -275,23 +275,35 @@ fn program_with_added_positions(
     if added.definition() != mapped.definition {
         return Err(invalid());
     }
-    if !mapped.definition.program.commands().is_empty() {
-        return program(mapped, body, original, limits, deadline);
-    }
-    let rebuilt = structural::parse_first_body(
+    let rebuilt = if mapped.definition.program.commands().is_empty() {
+        structural::parse_first_body(
+            mapped.definition,
+            &body.spans,
+            (&body.before, &body.after),
+            limits.2.max_commands,
+            mapped.location,
+            deadline,
+        )?
+    } else if let Some(appended) = structural::parse_appended_body(
         mapped.definition,
         &body.spans,
         (&body.before, &body.after),
         limits.2.max_commands,
         mapped.location,
         deadline,
-    )?;
+    )? {
+        appended
+    } else {
+        return program(mapped, body, original, limits, deadline);
+    };
     let constructor = if rebuilt
         .replacement
         .commands()
         .iter()
-        .any(|command| matches!(command, TeletextEnhancementCommand::SetPosition { .. }))
-    {
+        .zip(&rebuilt.retained)
+        .any(|(command, original)| {
+            original.is_none() && matches!(command, TeletextEnhancementCommand::SetPosition { .. })
+        }) {
         TeletextResourceObjectProgramOverlay::new_with_inserted_positions
     } else {
         TeletextResourceObjectProgramOverlay::new

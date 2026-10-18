@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1/F3: authored object bodies; F6 and engine acceptance open'
+current_focus = 'P9A-04 F6: selected caption initialization after capacity wait; engine acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -67,12 +67,20 @@ V18 Add definitions, exact native output, repeat/cold reopen and explicit
 publication. Canonical tmp/phase9-f1-first-position/work.json/source-context.json
 retain the native RED,31 unit/native passes and an actual pinned QTM1.0 menu edit,
 SaveAs, unchanged-byte import, preview and separate publication/recovery pass.
-Checkpoint SHA belongs to post-commit.json. New positions in populated added or
+Checkpoint e2a01b0e is local; post-commit.json owns the full SHA. Interior/coordinated positions in added or
 original objects remain open; no permanent limitation is accepted.
-Next F1/F3 product action: confirm the new-position insertion failure on a filled
-added definition with a focused native RED, then extend only that necessary
-reconstruction/folding boundary. Reuse this initial-body/editor evidence where
-unchanged; do not replay the whole AV/client chain for every row variant.
+F1/F3 later row appends now pass after actual RED ActivePositionOrder(1,8→1,4).
+Canonical tmp/phase9-f1-trailing-position/work.json/source-context.json records
+12 passes (nine unit/three native): exact unchanged body and semantic anchors,
+shared checked suffix, fresh receipt, V18 folding, complete native units,
+export/cold reopen and unchanged publication/other channel. Invalid positions,
+changed/dropped anchors and non-added originals reject. First-body actual QTM,
+admin/publication and ordinary transport proof are reused at unchanged seams.
+Interior/coordinated prefix edits and original-resource positions remain open.
+Next F6 product action: qualify bounded selected-cue bootstrap through existing
+source-preparation/wrapper/carriage paths, then prove actual Copy-caption handoff.
+No repeat of unchanged rawCopy/conversion negatives, held-file API prerequisite,
+new infrastructure or external-decoder maintenance.
 F1 localized Add/Copy and F2 boundary UI proofs remain valid at
 tmp/phase9-f1-first-definition/work.json and
 tmp/phase9-f2-boundary-preview/work.json. Full resource/set, metadata/template and
