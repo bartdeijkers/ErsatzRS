@@ -9,6 +9,9 @@ use ersatzrs_core::scheduling::{
 use ersatzrs_domain::{Playout, PlayoutScheduleKind, TeletextOverrideState};
 use std::sync::Arc;
 
+#[path = "scripted_controls/continue_after_reopen.rs"]
+mod continue_after_reopen;
+
 async fn bindings(fixture: &Fixture) -> Vec<(i64, String, i64, bool, i64)> {
     sqlx::query_as(
         r#"SELECT "ChannelId","AddonId","ProfileId","Enabled","Revision"

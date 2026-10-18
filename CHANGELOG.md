@@ -245,6 +245,8 @@ release section when tagging a release.
   choices through shared application controls without changing the admin base
   or activating packages. Publish cursor intervals atomically with the schedule,
   preserving target revisions, rollback, expiry and restart observations.
+  Fresh Continue builds reload the channel base after reopening while retaining
+  the earlier profile intervals and programme checkpoints.
   Bound the actual worker and snapshot reads; active overrides cannot emit a
   stale base artifact. Localized Health explains unavailable selections and pages
   that are not ready, with headed proof in every culture and both themes. Scoped
