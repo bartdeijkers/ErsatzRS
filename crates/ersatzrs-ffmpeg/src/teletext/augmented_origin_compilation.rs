@@ -262,6 +262,7 @@ pub(super) fn compile_augmented_with_context_and_usage<'a>(
             }) => Some(command),
             _ => None,
         });
+        physical.bind_original_object_sources(|source| augmented.original_object_source(source));
         Ok(EncodedTeletextAugmentedOriginProgram {
             augmented,
             physical,

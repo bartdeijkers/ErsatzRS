@@ -378,6 +378,7 @@ fn nested_header_factory(outer_type: TeletextObjectType, child_type: TeletextObj
         outer_type,
         child_type,
     );
+    assert_original_object_sources(display.normalized().encoded(), outer, child);
     let replay = display.normalized().physical().replay();
     assert_selected_child_a(replay.display_resolution(), replay.glyph_intent());
     assert_untouched_header_tail(original.display_resolution(), replay.display_resolution());
@@ -402,6 +403,47 @@ fn nested_header_factory(outer_type: TeletextObjectType, child_type: TeletextObj
             .collect::<Vec<_>>()
     };
     assert_eq!(rows(physical.records), rows(baseline.records));
+}
+
+fn assert_original_object_sources(
+    packed: &EncodedTeletextLocalObjectProgram,
+    outer: TeletextObjectIdentity,
+    child: TeletextObjectIdentity,
+) {
+    let mut outer_spans = 0;
+    for span in packed.command_positions() {
+        match span.source().object {
+            Some(identity) if identity == outer => {
+                outer_spans += 1;
+                let expected = match span.source().command {
+                    1 => TeletextMainCompositionSource::HeaderPosition { command: 0 },
+                    2 => TeletextMainCompositionSource::Object {
+                        identity,
+                        command: 1,
+                    },
+                    other => panic!("unexpected actual wrapper command {other}"),
+                };
+                assert_eq!(span.original_object_source(), Some(expected));
+            }
+            Some(identity) if identity == child => assert_eq!(
+                span.original_object_source(),
+                Some(TeletextMainCompositionSource::Object {
+                    identity,
+                    command: span.source().command,
+                })
+            ),
+            _ => assert_eq!(span.original_object_source(), None),
+        }
+    }
+    assert_eq!(outer_spans, 2);
+    // Final rebinding cannot fall back to an actual ordinal when a producer
+    // provides no original correspondence, including previously retained spans.
+    let mut unmapped = packed.clone();
+    unmapped.bind_original_object_sources(|_| None);
+    assert!(unmapped
+        .command_positions()
+        .iter()
+        .all(|span| span.original_object_source().is_none()));
 }
 
 fn qualified_outer_background(

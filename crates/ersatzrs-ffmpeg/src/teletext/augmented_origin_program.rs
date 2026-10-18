@@ -122,6 +122,24 @@ pub struct TeletextAugmentedOriginProgram<'a> {
     carriers: Vec<TeletextAugmentedOriginCarrier>,
 }
 impl TeletextAugmentedOriginProgram<'_> {
+    /// Preserve retained object ordinals and distinguish the derived AP writer.
+    /// Neither role identifies an original physical instance or grants edits.
+    pub(super) fn original_object_source(
+        &self,
+        source: TeletextEnhancementSource,
+    ) -> Option<TeletextMainCompositionSource> {
+        source.object?;
+        if let Some(TeletextAugmentedOriginSource::RetainedObject { identity, command }) =
+            self.emitter_source(source)
+        {
+            return Some(TeletextMainCompositionSource::Object { identity, command });
+        }
+        self.object_sources
+            .as_ref()?
+            .materialized_position(source)
+            .map(|command| TeletextMainCompositionSource::HeaderPosition { command })
+    }
+
     #[must_use]
     pub const fn placement(&self) -> &TeletextOriginCarrierPlacement<'_> {
         self.placement

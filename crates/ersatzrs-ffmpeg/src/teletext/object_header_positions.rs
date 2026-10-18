@@ -30,6 +30,12 @@ pub(super) struct ObjectHeaderSources {
 }
 
 impl ObjectHeaderSources {
+    /// The only derived body writer materializes its original leading AP.
+    pub(super) fn materialized_position(&self, actual: TeletextEnhancementSource) -> Option<usize> {
+        let mapping = self.inserted.get(&actual.object?)?;
+        (mapping.get(actual.command) == Some(&None)).then_some(0)
+    }
+
     /// Derived setters cannot become original writers or transmission witnesses.
     pub(super) fn retained_source(
         &self,

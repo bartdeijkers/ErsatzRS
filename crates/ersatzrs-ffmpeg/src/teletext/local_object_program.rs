@@ -81,6 +81,7 @@ impl TeletextLocalObjectDefinitionPosition {
 pub struct TeletextCompiledCommandPosition {
     source: TeletextEnhancementSource,
     retained_source: Option<TeletextEnhancementSource>,
+    object_header_position: Option<usize>,
     first_word: usize,
     semantic_word: usize,
     original_local_command: Option<usize>,
@@ -110,6 +111,26 @@ impl TeletextCompiledCommandPosition {
     pub const fn original_local_command(&self) -> Option<usize> {
         self.original_local_command
     }
+
+    /// Read-only correspondence with the original or directly supplied catalogue.
+    /// Normalized packing rebinds every object span to its owned producer map;
+    /// generated carriers have no original source. A header-position writer is
+    /// coupled to this span's actual full object identity and never authorizes
+    /// operand edits or original C.2 timing. This is not publication permission.
+    #[must_use]
+    pub fn original_object_source(&self) -> Option<super::TeletextMainCompositionSource> {
+        let identity = self.source.object?;
+        if let Some(command) = self.object_header_position {
+            return Some(super::TeletextMainCompositionSource::HeaderPosition { command });
+        }
+        let retained = self.retained_source?;
+        (retained.object == Some(identity)).then_some(
+            super::TeletextMainCompositionSource::Object {
+                identity,
+                command: retained.command,
+            },
+        )
+    }
 }
 
 /// Immutable main program and all supplied local definitions for this owner.
@@ -123,6 +144,35 @@ pub struct EncodedTeletextLocalObjectProgram {
 }
 
 impl EncodedTeletextLocalObjectProgram {
+    pub(super) fn bind_original_object_sources(
+        &mut self,
+        mut original: impl FnMut(
+            TeletextEnhancementSource,
+        ) -> Option<super::TeletextMainCompositionSource>,
+    ) {
+        for position in &mut self.commands {
+            let Some(identity) = position.source.object else {
+                continue;
+            };
+            position.retained_source = None;
+            position.object_header_position = None;
+            match original(position.source) {
+                Some(super::TeletextMainCompositionSource::Object {
+                    identity: retained,
+                    command,
+                }) if retained == identity => {
+                    position.retained_source = Some(TeletextEnhancementSource {
+                        object: Some(identity),
+                        command,
+                    });
+                }
+                Some(super::TeletextMainCompositionSource::HeaderPosition { command }) => {
+                    position.object_header_position = Some(command);
+                }
+                _ => {}
+            }
+        }
+    }
     pub(super) fn bind_retained_object_sources(
         &mut self,
         mut original: impl FnMut(TeletextEnhancementSource) -> Option<TeletextEnhancementSource>,
@@ -524,6 +574,7 @@ impl Input<'_> {
             emission.commands.push(TeletextCompiledCommandPosition {
                 source: location,
                 retained_source: Some(location),
+                object_header_position: None,
                 first_word,
                 semantic_word: emission.index - 1,
                 original_local_command: None,

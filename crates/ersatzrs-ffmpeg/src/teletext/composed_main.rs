@@ -431,6 +431,13 @@ pub struct EncodedTeletextPhysicalDisplayProgram {
 }
 
 impl EncodedTeletextPhysicalDisplayProgram {
+    pub(super) fn bind_original_object_sources(
+        &mut self,
+        original: impl FnMut(TeletextEnhancementSource) -> Option<TeletextMainCompositionSource>,
+    ) {
+        self.encoded.bind_original_object_sources(original);
+    }
+
     pub(super) fn bind_original_local_commands(
         &mut self,
         original: impl FnMut(TeletextEnhancementSource) -> Option<usize>,

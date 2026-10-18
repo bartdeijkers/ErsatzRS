@@ -4,7 +4,10 @@ use ersatzrs_domain::{
     TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementProgram,
     TeletextObjectIdentity,
 };
-use ersatzrs_ffmpeg::teletext::EncodedTeletextLocalObjectProgram;
+use ersatzrs_ffmpeg::teletext::{
+    EncodedTeletextLocalObjectProgram, TeletextCompiledCommandPosition,
+    TeletextMainCompositionSource,
+};
 use std::time::Instant;
 pub(super) struct Candidate {
     pub identity: TeletextObjectIdentity,
@@ -50,10 +53,15 @@ pub(super) fn parse(
     while ordinal < definition.program.commands().len() {
         location.check_deadline(deadline)?;
         let command = definition.program.commands()[ordinal];
-        if cluster_command(definition, program, ordinal, styles, location)?
-            || actual
-                .get(cursor)
-                .is_some_and(|entry| entry.editable(styles).is_some())
+        let derived = program
+            .command_positions()
+            .iter()
+            .any(|position| header_ordinal(position, definition) == Some(ordinal));
+        if !derived
+            && (cluster_command(definition, program, ordinal, styles, location)?
+                || actual
+                    .get(cursor)
+                    .is_some_and(|entry| entry.editable(styles).is_some()))
         {
             let start = ordinal;
             while ordinal < definition.program.commands().len()
@@ -117,8 +125,8 @@ fn consume_anchor(
 ) -> Result<usize> {
     let (definition, ordinal) = source;
     let mut positions = program.command_positions().iter().filter(|position| {
-        position.source().object == Some(definition.identity)
-            && position.source().command == ordinal
+        original_ordinal(position, definition) == Some(ordinal)
+            || header_ordinal(position, definition) == Some(ordinal)
     });
     let position = positions.next().ok_or_else(|| fail(location))?;
     if positions.next().is_some() {
@@ -192,12 +200,21 @@ fn cluster_command(
     let count = program
         .command_positions()
         .iter()
-        .filter(|position| {
-            position.source().object == Some(definition.identity)
-                && position.source().command == ordinal
-        })
+        .filter(|position| original_ordinal(position, definition) == Some(ordinal))
+        .count();
+    let derived = program
+        .command_positions()
+        .iter()
+        .filter(|position| header_ordinal(position, definition) == Some(ordinal))
         .count();
     let hidden = alignment::hidden_position(command).is_some();
+    if derived != 0 {
+        return if hidden && count == 0 && derived == 1 {
+            Ok(false)
+        } else {
+            Err(fail(location))
+        };
+    }
     if (hidden && count != 0) || (!hidden && count != 1) {
         return Err(fail(location));
     }
@@ -238,14 +255,15 @@ fn original_spans(
         .command_positions()
         .iter()
         .filter(|position| {
-            position.source().object == Some(definition.identity)
-                && matches!(
-                    definition.program.commands().get(position.source().command),
+            original_ordinal(position, definition).is_some_and(|ordinal| {
+                matches!(
+                    definition.program.commands().get(ordinal),
                     Some(TeletextEnhancementCommand::AtColumn {
                         operation: TeletextColumnOperation::Drcs { .. },
                         ..
                     })
                 )
+            })
         })
         .map(|position| {
             Ok(raw::OriginalSpan {
@@ -257,10 +275,42 @@ fn original_spans(
                     .semantic_word()
                     .checked_sub(start)
                     .ok_or_else(|| fail(location))?,
-                ordinal: position.source().command,
+                ordinal: original_ordinal(position, definition).ok_or_else(|| fail(location))?,
             })
         })
         .collect()
+}
+
+fn original_ordinal(
+    position: &TeletextCompiledCommandPosition,
+    definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+) -> Option<usize> {
+    match position.original_object_source()? {
+        TeletextMainCompositionSource::Object { identity, command }
+            if identity == definition.identity && position.source().object == Some(identity) =>
+        {
+            Some(command)
+        }
+        _ => None,
+    }
+}
+
+fn header_ordinal(
+    position: &TeletextCompiledCommandPosition,
+    definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+) -> Option<usize> {
+    let TeletextMainCompositionSource::HeaderPosition { command } =
+        position.original_object_source()?
+    else {
+        return None;
+    };
+    (position.source().object == Some(definition.identity)
+        && definition
+            .program
+            .commands()
+            .get(command)
+            .is_some_and(|command| alignment::hidden_position(command).is_some()))
+    .then_some(command)
 }
 fn finish(
     mut output: Candidate,

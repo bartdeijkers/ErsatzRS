@@ -253,7 +253,10 @@ async fn prepare_inner(
     SelectionLog,
 )> {
     if query.channel.is_some_and(|id| id > 0) {
-        return prepare_channel_window(state, query, paths, deadline, session).await;
+        return Box::pin(prepare_channel_window(
+            state, query, paths, deadline, session,
+        ))
+        .await;
     }
     let selected = select(state, query).await?;
     state
