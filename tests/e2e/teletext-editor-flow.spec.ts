@@ -276,3 +276,98 @@ for (const javaScriptEnabled of [true, false]) for (const dark of [false, true])
     } finally { await context.close(); fixture.close(); }
   });
 }
+
+// Read-only boundary changes require the preview integration, not another full
+// export/import/publication/stream cycle. Those unchanged receipts retain scope.
+for (const javaScriptEnabled of [true, false]) for (const dark of [false, true]) {
+  test(`teletext editing boundaries (JavaScript ${javaScriptEnabled}, dark ${dark})`, async ({ browser, baseURL }, testInfo) => {
+    test.skip(!databasePath, 'Requires the runner-owned disposable database.');
+    test.setTimeout(300_000);
+    testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
+    const fixture = new TeletextChannelFixture(databasePath!, { authoredPages: true, editorPages: true });
+    fixture.setAuthoringPolicy();
+    const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    try {
+      await page.request.post('/admin-api/settings/ui/save', {
+        form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
+      });
+      await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, javaScriptEnabled);
+      const day = await profile(page, fixture, 'day', javaScriptEnabled);
+      const night = await profile(page, fixture, 'night', javaScriptEnabled);
+      const originals: string[] = [];
+      for (const [index, theme, selected] of [[0, 'day', day], [1, 'night', night]] as const) {
+        await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, javaScriptEnabled);
+        originals.push(await original(page, fixture, theme, selected, javaScriptEnabled));
+      }
+      const safe = fixture.safetySnapshot();
+      const designs = fixture.designs();
+      for (const [language, module] of cultures) {
+        const translated = text(module);
+        await page.request.post('/admin-api/settings/ui/save', {
+          form: { language, is_dark_mode: String(dark) }, maxRedirects: 0,
+        });
+        for (const [index, theme] of [[0, 'day'], [1, 'night']] as const) {
+          await page.goto(originals[index]); await ready(page, javaScriptEnabled);
+          const boundaries = page.getByTestId('teletext-preview-authoring');
+          await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
+          await expect(boundaries.getByRole('heading', { name: translated('TeletextPreviewEditorialTitle'), exact: true })).toBeVisible();
+          await expect(boundaries).toContainText(translated('TeletextPreviewEditorialHelp'));
+          await expect(boundaries.getByTestId('teletext-preview-authoring-producer')).toHaveAttribute('data-addon-id', fixture.addonId);
+          await expect(boundaries.getByTestId('teletext-preview-template')).toHaveText(`synthetic-editor · ${translated('Revision')} r1`);
+          await expect(boundaries.getByTestId('teletext-preview-theme')).toHaveText(theme);
+          const rows = boundaries.getByTestId('teletext-preview-region');
+          await expect(rows).toHaveCount(3);
+          for (const [id, extent, permission] of [
+            ['free-title', '2–2 / 1–20', 'TeletextPreviewFree'],
+            ['custom-zone', '3–3 / 1–20', 'TeletextPreviewZone'],
+            ['guide-content', '4–4 / 1–20', 'TeletextPreviewGenerated'],
+          ]) {
+            await expect(boundaries.locator(`[data-region="${id}"]`).locator('th,td')).toHaveText([id, translated('TeletextPreviewPanelMain'), extent, translated(permission)]);
+          }
+          await expect(boundaries.getByTestId('teletext-preview-dynamic-field').locator('th,td')).toHaveText(['guide-title', 'guide-content', 'guide.title']);
+          await expect(boundaries.locator('input,button,select,textarea,form')).toHaveCount(0);
+          await page.getByTestId('teletext-preview-model').locator('nav a[href*="page=201"]').click(); await ready(page, javaScriptEnabled);
+          await expect(page.getByTestId('teletext-preview-model')).toHaveAttribute('data-page', '201');
+          await expect(page.getByTestId('teletext-preview-theme')).toHaveText(theme);
+          await expect(page.getByTestId('teletext-preview-region')).toHaveCount(3);
+          await boundaries.screenshot({ path: testInfo.outputPath(`${module}-${theme}-boundaries.png`) });
+          if (index === 0) {
+            await page.setViewportSize({ width: 320, height: 900 });
+            await expect.poll(async () => {
+              const drawer = await page.locator('[data-nav-drawer]').boundingBox();
+              return drawer ? drawer.x + drawer.width : 0;
+            }).toBeLessThanOrEqual(1);
+            await boundaries.scrollIntoViewIfNeeded();
+            await expect.poll(() => boundaries.evaluate(element => {
+              const bounds = element.getBoundingClientRect();
+              return bounds.left >= 0 && bounds.right <= innerWidth
+                && Array.from(element.querySelectorAll('th,td,h4')).every(cell =>
+                  cell.scrollWidth <= cell.clientWidth + 1);
+            })).toBe(true);
+            await page.screenshot({ path: testInfo.outputPath(`${module}-boundaries-320.png`), animations: 'disabled' });
+            if (language === 'en-us') {
+              await page.setViewportSize({ width: 640, height: 900 });
+              await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+              await boundaries.scrollIntoViewIfNeeded();
+              await expect.poll(() => page.evaluate(() => document.documentElement.getBoundingClientRect().right <= innerWidth + 1)).toBe(true);
+              await page.screenshot({ path: testInfo.outputPath('boundaries-200-percent.png') });
+              await page.evaluate(() => { document.documentElement.style.zoom = ''; });
+              await page.setViewportSize({ width: 1920, height: 1080 });
+              await boundaries.screenshot({ path: testInfo.outputPath('boundaries-1920.png') });
+            }
+            await page.setViewportSize({ width: 1280, height: 900 });
+          }
+        }
+        expect(fixture.safetySnapshot()).toEqual(safe);
+        expect(fixture.designs()).toEqual(designs);
+        expect(fixture.calls()).toEqual(['day', 'night']);
+        expect(fixture.unchangedPackage()).toBe(true);
+        expect(errors).toEqual([]);
+      }
+    } finally { await context.close(); fixture.close(); }
+  });
+}

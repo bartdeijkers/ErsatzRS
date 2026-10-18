@@ -17,8 +17,21 @@ pub struct TeletextDraftPreviewData {
     pub resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
     pub navigation: Vec<TeletextNavigationLink>,
     pub diagnostics: Vec<TeletextDraftDiagnosticData>,
+    pub authoring: Vec<TeletextDraftAuthoringData>,
     /// Unavailable observation remains distinct from observed absent pointers.
     pub publication: Option<TeletextDraftPublicationObservation>,
+}
+
+/// Historical declarations for the selected owner, never submitted permissions.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeletextDraftAuthoringData {
+    pub producer_index: usize,
+    pub binding_index: usize,
+    pub addon_id: String,
+    pub template: ersatzrs_addon_contract::TeletextAuthoringTemplateWire,
+    pub theme: ersatzrs_addon_contract::TeletextAuthoringThemeWire,
+    pub regions: Vec<ersatzrs_addon_contract::TeletextAuthoringRegionWire>,
+    pub dynamic_fields: Vec<ersatzrs_addon_contract::TeletextAuthoringDynamicFieldWire>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,8 +190,24 @@ fn project_preview(
         resource_objects: preview.resource_objects().to_vec(),
         navigation: preview.navigation().to_vec(),
         diagnostics,
+        authoring: preview.authoring().iter().map(project_authoring).collect(),
         publication: preview.publication().map(project_publication),
     })
+}
+
+#[cfg(feature = "ssr")]
+fn project_authoring(
+    metadata: &crate::host::teletext_authoring::TeletextAuthoringPageMetadata,
+) -> TeletextDraftAuthoringData {
+    TeletextDraftAuthoringData {
+        producer_index: metadata.producer_index,
+        binding_index: metadata.binding_index,
+        addon_id: metadata.addon_id.clone(),
+        template: metadata.template.clone(),
+        theme: metadata.theme.clone(),
+        regions: metadata.regions.clone(),
+        dynamic_fields: metadata.dynamic_fields.clone(),
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -299,6 +328,73 @@ mod tests {
     use crate::host::teletext_authoring::{
         TeletextAuthoringPublicationObservation, TeletextAuthoringPublicationState as State,
     };
+
+    #[test]
+    fn authoring_projection_preserves_typed_regions_bindings_and_public_overrides() {
+        use crate::host::teletext_authoring::TeletextAuthoringPageMetadata;
+        let captured: ersatzrs_addon_contract::TeletextAuthoringMetadataWire =
+            serde_json::from_value(serde_json::json!({
+                "schema_version":1,"template":{"id":"synthetic-grid","revision":"r7"},
+                "theme":{"id":"night","overrides":[
+                    {"key":"accent","value":{"kind":"colour","red":0,"green":1,"blue":15}},
+                    {"key":"layout","value":{"kind":"layout","id":"compact"}},
+                    {"key":"spacing","value":{"kind":"number","value":-2}},
+                    {"key":"footer","value":{"kind":"boolean","value":false}}
+                ]},
+                "pages":[{"page":{"page":124,"subcode":32},"regions":[
+                    {"id":"title","kind":"free","area":"main","row":2,"column":1,"width":20,"height":1},
+                    {"id":"custom","kind":"zone","area":"left_panel","row":3,"column":0,"width":4,"height":2},
+                    {"id":"guide","kind":"generated","area":"right_panel","row":4,"column":1,"width":3,"height":1}
+                ],"dynamic_fields":[{"id":"guide-title","region":"guide","binding":"guide.title"}]}]
+            })).unwrap();
+        let page = &captured.pages[0];
+        let metadata = TeletextAuthoringPageMetadata {
+            producer_index: 1,
+            binding_index: 3,
+            addon_id: "synthetic.authoring".to_owned(),
+            template: captured.template.clone(),
+            theme: captured.theme.clone(),
+            regions: page.regions.clone(),
+            dynamic_fields: page.dynamic_fields.clone(),
+        };
+        let projected = project_authoring(&metadata);
+        let json = serde_json::to_value(&projected).unwrap();
+        assert_eq!(json.as_object().unwrap().len(), 7);
+        assert_eq!(json["producer_index"], 1);
+        assert_eq!(json["binding_index"], 3);
+        assert_eq!(json["addon_id"], "synthetic.authoring");
+        assert_eq!(
+            json["template"],
+            serde_json::to_value(&captured.template).unwrap()
+        );
+        assert_eq!(
+            json["theme"],
+            serde_json::to_value(&captured.theme).unwrap()
+        );
+        assert_eq!(
+            json["regions"],
+            serde_json::to_value(&page.regions).unwrap()
+        );
+        assert_eq!(
+            json["dynamic_fields"],
+            serde_json::to_value(&page.dynamic_fields).unwrap()
+        );
+        let roundtrip: TeletextDraftAuthoringData = serde_json::from_value(json).unwrap();
+        assert!(roundtrip == projected);
+        let debug = format!("{metadata:?}");
+        for text in [
+            "synthetic.authoring",
+            "synthetic-grid",
+            "night",
+            "guide.title",
+            "compact",
+        ] {
+            assert!(
+                !debug.contains(text),
+                "preview metadata Debug must remain redacted"
+            );
+        }
+    }
 
     #[test]
     fn publication_projection_preserves_observed_fences_and_unavailable_observation() {

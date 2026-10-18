@@ -16,7 +16,7 @@ use std::time::Instant;
 mod publication;
 
 const POLICY_KEY: &str = "teletext.authoring.policy";
-const SCRIPT: &str = r#"test "$1" = pages || exit 9
+pub(super) const SCRIPT: &str = r#"test "$1" = pages || exit 9
  test "$ERSATZRS_ADDON_CAPABILITY" = teletext.pages.v2 || exit 10
  theme="$ERSATZRS_ADDON_SETTING_THEME"
  case "$theme" in day|night) ;; *) exit 11;; esac
@@ -172,6 +172,7 @@ async fn capacity_one_static_chain_saves_reloads_projects_and_isolates_two_profi
         assert_eq!(saved.identity.channel_id, channel);
         let preview = saved.preview.unwrap();
         assert_eq!(preview.pages(), &[channel_documents::address(123, 16)]);
+        assert!(preview.authoring().is_empty()); // V2 must not acquire invented scopes.
         assert!(preview.raster().unwrap().diagnostics().is_empty());
         assert_eq!(preview.navigation()[0].target.page.get(), 123);
         let raster = preview
@@ -186,6 +187,7 @@ async fn capacity_one_static_chain_saves_reloads_projects_and_isolates_two_profi
         .await
         .unwrap();
         assert_eq!(restored.raster(), Some(&raster));
+        assert!(restored.authoring().is_empty());
         drop(restored);
         rasters.push(raster);
     }

@@ -10,6 +10,11 @@ use ersatzrs_app::{
 use ersatzrs_domain::{TeletextColourPixel, TeletextPageContract};
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextRasterPixel};
 use ersatzrs_web::host::{
+    teletext_authoring::{
+        prepare_static_teletext_design, preview_original_teletext_design,
+        TeletextAuthoringIdentity, TeletextAuthoringPreview, TeletextAuthoringPreviewRequest,
+        TeletextAuthoringScope,
+    },
     teletext_channel_documents::{
         prepare_channel_teletext_document_candidate, ChannelTeletextDocumentEncodingError,
         EncodedChannelTeletextDocumentCandidate,
@@ -54,6 +59,248 @@ pub(super) fn response(theme: &str, page: u16, subcode: u16) -> Value {
             }]
         }
     })
+}
+
+fn two_owner_response(theme: &str) -> Value {
+    let mut value = response(theme, 123, 16);
+    let second = response(theme, 123, 32);
+    for key in ["pages", "page_enhancements", "mot_selections"] {
+        value["service"][key]
+            .as_array_mut()
+            .unwrap()
+            .push(second["service"][key][0].clone());
+    }
+    let mut declaration = second["authoring"]["pages"][0].clone();
+    // Different declarations for the other subpage expose accidental owner union.
+    declaration["regions"][1]["id"] = json!("other-subpage-zone");
+    declaration["dynamic_fields"][0]["id"] = json!("other-guide-title");
+    value["authoring"]["pages"]
+        .as_array_mut()
+        .unwrap()
+        .push(declaration);
+    value
+}
+
+pub(super) async fn controller_fixture() -> super::authoring::AuthoringFixture {
+    let fixture = Fixture::new_persistent().await;
+    install(&fixture).await;
+    std::fs::write(
+        fixture.root.path().join("package/fixture.sh"),
+        super::authoring::SCRIPT.replace("teletext.pages.v2", "teletext.pages.v3"),
+    )
+    .unwrap();
+    let hash = calculate_addon_content_sha256(&fixture.root.path().join("package"))
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "AddonInstallation" SET "ContentSha256"=? WHERE "AddonId"=?"#)
+        .bind(hash)
+        .bind(ADDON)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    for theme in ["day", "night"] {
+        write(&fixture, theme, &two_owner_response(theme));
+    }
+    let profiles = [
+        fixture.profile("Captured day", "day", "good").await,
+        fixture.profile("Captured night", "night", "good").await,
+    ];
+    for (channel, profile) in [1, 2].into_iter().zip(&profiles) {
+        fixture.bind(channel, profile, None).await;
+    }
+    super::authoring::setting(
+        &fixture,
+        "teletext.authoring.policy",
+        &super::authoring::policy().to_string(),
+    )
+    .await;
+    super::authoring::setting(&fixture, MAX_CONCURRENT_SETTING, "1").await;
+    super::authoring::setting(&fixture, "pages.language", "en-us").await;
+    super::authoring::AuthoringFixture { fixture, profiles }
+}
+
+pub(super) fn assert_captured_authoring(
+    preview: &TeletextAuthoringPreview,
+    theme: &str,
+    subcode: u16,
+) {
+    assert_eq!(
+        preview.raster().unwrap().owner(),
+        channel_documents::address(123, subcode)
+    );
+    let expected = two_owner_response(theme);
+    let page = usize::from(subcode == 32);
+    assert_eq!(preview.authoring().len(), 1);
+    let declaration = &preview.authoring()[0];
+    assert_eq!(declaration.producer_index, 0);
+    assert_eq!(declaration.binding_index, 0);
+    assert_eq!(declaration.addon_id, ADDON);
+    assert_eq!(
+        serde_json::to_value(&declaration.template).unwrap(),
+        expected["authoring"]["template"]
+    );
+    assert_eq!(
+        serde_json::to_value(&declaration.theme).unwrap(),
+        expected["authoring"]["theme"]
+    );
+    assert_eq!(
+        serde_json::to_value(&declaration.regions).unwrap(),
+        expected["authoring"]["pages"][page]["regions"]
+    );
+    assert_eq!(
+        serde_json::to_value(&declaration.dynamic_fields).unwrap(),
+        expected["authoring"]["pages"][page]["dynamic_fields"]
+    );
+}
+
+pub(super) async fn edit_profile_and_remove_package(fixture: &super::authoring::AuthoringFixture) {
+    let application = &fixture.fixture.state.application;
+    let profile = &fixture.profiles[0];
+    let mut settings = profile.settings.clone();
+    settings
+        .iter_mut()
+        .find(|setting| setting.key == "THEME")
+        .unwrap()
+        .value = TeletextProfileValue::Literal("night".to_owned());
+    let installation = application
+        .teletext_installation_snapshot(ADDON)
+        .await
+        .unwrap()
+        .snapshot
+        .unwrap();
+    let changed = saved(
+        application
+            .save_teletext_profile(&TeletextProfileSave {
+                addon_id: ADDON.to_owned(),
+                name: profile.name.clone(),
+                settings,
+                expected_installation: installation,
+                existing: Some((profile.id, profile.revision)),
+            })
+            .await
+            .unwrap(),
+    )
+    .profile;
+    assert_eq!(changed.revision, profile.revision + 1);
+    sqlx::query(r#"DELETE FROM "AddonInstallation" WHERE "AddonId"=?"#)
+        .bind(ADDON)
+        .execute(&fixture.fixture.state.pool)
+        .await
+        .unwrap();
+    std::fs::remove_dir_all(fixture.fixture.root.path().join("package")).unwrap();
+}
+
+pub(super) async fn selected_preview(
+    fixture: &Fixture,
+    identity: TeletextAuthoringIdentity,
+    subcode: Option<u16>,
+) -> TeletextAuthoringPreview {
+    preview_original_teletext_design(
+        &fixture.state.application,
+        TeletextAuthoringPreviewRequest {
+            channel_id: identity.channel_id,
+            design_id: identity.design_id,
+            revision: identity.revision,
+            owner: subcode.map(|subcode| channel_documents::address(123, subcode)),
+        },
+        designs::deadline(),
+    )
+    .await
+    .unwrap()
+}
+
+pub(super) async fn assert_owner_required(fixture: &Fixture, identity: TeletextAuthoringIdentity) {
+    let mut request = super::authoring::preview_request(identity);
+    request.owner = None;
+    let error =
+        preview_original_teletext_design(&fixture.state.application, request, designs::deadline())
+            .await
+            .unwrap_err();
+    assert_eq!(
+        error.status,
+        ersatzrs_web::host::teletext_authoring::TeletextAuthoringStatus::InvalidInput
+    );
+}
+
+#[tokio::test]
+async fn base_preview_keeps_captured_owner_boundaries_after_profile_edit_package_loss_and_reopen() {
+    let mut fixture = controller_fixture().await;
+    let mut originals = Vec::new();
+    for (channel, theme) in [(1, "day"), (2, "night")] {
+        let saved = prepare_static_teletext_design(
+            &fixture.fixture.state.application,
+            super::authoring::AuthoringFixture::request(channel, fixture.observe(channel).await),
+            designs::deadline(),
+        )
+        .await
+        .unwrap();
+        let preview = saved.preview.unwrap();
+        assert_eq!(preview.scope(), TeletextAuthoringScope::Base);
+        assert_captured_authoring(&preview, theme, 16);
+        let raster = preview.raster().unwrap().clone();
+        drop(preview);
+        assert_owner_required(&fixture.fixture, saved.identity).await;
+        let initial = selected_preview(&fixture.fixture, saved.identity, Some(16)).await;
+        assert_captured_authoring(&initial, theme, 16);
+        assert_eq!(initial.raster(), Some(&raster));
+        drop(initial);
+        let second = selected_preview(&fixture.fixture, saved.identity, Some(32)).await;
+        assert_captured_authoring(&second, theme, 32);
+        let second_raster = second.raster().unwrap().clone();
+        drop(second);
+        originals.push((saved.identity, raster, second_raster));
+    }
+    assert_ne!(originals[0].1, originals[1].1);
+    let calls = fixture.calls();
+    assert_eq!(calls, b"day\nnight\n");
+    let foreign = preview_original_teletext_design(
+        &fixture.fixture.state.application,
+        TeletextAuthoringPreviewRequest {
+            channel_id: 2,
+            design_id: originals[0].0.design_id,
+            revision: 1,
+            owner: Some(channel_documents::address(123, 16)),
+        },
+        designs::deadline(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(
+        foreign.status,
+        ersatzrs_web::host::teletext_authoring::TeletextAuthoringStatus::WrongChannel
+    );
+    edit_profile_and_remove_package(&fixture).await;
+    fixture.fixture = fixture.fixture.reopen().await;
+    let configuration = designs::config(&fixture.fixture).await;
+    for ((identity, first, second), theme) in originals.iter().zip(["day", "night"]) {
+        for (subcode, raster) in [(16, first), (32, second)] {
+            let preview = selected_preview(&fixture.fixture, *identity, Some(subcode)).await;
+            assert_captured_authoring(&preview, theme, subcode);
+            assert_eq!(preview.raster(), Some(raster));
+            assert!(!preview.publication().unwrap().can_publish);
+            drop(preview);
+        }
+        assert!(fixture
+            .fixture
+            .state
+            .application
+            .teletext_publication_request(identity.channel_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(fixture
+            .fixture
+            .state
+            .application
+            .accepted_teletext_generation(identity.channel_id)
+            .await
+            .unwrap()
+            .is_none());
+    }
+    assert_eq!(fixture.calls(), calls);
+    assert_eq!(designs::config(&fixture.fixture).await, configuration);
+    assert!(fixture.fixture.playout.try_recv().is_err());
+    fixture.fixture.state.pool.close().await;
 }
 
 pub(super) fn write(fixture: &Fixture, theme: &str, value: &Value) -> Vec<u8> {
@@ -468,6 +715,41 @@ async fn mixed_v1_v3_composition_retains_metadata_only_with_its_original_produce
     assert_eq!(prepared.producers().len(), 2);
     let saved = designs::save(&fixture, prepared, None).await;
     assert_eq!(saved.head().revision, 1);
+    super::authoring::setting(
+        &fixture,
+        "teletext.authoring.policy",
+        &super::authoring::policy().to_string(),
+    )
+    .await;
+    for (owner, has_metadata) in [
+        (channel_documents::address(123, 16), false),
+        (channel_documents::address(124, 32), true),
+    ] {
+        let preview = preview_original_teletext_design(
+            &fixture.state.application,
+            TeletextAuthoringPreviewRequest {
+                channel_id: 1,
+                design_id: saved.head().id,
+                revision: 1,
+                owner: Some(owner),
+            },
+            designs::deadline(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(preview.authoring().is_empty(), !has_metadata);
+        if has_metadata {
+            let declaration = &preview.authoring()[0];
+            assert_eq!(declaration.producer_index, 1);
+            assert_eq!(declaration.binding_index, 1);
+            assert_eq!(declaration.addon_id, SECONDARY);
+            assert_eq!(
+                serde_json::to_value(&declaration.regions).unwrap(),
+                second["authoring"]["pages"][0]["regions"]
+            );
+        }
+        drop(preview);
+    }
     assert!(fixture
         .state
         .application

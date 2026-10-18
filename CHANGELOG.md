@@ -25,6 +25,11 @@ release section when tagging a release.
 
 ### Added
 
+- Show saved teletext template, theme, Free/custom-zone/generated regions and
+  dynamic-field bindings beside the selected draft preview in every admin
+  language. Boundaries come from the immutable original and remain read-only;
+  viewing them does not change packages, concepts or the broadcast.
+
 - Add receipt-bound native teletext object creation within existing POP/GPOP
   resources. Private version18 concepts retain complete added definitions and
   their later body edits without changing originals or versions1–17. The localized

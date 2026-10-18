@@ -6,8 +6,8 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns canonical acceptance, scoped
-receipts and the compact F1–F6/V1–V6/X1–X3 completion list. No representative
+rendering/navigation. Kodi is optional. P9A-04 owns acceptance, scoped
+receipts and the F1–F6/V1–V6/X1–X3 completion list. No representative
 flow establishes full engine acceptance or accepts a permanent limitation.
 
 Typed services, provenance, complete resource identities/defaults, physical
@@ -28,7 +28,7 @@ V18 Add/Copy qualifies current receipts, allocations and inserted lineage in
 existing POP/GPOP resources. Localized admin Copy saves complete definitions;
 actual new-definition QTM import/preview/publication/reopen passes. Originals and
 generic refusal stay exact. P9A-04 owns proof and remaining creation/set gates.
-Actual pinned V8 compound glyph/style/column/call and V7 nonfirst-fragment native
+Pinned V8 compound glyph/style/column/call and V7 nonfirst-fragment native
 call add/delete saves pass unchanged-byte concepts, shared native previews,
 unpublished reopen and explicit publication/cold reopen. Actual editor controls
 are not native Public-target or suitable-client rendering. Remaining unqualified
@@ -39,9 +39,9 @@ packages stay open. No truncation or silent editor restriction is accepted.
 National/alias/bank/panel QTM, native, TCP, TSDuck and independent receipts retain
 their exact scope. Dense/padded banks join nine-culture headed SSR, explicit
 publication, fallback and two-theme navigation. Independent trials may supply
-banks/defaults explicitly. Stock failures and pinned sparse/G1 test candidates
+explicit banks/defaults. Stock failures and pinned sparse/G1 test candidates
 remain distinct; enlarged clients, hydration, Hebrew and general acquisition
-stay open. There is no expanded external decoder-repair program.
+stay open. No expanded external decoder-repair program.
 
 Producer contracts retain selection/model/deadline fences, aggregate quotas,
 persistence and cancellation ownership. Two-channel themes, Lua controls,
@@ -49,7 +49,8 @@ finite Off/base restoration/restart and warm acknowledged M29/page-X28/resource
 handover have scoped proof. Full profile/On/error/restart/client, RSS/work bounds,
 automatic Base redisplay, retirement, Header/POP uncertainty and open-client
 shutdown remain open. Scoped F6 waits/AC3 replay and native disconnect/shared
-lifetimes pass; remaining Copy/track and client/platform proof stays open.
+lifetimes pass; Copy active-cue/track and client/platform proof stays open.
+Captured preview regions/bindings have scoped native and localized headed proof.
 
 P9A-03 owns source descriptors, Local rescans and worker/lease ownership. Missing
 bytes remain NotAcquired; descriptors/PTS grant no readiness. Carousel PSI/PCR,
@@ -57,11 +58,11 @@ ACK/cycle updates and expiry preserve AV/EOF. Local888 legacy/Hybrid both-track/
 VBV, Off/stale/authored200, capacity cleanup and seek0.5s proof retain their scope.
 General source/seek/cue/charset/resource/wrap and Next policies remain open.
 
-Linux x64, Windows interop and QEMU ARM proof is partial; native six-RID
-acceptance remains required. P9A-02 owns decoder Health/licensing. Burn/Convert/
-copy, carriage, HLS/browser, playback, publication/refresh/restart and localized
-management gates remain. UCU waives none; production guide waits for independent
-P9A-04 acceptance and Phase10 for P9B-02.
+Linux/Windows-interop/QEMU ARM proof is partial; native six-RID gates remain.
+P9A-02 owns decoder Health/licensing. Burn/Convert/copy, carriage, HLS/browser,
+playback, publication/refresh/restart and localized management gates remain.
+No gate is waived; production guide waits for independent P9A-04, Phase10 for
+P9B-02.
 '''
 
 [[debt]]
@@ -271,5 +272,5 @@ id          = 'capacity-wait-mpegts-slate-clock-resets'
 adr         = '0123'
 description = 'Historical raw-byte capacity slates reset PTS/PCR across repetitions. Generated response-wide epoch joining now has scoped default2 Legacy/Hybrid H264/AAC and selected AC3 proof, preserving source captions and audio. Remaining accepted Copy/track initialization and applicable client/platform evidence keep full F6 acceptance open. Preserve admission/cleanup ownership without reconnect, extra mux, track loss or capacity increase.'
 discovered  = '2026-10-14'
-evidence    = 'Current scoped correction and native cancellation/shared lifetime are recorded in tmp/phase9-f6-handoff/integration.json, tmp/phase9-f6-copy-audio/identity.json and tmp/phase9-f6-disconnect/identity.json; P9A-04 owns remaining closure conditions. The following negative incident remains valid historical evidence, not a claim that those same scoped paths still reset clocks: Two live-URL TSDuck20-second probes overlapping two headed viewers at default capacity2 each reproduce8PTS/4PCR leaps and19percent delivery. Captures identify the repeated4-second wait slate, not the synthetic MPEG2 source. Four-slot disposable-fixture normal HTTP probes pass42 unchanged checks; product limit remains2. P9A-04 owns positive/negative receipts and next-step mapping. Production correction and same-response handoff proof remain open.'
+evidence    = 'Current scoped correction and native cancellation/shared lifetime are recorded in tmp/phase9-f6-handoff/integration.json, tmp/phase9-f6-copy-audio/identity.json and tmp/phase9-f6-disconnect/identity.json; P9A-04 owns remaining closure conditions. The following negative incident remains valid historical evidence, not a claim that those same scoped paths still reset clocks: Two live-URL TSDuck20-second probes overlapping two headed viewers at default capacity2 each reproduce8PTS/4PCR leaps and19percent delivery. Captures identify the repeated4-second wait slate, not the synthetic MPEG2 source. Four-slot disposable-fixture normal HTTP probes pass42 unchanged checks; product limit remains2. P9A-04 owns positive/negative receipts and next-step mapping. Remaining Copy/track same-response acceptance stays open.'
 resolved    = false

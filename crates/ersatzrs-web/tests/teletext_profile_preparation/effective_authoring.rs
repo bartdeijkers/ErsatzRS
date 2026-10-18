@@ -3,7 +3,7 @@
 
 use super::{
     authoring::{self, AuthoringFixture},
-    channel_documents, designs, scripted_controls, *,
+    authoring_metadata, channel_documents, designs, scripted_controls, *,
 };
 use chrono::Timelike as _;
 use ersatzrs_domain::TeletextOverrideState;
@@ -323,6 +323,7 @@ async fn all_off_has_no_owner_raster_or_fake_entry_and_explicit_acceptance_keeps
     let original = preview(&fixture, identity, true).await;
     assert!(original.is_absent() && original.raster().is_none());
     assert!(original.pages().is_empty() && original.navigation().is_empty());
+    assert!(original.authoring().is_empty());
     assert!(original.publication().unwrap().can_request);
     drop(original);
     select(&fixture, identity, &observed, true).await;
@@ -354,6 +355,72 @@ async fn all_off_has_no_owner_raster_or_fake_entry_and_explicit_acceptance_keeps
     .await;
     assert!(bad.is_err()); // An absent document cannot borrow an authored page owner.
     assert_eq!(history(&fixture).await, before);
+}
+
+#[tokio::test]
+async fn effective_preview_keeps_captured_owner_metadata_and_scope_across_unavailable_reopen() {
+    let mut fixture = authoring_metadata::controller_fixture().await;
+    for channel in [1, 2] {
+        disable_base(&fixture, channel).await;
+    }
+    scripted_controls::seed_publication_inputs(&fixture.fixture).await;
+    let intervals = [
+        lua(&fixture, 1, Some(&fixture.profiles[1])).await,
+        lua(&fixture, 2, Some(&fixture.profiles[0])).await,
+    ];
+    let mut originals = Vec::new();
+    for ((channel, theme), interval) in [(1, "night"), (2, "day")].into_iter().zip(&intervals) {
+        let saved = prepare_static_teletext_design(
+            &fixture.fixture.state.application,
+            request(channel, observe(&fixture, channel).await),
+            designs::deadline(),
+        )
+        .await
+        .unwrap();
+        let preview = saved.preview.unwrap();
+        assert_eq!(preview.scope(), TeletextAuthoringScope::Effective);
+        assert_eq!(preview.valid_until(), Some(interval.finish));
+        authoring_metadata::assert_captured_authoring(&preview, theme, 16);
+        let raster = preview.raster().unwrap().clone();
+        drop(preview);
+        authoring_metadata::assert_owner_required(&fixture.fixture, saved.identity).await;
+        let initial =
+            authoring_metadata::selected_preview(&fixture.fixture, saved.identity, Some(16)).await;
+        authoring_metadata::assert_captured_authoring(&initial, theme, 16);
+        assert_eq!(initial.raster(), Some(&raster));
+        drop(initial);
+        let second =
+            authoring_metadata::selected_preview(&fixture.fixture, saved.identity, Some(32)).await;
+        authoring_metadata::assert_captured_authoring(&second, theme, 32);
+        drop(second);
+        originals.push((saved.identity, raster));
+    }
+    assert_ne!(originals[0].1, originals[1].1);
+    let before = history(&fixture).await;
+    let calls = fixture.calls();
+    assert_eq!(calls, b"night\nday\n");
+    authoring_metadata::edit_profile_and_remove_package(&fixture).await;
+    fixture.fixture = fixture.fixture.reopen().await;
+    let configuration = designs::config(&fixture.fixture).await;
+    for (((identity, raster), theme), interval) in
+        originals.iter().zip(["night", "day"]).zip(&intervals)
+    {
+        let preview = preview(&fixture, *identity, false).await;
+        authoring_metadata::assert_captured_authoring(&preview, theme, 16);
+        assert_eq!(preview.raster(), Some(raster));
+        assert_eq!(preview.scope(), TeletextAuthoringScope::Effective);
+        assert_eq!(preview.valid_until(), Some(interval.finish));
+        // The active effective selection cannot resolve its deleted installation.
+        // Optional observation failure preserves the historical preview without
+        // fabricating a successful Unavailable observation or pointer identities.
+        assert!(preview.publication().is_none());
+        drop(preview);
+    }
+    assert_eq!(history(&fixture).await, before);
+    assert_eq!(fixture.calls(), calls);
+    assert_eq!(designs::config(&fixture.fixture).await, configuration);
+    assert!(fixture.fixture.playout.try_recv().is_err());
+    fixture.fixture.state.pool.close().await;
 }
 
 #[tokio::test]

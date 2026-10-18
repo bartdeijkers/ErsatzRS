@@ -58,7 +58,9 @@ use super::teletext_runtime_policy::{
 use super::teletext_work::{self, TeletextWorkError};
 
 mod effective;
+mod metadata;
 mod scope;
+pub use metadata::TeletextAuthoringPageMetadata;
 pub use scope::{
     observe_effective_teletext_authoring_selection, TeletextAuthoringEffectiveObservation,
 };
@@ -188,6 +190,7 @@ pub struct TeletextAuthoringPreview {
     navigation: Vec<TeletextNavigationLink>,
     pages: Vec<TeletextPageAddress>,
     resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
+    authoring: Vec<TeletextAuthoringPageMetadata>,
     hold: TeletextWorkHold,
     deadline: Instant,
 }
@@ -231,6 +234,12 @@ impl TeletextAuthoringPreview {
     #[must_use]
     pub fn resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
         &self.resource_objects
+    }
+    /// Selected-owner declarations from the immutable original producer, never
+    /// current package/profile state or imported permission authority.
+    #[must_use]
+    pub fn authoring(&self) -> &[TeletextAuthoringPageMetadata] {
+        &self.authoring
     }
     /// Project this owned raster off async workers under its original admission.
     /// The host callback must enforce its own derived output-storage limits.
@@ -931,6 +940,7 @@ fn render_original(
         navigation,
         pages,
         resource_objects: resource_objects(service),
+        authoring: metadata::base(restored, owner, deadline)?,
         hold,
         deadline,
     })

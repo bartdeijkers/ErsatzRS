@@ -235,6 +235,7 @@ fn render_original(
             .encoded()
             .map(super::resource_objects)
             .unwrap_or_default(),
+        authoring: super::metadata::effective(restored, request.owner, deadline)?,
         hold,
         deadline,
     })

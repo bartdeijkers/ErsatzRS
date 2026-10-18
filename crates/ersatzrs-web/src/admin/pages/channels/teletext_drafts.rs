@@ -12,6 +12,8 @@ use crate::admin::server_fns::teletext_drafts::{
 use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::admin_result_view;
 
+mod editorial;
+
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
 
 pub(super) fn draft_status_text(code: &str) -> &'static str {
@@ -358,6 +360,7 @@ fn preview_view(data: &TeletextDraftPreviewData) -> AnyView {
             <nav class=style::inventory aria-label=tr(TextKey::TeletextPreviewPage)>{inventory}</nav>
             <ul class=style::navigation>{navigation}</ul>
             {diagnostics}
+            {editorial::boundaries(data)}
             {editorial_controls(data)}
             {publication_controls(data)}
         </div>
@@ -832,6 +835,7 @@ mod tests {
             }],
             diagnostics: Vec::new(),
             resource_objects: Vec::new(),
+            authoring: Vec::new(),
             publication: None,
         }
     }
