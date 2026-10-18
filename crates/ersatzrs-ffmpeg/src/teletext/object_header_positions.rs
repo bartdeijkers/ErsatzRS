@@ -140,23 +140,33 @@ fn derive_inner(
             })?;
         if definition.identity.scope() != TeletextObjectScope::Local
             || definition.identity.owner() != Some(composition.owner())
-            || definition.object_type != TeletextObjectType::Adaptive
+            || !matches!(
+                definition.object_type,
+                TeletextObjectType::Active | TeletextObjectType::Adaptive
+            )
         {
             continue;
         }
         let [TeletextEnhancementCommand::SetPosition { position }, TeletextEnhancementCommand::InvokeObject {
-            object_type: TeletextObjectType::Passive,
+            object_type: child_type,
             ..
         }] = definition.program.commands()
         else {
             continue;
         };
-        if position.row() != 0 || position.column() < 8 {
+        if position.row() != 0
+            || position.column() < 8
+            || !definition.object_type.may_invoke(*child_type)
+        {
             continue;
         }
-        if let Some(colour) =
-            common_background(composition, definition.identity, position.column(), work)?
-        {
+        if let Some(colour) = common_background(
+            composition,
+            definition.identity,
+            definition.object_type,
+            position.column(),
+            work,
+        )? {
             replacements.insert(definition.identity, (position.column(), colour));
         }
     }
@@ -205,6 +215,7 @@ fn derive_inner(
 fn common_background(
     composition: &TeletextMainComposition,
     identity: TeletextObjectIdentity,
+    object_type: TeletextObjectType,
     relative_column: u8,
     work: &mut Work,
 ) -> Result<Option<TeletextColourReference>, DerivationError> {
@@ -215,7 +226,7 @@ fn common_background(
         if invocation.target() != identity {
             continue;
         }
-        if invocation.object_type() != TeletextObjectType::Adaptive {
+        if invocation.object_type() != object_type {
             return Ok(None);
         }
         let origin = invocation.origin();
@@ -228,8 +239,11 @@ fn common_background(
         if first >= width {
             return Ok(None);
         }
-        // A final call may leave an open extent: qualify the entire possible
-        // same-row tail of every actual invocation, from the lower stage.
+        // Active writes affect the remaining row; a final Adaptive call may
+        // leave an open extent. Qualify every possible tail of every invocation.
+        // This completed Local/Active projection is only a candidate witness,
+        // not a call-time Active default. Actual C.2 and full comparison still
+        // reject a candidate introducing conflicting same-priority writers.
         for column in first..width {
             work.charge(1)?;
             let Some(attributes) = composition

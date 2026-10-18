@@ -176,12 +176,14 @@ fn assert_nested_header_invocations(
     trace: &TeletextSpatialTrace,
     outer: TeletextObjectIdentity,
     child: TeletextObjectIdentity,
+    outer_type: TeletextObjectType,
+    child_type: TeletextObjectType,
 ) {
     assert_eq!(trace.invocations().len(), 2);
     let parent = trace.invocations()[0];
     let nested = trace.invocations()[1];
     assert_eq!(parent.target(), outer);
-    assert_eq!(parent.object_type(), TeletextObjectType::Adaptive);
+    assert_eq!(parent.object_type(), outer_type);
     assert_eq!(parent.parent(), None);
     assert_eq!(parent.offset(), None);
     assert_eq!((parent.origin().row(), parent.origin().column()), (0, 0));
@@ -193,7 +195,7 @@ fn assert_nested_header_invocations(
         (0, 0)
     );
     assert_eq!(nested.target(), child);
-    assert_eq!(nested.object_type(), TeletextObjectType::Passive);
+    assert_eq!(nested.object_type(), child_type);
     assert_eq!(nested.parent(), Some(parent.id()));
     assert_eq!(nested.offset(), None);
     assert_eq!((nested.origin().row(), nested.origin().column()), (0, 8));
@@ -233,8 +235,16 @@ fn assert_nested_header_trace(
     original: &TeletextMainComposition,
     outer: TeletextObjectIdentity,
     child: TeletextObjectIdentity,
+    outer_type: TeletextObjectType,
+    child_type: TeletextObjectType,
 ) {
-    assert_nested_header_invocations(original.spatial_trace(), outer, child);
+    assert_nested_header_invocations(
+        original.spatial_trace(),
+        outer,
+        child,
+        outer_type,
+        child_type,
+    );
     assert_eq!(
         original.spatial_trace().invocations()[1].source().command,
         1
@@ -242,18 +252,22 @@ fn assert_nested_header_trace(
     assert_nested_header_geometry(original.display_geometry(), outer, child);
 }
 
-fn nested_header_draft() -> (
+fn nested_header_draft(
+    outer_type: TeletextObjectType,
+    child_type: TeletextObjectType,
+) -> (
     TeletextResolvedServiceDraft,
     TeletextObjectIdentity,
     TeletextObjectIdentity,
 ) {
+    assert!(outer_type.may_invoke(child_type));
     let mut draft = input();
     let owner = draft.base.pages[0].address;
     let outer = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65534));
     let child = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
     let main = TeletextEnhancementProgram::new(vec![TeletextEnhancementCommand::InvokeObject {
         target: outer,
-        object_type: TeletextObjectType::Adaptive,
+        object_type: outer_type,
         offset: None,
     }])
     .unwrap();
@@ -262,7 +276,7 @@ fn nested_header_draft() -> (
         position(0, 8),
         TeletextEnhancementCommand::InvokeObject {
             target: child,
-            object_type: TeletextObjectType::Passive,
+            object_type: child_type,
             offset: None,
         },
     ])
@@ -271,12 +285,12 @@ fn nested_header_draft() -> (
     draft.objects.extend([
         TeletextEnhancementObjectDefinition {
             identity: outer,
-            object_type: TeletextObjectType::Adaptive,
+            object_type: outer_type,
             program: outer_program.clone(),
         },
         TeletextEnhancementObjectDefinition {
             identity: child,
-            object_type: TeletextObjectType::Passive,
+            object_type: child_type,
             program: child_program.clone(),
         },
     ]);
@@ -293,7 +307,22 @@ fn nested_header_draft() -> (
 
 #[test]
 fn nested_local_adaptive_header_position_preserves_original_parent_ap_in_complete_factory() {
-    let (draft, outer, child) = nested_header_draft();
+    nested_header_factory(TeletextObjectType::Adaptive, TeletextObjectType::Passive);
+}
+
+#[test]
+fn nested_local_active_header_position_preserves_original_parent_ap_in_complete_factory() {
+    nested_header_factory(TeletextObjectType::Active, TeletextObjectType::Passive);
+}
+
+#[test]
+fn nested_local_active_to_adaptive_header_position_preserves_original_parent_ap_in_complete_factory(
+) {
+    nested_header_factory(TeletextObjectType::Active, TeletextObjectType::Adaptive);
+}
+
+fn nested_header_factory(outer_type: TeletextObjectType, child_type: TeletextObjectType) {
+    let (draft, outer, child) = nested_header_draft(outer_type, child_type);
     let owner = draft.base.pages[0].address;
     let main = draft.pages[0].local_program.clone().unwrap();
     let [outer_program, child_program] = [outer, child].map(|target| {
@@ -309,9 +338,12 @@ fn nested_local_adaptive_header_position_preserves_original_parent_ap_in_complet
     let original =
         compose_teletext_main_program(saved.semantic(), owner, limits().normalization.composition)
             .unwrap();
-    assert_nested_header_trace(&original, outer, child);
+    assert_nested_header_trace(&original, outer, child, outer_type, child_type);
+    assert_selected_child_a(original.display_resolution(), original.glyph_intent());
     let actual = encode_teletext_authored_service(saved.clone(), &transmissions(&saved), &limits())
-        .expect("legal Adaptive relative AP0/8 must precede its original nested Passive call");
+        .unwrap_or_else(|error| {
+            panic!("legal {outer_type:?} relative AP0/8 before {child_type:?}: {error:?}")
+        });
     assert_eq!(actual.declared(), &saved);
     assert_eq!(
         saved
@@ -343,7 +375,12 @@ fn nested_local_adaptive_header_position_preserves_original_parent_ap_in_complet
         display.normalized().physical().replay().spatial_trace(),
         outer,
         child,
+        outer_type,
+        child_type,
     );
+    let replay = display.normalized().physical().replay();
+    assert_selected_child_a(replay.display_resolution(), replay.glyph_intent());
+    assert_untouched_header_tail(original.display_resolution(), replay.display_resolution());
     for geometry in [
         display.normalized().original().display_geometry(),
         display.normalized().physical().replay().display_geometry(),
@@ -418,9 +455,31 @@ fn assert_selected_child_a(display: &TeletextDisplayResolution, intent: &Teletex
         Some(TeletextGlyphIdentity::G0 { glyph }) if glyph.code() == b'A'));
 }
 
+fn assert_untouched_header_tail(
+    original: &TeletextDisplayResolution,
+    physical: &TeletextDisplayResolution,
+) {
+    for column in 9..40 {
+        for model in [original, physical] {
+            let attributes = model.cell(0, column).unwrap().attributes();
+            assert_eq!(
+                attributes.foreground().value(),
+                Some(TeletextColourReference::new(7).unwrap())
+            );
+            assert_eq!(
+                attributes.background().value(),
+                Some(TeletextColourReference::new(0).unwrap())
+            );
+            assert_eq!(attributes.foreground().pending(), None);
+            assert_eq!(attributes.background().pending(), None);
+        }
+    }
+}
+
 #[test]
 fn diagnostic_nested_adaptive_background_candidate_preserves_full_original_model_and_calls() {
-    let (draft, outer, child) = nested_header_draft();
+    let (draft, outer, child) =
+        nested_header_draft(TeletextObjectType::Adaptive, TeletextObjectType::Passive);
     let saved = declared(draft);
     let service = saved.semantic();
     let budget = limits().normalization;
@@ -428,7 +487,13 @@ fn diagnostic_nested_adaptive_background_candidate_preserves_full_original_model
         compose_teletext_main_program(service, service.base().pages[0].address, budget.composition)
             .unwrap();
     let unchanged = original.clone();
-    assert_nested_header_trace(&original, outer, child);
+    assert_nested_header_trace(
+        &original,
+        outer,
+        child,
+        TeletextObjectType::Adaptive,
+        TeletextObjectType::Passive,
+    );
     assert_selected_child_a(original.display_resolution(), original.glyph_intent());
     let colour = qualified_outer_background(&original, outer);
     let (derived, work) = super::super::object_header_positions::derive(
@@ -470,7 +535,13 @@ fn diagnostic_nested_adaptive_background_candidate_preserves_full_original_model
     )
     .unwrap();
     let replay = physical.replay();
-    assert_nested_header_invocations(replay.spatial_trace(), outer, child);
+    assert_nested_header_invocations(
+        replay.spatial_trace(),
+        outer,
+        child,
+        TeletextObjectType::Adaptive,
+        TeletextObjectType::Passive,
+    );
     assert_nested_header_geometry(replay.display_geometry(), outer, child);
     assert_selected_child_a(replay.display_resolution(), replay.glyph_intent());
     let comparison =
@@ -497,68 +568,82 @@ fn diagnostic_nested_adaptive_background_candidate_preserves_full_original_model
 
 #[test]
 fn object_header_derivation_maps_only_retained_original_commands() {
-    let (mut draft, outer, child) = nested_header_draft();
-    let unused =
-        TeletextObjectIdentity::local(draft.base.pages[0].address, TeletextObjectId::new(65533));
-    let mut definition = draft
-        .objects
-        .iter()
-        .find(|definition| definition.identity == outer)
-        .unwrap()
-        .clone();
-    definition.identity = unused;
-    draft.objects.push(definition);
-    let saved = declared(draft);
-    let service = saved.semantic();
-    let budget = limits().normalization;
-    let original =
-        compose_teletext_main_program(service, service.base().pages[0].address, budget.composition)
-            .unwrap();
-    let saved_catalog = service.objects().clone();
-    let (derived, _) = super::super::object_header_positions::derive(
-        &original,
-        service.objects(),
-        budget.packing,
-        usize::MAX,
-    );
-    let derived = derived.unwrap();
-    assert_eq!(service.objects(), &saved_catalog);
-    assert_eq!(
-        derived.catalog().definition(unused),
-        saved_catalog.definition(unused)
-    );
-    let source = |target, command| TeletextEnhancementSource {
-        object: Some(target),
-        command,
-    };
-    for (physical, retained) in [(0, Some(0)), (1, None), (2, Some(1)), (3, None)] {
-        assert_eq!(
-            derived.retained_source(source(outer, physical)),
-            retained.map(|command| source(outer, command))
+    for outer_type in [TeletextObjectType::Adaptive, TeletextObjectType::Active] {
+        let (mut draft, outer, child) =
+            nested_header_draft(outer_type, TeletextObjectType::Passive);
+        let unused = TeletextObjectIdentity::local(
+            draft.base.pages[0].address,
+            TeletextObjectId::new(65533),
         );
-    }
-    let (catalog, sources) = derived.into_parts();
-    assert_eq!(
-        catalog.definition(outer).unwrap().program.commands().len(),
-        3
-    );
-    for target in [child, unused] {
-        assert_eq!(
-            sources.retained_source(source(target, 1)),
-            Some(source(target, 1))
+        let mut definition = draft
+            .objects
+            .iter()
+            .find(|definition| definition.identity == outer)
+            .unwrap()
+            .clone();
+        definition.identity = unused;
+        draft.objects.push(definition);
+        let saved = declared(draft);
+        let service = saved.semantic();
+        let budget = limits().normalization;
+        let original = compose_teletext_main_program(
+            service,
+            service.base().pages[0].address,
+            budget.composition,
+        )
+        .unwrap();
+        let saved_catalog = service.objects().clone();
+        let (derived, _) = super::super::object_header_positions::derive(
+            &original,
+            service.objects(),
+            budget.packing,
+            usize::MAX,
         );
-        assert_eq!(sources.retained_source(source(target, 2)), None);
+        let derived = derived.unwrap();
+        assert_eq!(service.objects(), &saved_catalog);
+        assert_eq!(
+            derived.catalog().definition(unused),
+            saved_catalog.definition(unused)
+        );
+        let source = |target, command| TeletextEnhancementSource {
+            object: Some(target),
+            command,
+        };
+        for (physical, retained) in [(0, Some(0)), (1, None), (2, Some(1)), (3, None)] {
+            assert_eq!(
+                derived.retained_source(source(outer, physical)),
+                retained.map(|command| source(outer, command))
+            );
+        }
+        let (catalog, sources) = derived.into_parts();
+        assert_eq!(
+            catalog.definition(outer).unwrap().program.commands().len(),
+            3
+        );
+        for target in [child, unused] {
+            assert_eq!(
+                sources.retained_source(source(target, 1)),
+                Some(source(target, 1))
+            );
+            assert_eq!(sources.retained_source(source(target, 2)), None);
+        }
+        let unknown = TeletextObjectIdentity::local(original.owner(), TeletextObjectId::new(65532));
+        assert_eq!(sources.retained_source(source(unknown, 0)), None);
     }
-    let unknown = TeletextObjectIdentity::local(original.owner(), TeletextObjectId::new(65532));
-    assert_eq!(sources.retained_source(source(unknown, 0)), None);
 }
 
 #[test]
 fn object_header_derivation_preserves_body_when_actual_contexts_conflict() {
-    let (mut draft, outer, _) = nested_header_draft();
+    for outer_type in [TeletextObjectType::Adaptive, TeletextObjectType::Active] {
+        conflicting_actual_backgrounds(outer_type);
+    }
+}
+
+fn conflicting_actual_backgrounds(outer_type: TeletextObjectType) {
+    let (mut draft, outer, _) = nested_header_draft(outer_type, TeletextObjectType::Passive);
     let call = TeletextEnhancementCommand::InvokeObject {
         target: outer,
-        object_type: TeletextObjectType::Adaptive,
+        object_type: outer_type,
         offset: None,
     };
     draft.pages[0].local_program =
@@ -612,10 +697,59 @@ fn object_header_derivation_preserves_body_when_actual_contexts_conflict() {
 }
 
 #[test]
+fn object_header_derivation_active_requires_known_background_over_entire_row_tail() {
+    let (mut draft, _, _) =
+        nested_header_draft(TeletextObjectType::Active, TeletextObjectType::Passive);
+    draft.base.pages[0]
+        .rows
+        .iter_mut()
+        .find(|row| row.row == 0)
+        .unwrap()
+        .runs
+        .push(TeletextRun {
+            column: 20,
+            style: TeletextStyle {
+                background: TeletextColour::Blue,
+                ..TeletextStyle::default()
+            },
+            content: TeletextRunContent::Text {
+                text: "Z".repeat(20),
+            },
+        });
+    let saved = declared(draft);
+    let service = saved.semantic();
+    let budget = limits().normalization;
+    let original =
+        compose_teletext_main_program(service, service.base().pages[0].address, budget.composition)
+            .unwrap();
+    for (column, colour) in [(8, 0), (20, 4), (39, 4)] {
+        let background = original
+            .attribute_execution()
+            .before_adaptive_cell(0, column)
+            .unwrap()
+            .background();
+        assert_eq!(
+            background.value(),
+            Some(TeletextColourReference::new(colour).unwrap())
+        );
+        assert_eq!(background.pending(), None);
+    }
+    let (derived, admitted) = super::super::object_header_positions::derive(
+        &original,
+        service.objects(),
+        budget.packing,
+        usize::MAX,
+    );
+    assert!(admitted > 0);
+    assert_eq!(derived.unwrap().catalog(), service.objects());
+}
+
+#[test]
 fn object_header_derivation_enforces_work_and_catalogue_bounds_before_cloning() {
     use super::super::object_header_positions::{derive, DerivationError};
 
-    let (draft, _, _) = nested_header_draft();
+    let (draft, _, _) =
+        nested_header_draft(TeletextObjectType::Adaptive, TeletextObjectType::Passive);
     let saved = declared(draft);
     let service = saved.semantic();
     let budget = limits().normalization;
