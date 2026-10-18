@@ -138,6 +138,9 @@ pub struct FfmpegState {
     pub song_with_progress: bool,
     /// Preserve the already-edited common clock of the provider's NUT stream.
     pub retained_stream_timestamps: bool,
+    /// Generated realtime reserve, distinct from caller-supplied source options.
+    /// Retained inputs keep their established eight-second reserve instead.
+    pub realtime_initial_burst: Option<Duration>,
     pub output_format: OutputFormat,
     pub start: Option<Duration>,
     pub output_start: Option<Duration>,
@@ -157,6 +160,7 @@ impl Default for FfmpegState {
             song_text_subtitle_start: None,
             song_with_progress: false,
             retained_stream_timestamps: false,
+            realtime_initial_burst: None,
             output_format: OutputFormat::MpegTs,
             start: None,
             output_start: None,
@@ -3460,12 +3464,19 @@ fn add_realtime_input_options(request: &mut PipelineRequest) {
             _ => false,
         };
         if paced_media {
-            if request.state.retained_stream_timestamps {
-                // ADR 0087: let both logical legs establish output reserve before
-                // normal pacing. This input burst alone does not prove readiness.
-                input
-                    .input_options
-                    .extend(["-readrate_initial_burst".to_owned(), "8".to_owned()]);
+            let burst = if request.state.retained_stream_timestamps {
+                // ADR 0087: retained legs keep their established reserve.
+                Some(Duration::from_secs(8))
+            } else {
+                request.state.realtime_initial_burst
+            };
+            if let Some(burst) = burst {
+                // Generated after original-input capture, so the sealed caption
+                // plan retains its source seek without trusting raw options.
+                input.input_options.extend([
+                    "-readrate_initial_burst".to_owned(),
+                    format_duration_seconds(burst),
+                ]);
             }
             input.add_readrate(readrate);
         }
@@ -4688,6 +4699,53 @@ fn hls_output(
 mod tests {
     use super::*;
 
+    #[test]
+    fn typed_realtime_burst_respects_pacing_opt_outs_and_still_images() {
+        for (realtime, still_image, allow_video, allow_audio) in [
+            (false, false, true, true),
+            (true, true, true, true),
+            (true, false, false, true),
+            (true, false, true, false),
+            (true, false, false, false),
+        ] {
+            let mut request = PipelineRequest::new(
+                InputFile::video("synthetic.ts"),
+                DesiredVideoState::h264_1080p(),
+            );
+            request.desired.realtime_mode = if realtime {
+                RealtimeMode::On
+            } else {
+                RealtimeMode::Off
+            };
+            request.state.realtime_initial_burst = Some(Duration::from_millis(12_250));
+            let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
+            source.is_still_image = still_image;
+            request.source_video_stream = Some(source);
+            request.inputs[0].allow_readrate = allow_video;
+            request.inputs[1].allow_readrate = allow_audio;
+            add_realtime_input_options(&mut request);
+            for (input, paced) in request.inputs.iter().zip([
+                realtime && !still_image && allow_video,
+                realtime && allow_audio,
+            ]) {
+                assert_eq!(
+                    input
+                        .input_options
+                        .windows(2)
+                        .any(|pair| pair == ["-readrate_initial_burst", "12.25"]),
+                    paced
+                );
+                assert_eq!(
+                    input
+                        .input_options
+                        .windows(2)
+                        .any(|pair| pair == ["-readrate", "1.05"]),
+                    paced
+                );
+            }
+        }
+    }
+
     fn retained_stream_request() -> PipelineRequest {
         let mut desired = DesiredVideoState::h264_1080p();
         desired.frame_rate = Some(FrameRate::DEFAULT);
@@ -4705,10 +4763,9 @@ mod tests {
     // ADR 0087: yt-dlp owns source cuts; the host consumes one edited NUT clock.
     #[test]
     fn retained_stream_input_snapshot() {
-        let pipeline = build_pipeline_for_acceleration(
-            HardwareAccelerationKind::None,
-            retained_stream_request(),
-        );
+        let mut request = retained_stream_request();
+        request.state.realtime_initial_burst = Some(Duration::from_secs(12));
+        let pipeline = build_pipeline_for_acceleration(HardwareAccelerationKind::None, request);
         let command = pipeline.command(&[]);
         assert!(command.arguments.iter().any(|arg| arg == "-xerror"));
         assert!(!command

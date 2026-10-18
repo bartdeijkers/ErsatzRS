@@ -370,9 +370,9 @@ async fn public_body_disposal_and_explicit_cancellation_reap_the_raw_child() {
             }
             result
         };
-        let (outcome, result) = tokio::time::timeout(Duration::from_secs(2), async {
+        let (outcome, result) = Box::pin(tokio::time::timeout(Duration::from_secs(2), async {
             tokio::join!(produce, forward)
-        })
+        }))
         .await
         .unwrap();
         assert!(matches!(outcome, DirectStreamOutcome::Cancelled));

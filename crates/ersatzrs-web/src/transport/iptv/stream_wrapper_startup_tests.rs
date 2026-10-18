@@ -238,6 +238,7 @@ fn hybrid_capacity_deadline_cleans_prepared_script_before_sqlite_is_released() {
                 &channel,
                 std::slice::from_ref(&artifact),
                 deadline,
+                None,
             ),
         )
         .await
@@ -316,6 +317,7 @@ fn aborted_wrapper_request_removes_prepared_script_while_sqlite_is_held() {
                 &Channel::default(),
                 &paths,
                 tokio::time::Instant::now() + Duration::from_secs(20),
+                None,
             )
             .await;
             drop(guards);

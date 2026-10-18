@@ -14,7 +14,14 @@ use ersatzrs_domain::{
 use ersatzrs_ffmpeg::OutputFormat;
 use ersatzrs_infra::{
     file_system_layout::{transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL},
-    hls_worker::{HlsPlaybackProfileOverride, HlsSessionOptions, HlsSessionWorker},
+    hls_worker::{
+        HlsPlaybackProfileOverride, HlsSessionOptions, HlsSessionWorker,
+        ALL_STREAMS_IN_USE_SLATE_MESSAGE,
+    },
+    transcode_capacity::{
+        load_active_transcode_limit, try_reserve_existing_hls_wrapper_capacity,
+        ActiveTranscodeReservation, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+    },
 };
 use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -110,9 +117,213 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
     path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
     deadline: std::time::Instant,
 ) {
+    let _ = ensure_segmenter_worker_with_admission(
+        state,
+        channel_number,
+        channel_id,
+        idle_behavior,
+        output_format,
+        path_replacements,
+        deadline,
+        None,
+    )
+    .await;
+}
+
+/// Keep a Hybrid viewer on its finite capacity slate until both the final
+/// wrapper and an actual HLS producer have admission. Normal HLS and Next
+/// startup continue through the existing unrestricted session-start API.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Match the existing segmenter startup arguments at the Hybrid route boundary."
+)]
+pub(crate) async fn try_admit_segmenter_wrapper_before(
+    state: &AppState,
+    channel_number: &str,
+    channel_id: i64,
+    idle_behavior: ChannelIdleBehavior,
+    output_format: OutputFormat,
+    path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
+    deadline: std::time::Instant,
+) -> Option<ActiveTranscodeReservation> {
+    let limit = startup_read(deadline, load_active_transcode_limit(&state.pool))
+        .await
+        .ok()?
+        .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+    ensure_segmenter_worker_with_admission(
+        state,
+        channel_number,
+        channel_id,
+        idle_behavior,
+        output_format,
+        path_replacements,
+        deadline,
+        Some(limit),
+    )
+    .await
+}
+
+fn reserve_existing_segmenter_wrapper(
+    worker: &Arc<dyn HlsSessionHandle>,
+    channel_number: &str,
+    wrapper_limit: Option<i32>,
+    cached_playback_ready: bool,
+) -> Option<ActiveTranscodeReservation> {
+    if worker.admission_status() == HlsAdmissionStatus::AtCapacity
+        || (worker.admission_status() != HlsAdmissionStatus::Transcoding && !cached_playback_ready)
+    {
+        return None;
+    }
+    try_reserve_existing_hls_wrapper_capacity(
+        wrapper_limit?,
+        channel_number,
+        channel_number,
+        cached_playback_ready,
+    )
+}
+
+async fn reserve_existing_segmenter_wrapper_before(
+    state: &AppState,
+    worker: &Arc<dyn HlsSessionHandle>,
+    channel_number: &str,
+    wrapper_limit: Option<i32>,
+    deadline: std::time::Instant,
+) -> Option<ActiveTranscodeReservation> {
+    let limit = wrapper_limit?;
+    let cached_playback_ready = if worker.admission_status() == HlsAdmissionStatus::Waiting {
+        let minimum_segments =
+            tokio::time::timeout_at(deadline.into(), load_initial_segment_count(state))
+                .await
+                .ok()?;
+        wrapper_playback_segments_for_handle(
+            &*state.hls_sessions,
+            worker,
+            minimum_segments,
+            deadline,
+        )
+        .await
+    } else {
+        false
+    };
+    reserve_existing_segmenter_wrapper(worker, channel_number, Some(limit), cached_playback_ready)
+}
+
+/// Verify known programme or ordinary error-fallback segments at `FFmpeg`'s
+/// default live-start index (-3). Reject unknown provenance and capacity slates;
+/// preserve existing error displays, the configured minimum and worker identity.
+pub(crate) async fn has_wrapper_playback_segments(
+    registry: &dyn HlsSessionRegistry,
+    channel_number: &str,
+    minimum_segments: usize,
+    deadline: std::time::Instant,
+) -> bool {
+    let Ok(Some(worker)) =
+        tokio::time::timeout_at(deadline.into(), registry.try_get(channel_number)).await
+    else {
+        return false;
+    };
+    wrapper_playback_segments_for_handle(registry, &worker, minimum_segments, deadline).await
+}
+
+async fn wrapper_playback_segments_for_handle(
+    registry: &dyn HlsSessionRegistry,
+    worker: &Arc<dyn HlsSessionHandle>,
+    minimum_segments: usize,
+    deadline: std::time::Instant,
+) -> bool {
+    tokio::time::timeout_at(deadline.into(), async {
+        if worker.admission_status() == HlsAdmissionStatus::AtCapacity
+            || matches!(
+                worker.startup_readiness(),
+                HlsStartupReadiness::Pending { .. } | HlsStartupReadiness::Failed
+            )
+            || registry.initial_segments_ready(worker).await.is_none()
+        {
+            return false;
+        }
+        let Some(playlist) = worker.trim_playlist().await else {
+            return false;
+        };
+        let Some(segments) = wrapper_probe_segments(&playlist, minimum_segments) else {
+            return false;
+        };
+        for (uri, started_at) in segments {
+            if !worker
+                .segment_output(uri, started_at)
+                .await
+                .is_some_and(|output| {
+                    output.error.as_deref() != Some(ALL_STREAMS_IN_USE_SLATE_MESSAGE)
+                })
+            {
+                return false;
+            }
+        }
+        worker.admission_status() != HlsAdmissionStatus::AtCapacity
+            && !matches!(worker.startup_readiness(), HlsStartupReadiness::Failed)
+            && registry.initial_segments_ready(worker).await.is_some()
+    })
+    .await
+    .unwrap_or(false)
+}
+
+fn wrapper_probe_segments(playlist: &str, minimum_segments: usize) -> Option<Vec<(&str, i64)>> {
+    let mut segments = Vec::new();
+    let mut pending_segment = false;
+    let mut started_at = None;
+    for line in playlist.lines().map(str::trim) {
+        if line.starts_with("#EXTINF:") {
+            pending_segment = true;
+            started_at = None;
+        } else if let Some(value) = line.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:") {
+            // Native playlists use a numeric offset without a colon; accept
+            // the equivalent RFC3339 form as well, without inventing a clock.
+            started_at = DateTime::parse_from_rfc3339(value)
+                .or_else(|_| DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f%z"))
+                .ok()
+                .map(|time| time.timestamp_millis());
+        } else if !line.is_empty() && !line.starts_with('#') && pending_segment {
+            segments.push((line, started_at));
+            pending_segment = false;
+        }
+    }
+    if segments.len() < normalize_initial_segment_count(minimum_segments)
+        || segments.len() != count_playlist_segments(playlist)
+    {
+        return None;
+    }
+    segments
+        .into_iter()
+        .rev()
+        .take(MIN_STABLE_INITIAL_SEGMENT_COUNT)
+        .map(|(uri, time)| Some((uri, time?)))
+        .collect()
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "The startup helper preserves the existing route arguments and adds optional atomic wrapper admission."
+)]
+async fn ensure_segmenter_worker_with_admission(
+    state: &AppState,
+    channel_number: &str,
+    channel_id: i64,
+    idle_behavior: ChannelIdleBehavior,
+    output_format: OutputFormat,
+    path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
+    deadline: std::time::Instant,
+    wrapper_limit: Option<i32>,
+) -> Option<ActiveTranscodeReservation> {
     if let Some(worker) = state.hls_sessions.try_get(channel_number).await {
         worker.touch();
-        return;
+        return reserve_existing_segmenter_wrapper_before(
+            state,
+            &worker,
+            channel_number,
+            wrapper_limit,
+            deadline,
+        )
+        .await;
     }
 
     let Ok(segmenter_timeout) = tokio::time::timeout_at(
@@ -121,7 +332,7 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
     )
     .await
     else {
-        return;
+        return None;
     };
     let Ok(channel) = startup_read(
         deadline,
@@ -129,14 +340,17 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
     )
     .await
     else {
-        return;
+        return None;
     };
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+        if wrapper_limit.is_some() {
+            return None;
+        }
         let executable = match ersatzrs_infra::next_engine::host::channel_binary() {
             Ok(executable) => executable,
             Err(error) => {
                 tracing::warn!(channel_id, kind = ?error.kind(), "Next executable unavailable");
-                return;
+                return None;
             }
         };
         let _task = state
@@ -157,7 +371,7 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
                 },
             )
             .await;
-        return;
+        return None;
     }
     let working_dir = hls_working_dir(channel_number);
     let worker = HlsSessionWorker::new_with_options(
@@ -171,30 +385,57 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
     let Ok(minimum_segments) =
         tokio::time::timeout_at(deadline.into(), load_initial_segment_count(state)).await
     else {
-        return;
+        return None;
     };
     if worker
         .configure_source_teletext_locker(state.application.operations().entity_locker())
         .is_err()
     {
-        return;
+        return None;
     }
     if worker
         .configure_media_relay(Arc::clone(&state.next_engine.media))
         .is_err()
     {
-        return;
+        return None;
     }
     worker.initialize_startup(deadline, minimum_segments);
+    let pair = match wrapper_limit {
+        Some(limit) => Some(worker.try_reserve_wrapper_capacity(limit, segmenter_timeout)?),
+        None => None,
+    };
     if state.hls_sessions.try_insert(worker.clone()).await {
+        if let Some((wrapper, producer)) = pair {
+            worker.start_with_initial_reservation(
+                state.pool.clone(),
+                Arc::clone(&state.hls_sessions),
+                segmenter_timeout,
+                producer,
+            );
+            return Some(wrapper);
+        }
         worker.start(
             state.pool.clone(),
             Arc::clone(&state.hls_sessions),
             segmenter_timeout,
         );
-    } else if let Some(existing_worker) = state.hls_sessions.try_get(channel_number).await {
-        existing_worker.touch();
+    } else {
+        // Another viewer owns the published session. Neither unused lease may
+        // survive this race, and that shared worker must not be replaced.
+        drop(pair);
+        if let Some(existing_worker) = state.hls_sessions.try_get(channel_number).await {
+            existing_worker.touch();
+            return reserve_existing_segmenter_wrapper_before(
+                state,
+                &existing_worker,
+                channel_number,
+                wrapper_limit,
+                deadline,
+            )
+            .await;
+        }
     }
+    None
 }
 
 async fn load_segmenter_idle_timeout(
@@ -1458,8 +1699,43 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use ersatzrs_core::hls::HlsSessionHandle;
+    use std::fmt::Write as _;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Mutex;
+
+    #[test]
+    fn hybrid_existing_session_requires_a_live_producer_not_cached_slate_readiness() {
+        use ersatzrs_infra::transcode_capacity::{
+            active_transcode_snapshot, active_transcode_test_guard_for_tests,
+            reset_active_transcode_state_for_tests, try_reserve_active_transcode,
+            ActiveTranscodeSlot,
+        };
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let waiting = FakeHandle::with_admission_status("shared", HlsAdmissionStatus::AtCapacity);
+        *waiting.readiness.lock().unwrap() = HlsStartupReadiness::Ready;
+        waiting.set_playlist("#EXTM3U\n#EXTINF:4.0,\nslate-1.ts\n#EXTINF:4.0,\nslate-2.ts\n#EXTINF:4.0,\nslate-3.ts\n");
+        let waiting: Arc<dyn HlsSessionHandle> = waiting;
+        let running: Arc<dyn HlsSessionHandle> =
+            FakeHandle::with_admission_status("shared", HlsAdmissionStatus::Transcoding);
+        assert!(reserve_existing_segmenter_wrapper(&waiting, "shared", Some(2), false).is_none());
+        assert!(reserve_existing_segmenter_wrapper(&running, "shared", Some(2), false).is_none());
+        let producer = try_reserve_active_transcode(
+            2,
+            ActiveTranscodeSlot::new_next_hls_with_capacity_key("shared", "shared"),
+        )
+        .unwrap();
+        assert!(reserve_existing_segmenter_wrapper(&waiting, "shared", Some(2), false).is_none());
+        let wrapper =
+            reserve_existing_segmenter_wrapper(&running, "shared", Some(2), false).unwrap();
+        assert!(reserve_existing_segmenter_wrapper(&running, "shared", Some(2), false).is_none());
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        drop(wrapper);
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        drop(producer);
+        assert!(reserve_existing_segmenter_wrapper(&running, "shared", Some(2), false).is_none());
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+    }
 
     struct FakeHandle {
         channel: String,
@@ -1471,6 +1747,7 @@ mod tests {
         stall_playlist: AtomicBool,
         playlist_reads: AtomicUsize,
         playlist_gate: Mutex<Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>>,
+        segment_outputs: Mutex<HashMap<(String, i64), ersatzrs_core::hls::HlsSegmentOutput>>,
     }
 
     impl FakeHandle {
@@ -1489,6 +1766,7 @@ mod tests {
                 stall_playlist: AtomicBool::new(false),
                 playlist_reads: AtomicUsize::new(0),
                 playlist_gate: Mutex::new(None),
+                segment_outputs: Mutex::new(HashMap::new()),
             })
         }
 
@@ -1502,6 +1780,17 @@ mod tests {
 
     #[async_trait]
     impl HlsSessionHandle for FakeHandle {
+        async fn segment_output(
+            &self,
+            segment: &str,
+            started_at_millis: i64,
+        ) -> Option<ersatzrs_core::hls::HlsSegmentOutput> {
+            self.segment_outputs
+                .lock()
+                .unwrap()
+                .get(&(segment.to_owned(), started_at_millis))
+                .cloned()
+        }
         fn startup_readiness(&self) -> HlsStartupReadiness {
             *self.readiness.lock().unwrap()
         }
@@ -1538,6 +1827,173 @@ mod tests {
         }
 
         fn playout_updated(&self) {}
+    }
+
+    fn cached_programme_handle() -> Arc<FakeHandle> {
+        let handle = FakeHandle::new("cached");
+        let start = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z").unwrap();
+        let mut playlist = String::from("#EXTM3U\n");
+        for index in 0..4 {
+            let time = start + chrono::Duration::seconds(index * 4);
+            let uri = format!("live{index:06}.ts");
+            write!(
+                playlist,
+                "#EXTINF:4.0,\n#EXT-X-PROGRAM-DATE-TIME:{}\n{uri}\n",
+                time.format("%Y-%m-%dT%H:%M:%S%.3f%z")
+            )
+            .unwrap();
+            handle.segment_outputs.lock().unwrap().insert(
+                (uri, time.timestamp_millis()),
+                ersatzrs_core::hls::HlsSegmentOutput {
+                    error: (index == 0).then(|| ALL_STREAMS_IN_USE_SLATE_MESSAGE.into()),
+                },
+            );
+        }
+        handle.set_playlist(&playlist);
+        handle
+    }
+
+    #[test]
+    fn hybrid_cached_workahead_admits_without_a_running_encoder_and_keeps_headroom() {
+        use ersatzrs_infra::transcode_capacity::{
+            active_transcode_snapshot, active_transcode_test_guard_for_tests,
+            reset_active_transcode_state_for_tests,
+        };
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+                let cached = cached_programme_handle();
+                let handle: Arc<dyn HlsSessionHandle> = cached.clone();
+                assert!(registry.try_insert(handle.clone()).await);
+                let deadline = std::time::Instant::now() + Duration::from_secs(1);
+                let ready = has_wrapper_playback_segments(&registry, "cached", 4, deadline).await;
+                assert!(
+                    ready,
+                    "last three programme segments are ready even with an older slate"
+                );
+                assert!(
+                    !has_wrapper_playback_segments(&registry, "cached", 5, deadline).await,
+                    "configured minimum remains binding"
+                );
+                for output in cached.segment_outputs.lock().unwrap().values_mut() {
+                    if output.error.is_none() {
+                        output.error = Some("drawvg: Invalid argument".into());
+                    }
+                }
+                let fallback_ready =
+                    has_wrapper_playback_segments(&registry, "cached", 4, deadline).await;
+                assert!(
+                    fallback_ready,
+                    "known ordinary error fallback remains viewable"
+                );
+                let wrapper =
+                    reserve_existing_segmenter_wrapper(&handle, "cached", Some(2), fallback_ready)
+                        .unwrap();
+                assert_eq!(active_transcode_snapshot(2).active, 1);
+                assert!(reserve_existing_segmenter_wrapper(
+                    &handle,
+                    "cached",
+                    Some(2),
+                    fallback_ready
+                )
+                .is_none());
+                drop(wrapper);
+                assert_eq!(active_transcode_snapshot(2).active, 0);
+            });
+    }
+
+    #[tokio::test]
+    async fn hybrid_playback_probe_distinguishes_capacity_from_error_fallback() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        let handle = cached_programme_handle();
+        assert!(registry.try_insert(handle.clone()).await);
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        let key = handle
+            .segment_outputs
+            .lock()
+            .unwrap()
+            .keys()
+            .find(|(uri, _)| uri == "live000003.ts")
+            .unwrap()
+            .clone();
+        let output = handle.segment_outputs.lock().unwrap().remove(&key).unwrap();
+        assert!(!has_wrapper_playback_segments(&registry, "cached", 3, deadline).await);
+        handle
+            .segment_outputs
+            .lock()
+            .unwrap()
+            .insert((key.0.clone(), key.1 + 1), output.clone());
+        assert!(!has_wrapper_playback_segments(&registry, "cached", 3, deadline).await);
+        handle.segment_outputs.lock().unwrap().insert(
+            key.clone(),
+            ersatzrs_core::hls::HlsSegmentOutput {
+                error: Some("source unavailable".into()),
+            },
+        );
+        assert!(has_wrapper_playback_segments(&registry, "cached", 3, deadline).await);
+        handle.segment_outputs.lock().unwrap().insert(
+            key.clone(),
+            ersatzrs_core::hls::HlsSegmentOutput {
+                error: Some(ALL_STREAMS_IN_USE_SLATE_MESSAGE.into()),
+            },
+        );
+        assert!(!has_wrapper_playback_segments(&registry, "cached", 3, deadline).await);
+        handle.segment_outputs.lock().unwrap().insert(key, output);
+        assert!(has_wrapper_playback_segments(&registry, "cached", 3, deadline).await);
+        let playlist = handle.playlist.lock().unwrap().clone().unwrap();
+        let malformed = playlist.replace("#EXT-X-PROGRAM-DATE-TIME:", "#IGNORED-TIME:");
+        handle.set_playlist(&malformed);
+        assert!(!has_wrapper_playback_segments(&registry, "cached", 3, deadline).await);
+        handle.set_playlist(&playlist);
+        *handle.readiness.lock().unwrap() = HlsStartupReadiness::Failed;
+        assert!(!has_wrapper_playback_segments(&registry, "cached", 3, deadline).await);
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn hybrid_playback_probe_obeys_deadline_and_exact_worker_identity() {
+        let registry: Arc<dyn HlsSessionRegistry> =
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let handle = cached_programme_handle();
+        assert!(registry.try_insert(handle.clone()).await);
+        handle.stall_playlist.store(true, Ordering::SeqCst);
+        assert!(
+            !has_wrapper_playback_segments(
+                &*registry,
+                "cached",
+                3,
+                std::time::Instant::now() + Duration::from_millis(20)
+            )
+            .await
+        );
+        handle.stall_playlist.store(false, Ordering::SeqCst);
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        *handle.playlist_gate.lock().unwrap() = Some((Arc::clone(&entered), Arc::clone(&release)));
+        let probe_registry = Arc::clone(&registry);
+        let probe = tokio::spawn(async move {
+            has_wrapper_playback_segments(
+                &*probe_registry,
+                "cached",
+                3,
+                std::time::Instant::now() + Duration::from_secs(1),
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(1), entered.notified())
+            .await
+            .expect("probe entered the bounded playlist read");
+        let replacement = cached_programme_handle();
+        registry.insert(replacement.clone()).await;
+        release.notify_one();
+        assert!(!probe.await.unwrap());
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+        assert_eq!(replacement.cancelled.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

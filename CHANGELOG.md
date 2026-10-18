@@ -775,10 +775,13 @@ release section when tagging a release.
 
 ### Fixed
 
-- Prepare a bounded generated MPEG-TS epoch join for continuous clocks and stream
-  signalling. Capacity-wait route integration remains under verification.
-- Scale generated capacity-wait and HLS error screens to the configured channel
-  resolution using the embedded background image's actual dimensions.
+- Preserve generated MPEG-TS clocks, continuity and changed stream signalling
+  across repeated capacity-wait screens and programme admission. Native Hybrid
+  startup reserves its wrapper and first encoder together while continuing
+  waiting output; cached playback and ordinary failure screens remain available.
+  Scale capacity-wait and HLS error screens to the configured channel resolution
+  using the embedded background image's actual dimensions. Complete codec/client
+  and platform acceptance remains open.
 - Accept structural teletext resource edits that change packet extent without
   mistaking the derived `nn` subcode for a different original resource. Candidate
   mapping preserves exact identity, update counter and transmission; original

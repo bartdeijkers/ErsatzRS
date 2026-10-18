@@ -10696,7 +10696,7 @@ Missing product functionality:
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4, singleton bitmap warm/client and scoped expiry/native Base proof retained; ordinary POP edit/growth/shrink, per-owner updates, unchanged Night and reopened cold output now pass6d495364 | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
 | F5 — source acquisition and accepted output policies | P9A-03 Local descriptors/header windows and source ownership; ordinary Local888 legacy/Hybrid/seek0.5s/audio/VBV proof retained | Discover/select complete page/charset/provenance across supported providers and use all accepted native/Next Burn/Convert/copy/HLS/browser combinations | Persist distinct source/version/stream/page identities through rescan/replacement; implement remaining exact policies/timing/handoff/cancellation, with visible unsupported results and no caption loss, engine switch or double source consumption |
-| F6 — ordinary playback safety defect | Pure bounded generated-TS epoch join verified; route integration remains an uncommitted candidate. Earlier scoped Legacy36s/Hybrid52s transport/caption/audio success is retained, but final ordinary startup/burst regressions fail. Canonical tmp/phase9-f6-handoff/identity.json | Reliably wait then enter programme on one HTTP response with every accepted codec/full-track layout | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
+| F6 — ordinary playback safety defect | Pure epoch core and scoped route integration verified, including actual-host lifecycle. H264/AAC default2 Legacy/Hybrid wait flows and ordinary5s Hybrid caption/audio cases pass scoped transport/AV controls; work.json owns current proof | Rely on audio/video-Copy and all accepted full-track/shared-session transitions and disconnect cleanup | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
 
 Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
@@ -10776,32 +10776,44 @@ cleanup, not new spontaneous-disconnect proof. Reuse the9 ownership/held-SQLite
 passes in tmp/phase9-wrapper-selection/identity.json (run
 b5d1a36f-3eb2-42a4-988f-eb715a53b198), private-route source fences and unchanged
 editor/publication/channel-isolation receipts only in their original scope.
-F6 partial module checkpoint: tmp/phase9-f6-handoff/identity.json owns source
-hashes and scoped proof; post-commit.json records its SHA. Only the pure bounded
-generated-TS epoch module is committed. Its16 regressions pass within the
-retained54-pass focused selection; the separate short Hybrid36s case failed.
-Strict all-target FFmpeg Clippy and formatting pass. Split/malformed headers,
-clock wrap/rates/reordering, full PSI inventory/version/CRC, duplicates and
-bounded sticky failures are covered. No production route is accepted here.
-The uncommitted route candidate joins epochs before existing authored output,
-atomically reserves native Hybrid wrapper/producer and fences cached provenance.
-Earlier Legacy36s and Hybrid52s captures each pass22 strict transport controls,
-with continuous888 captions/selected660Hz audio and explicit fixture-stop cleanup.
-Those receipts retain their exact candidate scope, not present-head acceptance.
-Final regression exposes ordinary5s Hybrid503 under forced first realtime pacing.
-A bounded12s startup readburst passes2 argv/bounds tests but fails actual Hybrid
-source delivery at32.787s and fresh immediate Burn-eng888 pixels (Off-nld passes).
-Four cached/fallback controls and retained cancellation pass; the combined
-ordinary trial's reused app directory correctly rejects before routing. All
-negative receipts remain in work.json; no timeout or pixel expectation is relaxed.
-The route/pacing draft remains uncommitted. Next use one bounded read-only
-producer-playlist capture in the existing host probe to distinguish an exhausted
-published window/cursor from codec/initialization faults, then correct the named
-boundary. Strict consumer lint, lifecycle smoke, complete codec/shared-session/
-disconnect proof remain due before route acceptance. Source/lease, unaffected
-editor/publication/isolation and earlier scoped AV/transport evidence are reused.
-No reconnect, capacity increase, extra mux, track omission, suitable-client or
-six-RID acceptance is inferred. Full F6/9A and every other closure clause remain.
+F6 core checkpoint2b3ee96d: tmp/phase9-f6-handoff/identity.json and
+post-commit.json retain16 pure epoch regressions, strict FFmpeg Clippy/fmt and
+unchanged foreign deltas. Scoped route integration is verified; integration.json
+owns the receipt,
+source context and remaining gaps, with work.json retaining negative trials.
+It joins generated source epochs before authored/raw output, preserves full PSI/
+tracks and bounds malformed/incomplete headers. Native Hybrid admits wrapper+
+first producer atomically at capacity2 and continues finite waiting output;
+cache admission retains exact URI/PDT identity, ordinary-error fallback and
+producer headroom. Bootstrap pacing lasts through prebyte retries using is_first.
+A typed generated startup reserve preserves original caption timing:7 focused
+cases pass both audio choices/Burn888/seek, raw-option refusal, retained8s priority,
+bounds and a reviewed complete argv snapshot. Earlier raw-burst/source-read and
+503 failures remain in work.json; expectations/timeouts were not weakened.
+Actual ordinary Hybrid passes Off-nld, Burn-eng, Burn-nld and stale-eng at the
+existing5s setting (native-immediate-hybrid3.log; retained immediate3/ proof).
+Hybrid5 uses2 occupied slots for14s and ONE HTTP200 response through52s. It retains
+21 consecutive888 samples and207 selected660Hz100ms windows, video, selected
+nld audio and authored200 inventory, unchanged addon/generation, peak2 and157ms
+explicit cleanup
+(active0, channels[], work0). Strict TSDuck22/22 passes with0 CC/PTS/DTS/PCR faults,
+0 jitter violations and97pct delivery over conservative46s (actual45.589s after
+first bytes; startup6.411s separately recorded). Canonical hybrid5/ raw capture,
+continuity/observation/inventory, gate-analyze.json/PCRcsv and transport-result.json
+retain exact scope. Reuse the unchanged Legacy36s capture, exact stdin supplement
+and22 strict controls (18 caption samples/184 audio windows,95pct delivery), core/
+bridge/ownership guards and unchanged editor/publication/channel-isolation proof.
+Strict all-target FFmpeg/infra/web Clippy and formatting pass. Actual-host
+smoke --hls-lifecycle passes private callback fences, HLS
+playlist/segment delivery, wrapper restart and both idle cleanup paths
+(smoke-lifecycle.log). A raw append PDT
+shift needs no F6 fix: served playlists/provenance regenerate the saved canonical
+clock and ignore raw producer timestamps; existing guards retain their scope.
+F6/9A remain open: audio/video-Copy codec reinitialization, full accepted track/
+shared-session matrices and applicable disconnect/client/platform proof are not
+inferred from H264/AAC or explicit fixture stop. Next qualify audio-Copy/AC3 through the same bounded wait fixture before changing
+production codec policy. No capacity increase, reconnect, extra mux or track loss
+is accepted; TSDuck/source-caption decoding is not Level2.5 client acceptance.
 Complete oversized context (X3), remaining call/definition/set topology and remaining F2/V2
 packages stay required. The208-word limit is an editor constraint, never a native
 cap or a waiver; V6/V7 continue preserving full content. Bound each package to a

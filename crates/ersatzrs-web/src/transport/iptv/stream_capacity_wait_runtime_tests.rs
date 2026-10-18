@@ -7,9 +7,14 @@ use super::*;
 
 const WAIT_SECONDS: u64 = 14;
 const CAPTURE_SECONDS: u64 = 36;
+// Cold Hybrid includes admitted source-caption startup and three real HLS
+// segments before final wrapper probing. Retain enough programme tail to cross
+// the previously observed twelve-second source starvation, with no threshold
+// or capacity relaxation.
+const HYBRID_CAPTURE_SECONDS: u64 = 52;
 const CAPTURE_LIMIT: usize = 32 * 1024 * 1024;
 
-async fn capture_wait(public: &Server, root: &Path) -> (Vec<u8>, Value) {
+async fn capture_wait(public: &Server, root: &Path, capture_seconds: u64) -> (Vec<u8>, Value) {
     let occupied = ["capacity-fixture-first", "capacity-fixture-second"].map(|channel| {
         try_reserve_active_transcode(
             DEFAULT_ACTIVE_TRANSCODE_LIMIT,
@@ -41,7 +46,7 @@ async fn capture_wait(public: &Server, root: &Path) -> (Vec<u8>, Value) {
             status = Some(response.status().as_u16());
             headers_ms = Some(start.elapsed().as_millis());
             let mut body = response.bytes_stream();
-            let end = start + Duration::from_secs(CAPTURE_SECONDS);
+            let end = start + Duration::from_secs(capture_seconds);
             while let Ok(next) = tokio::time::timeout_at(end, body.next()).await {
                 match next {
                     Some(Ok(chunk)) => {
@@ -89,14 +94,20 @@ async fn capture_wait(public: &Server, root: &Path) -> (Vec<u8>, Value) {
         .await
         .unwrap();
     let observation = json!({"request_count":1,"status":status,"headers_ms":headers_ms,
-        "first_bytes_ms":first_bytes_ms,"capture_stopped_ms":stopped_ms,"capture_limit_seconds":CAPTURE_SECONDS,
+        "first_bytes_ms":first_bytes_ms,"capture_stopped_ms":stopped_ms,"capture_limit_seconds":capture_seconds,
         "release":release,"bytes":bytes.len(),"samples":samples,"error":error});
     (bytes, observation)
 }
 
-async fn programme_caption_frame(ffmpeg: &str, bytes: &[u8], caption: &[u8]) -> Vec<u8> {
+async fn programme_caption_frame(
+    ffmpeg: &str,
+    bytes: &[u8],
+    expected: &[Vec<u8>; 3],
+    root: &Path,
+    minimum_programme_samples: usize,
+) -> Vec<u8> {
     // A wait screen deliberately occupies the opening frames. Decode the whole
-    // response and compare a bounded one-frame/second sample against the same
+    // response and compare every 25 decoded frames against the same
     // independent source-page oracle; do not reinterpret reset TS timestamps.
     let frames = probe(
         ffmpeg,
@@ -123,21 +134,48 @@ async fn programme_caption_frame(ffmpeg: &str, bytes: &[u8], caption: &[u8]) -> 
             "pipe:1",
         ],
         bytes,
-        FRAME_BYTES * 50,
+        FRAME_BYTES * 64,
     )
     .await
     .unwrap();
-    frames
+    assert_eq!(frames.len() % FRAME_BYTES, 0);
+    let difference = |actual: &[u8], oracle: &[u8]| -> u64 {
+        actual
+            .iter()
+            .zip(oracle)
+            .map(|(left, right)| u64::from(left.abs_diff(*right)))
+            .sum()
+    };
+    let matches: Vec<_> = frames
         .chunks_exact(FRAME_BYTES)
-        .min_by_key(|frame| {
-            frame
-                .iter()
-                .zip(caption)
-                .map(|(left, right)| u64::from(left.abs_diff(*right)))
-                .sum::<u64>()
+        .map(|frame| {
+            let caption = difference(frame, &expected[0]);
+            caption < difference(frame, &expected[1]) / 2
+                && caption < difference(frame, &expected[2]) / 2
         })
-        .expect("programme video must decode from the same response")
-        .to_vec()
+        .collect();
+    let first = matches.iter().position(|matching| *matching);
+    tokio::fs::write(
+        root.join("capacity-video-continuity.json"),
+        serde_json::to_vec_pretty(&json!({
+            "sample_every_decoded_frames":25,
+            "sample_count":matches.len(),
+            "first_programme_sample":first,
+            "source888_matches":matches,
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let first = first.expect("programme video must decode from the same response");
+    assert!(
+        matches.len() - first >= minimum_programme_samples,
+        "programme must remain visible through the required tail"
+    );
+    for frame in frames.chunks_exact(FRAME_BYTES).skip(first) {
+        compare_burn(frame, &expected[0], &expected[1], &expected[2]);
+    }
+    frames[first * FRAME_BYTES..(first + 1) * FRAME_BYTES].to_vec()
 }
 
 #[expect(
@@ -211,7 +249,12 @@ async fn run_capacity_wait(mode: StreamingMode) {
         .execute(&state.pool)
         .await
         .unwrap();
-    let (bytes, mut observation) = capture_wait(&public, &root).await;
+    let capture_seconds = if mode == StreamingMode::TransportStreamHybrid {
+        HYBRID_CAPTURE_SECONDS
+    } else {
+        CAPTURE_SECONDS
+    };
+    let (bytes, mut observation) = capture_wait(&public, &root, capture_seconds).await;
     observation["cleanup"] = cleanup_wait(&state).await;
     observation["mode"] = json!(format!("{mode:?}"));
     observation["addon_unchanged"] =
@@ -276,22 +319,7 @@ async fn verify_wait(
     expected: &[Vec<u8>; 3],
     observation: &Value,
 ) {
-    let mut streams = Vec::new();
-    if bytes.first() == Some(&0x47) && bytes.len().is_multiple_of(188) {
-        let report = probe(&tools[2], &["--json"], bytes, 256 * 1024)
-            .await
-            .unwrap();
-        tokio::fs::write(root.join("capacity-tsanalyze.json"), &report)
-            .await
-            .unwrap();
-        streams = stream_inventory(&tools[1], bytes).await;
-        tokio::fs::write(
-            root.join("capacity-streams.json"),
-            serde_json::to_vec_pretty(&streams).unwrap(),
-        )
-        .await
-        .unwrap();
-    }
+    let streams = capacity_inventory(tools, root, bytes).await;
 
     assert_eq!(observation["addon_unchanged"], true);
     assert_eq!(observation["generation_unchanged"], true);
@@ -326,12 +354,7 @@ async fn verify_wait(
         "the same response must deliver repeated waiting output while both slots remain occupied"
     );
     assert_eq!(bytes.len() % 188, 0);
-    let actual = programme_caption_frame(&tools[0], bytes, &expected[0]).await;
-    tokio::fs::write(root.join("capacity-programme.rgb"), &actual)
-        .await
-        .unwrap();
-    compare_burn(&actual, &expected[0], &expected[1], &expected[2]);
-    tone_with_limit(&tools[0], bytes, 660, 4 * 1024 * 1024).await;
+    verify_programme_media(tools, root, bytes, expected, observation).await;
     verify_transport_for_language(&tools[2], bytes, true, "nld").await;
     assert_eq!(
         streams
@@ -350,8 +373,135 @@ async fn verify_wait(
     assert!(streams
         .iter()
         .any(|stream| stream["codec_name"] == "dvb_teletext"));
-    let authored = String::from_utf8(decode_text(&tools[0], bytes, "200", "0:s:0").await).unwrap();
+    let authored = String::from_utf8(
+        capacity_programme_probe(
+            &tools[0],
+            &[
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-nostdin",
+                "-txt_page",
+                "200",
+                "-txt_format",
+                "text",
+                "-txt_chop_top",
+                "0",
+                "-txt_duration",
+                "1000",
+                "-f",
+                "mpegts",
+                "-i",
+                "pipe:0",
+                "-map",
+                "0:s:0",
+                "-c:s",
+                "srt",
+                "-f",
+                "srt",
+                "pipe:1",
+            ],
+            bytes,
+        )
+        .await,
+    )
+    .unwrap();
     assert!(authored.contains("Routed stored original"));
+}
+
+async fn capacity_inventory(tools: &[String; 3], root: &Path, bytes: &[u8]) -> Vec<Value> {
+    let mut streams = Vec::new();
+    if bytes.first() == Some(&0x47) && bytes.len().is_multiple_of(188) {
+        let report = probe(&tools[2], &["--json"], bytes, 256 * 1024)
+            .await
+            .unwrap();
+        tokio::fs::write(root.join("capacity-tsanalyze.json"), &report)
+            .await
+            .unwrap();
+        // The programme's PMT adds teletext only after the occupied-capacity
+        // prefix. Discovery must cover this bounded capture, not just its
+        // opening wait film; reading packets alone does not extend probing.
+        let report: Value = serde_json::from_slice(
+            &capacity_programme_probe(
+                &tools[1],
+                &[
+                    "-v",
+                    "error",
+                    "-f",
+                    "mpegts",
+                    "-i",
+                    "pipe:0",
+                    "-count_packets",
+                    "-show_entries",
+                    "stream=index,codec_name,codec_type:stream_tags=language",
+                    "-of",
+                    "json",
+                ],
+                bytes,
+            )
+            .await,
+        )
+        .unwrap();
+        streams = report["streams"].as_array().unwrap().clone();
+        tokio::fs::write(
+            root.join("capacity-streams.json"),
+            serde_json::to_vec_pretty(&streams).unwrap(),
+        )
+        .await
+        .unwrap();
+    }
+
+    streams
+}
+
+async fn verify_programme_media(
+    tools: &[String; 3],
+    root: &Path,
+    bytes: &[u8],
+    expected: &[Vec<u8>; 3],
+    observation: &Value,
+) {
+    // This synthetic programme is 25fps. Hybrid must pass the formerly failing
+    // twelve-second tail; uniform-frame sampling is not assumed for wait films.
+    let minimum_programme_seconds = if observation["mode"] == "TransportStreamHybrid" {
+        13
+    } else {
+        3
+    };
+    let actual =
+        programme_caption_frame(&tools[0], bytes, expected, root, minimum_programme_seconds).await;
+    tokio::fs::write(root.join("capacity-programme.rgb"), &actual)
+        .await
+        .unwrap();
+    compare_burn(&actual, &expected[0], &expected[1], &expected[2]);
+    let audio = tone_windows(&tools[0], bytes, 660, 8 * 1024 * 1024).await;
+    let first = audio.iter().position(|matching| *matching);
+    tokio::fs::write(
+        root.join("capacity-audio-continuity.json"),
+        serde_json::to_vec_pretty(&json!({
+            "sample_window_ms":100,
+            "first_programme_window":first,
+            "selected660hz_matches":audio,
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let first = first.expect("selected Dutch audio must replace silent waiting audio");
+    assert!(
+        audio.len() - first >= minimum_programme_seconds * 10,
+        "selected audio must persist through the required tail"
+    );
+    assert!(
+        audio[first..].iter().all(|matching| *matching),
+        "selected alternate audio must persist through the programme tail"
+    );
+}
+
+async fn capacity_programme_probe(tool: &str, args: &[&str], bytes: &[u8]) -> Vec<u8> {
+    let mut bounded = vec!["-probesize", "33554432", "-analyzeduration", "40000000"];
+    bounded.extend_from_slice(args);
+    probe(tool, &bounded, bytes, 256 * 1024).await.unwrap()
 }
 
 #[test]

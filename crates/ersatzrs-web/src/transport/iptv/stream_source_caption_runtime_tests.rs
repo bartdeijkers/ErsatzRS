@@ -312,6 +312,18 @@ async fn tone(ffmpeg: &str, bytes: &[u8], frequency: usize) {
 }
 
 async fn tone_with_limit(ffmpeg: &str, bytes: &[u8], frequency: usize, limit: usize) {
+    let matching = tone_windows(ffmpeg, bytes, frequency, limit)
+        .await
+        .into_iter()
+        .filter(|matching| *matching)
+        .count();
+    assert!(
+        matching >= 10,
+        "actual selected alternate audio tone must survive"
+    );
+}
+
+async fn tone_windows(ffmpeg: &str, bytes: &[u8], frequency: usize, limit: usize) -> Vec<bool> {
     let pcm = probe(
         ffmpeg,
         &[
@@ -342,9 +354,9 @@ async fn tone_with_limit(ffmpeg: &str, bytes: &[u8], frequency: usize, limit: us
         .chunks_exact(2)
         .map(|s| i16::from_le_bytes(s.try_into().unwrap()))
         .collect();
-    let matching = samples
+    samples
         .chunks_exact(4800)
-        .filter(|chunk| {
+        .map(|chunk| {
             let crossings = chunk
                 .windows(2)
                 .filter(|pair| (pair[0] < 0) != (pair[1] < 0))
@@ -352,11 +364,7 @@ async fn tone_with_limit(ffmpeg: &str, bytes: &[u8], frequency: usize, limit: us
             (crossings * 48000 / (2 * chunk.len())).abs_diff(frequency) <= 20
                 && chunk.iter().any(|s| s.unsigned_abs() > 100)
         })
-        .count();
-    assert!(
-        matching >= 10,
-        "actual selected alternate audio tone must survive"
-    );
+        .collect()
 }
 
 async fn verify_case(

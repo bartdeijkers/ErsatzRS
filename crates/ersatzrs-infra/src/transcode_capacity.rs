@@ -322,18 +322,71 @@ pub fn try_reserve_mpeg_ts_wrapper_capacity(
     limit: i32,
     channel_number: &str,
 ) -> Option<(ActiveTranscodeReservation, ActiveTranscodeReservation)> {
+    try_reserve_wrapper_and_producer_capacity(
+        limit,
+        channel_number,
+        ActiveTranscodeSlot::new_mpeg_ts(channel_number),
+    )
+}
+
+/// Reserve a wrapper and its first producer atomically, preserving the
+/// producer's identity and reclaim policy. An existing producer is never replaced.
+pub(crate) fn try_reserve_wrapper_and_producer_capacity(
+    limit: i32,
+    channel_number: &str,
+    producer: ActiveTranscodeSlot,
+) -> Option<(ActiveTranscodeReservation, ActiveTranscodeReservation)> {
     let available_before_pair = usize::try_from(limit.checked_sub(2)?).ok()?;
     let mut slots = active_transcode_slots()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if slots.len() > available_before_pair {
+    if slots.len() > available_before_pair || slots.contains_key(&producer.key) {
         return None;
     }
     let wrapper = ActiveTranscodeSlot::new_mpeg_ts(channel_number);
-    let encoder = ActiveTranscodeSlot::new_mpeg_ts(channel_number);
     Some((
         insert_active_transcode(&mut slots, wrapper),
-        insert_active_transcode(&mut slots, encoder),
+        insert_active_transcode(&mut slots, producer),
+    ))
+}
+
+/// Admit a wrapper against an active HLS producer or positively verified
+/// cached playback, including ordinary error fallback. Without a producer lease,
+/// require two free places but reserve only the wrapper, leaving headroom for
+/// the next producer. All checks
+/// share the registry lock so competing wrappers cannot strand their producers.
+#[must_use]
+pub fn try_reserve_existing_hls_wrapper_capacity(
+    limit: i32,
+    channel_number: &str,
+    capacity_key: &str,
+    cached_playback_ready: bool,
+) -> Option<ActiveTranscodeReservation> {
+    let limit = usize::try_from(limit).ok()?;
+    let mut slots = active_transcode_slots()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let producer = slots.get(&format!("hls:{capacity_key}"));
+    let producer_is_active = producer.is_some_and(|slot| {
+        slot.channel_number == channel_number
+            && matches!(
+                slot.kind,
+                ActiveTranscodeKind::HlsRealtime | ActiveTranscodeKind::HlsWorkAhead
+            )
+    });
+    let required_free = if producer_is_active {
+        1
+    } else if cached_playback_ready && producer.is_none() {
+        2
+    } else {
+        return None;
+    };
+    if limit.saturating_sub(slots.len()) < required_free {
+        return None;
+    }
+    Some(insert_active_transcode(
+        &mut slots,
+        ActiveTranscodeSlot::new_mpeg_ts(channel_number),
     ))
 }
 
@@ -475,6 +528,157 @@ pub fn active_transcode_test_guard_for_tests() -> std::sync::MutexGuard<'static,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_hybrid_viewers_leave_headroom_for_a_producer() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        assert!(try_reserve_existing_hls_wrapper_capacity(2, "cached", "cached", false).is_none());
+        let occupied =
+            try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("occupied")).unwrap();
+        assert!(try_reserve_existing_hls_wrapper_capacity(2, "cached", "cached", true).is_none());
+        drop(occupied);
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let contenders = ["first", "second"].map(|channel| {
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                try_reserve_existing_hls_wrapper_capacity(2, channel, channel, true)
+            })
+        });
+        barrier.wait();
+        let results = contenders.map(|thread| thread.join().unwrap());
+        assert_eq!(results.iter().filter(|lease| lease.is_some()).count(), 1);
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        let winner = if results[0].is_some() {
+            "first"
+        } else {
+            "second"
+        };
+        let producer = try_reserve_active_transcode(2, hls_slot(winner, winner)).unwrap();
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        drop(results);
+        let shared = try_reserve_existing_hls_wrapper_capacity(2, winner, winner, false).unwrap();
+        drop((shared, producer));
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+        assert_eq!(active_transcode_snapshot(2).peak, 2);
+    }
+
+    #[test]
+    fn hybrid_bootstrap_waits_for_both_places_and_preserves_hls_identity() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let first = try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("occupied-a"))
+            .unwrap();
+        let second =
+            try_reserve_active_transcode(2, ActiveTranscodeSlot::new_mpeg_ts("occupied-b"))
+                .unwrap();
+        assert!(try_reserve_wrapper_and_producer_capacity(
+            2,
+            "hybrid",
+            hls_slot("hybrid", "hybrid")
+        )
+        .is_none());
+        drop(first);
+        for channel in ["hybrid", "competing"] {
+            assert!(try_reserve_wrapper_and_producer_capacity(
+                2,
+                channel,
+                hls_slot(channel, channel)
+            )
+            .is_none());
+            assert!(
+                try_reserve_existing_hls_wrapper_capacity(2, channel, channel, false).is_none()
+            );
+        }
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        drop(second);
+        let producer_slot = hls_slot("hybrid", "hybrid");
+        let last_access = Arc::clone(&producer_slot.last_access_ms);
+        let reclaim = Arc::clone(&producer_slot.reclaim.as_ref().unwrap().notify);
+        let (wrapper, producer) =
+            try_reserve_wrapper_and_producer_capacity(2, "hybrid", producer_slot).unwrap();
+        {
+            let slots = active_transcode_slots().lock().unwrap();
+            let registered = &slots["hls:hybrid"];
+            assert_eq!(registered.slot_id, producer.slot_id());
+            assert_eq!(registered.kind, ActiveTranscodeKind::HlsRealtime);
+            assert!(Arc::ptr_eq(&registered.last_access_ms, &last_access));
+            assert!(Arc::ptr_eq(
+                &registered.reclaim.as_ref().unwrap().notify,
+                &reclaim
+            ));
+        }
+        assert!(try_reserve_active_transcode(3, hls_slot("hybrid", "hybrid")).is_none());
+        drop(producer);
+        assert!(try_reserve_existing_hls_wrapper_capacity(2, "hybrid", "hybrid", false).is_none());
+        assert!(try_reserve_wrapper_and_producer_capacity(
+            2,
+            "competing",
+            hls_slot("competing", "competing")
+        )
+        .is_none());
+        let next = try_reserve_active_transcode(2, hls_slot("hybrid", "hybrid")).unwrap();
+        drop((wrapper, next));
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+        assert_eq!(active_transcode_snapshot(2).peak, 2);
+    }
+
+    #[test]
+    fn competing_hybrid_pairs_and_shared_viewers_do_not_strand_producers() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let contenders = ["first", "second"].map(|channel| {
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                try_reserve_wrapper_and_producer_capacity(2, channel, hls_slot(channel, channel))
+            })
+        });
+        barrier.wait();
+        let results = contenders.map(|thread| thread.join().unwrap());
+        assert_eq!(results.iter().filter(|pair| pair.is_some()).count(), 1);
+        assert_eq!(active_transcode_snapshot(2).active, 2);
+        drop(results);
+
+        let producer = try_reserve_active_transcode(2, hls_slot("shared", "shared")).unwrap();
+        assert!(try_reserve_existing_hls_wrapper_capacity(2, "other", "shared", false).is_none());
+        assert!(
+            try_reserve_existing_hls_wrapper_capacity(2, "shared", "preview:shared", false)
+                .is_none()
+        );
+        let viewer =
+            try_reserve_existing_hls_wrapper_capacity(2, "shared", "shared", false).unwrap();
+        assert!(try_reserve_existing_hls_wrapper_capacity(2, "shared", "shared", false).is_none());
+        drop(viewer);
+        assert_eq!(active_transcode_snapshot(2).active, 1);
+        let next_viewer =
+            try_reserve_existing_hls_wrapper_capacity(2, "shared", "shared", false).unwrap();
+        drop((next_viewer, producer));
+        assert_eq!(active_transcode_snapshot(2).active, 0);
+        assert_eq!(active_transcode_snapshot(2).peak, 2);
+    }
+
+    #[test]
+    fn hybrid_pair_does_not_replace_or_release_an_existing_producer() {
+        let _guard = active_transcode_test_guard_for_tests();
+        reset_active_transcode_state_for_tests();
+        let producer = try_reserve_active_transcode(3, hls_slot("shared", "shared")).unwrap();
+        assert!(try_reserve_wrapper_and_producer_capacity(
+            3,
+            "shared",
+            hls_slot("shared", "shared")
+        )
+        .is_none());
+        assert_eq!(active_transcode_snapshot(3).active, 1);
+        assert_eq!(
+            active_transcode_slots().lock().unwrap()["hls:shared"].slot_id,
+            producer.slot_id()
+        );
+        drop(producer);
+        assert_eq!(active_transcode_snapshot(3).active, 0);
+    }
 
     #[test]
     fn wrapper_pair_rejects_insufficient_capacity_without_partial_admission() {

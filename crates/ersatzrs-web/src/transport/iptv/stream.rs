@@ -1,3 +1,8 @@
+#[path = "stream_epoch_output.rs"]
+mod epoch_output;
+
+use epoch_output::{EpochStreamWriter, StreamEpochWrite};
+
 #[path = "stream_external.rs"]
 mod external;
 
@@ -115,7 +120,7 @@ use ersatzrs_infra::transcode_capacity::{
     DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
 use sqlx::Row;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(test)]
 use tokio::process::Command;
 use tokio::sync::{Notify, RwLock};
@@ -264,7 +269,10 @@ async fn serve_transport_stream_with_binding(
             serve_legacy_concat_stream(state, &channel, output, deadline).await
         }
         TransportStreamMode::HybridWrapper => {
-            serve_segmenter_wrapper_stream(state, &channel, query, output, deadline).await
+            Box::pin(serve_segmenter_wrapper_stream(
+                state, &channel, query, output, deadline,
+            ))
+            .await
         }
     }
 }
@@ -2710,35 +2718,13 @@ async fn serve_segmenter_wrapper_stream(
     let Ok((initial_segment_count, startup_timeout)) = settings else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    let startup_timeout =
-        startup_timeout.min(deadline.saturating_duration_since(std::time::Instant::now()));
-    let wait_result = hls::start_and_wait_for_initial_segments(
-        &*state.hls_sessions,
-        &channel.number,
+    let deferred_wrapper = DeferredSegmenterWrapper {
+        state: state.clone(),
+        channel: channel.clone(),
+        path_replacements,
         initial_segment_count,
         startup_timeout,
-        deadline,
-        || {
-            hls::ensure_segmenter_worker_running_before(
-                state,
-                &channel.number,
-                channel.id,
-                channel.idle_behavior,
-                OutputFormat::Hls,
-                path_replacements.clone(),
-                deadline,
-            )
-        },
-    )
-    .await;
-    if let Some(response) = segmenter_wrapper_wait_failure_response(
-        wait_result,
-        &channel.number,
-        initial_segment_count,
-        startup_timeout,
-    ) {
-        return response;
-    }
+    };
 
     let (playback_profile, target_frame_rate, runtime_capabilities) =
         match load_wrapper_capacity_context(state, channel, "wrapped segmenter", startup_deadline)
@@ -2780,36 +2766,53 @@ async fn serve_segmenter_wrapper_stream(
         }
     };
 
-    let capacity_reservation =
-        match reserve_wrapper_capacity_before(state, channel, &cleanup_paths, startup_deadline)
-            .await
-        {
-            Ok(Some(reservation)) => Some(reservation),
-            Ok(None) => {
-                let response = mpeg_ts_capacity_wait_response(
-                    state,
-                    channel,
-                    command,
-                    cleanup_paths,
-                    Vec::new(),
-                    &playback_profile,
-                    target_frame_rate,
-                    metadata,
-                    runtime_capabilities,
-                    None,
-                    None,
-                    None,
-                    output,
-                    Some((state.clone(), channel.clone())),
-                )
-                .await;
-                if response.status() == StatusCode::OK {
-                    disarm_prepared_mpegts_scripts(&mut prepared_scripts);
-                }
-                return response;
+    let capacity_reservation = match reserve_wrapper_capacity_before(
+        state,
+        channel,
+        &cleanup_paths,
+        startup_deadline,
+        Some(&deferred_wrapper),
+    )
+    .await
+    {
+        Ok(Some(reservation)) => Some(reservation),
+        Ok(None) => {
+            let response = mpeg_ts_capacity_wait_response(
+                state,
+                channel,
+                command,
+                cleanup_paths,
+                Vec::new(),
+                &playback_profile,
+                target_frame_rate,
+                metadata,
+                runtime_capabilities,
+                None,
+                None,
+                None,
+                output,
+                Some(deferred_wrapper),
+            )
+            .await;
+            if response.status() == StatusCode::OK {
+                disarm_prepared_mpegts_scripts(&mut prepared_scripts);
             }
-            Err(response) => return response,
-        };
+            return response;
+        }
+        Err(response) => return response,
+    };
+
+    // Native cold startup reserves the wrapper and first HLS encoder together.
+    // A full channel returns finite waiting output before awaiting readiness.
+    let wait_result = deferred_wrapper.wait_until_ready(startup_deadline).await;
+    if let Some(response) = segmenter_wrapper_wait_failure_response(
+        wait_result,
+        &channel.number,
+        initial_segment_count,
+        startup_timeout,
+    ) {
+        return response;
+    }
 
     let output = recover_wrapper_teletext(state, channel, &command, output, startup_deadline).await;
     if let Some(response) = reject_expired_wrapper_start(startup_deadline, &cleanup_paths).await {
@@ -2839,6 +2842,104 @@ async fn serve_segmenter_wrapper_stream(
             }
             tracing::error!(%error, channel_number = %channel.number, "failed to spawn ffmpeg for wrapped segmenter");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+struct DeferredSegmenterWrapper {
+    state: AppState,
+    channel: Channel,
+    path_replacements: Vec<PathReplacement>,
+    initial_segment_count: usize,
+    startup_timeout: Duration,
+}
+
+impl DeferredSegmenterWrapper {
+    async fn try_reserve_capacity(
+        &self,
+        limit: i32,
+        deadline: tokio::time::Instant,
+    ) -> Option<ActiveTranscodeReservation> {
+        if self.channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+            return try_reserve_active_transcode(
+                limit,
+                ActiveTranscodeSlot::new_mpeg_ts(&self.channel.number),
+            );
+        }
+        hls::try_admit_segmenter_wrapper_before(
+            &self.state,
+            &self.channel.number,
+            self.channel.id,
+            self.channel.idle_behavior,
+            OutputFormat::Hls,
+            self.path_replacements.clone(),
+            deadline.into_std(),
+        )
+        .await
+    }
+
+    async fn wait_until_ready(
+        &self,
+        deadline: tokio::time::Instant,
+    ) -> hls::InitialSegmentWaitResult {
+        let deadline = deadline.into_std();
+        let result = hls::start_and_wait_for_initial_segments(
+            &*self.state.hls_sessions,
+            &self.channel.number,
+            self.initial_segment_count,
+            self.startup_timeout
+                .min(deadline.saturating_duration_since(std::time::Instant::now())),
+            deadline,
+            || {
+                hls::ensure_segmenter_worker_running_before(
+                    &self.state,
+                    &self.channel.number,
+                    self.channel.id,
+                    self.channel.idle_behavior,
+                    OutputFormat::Hls,
+                    self.path_replacements.clone(),
+                    deadline,
+                )
+            },
+        )
+        .await;
+        if result != hls::InitialSegmentWaitResult::Ready
+            || self.channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next
+        {
+            return result;
+        }
+        // A shared worker can retain capacity-slate segments from before this
+        // wrapper was admitted. Probe existing playback (including ordinary
+        // failure slates), not an obsolete capacity-only cache.
+        loop {
+            if hls::has_wrapper_playback_segments(
+                &*self.state.hls_sessions,
+                &self.channel.number,
+                self.initial_segment_count,
+                deadline,
+            )
+            .await
+            {
+                return hls::InitialSegmentWaitResult::Ready;
+            }
+            match tokio::time::timeout_at(
+                deadline.into(),
+                self.state.hls_sessions.try_get(&self.channel.number),
+            )
+            .await
+            {
+                Ok(Some(_)) => {}
+                Ok(None) => return hls::InitialSegmentWaitResult::MissingSession,
+                Err(_) => return hls::InitialSegmentWaitResult::Timeout,
+            }
+            if std::time::Instant::now() >= deadline {
+                return hls::InitialSegmentWaitResult::Timeout;
+            }
+            tokio::time::sleep_until(
+                (tokio::time::Instant::now() + MPEG_TS_CAPACITY_RETRY_INTERVAL)
+                    .min(deadline.into()),
+            )
+            .await;
         }
     }
 }
@@ -2910,12 +3011,32 @@ async fn reserve_wrapper_capacity_before(
     channel: &Channel,
     cleanup_paths: &[PathBuf],
     deadline: tokio::time::Instant,
+    deferred: Option<&DeferredSegmenterWrapper>,
 ) -> Result<Option<ActiveTranscodeReservation>, Response> {
     if let Some(response) = reject_expired_wrapper_start(deadline, cleanup_paths).await {
         return Err(response);
     }
-    let result =
-        tokio::time::timeout_at(deadline, reserve_mpeg_ts_capacity(state, &channel.number)).await;
+    let admission = async {
+        let Some(deferred) = deferred else {
+            return reserve_mpeg_ts_capacity(state, &channel.number).await;
+        };
+        let limit = load_active_transcode_limit(&state.pool)
+            .await?
+            .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
+        let reclaim_deadline =
+            (tokio::time::Instant::now() + MPEG_TS_HLS_RECLAIM_GRACE).min(deadline);
+        loop {
+            if let Some(reservation) = deferred.try_reserve_capacity(limit, deadline).await {
+                return Ok(Some(reservation));
+            }
+            if tokio::time::Instant::now() >= reclaim_deadline {
+                return Ok(None);
+            }
+            request_hls_capacity_reclaim_for_mpeg_ts(&channel.number);
+            tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL).await;
+        }
+    };
+    let result = tokio::time::timeout_at(deadline, admission).await;
     match result {
         Ok(Ok(reservation)) => {
             if let Some(response) = reject_expired_wrapper_start(deadline, cleanup_paths).await {
@@ -3198,7 +3319,8 @@ fn legacy_wrapper_capacity_wait_body(
     let cancel = handle.cancel.clone();
     let handle: Arc<dyn HlsSessionHandle> = handle;
     let fence = Arc::new(WaitingLegacyWrapperFence::default());
-    let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let (reader, writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let mut writer = EpochStreamWriter::new(writer, slate_command.mpegts_output_policy().is_some());
     let output = TeletextOutputAdmission::plain(TeletextOutputRole::FinalWrapperMpegTs);
     let (body, completion) = stream_body_for_wrapper_wait(
         reader,
@@ -3275,6 +3397,7 @@ fn legacy_wrapper_capacity_wait_body(
                     break DirectStreamOutcome::Cancelled;
                 }
                 let selected = selected.with_command(&command);
+                writer.prepare_epoch(&command);
                 let mut child = match spawn_stream_process(&command, None, &channel_number) {
                     Ok(child) => child,
                     Err(error) => {
@@ -3357,6 +3480,7 @@ fn legacy_wrapper_capacity_wait_body(
                     };
                 }
             };
+            writer.prepare_epoch(&slate_command);
             match supervise_stream_process(
                 &mut slate_child,
                 &mut writer,
@@ -3513,7 +3637,7 @@ async fn mpeg_ts_capacity_wait_response(
     remote_stream: Option<ResolvedRemoteStream>,
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
     output: TeletextOutputAdmission,
-    deferred_wrapper: Option<(AppState, Channel)>,
+    deferred_wrapper: Option<DeferredSegmenterWrapper>,
 ) -> Response {
     let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
     let Some(slate_command) = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
@@ -5723,13 +5847,17 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     remote_stream: Option<ResolvedRemoteStream>,
     subtitle_owner: Option<ersatzrs_infra::external_json::subtitles::PreparedSubtitle>,
     output: TeletextOutputAdmission,
-    deferred_wrapper: Option<(AppState, Channel)>,
+    deferred_wrapper: Option<DeferredSegmenterWrapper>,
 ) -> Body {
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
     let handle_cancel = handle.cancel.clone();
     let handle: Arc<dyn HlsSessionHandle> = handle;
-    let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let (reader, writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let mut writer = EpochStreamWriter::new(
+        writer,
+        command.mpegts_output_policy().is_some() && slate_command.mpegts_output_policy().is_some(),
+    );
     let (body, output_completion) = stream_body_for_lifetime(
         reader,
         handle_cancel,
@@ -5762,11 +5890,21 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                     break;
                 }
             };
-            if let Some(reservation) = try_reserve_active_transcode(
-                limit,
-                ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
-            ) {
-                let capacity_guard = reservation;
+            let reservation = tokio::select! {
+                biased;
+                () = cancel.notified() => break,
+                reservation = async {
+                    match &deferred_wrapper {
+                        Some(deferred) => deferred.try_reserve_capacity(
+                            limit, tokio::time::Instant::now() + deferred.startup_timeout,
+                        ).await,
+                        None => try_reserve_active_transcode(
+                            limit, ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
+                        ),
+                    }
+                } => reservation,
+            };
+            if let Some(capacity_guard) = reservation {
                 if let Some(song) = retry.as_ref().and_then(|retry| retry.song.clone()) {
                     if let Err(error) =
                         render_stream_song(song, Some(capacity_guard.clone()), Some(&cancel)).await
@@ -5779,14 +5917,49 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 if let Some(song) = retry.as_ref().and_then(|retry| retry.song.as_ref()) {
                     song.mark_in_use();
                 }
+                // The viewer retains its HTTP body and finite slates while the
+                // admitted wrapper's ordinary HLS worker becomes ready. The
+                // registry, not this viewer, owns that shared worker's lifetime.
+                if let Some(deferred) = &deferred_wrapper {
+                    let deadline = tokio::time::Instant::now() + deferred.startup_timeout;
+                    match supervise_capacity_slates_until_ready(
+                        deferred.wait_until_ready(deadline),
+                        &slate_command,
+                        &mut writer,
+                        &cancel,
+                        &channel_number,
+                    )
+                    .await
+                    {
+                        Ok(hls::InitialSegmentWaitResult::Ready) => {}
+                        Ok(result) => {
+                            tracing::warn!(
+                                ?result,
+                                channel_number,
+                                "admitted MPEG-TS wrapper's HLS input did not become ready"
+                            );
+                            output_result = Err("HLS input did not become ready");
+                            break;
+                        }
+                        Err(outcome) => {
+                            output_result = stream_output_result(&outcome);
+                            cleanup_unconfirmed =
+                                matches!(outcome, DirectStreamOutcome::CleanupUnconfirmed);
+                            if cleanup_unconfirmed {
+                                capacity_guard.retain_until_restart();
+                            }
+                            break;
+                        }
+                    }
+                }
                 // Only the newly admitted final wrapper owns this recovery.
                 // Any capacity slate was supervised without authored output.
-                let selected = if let Some((state, channel)) = &deferred_wrapper {
+                let selected = if let Some(deferred) = &deferred_wrapper {
                     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
                     tokio::select! {
                         biased;
                         () = cancel.notified() => break,
-                        selected = recover_wrapper_teletext(state, channel, &command, output.clone(), deadline) => selected,
+                        selected = recover_wrapper_teletext(&deferred.state, &deferred.channel, &command, output.clone(), deadline) => selected,
                     }
                 } else {
                     output.clone()
@@ -5811,6 +5984,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                     }
                 }
                 let selected = selected.with_command(&command);
+                writer.prepare_epoch(&command);
                 match spawn_stream_process(&command, producer, &channel_number) {
                     Ok(mut child) => {
                         if let Some(source) = retry
@@ -5889,6 +6063,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                     break;
                 }
             };
+            writer.prepare_epoch(&slate_command);
             match supervise_stream_process(
                 &mut slate_child,
                 &mut writer,
@@ -5944,13 +6119,54 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     body
 }
 
+/// Keep the existing finite slate supervisor alive alongside HLS readiness.
+/// Even when readiness wins, await the current round so its child is reaped
+/// before the programme mux starts. Viewer cancellation follows that same reap.
+async fn supervise_capacity_slates_until_ready<W: StreamEpochWrite>(
+    ready: impl std::future::Future<Output = hls::InitialSegmentWaitResult>,
+    slate_command: &FfmpegCommand,
+    writer: &mut W,
+    cancel: &Arc<Notify>,
+    channel_number: &str,
+) -> Result<hls::InitialSegmentWaitResult, DirectStreamOutcome> {
+    tokio::pin!(ready);
+    loop {
+        // Do not start another finite child if input is already ready or the
+        // response was dropped between rounds.
+        tokio::select! {
+            biased;
+            () = cancel.notified() => return Err(DirectStreamOutcome::Cancelled),
+            result = &mut ready => return Ok(result),
+            () = std::future::ready(()) => {}
+        }
+        let mut child = spawn_stream_process(slate_command, None, channel_number)
+            .map_err(|error| failed_stream_spawn_outcome(&error))?;
+        writer.prepare_epoch(slate_command);
+        let round = supervise_stream_process(&mut child, writer, cancel, channel_number, None);
+        tokio::pin!(round);
+        let (ready_result, outcome) = tokio::select! {
+            biased;
+            outcome = &mut round => (None, outcome),
+            result = &mut ready => (Some(result), round.await),
+        };
+        match outcome {
+            DirectStreamOutcome::Completed => {
+                if let Some(result) = ready_result {
+                    return Ok(result);
+                }
+            }
+            outcome => return Err(outcome),
+        }
+    }
+}
+
 // One linear failure-classification ladder: graph denial, then decode denial,
 // then encoder rejection, each with its own persist-and-respawn. Splitting it
 // would mean threading the FnOnce rebuild and the &mut child through helpers
 // for no gain in clarity.
-async fn supervise_stream_command_with_retry(
+async fn supervise_stream_command_with_retry<W: StreamEpochWrite>(
     child: RemoteStreamProcess,
-    writer: &mut tokio::io::DuplexStream,
+    writer: &mut W,
     cancel: &Arc<Notify>,
     channel_number: &str,
     retry: &mut Option<StreamDenialRetry>,
@@ -5978,9 +6194,9 @@ async fn supervise_stream_command_with_retry(
     clippy::too_many_arguments,
     reason = "Adds the exact item cancellation state to the existing linear retry ownership ladder"
 )]
-async fn supervise_stream_command_with_retry_cancellable(
+async fn supervise_stream_command_with_retry_cancellable<W: StreamEpochWrite>(
     mut child: RemoteStreamProcess,
-    writer: &mut tokio::io::DuplexStream,
+    writer: &mut W,
     cancel: &Arc<Notify>,
     channel_number: &str,
     retry: &mut Option<StreamDenialRetry>,
@@ -6118,6 +6334,7 @@ async fn supervise_stream_command_with_retry_cancellable(
             if let Some(song) = &song {
                 song.mark_in_use();
             }
+            writer.prepare_epoch(&retry_command.command);
             let next_output = output.with_command(&retry_command.command);
             match spawn_stream_retry(
                 retry_command,
@@ -6227,6 +6444,7 @@ async fn supervise_stream_command_with_retry_cancellable(
             if let Some(song) = &song {
                 song.mark_in_use();
             }
+            writer.prepare_epoch(&retry_command.command);
             let next_output = output.with_command(&retry_command.command);
             match spawn_stream_retry(
                 retry_command,
@@ -6318,6 +6536,7 @@ async fn supervise_stream_command_with_retry_cancellable(
         if let Some(song) = &song {
             song.mark_in_use();
         }
+        writer.prepare_epoch(&retry_command.command);
         let next_output = output.with_command(&retry_command.command);
         match spawn_stream_retry(
             retry_command,
@@ -6449,9 +6668,9 @@ fn stream_body_for_wrapper_wait(
     (body, Some(sender))
 }
 
-async fn supervise_stream_process(
+async fn supervise_stream_process<W: StreamEpochWrite>(
     child: &mut RemoteStreamProcess,
-    writer: &mut tokio::io::DuplexStream,
+    writer: &mut W,
     cancel: &Arc<Notify>,
     channel_number: &str,
     remote_stream: Option<&ResolvedRemoteStream>,
@@ -6478,9 +6697,9 @@ async fn reap_stream_process(child: &mut RemoteStreamProcess) -> std::io::Result
     clippy::too_many_lines,
     reason = "Keeps stdout pumping, cancellation, process reaping and failure classification in their required teardown order"
 )]
-async fn supervise_stream_process_with_retry_context(
+async fn supervise_stream_process_with_retry_context<W: StreamEpochWrite>(
     child: &mut RemoteStreamProcess,
-    writer: &mut tokio::io::DuplexStream,
+    writer: &mut W,
     cancel: &Arc<Notify>,
     channel_number: &str,
     remote_stream: Option<&ResolvedRemoteStream>,
@@ -6515,56 +6734,78 @@ async fn supervise_stream_process_with_retry_context(
 
     // Pump stdout into the response body until EOF (process exit), a body
     // write failure (client gone), or session cancellation.
+    let joined_output = writer.joins_epochs();
     let pump = async {
-        match stdout.as_mut() {
-            Some(stdout) => match output.binding() {
-                Some(binding) => {
-                    // Every child gets fresh PSI/PCR/continuity and timing state.
-                    super::teletext_optional_output::forward_bound_teletext_output(
-                        stdout, writer, binding,
-                    )
-                    .await
-                }
-                None if output.live().is_some() => {
-                    let live = output.live().ok_or(TeletextPumpError::Configuration)?;
-                    let command = output.command().ok_or(TeletextPumpError::Configuration)?;
-                    let result = super::teletext_live_output::forward_live_teletext_output(
-                        stdout,
-                        writer,
-                        command,
-                        &live.intent,
-                        live.deadline,
-                    )
-                    .await?;
-                    if let Some(rejection) = result.rejection {
-                        tracing::debug!(%rejection, "live teletext rejected before commitment; preserving raw output");
+        writer
+            .begin_epoch()
+            .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+        // Normalize the owned source before authored forwarding. The actual
+        // response sink remains direct, preserving write/flush acknowledgements.
+        let result = async {
+            match stdout.as_mut() {
+                Some(stdout) => {
+                    let (mut source, sink) = writer.source(stdout);
+                    match output.binding() {
+                        Some(binding) => {
+                            super::teletext_optional_output::forward_bound_teletext_output(
+                                &mut source, sink, binding,
+                            )
+                            .await
+                        }
+                        None if output.live().is_some() => {
+                            let live = output.live().ok_or(TeletextPumpError::Configuration)?;
+                            let command = output.command().ok_or(TeletextPumpError::Configuration)?;
+                            let result = super::teletext_live_output::forward_live_teletext_output(
+                                &mut source,
+                                sink,
+                                command,
+                                &live.intent,
+                                live.deadline,
+                            )
+                            .await?;
+                            if let Some(rejection) = result.rejection {
+                                tracing::debug!(%rejection, "live teletext rejected before commitment; preserving raw output");
+                            }
+                            Ok(result.bytes)
+                        }
+                        None if output.accepted().is_some() => {
+                            let accepted = output.accepted().ok_or(TeletextPumpError::Configuration)?;
+                            let command = output.command().ok_or(TeletextPumpError::Configuration)?;
+                            let result = forward_accepted_teletext_output(
+                                &mut source,
+                                sink,
+                                command,
+                                &accepted.intent,
+                                &accepted.application,
+                                accepted.deadline,
+                            )
+                            .await?;
+                            if let Some(rejection) = result.rejection {
+                                tracing::debug!(%rejection, "accepted teletext rejected before commitment; preserving raw output");
+                            }
+                            Ok(result.bytes)
+                        }
+                        None => tokio::io::copy(&mut source, sink)
+                            .await
+                            .map_err(|error| TeletextPumpError::Write(error.kind())),
                     }
-                    Ok(result.bytes)
                 }
-                None if output.accepted().is_some() => {
-                    let accepted = output.accepted().ok_or(TeletextPumpError::Configuration)?;
-                    let command = output.command().ok_or(TeletextPumpError::Configuration)?;
-                    let result = forward_accepted_teletext_output(
-                        stdout,
-                        writer,
-                        command,
-                        &accepted.intent,
-                        &accepted.application,
-                        accepted.deadline,
-                    )
-                    .await?;
-                    if let Some(rejection) = result.rejection {
-                        tracing::debug!(%rejection, "accepted teletext rejected before commitment; preserving raw output");
-                    }
-                    Ok(result.bytes)
-                }
-                None => tokio::io::copy(stdout, writer)
-                    .await
-                    .map_err(|error| TeletextPumpError::Write(error.kind())),
-            },
-            None if output.has_authored_output() => Err(TeletextPumpError::EmptyOutput),
-            None => Ok(0),
+                None if output.has_authored_output() => Err(TeletextPumpError::EmptyOutput),
+                None => Ok(0),
+            }
         }
+        .await;
+        if result.is_ok() || matches!(result, Err(TeletextPumpError::EmptyOutput)) {
+            writer
+                .finish_epoch()
+                .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+            writer
+                .sink()
+                .flush()
+                .await
+                .map_err(|error| TeletextPumpError::Write(error.kind()))?;
+        }
+        result
     };
     let (wrote_media, transport_error) = tokio::select! {
         biased;
@@ -6589,7 +6830,7 @@ async fn supervise_stream_process_with_retry_context(
                 let _ = child.start_kill();
             }
             let wrote_media = !empty_output && result.as_ref().map_or(true, |bytes| *bytes > 0);
-            let transport_error = if output.has_authored_output() { result.err() } else { None };
+            let transport_error = if output.has_authored_output() || joined_output { result.err() } else { None };
             (wrote_media, transport_error)
         }
     };
@@ -6609,7 +6850,7 @@ async fn supervise_stream_process_with_retry_context(
             None
         },
         result = async {
-            if output.has_authored_output() {
+            if output.has_authored_output() || joined_output {
                 tokio::time::timeout(Duration::from_secs(5), child.wait())
                     .await
                     .unwrap_or_else(|_| Err(std::io::ErrorKind::TimedOut.into()))
@@ -9067,6 +9308,106 @@ mod tests {
         );
         drop(body);
         wait_for_capacity_active(1, 0).await;
+    }
+
+    // These finite-child ownership fixtures use POSIX shell handshakes. The
+    // production supervisor and the native stream acceptance remain portable.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn hybrid_readiness_keeps_slate_until_finite_child_is_reaped() {
+        let root = tempfile::tempdir().unwrap();
+        let marker = root.path().join("finish-slate");
+        let command = FfmpegCommand {
+            executable: "sh".to_owned(),
+            arguments: vec![
+                "-c".to_owned(),
+                "printf slate; while [ ! -f \"$1\" ]; do sleep 0.01; done; printf reaped"
+                    .to_owned(),
+                "capacity-slate".to_owned(),
+                marker.to_str().unwrap().to_owned(),
+            ],
+            environment: Vec::new(),
+            mpegts_output: None,
+        };
+        let cancel = Arc::new(Notify::new());
+        let first_bytes = Arc::new(Notify::new());
+        let read_started = first_bytes.clone();
+        let (mut reader, mut writer) = tokio::io::duplex(64);
+        let capture = tokio::spawn(async move {
+            let mut first = [0; 5];
+            reader.read_exact(&mut first).await.unwrap();
+            assert_eq!(&first, b"slate");
+            read_started.notify_one();
+            let mut rest = Vec::new();
+            reader.read_to_end(&mut rest).await.unwrap();
+            rest
+        });
+        let ready = async {
+            first_bytes.notified().await;
+            tokio::fs::write(&marker, b"finish").await.unwrap();
+            hls::InitialSegmentWaitResult::Ready
+        };
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(3),
+            supervise_capacity_slates_until_ready(
+                ready,
+                &command,
+                &mut writer,
+                &cancel,
+                "warming-hybrid",
+            ),
+        )
+        .await
+        .expect("readiness and the finite slate must finish");
+        assert!(matches!(outcome, Ok(hls::InitialSegmentWaitResult::Ready)));
+        drop(writer);
+        assert_eq!(capture.await.unwrap(), b"reaped");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn hybrid_readiness_cancellation_reaps_active_slate() {
+        let root = tempfile::tempdir().unwrap();
+        let marker = root.path().join("unexpected-late-output");
+        let command = FfmpegCommand {
+            executable: "sh".to_owned(),
+            arguments: vec![
+                "-c".to_owned(),
+                "printf slate; sleep 30; printf late > \"$1\"".to_owned(),
+                "capacity-slate".to_owned(),
+                marker.to_str().unwrap().to_owned(),
+            ],
+            environment: Vec::new(),
+            mpegts_output: None,
+        };
+        let cancel = Arc::new(Notify::new());
+        let body_cancel = cancel.clone();
+        let (mut reader, mut writer) = tokio::io::duplex(64);
+        let reader_task = tokio::spawn(async move {
+            let mut first = [0; 5];
+            reader.read_exact(&mut first).await.unwrap();
+            assert_eq!(&first, b"slate");
+            body_cancel.notify_one();
+            let mut rest = Vec::new();
+            reader.read_to_end(&mut rest).await.unwrap();
+            rest
+        });
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(3),
+            supervise_capacity_slates_until_ready(
+                std::future::pending(),
+                &command,
+                &mut writer,
+                &cancel,
+                "cancel-warming-hybrid",
+            ),
+        )
+        .await
+        .expect("cancellation must await the active slate's bounded reap");
+        assert!(matches!(outcome, Err(DirectStreamOutcome::Cancelled)));
+        drop(writer);
+        assert!(reader_task.await.unwrap().is_empty());
+        assert!(!marker.exists());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

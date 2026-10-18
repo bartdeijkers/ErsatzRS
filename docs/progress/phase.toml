@@ -62,16 +62,20 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F6 partial epoch-module checkpoint: tmp/phase9-f6-handoff/identity.json owns
-source/proof; post-commit.json records the SHA. Sixteen pure transport regressions,
-strict FFmpeg Clippy and formatting pass. Only the independent module is committed;
-route/pacing integration remains uncommitted and F6/9A stay open.
-Earlier scoped Legacy/Hybrid wait-flow successes are retained. Final qualification
-finds ordinary5s startup503; bounded startup burst then fails Hybrid source-read
-and actual Burn888 pixels. Work.json retains failures and draft/check details.
-Next: one bounded read-only producer-playlist sample during the existing host
-probe, then correct the demonstrated delivery boundary. Consumer lint, lifecycle,
-complete codec/shared-session/disconnect and suitable-client proof remain due.
+F6 core checkpoint2b3ee96d and the scoped epoch/admission integration now have
+canonical receipts in tmp/phase9-f6-handoff/identity.json and integration.json;
+post-commit records retain exact checkpoint SHAs and preserved foreign deltas.
+Typed reserve/caption timing passes7 focused cases. Ordinary Hybrid passes all4
+caption/audio/stale cases at unchanged5s startup. Default2 occupied14s Hybrid52s
+passes21 caption samples,207 selected100ms audio windows and22 strict transport
+controls, peak2 and157ms explicit cleanup. Reuse Legacy36s capture/supplement and
+22 strict controls. All-target FFmpeg/infra/web Clippy, fmt and actual-host HLS/
+wrapper lifecycle smoke pass, including idle cleanup and wrapper restart.
+F6/9A remain open: complete codec initialization, full track/shared-session and
+applicable disconnect/client/platform proof are not inferred. Next qualify
+selected audio-Copy/AC3 Legacy+Hybrid in the existing bounded wait fixture; change
+production policy only for an observed defect. Unknown raw-input fences remain
+intact. Canonical playlists/provenance protect against raw internal PDT shifts.
 Continue autonomously; unused-object removal stays deferred. Preserve unrelated
 deltas and all receipts; do not push/publish or weaken any acceptance clause.
 

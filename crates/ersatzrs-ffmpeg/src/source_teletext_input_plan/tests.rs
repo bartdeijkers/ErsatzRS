@@ -422,3 +422,74 @@ fn suppressed_fmp4_transport_offset_is_not_reported_as_emitted() {
         .any(|arg| arg == "-output_ts_offset"));
     assert_eq!(plan.timing().output_ts_offset(), None);
 }
+
+#[test]
+fn typed_realtime_burst_keeps_caption_seek_and_both_audio_selections_qualified() {
+    for audio in [1, 5] {
+        let mut request = request();
+        request.source_audio_streams = vec![
+            SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1),
+            SourceAudioStream::new(SourceAudioCodec::Aac).with_index(5),
+        ];
+        request.inputs[1] = request.inputs[1].clone().with_stream_index(audio);
+        request.desired.realtime_mode = crate::RealtimeMode::On;
+        request.state.start = Some(Duration::from_millis(17_500));
+        request.state.realtime_initial_burst = Some(Duration::from_secs(12));
+        let (command, plan) = build(HardwareAccelerationKind::None, request);
+        assert!(plan.matches_command(&command));
+        assert_eq!(plan.audio_stream(), Some((0, audio)));
+        assert_eq!(plan.enabled_caption_input_streams(), [4, audio, 7]);
+        assert_eq!(
+            plan.caption_input().streams[0]
+                .source_teletext_page
+                .unwrap()
+                .get(),
+            888
+        );
+        assert!(!plan.timing().has_opaque_input_options());
+        assert_eq!(
+            plan.timing().effective_input_seek_microseconds(),
+            Some(17_500_000)
+        );
+        let generated = plan
+            .physical_input_options()
+            .windows(2)
+            .filter(|pair| {
+                matches!(
+                    pair[0].as_str(),
+                    "-ss" | "-readrate_initial_burst" | "-readrate"
+                )
+            })
+            .map(|pair| format!("{} {}", pair[0], pair[1]))
+            .collect::<Vec<_>>();
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(generated.join("\n"), @"
+            -ss 00:00:17.5000000
+            -readrate_initial_burst 12
+            -readrate_initial_burst 12
+            -readrate 1.05
+            ");
+        }
+    }
+}
+
+#[test]
+fn raw_burst_and_seek_remain_opaque_even_with_generated_realtime_reserve() {
+    for options in [["-readrate_initial_burst", "12"], ["-ss", "99"]] {
+        let mut request = request();
+        request.inputs[0]
+            .input_options
+            .extend(options.map(str::to_owned));
+        request.desired.realtime_mode = crate::RealtimeMode::On;
+        request.state.start = Some(Duration::from_millis(17_500));
+        request.state.realtime_initial_burst = Some(Duration::from_secs(12));
+        let (command, plan) = build(HardwareAccelerationKind::None, request);
+        assert!(plan.matches_command(&command));
+        assert!(plan.timing().has_opaque_input_options());
+        assert_eq!(plan.timing().effective_input_seek_microseconds(), None);
+        assert!(plan
+            .physical_input_options()
+            .windows(2)
+            .any(|pair| pair == options));
+    }
+}

@@ -71,8 +71,9 @@ use crate::remote_stream::{
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
     load_active_transcode_limit, promote_hls_transcode_to_realtime,
-    request_active_transcode_reclaim, try_reserve_active_transcode, ActiveTranscodeKind,
-    ActiveTranscodeReclaimHandle, ActiveTranscodeSlot,
+    request_active_transcode_reclaim, try_reserve_active_transcode,
+    try_reserve_wrapper_and_producer_capacity, ActiveTranscodeKind, ActiveTranscodeReclaimHandle,
+    ActiveTranscodeReservation, ActiveTranscodeSlot,
 };
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -654,8 +655,67 @@ impl HlsSessionWorker {
         registry: Arc<dyn HlsSessionRegistry>,
         idle_timeout: Option<Duration>,
     ) {
+        self.start_with_reservation(pool, registry, idle_timeout, None);
+    }
+
+    /// Reserve a Hybrid wrapper and this worker's first realtime producer
+    /// without retaining a partial admission. Only start the producer after
+    /// this worker wins insertion into its shared session registry.
+    #[must_use]
+    pub fn try_reserve_wrapper_capacity(
+        &self,
+        limit: i32,
+        idle_timeout: Option<Duration>,
+    ) -> Option<(ActiveTranscodeReservation, ActiveTranscodeReservation)> {
+        try_reserve_wrapper_and_producer_capacity(
+            limit,
+            &self.channel_number,
+            self.active_transcode_slot(ActiveTranscodeKind::HlsRealtime, idle_timeout),
+        )
+    }
+
+    fn active_transcode_slot(
+        &self,
+        kind: ActiveTranscodeKind,
+        idle_timeout: Option<Duration>,
+    ) -> ActiveTranscodeSlot {
+        ActiveTranscodeSlot::new_hls_with_capacity_key(
+            &self.channel_number,
+            &self.capacity_key,
+            kind,
+            Arc::clone(&self.last_access_ms),
+            ActiveTranscodeReclaimHandle::new(
+                Arc::clone(&self.reclaim_transcode),
+                Arc::clone(&self.reclaim_requested_slot_id),
+                Arc::clone(&self.reclaim_reacquire_deferred_until_ms),
+                idle_timeout.is_some(),
+            ),
+        )
+    }
+
+    /// Move an atomically admitted first producer into the worker task. The
+    /// task owns its lease through startup, cancellation and process cleanup.
+    pub fn start_with_initial_reservation(
+        self: Arc<Self>,
+        pool: DbPool,
+        registry: Arc<dyn HlsSessionRegistry>,
+        idle_timeout: Option<Duration>,
+        initial_reservation: ActiveTranscodeReservation,
+    ) {
+        self.start_with_reservation(pool, registry, idle_timeout, Some(initial_reservation));
+    }
+
+    fn start_with_reservation(
+        self: Arc<Self>,
+        pool: DbPool,
+        registry: Arc<dyn HlsSessionRegistry>,
+        idle_timeout: Option<Duration>,
+        initial_reservation: Option<ActiveTranscodeReservation>,
+    ) {
         tokio::spawn(async move {
-            let operation = self.clone().run(pool, registry, idle_timeout);
+            let operation = self
+                .clone()
+                .run(pool, registry, idle_timeout, initial_reservation);
             tokio::pin!(operation);
             loop {
                 tokio::select! {
@@ -682,6 +742,7 @@ impl HlsSessionWorker {
         pool: DbPool,
         registry: Arc<dyn HlsSessionRegistry>,
         idle_timeout: Option<Duration>,
+        mut initial_reservation: Option<ActiveTranscodeReservation>,
     ) {
         if let Err(error) = self
             .startup_read(async {
@@ -701,6 +762,7 @@ impl HlsSessionWorker {
         self.touch();
 
         let mut is_first = true;
+        let started_with_initial_reservation = initial_reservation.is_some();
         let mut last_playout_item_id = None::<(i64, DateTime<Utc>)>;
         let channel_start_time = Utc::now();
         self.started_at_ms
@@ -869,7 +931,8 @@ impl HlsSessionWorker {
                 tokio::time::sleep(delay.min(Duration::from_secs(1))).await;
                 continue;
             }
-            let force_realtime = realtime_by_buffer || live_remote_stream;
+            let initial_bootstrap = started_with_initial_reservation && is_first;
+            let force_realtime = realtime_by_buffer || live_remote_stream || initial_bootstrap;
             let recently_accessed = self.was_recently_accessed();
             if idle_timeout.is_some() && !recently_accessed {
                 self.set_admission_status(HlsAdmissionStatus::Waiting);
@@ -927,21 +990,12 @@ impl HlsSessionWorker {
                     break;
                 }
             };
-            let active_transcode_reservation = try_reserve_active_transcode(
-                active_limit,
-                ActiveTranscodeSlot::new_hls_with_capacity_key(
-                    &self.channel_number,
-                    &self.capacity_key,
-                    active_transcode_kind,
-                    Arc::clone(&self.last_access_ms),
-                    ActiveTranscodeReclaimHandle::new(
-                        Arc::clone(&self.reclaim_transcode),
-                        Arc::clone(&self.reclaim_requested_slot_id),
-                        Arc::clone(&self.reclaim_reacquire_deferred_until_ms),
-                        idle_timeout.is_some(),
-                    ),
-                ),
-            );
+            let active_transcode_reservation = initial_reservation.take().or_else(|| {
+                try_reserve_active_transcode(
+                    active_limit,
+                    self.active_transcode_slot(active_transcode_kind, idle_timeout),
+                )
+            });
             let Some(active_transcode_reservation) = active_transcode_reservation else {
                 // Frozen interval startup includes admission wait, but never
                 // starts a resolver or capacity-slate encoder without capacity.
@@ -2162,7 +2216,7 @@ impl HlsSessionWorker {
                     }
                 }
             };
-            let (acceleration, request) = build_hls_request_with_input_explicit_discontinuity(
+            let (acceleration, mut request) = build_hls_request_with_input_explicit_discontinuity(
                 media_input,
                 self.output_format,
                 is_first,
@@ -2189,6 +2243,12 @@ impl HlsSessionWorker {
                     HlsInputTimeline::Original
                 },
                 song.as_ref(),
+            );
+            apply_hls_bootstrap_readburst(
+                &mut request,
+                initial_bootstrap,
+                is_continuous_remote,
+                self.startup_minimum_segments.load(Ordering::Acquire),
             );
             let source_caption_request =
                 crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest::new(
@@ -4094,6 +4154,35 @@ fn build_hls_command_with_explicit_discontinuity(
 enum HlsInputTimeline {
     Original,
     RetainedIntervals,
+}
+
+fn apply_hls_bootstrap_readburst(
+    request: &mut PipelineRequest,
+    initial_bootstrap: bool,
+    continuous_remote: bool,
+    minimum_segments: usize,
+) {
+    if !initial_bootstrap
+        || request.state.retained_stream_timestamps
+        || continuous_remote
+        || request.state.realtime_initial_burst.is_some()
+        || request.inputs.iter().any(|input| {
+            input
+                .input_options
+                .iter()
+                .any(|option| option == "-readrate_initial_burst")
+        })
+    {
+        return;
+    }
+    // Keep pacing in typed generator state: supplied input options deliberately
+    // make source-caption timing opaque. The four-second startup segments must
+    // fit within one ordinary work window. Retained/remote policies stay separate.
+    let burst_seconds = u64::try_from(minimum_segments)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(4)
+        .min(HLS_WORK_AHEAD_TRANSCODE_SECONDS);
+    request.state.realtime_initial_burst = Some(Duration::from_secs(burst_seconds));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -7023,7 +7112,7 @@ mod tests {
         let mut profile = playback_profile();
         profile.profile.hardware_acceleration = HardwareAccelerationKind::None;
         let build = |page: Option<u16>, start| {
-            build_hls_command_with_input_explicit_discontinuity(
+            let (acceleration, mut request) = build_hls_request_with_input_explicit_discontinuity(
                 InputFile::video("synthetic-source.ts"),
                 OutputFormat::Hls,
                 true,
@@ -7055,12 +7144,27 @@ mod tests {
                 None,
                 HlsInputTimeline::Original,
                 None,
+            );
+            apply_hls_bootstrap_readburst(&mut request, true, false, 3);
+            crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest::new(
+                acceleration,
+                request,
             )
+            .build()
             .unwrap()
         };
         let (primary, plan) = build(Some(888), Duration::from_secs(40));
         let plan = plan.expect("actual HLS source caption has its generated plan");
         assert!(plan.matches_command(&primary));
+        assert!(!plan.timing().has_opaque_input_options());
+        assert_eq!(
+            plan.timing().effective_input_seek_microseconds(),
+            Some(40_000_000)
+        );
+        assert!(plan
+            .physical_input_options()
+            .windows(2)
+            .any(|pair| pair == ["-readrate_initial_burst", "12"]));
         assert_eq!(plan.caption_physical_input_index(), 0);
         assert_eq!(plan.video_stream(), Some((0, 7)));
         assert_eq!(plan.audio_stream(), Some((0, 5)));
@@ -7083,6 +7187,11 @@ mod tests {
         let (retry, retry_plan) = build(Some(888), Duration::from_secs(41));
         let retry_plan = retry_plan.unwrap();
         assert!(retry_plan.matches_command(&retry));
+        assert!(!retry_plan.timing().has_opaque_input_options());
+        assert_eq!(
+            retry_plan.timing().effective_input_seek_microseconds(),
+            Some(41_000_000)
+        );
         assert!(!plan.matches_command(&retry));
         assert!(!retry_plan.matches_command(&primary));
         let (ordinary, ordinary_plan) = build(None, Duration::from_secs(40));
@@ -8222,6 +8331,71 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.to_string().contains("HLS startup cancelled"));
+    }
+
+    #[test]
+    fn hybrid_bootstrap_cancellation_releases_owned_producer_without_opening_source() {
+        let _guard = hls_counter_test_guard();
+        reset_active_transcode_state();
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let root = tempfile::tempdir().unwrap();
+                let output = root.path().join("cancelled-bootstrap");
+                let worker = HlsSessionWorker::new(
+                    "bootstrap-cancel".into(),
+                    1,
+                    output.clone(),
+                    OutputFormat::Hls,
+                    Vec::new(),
+                    test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+                );
+                let registry: Arc<dyn HlsSessionRegistry> =
+                    Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
+                assert!(registry.try_insert(worker.clone()).await);
+                worker.initialize_startup(std::time::Instant::now() + Duration::from_secs(1), 3);
+                let (wrapper, producer) = worker
+                    .try_reserve_wrapper_capacity(2, Some(Duration::from_mins(1)))
+                    .unwrap();
+                assert_eq!(
+                    crate::transcode_capacity::active_transcode_snapshot(2).active,
+                    2
+                );
+                worker.cancel().await;
+                let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                    .connect_lazy("sqlite::memory:")
+                    .unwrap();
+                worker.start_with_initial_reservation(
+                    pool,
+                    Arc::clone(&registry),
+                    Some(Duration::from_mins(1)),
+                    producer,
+                );
+                timeout(Duration::from_secs(1), async {
+                    while registry.try_get("bootstrap-cancel").await.is_some()
+                        || crate::transcode_capacity::active_transcode_snapshot(2).active != 1
+                    {
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .expect("cancelled bootstrap releases its producer and registry entry");
+                assert!(
+                    !output.exists(),
+                    "cancelled startup must not prepare output or open media"
+                );
+                drop(wrapper);
+                assert_eq!(
+                    crate::transcode_capacity::active_transcode_snapshot(2).active,
+                    0
+                );
+                assert_eq!(
+                    crate::transcode_capacity::active_transcode_snapshot(2).peak,
+                    2
+                );
+            });
     }
 
     #[tokio::test]
@@ -9946,6 +10120,146 @@ mod tests {
         assert!(
             !arguments.contains("mpegts_flags=+initial_discontinuity"),
             "{arguments}"
+        );
+    }
+
+    #[test]
+    fn build_hls_bootstrap_readburst_preserves_both_audio_selections() {
+        let mut profile = playback_profile();
+        profile.profile.video_format = FFmpegProfileVideoFormat::Copy;
+        profile.profile.audio_format = FFmpegProfileAudioFormat::Copy;
+        let build = |audio_index, initial_bootstrap| {
+            let (acceleration, mut request) = build_hls_request_with_input_explicit_discontinuity(
+                InputFile::video("synthetic-bootstrap.mkv"),
+                OutputFormat::Hls,
+                true,
+                false,
+                true,
+                Duration::ZERO,
+                Some(Duration::from_secs(44)),
+                None,
+                &profile,
+                None,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                Some(SourceVideoStream::new(SourceVideoCodec::H264).with_index(7)),
+                vec![
+                    SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1),
+                    SourceAudioStream::new(SourceAudioCodec::Aac).with_index(5),
+                ],
+                PlaybackAudioSelection::Exact(audio_index),
+                None,
+                Vec::new(),
+                Vec::new(),
+                HlsDiscontinuity::Absent,
+                None,
+                HlsInputTimeline::Original,
+                None,
+            );
+            apply_hls_bootstrap_readburst(&mut request, initial_bootstrap, false, 3);
+            ersatzrs_ffmpeg::build_pipeline_command_with_source_teletext_plan(acceleration, request)
+                .unwrap()
+                .0
+        };
+        let mut snapshot = String::new();
+        for selected_audio in [1, 5] {
+            let ordinary = build(selected_audio, false);
+            let command = build(selected_audio, true);
+            let burst_position = command
+                .arguments
+                .iter()
+                .position(|argument| argument == "-readrate_initial_burst")
+                .unwrap();
+            assert_eq!(
+                &command.arguments[burst_position..burst_position + 6],
+                [
+                    "-readrate_initial_burst",
+                    "12",
+                    "-readrate_initial_burst",
+                    "12",
+                    "-readrate",
+                    "1.0",
+                ]
+            );
+            let mut without_burst = command.arguments.clone();
+            while let Some(position) = without_burst
+                .iter()
+                .position(|argument| argument == "-readrate_initial_burst")
+            {
+                assert_eq!(without_burst[position + 1], "12");
+                without_burst.drain(position..position + 2);
+            }
+            assert_eq!(
+                without_burst, ordinary.arguments,
+                "burst must not change maps, codecs, captions or timeline options"
+            );
+            assert!(command
+                .arguments
+                .windows(2)
+                .any(|pair| pair[0] == "-map" && pair[1] == format!("0:{selected_audio}")));
+            writeln!(
+                snapshot,
+                "selected audio {selected_audio}\n{}",
+                command.arguments.join(" ")
+            )
+            .unwrap();
+        }
+        insta::assert_snapshot!("hls_bootstrap_readburst_audio_selection", snapshot);
+    }
+
+    #[test]
+    fn hls_bootstrap_readburst_is_bounded_and_preserves_other_input_policies() {
+        let request = || {
+            let profile = playback_profile();
+            PipelineRequest::new(
+                InputFile::video("synthetic-bootstrap.mkv"),
+                DesiredVideoState::from_profile(
+                    &profile.profile,
+                    &profile.resolution,
+                    None,
+                    None,
+                    StreamingMode::HttpLiveStreamingSegmenter,
+                ),
+            )
+        };
+        for (segments, seconds) in [(3, 12), (5, 20), (usize::MAX, 44)] {
+            let mut request = request();
+            apply_hls_bootstrap_readburst(&mut request, true, false, segments);
+            assert_eq!(
+                request.state.realtime_initial_burst,
+                Some(Duration::from_secs(seconds))
+            );
+            assert!(request
+                .inputs
+                .iter()
+                .all(|input| input.input_options.is_empty()));
+        }
+        for (initial, retained, continuous) in [
+            (false, false, false),
+            (true, true, false),
+            (true, false, true),
+        ] {
+            let mut request = request();
+            request.state.retained_stream_timestamps = retained;
+            apply_hls_bootstrap_readburst(&mut request, initial, continuous, 3);
+            assert!(request.state.realtime_initial_burst.is_none());
+        }
+        let mut raw = request();
+        raw.inputs[0]
+            .input_options
+            .extend(["-readrate_initial_burst".into(), "44".into()]);
+        apply_hls_bootstrap_readburst(&mut raw, true, false, 3);
+        assert!(raw.state.realtime_initial_burst.is_none());
+        assert_eq!(
+            raw.inputs[0].input_options,
+            ["-readrate_initial_burst", "44"]
+        );
+        let mut typed = request();
+        typed.state.realtime_initial_burst = Some(Duration::from_secs(20));
+        apply_hls_bootstrap_readburst(&mut typed, true, false, 3);
+        assert_eq!(
+            typed.state.realtime_initial_burst,
+            Some(Duration::from_secs(20))
         );
     }
 
