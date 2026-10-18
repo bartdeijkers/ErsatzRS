@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 qualified Local Next captions; source/output acceptance remains open'
+current_focus = 'P9A-04 F3 initial-header Active call; exact same-invocation lowering'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -257,10 +257,21 @@ callback refused by fresh actual projection, and observed source mutation refuse
 before hit validation; complete cache bytes/entries and admission0 preserved.
 This adds scoped evidence, no production change or in-flight handler-fence claim.
 Canonical work.json/cache_hit_followup resolves the local evidence checkpoint.
-Next: F3 initial headerAP8 before the same Active body, the named unresolved
-suffix-dependent prefix witness; use the original factory and fixed normative
-expectation before any correction. Larger finite sources, unknown final EOF,
-providers/output policies and full F5 stay open, not accepted limits.
+F3 initialAP8 before the same Active body now passes the complete authored
+factory: exact current original LocalActive/same-instance FG pending permits a
+known Base-background candidate, avoiding an extra MainFG contender. Existing
+prefix/body settlement and full final model comparison stay unchanged. Canonical
+ tmp/phase9-header-c2/identity.json/initial_header_followup owns actual factoryRED,
+failed fixture/discarded candidate, source pins and exact geometry/fallback.
+Focused21 pass8422b625, all926 teletext regressions pass17a72a85; pinned imager
+four old/new cases pass55ebcaca at Levels1.5/2.5, old two input unit bytes unchanged.
+The final lint-only local rename changes no behavior; strict FFmpeg lint,
+formatting and architecture pass. The canonical receipt owns final progress
+validation and the local checkpoint SHA.
+Next: finish local checkpoint, then the existing F3 later-header-after-body
+restoration criterion through the original factory and unchanged normative
+expectation. No generic audit or decoder repair. Broader row-zero/foreign context,
+larger finite sources, unknown EOF/provider/output breadth and full F5 stay open.
 Reuse editor/publication/isolation/F6 proof; no general audit, client repair or
 new infrastructure. No relevant check or temporary native worker remains running; source pins are frozen.
 The goal and full F5 remain active. No push or publication.

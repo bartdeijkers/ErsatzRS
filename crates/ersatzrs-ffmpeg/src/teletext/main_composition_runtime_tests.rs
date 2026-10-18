@@ -1310,7 +1310,80 @@ async fn local_active_header_prefix_decodes_with_pinned_independent_teletextimag
             MainEncoding::Normalized,
         ));
     }
+    cases.extend(initial_header_active_cases());
     assert_contextual_decoding(cases, "ERSATZRS_TELETEXT_TEST_LOCAL_ACTIVE_HEADER_FIXTURE").await;
+}
+
+fn initial_header_active_cases() -> Vec<serde_json::Value> {
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let active = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65534));
+    let passive = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
+    let foreground = |column, value| {
+        at(
+            column,
+            TeletextColumnOperation::Foreground {
+                colour: TeletextColourReference::new(value).unwrap(),
+            },
+        )
+    };
+    let glyph = |column, code| {
+        at(
+            column,
+            TeletextColumnOperation::G0 {
+                code: TeletextGlyphCode::new(code).unwrap(),
+            },
+        )
+    };
+    [(3, 4), (4, 3)]
+        .into_iter()
+        .map(|(first, last)| {
+            encoded_case_with_encoding(
+                &format!("initial_header_active_{first}_{last}"),
+                vec![text(0, 8, "ZZZ")],
+                vec![
+                    position(0, 8),
+                    TeletextEnhancementCommand::InvokeObject {
+                        target: active,
+                        object_type: TeletextObjectType::Active,
+                        offset: None,
+                    },
+                    position(0, 9),
+                    TeletextEnhancementCommand::InvokeObject {
+                        target: passive,
+                        object_type: TeletextObjectType::Passive,
+                        offset: None,
+                    },
+                ],
+                vec![
+                    TeletextEnhancementObjectDefinition {
+                        identity: active,
+                        object_type: TeletextObjectType::Active,
+                        program: TeletextEnhancementProgram::new(vec![
+                            foreground(0, first),
+                            foreground(0, last),
+                            glyph(2, b'B'),
+                        ])
+                        .unwrap(),
+                    },
+                    TeletextEnhancementObjectDefinition {
+                        identity: passive,
+                        object_type: TeletextObjectType::Passive,
+                        program: TeletextEnhancementProgram::new(vec![
+                            foreground(0, 2),
+                            glyph(0, b'A'),
+                        ])
+                        .unwrap(),
+                    },
+                ],
+                &[
+                    cell(0, 8, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, last, 0]),
+                    cell(0, 9, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0]),
+                    cell(0, 10, [b'Z', 15, 0, 7, 0], [b'B', 0, 0, last, 0]),
+                ],
+                MainEncoding::Normalized,
+            )
+        })
+        .collect()
 }
 
 #[tokio::test]

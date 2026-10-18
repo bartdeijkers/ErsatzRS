@@ -110,6 +110,258 @@ fn complete_authored_factory_keeps_header_call_geometry_and_base_fallback() {
     }
 }
 
+fn assert_initial_header_geometry(geometry: &TeletextDisplayGeometry) {
+    let active = geometry
+        .object_regions()
+        .iter()
+        .find(|region| region.instance().object_type() == TeletextObjectType::Active)
+        .unwrap();
+    assert_eq!(
+        active.interval(),
+        TeletextObjectAddressInterval::Known {
+            start: (0, 8),
+            finish: (0, 10),
+        }
+    );
+    let passive = geometry
+        .object_regions()
+        .iter()
+        .find(|region| region.instance().object_type() == TeletextObjectType::Passive)
+        .unwrap();
+    assert_eq!(
+        passive.interval(),
+        TeletextObjectAddressInterval::Known {
+            start: (0, 9),
+            finish: (0, 9),
+        }
+    );
+    assert_eq!(geometry.object_open_count().maximum_known_open(), 2);
+}
+
+fn assert_initial_header_context(original: &TeletextMainComposition) {
+    assert_initial_header_geometry(original.display_geometry());
+    let active = original
+        .display_geometry()
+        .object_regions()
+        .iter()
+        .find(|region| region.instance().object_type() == TeletextObjectType::Active)
+        .unwrap();
+    let attributes = original.attribute_execution();
+    assert_eq!(
+        attributes
+            .pending()
+            .iter()
+            .map(|pending| pending.position())
+            .collect::<Vec<_>>(),
+        (8..40).map(|column| (0, column)).collect::<Vec<_>>()
+    );
+    for pending in attributes.pending() {
+        assert_eq!(
+            pending.reason(),
+            TeletextAttributePendingReason::TransmissionOrder
+        );
+        assert_eq!(
+            pending.root_source(),
+            TeletextSpatialRootSource::Local { command: 1 }
+        );
+        assert_eq!(pending.invocation(), Some(active.instance().id()));
+        assert!(pending.previous().is_none() && pending.incoming_previous().is_none());
+        for (source, ordinal) in [(pending.first_source(), 0), (pending.second_source(), 1)] {
+            assert!(matches!(source, Some(TeletextAttributeSource::Enhancement {
+                location: TeletextEnhancementSource { object: Some(target), command },
+                invocation: Some(invocation), ..
+            }) if target == active.instance().target() && command == ordinal && invocation == active.instance().id()));
+        }
+    }
+}
+
+#[test]
+fn initial_header_active_call_settles_its_exact_relative_body_and_preserves_factory_fallback() {
+    for (first, last) in [(3, 4), (4, 3)] {
+        let saved = declared(initial_header_draft(first, last));
+        let original = compose_teletext_main_program(
+            saved.semantic(),
+            saved.semantic().base().pages[0].address,
+            limits().normalization.composition,
+        )
+        .unwrap();
+        assert_initial_header_context(&original);
+        let actual =
+            encode_teletext_authored_service(saved.clone(), &transmissions(&saved), &limits())
+                .expect("initial header8 must use exact same-Active transmitted order");
+        assert_eq!(actual.declared(), &saved);
+        let EncodedTeletextAuthoredPage::CompiledDisplay(display) = &actual.pages()[0] else {
+            panic!("complete authored output required");
+        };
+        let normalized = display.normalized();
+        for geometry in [
+            normalized.original().display_geometry(),
+            normalized.physical().replay().display_geometry(),
+        ] {
+            assert_initial_header_geometry(geometry);
+        }
+        let setters: Vec<_> = normalized
+            .original()
+            .program()
+            .commands()
+            .iter()
+            .zip(normalized.original().provenance())
+            .filter_map(|(command, source)| {
+                matches!(source, TeletextMainCompositionSource::HeaderPosition { .. })
+                    .then_some(*command)
+            })
+            .collect();
+        assert_eq!(
+            setters,
+            [
+                TeletextEnhancementCommand::AtColumn {
+                    column: 8,
+                    operation: TeletextColumnOperation::Background {
+                        colour: TeletextColourReference::new(0).unwrap(),
+                    },
+                },
+                fg(9, last)
+            ]
+        );
+        let fallback = encode_teletext_page(
+            &saved.semantic().base().pages[0],
+            TeletextEncodingRegion::WesternLatin,
+        )
+        .unwrap();
+        let actual = project_encoded_teletext_display(display.page(), 128).unwrap();
+        let baseline = project_encoded_teletext_display(&fallback, 128).unwrap();
+        assert_eq!(actual.header, baseline.header);
+        let rows = |records: Vec<TeletextEncodedDisplayRecord>| {
+            records
+                .into_iter()
+                .filter(|record| !matches!(record, TeletextEncodedDisplayRecord::Triplets { .. }))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(rows(actual.records), rows(baseline.records));
+    }
+}
+
+fn initial_header_draft(first: u8, last: u8) -> TeletextResolvedServiceDraft {
+    let mut draft = fixture_draft_with_active_body(
+        |passive, active| vec![position(8), active, position(9), passive],
+        vec![
+            fg(0, first),
+            fg(0, last),
+            TeletextEnhancementCommand::AtColumn {
+                column: 2,
+                operation: TeletextColumnOperation::G0 {
+                    code: TeletextGlyphCode::new(b'B').unwrap(),
+                },
+            },
+        ],
+    );
+    draft.base.pages[0].rows.push(TeletextRow {
+        row: 0,
+        runs: vec![TeletextRun {
+            column: 8,
+            style: TeletextStyle::default(),
+            content: TeletextRunContent::Text { text: "ZZZ".into() },
+        }],
+    });
+    draft
+}
+
+fn initial_composition(service: &TeletextSemanticService) -> TeletextMainComposition {
+    compose_teletext_main_program(
+        service,
+        service.base().pages[0].address,
+        limits().normalization.composition,
+    )
+    .unwrap()
+}
+
+#[test]
+fn initial_header_background_candidate_requires_exact_original_call_and_unwritten_base_context() {
+    use super::super::super::current_local_background;
+    let service =
+        TeletextSemanticService::new(initial_header_draft(3, 4), semantic_limits()).unwrap();
+    let original = initial_composition(&service);
+    assert_eq!(
+        current_local_background(&original, 1, 8),
+        Some(TeletextColourReference::new(0).unwrap())
+    );
+    for (before, column) in [(0, 8), (3, 9), (usize::MAX, 8), (1, 9)] {
+        assert_eq!(current_local_background(&original, before, column), None);
+    }
+    for wrong_source in [true, false] {
+        let mut provenance = original.provenance().to_vec();
+        let mut commands = original.program().commands().to_vec();
+        if wrong_source {
+            provenance[1] = TeletextMainCompositionSource::HeaderPosition { command: 1 };
+        } else {
+            let TeletextEnhancementCommand::InvokeObject { offset, .. } = &mut commands[1] else {
+                panic!("exact original call");
+            };
+            *offset = Some(TeletextObjectOffset::new(1, 0).unwrap());
+        }
+        let wrong = original
+            .clone()
+            .with_physical_main(
+                &service,
+                TeletextEnhancementProgram::new(commands).unwrap(),
+                provenance,
+                limits().normalization.composition,
+                &mut TeletextCompileContext::new(None, None, None),
+            )
+            .unwrap();
+        assert_eq!(current_local_background(&wrong, 1, 8), None);
+    }
+    let mut wrong_type = initial_header_draft(3, 4);
+    wrong_type
+        .objects
+        .iter_mut()
+        .find(|definition| definition.object_type == TeletextObjectType::Active)
+        .unwrap()
+        .object_type = TeletextObjectType::Adaptive;
+    let mut commands = wrong_type.pages[0]
+        .local_program
+        .as_ref()
+        .unwrap()
+        .commands()
+        .to_vec();
+    let TeletextEnhancementCommand::InvokeObject { object_type, .. } = &mut commands[1] else {
+        panic!("exact original call");
+    };
+    *object_type = TeletextObjectType::Adaptive;
+    wrong_type.pages[0].local_program = Some(TeletextEnhancementProgram::new(commands).unwrap());
+    let wrong_type = TeletextSemanticService::new(wrong_type, semantic_limits()).unwrap();
+    assert_eq!(
+        current_local_background(&initial_composition(&wrong_type), 1, 8),
+        None
+    );
+    for backgrounds in [vec![0], vec![0, 1]] {
+        let mut draft = initial_header_draft(3, 4);
+        let active = draft
+            .objects
+            .iter_mut()
+            .find(|definition| definition.object_type == TeletextObjectType::Active)
+            .unwrap();
+        let mut commands = active.program.commands().to_vec();
+        commands.splice(
+            2..2,
+            backgrounds
+                .into_iter()
+                .map(|value| TeletextEnhancementCommand::AtColumn {
+                    column: 0,
+                    operation: TeletextColumnOperation::Background {
+                        colour: TeletextColourReference::new(value).unwrap(),
+                    },
+                }),
+        );
+        active.program = TeletextEnhancementProgram::new(commands).unwrap();
+        let service = TeletextSemanticService::new(draft, semantic_limits()).unwrap();
+        assert_eq!(
+            current_local_background(&initial_composition(&service), 1, 8),
+            None
+        );
+    }
+}
+
 #[test]
 fn provisional_local_words_require_exact_final_body_source_and_relative_mapping() {
     let service = service(3, 4);

@@ -1,6 +1,6 @@
 //! Typed physical header-position candidates, never neutral wire fillers.
 //!
-//! A known original foreground is only a candidate: its real row-tail effects
+//! A known original colour attribute is only a candidate: its real row-tail effects
 //! remain visible to the existing physical replay and whole-model comparisons.
 //! This module neither changes the authored target nor grants an edit operand.
 
@@ -10,8 +10,10 @@ use super::{
     TeletextMainCompositionFailure, TeletextMainCompositionSource,
 };
 use ersatzrs_domain::{
-    TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
-    TeletextEnhancementProgram, TeletextSemanticService,
+    TeletextAttributePendingReason, TeletextAttributeSource, TeletextColourReference,
+    TeletextColumnOperation, TeletextEnhancementCommand, TeletextEnhancementProgram,
+    TeletextObjectScope, TeletextObjectType, TeletextSemanticService, TeletextSpatialInvocation,
+    TeletextSpatialRootSource,
 };
 
 #[derive(Clone, Copy)]
@@ -19,7 +21,7 @@ struct Setter {
     before: usize,
     command: usize,
     column: u8,
-    foreground: TeletextColourReference,
+    operation: TeletextColumnOperation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,7 +60,7 @@ pub(super) fn materialize(
     apply(composition, service, budget, context, &plan.setters)
 }
 
-/// Apply only known setters preceding the first unresolved original foreground.
+/// Apply only checked setters preceding the first unresolved header context.
 /// The caller may settle sparse, authenticated prefix evidence and resume. This
 /// helper never chooses a pending writer or grants partial output authority.
 pub(super) fn materialize_until_unsettled(
@@ -106,9 +108,7 @@ fn apply(
         if let Some(setter) = next.peek().filter(|setter| setter.before == index) {
             commands.push(TeletextEnhancementCommand::AtColumn {
                 column: setter.column,
-                operation: TeletextColumnOperation::Foreground {
-                    colour: setter.foreground,
-                },
+                operation: setter.operation,
             });
             provenance.push(TeletextMainCompositionSource::HeaderPosition {
                 command: setter.command,
@@ -150,12 +150,12 @@ fn plan(
         Ok(())
     })?;
     let mut setters = Vec::with_capacity(count);
-    visit_setters(composition, |before, command, column, foreground| {
+    visit_setters(composition, |before, command, column, operation| {
         setters.push(Setter {
             before,
             command,
             column,
-            foreground,
+            operation,
         });
         Ok(())
     })?;
@@ -168,7 +168,7 @@ fn visit_setters(
         usize,
         usize,
         u8,
-        TeletextColourReference,
+        TeletextColumnOperation,
     ) -> Result<(), TeletextMainCompositionError>,
 ) -> Result<ScanEnd, TeletextMainCompositionError> {
     let mut logical = (0, 0);
@@ -204,13 +204,19 @@ fn visit_setters(
                 let Some(TeletextMainCompositionSource::OriginalPage { command }) = source else {
                     return Ok(ScanEnd::Unsupported);
                 };
-                let Some(foreground) = foreground(composition, logical.1) else {
+                let operation = foreground(composition, logical.1)
+                    .map(|colour| TeletextColumnOperation::Foreground { colour })
+                    .or_else(|| {
+                        current_local_background(composition, index, logical.1)
+                            .map(|colour| TeletextColumnOperation::Background { colour })
+                    });
+                let Some(operation) = operation else {
                     return Ok(ScanEnd::Unsettled(UnsettledHeaderPosition {
                         before: index,
                         column: logical.1,
                     }));
                 };
-                visit(index, command, logical.1, foreground)?;
+                visit(index, command, logical.1, operation)?;
                 emitted = logical;
             }
             TeletextEnhancementCommand::SetScreenColour { .. }
@@ -232,6 +238,85 @@ pub(super) fn foreground(
         .foreground();
     foreground.source()?;
     foreground.value()
+}
+
+fn current_local_background(
+    composition: &TeletextMainComposition,
+    before: usize,
+    column: u8,
+) -> Option<TeletextColourReference> {
+    let call = current_local_active(composition, before, column)?;
+    let attributes = composition.attribute_execution();
+    let attributes_at_position = attributes.before_adaptive_cell(0, column)?;
+    let pending = attributes
+        .pending()
+        .get(attributes_at_position.foreground().pending()?)?;
+    if pending.reason() != TeletextAttributePendingReason::TransmissionOrder
+        || pending.root_source() != call.root_source()
+        || pending.invocation() != Some(call.id())
+        || ![pending.first_source(), pending.second_source()]
+            .into_iter()
+            .all(|source| {
+                matches!(source, Some(TeletextAttributeSource::Enhancement {
+                location, root_source, invocation: Some(invocation), ..
+            }) if location.object == Some(call.target()) && root_source == call.root_source()
+                && invocation == call.id())
+            })
+    {
+        return None;
+    }
+    let background = attributes_at_position.background();
+    if background.pending().is_some()
+        || !matches!(
+            background.source(),
+            Some(TeletextAttributeSource::Base { .. })
+        )
+    {
+        return None;
+    }
+    // This real Base-background candidate sets the same AP without introducing
+    // a Main foreground writer at the Active object's unresolved C.2 location.
+    // Complete physical replay still checks its entire row-tail effect.
+    background.value()
+}
+
+fn current_local_active(
+    composition: &TeletextMainComposition,
+    before: usize,
+    column: u8,
+) -> Option<TeletextSpatialInvocation> {
+    let TeletextMainCompositionSource::OriginalPage { command } =
+        *composition.provenance().get(before)?
+    else {
+        return None;
+    };
+    let TeletextEnhancementCommand::InvokeObject {
+        target,
+        object_type,
+        offset,
+    } = *composition.program().commands().get(before)?
+    else {
+        return None;
+    };
+    if target.scope() != TeletextObjectScope::Local || object_type != TeletextObjectType::Active {
+        return None;
+    }
+    let root = TeletextSpatialRootSource::Local { command };
+    let mut calls = composition
+        .spatial_trace()
+        .invocations()
+        .iter()
+        .filter(|call| call.parent().is_none() && call.root_source() == root);
+    let call = *calls.next()?;
+    (calls.next().is_none()
+        && call.source().object.is_none()
+        && call.source().command == command
+        && call.target() == target
+        && call.object_type() == object_type
+        && call.offset() == offset
+        && call.caller_position().row() == 0
+        && call.caller_position().column() == u16::from(column))
+    .then_some(call)
 }
 
 fn output_error(

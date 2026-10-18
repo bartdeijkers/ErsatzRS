@@ -59,7 +59,8 @@ release section when tagging a release.
   and byte-identical original companions with separate current receipts, native
   preview, explicit publication and cold recovery.
   Header object calls preserve foreground and base fallback when local Active
-  or nested objects share a page; unrelated pointer relocation no longer causes
+  or nested objects share a page, including an initial header position before
+  a same-instance Active call. Unrelated pointer relocation no longer causes
   false validation errors.
   Native preview,
   publication and recovery qualify new allocations and every protected shared
