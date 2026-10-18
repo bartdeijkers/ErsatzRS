@@ -33,10 +33,12 @@ versions1–18 do not gain this storage role. Existing definition additions may
 compose while preserving version19. Checked native reconstruction and every
 shared consumer remain mandatory. Exact-root restoration derives a temporary
 inverse only from authenticated prior intent, current state and complete root
-native bytes; no saved role accepts that inverse. Cumulative composition removes
-the empty intent. Qualification remains partial; P9A-04 owns lifecycle and
-actual-editor proof. Broader
-row-zero, coordinated position and complete resource/set requirements remain open.
+native bytes; no saved role accepts that inverse. Retained scalar edits may be
+restored with the positions only through the existing scalar-family validator;
+command counts, columns, non-scalar anchors and fresh budgets remain checked.
+Cumulative composition removes the empty intent. Qualification remains partial;
+P9A-04 owns lifecycle and actual-editor proof. Broader row-zero, coordinated
+position and complete resource/set requirements remain open.
 
 The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit

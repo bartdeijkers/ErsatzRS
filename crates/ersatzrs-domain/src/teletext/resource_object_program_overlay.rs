@@ -5,7 +5,8 @@ use super::{
         validate_invocation_structure_correspondence, validate_style_correspondence,
     },
     TeletextEnhancementCommand, TeletextEnhancementProgram,
-    TeletextLocalObjectGlyphProgramOverlayError, TeletextObjectIdentity, TeletextServiceBudget,
+    TeletextLocalObjectGlyphProgramOverlayError, TeletextObjectIdentity,
+    TeletextResourceObjectOperandOverlay, TeletextServiceBudget,
 };
 
 /// Invalid resource structure without retaining authored contents in errors.
@@ -207,6 +208,25 @@ impl TeletextResourceObjectProgramOverlay {
         previous: &Self,
         budget: TeletextServiceBudget,
     ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        Self::restore_original_positions_to(previous, &previous.expected, budget)
+    }
+
+    /// Reverse checked position history and compatible retained scalar changes.
+    ///
+    /// The target keeps the prior expected command count, columns and non-scalar
+    /// anchors. Differences use the existing resource scalar validator; inverse
+    /// correspondence still comes exclusively from the checked prior map.
+    /// This checks structure only. The host must authenticate the exact immutable
+    /// root, fresh receipt, current body and all shared consumer permissions, then
+    /// fold restoration before persistence. No saved format accepts this intent.
+    /// # Errors
+    /// Rejects unqualified priors, changed anchors, incompatible scalar families,
+    /// columns, command counts and exhausted fresh budgets before allocation.
+    pub fn restore_original_positions_to(
+        previous: &Self,
+        original: &TeletextEnhancementProgram,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
         use TeletextResourceObjectProgramOverlayError as Error;
         if !previous.is_original_position_intent() {
             return Err(Error::OriginalPositionIntent);
@@ -222,6 +242,43 @@ impl TeletextResourceObjectProgramOverlay {
         {
             return Err(Error::Budget);
         }
+        if original.commands().len() != previous.expected.commands().len() {
+            return Err(Error::OriginalPositionIntent);
+        }
+        for (ordinal, (root, expected)) in original
+            .commands()
+            .iter()
+            .zip(previous.expected.commands())
+            .enumerate()
+        {
+            if root == expected {
+                continue;
+            }
+            let (
+                TeletextEnhancementCommand::AtColumn {
+                    column,
+                    operation: before,
+                },
+                TeletextEnhancementCommand::AtColumn {
+                    column: after_column,
+                    operation: after,
+                },
+            ) = (root, expected)
+            else {
+                return Err(Error::OriginalPositionIntent);
+            };
+            if column != after_column {
+                return Err(Error::OriginalPositionIntent);
+            }
+            TeletextResourceObjectOperandOverlay::new(
+                previous.identity,
+                ordinal,
+                *column,
+                *before,
+                *after,
+            )
+            .map_err(|_| Error::OriginalPositionIntent)?;
+        }
         let mut inverse = vec![None; previous.expected.commands().len()];
         for (ordinal, original) in previous.retained_commands.iter().enumerate() {
             if let Some(original) = original {
@@ -236,7 +293,7 @@ impl TeletextResourceObjectProgramOverlay {
         Ok(Self {
             identity: previous.identity,
             expected: previous.replacement.clone(),
-            replacement: previous.expected.clone(),
+            replacement: original.clone(),
             retained_commands: inverse,
             position_intent: PositionIntent::Restoration,
         })

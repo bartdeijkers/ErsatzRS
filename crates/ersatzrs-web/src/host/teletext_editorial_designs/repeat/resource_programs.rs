@@ -72,8 +72,8 @@ pub(super) fn merge(
             }
             if program.is_position_restoration() {
                 let previous = old.ok_or_else(fail)?;
-                let expected =
-                    Program::restore_original_positions(previous, budget).map_err(|_| fail())?;
+                let expected = Program::restore_original_positions_to(previous, original, budget)
+                    .map_err(|_| fail())?;
                 if program != &expected {
                     return Err(fail());
                 }

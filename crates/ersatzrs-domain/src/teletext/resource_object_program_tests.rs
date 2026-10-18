@@ -703,3 +703,108 @@ fn original_position_restoration_refuses_unqualified_priors_and_rechecks_fresh_b
         );
     }
 }
+
+fn recoloured_position_prior(global: bool) -> TeletextResourceObjectProgramOverlay {
+    let prior = original_position_restoration_prior();
+    let mut expected = prior.expected().commands().to_vec();
+    let mut replacement = prior.replacement().commands().to_vec();
+    expected[2] = at(8, fg(3));
+    replacement[2] = at(8, fg(3));
+    TeletextResourceObjectProgramOverlay::new_with_original_positions(
+        target(global, 15),
+        program(expected),
+        program(replacement),
+        prior.retained_commands().to_vec(),
+        budget(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn original_position_restoration_to_root_combines_checked_scalar_and_inverse_lineage() {
+    for global in [false, true] {
+        let prior = recoloured_position_prior(global);
+        let mut commands = prior.expected().commands().to_vec();
+        commands[2] = at(8, fg(2));
+        let root = program(commands);
+        let restored = TeletextResourceObjectProgramOverlay::restore_original_positions_to(
+            &prior,
+            &root,
+            budget(),
+        )
+        .unwrap();
+        assert!(restored.is_position_restoration());
+        assert_eq!(restored.expected(), prior.replacement());
+        assert_eq!(restored.replacement(), &root);
+        assert_eq!(restored.identity(), target(global, 15));
+        assert_eq!(
+            restored.retained_commands(),
+            [Some(0), Some(1), Some(2), None, Some(5)]
+        );
+        let legacy =
+            TeletextResourceObjectProgramOverlay::restore_original_positions(&prior, budget())
+                .unwrap();
+        assert_eq!(legacy.replacement(), prior.expected());
+        assert_ne!(legacy, restored);
+    }
+}
+
+#[test]
+fn original_position_restoration_to_root_rejects_anchor_mode_column_and_budget_changes() {
+    let prior = recoloured_position_prior(false);
+    let expected = prior.expected().commands();
+    for (ordinal, replacement) in [
+        (
+            1,
+            TeletextEnhancementCommand::SetPosition {
+                position: TeletextEnhancementPosition::new(2, 0).unwrap(),
+            },
+        ),
+        (2, at(9, fg(2))),
+        (2, at(8, op(json!({"kind":"background","colour":2})))),
+        (2, at(8, glyph(b'P'))),
+    ] {
+        let mut commands = expected.to_vec();
+        commands[ordinal] = replacement;
+        assert_eq!(
+            TeletextResourceObjectProgramOverlay::restore_original_positions_to(
+                &prior,
+                &program(commands),
+                budget(),
+            ),
+            Err(TeletextResourceObjectProgramOverlayError::OriginalPositionIntent)
+        );
+    }
+    assert_eq!(
+        TeletextResourceObjectProgramOverlay::restore_original_positions_to(
+            &prior,
+            &program(expected[..4].to_vec()),
+            budget(),
+        ),
+        Err(TeletextResourceObjectProgramOverlayError::OriginalPositionIntent)
+    );
+    let mut commands = expected.to_vec();
+    commands[2] = at(8, fg(2));
+    let root = program(commands);
+    for bounded in [
+        TeletextServiceBudget {
+            max_commands: 10,
+            ..budget()
+        },
+        TeletextServiceBudget {
+            max_structure_items: 4,
+            ..budget()
+        },
+        TeletextServiceBudget {
+            max_objects: 0,
+            ..budget()
+        },
+    ] {
+        assert_eq!(
+            TeletextResourceObjectProgramOverlay::restore_original_positions_to(
+                &prior, &root, bounded,
+            ),
+            Err(TeletextResourceObjectProgramOverlayError::Budget)
+        );
+    }
+}

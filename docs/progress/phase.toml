@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 automatic Base MAIN checkpoint; V3/X1 and broader lifecycle remain open'
+current_focus = 'P9A-04 F4 automatic Off-to-Base recovery; mixed root undo verified locally'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -180,7 +180,7 @@ accepted-generation/stream/client/whole-process restart claim follows.
 Strict web all-target lint and final fmt/progress/architecture pass for the
 explicit owned-only local evidence checkpoint. Reuse valid actual On/reopen and Off/expiry
 flows; Refresh/Reset/error/full restart and remaining V5 matrix stay open.
-F4 MAIN expiry now passes the unchanged original-response visual oracle.
+F4 local checkpoint ba47de30 passes the unchanged original-response MAIN expiry oracle.
 Canonical tmp/phase9-headed-expiry/identity.json/prepared_base_followup owns
 private bounded native Base preparation, fresh transactional role/identity
 confirmation and same-ACK rejection withdrawal. Original expiry and withdrawal
@@ -200,12 +200,29 @@ This closes the representative automatic MAIN Base/display gap; slow/failing
 recovery safely withdraws. Automatic Off→Base, wider resource retirement and
 client acceptance remain open. Reuse owner-qualified ACK, unchanged editor/publication/isolation,
 localized admin and F6 track/lease evidence only in their established scope.
-Next qualify a concrete source-positive V3/X1 client option against fixed
-required enlarged/panel functions, bounded by existing tools. If unavailable,
-record the exact capability gap and continue independent F1 coordinated-state
-undo; do not restart a known-negative decoder repair. Full authored standards,
-QTM context, Lua/restart and platform gates remain open. Unused-object removal
-stays deferred; no scope waiver, new push or publication.
+V3/X1 bounded follow-up qualifies official Kodi22.0rc1 source28ea2eac. Local
+triplet-type selection, APx0<40 panel exclusion and normal DRCS scaling remain;
+only unrelated wrappers/colour aliases/locks changed. Canonical
+ tmp/phase9-polish-editor/client-qualification/kodi22rc1/identity.json owns exact
+source/diff/line evidence. No new runtime/build/repair or lowered oracle; suitable
+client coverage stays blocked independently. Remote main is still verified
+c07af3a1 (F6); no later push.
+F1 mixed retained foreground/positive-row root undo now passes. Native e23f036a
+first reproduced Structure only after valid FG2→3/save2 and AP2/R6/save3 plus
+cold reopen. Existing scalar-family validation and checked prior inverse now
+target the authenticated immutable root; no stored inverse/new format or receipt
+permission. Four domain controls4cb99add and three native casesf0e34851 pass:
+combined exact document/unit/preview/export restore, explicit publication/cold
+reopen, existing undo and executed Generated125 atomic refusal. Canonical
+ tmp/phase9-f1-interior-position/work.json/mixed_root_undo_followup owns evidence.
+Actual pinned QTM AP2/R6/interior proof retains scope; no new GUI/stream/client
+claim. Strict domain/web all-target lint, fmt and architecture pass. Broader
+coordinated-state/position, resource/set and context work remain. Next concrete
+package F4: qualify automatic Off→Base on one original ordinary response using
+the existing expiry fixture/client tools; distinguish emitted recovery from
+client track discovery and preserve immutable expiry, withdrawal and cleanup.
+Full authored standards, QTM context, Lua/restart and platform gates remain open.
+Unused-object removal stays deferred; no scope waiver, new push or publication.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

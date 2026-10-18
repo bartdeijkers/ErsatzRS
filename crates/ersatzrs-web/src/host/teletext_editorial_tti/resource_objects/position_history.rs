@@ -50,9 +50,7 @@ impl PositionScope<'_> {
             .objects()
             .definition(mapped.identity)
             .ok_or_else(invalid)?;
-        if previous.expected() != &definition.program
-            || definition.object_type != mapped.object_type
-        {
+        if definition.object_type != mapped.object_type {
             return Ok(None);
         }
         let header_identity = mapped
@@ -81,8 +79,12 @@ impl PositionScope<'_> {
         if body.after != native_body(&original, limits, deadline)? {
             return Ok(None);
         }
-        TeletextResourceObjectProgramOverlay::restore_original_positions(previous, limits.2)
-            .map(Some)
-            .map_err(|_| invalid())
+        TeletextResourceObjectProgramOverlay::restore_original_positions_to(
+            previous,
+            &definition.program,
+            limits.2,
+        )
+        .map(Some)
+        .map_err(|_| invalid())
     }
 }

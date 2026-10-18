@@ -63,8 +63,9 @@ release section when tagging a release.
   first, appended and interior rows. Private version19 concepts preserve original
   anchors and complete object identities separately from added-definition edits.
   Fresh-receipt restoration of an exact original body uses checked prior edit
-  history; imports remain unpublished until explicit acceptance. Complete editor
-  and Level 2.5 engine acceptance remain open.
+  history and restores retained scalar changes together with inserted rows.
+  Imports remain unpublished until explicit acceptance. Complete editor and
+  Level 2.5 engine acceptance remain open.
 - Edit original POP/GPOP teletext objects through receipt-bound QTeletextMaker
   companions, including full-capacity command fragments. Private version14 concepts
   retain scalar changes; version15 adds bounded glyph/style insertion, deletion and

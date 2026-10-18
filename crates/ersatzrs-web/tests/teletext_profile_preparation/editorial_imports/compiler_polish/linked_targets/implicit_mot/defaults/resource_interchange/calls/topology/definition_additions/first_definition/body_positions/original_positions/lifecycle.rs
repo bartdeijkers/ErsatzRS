@@ -2,6 +2,9 @@
 use super::support;
 use super::*;
 
+#[path = "lifecycle/mixed_root_undo.rs"]
+mod mixed_root_undo;
+
 fn scalar_s(theme: &str, page: u16, subcode: u16) -> Value {
     let mut value = original_inserted_row(theme, page, subcode);
     value["service"]["objects"][0]["program"]["commands"][3]["operation"]["code"] = json!(83);
