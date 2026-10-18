@@ -293,6 +293,15 @@ fn program_with_added_positions(
         deadline,
     )? {
         appended
+    } else if let Some(inserted) = structural::parse_inserted_rows(
+        mapped.definition,
+        &body.spans,
+        (&body.before, &body.after),
+        limits.2.max_commands,
+        mapped.location,
+        deadline,
+    )? {
+        inserted
     } else {
         return program(mapped, body, original, limits, deadline);
     };

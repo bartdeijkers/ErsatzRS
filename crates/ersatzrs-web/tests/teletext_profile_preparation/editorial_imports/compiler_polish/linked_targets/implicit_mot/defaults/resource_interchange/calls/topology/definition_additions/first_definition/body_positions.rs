@@ -18,6 +18,9 @@ mod forward_boundaries;
 #[path = "body_positions/extended_body.rs"]
 mod extended_body;
 
+#[path = "body_positions/interior_rows.rs"]
+mod interior_rows;
+
 fn glyph(code: u8) -> u32 {
     8 | (9 << 6) | (u32::from(code) << 11)
 }

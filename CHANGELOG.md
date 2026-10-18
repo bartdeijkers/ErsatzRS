@@ -46,8 +46,8 @@ release section when tagging a release.
   A first empty added definition can now receive explicit row positions and
   glyphs through a pinned QTeletextMaker save, retaining exact complete native
   output through concept import, repeat edits, reopen and separate publication.
-  Later concept imports can append new rows while retaining the complete saved
-  body and its position anchors.
+  Later concept imports can append rows or insert complete rows between existing
+  rows while retaining the complete saved body and its position anchors.
   Native preview,
   publication and recovery qualify new allocations and every protected shared
   consumer. A pinned actual QTeletextMaker save of an added definition now passes

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04: F6 handoff verified; remaining authored editor and client acceptance open'
+current_focus = 'P9A-04 F1: original-resource row positions; interior-editor, X3 and V3 proof remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -115,6 +115,29 @@ Next product package: F1/X3 complete-capacity editor context, using the existing
 completion list and pinned QTM path; first identify the exact blocked user edit
 and smallest bounded correction. V3/X1 remains required but has no changed
 source-positive runtime candidate; do not repeat unchanged decoder trials.
+
+Current F1 native slice is verified: complete interior rows in an authenticated
+saved V18 Add retain exact original commands/hidden anchors, identities and
+permissions. Canonical tmp/phase9-f1-interior-position/work.json records actual
+RED ActivePositionOrder(1,8->1,6),13 parser passes and three native flows including
+first/trailing controls, exact units/shared preview/export/unpublished reopen,
+separate publication and accepted cold recovery. Strict web all-target Clippy,
+final fmt, architecture and progress checks pass; only an equivalent clone_from
+spelling in the ignored editor helper changed after native verification. The
+checkpoint SHA/excluded files resolve through canonical work.json/checkpoint.
+Actual interior QTM SaveAs remains open: three bounded headed attempts stop
+before editing/save on driver default/hover/menu-selection assumptions; the final
+native wait is cancelled. No saved file, import or publication success is claimed.
+Preserve all attempts; unverified widget-driver changes remain outside the local
+product checkpoint. No further GUI input repair in this package. The ignored
+native editor seam is compiled but not accepted. Reuse unchanged admin, first-body
+QTM and stream/client boundaries, without relabeling them as interior-editor proof.
+Next concrete independent product action: checked new row positions in original
+producer resources require explicit persisted intent, exact anchors, protected
+consumers and repeat/undo/reopen; old formats and Add-only roles remain closed.
+Unused-object removal remains deferred. X3's complete-catalogue208-word limit,
+V3/X1 suitable-client coverage and all remaining9A clauses stay open. No scope
+waiver, new client/decoder work or push authority follows.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

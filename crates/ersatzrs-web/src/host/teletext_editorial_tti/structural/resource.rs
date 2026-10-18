@@ -7,8 +7,10 @@ use ersatzrs_domain::{
 use std::time::Instant;
 
 mod call_atoms;
+mod inserted_rows;
 
 pub(in super::super) use call_atoms::CallAtom;
+pub(in super::super) use inserted_rows::parse_inserted_rows;
 
 pub(in super::super) struct Span {
     pub ordinal: usize,
