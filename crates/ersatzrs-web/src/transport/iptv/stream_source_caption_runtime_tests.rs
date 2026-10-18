@@ -461,6 +461,7 @@ async fn late_source_rejection_uses_actual_receipt(
     let locker = state.application.operations().entity_locker();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
     let selection = runtime::select(RuntimeSelectionContext {
+        source_teletext_delivery: ersatzrs_domain::SourceTeletextCaptionDelivery::Burn,
         pool: &state.pool,
         locker: &locker,
         media_item_id: Some(item),
@@ -542,7 +543,9 @@ async fn late_source_rejection_uses_actual_receipt(
         active_transcode_snapshot(DEFAULT_ACTIVE_TRANSCODE_LIMIT).active,
         0
     );
-    println!("actual source receipt rejected changed filesystem mtime before open; exact ordinary command selected, no child spawn claimed");
+    println!(
+        "actual source receipt rejected changed filesystem mtime before open; exact ordinary command selected, no child spawn claimed"
+    );
 }
 
 fn source_caption_denial_context(
@@ -636,7 +639,9 @@ async fn assert_native_inventory_fallback(
             .active_teletext_work(),
         0
     );
-    eprintln!("actual native wrong-role selection rejected despite valid plan/caption seal; exact ordinary command retained and probe work drained");
+    eprintln!(
+        "actual native wrong-role selection rejected despite valid plan/caption seal; exact ordinary command retained and probe work drained"
+    );
 }
 
 async fn assert_consumer_plan_fences(
@@ -727,13 +732,8 @@ async fn assert_consumer_plan_fences(
     )
     .await;
     assert_consumer_interval_fences(&request, &receipt, &consumer, reservation, deadline).await;
-    let stream = request
-        .inputs
-        .last_mut()
-        .unwrap()
-        .streams
-        .first_mut()
-        .unwrap();
+    let subtitle = request.inputs.last_mut().unwrap();
+    let stream = subtitle.streams.first_mut().unwrap();
     stream.source_teletext_page = Some(ersatzrs_domain::TeletextPageNumber::new(200).unwrap());
     let request = consumer_request(&request);
     let (wrong_page, wrong_plan) = request.build().unwrap();
@@ -743,7 +743,9 @@ async fn assert_consumer_plan_fences(
             .await
             .is_err()
     );
-    println!("generated consumer fences: matching nonzero initial/fresh retry and native-equivalent timing accepted; changed seek/duration, executable/argv, missing request, missing or reused retry plan and independently sealed wrong page rejected before spawn; unknown duration/independent caption clock not inferred");
+    println!(
+        "generated consumer fences: matching nonzero initial/fresh retry and native-equivalent timing accepted; changed seek/duration, executable/argv, missing request, missing or reused retry plan and independently sealed wrong page rejected before spawn; unknown duration/independent caption clock not inferred"
+    );
     (consumer, primary)
 }
 

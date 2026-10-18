@@ -791,6 +791,70 @@ caption carriage or source-bound sidecar below. A carriage adapter must retain
 exact source identity, chosen stream/page, command binding and consuming-child
 ownership. The existing Burn/NUT initializer grants no carriage authority.
 
+Source-caption delivery is an explicit output-channel choice, independent of
+video Copy, authored-page profiles and a mirrored channel's source. Reuse the
+channel editor, application save boundary and transactional `ConfigElement`
+storage, keyed by the actual channel UUID. Burn remains the default. An omitted
+field preserves an existing choice; malformed values fail validation rather
+than silently selecting another delivery. Native MPEG-TS and its verified
+TS-segment Hybrid path may select DVB bitmap subtitles. Other engines/outputs
+must reject that choice visibly; scripts do not change it implicitly.
+
+An initialized carriage request must bind the selected source/page and the
+complete generated consumer command. Project native caption timing from the
+actual selected AV owner and executed seek, retaining measured uncertainty and
+container rounding rather than inventing an exact origin. Private initialized
+fragments and their playlist follow the consuming child through confirmed reap
+or bounded quarantine, including command rejection after spawn. Preparation
+admission ends with actual preparation work; playback retains its existing
+transcode reservation. No extra serving mux, connection or capacity increase
+may substitute for the required handoff.
+
+Independent prepared captions retain ordinary primary AV pacing. Their explicit
+bitmap producer retains the normal positive MPEG-TS mux lead (0.7 s), so late
+AAC priming packets do not become a wrapped negative start after an early
+subtitle packet fixes the muxer's timestamp offset. Require the same lead in
+its TS-segment child; ordinary Burn producers and wrappers retain
+their existing mux-delay policy. Actual caption/AV timing and wrapper delivery
+remain required qualification, not an inference from command options.
+The explicit bitmap producer with video Copy excludes the initial pre-seek
+keyframe via `-copypriorss:v:0 0`; it waits for an eligible keyframe without
+retiming retained packets or converting video. Decoder preroll DTS may precede
+the requested boundary. Caption initialization must precede the first retained
+picture PTS, not merely the first packet inside an assumed seek window.
+The explicit native bitmap Hybrid producer owns input AV pacing. Its generated
+map-all wrapper must not apply a second input readrate to the combined HLS
+stream: FFmpeg includes sparse subtitle progress in that shared input clock.
+The final existing PCR gate still owns HTTP delivery pacing and backpressure.
+Ordinary wrappers and user-configured scripts retain their existing authority;
+only the actual enabled native Hybrid output UUID selects this typed variant.
+That variant also preserves packet DTS: retain genpts/discardcorrupt but omit
+igndts on its shared HLS input. The ordinary wrapper flag policy is unchanged.
+FFmpeg n9.0 [readrate scheduling](https://github.com/FFmpeg/FFmpeg/blob/n9.0/fftools/ffmpeg_demux.c#L471-L524)
+includes sparse streams; its [DTS reconstruction](https://github.com/FFmpeg/FFmpeg/blob/n9.0/libavformat/demux.c#L946-L1064)
+explains the separate startup-clock boundary. Require native proof of exact
+retained clocks, complete tracks and bounded final delivery for both corrections.
+The bitmap mux and the final map-all live wrappers use a positive 100 ms interleave
+bound to limit the native mux queue for sparse subtitle updates. This alone
+does not qualify the input scheduler or subtitle timeline. Private fragments
+normalize container packet durations to zero before consumer input, using the
+existing FFmpeg `setts` bitstream filter. Old source packet durations must not
+throttle a clear/replacement group; original artifact durations, shifted PTS/DTS,
+packet payloads and order remain independently checked. DVB payload timeouts and
+explicit clear events retain their presentation meaning. This changes neither
+the delivery deadline nor
+timestamp validation. Shipped wrapper defaults follow the existing exact-known-
+content upgrade; customized scripts remain untouched.
+
+FFmpeg's HLS muxer cannot carry DVB bitmap subtitles through its WebVTT branch.
+Any explicit Hybrid carriage adapter must therefore qualify the existing
+producer's MPEG-TS segment path, preserve append/sequence/clock behavior and
+publish only closed segments through the existing playlist/worker lifecycle.
+This is an implementation obligation, not Hybrid runtime acceptance. Bounded
+finite-source artifacts likewise do not close full-source, exact-boundary,
+final-clear, client or platform acceptance; the canonical P9A-04 F6 record owns
+implementation coverage, actual proof and remaining gaps.
+
 ### Engine/source/output matrix
 
 Every row is an implementation obligation, not a claim of current support.

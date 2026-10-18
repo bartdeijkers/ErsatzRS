@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::{
     ffprobe::teletext_decode::DecodedLocalTeletextPage,
+    playback::source_teletext::runtime::InitializedSourceTeletextBitmap,
     transcode_capacity::ActiveTranscodeReservation,
 };
 
@@ -20,12 +21,23 @@ pub enum SourceCaptionAttachmentError {
     Exited,
     #[error("local source caption consumer state is unavailable")]
     ProcessState,
+    #[error("initialized source captions belong to a different consumer command")]
+    Command,
+}
+
+/// The logical command before the existing filter-graph transport rewrite.
+pub(super) struct ConsumerCommandSeal(pub(super) ersatzrs_ffmpeg::FfmpegCommand);
+impl std::fmt::Debug for ConsumerCommandSeal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ConsumerCommandSeal(<redacted>)")
+    }
 }
 
 /// Hold source before capacity in normal field destruction. Preparation work
 /// admission is deliberately absent: playback uses its existing transcode slot.
 pub(super) struct SourceCaptionRetention {
     source: Option<Arc<DecodedLocalTeletextPage>>,
+    bitmap: Option<Arc<InitializedSourceTeletextBitmap>>,
     capacity: ActiveTranscodeReservation,
     reaped: bool,
 }
@@ -34,6 +46,7 @@ impl std::fmt::Debug for SourceCaptionRetention {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SourceCaptionRetention")
             .field("reaped", &self.reaped)
+            .field("initialized_bitmap", &self.bitmap.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -53,6 +66,9 @@ impl Drop for SourceCaptionRetention {
                 // need this association. Its already quarantined transcode
                 // slot bounds retained owners until the host restarts.
                 std::mem::forget(source);
+            }
+            if let Some(bitmap) = self.bitmap.take() {
+                std::mem::forget(bitmap);
             }
         }
     }
@@ -83,6 +99,38 @@ impl RemoteStreamProcess {
         source: Arc<DecodedLocalTeletextPage>,
         capacity: ActiveTranscodeReservation,
     ) -> Result<(), SourceCaptionAttachmentError> {
+        self.attach_caption_owner(source, None, capacity)
+    }
+
+    /// Retain an initialized bitmap owner while checking its generated consumer.
+    ///
+    /// The owner includes all private concat and fragment files. Source checks
+    /// must immediately precede spawn; this synchronous transfer adds no await.
+    /// Cleanup and quarantine semantics are identical to the existing Burn owner.
+    /// # Errors
+    /// Rejects a different command, producer, duplicate or exited child. On the
+    /// first live attachment, both a command mismatch and uncertain process state
+    /// retain the owner before returning an error. The caller must reap the child;
+    /// abandonment quarantines its files and capacity, granting no playback authority.
+    pub fn attach_initialized_teletext_bitmap(
+        &mut self,
+        bitmap: Arc<InitializedSourceTeletextBitmap>,
+        capacity: ActiveTranscodeReservation,
+    ) -> Result<(), SourceCaptionAttachmentError> {
+        let matches = bitmap.matches_command(&self.consumer_command.0);
+        self.attach_caption_owner(bitmap.receipt(), Some(bitmap), capacity)?;
+        if !matches {
+            return Err(SourceCaptionAttachmentError::Command);
+        }
+        Ok(())
+    }
+
+    fn attach_caption_owner(
+        &mut self,
+        source: Arc<DecodedLocalTeletextPage>,
+        bitmap: Option<Arc<InitializedSourceTeletextBitmap>>,
+        capacity: ActiveTranscodeReservation,
+    ) -> Result<(), SourceCaptionAttachmentError> {
         if self.producer_pipe.is_some() {
             return Err(SourceCaptionAttachmentError::Producer);
         }
@@ -95,6 +143,7 @@ impl RemoteStreamProcess {
         }
         self.source_caption = Some(SourceCaptionRetention {
             source: Some(source),
+            bitmap,
             capacity,
             reaped: false,
         });
@@ -107,3 +156,22 @@ impl RemoteStreamProcess {
 #[cfg(test)]
 #[path = "remote_stream_source_caption/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod command_seal_tests {
+    use super::ConsumerCommandSeal;
+
+    #[test]
+    fn spawned_consumer_seal_does_not_disclose_arguments_or_environment() {
+        let command = ersatzrs_ffmpeg::FfmpegCommand::new_with_executable(
+            "synthetic-native-executable",
+            vec![],
+            vec!["-i".into(), "synthetic-private-caption.ffconcat".into()],
+        );
+        let seal = ConsumerCommandSeal(command);
+        let debug = format!("{seal:?}");
+        assert!(!debug.contains("synthetic-native-executable"));
+        assert!(!debug.contains("synthetic-private-caption"));
+        assert_eq!(debug, "ConsumerCommandSeal(<redacted>)");
+    }
+}

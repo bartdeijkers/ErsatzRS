@@ -165,17 +165,19 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
-        let result = sqlx::query(r#"DELETE FROM "Channel" WHERE "Id" = ?"#)
-            .bind(id)
-            .execute(&self.0)
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let uuid = crate::source_teletext_delivery::channel_uuid(&mut tx, id).await?;
+        sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(ersatzrs_domain::channel_source_teletext_delivery_key(&uuid))
+            .execute(&mut *tx)
             .await
             .repository()?;
-        if result.rows_affected() == 0 {
-            return Err(ersatzrs_core::repositories::RepositoryError::NotFound {
-                kind: "channel",
-                id,
-            });
-        }
+        sqlx::query(r#"DELETE FROM "Channel" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -210,6 +212,27 @@ impl ChannelRepository for SqliteChannelRepository {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let now = encode_datetime(Utc::now());
         let normalized = normalize_editor_form(form, &mut tx).await?;
+        let uuid = if normalized.id == 0 {
+            Uuid::new_v4()
+        } else {
+            crate::source_teletext_delivery::channel_uuid(&mut tx, normalized.id).await?
+        };
+        let delivery = match normalized.source_teletext_delivery {
+            Some(value) => ersatzrs_domain::SourceTeletextCaptionDelivery::try_from(value)
+                .map_err(|_| crate::source_teletext_delivery::invalid())?,
+            None => crate::source_teletext_delivery::load_for_uuid(&mut tx, &uuid).await?,
+        };
+        if delivery == ersatzrs_domain::SourceTeletextCaptionDelivery::DvbSubtitles
+            && (normalized.streaming_engine != 0 || !matches!(normalized.streaming_mode, 1 | 5))
+        {
+            return Ok(ChannelSaveResult::validation(vec![
+                ChannelValidationError::new(
+                    "source_teletext_delivery",
+                    "DVB source teletext subtitles require native MPEG-TS or Hybrid output",
+                ),
+            ]));
+        }
+
         let group = normalized.group.trim();
         let show_in_epg = normalized.is_enabled && normalized.show_in_epg;
         let sort_number = normalized.number.parse::<f64>().unwrap_or(0.0);
@@ -228,7 +251,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             )
-            .bind(Uuid::new_v4().to_string())
+            .bind(uuid.to_string())
             .bind(&normalized.number)
             .bind(sort_number)
             .bind(&normalized.name)
@@ -313,6 +336,17 @@ impl ChannelRepository for SqliteChannelRepository {
             normalized.id
         };
 
+        if normalized.source_teletext_delivery.is_some() {
+            sqlx::query(
+                r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+                ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+            )
+            .bind(ersatzrs_domain::channel_source_teletext_delivery_key(&uuid))
+            .bind((delivery as i32).to_string())
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        }
         replace_logo_artwork(&mut tx, id, &normalized, &now).await?;
         tx.commit().await.repository()?;
         Ok(ChannelSaveResult::success(id))
@@ -1102,6 +1136,13 @@ async fn load_editor_form(
         .map(try_decode_signed_duration_text)
         .transpose()?;
 
+    let unique_id: String = row.try_get("UniqueId").repository()?;
+    let unique_id =
+        Uuid::parse_str(&unique_id).map_err(|_| crate::source_teletext_delivery::invalid())?;
+    let mut connection = pool.acquire().await.repository()?;
+    let source_teletext_delivery =
+        crate::source_teletext_delivery::load_for_uuid(&mut connection, &unique_id).await?;
+
     Ok(Some((
         ChannelEditorForm {
             id: row.try_get("Id").repository()?,
@@ -1140,6 +1181,7 @@ async fn load_editor_form(
             preferred_subtitle_language_code: row
                 .try_get("PreferredSubtitleLanguageCode")
                 .repository()?,
+            source_teletext_delivery: Some(source_teletext_delivery as i32),
             subtitle_mode: row.try_get("SubtitleMode").repository()?,
             music_video_credits_mode: row.try_get("MusicVideoCreditsMode").repository()?,
             music_video_credits_template: row.try_get("MusicVideoCreditsTemplate").repository()?,
@@ -1323,6 +1365,15 @@ fn validate_editor_streaming_engine(
     form: &ChannelEditorForm,
     errors: &mut Vec<ChannelValidationError>,
 ) {
+    if form
+        .source_teletext_delivery
+        .is_some_and(|value| !matches!(value, 0 | 1))
+    {
+        errors.push(ChannelValidationError::new(
+            "source_teletext_delivery",
+            "Invalid source teletext caption delivery",
+        ));
+    }
     if !matches!(form.streaming_engine, 0 | 1) {
         errors.push(ChannelValidationError::new(
             "streaming_engine",

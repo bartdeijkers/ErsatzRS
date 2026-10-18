@@ -10696,7 +10696,7 @@ Missing product functionality:
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4, singleton bitmap warm/client and scoped expiry/native Base proof retained; ordinary POP edit/growth/shrink, per-owner updates, unchanged Night and reopened cold output now pass6d495364 | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
 | F5 — source acquisition and accepted output policies | P9A-03 Local descriptors/header windows and source ownership; ordinary Local888 legacy/Hybrid/seek0.5s/audio/VBV proof retained | Discover/select complete page/charset/provenance across supported providers and use all accepted native/Next Burn/Convert/copy/HLS/browser combinations | Persist distinct source/version/stream/page identities through rescan/replacement; implement remaining exact policies/timing/handoff/cancellation, with visible unsupported results and no caption loss, engine switch or double source consumption |
-| F6 — ordinary playback safety defect | Pure epoch core and scoped route integration verified, including actual-host lifecycle. H264/AAC default2 Legacy/Hybrid wait flows and ordinary5s Hybrid cases pass; scoped selected AC3 Copy adds complete retained media/client replay and strict transport evidence. Source-bound bitmap preparation, owned fragment isolation and bounded AV projection have scoped native/unit proof; activation remains open. Canonical F6 receipts own proof | Receive the active selected caption and subsequent updates when video is copied after waiting; retain full track initialization | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
+| F6 — ordinary playback safety defect | Existing H264/AAC, selected AC3, source/lease/disconnect and actual-host lifecycle proof is retained. UUID-bound native DVB/Copy carriage now passes actual Legacy7 and Hybrid4 at default2, both occupied/release14s, repeated waits, one HTTP response, four tracks, exact active/update/clear clocks and pixels, selected alternate audio and cleanup. Fully localized production headed forms pass both browsers; final strict lint passes. Existing ordinary lifecycle smoke and four-route manual TSDuck gate pass (87 checks, zero failures). F6 targeted handoff repair is verified; canonical tmp/phase9-f6-native-carriage/work.json owns evidence | No remaining action in this F6 handoff work package; V3/X1 client and V6/X2 platform acceptance remain separate open 9A requirements | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
 
 Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
@@ -10888,6 +10888,43 @@ full tracks, TSDuck and real client. No hidden Burn-to-carriage switch, serving
 mux, capacity increase or engine change. Existing H264Burn/audio/source/lease/
 cancellation/editor/publication/isolation evidence retains its scope; six-RID
 packages and full engine/client acceptance remain open.
+Current F6 integration evidence is canonical at
+ tmp/phase9-f6-native-carriage/work.json (implementation base68f70bb0;
+working base d8809a27). Explicit UUID-bound Burn/DVB choice reuses configuration,
+transactional channel save, localized native forms and Health. Exact consumer,
+AV-seek and file seals retain fragments through actual child reap/quarantine.
+Hybrid reuses its worker and closed TS-segment publication; sparse-input pacing
+and supplied DTS are preserved without another mux or increased capacity.
+Legacy7 (e71367e2) and Hybrid4 (958764a4) pass default2, both places occupied,
+release after14s, repeated waits and one HTTP response (46s/52s). Both retain
+four tracks, independently derived exact source PTS/DTS and four cue clocks,
+active/update/clear pixels, selected660Hz programme audio and authored200;
+source/addon/generation stay unchanged and owned cleanup reaches zero.
+Retained TSDuck qualifications pass strict8ms PCR jitter and continuity with
+zero errors, and actual first-byte delivery windows at95.194/98.878percent.
+Raw22-check results remain20/22: the two qualified negatives are intentional
+sparse-DVB PTS gaps and the wrong nominal request-window denominator. Exact
+cue/AV clocks independently qualify the gaps; no generic all-green claim follows.
+Reuse source-opening/lease/cancellation, native mismatch/reap ownership,
+H264Burn/AC3, editor/publication and channel-isolation evidence at unchanged seams.
+Final10 component and final atomic repository tests pass; affected four-crate
+all-target strict Clippy, formatting and architecture lint pass. Canonical work
+records superseding receipts and every retained negative, including Hybrid3 DTS
+rewrites and the test-only quiet SSR mismatch; neither oracle was weakened.
+Matched production admin5 passes Chromium151/Firefox153, all nine cultures,
+light/dark and JS/no-JS, localized save/reopen/atomic rejection and unchanged
+other settings. Stable320/1920 observations and visual checks pass; browser and
+host processes are stopped. The failed early-navigation/transition traces remain.
+Ordinary regression controls now pass: ordinary-smoke.log proves actual-host
+HLS delivery, wrapper restart and both idle cleanup paths; ordinary-tsduck.log
+records87 checks and zero failures across Legacy, Hybrid, HLS segmenter/direct
+at unchanged thresholds. F6 targeted handoff repair is verified. No relevant
+checks or fixture hosts remain active. The checkpoint commit introducing this
+record is resolved through work.json/checkpoint after commit; that receipt also
+records the exact SHA, excluded foreign changes and authorized push result.
+Full authored Level2.5, suitable-client V3/X1, six-RID V6/X2 and all other
+completion-list requirements remain open; this source-caption proof does not
+establish authored Level2.5 rendering or accept a source/platform restriction.
 Copy/Off and refusal cannot close caption acceptance; no permanent restriction
 or engine/client/platform waiver is accepted. No capacity increase, reconnect, extra mux or track loss
 is accepted; TSDuck/source-caption decoding is not Level2.5 client acceptance.
@@ -10897,7 +10934,8 @@ cap or a waiver; V6/V7 continue preserving full content. Bound each package to a
 specific missing action and prove its affected boundaries together.
 F4 retirement/Base/drain, independent acquisition and V3/X1 stay open. No decoder
 repair, general audit, extra measurement program or production content follows.
-F1 dependency/set views, F2–F6/V1–V6/X1–X3 remain open; no criterion or necessary
+F1 dependency/set views, F2–F5/V1–V6/X1–X3 remain open; the F6 row above records
+its verified targeted repair without closing full9A. No criterion or necessary
 limitation is waived. Production guide waits for independent generic acceptance.
 
 

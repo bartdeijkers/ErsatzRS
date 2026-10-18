@@ -25,10 +25,12 @@ release section when tagging a release.
 
 ### Added
 
-- Prepare and initialize finite bitmap captions from an exact local teletext
-  page with bounded worker ownership, ordered update/clear fragments, retained
-  source hashes and correlated AV-clock bounds. Caption carriage for copied
-  video remains preparatory and is not activated.
+- Let native MPEG-TS and Hybrid channels carry selected source teletext captions
+  as DVB bitmap subtitles while copying video. Preserve the active caption,
+  updates, clearing and selected alternate audio when capacity waiting hands
+  over to the programme within the same stream. The localized delivery choice
+  is isolated per output channel and rejects incompatible outputs; Burn remains
+  the default. Full generic teletext engine acceptance remains open.
 
 - Show saved teletext template, theme, Free/custom-zone/generated regions and
   dynamic-field bindings beside the selected draft preview in every admin

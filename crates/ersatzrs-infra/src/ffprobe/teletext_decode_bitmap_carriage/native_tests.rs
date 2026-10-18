@@ -186,6 +186,16 @@ async fn retain_fragment(
     assert!(bytes.len() <= crate::ffprobe::MAX_REMOTE_FFPROBE_OUTPUT_BYTES);
     assert_eq!(fragment.byte_count, bytes.len());
     assert_eq!(fragment.sha256, <[u8; 32]>::from(Sha256::digest(&bytes)));
+    assert_eq!(
+        fragment.observation.last_packet_end_microseconds(),
+        fragment
+            .observation
+            .groups()
+            .last()
+            .unwrap()
+            .pts_microseconds(),
+        "private fragments must not retain stale source cue scheduling durations"
+    );
     tokio::fs::write(directory.join(name), &bytes)
         .await
         .unwrap();

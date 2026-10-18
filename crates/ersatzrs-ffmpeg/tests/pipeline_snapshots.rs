@@ -536,6 +536,7 @@ fn software_pipeline_fmp4_hls_uses_fragmented_mp4_movflags() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     request.state.output_format = OutputFormat::HlsMp4;
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: "/tmp/channel-1/%05d.m4s".to_owned(),
         init_template: Some("init.mp4".to_owned()),
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
@@ -1481,6 +1482,7 @@ fn software_pipeline_hls_snapshot() {
     let mut request = h264_request(desired);
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
         init_template: None,
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
@@ -1503,6 +1505,7 @@ fn software_pipeline_hls_time_limit_snapshot() {
     request.state.duration = Some(Duration::from_millis(12_500));
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
         init_template: None,
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
@@ -2486,6 +2489,7 @@ fn qsv_pipeline_hls_snapshot() {
     let mut request = h264_request(desired);
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
         init_template: None,
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
@@ -5903,6 +5907,7 @@ fn real_profile_7_fixture_proves_hdr10_hls_output() {
     let mut request = profile_7_fixture_request(&fixture, hdr10_desired(), Duration::from_secs(6));
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: output_dir
             .path()
             .join("%05d.ts")
@@ -6516,6 +6521,7 @@ fn av1_native_fmp4_output_snapshot() {
     request.desired.video_preset = None;
     request.state.output_format = OutputFormat::HlsMp4;
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: "live_%05d.m4s".into(),
         init_template: Some("init.mp4".into()),
         playlist_path: "live.m3u8".into(),

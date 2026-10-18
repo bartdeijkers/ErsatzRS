@@ -114,6 +114,9 @@ pub struct ChannelEditorForm {
     pub watermark_id: Option<EntityId>,
     pub fallback_filler_id: Option<EntityId>,
     pub preferred_subtitle_language_code: Option<String>,
+    /// Omission preserves an existing channel's explicit delivery selection.
+    #[serde(default)]
+    pub source_teletext_delivery: Option<i32>,
     pub subtitle_mode: i32,
     pub music_video_credits_mode: i32,
     pub music_video_credits_template: Option<String>,

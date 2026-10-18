@@ -94,6 +94,7 @@ pub mod scan_refresh;
 pub mod scripted_dependencies;
 pub mod scripted_scheduling;
 pub mod song_background;
+pub mod source_teletext_delivery;
 pub mod startup_config;
 pub mod subtitle_cleanup;
 pub mod subtitles;

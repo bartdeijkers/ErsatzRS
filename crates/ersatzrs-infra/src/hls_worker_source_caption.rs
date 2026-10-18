@@ -1,10 +1,16 @@
 //! Automatic local source captions in the existing owned HLS item worker.
 
-use ersatzrs_core::{hls::HlsSessionHandle as _, locking::EntityLocker};
-use ersatzrs_domain::{Channel, ChannelSubtitleMode, Resolution, StreamingMode};
+use ersatzrs_core::{
+    hls::HlsSessionHandle as _, locking::EntityLocker, repositories::RepositoryError,
+};
+use ersatzrs_domain::{
+    Channel, ChannelSubtitleMode, Resolution, SourceTeletextCaptionDelivery, StreamingEngine,
+    StreamingMode,
+};
 
 use super::{external, ActiveHlsItem, DbPool, HlsSessionWorker, RepositoryResult};
 use crate::playback::source_teletext::runtime::{self, RuntimeSelectionContext, Selection};
+use crate::repositories::{common::decode_enum_column, SqlxResultExt as _};
 
 pub(super) use crate::playback::source_teletext::runtime::SourceTeletextPlaybackInterval;
 
@@ -98,7 +104,15 @@ impl HlsSessionWorker {
         if request.ordinary_only {
             return ordinary_caption_fallback(pool, &request).await;
         }
+        let delivery =
+            native_hybrid_caption_delivery(pool, self.channel_id, self.output_format).await?;
+        let streaming_mode = if delivery == SourceTeletextCaptionDelivery::DvbSubtitles {
+            StreamingMode::TransportStreamHybrid
+        } else {
+            StreamingMode::HttpLiveStreamingSegmenter
+        };
         let selected = runtime::select(RuntimeSelectionContext {
+            source_teletext_delivery: delivery,
             pool,
             locker,
             media_item_id: Some(active.media_item_id),
@@ -108,7 +122,7 @@ impl HlsSessionWorker {
             resolved_path: &active.media_path,
             languages: request.languages,
             subtitle_mode: request.mode,
-            streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+            streaming_mode,
             playback_interval: request.playback_interval,
             deadline: external::deadline(self),
         })
@@ -147,6 +161,43 @@ impl HlsSessionWorker {
             tokio::time::Instant::now(),
         )
     }
+}
+
+async fn native_hybrid_caption_delivery(
+    pool: &DbPool,
+    output_channel: i64,
+    output_format: ersatzrs_ffmpeg::OutputFormat,
+) -> RepositoryResult<SourceTeletextCaptionDelivery> {
+    if output_format != ersatzrs_ffmpeg::OutputFormat::Hls {
+        return Ok(SourceTeletextCaptionDelivery::Burn);
+    }
+    // Runtime stream preferences are a partial Channel, not output policy.
+    // This read-only transaction observes the actual output mode and its
+    // UUID-bound setting in one snapshot.
+    let mut tx = pool.begin().await.repository()?;
+    let row =
+        sqlx::query(r#"SELECT "StreamingEngine", "StreamingMode" FROM "Channel" WHERE "Id" = ?"#)
+            .bind(output_channel)
+            .fetch_optional(&mut *tx)
+            .await
+            .repository()?
+            .ok_or(RepositoryError::NotFound {
+                kind: "channel",
+                id: output_channel,
+            })?;
+    let engine: StreamingEngine =
+        decode_enum_column("channel streaming_engine", &row, "StreamingEngine")?;
+    let mode: StreamingMode = decode_enum_column("channel streaming_mode", &row, "StreamingMode")?;
+    let delivery = if engine == StreamingEngine::Legacy
+        && mode == StreamingMode::TransportStreamHybrid
+    {
+        let uuid = crate::source_teletext_delivery::channel_uuid(&mut tx, output_channel).await?;
+        crate::source_teletext_delivery::load_for_uuid(&mut tx, &uuid).await?
+    } else {
+        SourceTeletextCaptionDelivery::Burn
+    };
+    tx.commit().await.repository()?;
+    Ok(delivery)
 }
 
 fn caption_check_deadline(
@@ -248,5 +299,120 @@ mod tests {
             ),
             now
         );
+    }
+
+    async fn output_policy_fixture() -> DbPool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::raw_sql(
+            r#"
+            CREATE TABLE "Channel" (
+                "Id" INTEGER PRIMARY KEY, "UniqueId" TEXT NOT NULL,
+                "StreamingEngine" INTEGER NOT NULL, "StreamingMode" INTEGER NOT NULL,
+                "MirrorSourceChannelId" INTEGER
+            );
+            CREATE TABLE "ConfigElement" ("Key" TEXT PRIMARY KEY, "Value" TEXT);
+            INSERT INTO "Channel" VALUES
+                (1, '00000000-0000-0000-0000-000000000001', 0, 5, NULL),
+                (2, '00000000-0000-0000-0000-000000000002', 0, 5, 1),
+                (3, '00000000-0000-0000-0000-000000000003', 0, 4, NULL),
+                (4, '00000000-0000-0000-0000-000000000004', 1, 5, NULL);
+            INSERT INTO "ConfigElement" VALUES
+                ('channel.00000000-0000-0000-0000-000000000001.source_caption_delivery', '1'),
+                ('channel.00000000-0000-0000-0000-000000000003.source_caption_delivery', '1'),
+                ('channel.00000000-0000-0000-0000-000000000004.source_caption_delivery', '1');
+        "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn hybrid_delivery_observes_actual_output_policy_not_partial_stream_preferences() {
+        use ersatzrs_ffmpeg::OutputFormat;
+        let pool = output_policy_fixture().await;
+        assert_eq!(
+            Channel::default().streaming_mode,
+            StreamingMode::TransportStream
+        );
+        assert_eq!(
+            native_hybrid_caption_delivery(&pool, 1, OutputFormat::Hls)
+                .await
+                .unwrap(),
+            SourceTeletextCaptionDelivery::DvbSubtitles
+        );
+        for (channel, format) in [
+            (3, OutputFormat::Hls),
+            (4, OutputFormat::Hls),
+            (1, OutputFormat::HlsMp4),
+            (1, OutputFormat::MpegTs),
+        ] {
+            assert_eq!(
+                native_hybrid_caption_delivery(&pool, channel, format)
+                    .await
+                    .unwrap(),
+                SourceTeletextCaptionDelivery::Burn
+            );
+        }
+        sqlx::query(r#"UPDATE "Channel" SET "StreamingMode" = 4 WHERE "Id" = 1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            native_hybrid_caption_delivery(&pool, 1, OutputFormat::Hls)
+                .await
+                .unwrap(),
+            SourceTeletextCaptionDelivery::Burn
+        );
+    }
+
+    #[tokio::test]
+    async fn hybrid_delivery_never_inherits_mirrored_source_setting_and_rejects_invalid_policy() {
+        use ersatzrs_ffmpeg::OutputFormat;
+        let pool = output_policy_fixture().await;
+        assert_eq!(
+            native_hybrid_caption_delivery(&pool, 2, OutputFormat::Hls)
+                .await
+                .unwrap(),
+            SourceTeletextCaptionDelivery::Burn
+        );
+        sqlx::query(
+            r#"INSERT INTO "ConfigElement" VALUES
+            ('channel.00000000-0000-0000-0000-000000000002.source_caption_delivery', '1')"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            native_hybrid_caption_delivery(&pool, 2, OutputFormat::Hls)
+                .await
+                .unwrap(),
+            SourceTeletextCaptionDelivery::DvbSubtitles
+        );
+        sqlx::query(
+            r#"UPDATE "ConfigElement" SET "Value" = '0' WHERE "Key" =
+            'channel.00000000-0000-0000-0000-000000000001.source_caption_delivery'"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            native_hybrid_caption_delivery(&pool, 2, OutputFormat::Hls)
+                .await
+                .unwrap(),
+            SourceTeletextCaptionDelivery::DvbSubtitles
+        );
+        sqlx::query(r#"UPDATE "Channel" SET "StreamingMode" = 99 WHERE "Id" = 2"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(native_hybrid_caption_delivery(&pool, 2, OutputFormat::Hls)
+            .await
+            .is_err());
     }
 }

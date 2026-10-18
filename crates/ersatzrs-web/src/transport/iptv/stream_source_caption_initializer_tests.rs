@@ -122,6 +122,7 @@ async fn selected_source(
             .unwrap();
     let locker = state.application.operations().entity_locker();
     let selection = runtime::select(RuntimeSelectionContext {
+        source_teletext_delivery: ersatzrs_domain::SourceTeletextCaptionDelivery::Burn,
         pool: &state.pool,
         locker: &locker,
         media_item_id: Some(item),

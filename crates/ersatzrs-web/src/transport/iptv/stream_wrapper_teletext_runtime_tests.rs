@@ -539,8 +539,10 @@ async fn verify_decoded_tones(ffmpeg: &str, bytes: &[u8], audio: usize, tones: &
                     && chunk.iter().any(|sample| sample.unsigned_abs() > 100)
             })
             .count();
-        assert!(matching >= 10,
-            "audio {audio} must decode at least one second of programme tone {tone}; got {matching} segments");
+        assert!(
+            matching >= 10,
+            "audio {audio} must decode at least one second of programme tone {tone}; got {matching} segments"
+        );
     }
 }
 

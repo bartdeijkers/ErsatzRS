@@ -74,6 +74,26 @@ fn concat_and_segmenter_wrappers_keep_input_container_scope_and_explicit_rate() 
 }
 
 #[test]
+fn bounded_sparse_interleave_keeps_generated_rate_policy_and_full_argument_seal() {
+    let mut candidate = steps();
+    candidate.insert(0, crate::command::sparse_subtitle_interleave());
+    let command = generate(&candidate);
+    let policy = command.mpegts_output_policy().unwrap();
+    assert_eq!(policy.muxrate_bps(), 5_000_000);
+    assert_eq!(policy.pcr_period_ms(), 20);
+    let mut changed = command.clone();
+    let index = changed
+        .arguments
+        .iter()
+        .position(|value| value == "-max_interleave_delta")
+        .unwrap();
+    changed.arguments[index + 1] = "200000".into();
+    assert!(changed.mpegts_output_policy().is_none());
+    candidate[0] = PipelineStep::generic("sparse_subtitle_interleave", ["-max_interleave_delta"]);
+    assert!(generate(&candidate).mpegts_output_policy().is_none());
+}
+
+#[test]
 fn opaque_commands_do_not_infer_policy_even_for_identical_generated_argv() {
     let generated = generate(&steps());
     assert!(generated.mpegts_output_policy().is_some());

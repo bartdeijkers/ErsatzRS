@@ -105,8 +105,17 @@ pub fn av1_output_error(format: OutputFormat) -> Option<&'static str> {
     )
 }
 
+/// One private segment-muxer list owned by an explicit bitmap-Carriage producer.
+/// This typed intent is activated only after the exact Copy caption plan qualifies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HlsMpegTsSegments {
+    pub producer_playlist: String,
+    pub start_number: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HlsOutput {
+    pub mpegts_segments: Option<HlsMpegTsSegments>,
     pub segment_template: String,
     pub init_template: Option<String>,
     pub playlist_path: String,
@@ -2298,7 +2307,7 @@ pub fn build_pipeline_command(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
 ) -> Result<FfmpegCommand, UnsupportedSource> {
-    build_pipeline_command_with_optional_source_plan(acceleration, request, false)
+    build_pipeline_command_with_optional_source_plan(acceleration, request, false, None)
         .map(|(command, _)| command)
 }
 
@@ -2313,43 +2322,184 @@ pub fn build_pipeline_command_with_source_teletext_plan(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
 ) -> Result<(FfmpegCommand, Option<crate::SourceTeletextInputPlan>), UnsupportedSource> {
-    build_pipeline_command_with_optional_source_plan(acceleration, request, true)
+    build_pipeline_command_with_optional_source_plan(acceleration, request, true, None)
+}
+
+/// Build a command sealed to one exact, independently owned DVB-bitmap Copy input.
+///
+/// The expected input must be uniquely mapped before and after normalization,
+/// image-based subtitle Copy with only stream zero, and carry no source teletext
+/// page, text format or subtitle filters. The effective global subtitle encoder
+/// must be Copy, and the actual video owner must be physical input zero. A
+/// mismatch returns no plan; callers must require a plan before using this as
+/// a native carriage command. Existing generic command behavior is unchanged.
+///
+/// This does not verify files, source authority, decoder context or native
+/// caption delivery. Input options remain separately captured observations,
+/// never parsed as a trusted source or clock policy.
+/// # Errors
+/// Returns the same unsupported-source refusal as [`build_pipeline_command`].
+pub fn build_pipeline_command_with_source_bitmap_carriage_plan(
+    acceleration: HardwareAccelerationKind,
+    request: PipelineRequest,
+    expected_caption: &InputFile,
+) -> Result<(FfmpegCommand, Option<crate::SourceTeletextInputPlan>), UnsupportedSource> {
+    build_pipeline_command_with_optional_source_plan(
+        acceleration,
+        request,
+        true,
+        Some(expected_caption),
+    )
 }
 
 fn build_pipeline_command_with_optional_source_plan(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
     capture_plan: bool,
+    expected_bitmap_copy: Option<&InputFile>,
 ) -> Result<(FfmpegCommand, Option<crate::SourceTeletextInputPlan>), UnsupportedSource> {
     if let Some(reason) = unsupported_source_reason_for_acceleration(Some(acceleration), &request) {
         return Err(UnsupportedSource { reason });
     }
+    let segments = requested_mpegts_segments(&request, expected_bitmap_copy.is_some())?;
+    let desired = request.desired.clone();
+    let hls = request.state.hls.clone();
     let inputs = request.inputs.clone();
     let executable = request.ffmpeg_executable.clone();
     let timing = crate::SourceTeletextInputTiming::from_state(&request.state);
-    let pipeline = build_pipeline_for_acceleration(acceleration, request);
-    let mut command = pipeline.command(&inputs);
-    if let Some(executable) = executable {
-        command.executable = executable;
+    let mut pipeline = build_pipeline_for_acceleration(acceleration, request);
+    let generate = |pipeline: &FFmpegPipeline| {
+        let mut command = pipeline.command(&inputs);
+        if let Some(executable) = &executable {
+            command.executable.clone_from(executable);
+        }
+        command
+    };
+    let observe = |pipeline: &FFmpegPipeline, command: &FfmpegCommand| {
+        let effective_inputs = if pipeline.inputs.is_empty() {
+            &inputs
+        } else {
+            &pipeline.inputs
+        };
+        capture_plan
+            .then(|| {
+                crate::SourceTeletextInputPlan::from_generated(
+                    &crate::source_teletext_input_plan::GeneratedSourceTeletextPlan {
+                        command,
+                        inputs: effective_inputs,
+                        original_inputs: &inputs,
+                        steps: &pipeline.steps,
+                        intel: pipeline.is_intel_vaapi_or_qsv,
+                        timing,
+                        mpegts_segments: segments.as_ref(),
+                    },
+                    expected_bitmap_copy,
+                )
+            })
+            .flatten()
+    };
+    let mut command = generate(&pipeline);
+    let mut plan = observe(&pipeline, &command);
+    if segments.is_some() {
+        if plan.is_none() {
+            return Err(unsupported_segments());
+        }
+        let hls = hls.as_ref().ok_or_else(unsupported_segments)?;
+        let output = pipeline
+            .steps
+            .iter_mut()
+            .find(|step| matches!(step, PipelineStep::Generic { name: "hls", .. }))
+            .ok_or_else(unsupported_segments)?;
+        *output = mpegts_segments_output(hls, &desired, acceleration)?;
+        command = generate(&pipeline);
+        plan = observe(&pipeline, &command);
+        if plan.is_none() {
+            return Err(unsupported_segments());
+        }
     }
-    let plan = capture_plan
-        .then(|| {
-            let effective_inputs = if pipeline.inputs.is_empty() {
-                &inputs
-            } else {
-                &pipeline.inputs
-            };
-            crate::SourceTeletextInputPlan::from_generated(
-                &command,
-                effective_inputs,
-                &inputs,
-                &pipeline.steps,
-                pipeline.is_intel_vaapi_or_qsv,
-                timing,
+    if plan
+        .as_ref()
+        .is_some_and(crate::SourceTeletextInputPlan::is_bitmap_carriage)
+    {
+        bitmap_carriage_output_options(
+            &mut pipeline,
+            desired.video_format == FFmpegProfileVideoFormat::Copy,
+        )?;
+        command = generate(&pipeline);
+        plan = observe(&pipeline, &command);
+    }
+    Ok((command, plan))
+}
+
+fn bitmap_carriage_output_options(
+    pipeline: &mut FFmpegPipeline,
+    copy_video: bool,
+) -> Result<(), UnsupportedSource> {
+    let delay = pipeline
+        .steps
+        .iter_mut()
+        .find(|step| {
+            matches!(
+                step,
+                PipelineStep::Generic { name: "no_demux_decode_delay", output_options, .. }
+                    if output_options == &["-muxdelay", "0", "-muxpreload", "0"]
             )
         })
-        .flatten();
-    Ok((command, plan))
+        .ok_or_else(|| UnsupportedSource {
+            reason: "Bitmap carriage requires the generated MPEG-TS mux-delay step".into(),
+        })?;
+    // Retain the ordinary muxer's lead for AAC priming and sparse bitmap input.
+    // Replace the generated option rather than appending a competing value.
+    *delay = PipelineStep::generic(
+        "bitmap_carriage_mux_lead",
+        ["-muxdelay", "0.7", "-muxpreload", "0"],
+    );
+    // Output options follow the physical inputs, including the private outer
+    // segment mux. Rebuilding the command afterwards seals both changes.
+    pipeline
+        .steps
+        .insert(0, crate::command::sparse_subtitle_interleave());
+    if copy_video {
+        // Input seeking can retain an earlier keyframe during stream copy.
+        // The active caption bootstrap belongs to the consumed programme, so
+        // begin with a keyframe whose presentation time is not before its SS.
+        pipeline.steps.insert(
+            0,
+            PipelineStep::generic("bitmap_carriage_video_landing", ["-copypriorss:v:0", "0"]),
+        );
+    }
+    Ok(())
+}
+
+fn requested_mpegts_segments(
+    request: &PipelineRequest,
+    bitmap: bool,
+) -> Result<Option<HlsMpegTsSegments>, UnsupportedSource> {
+    let Some(segments) = request
+        .state
+        .hls
+        .as_ref()
+        .and_then(|hls| hls.mpegts_segments.as_ref())
+    else {
+        return Ok(None);
+    };
+    if !bitmap
+        || request.state.output_format != OutputFormat::Hls
+        || segments.producer_playlist.is_empty()
+        || segments.producer_playlist.len() > 4096
+        || segments.producer_playlist.chars().any(char::is_control)
+        || i32::try_from(segments.start_number).is_err()
+    {
+        return Err(unsupported_segments());
+    }
+    Ok(Some(segments.clone()))
+}
+
+fn unsupported_segments() -> UnsupportedSource {
+    UnsupportedSource {
+        reason: "Private MPEG-TS segments require the exact explicit bitmap-Carriage HLS plan"
+            .into(),
+    }
 }
 
 /// Why a source cannot be played, when ErsatzRS refuses rather than guessing.
@@ -4614,12 +4764,10 @@ fn add_metadata_output_options(steps: &mut Vec<PipelineStep>, metadata: &OutputM
     }
 }
 
-fn hls_output(
-    format: OutputFormat,
-    hls: &HlsOutput,
+fn hls_encoding_options(
     desired: &DesiredVideoState,
     acceleration: HardwareAccelerationKind,
-) -> PipelineStep {
+) -> Vec<String> {
     let frame_rate = desired.frame_rate.unwrap_or(FrameRate::DEFAULT);
     let one_second_gop = acceleration == HardwareAccelerationKind::Qsv;
     let keyframe_interval_seconds = 2.0;
@@ -4648,6 +4796,51 @@ fn hls_output(
     {
         options.extend(["-max_delay".to_owned(), "500000".to_owned()]);
     }
+
+    options
+}
+
+fn mpegts_segments_output(
+    hls: &HlsOutput,
+    desired: &DesiredVideoState,
+    acceleration: HardwareAccelerationKind,
+) -> Result<PipelineStep, UnsupportedSource> {
+    let segments = hls
+        .mpegts_segments
+        .as_ref()
+        .ok_or_else(unsupported_segments)?;
+    let mut options = hls_encoding_options(desired, acceleration);
+    options.extend([
+        "-f".into(),
+        "segment".into(),
+        "-segment_format".into(),
+        "mpegts".into(),
+        "-segment_time".into(),
+        "4".into(),
+        "-segment_list_type".into(),
+        "m3u8".into(),
+        "-segment_list_size".into(),
+        "0".into(),
+        "-segment_list_flags".into(),
+        "+live".into(),
+        "-segment_start_number".into(),
+        segments.start_number.to_string(),
+        "-segment_format_options".into(),
+        mpegts_muxing_options(desired).hls_segment_options(hls.segment_options.as_deref()),
+        "-segment_list".into(),
+        segments.producer_playlist.clone(),
+        hls.segment_template.clone(),
+    ]);
+    Ok(PipelineStep::generic("native_hls_mpegts_segments", options))
+}
+
+fn hls_output(
+    format: OutputFormat,
+    hls: &HlsOutput,
+    desired: &DesiredVideoState,
+    acceleration: HardwareAccelerationKind,
+) -> PipelineStep {
+    let mut options = hls_encoding_options(desired, acceleration);
 
     options.extend([
         "-f".to_owned(),
@@ -4912,6 +5105,7 @@ mod tests {
         hls_output(
             OutputFormat::Hls,
             &HlsOutput {
+                mpegts_segments: None,
                 playlist_path: "playlist.m3u8".to_owned(),
                 segment_template: "segment-%05d.ts".to_owned(),
                 init_template: None,

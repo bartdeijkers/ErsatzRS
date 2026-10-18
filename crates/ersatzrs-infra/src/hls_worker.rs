@@ -1,4 +1,5 @@
 mod output_status;
+mod producer_playlist;
 
 #[path = "hls_worker_external.rs"]
 mod external;
@@ -330,6 +331,7 @@ impl HlsDeliveryTracker {
 }
 
 struct HlsProcessCapacity<'a> {
+    producer_playlist: Option<&'a producer_playlist::MpegTsProducerPlaylist>,
     song: Option<&'a crate::song_background::NativeSongBackground>,
     active_transcode_slot_id: Option<u64>,
     work_ahead_reservation: Option<&'a mut Option<WorkAheadReservation>>,
@@ -1733,7 +1735,7 @@ impl HlsSessionWorker {
                 selection.subtitle
             } else {
                 match self
-                    .startup_read(self.automatic_source_caption(
+                    .startup_read(Box::pin(self.automatic_source_caption(
                         &pool,
                         source_caption::AutomaticCaptionRequest {
                             active: &active,
@@ -1754,7 +1756,7 @@ impl HlsSessionWorker {
                                 },
                             ),
                         },
-                    ))
+                    )))
                     .await
                 {
                     Ok(selection) => {
@@ -2250,14 +2252,61 @@ impl HlsSessionWorker {
                 is_continuous_remote,
                 self.startup_minimum_segments.load(Ordering::Acquire),
             );
-            let source_caption_request =
+            let bitmap_source = source_caption.as_ref().filter(|source| {
+                source.delivery() == ersatzrs_domain::SourceTeletextCaptionDelivery::DvbSubtitles
+            });
+            let mut producer_failed = false;
+            let producer_playlist = if bitmap_source.is_some() {
+                let _ = self.trim_playlist_for_append(discontinuity).await;
+                if let Ok(playlist) = producer_playlist::MpegTsProducerPlaylist::prepare(
+                    &self.working_dir,
+                    *self.playlist_start.lock().await,
+                )
+                .await
+                {
+                    if let Ok(options) = playlist.options() {
+                        if let Some(hls) = request.state.hls.as_mut() {
+                            hls.mpegts_segments = Some(options);
+                            Some(playlist)
+                        } else {
+                            producer_failed = true;
+                            None
+                        }
+                    } else {
+                        producer_failed = true;
+                        None
+                    }
+                } else {
+                    producer_failed = true;
+                    None
+                }
+            } else {
+                None
+            };
+            let source_caption_request = if let Some(source) = bitmap_source {
+                let request = crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest::new_bitmap_carriage(
+                    acceleration, request, source.input(),
+                );
+                if let Some(playlist) = &producer_playlist {
+                    request.with_hls_producer_directory(playlist.directory_owner())
+                } else {
+                    request
+                }
+            } else {
                 crate::playback::source_teletext::runtime::SourceTeletextConsumerRequest::new(
                     acceleration,
                     request,
-                );
+                )
+            };
             let command = source_caption_request.build();
             let retained_failure = Arc::new(std::sync::Mutex::new(RetainedHlsFailure::default()));
             let (outcome, selected_graph_for_denial) = match command {
+                _ if producer_failed => {
+                    if let Some(song) = &song {
+                        song.confirm_reaped();
+                    }
+                    (HlsProcessOutcome::SourceCaptionUnavailable, None)
+                }
                 Ok((command, source_caption_plan)) => {
                     // Attributed from the command that actually ran, so a
                     // runtime failure cannot be blamed on a graph this spawn
@@ -2272,7 +2321,9 @@ impl HlsSessionWorker {
                         source_stream_for_denial.as_ref(),
                         active.remote_stream.as_ref(),
                     );
-                    let _ = self.trim_playlist_for_append(discontinuity).await;
+                    if producer_playlist.is_none() {
+                        let _ = self.trim_playlist_for_append(discontinuity).await;
+                    }
                     let outcome = self
                         .run_hls_process_with_remote(
                             command,
@@ -2295,6 +2346,7 @@ impl HlsSessionWorker {
                                 ),
                             }),
                             HlsProcessCapacity {
+                                producer_playlist: producer_playlist.as_ref(),
                                 song: song.as_ref(),
                                 active_transcode_slot_id: Some(active_transcode_slot_id),
                                 work_ahead_reservation: (is_continuous_remote
@@ -2748,6 +2800,7 @@ impl HlsSessionWorker {
             None,
             None,
             HlsProcessCapacity {
+                producer_playlist: None,
                 song: None,
                 active_transcode_slot_id,
                 work_ahead_reservation: None,
@@ -2933,6 +2986,7 @@ impl HlsSessionWorker {
             .as_ref()
             .map(|retained| Arc::clone(&retained.failure));
         let mut reserve_interval = tokio::time::interval(Duration::from_millis(250));
+        let mut initialized_bitmap = None;
         if let Some((source, _, plan, request)) = &capacity.source_caption {
             if producer.is_some() || retained.is_some() {
                 if let Some(retained) = retained {
@@ -2942,16 +2996,19 @@ impl HlsSessionWorker {
                     "local source captions cannot use a remote HLS producer".into(),
                 );
             }
-            match source
-                .initialize_consumer_command(
-                    &command,
-                    plan.as_ref(),
-                    request,
-                    self.source_caption_check_deadline(source.initial_deadline()),
-                )
-                .await
+            match Box::pin(source.initialize_consumer(
+                &command,
+                plan.as_ref(),
+                request,
+                self.source_caption_check_deadline(source.initial_deadline()),
+            ))
+            .await
             {
-                Ok(initialized) => command = initialized,
+                Ok(initialized) => {
+                    let (initialized_command, owner) = initialized.into_parts();
+                    command = initialized_command;
+                    initialized_bitmap = owner;
+                }
                 Err(_) => return HlsProcessOutcome::SourceCaptionUnavailable,
             }
         }
@@ -2998,9 +3055,12 @@ impl HlsSessionWorker {
         // receipt and actual transcode admission. The child adapter, including
         // its uncertainty Drop, owns them independently of the requesting UI.
         if let Some((source, reservation, _, _)) = &capacity.source_caption {
-            if let Err(error) =
+            let attached = if let Some(owner) = &initialized_bitmap {
+                child.attach_initialized_teletext_bitmap(Arc::clone(owner), reservation.clone())
+            } else {
                 child.attach_local_teletext_source(source.receipt(), reservation.clone())
-            {
+            };
+            if let Err(error) = attached {
                 if self
                     .terminate_hls_child(&mut child, None, "source caption attachment failed")
                     .await
@@ -3036,6 +3096,14 @@ impl HlsSessionWorker {
                     let cleanup_confirmed = result.is_ok() || matches!(tokio::time::timeout(Duration::from_secs(5), child.kill()).await, Ok(Ok(())));
                     if cleanup_confirmed { if let Some(song) = capacity.song { song.confirm_reaped(); } }
                     let outcome = self.hls_process_wait_outcome(result, stderr_task.take()).await;
+                    if cleanup_confirmed && outcome == HlsProcessOutcome::Success {
+                        if let Some(playlist) = capacity.producer_playlist {
+                            if let Err(error) = playlist.publish(self, true).await {
+                                tracing::warn!(channel_id = self.channel_id, %error, "private HLS segment publication failed after producer completion");
+                                return HlsProcessOutcome::Failed("private HLS segment publication failed".into());
+                            }
+                        }
+                    }
                     if let Some(failure) = &retained_failure_state {
                         let published = playlist_segment_uris(&self.working_dir).await.map_or(true, |uris| uris.iter().any(|uri| !burst_baseline.contains(uri)));
                         if let Ok(mut failure) = failure.lock() { failure.media_published = published; }
@@ -3047,8 +3115,19 @@ impl HlsSessionWorker {
                     }
                     return outcome;
                 }
-                _ = reserve_interval.tick(), if retained_remaining.is_some() && matches!(self.startup_readiness(), HlsStartupReadiness::Pending { .. }) => {
-                    self.observe_startup_reserve(&burst_baseline, retained_remaining.unwrap_or_default(), false).await;
+                _ = reserve_interval.tick(), if capacity.producer_playlist.is_some() || retained_remaining.is_some() && matches!(self.startup_readiness(), HlsStartupReadiness::Pending { .. }) => {
+                    if let Some(playlist) = capacity.producer_playlist {
+                        if let Err(error) = playlist.publish(self, false).await {
+                            tracing::warn!(channel_id = self.channel_id, %error, "private HLS segment publication failed");
+                            if self.terminate_hls_child(&mut child, stderr_task.take(), "private HLS segment publication failed").await {
+                                if let Some(song) = capacity.song { song.confirm_reaped(); }
+                            }
+                            return HlsProcessOutcome::Failed("private HLS segment publication failed".into());
+                        }
+                    }
+                    if let Some(remaining) = retained_remaining {
+                        self.observe_startup_reserve(&burst_baseline, remaining, false).await;
+                    }
                 }
                 () = self.cancel.notified() => {
                     if self.terminate_hls_child(&mut child, stderr_task.take(), "channel stream cancelled").await { if let Some(song) = capacity.song { song.confirm_reaped(); } }
@@ -3090,6 +3169,15 @@ impl HlsSessionWorker {
                     }
                 }
                 _ = cleanup_interval.tick() => {
+                    if let Some(playlist) = capacity.producer_playlist {
+                        if let Err(error) = playlist.publish(self, false).await {
+                            tracing::warn!(channel_id = self.channel_id, %error, "private HLS segment publication failed");
+                            if self.terminate_hls_child(&mut child, stderr_task.take(), "private HLS segment publication failed").await {
+                                if let Some(song) = capacity.song { song.confirm_reaped(); }
+                            }
+                            return HlsProcessOutcome::Failed("private HLS segment publication failed".into());
+                        }
+                    }
                     if let (Some(pool), Some(tracker)) = (delivery_pool, delivery_tracker.as_mut()) {
                         if let Some(observation) = self
                             .sample_hls_delivery(pool, tracker, delivery_started_at)
@@ -4332,6 +4420,7 @@ fn build_hls_request_with_input_explicit_discontinuity(
     }
     let hls_generated_at = Utc::now().timestamp();
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: match output_format {
             OutputFormat::HlsMp4 => format!("live_{hls_generated_at}_%06d.m4s"),
             _ => "live%06d.ts".to_string(),
@@ -4445,6 +4534,7 @@ pub fn build_hls_slug_command(
     }
     let hls_generated_at = Utc::now().timestamp();
     request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: match output_format {
             OutputFormat::HlsMp4 => format!("live_{hls_generated_at}_%06d.m4s"),
             _ => "live%06d.ts".to_string(),
@@ -4675,6 +4765,7 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
     }
     let hls_generated_at = Utc::now().timestamp();
     pipeline_request.state.hls = Some(HlsOutput {
+        mpegts_segments: None,
         segment_template: match request.output_format {
             OutputFormat::HlsMp4 => format!("live_{hls_generated_at}_%06d.m4s"),
             _ => "live%06d.ts".to_string(),

@@ -539,6 +539,7 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
     });
     Ok(RemoteStreamProcess {
         child: consumer,
+        consumer_command: super::source_caption::ConsumerCommandSeal(command.clone()),
         filter_graph_file,
         source_caption: None,
         producer_pipe: Some(RemoteStreamProducerPipe {

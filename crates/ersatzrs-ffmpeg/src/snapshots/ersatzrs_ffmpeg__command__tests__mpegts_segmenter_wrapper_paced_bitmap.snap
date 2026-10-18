@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/src/command.rs
+expression: "command.arguments.join(\" \")"
+---
+-nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt -i http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter -map 0 -c copy -max_interleave_delta 100000 -muxrate 9830400 -pcr_period 20 -metadata service_provider="ErsatzTV" -metadata service_name="Channel One" -f mpegts pipe:1

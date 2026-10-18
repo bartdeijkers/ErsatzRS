@@ -8,7 +8,7 @@ use ersatzrs_ffmpeg::{
 
 use super::*;
 
-fn fixture(audio_index: Option<usize>, buffer_size: Option<u32>) -> PipelineRequest {
+pub(super) fn fixture(audio_index: Option<usize>, buffer_size: Option<u32>) -> PipelineRequest {
     let mut video = SourceVideoStream::new(SourceVideoCodec::H264).with_index(4);
     video.frame_size = Some(FrameSize::new(640, 360));
     video.pixel_format = Some(PixelFormat::Yuv420P);

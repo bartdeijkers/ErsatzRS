@@ -1649,6 +1649,16 @@ pub enum TextKey {
     TeletextDecoderHelpFailed,
     TeletextDecoderTextFailed,
     TeletextDecoderBitmapFailed,
+    SourceTeletextDelivery,
+    SourceTeletextDeliveryHelp,
+    SourceTeletextDeliveryBurn,
+    SourceTeletextDeliveryDvb,
+    InvalidSourceTeletextDelivery,
+    SourceTeletextDeliveryUnsupported,
+    TeletextCarriageReady,
+    TeletextCarriageMissing,
+    TeletextCarriageInvalid,
+    TeletextCarriageOutput,
     NextRuntimeAvailability,
     NextOverlayInvalid,
     NextOverlaySchema,
@@ -4008,6 +4018,16 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::TeletextDecoderHelpFailed,
     TextKey::TeletextDecoderTextFailed,
     TextKey::TeletextDecoderBitmapFailed,
+    TextKey::SourceTeletextDelivery,
+    TextKey::SourceTeletextDeliveryHelp,
+    TextKey::SourceTeletextDeliveryBurn,
+    TextKey::SourceTeletextDeliveryDvb,
+    TextKey::InvalidSourceTeletextDelivery,
+    TextKey::SourceTeletextDeliveryUnsupported,
+    TextKey::TeletextCarriageReady,
+    TextKey::TeletextCarriageMissing,
+    TextKey::TeletextCarriageInvalid,
+    TextKey::TeletextCarriageOutput,
     TextKey::NextRuntimeAvailability,
     TextKey::NextOverlayInvalid,
     TextKey::NextOverlaySchema,
@@ -5782,6 +5802,10 @@ fn teletext_authoring_health_message(language: UiLanguage, message: &str) -> Opt
 
 fn teletext_decoder_health_message(language: UiLanguage, message: &str) -> Option<&'static str> {
     let key = match message {
+        "DVB subtitle delivery requirements are available. Per-source caption preparation and client display still require validation." => TextKey::TeletextCarriageReady,
+        "DVB subtitle delivery is configured but its required FFmpeg support is unavailable. Select a compatible runtime; ordinary playback remains available." => TextKey::TeletextCarriageMissing,
+        "A channel has invalid source teletext delivery settings. Review its subtitle delivery choice; ordinary playback remains available." => TextKey::TeletextCarriageInvalid,
+        "A channel uses DVB subtitles with an unsupported engine or output. Select native MPEG-TS or change subtitle delivery; ordinary playback remains available." => TextKey::TeletextCarriageOutput,
         "The selected FFmpeg runtime passed teletext page selection, subtitle text and colour bitmap decoding." => {
             TextKey::TeletextDecoderReady
         }
@@ -7002,6 +7026,10 @@ mod tests {
             TextKey::TeletextDecoderHelpFailed,
             TextKey::TeletextDecoderTextFailed,
             TextKey::TeletextDecoderBitmapFailed,
+            TextKey::TeletextCarriageReady,
+            TextKey::TeletextCarriageMissing,
+            TextKey::TeletextCarriageInvalid,
+            TextKey::TeletextCarriageOutput,
         ];
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);

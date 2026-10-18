@@ -51,10 +51,14 @@ impl SourceTeletextPlaybackInterval {
         self,
         plan: &ersatzrs_ffmpeg::SourceTeletextInputPlan,
     ) -> bool {
-        let timing = plan.timing();
+        let timing = if plan.is_bitmap_carriage() {
+            plan.first_input_timing()
+        } else {
+            plan.timing()
+        };
         // StreamSeek belongs to physical input zero. An independent caption
         // owner can intentionally remain unseeked while the video is sought.
-        if plan.caption_physical_input_index() != 0
+        if (!plan.is_bitmap_carriage() && plan.caption_physical_input_index() != 0)
             || plan
                 .video_stream()
                 .is_none_or(|(physical, _)| physical != 0)

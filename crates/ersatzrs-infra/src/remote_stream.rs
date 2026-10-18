@@ -310,6 +310,7 @@ pub struct RemoteStreamProcess {
     /// leaves `FFmpeg` running without this guard.
     filter_graph_file: Option<crate::filter_graph_file::FilterGraphFile>,
     source_caption: Option<source_caption::SourceCaptionRetention>,
+    consumer_command: source_caption::ConsumerCommandSeal,
 }
 
 impl RemoteStreamProcess {
@@ -1247,6 +1248,7 @@ pub fn spawn_ffmpeg_with_remote_input(
         producer_pipe,
         filter_graph_file,
         source_caption: None,
+        consumer_command: source_caption::ConsumerCommandSeal(command.clone()),
     })
 }
 

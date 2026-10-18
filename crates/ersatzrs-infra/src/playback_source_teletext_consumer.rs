@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use ersatzrs_domain::HardwareAccelerationKind;
 use ersatzrs_ffmpeg::{
-    build_pipeline_command_with_source_teletext_plan, FfmpegCommand, PipelineRequest,
+    build_pipeline_command_with_source_bitmap_carriage_plan,
+    build_pipeline_command_with_source_teletext_plan, FfmpegCommand, InputFile, PipelineRequest,
     SourceTeletextInputPlan, UnsupportedSource,
 };
 
@@ -24,6 +25,17 @@ use tokio::time::Instant;
 pub struct SourceTeletextConsumerRequest {
     acceleration: HardwareAccelerationKind,
     request: Arc<PipelineRequest>,
+    expected_bitmap: Option<InputFile>,
+    hls_producer_directory: Option<HlsProducerDirectory>,
+}
+
+#[derive(Clone)]
+struct HlsProducerDirectory(Arc<tempfile::TempDir>);
+
+impl std::fmt::Debug for HlsProducerDirectory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("HlsProducerDirectory(<redacted>)")
+    }
 }
 
 impl SourceTeletextConsumerRequest {
@@ -32,7 +44,29 @@ impl SourceTeletextConsumerRequest {
         Self {
             acceleration,
             request: Arc::new(request),
+            expected_bitmap: None,
+            hls_producer_directory: None,
         }
+    }
+
+    /// Explicitly bind a prepared bitmap input; the full artifact is never a fallback consumer.
+    #[must_use]
+    pub fn new_bitmap_carriage(
+        acceleration: HardwareAccelerationKind,
+        request: PipelineRequest,
+        expected_caption: InputFile,
+    ) -> Self {
+        Self {
+            acceleration,
+            request: Arc::new(request),
+            expected_bitmap: Some(expected_caption),
+            hls_producer_directory: None,
+        }
+    }
+
+    pub(crate) fn with_hls_producer_directory(mut self, directory: Arc<tempfile::TempDir>) -> Self {
+        self.hls_producer_directory = Some(HlsProducerDirectory(directory));
+        self
     }
 
     /// Build the ordinary command, preserving existing source refusal behavior.
@@ -42,10 +76,18 @@ impl SourceTeletextConsumerRequest {
         &self,
     ) -> std::result::Result<(FfmpegCommand, Option<SourceTeletextInputPlan>), UnsupportedSource>
     {
-        build_pipeline_command_with_source_teletext_plan(
-            self.acceleration,
-            self.request.as_ref().clone(),
-        )
+        if let Some(expected) = &self.expected_bitmap {
+            build_pipeline_command_with_source_bitmap_carriage_plan(
+                self.acceleration,
+                self.request.as_ref().clone(),
+                expected,
+            )
+        } else {
+            build_pipeline_command_with_source_teletext_plan(
+                self.acceleration,
+                self.request.as_ref().clone(),
+            )
+        }
     }
 
     fn independent_command(
@@ -115,6 +157,10 @@ impl SourceTeletextConsumerRequest {
     }
 }
 
+#[path = "playback_source_teletext_bitmap_consumer.rs"]
+mod bitmap;
+pub use bitmap::{InitializedSourceTeletextBitmap, InitializedSourceTeletextConsumer};
+
 impl PlaybackSource {
     /// Initialize the exact-page decoder independently of ordinary AV decoding.
     ///
@@ -136,6 +182,9 @@ impl PlaybackSource {
         request: &SourceTeletextConsumerRequest,
         deadline: Instant,
     ) -> Result<FfmpegCommand> {
+        if self.delivery == ersatzrs_domain::SourceTeletextCaptionDelivery::DvbSubtitles {
+            return Err(unavailable());
+        }
         self.check_consumer_command(command, plan)?;
         let initial = plan.ok_or_else(unavailable)?;
         let (rebuilt, rebuilt_plan) = request.build().map_err(|_| unavailable())?;

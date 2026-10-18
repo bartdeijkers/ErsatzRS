@@ -15,6 +15,10 @@ use super::{
 mod isolator;
 pub use isolator::SourceTeletextBitmapFragments;
 
+#[path = "teletext_decode_bitmap_carriage/playlist.rs"]
+mod playlist;
+pub(crate) use playlist::SourceTeletextBitmapPlaylist;
+
 #[path = "teletext_decode_bitmap_carriage/parser.rs"]
 mod parser;
 use parser::parse;

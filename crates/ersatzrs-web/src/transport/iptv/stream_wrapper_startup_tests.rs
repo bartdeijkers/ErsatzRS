@@ -399,3 +399,119 @@ fn handed_off_prepared_script_survives_request_guard_until_wait_body_drop() {
         pool.close().await;
     });
 }
+
+#[tokio::test]
+async fn hybrid_wrapper_pacing_belongs_only_to_explicit_enabled_bitmap_output() {
+    let pool = held_capacity_pool().await;
+    sqlx::raw_sql(
+        r#"
+        CREATE TABLE "Channel" ("Id" INTEGER PRIMARY KEY, "UniqueId" TEXT NOT NULL);
+        INSERT INTO "Channel" VALUES
+            (1, '00000000-0000-0000-0000-000000000001'),
+            (2, '00000000-0000-0000-0000-000000000002');
+        INSERT INTO "ConfigElement" VALUES
+            ('channel.00000000-0000-0000-0000-000000000001.source_caption_delivery', '1');
+    "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, '')"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let state = state_for_pool(pool.clone());
+    let enabled = Channel {
+        id: 1,
+        streaming_mode: StreamingMode::TransportStreamHybrid,
+        subtitle_mode: ChannelSubtitleMode::Any,
+        ..Channel::default()
+    };
+    let metadata = OutputMetadata::default();
+    let url = "http://127.0.0.1:1/iptv/session/1/index.m3u8";
+    assert_bitmap_wrapper_pacing_variants(&state, &enabled).await;
+    let (actual, cleanup) = segmenter_wrapper_command(
+        &state,
+        &enabled,
+        url.into(),
+        &metadata,
+        false,
+        5_000_000,
+        tokio::time::Instant::now() + Duration::from_secs(2),
+    )
+    .await
+    .unwrap();
+    assert!(cleanup.is_empty());
+    assert_eq!(
+        actual,
+        build_mpegts_segmenter_wrapper_command_for_paced_bitmap(
+            url,
+            &metadata,
+            false,
+            Some(5_000_000),
+        )
+    );
+    sqlx::query(
+        r#"UPDATE "ConfigElement" SET "Value" = '0' WHERE "Key" =
+        'channel.00000000-0000-0000-0000-000000000001.source_caption_delivery'"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (actual, _) = segmenter_wrapper_command(
+        &state,
+        &enabled,
+        url.into(),
+        &metadata,
+        false,
+        5_000_000,
+        tokio::time::Instant::now() + Duration::from_secs(2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        actual,
+        build_mpegts_segmenter_wrapper_command(url, &metadata, false, Some(5_000_000))
+    );
+}
+
+async fn assert_bitmap_wrapper_pacing_variants(state: &AppState, enabled: &Channel) {
+    for (channel, expected_paced_source) in [
+        (enabled.clone(), true),
+        (
+            Channel {
+                subtitle_mode: ChannelSubtitleMode::None,
+                ..enabled.clone()
+            },
+            false,
+        ),
+        (
+            Channel {
+                streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+                ..enabled.clone()
+            },
+            false,
+        ),
+        (
+            Channel {
+                streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                ..enabled.clone()
+            },
+            false,
+        ),
+        (
+            Channel {
+                id: 2,
+                mirror_source_channel_id: Some(1),
+                ..enabled.clone()
+            },
+            false,
+        ),
+    ] {
+        assert_eq!(
+            bitmap_segmenter_owns_pacing(state, &channel).await.unwrap(),
+            expected_paced_source
+        );
+    }
+}

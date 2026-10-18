@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F6: selected caption initialization after capacity wait; engine acceptance open'
+current_focus = 'P9A-04: F6 handoff verified; remaining authored editor and client acceptance open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -92,24 +92,29 @@ its pinned Local/DRCS and panel implementation; canonical
 tmp/phase9-tuxtxt-client-qualification/identity.json. No build/runtime/adapter or
 repair; require a distinct source-positive suitable runtime before dependent
 acceptance. Unused-object removal stays deferred. No push/publication.
-F6 remains open for selected active-caption initialization when copying video.
-Source preparation checkpoint15702ee9 is followed by owned fragment isolation
-and bounded AV projection, canonical tmp/phase9-f6-bitmap-isolation/work.json.
-Twenty-nine focused tests include native five-position preparation, ordered
-packet payload/timing comparison and private-file/source/hold cleanup. The
-selected video0/audio3 projection retains17.458066..17.458068s bounds and66..68us
-rounding residual for a declared17.52s seek; no exact midpoint or actual consumed
-host seek is claimed. Prior13 content pixels/raw-concat negatives remain valid;
-clear-only overlay pixels remain unproven. Full-source/exact-ms/final-clear and
-arbitrary context coverage are open gaps, not accepted permanent restrictions.
-Next connect explicit native delivery and the completed real consumer request
-through actual child ownership, then ordinary default2 repeated-wait Legacy/
-Hybrid transport, caption/audio/client proof. Reuse unchanged H264Burn, source/
-lease/cancellation, editor/publication/isolation evidence. Prior finite-source
-TSDuck retains its one failure; no threshold or criterion changes. All authored
-Level2.5/editor/metadata/zones/profiles/Lua/restart/localized-admin/independent/
-client/platform criteria and engine-first delivery remain. Unused-object removal
-stays deferred. Continue autonomously; no push/publication.
+F6 source-bound artifacts retain their original scope at
+ tmp/phase9-f6-bitmap-isolation/work.json (68f70bb0). Current connection:
+ tmp/phase9-f6-native-carriage/work.json (working base d8809a27). Explicit
+UUID-bound delivery, exact consumer/seek/files and actual-child ownership reuse
+configuration and the same Hybrid worker. Legacy7 and Hybrid4 pass default2,
+both occupied/release14s/repeated waits/one46s or52s HTTP response, four tracks,
+exact source/cue clocks and active/update/clear pixels, selected audio and cleanup.
+Qualified retained TSDuck PCR/continuity/delivery pass; raw sparse-PTS and nominal
+window negatives stay visible. Production headed Chromium151/Firefox153 pass all
+nine cultures/light-dark/JS-no-JS and stable320/1920 with fully localized errors.
+Reuse earlier source/lease/cancel, native ownership, editor/publication/isolation
+proof. Strict affected lint, formatting and architecture checks pass. Existing
+ordinary lifecycle smoke and manual TSDuck regression gate now pass (87 checks,
+zero failures). The F6 targeted handoff repair is verified. Canonical work.json
+owns receipts, the checkpoint SHA/push result and stopped process state.
+V3/X1 client coverage, V6/X2 platforms and all other engine criteria remain open;
+unused-object removal stays deferred. Engine-first delivery and no publication
+continue. The latest user authorizes this completed F6 checkpoint and its
+predecessors to origin/main [skip ci]; no general publication authority follows.
+Next product package: F1/X3 complete-capacity editor context, using the existing
+completion list and pinned QTM path; first identify the exact blocked user edit
+and smallest bounded correction. V3/X1 remains required but has no changed
+source-positive runtime candidate; do not repeat unchanged decoder trials.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

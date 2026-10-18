@@ -32,6 +32,8 @@ const MUXRATE_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"{{ FFmpegPath }}\
 const PCR_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
 const MUXRATE_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -muxrate {{ MuxRate }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
 const PCR_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
+const READBURST_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"$ETV_FFMPEG_PATH\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -readrate_initial_burst 6 -i \"$ETV_HLS_URL\" -map 0 -c copy -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"$ETV_CHANNEL_NAME\" -f mpegts pipe:1\n";
+const READBURST_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"%ETV_FFMPEG_PATH%\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -readrate_initial_burst 6 -i \"%ETV_HLS_URL%\" -map 0 -c copy -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"%ETV_CHANNEL_NAME%\" -f mpegts pipe:1\n";
 const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
     DefaultMpegTsScriptFile {
         name: "mpegts.yml",
@@ -45,6 +47,7 @@ const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
             LEGACY_DEFAULT_MPEGTS_RUN_SH,
             MUXRATE_DEFAULT_MPEGTS_RUN_SH,
             PCR_DEFAULT_MPEGTS_RUN_SH,
+            READBURST_DEFAULT_MPEGTS_RUN_SH,
         ],
     },
     DefaultMpegTsScriptFile {
@@ -54,6 +57,7 @@ const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
             LEGACY_DEFAULT_MPEGTS_RUN_BAT,
             MUXRATE_DEFAULT_MPEGTS_RUN_BAT,
             PCR_DEFAULT_MPEGTS_RUN_BAT,
+            READBURST_DEFAULT_MPEGTS_RUN_BAT,
         ],
     },
 ];
@@ -1393,6 +1397,51 @@ mod tests {
             assert!(rendered.contains("ETV_FFMPEG_PATH"));
             assert!(rendered.contains("MuxRate"));
             assert!(rendered.contains("PcrPeriod"));
+        }
+    }
+
+    #[tokio::test]
+    async fn seed_default_mpegts_script_bounds_sparse_subtitle_interleave_without_changing_custom_scripts(
+    ) {
+        let root = tempfile::tempdir().unwrap();
+        for script in DEFAULT_MPEGTS_SCRIPT_FILES
+            .iter()
+            .filter(|script| script.name != "mpegts.yml")
+        {
+            let old = if script.name == "run.sh" {
+                READBURST_DEFAULT_MPEGTS_RUN_SH
+            } else {
+                READBURST_DEFAULT_MPEGTS_RUN_BAT
+            };
+            tokio::fs::write(root.path().join(script.name), old)
+                .await
+                .unwrap();
+            seed_default_mpegts_script_in(root.path()).await.unwrap();
+            assert_eq!(
+                tokio::fs::read(root.path().join(script.name))
+                    .await
+                    .unwrap(),
+                script.contents
+            );
+            assert!(std::str::from_utf8(script.contents)
+                .unwrap()
+                .contains("-max_interleave_delta 100000"));
+            let mut custom = old.to_vec();
+            custom.extend_from_slice(if script.name == "run.sh" {
+                b"# custom\n"
+            } else {
+                b"rem custom\n"
+            });
+            tokio::fs::write(root.path().join(script.name), &custom)
+                .await
+                .unwrap();
+            seed_default_mpegts_script_in(root.path()).await.unwrap();
+            assert_eq!(
+                tokio::fs::read(root.path().join(script.name))
+                    .await
+                    .unwrap(),
+                custom
+            );
         }
     }
 

@@ -5652,6 +5652,7 @@ pub async fn save_channel(
     let form = normalize_channel_form(command.form, &validation_state);
     reject_channel_validation(validate_channel_form(&form, &validation_state))?;
     let result = repository.save_editor_form(form).await?;
+    reject_channel_validation(result.validation_errors)?;
 
     if let Some(side_effects) = repository.save_side_effects(result.id).await? {
         if side_effects.subtitle_mode != 0 {
@@ -5775,11 +5776,35 @@ fn clean_optional(value: Option<String>) -> Option<String> {
     })
 }
 
+fn validate_source_teletext_delivery(
+    form: &ChannelEditorForm,
+    errors: &mut Vec<ChannelValidationError>,
+) {
+    if form
+        .source_teletext_delivery
+        .is_some_and(|value| !matches!(value, 0 | 1))
+    {
+        errors.push(ChannelValidationError::new(
+            "source_teletext_delivery",
+            "Invalid source teletext caption delivery",
+        ));
+    }
+    if form.source_teletext_delivery == Some(1)
+        && (form.streaming_engine != 0 || !matches!(form.streaming_mode, 1 | 5))
+    {
+        errors.push(ChannelValidationError::new(
+            "source_teletext_delivery",
+            "DVB source teletext subtitles require native MPEG-TS or Hybrid output",
+        ));
+    }
+}
+
 fn validate_channel_form(
     form: &ChannelEditorForm,
     state: &ChannelValidationState,
 ) -> Vec<ChannelValidationError> {
     let mut errors = Vec::new();
+    validate_source_teletext_delivery(form, &mut errors);
     if !matches!(form.streaming_engine, 0 | 1) {
         errors.push(ChannelValidationError::new(
             "streaming_engine",
@@ -10494,6 +10519,37 @@ mod tests {
             ffmpeg_profile_ids: vec![10],
             watermark_ids: vec![20],
             fallback_filler_ids: vec![30],
+        }
+    }
+
+    #[test]
+    fn source_teletext_delivery_validation_preserves_choice_and_rejects_unsupported_output() {
+        let state = channel_validation_state();
+        for (value, engine, mode, rejected) in [
+            (None, 1, 5, false),
+            (Some(0), 1, 5, false),
+            (Some(1), 0, 1, false),
+            (Some(1), 0, 5, false),
+            (Some(1), 1, 5, true),
+            (Some(1), 0, 4, true),
+            (Some(99), 0, 5, true),
+        ] {
+            let form = normalize_channel_form(
+                ChannelEditorForm {
+                    source_teletext_delivery: value,
+                    streaming_engine: engine,
+                    streaming_mode: mode,
+                    ..ChannelEditorForm::default()
+                },
+                &state,
+            );
+            assert_eq!(form.source_teletext_delivery, value);
+            assert_eq!(
+                validate_channel_form(&form, &state)
+                    .iter()
+                    .any(|error| error.field == "source_teletext_delivery"),
+                rejected
+            );
         }
     }
 

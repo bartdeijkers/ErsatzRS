@@ -23,6 +23,9 @@ pub fn ChannelEditorPage() -> impl IntoView {
         move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let form_error = query.with_untracked(|params| {
         let raw = params.get("error").unwrap_or_default();
+        if let Some(message) = source_teletext_delivery_form_error(&raw) {
+            return message.to_owned();
+        }
         match raw.as_str() {
             "" => String::new(),
             "save" => tr(TextKey::ChannelCouldNotBeSaved).to_string(),
@@ -35,6 +38,14 @@ pub fn ChannelEditorPage() -> impl IntoView {
                 .replace(
                     "Invalid Next engine text subtitle mode",
                     tr(TextKey::InvalidNextEngineTextSubtitleMode),
+                )
+                .replace(
+                    "Invalid source teletext caption delivery",
+                    tr(TextKey::InvalidSourceTeletextDelivery),
+                )
+                .replace(
+                    "DVB source teletext subtitles require native MPEG-TS or Hybrid output",
+                    tr(TextKey::SourceTeletextDeliveryUnsupported),
                 ),
         }
     });
@@ -45,7 +56,14 @@ pub fn ChannelEditorPage() -> impl IntoView {
         <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let form_error = form_error.clone();
-                data.get().map(|result| admin_result_view(result, |initial_data| {
+                data.get().map(|result| admin_result_view(result.map_err(|error| {
+                    let message = error.to_string();
+                    if message.contains("Invalid source teletext caption delivery") {
+                        tr(TextKey::InvalidSourceTeletextDelivery).to_owned()
+                    } else {
+                        message
+                    }
+                }), |initial_data| {
                     view! {
                         <ChannelEditorForm initial_data=initial_data form_error=form_error/>
                     }
@@ -54,6 +72,20 @@ pub fn ChannelEditorPage() -> impl IntoView {
             }}
         </Suspense>
     }
+}
+
+fn source_teletext_delivery_form_error(message: &str) -> Option<&'static str> {
+    let detail = message
+        .strip_prefix("invalid channel: source_teletext_delivery: ")
+        .or_else(|| message.strip_prefix("invalid source_teletext_delivery: "))?;
+    let key = match detail {
+        "Invalid source teletext caption delivery" => TextKey::InvalidSourceTeletextDelivery,
+        "DVB source teletext subtitles require native MPEG-TS or Hybrid output" => {
+            TextKey::SourceTeletextDeliveryUnsupported
+        }
+        _ => return None,
+    };
+    Some(tr(key))
 }
 
 #[component]
@@ -103,6 +135,8 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     let preferred_subtitle_language_code =
         RwSignal::new(initial_form.preferred_subtitle_language_code);
     let subtitle_mode = RwSignal::new(initial_form.subtitle_mode);
+    let source_teletext_delivery =
+        RwSignal::new(initial_form.source_teletext_delivery.unwrap_or(0));
     let music_video_credits_mode = RwSignal::new(initial_form.music_video_credits_mode);
     let music_video_credits_template = RwSignal::new(initial_form.music_video_credits_template);
     let song_video_mode = RwSignal::new(initial_form.song_video_mode);
@@ -405,6 +439,17 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                             None,
                             tr(TextKey::SubtitleModeHelp),
                         )}
+                        {select_i32_field(
+                            tr(TextKey::SourceTeletextDelivery),
+                            "source_teletext_delivery",
+                            source_teletext_delivery,
+                            Signal::derive(|| vec![
+                                (0, tr(TextKey::SourceTeletextDeliveryBurn).to_owned()),
+                                (1, tr(TextKey::SourceTeletextDeliveryDvb).to_owned()),
+                            ]),
+                            None,
+                            tr(TextKey::SourceTeletextDeliveryHelp),
+                        )}
                     </div>
 
                     <div>
@@ -618,7 +663,7 @@ fn select_i32_field(
     let disabled_initial = disabled.get_untracked();
     view! {
         <div class=style::field>
-            <label class=style::label inner_html=label></label>
+            <label for=name class=style::label inner_html=label></label>
             {disabled_initial.then(|| {
                 view! {
                     <input
@@ -629,6 +674,7 @@ fn select_i32_field(
                 }
             })}
             <select
+                id=name
                 name=name
                 class=select_class
                 disabled=move || disabled.get()
@@ -837,6 +883,82 @@ fn music_video_credits_template_dependency_script() -> &'static str {
 mod tests {
     use super::*;
     use crate::admin::server_fns::channels::ChannelForm;
+
+    #[test]
+    fn source_teletext_delivery_errors_localize_only_their_complete_typed_failure() {
+        let owner = Owner::new();
+        owner.with(|| {
+            provide_context(crate::admin::i18n::UiLanguage::Dutch);
+            for (message, key) in [
+                (
+                    "Invalid source teletext caption delivery",
+                    TextKey::InvalidSourceTeletextDelivery,
+                ),
+                (
+                    "DVB source teletext subtitles require native MPEG-TS or Hybrid output",
+                    TextKey::SourceTeletextDeliveryUnsupported,
+                ),
+            ] {
+                for (field, detail) in [
+                    ("channel", format!("source_teletext_delivery: {message}")),
+                    ("source_teletext_delivery", message.to_owned()),
+                ] {
+                    let error = ersatzrs_app::ApplicationError::Validation {
+                        field,
+                        message: detail,
+                    }
+                    .to_string();
+                    assert_eq!(source_teletext_delivery_form_error(&error), Some(tr(key)));
+                }
+                // An additional failure must not disappear behind this single
+                // field's localized message, and another field is not ours.
+                assert_eq!(
+                    source_teletext_delivery_form_error(&format!(
+                        "invalid channel: source_teletext_delivery: {message}; number: required"
+                    )),
+                    None
+                );
+                assert_eq!(
+                    source_teletext_delivery_form_error(&format!("invalid number: {message}")),
+                    None
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn source_teletext_delivery_select_remains_visible_and_submitted_for_every_engine() {
+        for engine in [0, 1] {
+            let owner = Owner::new();
+            let html = owner.with(|| {
+                channel_editor_form(
+                    ChannelEditorData {
+                        form: ChannelForm {
+                            streaming_engine: engine,
+                            source_teletext_delivery: Some(1),
+                            ..ChannelForm::new_defaults()
+                        },
+                        ..ChannelEditorData::default()
+                    },
+                    String::new(),
+                )
+                .into_view()
+                .to_html()
+            });
+            let select = html
+                .split("name=\"source_teletext_delivery\"")
+                .nth(1)
+                .unwrap();
+            let tag = select.split('>').next().unwrap();
+            assert!(!tag.contains("disabled"));
+            assert!(!tag.contains("hidden"));
+            assert!(select
+                .split("</select>")
+                .next()
+                .unwrap()
+                .contains("value=\"1\" selected"));
+        }
+    }
 
     #[test]
     fn native_slug_setting_stays_in_ssr_form_when_next_hides_it() {

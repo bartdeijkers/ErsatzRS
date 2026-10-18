@@ -12,6 +12,37 @@ pub enum StreamingEngine {
     Next,
 }
 
+/// Explicit delivery of selected source teletext captions on a native output channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[repr(i32)]
+pub enum SourceTeletextCaptionDelivery {
+    #[default]
+    Burn = 0,
+    DvbSubtitles = 1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("Invalid source teletext caption delivery")]
+pub struct InvalidSourceTeletextCaptionDelivery;
+
+impl TryFrom<i32> for SourceTeletextCaptionDelivery {
+    type Error = InvalidSourceTeletextCaptionDelivery;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Burn),
+            1 => Ok(Self::DvbSubtitles),
+            _ => Err(InvalidSourceTeletextCaptionDelivery),
+        }
+    }
+}
+
+/// Output-channel identity, independent of reused database IDs or mirror sources.
+#[must_use]
+pub fn channel_source_teletext_delivery_key(channel: &Uuid) -> String {
+    format!("channel.{channel}.source_caption_delivery")
+}
+
 /// Persisted Next text-subtitle treatment, matching upstream Burn=0 and Convert=1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NextEngineTextSubtitleMode {

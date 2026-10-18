@@ -41,22 +41,23 @@ pub(super) async fn recover_optional_output(
         .live_updates
         .map(|timing| (timing, policy.encoding.clone()));
     if let Some((timing, encoding)) = live {
-        let initial =
-            if let Ok(candidate) = load_selected_teletext_output_candidate(
-                &state.application,
+        let initial = if let Ok(candidate) = load_selected_teletext_output_candidate(
+            &state.application,
+            channel_id,
+            policy.design,
+            policy.encoding,
+            bounded_deadline.into_std(),
+        )
+        .await
+        {
+            candidate
+        } else {
+            tracing::warn!(
                 channel_id,
-                policy.design,
-                policy.encoding,
-                bounded_deadline.into_std(),
-            )
-            .await
-            {
-                candidate
-            } else {
-                tracing::warn!(channel_id,
-                "selected teletext recovery rejected; starting live output without authored pages");
-                None
-            };
+                "selected teletext recovery rejected; starting live output without authored pages"
+            );
+            None
+        };
         let intent = TeletextLiveOutputIntent::new_selected(
             Arc::clone(&state.application),
             channel_id,

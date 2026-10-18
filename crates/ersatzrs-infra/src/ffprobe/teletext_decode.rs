@@ -33,6 +33,8 @@ pub use bitmap_carriage::{
     SourceTeletextBitmapArtifactObservation, SourceTeletextBitmapFragments,
 };
 
+pub(crate) use bitmap_carriage::SourceTeletextBitmapPlaylist;
+
 #[path = "teletext_decode_consumer.rs"]
 mod consumer;
 #[path = "teletext_decode_demux.rs"]

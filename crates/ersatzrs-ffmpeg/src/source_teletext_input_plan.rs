@@ -8,7 +8,7 @@ use crate::{
         selected_bitmap_burn_input,
     },
     physical_inputs::{physical_input_index, physical_inputs},
-    FfmpegCommand, FfmpegState, InputFile, InputKind, PipelineStep,
+    FfmpegCommand, FfmpegState, InputFile, InputKind, PipelineStep, StreamKind, SubtitleMethod,
 };
 
 /// Typed generated clock settings, distinct from native decoding observations.
@@ -90,7 +90,7 @@ impl SourceTeletextInputTiming {
     }
 }
 
-/// Final generated physical inputs for the first selected source bitmap Burn.
+/// Final generated physical inputs for an explicit source caption consumer.
 ///
 /// The plan is built after pipeline normalization and sealed to the complete
 /// executable, environment, arguments and generated output hints. It records
@@ -106,6 +106,21 @@ pub struct SourceTeletextInputPlan {
     audio: Option<(usize, usize)>,
     physical_options: Vec<String>,
     timing: SourceTeletextInputTiming,
+    first_input_options: Vec<String>,
+    first_input_timing: SourceTeletextInputTiming,
+    bitmap_carriage: bool,
+    mpegts_segments: Option<crate::HlsMpegTsSegments>,
+}
+
+/// The same normalized inputs and steps used to generate the sealed command.
+pub(crate) struct GeneratedSourceTeletextPlan<'a> {
+    pub command: &'a FfmpegCommand,
+    pub inputs: &'a [InputFile],
+    pub original_inputs: &'a [InputFile],
+    pub steps: &'a [PipelineStep],
+    pub intel: bool,
+    pub timing: SourceTeletextInputTiming,
+    pub mpegts_segments: Option<&'a crate::HlsMpegTsSegments>,
 }
 
 impl fmt::Debug for SourceTeletextInputPlan {
@@ -121,16 +136,31 @@ impl fmt::Debug for SourceTeletextInputPlan {
 
 impl SourceTeletextInputPlan {
     pub(crate) fn from_generated(
-        command: &FfmpegCommand,
-        inputs: &[InputFile],
-        original_inputs: &[InputFile],
-        steps: &[PipelineStep],
-        intel: bool,
-        mut timing: SourceTeletextInputTiming,
+        generated: &GeneratedSourceTeletextPlan<'_>,
+        expected_bitmap_copy: Option<&InputFile>,
     ) -> Option<Self> {
-        let caption = selected_bitmap_burn_input(inputs)?;
-        caption.streams.first()?.source_teletext_page?;
-        let owners = physical_inputs(inputs, intel);
+        let inputs = generated.inputs;
+        let caption = if let Some(expected) = expected_bitmap_copy {
+            let caption = selected_bitmap_copy(inputs, expected)?;
+            selected_bitmap_copy(generated.original_inputs, expected)?;
+            let mut encoders = generated.steps.iter().filter_map(|step| match step {
+                PipelineStep::Encoder {
+                    name,
+                    kind: StreamKind::Subtitle,
+                    ..
+                } => Some(name),
+                _ => None,
+            });
+            if encoders.next().is_none_or(|name| name != "copy") || encoders.next().is_some() {
+                return None;
+            }
+            caption
+        } else {
+            let caption = selected_bitmap_burn_input(inputs)?;
+            caption.streams.first()?.source_teletext_page?;
+            caption
+        };
+        let owners = physical_inputs(inputs, generated.intel);
         let caption_index = physical_input_index(&owners, caption, false)?;
         let selected_stream = |kind, last| {
             let input = inputs.iter().find(|input| input.kind == kind)?;
@@ -139,55 +169,36 @@ impl SourceTeletextInputPlan {
                 input.streams.first()?.index,
             ))
         };
-        let mut physical_options = if caption_index == 0 {
-            input_prefix_options(steps)
-        } else {
-            Vec::new()
-        };
-        physical_options.extend(physical_input_options(
-            inputs,
-            &owners,
-            caption_index,
-            intel,
-        ));
-        // The generator emits StreamSeek before the first physical -i only.
-        // A later caption owner must not borrow the video's pre-input seek.
-        timing.input_seek = (caption_index == 0)
-            .then(|| {
-                steps.iter().find_map(|step| match step {
-                    PipelineStep::StreamSeek { position } => Some(*position),
-                    _ => None,
-                })
-            })
-            .flatten();
-        // Some output modes deliberately suppress the requested TS offset.
-        if !steps.iter().any(|step| {
-            matches!(
-                step,
-                PipelineStep::Generic {
-                    name: "output_ts_offset",
-                    ..
-                }
-            )
-        }) {
-            timing.output_ts_offset = None;
+        let video = selected_stream(InputKind::Video, false);
+        let audio = selected_stream(InputKind::Audio, true);
+        if expected_bitmap_copy.is_some()
+            && (video.is_none_or(|(physical, _)| physical != 0)
+                || caption_index == 0
+                || audio.is_some_and(|(physical, _)| physical == caption_index)
+                || mapped_caption_count(inputs, &owners, caption_index) != 1)
+        {
+            return None;
         }
-        let owner = owners[caption_index];
-        timing.opaque_input_options = original_inputs
-            .iter()
-            .find(|input| input.kind == owner.kind && input.source_key() == owner.source_key())
-            .is_none_or(|original| {
-                !physical_input_base_options(original_inputs, original, intel).is_empty()
-            });
         Some(Self {
-            command: command.clone(),
+            command: generated.command.clone(),
             caption: caption.clone(),
             caption_index,
-            video: selected_stream(InputKind::Video, false),
-            audio: selected_stream(InputKind::Audio, true),
-            physical_options,
-            timing,
+            video,
+            audio,
+            physical_options: generated.options(&owners, caption_index),
+            timing: generated.timing(&owners, caption_index),
+            first_input_options: generated.options(&owners, 0),
+            first_input_timing: generated.timing(&owners, 0),
+            bitmap_carriage: expected_bitmap_copy.is_some(),
+            mpegts_segments: generated.mpegts_segments.cloned(),
         })
+    }
+
+    /// Private segment-muxer intent sealed to this explicit bitmap command.
+    /// This does not certify publication, segment ownership or source readiness.
+    #[must_use]
+    pub const fn mpegts_segments(&self) -> Option<&crate::HlsMpegTsSegments> {
+        self.mpegts_segments.as_ref()
     }
 
     /// Require the entire generated command to remain unchanged.
@@ -196,7 +207,7 @@ impl SourceTeletextInputPlan {
         &self.command == command
     }
 
-    /// The final logical caption input, including its explicit page and stream.
+    /// The final logical caption input with its exact stream/page metadata.
     #[must_use]
     pub const fn caption_input(&self) -> &InputFile {
         &self.caption
@@ -251,6 +262,111 @@ impl SourceTeletextInputPlan {
     pub const fn timing(&self) -> SourceTeletextInputTiming {
         self.timing
     }
+
+    /// Actual generated options for physical input zero, including its prefix.
+    /// These remain distinct from an independent caption input's options.
+    #[must_use]
+    pub fn first_input_options(&self) -> &[String] {
+        &self.first_input_options
+    }
+
+    /// Actual first-input seek/options policy, not the independent caption's seek.
+    #[must_use]
+    pub const fn first_input_timing(&self) -> SourceTeletextInputTiming {
+        self.first_input_timing
+    }
+
+    /// Whether this plan used the explicit expected DVB-bitmap Copy builder.
+    /// This generated observation grants no source or carriage authorization.
+    #[must_use]
+    pub const fn is_bitmap_carriage(&self) -> bool {
+        self.bitmap_carriage
+    }
+}
+
+impl GeneratedSourceTeletextPlan<'_> {
+    fn options(&self, owners: &[&InputFile], index: usize) -> Vec<String> {
+        let mut options = if index == 0 {
+            input_prefix_options(self.steps)
+        } else {
+            Vec::new()
+        };
+        options.extend(physical_input_options(
+            self.inputs,
+            owners,
+            index,
+            self.intel,
+        ));
+        options
+    }
+
+    fn timing(&self, owners: &[&InputFile], index: usize) -> SourceTeletextInputTiming {
+        let mut timing = self.timing;
+        timing.input_seek = (index == 0)
+            .then(|| {
+                self.steps.iter().find_map(|step| match step {
+                    PipelineStep::StreamSeek { position } => Some(*position),
+                    _ => None,
+                })
+            })
+            .flatten();
+        if !self.steps.iter().any(|step| {
+            matches!(
+                step,
+                PipelineStep::Generic {
+                    name: "output_ts_offset",
+                    ..
+                }
+            )
+        }) {
+            timing.output_ts_offset = None;
+        }
+        let owner = owners[index];
+        timing.opaque_input_options = self
+            .original_inputs
+            .iter()
+            .find(|input| input.kind == owner.kind && input.source_key() == owner.source_key())
+            .is_none_or(|original| {
+                !physical_input_base_options(self.original_inputs, original, self.intel).is_empty()
+            });
+        timing
+    }
+}
+
+fn selected_bitmap_copy<'a>(
+    inputs: &'a [InputFile],
+    expected: &InputFile,
+) -> Option<&'a InputFile> {
+    if expected.kind != InputKind::Subtitle
+        || expected.subtitle_method != Some(SubtitleMethod::Copy)
+        || !expected.is_image_based_subtitle
+        || expected.subtitle_text_format.is_some()
+        || !expected.filter_steps.is_empty()
+        || expected.streams.len() != 1
+        || expected.streams[0].index != 0
+        || expected.streams[0].source_teletext_page.is_some()
+    {
+        return None;
+    }
+    let mut matches = inputs.iter().filter(|input| *input == expected);
+    let selected = matches.next()?;
+    matches.next().is_none().then_some(selected)
+}
+
+fn mapped_caption_count(inputs: &[InputFile], owners: &[&InputFile], index: usize) -> usize {
+    inputs
+        .iter()
+        .filter(|input| {
+            input.kind == InputKind::Subtitle
+                && matches!(
+                    input.subtitle_method,
+                    Some(SubtitleMethod::Copy | SubtitleMethod::Convert)
+                )
+                && physical_input_index(owners, input, false) == Some(index)
+        })
+        .flat_map(|input| &input.streams)
+        .filter(|stream| stream.index == 0)
+        .count()
 }
 
 #[cfg(test)]

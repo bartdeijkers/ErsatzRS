@@ -730,7 +730,9 @@ async fn trial(
     } else {
         "bundled-default-opaque"
     };
-    println!("ordinary wrapper trial: mode={mode:?}, wrapper={wrapper_label}, policy={policy_label}, selected={selected}");
+    println!(
+        "ordinary wrapper trial: mode={mode:?}, wrapper={wrapper_label}, policy={policy_label}, selected={selected}"
+    );
     reset_active_transcode_state_for_tests();
     programme_start(state, root, mode).await;
     config(state, NATIVE_TELETEXT_RUNTIME_POLICY_SETTING, policy).await;
@@ -807,8 +809,16 @@ async fn unavailable_profile_trials(
                 source_hashes,
             )
             .await;
-            assert_eq!(state.application.accepted_teletext_generation(1).await.unwrap().unwrap(), selected,
-                "unavailable profile preserves historical accepted metadata while declining authored output");
+            assert_eq!(
+                state
+                    .application
+                    .accepted_teletext_generation(1)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                selected,
+                "unavailable profile preserves historical accepted metadata while declining authored output"
+            );
         }
     }
 }
@@ -1148,7 +1158,9 @@ async fn alternate_audio_trial(
 ) {
     let (mode, policy, language, frequency) = scenario;
     let label = if policy == POLICY { "v1" } else { "v2" };
-    println!("ordinary alternate trial: mode={mode:?}, policy={label}, language={language}, frequency={frequency}");
+    println!(
+        "ordinary alternate trial: mode={mode:?}, policy={label}, language={language}, frequency={frequency}"
+    );
     reset_active_transcode_state_for_tests();
     let mut channel = state.repositories.channel.get_by_number("1").await.unwrap();
     assert_eq!(
@@ -1196,7 +1208,10 @@ async fn alternate_audio_trial(
         tokio::fs::read(root.join("addon-calls")).await.unwrap(),
         calls
     );
-    println!("ordinary alternate verified: mode={mode:?}, policy={label}, language={language}, frequency={frequency}, authored200=decoded, caption888=omitted-explicit-subtitle-off, packets={}", bytes.len()/188);
+    println!(
+        "ordinary alternate verified: mode={mode:?}, policy={label}, language={language}, frequency={frequency}, authored200=decoded, caption888=omitted-explicit-subtitle-off, packets={}",
+        bytes.len() / 188
+    );
 }
 
 async fn run_alternate_audio() {

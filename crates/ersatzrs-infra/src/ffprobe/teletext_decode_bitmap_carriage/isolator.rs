@@ -315,7 +315,7 @@ impl FfprobeExtractor {
         )
         .await
         .map_err(probe_error)?;
-        let observation = parser::parse_observation(&output)?;
+        let observation = parser::parse_fragment_observation(&output)?;
         parser::qualify_fragment(&observation, artifact.observation(), range.0, range.1)?;
         let sha256 = Sha256::digest(&bytes).into();
         let byte_count = bytes.len();
@@ -426,6 +426,10 @@ fn fragment_command(
         "0:s:0".into(),
         "-c:s".into(),
         "copy".into(),
+        // The original cue duration would stall FFmpeg's dts+duration scheduler
+        // past the next group. Explicit DVB clears and payload timeouts remain intact.
+        "-bsf:s".into(),
+        "setts=pts=PTS:dts=DTS:duration=0".into(),
         "-f".into(),
         "matroska".into(),
         "pipe:1".into(),

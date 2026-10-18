@@ -266,9 +266,10 @@ fn registered_health_checks(
             ffmpeg_runtime.clone(),
             pool.clone(),
         )),
-        Box::new(TeletextDecoderHealthCheck::new(
-            ffmpeg_runtime.capabilities.teletext_decoder.clone(),
-        )),
+        Box::new(
+            TeletextDecoderHealthCheck::new(ffmpeg_runtime.capabilities.teletext_decoder.clone())
+                .with_channel_delivery(pool.clone(), &ffmpeg_runtime.capabilities),
+        ),
         Box::new(TeletextWorkHealthCheck::new(pool.clone())),
         Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
         Box::new(DynamicTextGraphicsHealthCheck::new(pool.clone())),

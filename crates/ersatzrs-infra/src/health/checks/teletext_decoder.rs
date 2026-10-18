@@ -2,14 +2,31 @@ use ersatzrs_ffmpeg::{TeletextDecoderCapability, TeletextDecoderStatus};
 
 use super::super::{async_trait, HealthCheck, HealthCheckResult, HealthCheckStatus, Result};
 
+#[path = "teletext_decoder_carriage.rs"]
+mod carriage;
+use carriage::CarriageContext;
+
 /// ADR 0121: decoder readiness is separate from authored-page delivery.
 pub(crate) struct TeletextDecoderHealthCheck {
     capability: TeletextDecoderCapability,
+    carriage: Option<CarriageContext>,
 }
 
 impl TeletextDecoderHealthCheck {
     pub(crate) fn new(capability: TeletextDecoderCapability) -> Self {
-        Self { capability }
+        Self {
+            capability,
+            carriage: None,
+        }
+    }
+
+    pub(crate) fn with_channel_delivery(
+        mut self,
+        pool: crate::db::DbPool,
+        capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+    ) -> Self {
+        self.carriage = Some(CarriageContext::new(pool, capabilities));
+        self
     }
 }
 
@@ -20,6 +37,14 @@ impl HealthCheck for TeletextDecoderHealthCheck {
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
+        if let Some(context) = &self.carriage {
+            if let Some((status, message)) = context.check(&self.capability).await? {
+                return Ok(
+                    HealthCheckResult::new(self.title(), status, message, message)
+                        .with_link("/channels"),
+                );
+            }
+        }
         let (status, message) = match self.capability.status {
             TeletextDecoderStatus::Ready => (
                 HealthCheckStatus::Pass,

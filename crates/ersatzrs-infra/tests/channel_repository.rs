@@ -1312,3 +1312,244 @@ async fn playback_troubleshooting_projection_retains_each_owning_channel_engine(
         );
     }
 }
+
+#[tokio::test]
+async fn source_teletext_delivery_is_explicit_preserved_and_output_channel_local() {
+    use ersatzrs_domain::SourceTeletextCaptionDelivery::{Burn, DvbSubtitles};
+    use ersatzrs_infra::source_teletext_delivery::load_channel_source_teletext_delivery as load;
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "default"))
+        .await
+        .unwrap();
+    let saved = repos
+        .channel
+        .save_editor_form(editor_form("81", "Source"))
+        .await
+        .unwrap();
+    assert!(saved.is_success());
+    assert_eq!(load(&pool, saved.id).await.unwrap(), Burn);
+    let mut form = repos
+        .channel
+        .get_editor_state(Some(saved.id))
+        .await
+        .unwrap()
+        .unwrap()
+        .form;
+    assert_eq!(form.source_teletext_delivery, Some(0));
+    form.source_teletext_delivery = Some(1);
+    assert!(repos
+        .channel
+        .save_editor_form(form.clone())
+        .await
+        .unwrap()
+        .is_success());
+    assert_eq!(load(&pool, saved.id).await.unwrap(), DvbSubtitles);
+    form.source_teletext_delivery = None;
+    form.name = "Preserved choice".into();
+    assert!(repos
+        .channel
+        .save_editor_form(form.clone())
+        .await
+        .unwrap()
+        .is_success());
+    assert_eq!(load(&pool, saved.id).await.unwrap(), DvbSubtitles);
+    let mirror = repos
+        .channel
+        .save_editor_form(ChannelEditorForm {
+            playout_source: 1,
+            mirror_source_channel_id: Some(saved.id),
+            ..editor_form("82", "Mirror")
+        })
+        .await
+        .unwrap();
+    assert!(mirror.is_success(), "{:?}", mirror.validation_errors);
+    assert_eq!(load(&pool, mirror.id).await.unwrap(), Burn);
+    let mut mirror_form = repos
+        .channel
+        .get_editor_state(Some(mirror.id))
+        .await
+        .unwrap()
+        .unwrap()
+        .form;
+    mirror_form.source_teletext_delivery = Some(1);
+    assert!(repos
+        .channel
+        .save_editor_form(mirror_form)
+        .await
+        .unwrap()
+        .is_success());
+    form.source_teletext_delivery = Some(0);
+    assert!(repos
+        .channel
+        .save_editor_form(form)
+        .await
+        .unwrap()
+        .is_success());
+    assert_eq!(load(&pool, saved.id).await.unwrap(), Burn);
+    assert_eq!(load(&pool, mirror.id).await.unwrap(), DvbSubtitles);
+}
+
+#[tokio::test]
+async fn source_teletext_delivery_rejects_invalid_and_incompatible_saves_atomically() {
+    use ersatzrs_domain::channel_source_teletext_delivery_key;
+    use ersatzrs_infra::source_teletext_delivery::load_channel_source_teletext_delivery as load;
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "default"))
+        .await
+        .unwrap();
+    let saved = repos
+        .channel
+        .save_editor_form(ChannelEditorForm {
+            source_teletext_delivery: Some(1),
+            ..editor_form("83", "Unchanged")
+        })
+        .await
+        .unwrap();
+    assert!(saved.is_success());
+    let original = repos
+        .channel
+        .get_editor_state(Some(saved.id))
+        .await
+        .unwrap()
+        .unwrap()
+        .form;
+    for (delivery, engine, mode) in [
+        (Some(2), 0, 5),
+        (Some(1), 1, 5),
+        (None, 1, 5),
+        (Some(1), 0, 4),
+        (None, 0, 2),
+    ] {
+        let result = repos
+            .channel
+            .save_editor_form(ChannelEditorForm {
+                source_teletext_delivery: delivery,
+                streaming_engine: engine,
+                streaming_mode: mode,
+                name: "Must not persist".into(),
+                ..original.clone()
+            })
+            .await
+            .unwrap();
+        assert!(!result.is_success());
+        assert!(result
+            .validation_errors
+            .iter()
+            .any(|error| error.field == "source_teletext_delivery"));
+        assert_eq!(
+            repos
+                .channel
+                .get_editor_state(Some(saved.id))
+                .await
+                .unwrap()
+                .unwrap()
+                .form,
+            original
+        );
+    }
+    let channel = repos.channel.get_with_profile(saved.id).await.unwrap();
+    let key = channel_source_teletext_delivery_key(&channel.unique_id);
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = 'bad' WHERE "Key" = ?"#)
+        .bind(&key)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(load(&pool, saved.id).await.is_err());
+    assert!(repos
+        .channel
+        .get_editor_state(Some(saved.id))
+        .await
+        .is_err());
+    assert!(repos
+        .channel
+        .save_editor_form(ChannelEditorForm {
+            source_teletext_delivery: None,
+            name: "Must not persist".into(),
+            ..original.clone()
+        })
+        .await
+        .is_err());
+    assert_eq!(
+        repos.channel.get_with_profile(saved.id).await.unwrap().name,
+        "Unchanged"
+    );
+    assert_delivery_storage_representations(&pool, saved.id, &key).await;
+}
+
+async fn assert_delivery_storage_representations(
+    pool: &sqlx::SqlitePool,
+    channel_id: i64,
+    key: &str,
+) {
+    use ersatzrs_infra::source_teletext_delivery::load_channel_source_teletext_delivery as load;
+    for invalid in [
+        r#"UPDATE "ConfigElement" SET "Value" = NULL WHERE "Key" = ?"#,
+        r#"UPDATE "ConfigElement" SET "Value" = x'FF' WHERE "Key" = ?"#,
+    ] {
+        sqlx::query(invalid).bind(key).execute(pool).await.unwrap();
+        assert!(load(pool, channel_id).await.is_err());
+    }
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = x'31' WHERE "Key" = ?"#)
+        .bind(key)
+        .execute(pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        load(pool, channel_id).await.unwrap(),
+        ersatzrs_domain::SourceTeletextCaptionDelivery::DvbSubtitles
+    );
+}
+
+#[tokio::test]
+async fn source_teletext_delivery_delete_does_not_leak_to_reused_channel_ids() {
+    use ersatzrs_domain::{channel_source_teletext_delivery_key, SourceTeletextCaptionDelivery};
+    use ersatzrs_infra::source_teletext_delivery::load_channel_source_teletext_delivery as load;
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "default"))
+        .await
+        .unwrap();
+    let saved = repos
+        .channel
+        .save_editor_form(ChannelEditorForm {
+            source_teletext_delivery: Some(1),
+            ..editor_form("84", "Deleted")
+        })
+        .await
+        .unwrap();
+    assert!(saved.is_success());
+    let old = repos.channel.get_with_profile(saved.id).await.unwrap();
+    let key = channel_source_teletext_delivery_key(&old.unique_id);
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES ('synthetic.unrelated', 'preserve')"#)
+        .execute(&pool).await.unwrap();
+    repos.channel.delete(saved.id).await.unwrap();
+    assert!(load(&pool, saved.id).await.is_err());
+    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ConfigElement" WHERE "Key" = ?"#)
+        .bind(&key)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    let fresh = common::channel(saved.id, "85", true);
+    assert_ne!(fresh.unique_id, old.unique_id);
+    repos.channel.upsert(&fresh).await.unwrap();
+    assert_eq!(
+        load(&pool, fresh.id).await.unwrap(),
+        SourceTeletextCaptionDelivery::Burn
+    );
+    let unrelated: String = sqlx::query_scalar(
+        r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = 'synthetic.unrelated'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(unrelated, "preserve");
+}

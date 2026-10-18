@@ -292,12 +292,16 @@ fn duplicate_sources_share_the_same_generator_and_filter_ownership() {
     assert_eq!(complex.audio_label, "2:3");
     let command = crate::CommandGenerator::generate_command(&inputs, &[], true);
     let plan = SourceTeletextInputPlan::from_generated(
-        &command,
-        &inputs,
-        &inputs,
-        &[],
-        true,
-        SourceTeletextInputTiming::from_state(&FfmpegState::default()),
+        &GeneratedSourceTeletextPlan {
+            command: &command,
+            inputs: &inputs,
+            original_inputs: &inputs,
+            steps: &[],
+            intel: true,
+            timing: SourceTeletextInputTiming::from_state(&FfmpegState::default()),
+            mpegts_segments: None,
+        },
+        None,
     )
     .unwrap();
     assert_eq!(
@@ -504,6 +508,7 @@ fn suppressed_fmp4_transport_offset_is_not_reported_as_emitted() {
     request.state.output_ts_offset = Some(Duration::from_secs(5));
     request.state.output_format = crate::OutputFormat::HlsMp4;
     request.state.hls = Some(crate::HlsOutput {
+        mpegts_segments: None,
         segment_template: "segment-%d.m4s".into(),
         init_template: Some("init.mp4".into()),
         playlist_path: "stream.m3u8".into(),
@@ -594,3 +599,8 @@ fn raw_burst_and_seek_remain_opaque_even_with_generated_realtime_reserve() {
             .any(|pair| pair == options));
     }
 }
+
+#[path = "carriage_tests.rs"]
+mod carriage;
+#[path = "segment_tests.rs"]
+mod segments;

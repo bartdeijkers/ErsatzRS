@@ -95,7 +95,8 @@ enum Record {
         stream_index: usize,
         pts: i64,
         dts: i64,
-        duration: i64,
+        #[serde(default, deserialize_with = "optional_duration")]
+        duration: Option<i64>,
         flags: String,
         data_hash: String,
     },
@@ -108,6 +109,12 @@ enum Record {
         end_display_time: u32,
         num_rects: u32,
     },
+}
+fn optional_duration<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    i64::deserialize(deserializer).map(Some)
 }
 fn invalid() -> SourceTeletextPageDecodeError {
     SourceTeletextPageDecodeError::InvalidOutput
@@ -163,6 +170,20 @@ pub(super) fn parse(
 pub(super) fn parse_observation(
     bytes: &[u8],
 ) -> Result<SourceTeletextBitmapArtifactObservation, SourceTeletextPageDecodeError> {
+    parse_with_duration(bytes, false)
+}
+
+/// Private fragments carry no container scheduling duration; DVB payloads retain their timeout.
+pub(super) fn parse_fragment_observation(
+    bytes: &[u8],
+) -> Result<SourceTeletextBitmapArtifactObservation, SourceTeletextPageDecodeError> {
+    parse_with_duration(bytes, true)
+}
+
+fn parse_with_duration(
+    bytes: &[u8],
+    normalized: bool,
+) -> Result<SourceTeletextBitmapArtifactObservation, SourceTeletextPageDecodeError> {
     if bytes.len() > crate::ffprobe::MAX_REMOTE_FFPROBE_OUTPUT_BYTES {
         return Err(invalid());
     }
@@ -190,7 +211,7 @@ pub(super) fn parse_observation(
     let mut records = output.packets_and_frames.into_iter();
     while let Some(packet) = records.next() {
         let frame = records.next().ok_or_else(invalid)?;
-        let packet = pair(packet, frame)?;
+        let packet = pair(packet, frame, normalized)?;
         let pts = packet.pts;
         let end = pts.checked_add(packet.duration).ok_or_else(invalid)?;
         let nonempty = packet.rectangles != 0;
@@ -246,7 +267,7 @@ pub(super) fn qualify_fragment(
     for expected in expected {
         let actual = actual.next().ok_or_else(invalid)?;
         if actual.pts != expected.pts.checked_sub(start).ok_or_else(invalid)?
-            || actual.duration != expected.duration
+            || actual.duration != 0
             || actual.rectangles != expected.rectangles
             || actual.sha256 != expected.sha256
         {
@@ -259,7 +280,11 @@ pub(super) fn qualify_fragment(
     Ok(())
 }
 
-fn pair(packet: Record, frame: Record) -> Result<Packet, SourceTeletextPageDecodeError> {
+fn pair(
+    packet: Record,
+    frame: Record,
+    normalized: bool,
+) -> Result<Packet, SourceTeletextPageDecodeError> {
     let Record::Packet {
         codec_type,
         stream_index,
@@ -283,11 +308,15 @@ fn pair(packet: Record, frame: Record) -> Result<Packet, SourceTeletextPageDecod
     else {
         return Err(invalid());
     };
+    let duration = match (normalized, duration) {
+        (true, None | Some(0)) => 0,
+        (false, Some(value)) if value > 0 => value,
+        _ => return Err(invalid()),
+    };
     if flags != "K__"
         || codec_type != "subtitle"
         || stream_index != 0
         || pts != dts
-        || duration <= 0
         || media_type != "subtitle"
         || format != 0
         || num_rects > 4096

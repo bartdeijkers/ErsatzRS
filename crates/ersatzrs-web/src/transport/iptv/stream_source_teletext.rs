@@ -3,7 +3,9 @@
 use std::{sync::Arc, time::Duration};
 
 use ersatzrs_core::repositories::{RepositoryError, Result};
-use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
+use ersatzrs_domain::{
+    ChannelSubtitleMode, HardwareAccelerationKind, SourceTeletextCaptionDelivery, StreamingMode,
+};
 use ersatzrs_infra::playback::source_teletext::runtime::{self, RuntimeSelectionContext};
 use tokio::time::Instant;
 
@@ -16,6 +18,7 @@ use crate::host::state::AppState;
 
 pub(super) struct SelectionContext<'a> {
     pub state: &'a AppState,
+    pub output_channel_id: i64,
     pub active: &'a ActivePlayoutItem,
     pub resolved: &'a str,
     pub languages: &'a [String],
@@ -26,11 +29,24 @@ pub(super) struct SelectionContext<'a> {
 }
 
 pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selection>> {
-    if context.active.external.is_some() || context.active.remote_stream.is_some() {
+    if context.active.external.is_some()
+        || context.active.remote_stream.is_some()
+        || context.subtitle_mode == ChannelSubtitleMode::None
+        || context.streaming_mode == StreamingMode::HttpLiveStreamingDirect
+    {
         return Ok(None);
     }
     let locker = context.state.application.operations().entity_locker();
-    runtime::select(RuntimeSelectionContext {
+    let delivery = tokio::time::timeout_at(
+        context.deadline,
+        ersatzrs_infra::source_teletext_delivery::load_channel_source_teletext_delivery(
+            &context.state.pool,
+            context.output_channel_id,
+        ),
+    )
+    .await
+    .map_err(|_| unavailable())??;
+    Box::pin(runtime::select(RuntimeSelectionContext {
         pool: &context.state.pool,
         locker: &locker,
         media_item_id: Some(context.active.media_item_id),
@@ -40,11 +56,33 @@ pub(super) async fn select(context: SelectionContext<'_>) -> Result<Option<Selec
         resolved_path: context.resolved,
         languages: context.languages,
         subtitle_mode: context.subtitle_mode,
+        source_teletext_delivery: delivery,
         streaming_mode: context.streaming_mode,
         playback_interval: context.playback_interval,
         deadline: context.deadline,
-    })
+    }))
     .await
+}
+
+/// Bind only the explicitly selected prepared source input, never a fallback.
+pub(super) fn consumer_request(
+    acceleration: HardwareAccelerationKind,
+    request: ersatzrs_ffmpeg::PipelineRequest,
+    source: Option<&PlaybackSource>,
+) -> SourceTeletextConsumerRequest {
+    if let Some(source) =
+        source.filter(|source| source.delivery() == SourceTeletextCaptionDelivery::DvbSubtitles)
+    {
+        let expected = source.input();
+        if request.inputs.iter().any(|input| input == &expected) {
+            return SourceTeletextConsumerRequest::new_bitmap_carriage(
+                acceleration,
+                request,
+                expected,
+            );
+        }
+    }
+    SourceTeletextConsumerRequest::new(acceleration, request)
 }
 
 /// Startup/retry context, owned by the existing actual stream supervisor.
@@ -54,6 +92,7 @@ pub(super) struct Consumer {
     plan: Option<ersatzrs_ffmpeg::SourceTeletextInputPlan>,
     request: Option<SourceTeletextConsumerRequest>,
     reservation: Option<ersatzrs_infra::transcode_capacity::ActiveTranscodeReservation>,
+    initialized: Option<Arc<runtime::InitializedSourceTeletextBitmap>>,
 }
 
 impl Consumer {
@@ -67,6 +106,7 @@ impl Consumer {
             plan,
             request,
             reservation: None,
+            initialized: None,
         }
     }
 
@@ -82,14 +122,16 @@ impl Consumer {
     ) -> Result<ersatzrs_ffmpeg::FfmpegCommand> {
         self.check_command(command)?;
         self.reservation = Some(reservation.ok_or_else(unavailable)?.clone());
-        self.source
-            .initialize_consumer_command(
-                command,
-                self.plan.as_ref(),
-                self.request.as_ref().ok_or_else(unavailable)?,
-                deadline,
-            )
-            .await
+        let initialized = Box::pin(self.source.initialize_consumer(
+            command,
+            self.plan.as_ref(),
+            self.request.as_ref().ok_or_else(unavailable)?,
+            deadline,
+        ))
+        .await?;
+        let (command, owner) = initialized.into_parts();
+        self.initialized = owner;
+        Ok(command)
     }
 
     pub(super) async fn before_retry(
@@ -103,14 +145,16 @@ impl Consumer {
         self.plan = plan;
         self.request = request;
         self.check_command(command)?;
-        self.source
-            .initialize_consumer_command(
-                command,
-                self.plan.as_ref(),
-                self.request.as_ref().ok_or_else(unavailable)?,
-                Instant::now() + Duration::from_secs(15),
-            )
-            .await
+        let initialized = Box::pin(self.source.initialize_consumer(
+            command,
+            self.plan.as_ref(),
+            self.request.as_ref().ok_or_else(unavailable)?,
+            Instant::now() + Duration::from_secs(15),
+        ))
+        .await?;
+        let (command, owner) = initialized.into_parts();
+        self.initialized = owner;
+        Ok(command)
     }
 
     fn check_command(&self, command: &ersatzrs_ffmpeg::FfmpegCommand) -> Result<()> {
@@ -122,12 +166,18 @@ impl Consumer {
         &self,
         child: &mut ersatzrs_infra::remote_stream::RemoteStreamProcess,
     ) -> Result<()> {
-        child
-            .attach_local_teletext_source(
-                self.source.receipt(),
-                self.reservation.as_ref().ok_or_else(unavailable)?.clone(),
-            )
-            .map_err(|_| unavailable())
+        let reservation = self.reservation.as_ref().ok_or_else(unavailable)?.clone();
+        if let Some(owner) = &self.initialized {
+            child
+                .attach_initialized_teletext_bitmap(owner.clone(), reservation)
+                .map_err(|_| unavailable())
+        } else if self.source.delivery() == SourceTeletextCaptionDelivery::Burn {
+            child
+                .attach_local_teletext_source(self.source.receipt(), reservation)
+                .map_err(|_| unavailable())
+        } else {
+            Err(unavailable())
+        }
     }
 }
 

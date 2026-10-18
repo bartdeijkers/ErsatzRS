@@ -171,6 +171,8 @@ fn generated_options(options: &[String]) -> bool {
             | "-movflags"
             | "-muxdelay"
             | "-muxpreload"
+            | "-max_interleave_delta"
+            | "-copypriorss:v:0"
             | "-sc_threshold"
             | "-muxrate"
             | "-pcr_period"

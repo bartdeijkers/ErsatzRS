@@ -74,11 +74,12 @@ use ersatzrs_domain::{
     StreamingMode,
 };
 use ersatzrs_ffmpeg::{
-    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command, ConcatPlaylist,
-    DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate,
-    FrameSize, GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions, OutputFormat,
-    OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
-    SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
+    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
+    build_mpegts_segmenter_wrapper_command_for_paced_bitmap, ConcatPlaylist, DesiredVideoState,
+    FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate, FrameSize,
+    GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions, OutputFormat, OutputMetadata,
+    PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec, SourceVideoStream,
+    WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
 use ersatzrs_infra::addons::AddonRuntimeContext;
 use ersatzrs_infra::channel_playout::load_channel_playout_context;
@@ -1605,7 +1606,7 @@ async fn serve_channel_stream_admitted_inner(
                     return Ok(Some(credits));
                 }
                 let selected = source_teletext::select(source_teletext::SelectionContext {
-                    state, active: &active, resolved: &resolved,
+                    state, output_channel_id: channel.id, active: &active, resolved: &resolved,
                     languages: &preferred_subtitle_languages, subtitle_mode,
                     streaming_mode: effective_streaming_mode, deadline: startup_deadline,
                     playback_interval: source_caption_playback_interval,
@@ -2090,6 +2091,7 @@ async fn serve_channel_stream_admitted_inner(
         match source_caption_recovery::prepare(
             source_teletext::SelectionContext {
                 state,
+                output_channel_id: channel.id,
                 active: &active,
                 resolved: &resolved,
                 languages: &preferred_subtitle_languages,
@@ -2122,16 +2124,18 @@ async fn serve_channel_stream_admitted_inner(
         None
     };
     // The owned legacy wrapper paces its final output. Keep this exact-page
-    // producer bounded by that consumer's backpressure instead of applying a
-    // second readrate clock to its sparse bitmap-subtitle decoder.
+    // Burn producer bounded by that consumer's backpressure instead of applying
+    // a second readrate clock to its source-page decoder. Independent prepared
+    // carriage captions retain ordinary AV pacing on the primary media input.
     let wrapper_paces_source_caption = output.role() == TeletextOutputRole::InternalItem
         && legacy_item.is_some()
         && output_format == OutputFormat::MpegTs
         && effective_streaming_mode == StreamingMode::TransportStream
         && !retained_stream
-        && source_caption_owner
-            .as_ref()
-            .is_some_and(|source| subtitle_input.as_ref() == Some(&source.input()));
+        && source_caption_owner.as_ref().is_some_and(|source| {
+            source.delivery() == ersatzrs_domain::SourceTeletextCaptionDelivery::Burn
+                && subtitle_input.as_ref() == Some(&source.input())
+        });
     let primary_input = if wrapper_paces_source_caption {
         media_input.clone().without_readrate()
     } else {
@@ -2158,7 +2162,11 @@ async fn serve_channel_stream_admitted_inner(
             retained_stream,
             song.as_deref(),
         );
-        let request = source_teletext::SourceTeletextConsumerRequest::new(acceleration, request);
+        let request = source_teletext::consumer_request(
+            acceleration,
+            request,
+            source_caption_owner.as_deref(),
+        );
         request.build().map(|command| (command, request))
     };
     let commands = build_command(primary_input, metadata.clone(), subtitle_input.clone()).and_then(
@@ -2205,6 +2213,7 @@ async fn serve_channel_stream_admitted_inner(
     let retry_playback_profile = playback_profile.clone();
     let retry_preferred_audio_title = preferred_audio_title.map(str::to_owned);
     let retry_preferred_audio_language = preferred_audio_language.clone();
+    let retry_source_caption_owner = source_caption_owner.clone();
     let retry = StreamDenialRetry {
         source_caption: source_caption_owner.map(|source| {
             source_teletext::Consumer::new(
@@ -2400,8 +2409,11 @@ async fn serve_channel_stream_admitted_inner(
                         retained_stream,
                         song.as_deref(),
                     );
-                    let source_caption_request =
-                        source_teletext::SourceTeletextConsumerRequest::new(acceleration, request);
+                    let source_caption_request = source_teletext::consumer_request(
+                        acceleration,
+                        request,
+                        retry_source_caption_owner.as_deref(),
+                    );
                     let command = source_caption_request.build();
                     let (Ok((command, source_caption_plan)), Ok(ordinary_caption_fallback)) =
                         (command, ordinary_caption_fallback)
@@ -2984,26 +2996,53 @@ async fn segmenter_wrapper_command(
         return Err(StatusCode::SERVICE_UNAVAILABLE.into_response());
     }
     let prepared = tokio::time::timeout_at(deadline, async {
-        match configured_mpegts_script_command(state, channel, &hls_url, wrapper_muxrate_bps).await
+        if let Some(command) =
+            configured_mpegts_script_command(state, channel, &hls_url, wrapper_muxrate_bps).await
         {
-            Some(command) => command,
-            None => (
+            Ok(command)
+        } else {
+            let command = if bitmap_segmenter_owns_pacing(state, channel).await? {
+                build_mpegts_segmenter_wrapper_command_for_paced_bitmap(
+                    hls_url, metadata, aac_latm_audio, Some(wrapper_muxrate_bps),
+                )
+            } else {
                 build_mpegts_segmenter_wrapper_command(
-                    hls_url,
-                    metadata,
-                    aac_latm_audio,
-                    Some(wrapper_muxrate_bps),
-                ),
-                Vec::new(),
-            ),
+                    hls_url, metadata, aac_latm_audio, Some(wrapper_muxrate_bps),
+                )
+            };
+            Ok::<_, RepositoryError>((command, Vec::new()))
         }
     })
     .await
-    .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
+    .map_err(|_| StatusCode::SERVICE_UNAVAILABLE.into_response())?
+    .map_err(|error| {
+        tracing::warn!(%error, channel_id = channel.id, "failed to load Hybrid caption delivery policy");
+        StatusCode::SERVICE_UNAVAILABLE.into_response()
+    })?;
     if let Some(response) = reject_expired_wrapper_start(deadline, &prepared.1).await {
         return Err(response);
     }
     Ok(prepared)
+}
+
+async fn bitmap_segmenter_owns_pacing(
+    state: &AppState,
+    channel: &Channel,
+) -> Result<bool, RepositoryError> {
+    if channel.streaming_engine != ersatzrs_domain::StreamingEngine::Legacy
+        || channel.streaming_mode != StreamingMode::TransportStreamHybrid
+        || channel.subtitle_mode == ChannelSubtitleMode::None
+    {
+        return Ok(false);
+    }
+    // The native bitmap producer already paces AV. A second per-stream input
+    // clock on its shared HLS input would stall on sparse subtitle timestamps.
+    let delivery = ersatzrs_infra::source_teletext_delivery::load_channel_source_teletext_delivery(
+        &state.pool,
+        channel.id,
+    )
+    .await?;
+    Ok(delivery == ersatzrs_domain::SourceTeletextCaptionDelivery::DvbSubtitles)
 }
 
 async fn reserve_wrapper_capacity_before(

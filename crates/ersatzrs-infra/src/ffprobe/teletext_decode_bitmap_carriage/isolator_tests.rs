@@ -5,6 +5,9 @@ use serde_json::{json, Value};
 fn observe(value: &Value) -> SourceTeletextBitmapArtifactObservation {
     parser::parse_observation(&serde_json::to_vec(value).unwrap()).unwrap()
 }
+fn observe_fragment(value: &Value) -> SourceTeletextBitmapArtifactObservation {
+    parser::parse_fragment_observation(&serde_json::to_vec(value).unwrap()).unwrap()
+}
 fn copied(value: &Value, start: i64, end: Option<i64>) -> Value {
     let mut result = value.clone();
     let records = value["packets_and_frames"].as_array().unwrap();
@@ -17,6 +20,7 @@ fn copied(value: &Value, start: i64, end: Option<i64>) -> Value {
         let mut packet = pair[0].clone();
         packet["pts"] = json!((pts - start) / 1000);
         packet["dts"] = packet["pts"].clone();
+        packet["duration"] = json!(0);
         let mut frame = pair[1].clone();
         frame["pts"] = json!(pts - start);
         copied.extend([packet, frame]);
@@ -52,41 +56,47 @@ fn bitmap_isolator_qualifies_complete_ordered_payloads_at_zero_and_exact_future_
         (560_000, None),
         (25_080_000, None),
     ] {
-        let fragment = observe(&copied(&output(), start, end));
+        let fragment = observe_fragment(&copied(&output(), start, end));
         parser::qualify_fragment(&fragment, &original, start, end).unwrap();
         assert_eq!(fragment.groups()[0].pts_microseconds(), 0);
     }
     let group = copied(&output(), 25_080_000, Some(40_080_000));
     let mut changed = group.clone();
     changed["packets_and_frames"][0]["data_hash"] = json!(format!("SHA256:{}", "cd".repeat(32)));
-    assert!(
-        parser::qualify_fragment(&observe(&changed), &original, 25_080_000, Some(40_080_000))
-            .is_err()
-    );
+    assert!(parser::qualify_fragment(
+        &observe_fragment(&changed),
+        &original,
+        25_080_000,
+        Some(40_080_000)
+    )
+    .is_err());
     let mut changed = group.clone();
     changed["packets_and_frames"]
         .as_array_mut()
         .unwrap()
         .drain(..2);
-    assert!(
-        parser::qualify_fragment(&observe(&changed), &original, 25_080_000, Some(40_080_000))
-            .is_err()
-    );
+    assert!(parser::qualify_fragment(
+        &observe_fragment(&changed),
+        &original,
+        25_080_000,
+        Some(40_080_000)
+    )
+    .is_err());
     let mut changed = group.clone();
     changed["packets_and_frames"]
         .as_array_mut()
         .unwrap()
         .rotate_left(2);
-    assert!(
-        parser::qualify_fragment(&observe(&changed), &original, 25_080_000, Some(40_080_000))
-            .is_err()
-    );
+    assert!(parser::qualify_fragment(
+        &observe_fragment(&changed),
+        &original,
+        25_080_000,
+        Some(40_080_000)
+    )
+    .is_err());
     let mut changed = group;
     changed["packets_and_frames"][0]["duration"] = json!(1);
-    assert!(
-        parser::qualify_fragment(&observe(&changed), &original, 25_080_000, Some(40_080_000))
-            .is_err()
-    );
+    assert!(parser::parse_fragment_observation(&serde_json::to_vec(&changed).unwrap()).is_err());
     let raw_preroll = observe(&output());
     assert!(parser::qualify_fragment(&raw_preroll, &original, 25_080_000, None).is_err());
 }
@@ -129,6 +139,8 @@ private-caption.mks
 0:s:0
 -c:s
 copy
+-bsf:s
+setts=pts=PTS:dts=DTS:duration=0
 -f
 matroska
 pipe:1
@@ -146,9 +158,36 @@ private-caption.mks
 0:s:0
 -c:s
 copy
+-bsf:s
+setts=pts=PTS:dts=DTS:duration=0
 -f
 matroska
 pipe:1
 ");
     assert!(fragment_command("ffmpeg", Path::new("private-caption.mks"), -1, true).is_err());
+}
+
+#[test]
+fn bitmap_fragment_duration_policy_never_weakens_original_artifact_validation() {
+    let mut normalized = copied(&output(), 560_000, None);
+    let bytes = serde_json::to_vec(&normalized).unwrap();
+    assert!(parser::parse_observation(&bytes).is_err());
+    assert!(parser::parse_fragment_observation(&bytes).is_ok());
+    for pair in normalized["packets_and_frames"]
+        .as_array_mut()
+        .unwrap()
+        .chunks_exact_mut(2)
+    {
+        pair[0].as_object_mut().unwrap().remove("duration");
+    }
+    let bytes = serde_json::to_vec(&normalized).unwrap();
+    assert!(parser::parse_observation(&bytes).is_err());
+    assert!(parser::parse_fragment_observation(&bytes).is_ok());
+    for value in [Value::Null, json!(-1), json!(1), json!(24_520)] {
+        normalized["packets_and_frames"][0]["duration"] = value;
+        assert!(
+            parser::parse_fragment_observation(&serde_json::to_vec(&normalized).unwrap()).is_err()
+        );
+    }
+    assert!(parser::parse_fragment_observation(&serde_json::to_vec(&output()).unwrap()).is_err());
 }

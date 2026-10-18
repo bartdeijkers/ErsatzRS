@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/src/command.rs
-assertion_line: 358
+assertion_line: 593
 expression: "command.arguments.join(\" \")"
 ---
--nostdin -hide_banner -nostats -loglevel error -fflags +genpts+discardcorrupt+igndts -f concat -safe 0 -protocol_whitelist file,http,tcp,https,tcp,tls -probesize 32 -readrate 1.0 -stream_loop -1 -i http://localhost:8409/ffmpeg/concat/1?mode=ts-legacy -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -sc_threshold 0 -map 0 -c copy -map_metadata:g -1 -metadata service_provider="ErsatzTV" -metadata service_name="Channel One" -muxrate 9830400 -pcr_period 20 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+-nostdin -hide_banner -nostats -loglevel error -fflags +genpts+discardcorrupt+igndts -f concat -safe 0 -protocol_whitelist file,http,tcp,https,tcp,tls -probesize 32 -readrate 1.0 -stream_loop -1 -i http://localhost:8409/ffmpeg/concat/1?mode=ts-legacy -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -sc_threshold 0 -map 0 -c copy -max_interleave_delta 100000 -map_metadata:g -1 -metadata service_provider="ErsatzTV" -metadata service_name="Channel One" -muxrate 9830400 -pcr_period 20 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

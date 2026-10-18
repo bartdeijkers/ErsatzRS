@@ -10,7 +10,7 @@ use ersatzrs_core::{
     locking::{EntityLocker, TeletextWorkGuard},
     repositories::{ConfigRepository, RepositoryError, Result},
 };
-use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
+use ersatzrs_domain::{ChannelSubtitleMode, SourceTeletextCaptionDelivery, StreamingMode};
 use tokio::time::Instant;
 
 use super::{
@@ -38,7 +38,10 @@ pub use interval::{SourceTeletextEffectiveInterval, SourceTeletextPlaybackInterv
 
 #[path = "playback_source_teletext_consumer.rs"]
 mod consumer;
-pub use consumer::SourceTeletextConsumerRequest;
+pub use consumer::{
+    InitializedSourceTeletextBitmap, InitializedSourceTeletextConsumer,
+    SourceTeletextConsumerRequest,
+};
 
 /// Persisted source identity plus the actual resolved playback locator.
 /// Transient/external inputs have no durable identity and remain inapplicable.
@@ -53,6 +56,7 @@ pub struct RuntimeSelectionContext<'a> {
     pub languages: &'a [String],
     pub subtitle_mode: ChannelSubtitleMode,
     pub streaming_mode: StreamingMode,
+    pub source_teletext_delivery: SourceTeletextCaptionDelivery,
     /// Actual finite media-relative request, not source-clock qualification.
     pub playback_interval: Option<SourceTeletextPlaybackInterval>,
     pub deadline: Instant,
@@ -76,6 +80,9 @@ pub struct PlaybackSource {
     locker: EntityLocker,
     deadline: Instant,
     playback_interval: Option<SourceTeletextPlaybackInterval>,
+    delivery: SourceTeletextCaptionDelivery,
+    artifact: Option<Arc<crate::ffprobe::teletext_decode::SourceTeletextBitmapArtifact>>,
+    caption_input: ersatzrs_ffmpeg::InputFile,
 }
 
 impl PlaybackSource {
@@ -92,10 +99,15 @@ impl PlaybackSource {
         self.receipt.clone()
     }
 
-    /// Construct native Burn for the previously decoded exact page.
+    /// Expected initial input; carriage must initialize its owned playlist before playback.
     #[must_use]
     pub fn input(&self) -> ersatzrs_ffmpeg::InputFile {
-        self.receipt.native_burn_input()
+        self.caption_input.clone()
+    }
+
+    #[must_use]
+    pub const fn delivery(&self) -> SourceTeletextCaptionDelivery {
+        self.delivery
     }
 
     /// Match the generated final consumer command and its exact caption input.
@@ -119,7 +131,9 @@ impl PlaybackSource {
         }
         let actual = plan.caption_input();
         let expected = self.input();
-        if actual != &expected
+        if plan.is_bitmap_carriage()
+            != (self.delivery == SourceTeletextCaptionDelivery::DvbSubtitles)
+            || actual != &expected
             || self
                 .playback_interval
                 .is_some_and(|interval| interval.has_known_consumer_mismatch(plan))
@@ -358,23 +372,41 @@ pub async fn select(context: RuntimeSelectionContext<'_>) -> Result<Option<Selec
         }));
     };
     let (subtitle, source) = selected.into_parts();
-    let source = source.map(|source| {
-        Arc::new(PlaybackSource {
-            receipt: source.receipt().clone(),
-            candidate: source.candidate().clone(),
-            item,
-            original: context.original_path.to_owned(),
-            pool: context.pool.clone(),
-            locker: context.locker.clone(),
-            deadline: work_deadline,
-            playback_interval: context.playback_interval,
-        })
+    let source = source.map(|source| PlaybackSource {
+        caption_input: source.receipt().native_burn_input(),
+        receipt: source.receipt().clone(),
+        candidate: source.candidate().clone(),
+        item,
+        original: context.original_path.to_owned(),
+        pool: context.pool.clone(),
+        locker: context.locker.clone(),
+        deadline: work_deadline,
+        playback_interval: context.playback_interval,
+        delivery: context.source_teletext_delivery,
+        artifact: None,
     });
+    // Qualification has closed and drained its actual workers. Retain its
+    // receipt/candidate, but release all ranking holds before the next bounded
+    // preparation stage reacquires the existing admission (normally one slot).
+    drop(qualified);
+    let source = if let Some(mut playback) = source {
+        if playback.delivery == SourceTeletextCaptionDelivery::DvbSubtitles {
+            playback
+                .prepare_bitmap_carriage(context.streaming_mode, work_deadline)
+                .await?;
+        }
+        Some(Arc::new(playback))
+    } else {
+        None
+    };
     Ok(Some(Selection {
         subtitle: Some(subtitle),
         source,
     }))
 }
+
+#[path = "playback_source_teletext_bitmap.rs"]
+mod bitmap;
 
 async fn prepare(
     context: &RuntimeSelectionContext<'_>,
@@ -413,8 +445,10 @@ async fn prepare(
             };
             let window = decoded.window();
             if !window.covers_entire_source_bytes() {
-                tracing::warn!(media_item_id = item,
-                    "source teletext interval is not fully qualified; ordinary playback remains available");
+                tracing::warn!(
+                    media_item_id = item,
+                    "source teletext interval is not fully qualified; ordinary playback remains available"
+                );
                 continue;
             }
             qualified.push(
@@ -523,6 +557,7 @@ mod tests {
                 resolved_path: "synthetic-source.ts",
                 languages: &[],
                 subtitle_mode,
+                source_teletext_delivery: SourceTeletextCaptionDelivery::Burn,
                 streaming_mode,
                 playback_interval: None,
                 deadline: Instant::now(),

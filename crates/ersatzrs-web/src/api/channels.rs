@@ -80,6 +80,8 @@ pub struct ChannelSaveForm {
     #[serde(default)]
     preferred_subtitle_language_code: String,
     #[serde(default)]
+    source_teletext_delivery: Option<i32>,
+    #[serde(default)]
     subtitle_mode: i32,
     #[serde(default)]
     music_video_credits_mode: i32,
@@ -361,6 +363,9 @@ impl ChannelSaveForm {
             show_in_epg: parse_bool(fields, "show_in_epg"),
             fallback_filler_id: parse_i64(fields, "fallback_filler_id"),
             preferred_subtitle_language_code: text(fields, "preferred_subtitle_language_code"),
+            source_teletext_delivery: fields
+                .get("source_teletext_delivery")
+                .map(|value| value.parse().unwrap_or(i32::MIN)),
             subtitle_mode: parse_i32(fields, "subtitle_mode"),
             music_video_credits_mode: parse_i32(fields, "music_video_credits_mode"),
             music_video_credits_template: text(fields, "music_video_credits_template"),
@@ -410,6 +415,7 @@ impl ChannelSaveForm {
             show_in_epg: self.show_in_epg,
             fallback_filler_id: self.fallback_filler_id,
             preferred_subtitle_language_code: self.preferred_subtitle_language_code,
+            source_teletext_delivery: self.source_teletext_delivery,
             subtitle_mode: self.subtitle_mode,
             music_video_credits_mode: self.music_video_credits_mode,
             music_video_credits_template: self.music_video_credits_template,
@@ -492,6 +498,38 @@ mod tests {
     use std::fmt::Write as _;
 
     use super::*;
+
+    #[test]
+    fn source_teletext_delivery_html_and_multipart_preserve_omission_and_invalid_input() {
+        let base = "id=7&number=101&name=Caption&ffmpeg_profile_id=3&streaming_mode=1";
+        for value in [None, Some(0), Some(1), Some(99)] {
+            let encoded = value.map_or_else(
+                || base.to_owned(),
+                |value| format!("{base}&source_teletext_delivery={value}"),
+            );
+            let form: ChannelSaveForm = serde_urlencoded::from_str(&encoded).unwrap();
+            assert_eq!(form.into_channel_form().source_teletext_delivery, value);
+            let fields = serde_urlencoded::from_str(&encoded).unwrap();
+            assert_eq!(
+                ChannelSaveForm::from_fields(&fields)
+                    .into_channel_form()
+                    .source_teletext_delivery,
+                value
+            );
+        }
+        for value in ["", "invalid", "999999999999999999999999"] {
+            let encoded = format!("{base}&source_teletext_delivery={value}");
+            assert!(serde_urlencoded::from_str::<ChannelSaveForm>(&encoded).is_err());
+            let fields = serde_urlencoded::from_str(&encoded).unwrap();
+            assert_eq!(
+                ChannelSaveForm::from_fields(&fields)
+                    .into_channel_form()
+                    .source_teletext_delivery,
+                Some(i32::MIN),
+                "multipart must preserve an invalid supplied choice for validation"
+            );
+        }
+    }
 
     #[test]
     fn channel_create_html_omission_defaults_next_and_explicit_native_and_updates_stay_native() {

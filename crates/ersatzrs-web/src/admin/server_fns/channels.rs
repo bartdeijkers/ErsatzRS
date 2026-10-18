@@ -192,6 +192,8 @@ pub struct ChannelForm {
     /// 0 = no fallback filler.
     pub fallback_filler_id: i64,
     pub preferred_subtitle_language_code: String,
+    #[serde(default)]
+    pub source_teletext_delivery: Option<i32>,
     pub subtitle_mode: i32,
     pub music_video_credits_mode: i32,
     pub music_video_credits_template: String,
@@ -235,6 +237,8 @@ struct ChannelFormInput {
     /// 0 = no fallback filler.
     fallback_filler_id: i64,
     preferred_subtitle_language_code: String,
+    #[serde(default)]
+    source_teletext_delivery: Option<i32>,
     subtitle_mode: i32,
     music_video_credits_mode: i32,
     music_video_credits_template: String,
@@ -280,6 +284,7 @@ impl From<ChannelFormInput> for ChannelForm {
             show_in_epg: input.show_in_epg,
             fallback_filler_id: input.fallback_filler_id,
             preferred_subtitle_language_code: input.preferred_subtitle_language_code,
+            source_teletext_delivery: input.source_teletext_delivery,
             subtitle_mode: input.subtitle_mode,
             music_video_credits_mode: input.music_video_credits_mode,
             music_video_credits_template: input.music_video_credits_template,
@@ -367,6 +372,7 @@ impl ChannelForm {
             preferred_subtitle_language_code: form
                 .preferred_subtitle_language_code
                 .unwrap_or_default(),
+            source_teletext_delivery: form.source_teletext_delivery,
             subtitle_mode: form.subtitle_mode,
             music_video_credits_mode: form.music_video_credits_mode,
             music_video_credits_template: form.music_video_credits_template.unwrap_or_default(),
@@ -423,6 +429,7 @@ impl ChannelForm {
             preferred_subtitle_language_code: optional_string(
                 self.preferred_subtitle_language_code,
             ),
+            source_teletext_delivery: self.source_teletext_delivery,
             subtitle_mode: self.subtitle_mode,
             music_video_credits_mode: self.music_video_credits_mode,
             music_video_credits_template: optional_string(self.music_video_credits_template),
@@ -896,6 +903,28 @@ fn channel_logo_url(name: &str, path: Option<&str>) -> String {
 #[cfg(all(test, feature = "ssr"))]
 mod tests {
     #[test]
+    fn source_teletext_delivery_form_roundtrip_preserves_omission_and_explicit_choice() {
+        for value in [None, Some(0), Some(1), Some(99)] {
+            let form = ChannelForm {
+                source_teletext_delivery: value,
+                ..ChannelForm::new_defaults()
+            };
+            let mut payload = serde_json::to_value(&form).unwrap();
+            if value.is_none() {
+                payload
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("source_teletext_delivery");
+            }
+            let restored: ChannelForm = serde_json::from_value(payload).unwrap();
+            assert_eq!(restored.source_teletext_delivery, value);
+            let core = restored.into_core();
+            assert_eq!(core.source_teletext_delivery, value);
+            assert_eq!(ChannelForm::from_core(core).source_teletext_delivery, value);
+        }
+    }
+
+    #[test]
     fn channel_create_wire_omission_defaults_next_but_explicit_and_update_engines_remain_numeric() {
         assert_eq!(ChannelForm::new_defaults().streaming_engine, 1);
         let mut null_engine = serde_json::to_value(ChannelForm::new_defaults()).unwrap();
@@ -1017,6 +1046,64 @@ mod tests {
         fn playout_updated(&self) {
             self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
+    }
+
+    #[tokio::test]
+    async fn source_teletext_delivery_rejection_survives_app_boundary_without_side_effects() {
+        use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
+        let (state, mut playout_build_rx) = migrated_channel_state_with_playout_rx().await;
+        let observer = std::sync::Arc::new(UpdateObserver::default());
+        state.hls_sessions.insert(observer.clone()).await;
+        let repos = ersatzrs_infra::repositories::make_repositories(state.pool.clone());
+        repos
+            .ffmpeg_profile
+            .upsert(&ersatzrs_domain::FFmpegProfile {
+                id: 1,
+                name: "default".into(),
+                resolution_id: 1,
+                ..ersatzrs_domain::FFmpegProfile::default()
+            })
+            .await
+            .unwrap();
+        let id = save_channel_with_state(
+            &state,
+            ChannelForm {
+                number: "1".into(),
+                name: "Native captions".into(),
+                group: "Synthetic".into(),
+                ffmpeg_profile_id: 1,
+                streaming_engine: 0,
+                streaming_mode: 5,
+                source_teletext_delivery: Some(1),
+                ..ChannelForm::default()
+            },
+        )
+        .await
+        .unwrap();
+        let before = observer.0.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(before, 1);
+        let mut update = ChannelForm::from_core(
+            repos
+                .channel
+                .get_editor_state(Some(id))
+                .await
+                .unwrap()
+                .unwrap()
+                .form,
+        );
+        update.source_teletext_delivery = None;
+        update.streaming_engine = 1;
+        update.name = "Must not save".into();
+        let error = save_channel_with_state(&state, update).await.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("DVB source teletext subtitles require"));
+        assert_eq!(
+            repos.channel.get_with_profile(id).await.unwrap().name,
+            "Native captions"
+        );
+        assert_eq!(observer.0.load(std::sync::atomic::Ordering::SeqCst), before);
+        assert!(playout_build_rx.try_recv().is_err());
     }
 
     #[tokio::test]

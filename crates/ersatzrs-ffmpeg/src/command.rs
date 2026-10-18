@@ -67,18 +67,48 @@ pub fn build_mpegts_segmenter_wrapper_command(
     aac_latm_audio: bool,
     muxrate_bps: Option<i64>,
 ) -> FfmpegCommand {
+    segmenter_wrapper_command(hls_url, metadata, aac_latm_audio, muxrate_bps, true)
+}
+
+/// Remux an already-paced native bitmap segment producer without a second
+/// stream-progress readrate limiter. Sparse caption progress must not pause AV.
+/// Preserve supplied packet DTS rather than asking the HLS demuxer to rebuild it.
+///
+/// The caller must establish the typed bitmap producer, source pacing and
+/// bounded final delivery; this command grants none of those admission facts.
+/// Every stream map, codec, mux bound and generated output seal remains shared
+/// with [`build_mpegts_segmenter_wrapper_command`].
+#[must_use]
+pub fn build_mpegts_segmenter_wrapper_command_for_paced_bitmap(
+    hls_url: impl Into<String>,
+    metadata: &OutputMetadata,
+    aac_latm_audio: bool,
+    muxrate_bps: Option<i64>,
+) -> FfmpegCommand {
+    segmenter_wrapper_command(hls_url, metadata, aac_latm_audio, muxrate_bps, false)
+}
+
+fn segmenter_wrapper_command(
+    hls_url: impl Into<String>,
+    metadata: &OutputMetadata,
+    aac_latm_audio: bool,
+    muxrate_bps: Option<i64>,
+    ordinary_input_policy: bool,
+) -> FfmpegCommand {
     let mut input = InputFile::video(hls_url);
     if aac_latm_audio {
         input
             .input_options
             .extend(["-c:a".to_owned(), "aac_latm".to_owned()]);
     }
-    input.add_readrate("1.0");
-    // Match the six-second HLS remux burst in upstream v26.11.3; keep it
-    // below the Next producer's twelve-second lookahead, then resume pacing.
-    input
-        .input_options
-        .extend(["-readrate_initial_burst".to_owned(), "6".to_owned()]);
+    if ordinary_input_policy {
+        input.add_readrate("1.0");
+        // Match the six-second HLS remux burst in upstream v26.11.3; keep it
+        // below the Next producer's twelve-second lookahead, then resume pacing.
+        input
+            .input_options
+            .extend(["-readrate_initial_burst".to_owned(), "6".to_owned()]);
+    }
 
     let mut steps = vec![
         no_standard_input(),
@@ -86,9 +116,17 @@ pub fn build_mpegts_segmenter_wrapper_command(
         hide_banner(),
         loglevel_error(),
         no_stats(),
-        standard_format_flags(),
+        if ordinary_input_policy {
+            standard_format_flags()
+        } else {
+            PipelineStep::global(
+                "paced_bitmap_format_flags",
+                ["-fflags", "+genpts+discardcorrupt"],
+            )
+        },
         map_all_streams(),
         copy_all_streams(),
+        sparse_subtitle_interleave(),
     ];
     if let Some(muxrate_bps) = muxrate_bps {
         let muxing = MpegTsMuxingOptions {
@@ -138,6 +176,7 @@ pub fn build_mpegts_concat_command(
         // selection in ErsatzTV's legacy Concat pipeline.
         map_all_streams(),
         copy_all_streams(),
+        sparse_subtitle_interleave(),
         // Keep the channel's global metadata separate from source language and
         // subtitle descriptors; FFmpeg 9's unscoped negative map drops both.
         PipelineStep::generic("no_metadata", ["-map_metadata:g", "-1"]),
@@ -155,6 +194,15 @@ pub fn build_mpegts_concat_command(
     steps.push(pipe_output());
 
     CommandGenerator::generate_command(&[input], &steps, false)
+}
+
+/// Sparse subtitle packets must not hold live audiovisual output in the native
+/// muxer's ten-second default interleave queue (ADR 0121).
+pub(crate) fn sparse_subtitle_interleave() -> PipelineStep {
+    PipelineStep::generic(
+        "sparse_subtitle_interleave",
+        ["-max_interleave_delta", "100000"],
+    )
 }
 
 fn add_service_metadata_steps(steps: &mut Vec<PipelineStep>, metadata: &OutputMetadata) {
@@ -531,6 +579,12 @@ mod tests {
             Some(9_830_400),
         );
 
+        assert!(command
+            .arguments
+            .windows(2)
+            .any(|pair| pair == ["-max_interleave_delta", "100000"]));
+        assert!(command.mpegts_output_policy().is_some());
+
         insta::assert_snapshot!(
             "mpegts_segmenter_wrapper_default",
             command.arguments.join(" ")
@@ -555,6 +609,66 @@ mod tests {
     }
 
     #[test]
+    fn mpegts_paced_bitmap_wrapper_only_changes_pacing_and_preserves_packet_dts() {
+        let metadata = OutputMetadata {
+            service_provider: Some("ErsatzTV".into()),
+            service_name: Some("Channel One".into()),
+            ..OutputMetadata::default()
+        };
+        let url = "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter";
+        for latm in [false, true] {
+            let ordinary =
+                build_mpegts_segmenter_wrapper_command(url, &metadata, latm, Some(9_830_400));
+            let command = build_mpegts_segmenter_wrapper_command_for_paced_bitmap(
+                url,
+                &metadata,
+                latm,
+                Some(9_830_400),
+            );
+            let mut expected = ordinary.arguments.clone();
+            for pair in [["-readrate", "1.0"], ["-readrate_initial_burst", "6"]] {
+                let positions: Vec<_> = expected
+                    .windows(2)
+                    .enumerate()
+                    .filter_map(|(index, actual)| (actual == pair).then_some(index))
+                    .collect();
+                let [position] = positions.as_slice() else {
+                    panic!("one ordinary generated input pacer option");
+                };
+                expected.drain(*position..*position + 2);
+            }
+            let flags = expected
+                .iter()
+                .position(|option| option == "-fflags")
+                .unwrap();
+            assert_eq!(expected[flags + 1], "+genpts+discardcorrupt+igndts");
+            expected[flags + 1] = "+genpts+discardcorrupt".into();
+            assert_eq!(command.arguments, expected);
+            let mut discarded_dts = command.clone();
+            discarded_dts.arguments[flags + 1] = "+genpts+discardcorrupt+igndts".into();
+            assert!(discarded_dts.mpegts_output_policy().is_none());
+            assert_eq!(command.executable, ordinary.executable);
+            assert_eq!(command.environment, ordinary.environment);
+            assert!(!command
+                .arguments
+                .iter()
+                .any(|arg| arg.starts_with("-readrate")));
+            let policy = command.mpegts_output_policy().unwrap();
+            assert_eq!(policy.muxrate_bps(), 9_830_400);
+            assert_eq!(policy.pcr_period_ms(), 20);
+            let mut stale_hint = command.clone();
+            stale_hint.mpegts_output = ordinary.mpegts_output;
+            assert!(stale_hint.mpegts_output_policy().is_none());
+            if !latm {
+                insta::assert_snapshot!(
+                    "mpegts_segmenter_wrapper_paced_bitmap",
+                    command.arguments.join(" ")
+                );
+            }
+        }
+    }
+
+    #[test]
     fn mpegts_concat_uses_cbr_muxrate_for_pcr_stability() {
         let metadata = OutputMetadata {
             service_provider: Some("ErsatzTV".to_owned()),
@@ -566,6 +680,12 @@ mod tests {
             &metadata,
             Some(9_830_400),
         );
+
+        assert!(command
+            .arguments
+            .windows(2)
+            .any(|pair| pair == ["-max_interleave_delta", "100000"]));
+        assert!(command.mpegts_output_policy().is_some());
 
         insta::assert_snapshot!("mpegts_concat_default", command.arguments.join(" "));
     }
