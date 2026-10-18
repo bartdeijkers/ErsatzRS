@@ -30,6 +30,18 @@ pub(super) fn proof_root() -> PathBuf {
 }
 
 pub(super) async fn source(ffmpeg: &Path, root: &Path) -> PathBuf {
+    let clip = source_inner(ffmpeg, root, None).await;
+    assert!(tokio::fs::metadata(&clip).await.unwrap().len() < 32_768 * 188);
+    clip
+}
+
+pub(super) async fn source_with_mux_rate(ffmpeg: &Path, root: &Path, mux_rate: u32) -> PathBuf {
+    let clip = source_inner(ffmpeg, root, Some(mux_rate)).await;
+    assert!(tokio::fs::metadata(&clip).await.unwrap().len() > 32_768 * 188);
+    clip
+}
+
+async fn source_inner(ffmpeg: &Path, root: &Path, mux_rate: Option<u32>) -> PathBuf {
     let raw = root.join("two-captions.ts");
     let mut python = Command::new("python3");
     python
@@ -113,12 +125,12 @@ pub(super) async fn source(ffmpeg: &Path, root: &Path) -> PathBuf {
             "256",
             "-mpegts_pmt_start_pid",
             "4096",
-            "-f",
-            "mpegts",
-        ])
-        .arg(&clip);
+        ]);
+    if let Some(mux_rate) = mux_rate {
+        mux.args(["-muxrate", &mux_rate.to_string()]);
+    }
+    mux.args(["-f", "mpegts"]).arg(&clip);
     tool(mux).await;
-    assert!(tokio::fs::metadata(&clip).await.unwrap().len() < 32_768 * 188);
     clip
 }
 
@@ -127,22 +139,7 @@ pub(super) async fn independent_pages(ffmpeg: &Path, clip: &Path, root: &Path) {
         ("888", "ENGLISH PAGE 888", "NEDERLANDSE PAGINA 889"),
         ("889", "NEDERLANDSE PAGINA 889", "ENGLISH PAGE 888"),
     ] {
-        let mut decode = Command::new(ffmpeg);
-        decode
-            .args([
-                "-v",
-                "error",
-                "-nostdin",
-                "-txt_page:2",
-                page,
-                "-txt_format:2",
-                "text",
-                "-fix_sub_duration",
-                "-i",
-            ])
-            .arg(clip)
-            .args(["-map", "0:2", "-c:s", "srt", "-f", "srt", "pipe:1"]);
-        let bytes = tool(decode).await;
+        let bytes = decode_page(ffmpeg, clip, page).await;
         let text = std::str::from_utf8(&bytes).unwrap();
         assert!(
             text.contains(selected),
@@ -153,6 +150,87 @@ pub(super) async fn independent_pages(ffmpeg: &Path, clip: &Path, root: &Path) {
             .await
             .unwrap();
     }
+}
+
+async fn decode_page(ffmpeg: &Path, clip: &Path, page: &str) -> Vec<u8> {
+    let mut decode = Command::new(ffmpeg);
+    decode
+        .args([
+            "-v",
+            "error",
+            "-nostdin",
+            "-txt_page:2",
+            page,
+            "-txt_format:2",
+            "text",
+            "-fix_sub_duration",
+            "-i",
+        ])
+        .arg(clip)
+        .args(["-map", "0:2", "-c:s", "srt", "-f", "srt", "pipe:1"]);
+    tool(decode).await
+}
+
+pub(super) async fn assert_page_spans_source_window(ffmpeg: &Path, clip: &Path, root: &Path) {
+    const WINDOW_BYTES: usize = 32_768 * 188;
+    let length = tokio::fs::metadata(clip).await.unwrap().len();
+    assert!(length > u64::try_from(WINDOW_BYTES).unwrap());
+    assert!(
+        length < 32 * 1024 * 1024,
+        "finite synthetic test input bound"
+    );
+    let bytes = tokio::fs::read(clip).await.unwrap();
+    assert_eq!(bytes.len() % 188, 0);
+    let prefix = root.join("first-source-window.ts");
+    tokio::fs::write(&prefix, &bytes[..WINDOW_BYTES])
+        .await
+        .unwrap();
+    let first = decode_page(ffmpeg, &prefix, "889").await;
+    let first_text = std::str::from_utf8(&first).unwrap();
+    assert!(first_text.contains("NEDERLANDSE PAGINA 889 EARLY"));
+    assert!(!first_text.contains("889 FINAL"));
+    let complete = tokio::fs::read_to_string(root.join("independent-889.srt"))
+        .await
+        .unwrap();
+    assert!(complete.contains("NEDERLANDSE PAGINA 889 FINAL"));
+
+    // A missing prefix decode alone could mean EOF buffering. Locate the
+    // known synthetic row's odd-parity/reversed wire literal too, so FINAL's
+    // actual payload bytes must lie beyond the physical packet window.
+    let marker: Vec<_> = b"NEDERLANDSE PAGINA 889 FINAL"
+        .iter()
+        .map(|byte| {
+            let parity = if byte.count_ones() % 2 == 0 { 0x80 } else { 0 };
+            (byte | parity).reverse_bits()
+        })
+        .collect();
+    let positions: Vec<_> = bytes
+        .windows(marker.len())
+        .enumerate()
+        .filter_map(|(offset, row)| (row == marker).then_some(offset))
+        .collect();
+    let [final_offset] = positions.as_slice() else {
+        panic!("exactly one known fixture FINAL row required");
+    };
+    assert!(*final_offset >= WINDOW_BYTES);
+    tokio::fs::write(root.join("first-source-window-889.srt"), first)
+        .await
+        .unwrap();
+    tokio::fs::write(
+        root.join("source-window-preconditions.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "source_bytes":length,"source_packets":bytes.len()/188,
+            "window_bytes":WINDOW_BYTES,"window_packets":32768,
+            "selected_page":889,"prefix_has_early_caption":true,
+            "full_decode_has_final_caption":true,"prefix_decode_has_final_caption":false,
+            "final_fixture_wire_literal_offset":final_offset,
+            "final_fixture_wire_literal_packet":final_offset/188,
+            "scope":"Finite synthetic source preconditions; no Next output assertion has run yet."
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
 }
 
 #[allow(

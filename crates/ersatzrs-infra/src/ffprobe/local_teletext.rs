@@ -32,6 +32,7 @@ mod source_clock;
 mod source_cue;
 mod source_cue_prelude;
 mod source_native_clock;
+mod source_text_snapshot;
 mod source_window;
 
 pub use source_av_origin::{SourceTeletextAvOriginEvidence, SourceTeletextAvOriginWitness};
@@ -42,10 +43,11 @@ pub(crate) use source_clock::{observe_native_clock_owned, observe_native_cue_own
 pub use source_cue::{SourceTeletextCueEvidence, SourceTeletextCueRequest};
 pub use source_cue_prelude::SourceTeletextPagePrelude;
 pub use source_native_clock::SourceTeletextNativeClockEvidence;
+pub(crate) use source_text_snapshot::capture_owned as capture_complete_text_source_owned;
 
 pub(crate) use source_window::{
-    capture_observed_source_packet_span_owned, capture_observed_source_window_owned,
-    capture_source_packet_span_owned, capture_source_window_owned, LocalTeletextSourceWindow,
+    capture_observed_source_packet_span_owned, capture_source_packet_span_owned,
+    capture_source_window_owned, LocalTeletextSourceWindow,
 };
 pub use source_window::{
     SourceTeletextDecodeWindowEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,

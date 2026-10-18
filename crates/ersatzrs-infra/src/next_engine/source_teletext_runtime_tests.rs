@@ -26,6 +26,22 @@ async fn real_next_local_teletext_convert_selects_page889_and_preserves_copy_and
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
     let clip = fixture::source(&ffmpeg, &root).await;
     fixture::independent_pages(&ffmpeg, &clip, &root).await;
+    run_selected_page(&ffmpeg, &ffprobe, &root, &clip).await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned Next0.2.2, FFmpeg9, Python3 and fresh ERSATZRS_NEXT_TELETEXT_PROOF_DIR"]
+async fn real_next_local_teletext_convert_retains_page889_beyond_first_source_window() {
+    let root = fixture::proof_root();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let clip = fixture::source_with_mux_rate(&ffmpeg, &root, 8_000_000).await;
+    fixture::independent_pages(&ffmpeg, &clip, &root).await;
+    fixture::assert_page_spans_source_window(&ffmpeg, &clip, &root).await;
+    run_selected_page(&ffmpeg, &ffprobe, &root, &clip).await;
+}
+
+async fn run_selected_page(ffmpeg: &Path, ffprobe: &Path, root: &Path, clip: &Path) {
     let profile = FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::Copy,
         audio_format: FFmpegProfileAudioFormat::Copy,
@@ -33,8 +49,9 @@ async fn real_next_local_teletext_convert_selects_page889_and_preserves_copy_and
         audio_channels: 1,
         ..text_profile()
     };
-    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
-    fixture::acquire_and_store(&pool, &ffprobe, &clip, &root).await;
+    let (pool, locker) = prepare_schedule(clip, false, &profile).await;
+    fixture::acquire_and_store(&pool, ffprobe, clip, root).await;
+    cache::assert_complete_text_preparation(&pool, &locker, ffmpeg, ffprobe, clip).await;
     sqlx::query(
         r#"UPDATE "Channel" SET "SubtitleMode"=3,"NextEngineTextSubtitleMode"=1 WHERE "Id"=1"#,
     )
@@ -61,7 +78,7 @@ async fn real_next_local_teletext_convert_selects_page889_and_preserves_copy_and
             locker.clone(),
             root.join("playout"),
         ));
-        paths.push(run_case(host, &pool, (&ffmpeg, &ffprobe), &root, &clip, case).await);
+        paths.push(run_case(host, &pool, (ffmpeg, ffprobe), root, clip, case).await);
         assert_eq!(locker.active_teletext_work(), 0);
     }
     assert_eq!(

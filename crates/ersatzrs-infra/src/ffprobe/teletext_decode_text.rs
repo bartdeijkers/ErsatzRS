@@ -8,8 +8,7 @@ use tokio::time::Instant;
 
 use super::{
     check_deadline, local, local_teletext, probe_error, FfprobeCommand, FfprobeExtractor,
-    LocalProbeCleanupScope, PreparedLocalTeletextSource, SourceTeletextDecodeWindowEvidence,
-    SourceTeletextPageDecodeError,
+    LocalProbeCleanupScope, PreparedLocalTeletextSource, SourceTeletextPageDecodeError,
 };
 
 const MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
@@ -20,7 +19,7 @@ mod qualification;
 /// Readonly qualification, not permission to change a selection or publish it.
 pub(crate) struct SourceTeletextTextArtifact {
     pub(crate) content: String,
-    pub(crate) window: SourceTeletextDecodeWindowEvidence,
+    pub(crate) psi_fingerprint: [u8; 32],
     pub(crate) source: Arc<PreparedLocalTeletextSource>,
 }
 
@@ -76,26 +75,16 @@ impl FfprobeExtractor {
         {
             return Err(SourceTeletextPageDecodeError::InvalidOutput);
         }
-        let captured = local_teletext::capture_observed_source_window_owned(
+        let captured = local_teletext::capture_complete_text_source_owned(
             source.guard.clone(),
-            source.original.clone(),
-            source.resolved.clone(),
-            source.request.pid,
-            source.request.program_number,
+            (source.original.clone(), source.resolved.clone()),
+            source.request.clone(),
             deadline,
             hold.clone(),
         )
         .await
         .map_err(probe_error)?;
-        if !captured.evidence.covers_entire_source_bytes() {
-            return Err(SourceTeletextPageDecodeError::InvalidTransportWindow);
-        }
-        if !captured.headers.as_ref().is_some_and(|headers| {
-            headers
-                .headers()
-                .iter()
-                .any(|header| header.header.display_page() == Some(source.request.page))
-        }) {
+        if !captured.selected_page_observed {
             return Err(SourceTeletextPageDecodeError::UnobservedPage);
         }
         let snapshot = Arc::new(captured.snapshot);
@@ -134,7 +123,7 @@ impl FfprobeExtractor {
         source.check_source(deadline, hold).await?;
         Ok(SourceTeletextTextArtifact {
             content,
-            window: captured.evidence,
+            psi_fingerprint: captured.psi_fingerprint,
             source,
         })
     }

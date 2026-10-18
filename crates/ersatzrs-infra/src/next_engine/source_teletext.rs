@@ -187,8 +187,7 @@ where
                         )
                         .await
                         .map_err(|_| CacheError::Stale)?;
-                    if artifact.window.psi_fingerprint != request.pending.candidate.psi_fingerprint
-                    {
+                    if artifact.psi_fingerprint != request.pending.candidate.psi_fingerprint {
                         return Err(CacheError::Stale);
                     }
                     artifact

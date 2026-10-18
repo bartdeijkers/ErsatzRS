@@ -23,6 +23,55 @@ struct Fixture {
     clip: PathBuf,
 }
 
+pub(super) async fn assert_complete_text_preparation(
+    pool: &crate::db::DbPool,
+    locker: &EntityLocker,
+    ffmpeg: &Path,
+    ffprobe: &Path,
+    clip: &Path,
+) {
+    let candidate =
+        crate::teletext_source::load_caption_candidates(pool, 10, 100, 1, clip.to_str().unwrap())
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|candidate| candidate.request.page.get() == 889)
+            .unwrap();
+    let work = ersatzrs_core::locking::TeletextWorkGuard::try_acquire(locker, 1).unwrap();
+    let scope = LocalProbeCleanupScope::new();
+    let extractor = FfprobeExtractor::new(ffprobe.to_str().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let result = scope
+        .scope(async {
+            let source = extractor
+                .prepare_local_teletext_source(
+                    candidate.request,
+                    clip.into(),
+                    clip.into(),
+                    deadline,
+                    work.hold_work(),
+                )
+                .await?;
+            extractor
+                .prepare_local_teletext_text(
+                    std::sync::Arc::new(source),
+                    ffmpeg,
+                    deadline,
+                    work.hold_work(),
+                )
+                .await
+        })
+        .await;
+    scope.close();
+    scope.wait_cleanup().await.unwrap();
+    drop(work);
+    assert_eq!(locker.active_teletext_work(), 0);
+    let artifact =
+        result.unwrap_or_else(|error| panic!("complete selected-page preparation: {error:?}"));
+    assert!(artifact.content.contains("NEDERLANDSE PAGINA 889 FINAL"));
+    assert!(!artifact.content.contains("ENGLISH PAGE 888"));
+}
+
 impl Fixture {
     async fn new(root: &Path) -> Self {
         let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");

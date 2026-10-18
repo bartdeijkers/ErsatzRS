@@ -218,14 +218,32 @@ fn vtt_cues(documents: &[String]) -> BTreeSet<(i64, i64, String)> {
 
 fn format_ticks(text: &str) -> i64 {
     let (whole, fraction) = text.split_once('.').unwrap();
-    let scale = 10_i64.pow(u32::try_from(fraction.len()).unwrap());
+    assert_eq!(fraction.len(), 6, "pinned ffprobe plain microsecond writer");
+    let scale = 1_000_000_i64;
     let numerator = whole.parse::<i64>().unwrap() * scale + fraction.parse::<i64>().unwrap();
+    // ffprobe reports AV_TIME_BASE timestamps with six decimal places. The
+    // pinned writer's closed one-microsecond enclosure must contain ONE exact
+    // 90kHz tick, not a guessed/rounded tick or a widened cue comparison.
+    let lower = ((numerator - 1) * 90_000 + scale - 1).div_euclid(scale);
+    let upper = ((numerator + 1) * 90_000).div_euclid(scale);
     assert_eq!(
-        numerator * 90_000 % scale,
-        0,
-        "synthetic origin must have an exact MPEG-TS tick representation"
+        lower, upper,
+        "reported synthetic origin must identify one exact MPEG-TS tick"
     );
-    numerator * 90_000 / scale
+    lower
+}
+
+#[test]
+fn pinned_decimal_writer_identifies_exact_source_ticks_without_cue_tolerance() {
+    for (reported, ticks) in [
+        ("1.400000", 126_000),
+        ("0.861667", 77550),
+        ("1.418667", 127_680),
+    ] {
+        assert_eq!(format_ticks(reported), ticks);
+    }
+    assert!(std::panic::catch_unwind(|| format_ticks("0.861671")).is_err());
+    assert!(std::panic::catch_unwind(|| format_ticks("0.86")).is_err());
 }
 
 pub(super) async fn check(

@@ -836,6 +836,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve late selected teletext captions when Next converts a finite Local
+  source larger than one observation window. Decode a complete owned snapshot
+  with bounded memory, unchanged source clocks, selected audio and cleanup;
+  reject incomplete or changing transport instead of publishing partial text.
 - Reject native source-teletext burn-in with video stream-copy during command
   construction, avoiding an incompatible FFmpeg filter/copy command. Verified
   caption carriage for copied video remains open.
