@@ -82,7 +82,7 @@ pub(super) fn reconcile(
                 return Err(fail(location));
             }
             candidates.push(program::parse(
-                definition,
+                (definition, service.declared().semantic().objects()),
                 native,
                 (&old, &new),
                 index,

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1/F3 normalized Local-object editor alignment'
+current_focus = 'P9A-04 F1 retained Local calls verified; decisive client qualification next'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -307,10 +307,29 @@ QTM GUI, publication, client or full-engine acceptance claim. Canonical
  tmp/phase9-header-c2/identity.json/wrapper_editor_followup owns frozen sources,
 RED/green logs, terminal processes and local checkpoint SHA. No checks remain
 running for this package; only the verified owned slice is committed.
-Next concrete product action: qualify the still-open F1 Local-definition call
-editing boundary against the existing V7 native-call machinery; establish a
-specific accepted rejection before choosing a correction. Unused-object removal
-stays deferred. Preserve foreign7 and keep later checkpoints local.
+Verified local checkpoint2d09b33c owns normalized-wrapper editor alignment.
+F1 retained Local-call editing is verified after genuine nativeRED5b97aca3.
+Private20 uses the existing bounded invocation policy, original full Local
+markers, complete native reconstruction and changed-subtree lineage. Versions
+1–19 stay closed; mixed prior style/resource-position/addition roles preserve
+identity, association, quotas and sibling edits. Current315 focused tests and
+nine native forward-anchor flows pass (01bf4ad9/4a0a6e92). Independent complete
+typed target/TTI equality precedes concept20 import, exact shared preview/cold
+reopen; fresh receipts qualify repeat, exact-root undo and explicit publication.
+Absent/row/column/original-target variants pass. Moved and equal-pixel protected
+second consumers, unknown/type/reserved/duplicate origin atoms refuse atomically.
+All19 Rust sources are frozen; strict domain/app/web all-target Clippy, format
+and architecture pass. No checks remain running. Canonical
+ tmp/phase9-header-c2/identity.json/local_invocation_followup owns sources,
+RED/green logs, exact scope, reused evidence, terminal processes and checkpoint
+SHA. Prior genuine QTM, localized headed admin, stream/isolation/F6 and pinned
+independent receipts retain scope; no new GUI/HTTP/suitable-client claim.
+Next acceptance priority: V3/X1 suitable display/navigation remains decisive;
+qualify a changed source-positive candidate early and boundedly, without
+repeating unchanged negative clients or starting decoder maintenance. If no
+qualified option exists, record that exact dependent blocker and continue
+independent F1 remaining call/resource/set or F5 source-policy product work.
+Unused-object removal stays deferred. Preserve foreign7; no push/publication.
 Broader context/editor/client/platform gates remain; full9A is not accepted.
 No generic audit, new infrastructure or decoder repair. Broader row-zero/foreign context,
 larger finite sources, unknown EOF/provider/output breadth and full F5 stay open.

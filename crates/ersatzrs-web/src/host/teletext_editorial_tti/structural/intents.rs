@@ -60,6 +60,14 @@ pub(super) fn append(
         .or_else(|_| {
             TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands(
                 candidate.identity,
+                candidate.expected.clone(),
+                replacement.clone(),
+                candidate.retained.clone(),
+            )
+        })
+        .or_else(|_| {
+            TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes(
+                candidate.identity,
                 candidate.expected,
                 replacement,
                 candidate.retained,

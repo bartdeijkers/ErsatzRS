@@ -5,6 +5,8 @@ use ersatzrs_domain::{
     TeletextPageAddress, TeletextPageNumber, TeletextSubcode,
 };
 use std::time::Duration;
+#[path = "object_programs_tests/retained_calls.rs"]
+mod retained_calls;
 fn identity() -> TeletextObjectIdentity {
     TeletextObjectIdentity::local(
         TeletextPageAddress {

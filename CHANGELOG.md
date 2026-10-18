@@ -68,6 +68,10 @@ release section when tagging a release.
   unchanged normalized header wrapper; compiler-owned source correspondence
   keeps derived background writes and every protected shared consumer guarded.
   Concept preview and cold reopen retain the original definitions and metadata.
+  Existing Local object calls can now be moved or retargeted to another original
+  definition on the same page through concept import. Repeat edits, undo and cold
+  recovery preserve unrelated edits; publication stays explicit and protected
+  shared consumers remain guarded even when pixels match.
   Native preview,
   publication and recovery qualify new allocations and every protected shared
   consumer. A pinned actual QTeletextMaker save of an added definition now passes

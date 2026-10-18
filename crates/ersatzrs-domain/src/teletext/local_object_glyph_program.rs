@@ -30,16 +30,19 @@ pub enum TeletextLocalObjectGlyphProgramOverlayError {
     Correspondence,
     #[error("teletext glyph program changes a protected command or glyph family")]
     ProtectedCommand,
+    #[error("teletext glyph program must change a retained original invocation")]
+    MissingInvocationChange,
 }
 
 /// One checked replacement of an existing Local definition's ordered program.
 ///
 /// The legacy constructor permits G0/G1 structure changes. The explicit complete
 /// glyph constructor supports all typed glyph families, retaining G3 compatibility.
-/// Every nonglyph command survives exactly and in order, retaining position,
-/// context, attributes and invocation anchors. Retained glyphs cannot cross an
-/// unchanged anchor. The map records checked correspondence, not edit permission:
-/// hosts must establish original provenance and qualify every shared consumer.
+/// Protected nonglyph commands survive exactly and in order. The explicit style
+/// and retained-invocation constructors permit only their named extensions.
+/// Retained glyphs cannot cross an unchanged anchor. The map records checked
+/// correspondence, not edit permission: hosts must establish original provenance
+/// and qualify every shared consumer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TeletextLocalObjectGlyphProgramOverlay {
     identity: TeletextObjectIdentity,
@@ -124,6 +127,34 @@ impl TeletextLocalObjectGlyphProgramOverlay {
         )
     }
 
+    /// Change retained original calls alongside checked glyph and style changes.
+    ///
+    /// At least one retained invocation must change target, type or offset.
+    /// Calls cannot be inserted or deleted; every other protected anchor remains
+    /// exact. This intent grants no catalogue, dependency or consumer authority:
+    /// complete service reconstruction and host effects checks remain mandatory.
+    /// # Errors
+    /// Rejects nonlocal/no-op intents, over208 inputs, invalid correspondence,
+    /// absent retained-call changes, inserted/deleted calls and altered anchors.
+    pub fn new_with_invocation_changes(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+    ) -> Result<Self, TeletextLocalObjectGlyphProgramOverlayError> {
+        let overlay = Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            GlyphPolicy::InvocationChanges,
+        )?;
+        if !overlay.has_invocation_changes() {
+            return Err(TeletextLocalObjectGlyphProgramOverlayError::MissingInvocationChange);
+        }
+        Ok(overlay)
+    }
+
     fn new_for_policy(
         identity: TeletextObjectIdentity,
         expected: TeletextEnhancementProgram,
@@ -181,6 +212,43 @@ impl TeletextLocalObjectGlyphProgramOverlay {
             GlyphPolicy::All,
         )
         .is_ok()
+    }
+
+    /// Whether the unchanged glyph/style contract accepts this correspondence.
+    ///
+    /// Borrowed validation keeps old storage versions closed to changed calls.
+    #[must_use]
+    pub fn is_style_commands_compatible(&self) -> bool {
+        validate_correspondence(
+            &self.expected,
+            &self.replacement,
+            &self.retained_commands,
+            GlyphPolicy::StyleCommands,
+        )
+        .is_ok()
+    }
+
+    /// Whether an exactly retained original call changes, without granting authority.
+    #[must_use]
+    pub fn has_invocation_changes(&self) -> bool {
+        self.replacement
+            .commands()
+            .iter()
+            .zip(&self.retained_commands)
+            .any(|(after, original)| {
+                original.is_some_and(|ordinal| {
+                    self.expected.commands().get(ordinal).is_some_and(|before| {
+                        before != after
+                            && matches!(
+                                (before, after),
+                                (
+                                    TeletextEnhancementCommand::InvokeObject { .. },
+                                    TeletextEnhancementCommand::InvokeObject { .. }
+                                )
+                            )
+                    })
+                })
+            })
     }
 
     #[must_use]
@@ -387,3 +455,7 @@ pub enum TeletextLocalObjectGlyphProgramFailure {
     #[error("the exact Local object program is repeated")]
     Duplicate,
 }
+
+#[cfg(test)]
+#[path = "local_object_invocation_program_tests.rs"]
+mod invocation_tests;

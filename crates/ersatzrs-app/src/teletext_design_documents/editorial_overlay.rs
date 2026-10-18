@@ -44,6 +44,10 @@ const RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 16;
 const RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 17;
 const RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION: u16 = 18;
 const RESOURCE_OBJECT_POSITION_OVERLAY_VERSION: u16 = 19;
+const LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 20;
+
+#[path = "editorial_overlay/local_object_invocation_programs.rs"]
+mod local_object_invocation_programs;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -538,6 +542,47 @@ impl TeletextSavedEditorialOverlay {
         Ok(value)
     }
 
+    /// Capture version20 changes to retained Local object invocations.
+    ///
+    /// Every supplied program must change an original call. Calls cannot be
+    /// inserted or omitted. Original association, dependency reconstruction and
+    /// all shared-consumer permissions remain separate mandatory host checks.
+    /// # Errors
+    /// Rejects missing call changes, duplicate programs, scalar glyph overlap,
+    /// unsupported scalar families and invalid provenance.
+    pub fn new_with_local_object_invocation_programs(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        Self::new_parts_for_families(
+            provenance,
+            pages,
+            local_program_operands,
+            drcs_bitmap_overlays,
+            local_object_operands,
+            OperandFamilies::DrcsSelections,
+        )?
+        .with_local_object_invocation_programs(programs)
+    }
+
+    /// Install changed-call Local programs alongside already checked sibling
+    /// intents, preserving rows, scalars, resources, additions and other programs.
+    /// The new programs must have distinct identities and genuine retained-call
+    /// changes; this grants no dependency, edit or publication authority.
+    /// # Errors
+    /// Rejects empty/non-call batches, duplicate program identities and scalar
+    /// overlap. Matching the immutable original remains mandatory on attachment.
+    pub fn with_local_object_invocation_programs(
+        self,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        local_object_invocation_programs::install(self, programs)
+    }
+
     /// Capture version14 exact-original POP/GPOP scalar intent, optionally with
     /// existing Local, row, bitmap and structural Local program changes.
     ///
@@ -740,7 +785,10 @@ impl TeletextSavedEditorialOverlay {
         }
         self.resource_object_definition_additions = additions;
         resource_object_additions::distinct(&self)?;
-        if self.schema_version != RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
+        if !matches!(
+            self.schema_version,
+            RESOURCE_OBJECT_POSITION_OVERLAY_VERSION | LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
+        ) {
             self.schema_version = RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
         }
         Ok(self)
@@ -1369,6 +1417,9 @@ fn restore_bitmap(
 
 impl StoredOverlay {
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        if self.schema_version == LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION {
+            return local_object_invocation_programs::check_version(self);
+        }
         if self.schema_version == RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
             if self
                 .resource_object_definition_additions
@@ -1479,6 +1530,9 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
+        if self.schema_version == LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION {
+            return local_object_invocation_programs::restore(self, documents, budget);
+        }
         if self.schema_version == RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION
             || (self.schema_version == RESOURCE_OBJECT_POSITION_OVERLAY_VERSION
                 && self.resource_object_definition_additions.0.is_some())
@@ -2049,3 +2103,7 @@ mod resource_object_addition_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/resource_object_position_tests.rs"]
 mod resource_object_position_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/local_object_invocation_program_tests.rs"]
+mod local_object_invocation_program_tests;

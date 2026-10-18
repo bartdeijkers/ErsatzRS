@@ -895,7 +895,15 @@ pub(super) fn cumulative_overlay(
         )
         .map_err(Into::into);
     }
-    let overlay = body_overlay(provenance, changes)?;
+    let overlay = if changes
+        .object_programs
+        .iter()
+        .any(ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes)
+    {
+        local_invocation_overlay(provenance, changes)?
+    } else {
+        body_overlay(provenance, changes)?
+    };
     if changes.resource_additions.is_empty() {
         Ok(overlay)
     } else {
@@ -1004,6 +1012,50 @@ fn body_overlay(
         )?
     };
     Ok(overlay)
+}
+
+fn local_invocation_overlay(
+    provenance: &TeletextSavedEditorialProvenance,
+    changes: &TeletextEditorialChanges,
+) -> Result<TeletextSavedEditorialOverlay> {
+    let (calls, ordinary): (Vec<_>, Vec<_>) =
+        changes.object_programs.iter().cloned().partition(
+            ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes,
+        );
+    if ordinary.is_empty()
+        && changes.rows.is_empty()
+        && changes.operands.is_empty()
+        && changes.object_operands.is_empty()
+        && changes.bitmaps.is_empty()
+        && changes.resource_operands.is_empty()
+        && changes.resource_programs.is_empty()
+    {
+        return TeletextSavedEditorialOverlay::new_with_local_object_invocation_programs(
+            provenance.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            calls,
+        )
+        .map_err(Into::into);
+    }
+    // First qualify siblings through their unchanged stored-role constructors.
+    // Resource additions are attached once by cumulative_overlay after this
+    // explicit installation, which must preserve the newer role.
+    let siblings = TeletextEditorialChanges {
+        rows: changes.rows.clone(),
+        operands: changes.operands.clone(),
+        object_operands: changes.object_operands.clone(),
+        bitmaps: changes.bitmaps.clone(),
+        object_programs: ordinary,
+        resource_operands: changes.resource_operands.clone(),
+        resource_programs: changes.resource_programs.clone(),
+        resource_additions: Vec::new(),
+    };
+    body_overlay(provenance, &siblings)?
+        .with_local_object_invocation_programs(calls)
+        .map_err(Into::into)
 }
 
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {

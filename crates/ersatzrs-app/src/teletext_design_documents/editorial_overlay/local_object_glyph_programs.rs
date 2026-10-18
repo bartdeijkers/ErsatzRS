@@ -19,6 +19,7 @@ pub(super) enum ProgramPolicy {
     Legacy,
     AllGlyphs,
     StyleCommands,
+    InvocationChanges,
 }
 
 #[derive(Serialize)]
@@ -73,7 +74,10 @@ pub(super) fn restore(
                 ProgramPolicy::AllGlyphs => {
                     TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs
                 }
-                ProgramPolicy::StyleCommands => {
+                ProgramPolicy::InvocationChanges if changed_invocation(&program) => {
+                    TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes
+                }
+                ProgramPolicy::StyleCommands | ProgramPolicy::InvocationChanges => {
                     TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands
                 }
             };
@@ -99,6 +103,9 @@ pub(super) fn restore_overlay(
     policy: ProgramPolicy,
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
     let constructor = match policy {
+        ProgramPolicy::InvocationChanges => {
+            TeletextSavedEditorialOverlay::new_with_local_object_invocation_programs
+        }
         ProgramPolicy::StyleCommands => {
             TeletextSavedEditorialOverlay::new_with_local_object_style_programs
         }
@@ -155,11 +162,25 @@ pub(super) fn distinct(
                     .iter()
                     .any(|program| !program.is_legacy_compatible())
         }
-        ProgramPolicy::StyleCommands => programs
-            .iter()
-            .any(|program| !program.is_all_glyphs_compatible()),
+        ProgramPolicy::StyleCommands => {
+            programs
+                .iter()
+                .all(TeletextLocalObjectGlyphProgramOverlay::is_style_commands_compatible)
+                && programs
+                    .iter()
+                    .any(|program| !program.is_all_glyphs_compatible())
+        }
+        ProgramPolicy::InvocationChanges => {
+            programs.iter().all(|program| {
+                program.has_invocation_changes() || program.is_style_commands_compatible()
+            }) && programs
+                .iter()
+                .any(TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes)
+        }
     };
-    if !programs.iter().any(structural) || !compatible {
+    if (!matches!(policy, ProgramPolicy::InvocationChanges) && !programs.iter().any(structural))
+        || !compatible
+    {
         return Err(invalid());
     }
     let mut identities = BTreeSet::new();
@@ -169,7 +190,9 @@ pub(super) fn distinct(
                 operand.identity() == program.identity()
                     && match policy {
                         ProgramPolicy::Legacy => object_operands::glyph(operand.expected()),
-                        ProgramPolicy::AllGlyphs | ProgramPolicy::StyleCommands => {
+                        ProgramPolicy::AllGlyphs
+                        | ProgramPolicy::StyleCommands
+                        | ProgramPolicy::InvocationChanges => {
                             operand.expected().glyph_family().is_some()
                         }
                     }
@@ -179,6 +202,32 @@ pub(super) fn distinct(
         }
     }
     Ok(())
+}
+
+fn changed_invocation(program: &StoredGlyphProgram) -> bool {
+    program
+        .replacement
+        .commands()
+        .iter()
+        .zip(&program.retained_commands)
+        .any(|(after, original)| {
+            original.is_some_and(|ordinal| {
+                program
+                    .expected
+                    .commands()
+                    .get(ordinal)
+                    .is_some_and(|before| {
+                        before != after
+                            && matches!(
+                                (before, after),
+                                (
+                                    TeletextEnhancementCommand::InvokeObject { .. },
+                                    TeletextEnhancementCommand::InvokeObject { .. }
+                                )
+                            )
+                    })
+            })
+        })
 }
 
 pub(super) fn validate_budgets(

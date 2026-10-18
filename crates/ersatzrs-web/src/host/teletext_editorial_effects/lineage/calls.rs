@@ -174,12 +174,9 @@ impl Calls {
                 .object
                 .and_then(|object| lineage.programs.get(&object))
                 .ok_or_else(association)?;
-            let super::Program::Resource(resource) = program else {
-                return Err(association());
-            };
-            if !resource.has_invocation_changes()
-                || resource.expected().commands().get(source.command) != Some(&command(*original))
-                || resource.replacement().commands().get(call.source().command)
+            if !program.has_invocation_changes()
+                || program.expected().commands().get(source.command) != Some(&command(*original))
+                || program.replacement().commands().get(call.source().command)
                     != Some(&command(*call))
             {
                 return Err(association());

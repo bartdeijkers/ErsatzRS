@@ -22,6 +22,7 @@ enum ProgramPolicy {
     Legacy,
     AllGlyphs,
     StyleCommands,
+    InvocationChanges,
 }
 
 pub(super) fn merge(
@@ -168,6 +169,10 @@ fn collect(
                     TeletextEnhancementCommand::AtColumn { column: a, .. },
                     TeletextEnhancementCommand::AtColumn { column: b, .. },
                 ) => a != b,
+                (
+                    TeletextEnhancementCommand::InvokeObject { .. },
+                    TeletextEnhancementCommand::InvokeObject { .. },
+                ) => a != b,
                 _ => false,
             });
     if !structural {
@@ -205,6 +210,15 @@ fn collect(
             retained,
             ProgramPolicy::StyleCommands,
         )
+    })
+    .or_else(|_| {
+        make_program(
+            identity,
+            original,
+            replacement,
+            retained,
+            ProgramPolicy::InvocationChanges,
+        )
     })?;
     operands.extend(scalar_operands);
     programs.push(program);
@@ -225,6 +239,11 @@ fn make_program(
     for (command, source) in replacement.commands().iter().zip(retained) {
         let Some(source) = *source else { continue };
         let before = original.commands().get(source).ok_or_else(fail)?;
+        if matches!(policy, ProgramPolicy::InvocationChanges)
+            && matches!(before, TeletextEnhancementCommand::InvokeObject { .. })
+        {
+            continue;
+        }
         if !glyph(before) || (matches!(policy, ProgramPolicy::Legacy) && !legacy_glyph(before)) {
             push_operand(identity, source, before, command, &mut operands)?;
             expected[source] = *command;
@@ -236,6 +255,9 @@ fn make_program(
         ProgramPolicy::AllGlyphs => TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs,
         ProgramPolicy::StyleCommands => {
             TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands
+        }
+        ProgramPolicy::InvocationChanges => {
+            TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes
         }
     };
     let program = constructor(identity, expected, replacement.clone(), retained.to_vec())

@@ -9,6 +9,7 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextMainCompositionSource,
 };
 use std::time::Instant;
+mod calls;
 pub(super) struct Candidate {
     pub identity: TeletextObjectIdentity,
     pub expected: TeletextEnhancementProgram,
@@ -17,7 +18,10 @@ pub(super) struct Candidate {
     pub structural: bool,
 }
 pub(super) fn parse(
-    definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+    definitions: (
+        &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+        &ersatzrs_domain::TeletextEnhancementObjectCatalog,
+    ),
     program: &EncodedTeletextLocalObjectProgram,
     images: (&stream::Image, &stream::Image),
     index: usize,
@@ -25,6 +29,7 @@ pub(super) fn parse(
     location: Location,
     deadline: Instant,
 ) -> Result<Candidate> {
+    let (definition, catalog) = definitions;
     let (old, new) = images;
     let actual = new.body(index);
     location.check_deadline(deadline)?;
@@ -52,7 +57,6 @@ pub(super) fn parse(
     let mut ordinal = 0;
     while ordinal < definition.program.commands().len() {
         location.check_deadline(deadline)?;
-        let command = definition.program.commands()[ordinal];
         let derived = program
             .command_positions()
             .iter()
@@ -85,15 +89,16 @@ pub(super) fn parse(
             output.retained.extend(cluster.retained);
             output.replacement.extend(cluster.commands);
         } else {
-            cursor += consume_anchor(
-                (definition, ordinal),
+            let (consumed, retained) = consume_anchor(
+                (definition, ordinal, catalog),
                 program,
                 images,
                 (actual, cursor),
                 aligned,
                 location,
             )?;
-            output.replacement.push(command);
+            cursor += consumed;
+            output.replacement.push(retained);
             output.retained.push(Some(ordinal));
             ordinal += 1;
         }
@@ -116,14 +121,18 @@ pub(super) fn parse(
     Ok(finish(output, definition))
 }
 fn consume_anchor(
-    source: (&ersatzrs_domain::TeletextEnhancementObjectDefinition, usize),
+    source: (
+        &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+        usize,
+        &ersatzrs_domain::TeletextEnhancementObjectCatalog,
+    ),
     program: &EncodedTeletextLocalObjectProgram,
     images: (&stream::Image, &stream::Image),
     input: (&[raw::Entry], usize),
     aligned: &mut [u32],
     location: Location,
-) -> Result<usize> {
-    let (definition, ordinal) = source;
+) -> Result<(usize, TeletextEnhancementCommand)> {
+    let (definition, ordinal, catalog) = source;
     let mut positions = program.command_positions().iter().filter(|position| {
         original_ordinal(position, definition) == Some(ordinal)
             || header_ordinal(position, definition) == Some(ordinal)
@@ -131,6 +140,25 @@ fn consume_anchor(
     let position = positions.next().ok_or_else(|| fail(location))?;
     if positions.next().is_some() {
         return Err(fail(location));
+    }
+    let command = definition.program.commands()[ordinal];
+    if matches!(command, TeletextEnhancementCommand::InvokeObject { target, .. }
+        if target.scope() == ersatzrs_domain::TeletextObjectScope::Local)
+    {
+        let expected = &images.0.words[position.first_word()..=position.semantic_word()];
+        let (consumed, replacement) = calls::retained(
+            (definition, catalog),
+            command,
+            expected,
+            input,
+            (program, images),
+            location,
+        )?;
+        // Normalize only the original owned call atom for old scalar parsing.
+        // The explicit typed intent and complete final native comparison retain
+        // every uploaded target, type, offset and physical-word requirement.
+        aligned[position.first_word()..=position.semantic_word()].copy_from_slice(expected);
+        return Ok((consumed, replacement));
     }
     let count = position.semantic_word() - position.first_word() + 1;
     let entries = input
@@ -165,7 +193,7 @@ fn consume_anchor(
             expected[offset]
         };
     }
-    Ok(count)
+    Ok((count, command))
 }
 fn check_rebuilt_count(
     original: &[TeletextEnhancementCommand],
@@ -330,6 +358,10 @@ fn finish(
                 (
                     TeletextEnhancementCommand::AtColumn { column: a, .. },
                     TeletextEnhancementCommand::AtColumn { column: b, .. },
+                ) => a != b,
+                (
+                    TeletextEnhancementCommand::InvokeObject { .. },
+                    TeletextEnhancementCommand::InvokeObject { .. },
                 ) => a != b,
                 _ => false,
             });

@@ -11,6 +11,12 @@ pub(super) enum Program<'a> {
     Resource(&'a TeletextResourceObjectProgramOverlay),
 }
 impl<'a> Program<'a> {
+    pub(super) fn has_invocation_changes(self) -> bool {
+        match self {
+            Self::Local(value) => value.has_invocation_changes(),
+            Self::Resource(value) => value.has_invocation_changes(),
+        }
+    }
     pub(super) fn identity(self) -> TeletextObjectIdentity {
         match self {
             Self::Local(value) => value.identity(),

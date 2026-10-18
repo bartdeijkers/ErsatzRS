@@ -5820,6 +5820,40 @@ remains distinct. Broader row-zero/coordinated position editing and
 complete resource/set semantics remain required for engine acceptance. No permanent
 authoring restriction, publication shortcut or suitable-client waiver follows.
 
+### Private retained Local calls
+
+Private concept version20 uses the existing closed Local-program/map fields to
+record a genuinely changed retained `InvokeObject`. The domain constructor
+`TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes` preserves
+all noncall context anchors, ordered correspondence, glyph-family compatibility
+and the 208-command bounds. Invocation insertion/deletion remains refused.
+The old glyph/style constructors and stored versions1–19 do not accept this
+intent; choosing version20 without a call change is also refused.
+
+The host consumes an optional mode16 origin modifier and its call as one atom.
+An unchanged exact or relocated anchor retains its existing behavior. A changed
+Local call must resolve through a canonical pointer to an original same-owner
+definition, with the complete saved identity and matching object type. Generated
+carriers, unknown markers, ambiguous or noncanonical pointers and malformed
+origin atoms grant no editing authority. Generated header-position backgrounds
+remain protected. Native reconstruction must reproduce the complete uploaded
+body, not only its visible cells.
+
+Storage installs changed Local programs onto a separately validated sibling
+overlay. Existing Local glyph/style, resource scalar/program/position, bitmap
+and definition-addition intents retain their identities and approved roles.
+Restoration repeats those checks before binding to the immutable original and
+charging aggregate budgets. Attaching additions preserves version20. Repeated
+imports compose against the root; undo removes only the reverted intent and
+recovers exact original document bytes when no edits remain.
+
+A changed call and all descendants are new writers. Equal pixels do not retain
+old protected-consumer authority, while unchanged sibling calls keep their
+original lineage. Import saves a concept; preview and publication remain separate.
+P9A-04 owns actual evidence and remaining Local-call topology, resource/context,
+QTeletextMaker and suitable-client coverage. This partial role does not lower
+the authored Level2.5 or complete interchange acceptance requirements.
+
 ### Original resource context companions
 
 V8 uses the closed `object_context_tti_v1` asset scope. Its fields are

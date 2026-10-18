@@ -40,6 +40,19 @@ Cumulative composition removes the empty intent. Qualification remains partial;
 P9A-04 owns lifecycle and actual-editor proof. Broader row-zero, coordinated
 position and complete resource/set requirements remain open.
 
+Private concept version20 records explicit changes to retained calls in original
+Local definitions. Versions1–19 remain closed to this role. Existing checked
+glyph/style and resource intents retain their separate correspondence and may
+accompany it; additions must not downgrade the newer stored role. Native import
+resolves changed Local targets only through original same-owner definitions and
+their complete compiler-owned markers. Optional origin modifiers and calls are
+one atom. Changed callees and their descendants lose original writer authority,
+including when pixels happen to match; unchanged siblings retain their lineage.
+Complete reconstruction, shared-consumer permissions, fresh receipts and explicit
+publication remain mandatory. This adds neither invocation insertion/deletion
+nor general target/resource editing authority. P9A-04 owns scoped verification
+and the remaining full editor, client and engine acceptance.
+
 The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit
 trusted authoring bounds are separate from per-channel entry/region/resource

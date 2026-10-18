@@ -578,3 +578,6 @@ async fn normalized_header_wrapper_native_protects_second_child_consumer() {
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
 }
+
+#[path = "forward_anchor/retained_calls.rs"]
+mod retained_calls;
