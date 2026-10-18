@@ -510,6 +510,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Clarify the [Phase 9A/9B authoring boundary](docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary)
+  and F2 scope while preserving all generic engine acceptance requirements.
+
 - Store local DVB teletext descriptors and bounded actual header observations
   alongside ordinary film, video, music-video, television and extras metadata.
   Keep reader ownership through cancellation, bind headers to stable current

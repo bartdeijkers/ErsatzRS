@@ -157,6 +157,9 @@ channels. Do not choose another profile, enable a package or invent defaults.
 
 ### Add-on presentation and custom zones
 
+The normative [Phase 9A/9B ownership boundary](0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary)
+also governs these declarations and P9A-04 F2.
+
 The single production TV-guide add-on declares named colour/layout themes.
 A profile selects a theme and its permitted overrides. The add-on defines named
 page zones, their location, accepted custom values and bounds; profiles can fill

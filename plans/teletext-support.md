@@ -36,7 +36,13 @@ failure through health and troubleshooting on every supported platform.
 
 ## Ownership and content scope
 
-ADR 0120 owns the engine/content split. The planned boundary is:
+ADR 0120 owns the engine/content split.
+
+For zones, edit permissions and authoring metadata, apply the normative
+[Phase 9A/9B ownership boundary in ADR 0123](../docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary),
+including the F2 exclusions and unchanged generic engine acceptance.
+
+The planned boundary is:
 
 | Owner | Responsibility |
 |---|---|

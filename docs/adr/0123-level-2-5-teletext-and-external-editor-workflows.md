@@ -1424,6 +1424,23 @@ Edit-policy validation includes indirect effects: a shared palette, object or
 DRCS change can modify protected/generated cells even when its definition lies
 outside their geometric bounds. Checking edited coordinates alone is insufficient.
 
+### Phase 9A/9B ownership boundary
+
+Phase 9A owns generic, addon-independent zone boundaries, edit permissions and
+versioned metadata. During export/import the engine preserves and validates
+addon-declared zones, template/theme references and dynamic-field bindings.
+The addon owns the concrete zones and their meaning, layouts, colour themes,
+templates and content; their production TV-guide realization belongs to Phase 9B.
+Prove the generic mechanisms in Phase 9A with synthetic fixtures.
+
+P9A-04 F2 requires neither a general visual template/theme editor nor production
+TV-guide design. The complete agreed generic QTeletextMaker workflow, metadata
+interchange, Free/Zone/Generated edit boundaries, package immutability and
+explicit addon-version workflow remain mandatory. This clarifies ownership and
+phase boundaries without lowering acceptance criteria or moving necessary
+generic engine work to Phase 9B. Engine-first delivery remains mandatory:
+production TV-guide work starts only after independent full engine acceptance.
+
 ### Durable design ownership
 
 Existing graphics upserts have no draft revisions or export compare-and-swap;
