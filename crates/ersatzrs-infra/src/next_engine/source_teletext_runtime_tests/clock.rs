@@ -81,7 +81,7 @@ fn hashes(value: &serde_json::Value) -> BTreeSet<&str> {
         .collect()
 }
 
-async fn copied_audio(ffprobe: &Path, source: &Path, captured: &Path) {
+pub(super) async fn copied_audio(ffprobe: &Path, source: &Path, captured: &Path) {
     let dutch = packets(ffprobe, source, "a:1", false).await;
     let english = packets(ffprobe, source, "a:0", false).await;
     let actual = packets(ffprobe, captured, "a:0", false).await;
@@ -103,7 +103,7 @@ async fn copied_audio(ffprobe: &Path, source: &Path, captured: &Path) {
     );
 }
 
-async fn copied_video(ffmpeg: &Path, source: &Path, actual: &Path) {
+pub(super) async fn copied_video(ffmpeg: &Path, source: &Path, actual: &Path) {
     let mut bodies = Vec::new();
     for path in [source, actual] {
         let output = tempfile::NamedTempFile::new().unwrap();
@@ -184,7 +184,7 @@ fn milliseconds(text: &str) -> i64 {
     fields[0] * 3_600_000 + fields[1] * 60_000 + fields[2] * 1000 + fields[3]
 }
 
-fn cue_blocks(body: &str) -> Vec<(i64, i64, String)> {
+pub(super) fn cue_blocks(body: &str) -> Vec<(i64, i64, String)> {
     body.split("\n\n")
         .filter_map(|block| {
             let mut lines = block.lines();

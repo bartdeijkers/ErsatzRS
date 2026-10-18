@@ -201,7 +201,7 @@ impl NextHost {
             .await;
         }
         Box::pin(self.resolve_concrete(
-            before, &request, item_id, instance, audio, now, until, deadline,
+            before, &request, item_id, instance, audio, now, until, deadline, true,
         ))
         .await
     }
@@ -220,6 +220,7 @@ impl NextHost {
         now: DateTime<Utc>,
         until: DateTime<Utc>,
         deadline: Instant,
+        include_source_text: bool,
     ) -> Result<protocol::PlayoutItem> {
         let digest = &before.identity.descriptor;
         if before.projection.pending_burn.is_none() {
@@ -235,16 +236,24 @@ impl NextHost {
         let stream = u32::try_from(pending.subtitle.stream_index)
             .map_err(|_| unavailable("subtitle stream is invalid"))?;
         let validate = || async {
-            self.project_session_snapshot(request, instance, item_id, now, until, audio)
-                .await
-                .is_ok_and(|current| {
-                    &current.identity.descriptor == digest
-                        && current.identity.cache_key == before.identity.cache_key
-                })
+            self.project_preparation_snapshot(
+                request,
+                instance,
+                item_id,
+                now,
+                until,
+                audio,
+                include_source_text,
+            )
+            .await
+            .is_ok_and(|current| {
+                &current.identity.descriptor == digest
+                    && current.identity.cache_key == before.identity.cache_key
+            })
         };
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
         let prepared = if let Some(text) = &pending.source_text {
-            Box::pin(super::source_teletext::prepare(
+            let prepared = Box::pin(super::source_teletext::prepare(
                 &self.pool,
                 &self.locker,
                 &self.burn_cache,
@@ -259,8 +268,16 @@ impl NextHost {
                 },
                 validate,
             ))
-            .await
-            .map_err(|_| super::burn_cache::CacheError::Stale)
+            .await?;
+            match prepared {
+                super::source_teletext::PreparedText::Ready(path) => Ok(path),
+                super::source_teletext::PreparedText::Absent(absent) => {
+                    return Box::pin(self.resolve_absent_source_page(
+                        &before, absent, request, instance, item_id, audio, now, until, deadline,
+                    ))
+                    .await;
+                }
+            }
         } else if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR {
             self.burn_cache
                 .prepare_provider(
@@ -286,12 +303,50 @@ impl NextHost {
                 .await
         }
         .map_err(|_| unavailable("subtitle preparation failed"))?;
+        self.finish_concrete(
+            &before,
+            request,
+            instance,
+            item_id,
+            audio,
+            now,
+            until,
+            include_source_text,
+            &prepared,
+        )
+        .await
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Final installation rechecks the exact session, selected policy and original timing bounds."
+    )]
+    async fn finish_concrete(
+        &self,
+        before: &dynamic_projection::Snapshot,
+        request: &super::host::NextStart,
+        instance: uuid::Uuid,
+        item_id: i64,
+        audio: Option<usize>,
+        now: DateTime<Utc>,
+        until: DateTime<Utc>,
+        include_source_text: bool,
+        prepared: &std::path::Path,
+    ) -> Result<protocol::PlayoutItem> {
         // Metadata and membership may change while FFmpeg is running. Never
         // attach a completed artifact to a different selection or publication.
         let mut after = self
-            .project_session_snapshot(request, instance, item_id, now, until, audio)
+            .project_preparation_snapshot(
+                request,
+                instance,
+                item_id,
+                now,
+                until,
+                audio,
+                include_source_text,
+            )
             .await?;
-        if &after.identity.descriptor != digest
+        if after.identity.descriptor != before.identity.descriptor
             || after.identity.cache_key != before.identity.cache_key
             || !self.dynamic_contexts.lock().await.contains_key(&instance)
         {
@@ -300,10 +355,111 @@ impl NextHost {
         after
             .projection
             .publish_graphics(&self.media, Some(instance), now)?;
-        let item = install_prepared_track(after.projection.item, &prepared)?;
+        let item = install_prepared_track(after.projection.item, prepared)?;
         dynamic_item::resolve_at(&item, now)
             .map_err(|_| unavailable("requested item timing is invalid"))
     }
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Ordinary fallback must retain every authenticated session and publication bound."
+    )]
+    async fn project_preparation_snapshot(
+        &self,
+        request: &super::host::NextStart,
+        instance: uuid::Uuid,
+        item_id: i64,
+        now: DateTime<Utc>,
+        until: DateTime<Utc>,
+        audio: Option<usize>,
+        include_source_text: bool,
+    ) -> Result<dynamic_projection::Snapshot> {
+        if include_source_text {
+            return self
+                .project_session_snapshot(request, instance, item_id, now, until, audio)
+                .await;
+        }
+        // Source-text intents are created only for ordinary scheduled local
+        // media. Never replace the distinct troubleshooting-origin policy.
+        if self
+            .dynamic_contexts
+            .lock()
+            .await
+            .get(&instance)
+            .is_none_or(|context| context.troubleshooting.is_some())
+        {
+            return Err(unavailable("ordinary caption selection is unavailable"));
+        }
+        dynamic_projection::project_snapshot_with_source_text(
+            &self.pool,
+            &self.locker,
+            &self.media,
+            request.channel_id,
+            item_id,
+            now,
+            until,
+            &request.replacements,
+            audio,
+            false,
+        )
+        .await
+    }
+
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Absence retains the original identity and admitted source across ordinary preparation."
+    )]
+    async fn resolve_absent_source_page(
+        &self,
+        before: &dynamic_projection::Snapshot,
+        absent: super::source_teletext::AbsentPage,
+        request: &super::host::NextStart,
+        instance: uuid::Uuid,
+        item_id: i64,
+        audio: Option<usize>,
+        now: DateTime<Utc>,
+        until: DateTime<Utc>,
+        deadline: Instant,
+    ) -> Result<protocol::PlayoutItem> {
+        let validate = || async {
+            let current = self
+                .project_session_snapshot(request, instance, item_id, now, until, audio)
+                .await?;
+            if current.identity.descriptor != before.identity.descriptor
+                || current.identity.cache_key != before.identity.cache_key
+            {
+                return Err(unavailable("publication changed after page absence"));
+            }
+            absent.check_source(deadline).await
+        };
+        validate().await?;
+        let ordinary = self
+            .project_preparation_snapshot(request, instance, item_id, now, until, audio, false)
+            .await?;
+        // No generic error fallback: only the privately held successful
+        // complete-source absence can enter this ordinary selection path.
+        let ordinary_identity = ordinary.identity.clone();
+        let item = Box::pin(self.resolve_concrete(
+            ordinary, request, item_id, instance, audio, now, until, deadline, false,
+        ))
+        .await?;
+        validate().await?;
+        let current = self
+            .project_preparation_snapshot(request, instance, item_id, now, until, audio, false)
+            .await?;
+        if current.identity.descriptor != ordinary_identity.descriptor
+            || current.identity.cache_key != ordinary_identity.cache_key
+        {
+            return Err(unavailable("ordinary selection changed after page absence"));
+        }
+        tracing::warn!(
+            channel_id = request.channel_id,
+            item_id,
+            page = absent.page(),
+            "Complete finite source lacks selected teletext page; using ordinary subtitle selection"
+        );
+        Ok(item)
+    }
+
     async fn resolve_ready_item(
         &self,
         instance: uuid::Uuid,

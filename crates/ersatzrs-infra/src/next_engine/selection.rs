@@ -229,10 +229,28 @@ pub(super) async fn project_scheduled_item(
     resolution: &Resolution,
     audio: AudioDirective,
 ) -> Result<DeferredProjection> {
-    let source_text = Box::pin(super::source_teletext::pending(
-        pool, channel, media, &source,
-    ))
-    .await?;
+    project_scheduled_item_with_source_text(pool, channel, media, source, resolution, audio, true)
+        .await
+}
+
+/// Reuse ordinary selection only after the preferred page was proven absent.
+pub(super) async fn project_scheduled_item_with_source_text(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &super::schedule::ScheduledMedia,
+    source: wire::Source,
+    resolution: &Resolution,
+    audio: AudioDirective,
+    include_source_text: bool,
+) -> Result<DeferredProjection> {
+    let source_text = if include_source_text {
+        Box::pin(super::source_teletext::pending(
+            pool, channel, media, &source,
+        ))
+        .await?
+    } else {
+        None
+    };
     Box::pin(project_deferred_item_selected(
         pool,
         channel,

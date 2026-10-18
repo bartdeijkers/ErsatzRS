@@ -47,6 +47,7 @@ pub use prepared::PreparedLocalTeletextSource;
 
 #[path = "teletext_decode_text.rs"]
 mod text;
+pub(crate) use text::SourceTeletextTextPreparation;
 
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_FRAMES: usize = 4096;

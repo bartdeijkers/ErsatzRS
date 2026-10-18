@@ -7,7 +7,10 @@ use crate::{
         },
         FfprobeExtractor, LocalProbeCleanupScope,
     },
-    teletext_source::{load_caption_candidates, SourceTeletextParents},
+    teletext_source::{
+        discover_caption_requests, load_caption_candidates, SourceTeletextCaptionCandidate,
+        SourceTeletextParents,
+    },
 };
 use ersatzrs_core::repositories::{ManagedLibraryOperationRepository as _, ManagedLibraryScanSpec};
 use ersatzrs_domain::{
@@ -30,19 +33,36 @@ pub(super) fn proof_root() -> PathBuf {
 }
 
 pub(super) async fn source(ffmpeg: &Path, root: &Path) -> PathBuf {
-    let clip = source_inner(ffmpeg, root, None).await;
+    let clip = source_inner(ffmpeg, root, None, "two-captions").await;
     assert!(tokio::fs::metadata(&clip).await.unwrap().len() < 32_768 * 188);
     clip
 }
 
 pub(super) async fn source_with_mux_rate(ffmpeg: &Path, root: &Path, mux_rate: u32) -> PathBuf {
-    let clip = source_inner(ffmpeg, root, Some(mux_rate)).await;
+    let clip = source_inner(ffmpeg, root, Some(mux_rate), "two-captions").await;
     assert!(tokio::fs::metadata(&clip).await.unwrap().len() > 32_768 * 188);
     clip
 }
 
-async fn source_inner(ffmpeg: &Path, root: &Path, mux_rate: Option<u32>) -> PathBuf {
-    let raw = root.join("two-captions.ts");
+pub(super) async fn source_with_late_caption(ffmpeg: &Path, root: &Path) -> PathBuf {
+    let clip = source_inner(ffmpeg, root, Some(8_000_000), "late-caption").await;
+    assert!(tokio::fs::metadata(&clip).await.unwrap().len() > 32_768 * 188);
+    clip
+}
+
+pub(super) async fn source_with_untransmitted_caption(ffmpeg: &Path, root: &Path) -> PathBuf {
+    let clip = source_inner(ffmpeg, root, Some(8_000_000), "untransmitted-caption").await;
+    assert!(tokio::fs::metadata(&clip).await.unwrap().len() > 32_768 * 188);
+    clip
+}
+
+async fn source_inner(
+    ffmpeg: &Path,
+    root: &Path,
+    mux_rate: Option<u32>,
+    scenario: &str,
+) -> PathBuf {
+    let raw = root.join(format!("{scenario}.ts"));
     let mut python = Command::new("python3");
     python
         .arg(
@@ -50,7 +70,7 @@ async fn source_inner(ffmpeg: &Path, root: &Path, mux_rate: Option<u32>) -> Path
                 .join("../../scripts/calibration/generate-teletext-fixture.py"),
         )
         .arg(&raw)
-        .args(["--scenario", "two-captions"]);
+        .args(["--scenario", scenario]);
     tool(python).await;
     let video = root.join("source.mkv");
     let mut generate = Command::new(ffmpeg);
@@ -233,15 +253,25 @@ pub(super) async fn assert_page_spans_source_window(ffmpeg: &Path, clip: &Path, 
     .unwrap();
 }
 
-#[allow(
-    clippy::too_many_lines,
-    reason = "Opt-in proof keeps actual probe acquisition, managed association and exact source/page assertions together"
-)]
 pub(super) async fn acquire_and_store(
     pool: &crate::db::DbPool,
     ffprobe: &Path,
     clip: &Path,
     root: &Path,
+) {
+    acquire_and_store_observed(pool, ffprobe, clip, root, &[888, 889]).await;
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "Opt-in proof keeps actual probe acquisition, managed association and exact source/page assertions together"
+)]
+pub(super) async fn acquire_and_store_observed(
+    pool: &crate::db::DbPool,
+    ffprobe: &Path,
+    clip: &Path,
+    root: &Path,
+    observed_pages: &[u16],
 ) {
     let scope = LocalProbeCleanupScope::new();
     let probe = scope
@@ -382,20 +412,89 @@ pub(super) async fn acquire_and_store(
     let candidates = load_caption_candidates(pool, 10, 100, 1, clip.to_str().unwrap())
         .await
         .unwrap();
+    let expected: Vec<_> = observed_pages
+        .iter()
+        .map(|page| match page {
+            888 => (888, "eng", 2),
+            889 => (889, "nld", 2),
+            _ => panic!("unknown expected synthetic subtitle page"),
+        })
+        .collect();
     assert_eq!(
         candidates
             .iter()
             .map(|c| (c.request.page.get(), c.language.as_str(), c.descriptor_type))
             .collect::<Vec<_>>(),
+        expected
+    );
+    let requests = discover_caption_requests(pool, 10, 100, 1, clip.to_str().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(
+        requests
+            .iter()
+            .map(|entry| (
+                entry.candidate.request.page.get(),
+                entry.candidate.language.as_str(),
+                entry.candidate.descriptor_type
+            ))
+            .collect::<Vec<_>>(),
         [(888, "eng", 2), (889, "nld", 2)]
     );
-    assert_eq!(candidates[0].request.binding, candidates[1].request.binding);
-    assert_eq!(candidates[0].request.pid, 258);
-    assert_eq!(candidates[0].request.stream_index, 2);
-    assert_eq!(candidates[0].request.program_number, 1);
-    tokio::fs::write(root.join("acquired-page-choices.json"), serde_json::to_vec_pretty(&serde_json::json!({
-        "scanner_executed":false,"source_revision":acquisition.revision(),"pid":258,"index":2,
-        "choices":[{"page":888,"language":"eng","role":2},{"page":889,"language":"nld","role":2}],
-        "actual_program_and_psi":true,"independent_page_decodes":true,
-    })).unwrap()).await.unwrap();
+    assert_eq!(
+        requests[0].candidate.request.binding,
+        requests[1].candidate.request.binding
+    );
+    for entry in &requests {
+        assert_eq!(entry.candidate.request.pid, 258);
+        assert_eq!(entry.candidate.request.stream_index, 2);
+        assert_eq!(entry.candidate.request.program_number, 1);
+    }
+    for candidate in &candidates {
+        assert_eq!(
+            candidate,
+            &requests
+                .iter()
+                .find(|entry| entry.candidate.request.page == candidate.request.page)
+                .unwrap()
+                .candidate
+        );
+    }
+    let observed_choices: Vec<_> = candidates.iter().map(candidate_receipt).collect();
+    let descriptor_requests: Vec<_> = requests
+        .iter()
+        .map(|entry| candidate_receipt(&entry.candidate))
+        .collect();
+    let independent_page_decodes = tokio::fs::try_exists(root.join("independent-888.srt"))
+        .await
+        .unwrap()
+        && tokio::fs::try_exists(root.join("independent-889.srt"))
+            .await
+            .unwrap();
+    tokio::fs::write(
+        root.join("acquired-page-choices.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "scanner_executed":false,"source_revision":acquisition.revision(),"pid":258,"index":2,
+            "choices":observed_choices,"descriptor_requests":descriptor_requests,
+            "observed_caption_pages":observed_pages,
+            "stored_header_window":acquisition.headers().for_stream(2).unwrap(),
+        "descriptor_requests_grant_observation_or_readiness":false,
+        "actual_program_and_psi":true,"independent_page_decodes":independent_page_decodes,
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+}
+
+fn candidate_receipt(candidate: &SourceTeletextCaptionCandidate) -> serde_json::Value {
+    serde_json::json!({
+        "page":candidate.request.page.get(),"language":candidate.language.as_str(),
+        "role":candidate.descriptor_type,"binding":candidate.request.binding,
+        "pid":candidate.request.pid,"stream_index":candidate.request.stream_index,
+        "program_number":candidate.request.program_number,"psi_fingerprint":candidate.psi_fingerprint,
+        "descriptor_occurrences":candidate.descriptor_occurrences.iter().map(|entry|
+            (entry.descriptor_tag,entry.descriptor_ordinal,entry.entry_ordinal,entry.language.as_str(),
+             entry.descriptor_type,entry.wire_magazine,entry.wire_page)).collect::<Vec<_>>()
+    })
 }

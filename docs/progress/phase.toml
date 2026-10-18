@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 large finite source checkpoint verified; remaining selection/policy gaps open'
+current_focus = 'P9A-04 F5 late first-header intent and proven-absence playback safety; source-out gap open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -333,33 +333,39 @@ The QTM208-frame bound does not apply to this native decoder. Canonical
 identity.json/client_qualification_after_local_calls links unchanged actual
 native-target/panel/enlarged receipts and exact source pointers; no runtime,
 client build, decoder repair, new adapter or acceptance waiver.
-F5 large_finite_followup now isolates and corrects the actual20MB Local889
-failure. On byte-identical source6e8b7394, direct RED4da9c78e and guard
-REDa54c9b41 prove the successful32768-packet prefix was refused for nonEOF.
-A private complete text snapshot uses the existing held reader/worker/stop,
-fixed buffers, continuous PSI and strict complete PES; window types/caps stay
-unchanged. Forty focused tests pass. Pinned native c2d0e836 (large),22722ea9
-(original small) and c3eb51a0 (cache) pass exact cue/clear/seek/outpoint, copied
-video PTS/DTS, selected Dutch AAC payloads, common cache identity and cleanup.
-The initial corrected delivery reaches FINAL but exposes a test-only decimal
-origin assumption. Retained negative8119123b and independent integer PTS77550
-versus reported0.861667 justify unique-tick quantization; cue equality remains
-exact with no added tolerance. Canonical
- tmp/phase9-next-local-teletext/work.json/large_finite_followup owns all source,
-negative/positive, tool and process receipts. Strict affected infra all-target Clippy, format, progress and architecture pass.
-Broader F5 provider/output/charset/unknownEOF policies, complete F/V/X and
-full9A remain open. Reuse unchanged editor/publication/isolation/transport/F6
-proof; do not reopen F6 without a relevant regression. X1 still needs suitable
-HTTP/TS/resource-lifecycle/navigation client capability; X2 needs accepted
-platform artifacts/environments; X3 needs a lossless changed editor capability
-for full oversized context. No unchanged negative client retry or decoder repair.
-After this local checkpoint, qualify selected descriptor889 whose first actual
-header lies after the prefix using existing discovery/prepared-source fixtures.
-Distinguish missing selection from decode refusal before choosing a correction;
-no new general audit. Production
-TV-guide design remains9B after full independent9A underADR0123; no general
-visual template/theme editor is required. Unused-object removal stays deferred.
-Goal active; preserve foreign7. No push, publication or scope waiver.
+F5 verified local ee9b2e38 fixes the identical20MB source refusal with a complete
+owned text snapshot; reuse its40 focused/3 pinned native receipts and strict gates.
+Canonical tmp/phase9-next-local-teletext/work.json/large_finite_followup owns proof.
+The current first_header_followup closes the private selection gap for889 whose
+first header lies beyond the stored888-only prefix; descriptor intent is never
+scanner-observed readiness. Exact independent text/cache proof is retained.
+A complete validated source with no889 header now yields opaque, PSI-matched
+absence retaining the original source/admission. Fresh original AND ordinary
+selection identities fence the existing ordinary fallback; generic source,
+publication, deadline, cancellation and cleanup errors still refuse. Actual
+Next1063a69d delivers programme/CopyH264/selectedDutchAAC without a ready caption,
+with joined cleanup. Empty Convert VTT headers contain no manufactured cues.
+The30s callback/15s source-budget mismatch was isolated by retained e9d74e12;
+rechecks now use the existing15s maximum without extending caller deadlines.
+Forty-three focused controls and the ownedabsence/source/SQL negative test pass.
+Final grouped30s/lateheader/cache/native tests all pass, including authenticated
+Next d38aa682 programme delivery. Strict affected all-target Clippy, format,
+architecture and progress pass. This is a verified partial local checkpoint;
+full F5 and9A are not accepted. Canonical first_header_followup owns commit,
+source hashes, preserved negatives, exact tool pins and all four final run IDs.
+Remaining concrete product gap: shared pinnedNextCopy in/out alignment exceeds
+the original caption sourceout. Retained native04179ca0 and ordinarySRT control
+284a72f0 independently reproduce it; no cue tolerance, filtering or waiver.
+Next correct that exact shared boundary through existing Next integration after
+this checkpoint; reuse all unaffected editor/publication/isolation/F6 evidence.
+Broader F5 sources/outputs/charset/unknownEOF and full F/V/X remain open. X1 needs
+suitable HTTP/TS/resource-lifecycle/navigation client capability; X2 needs
+accepted platform artifacts/native environments; X3 needs a lossless editor
+capability for oversized complete context. Unchanged negative clients are not
+retried and no external decoder maintenance starts. Production guide design
+remains9B after full independent9A underADR0123; no general visual template/theme
+editor. Unused-object removal deferred. Preserve foreign7 and negative proof.
+Goal active; no push, publication or scope waiver.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

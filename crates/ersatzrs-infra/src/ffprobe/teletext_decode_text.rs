@@ -16,6 +16,17 @@ const MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
 #[path = "teletext_decode_text/qualification.rs"]
 mod qualification;
 
+/// Complete finite-source text observation, never a default track selection.
+pub(crate) enum SourceTeletextTextPreparation {
+    Ready(SourceTeletextTextArtifact),
+    /// No requested header occurred in the complete validated held-source copy.
+    /// Callers must compare actual PSI and recheck SQL/source before any fallback.
+    Absent {
+        psi_fingerprint: [u8; 32],
+        source: Arc<PreparedLocalTeletextSource>,
+    },
+}
+
 /// Readonly qualification, not permission to change a selection or publish it.
 pub(crate) struct SourceTeletextTextArtifact {
     pub(crate) content: String,
@@ -65,7 +76,7 @@ impl FfprobeExtractor {
         ffmpeg: &Path,
         deadline: Instant,
         hold: TeletextWorkHold,
-    ) -> Result<SourceTeletextTextArtifact, SourceTeletextPageDecodeError> {
+    ) -> Result<SourceTeletextTextPreparation, SourceTeletextPageDecodeError> {
         check_deadline(deadline)?;
         if LocalProbeCleanupScope::current().is_none() {
             return Err(SourceTeletextPageDecodeError::NoCleanupScope);
@@ -85,7 +96,10 @@ impl FfprobeExtractor {
         .await
         .map_err(probe_error)?;
         if !captured.selected_page_observed {
-            return Err(SourceTeletextPageDecodeError::UnobservedPage);
+            return Ok(SourceTeletextTextPreparation::Absent {
+                psi_fingerprint: captured.psi_fingerprint,
+                source,
+            });
         }
         let snapshot = Arc::new(captured.snapshot);
         let frames = local::capture_retained(
@@ -121,11 +135,13 @@ impl FfprobeExtractor {
         .ok_or(SourceTeletextPageDecodeError::InvalidOutput)?;
         qualification::check(&source, &frames, &content, deadline)?;
         source.check_source(deadline, hold).await?;
-        Ok(SourceTeletextTextArtifact {
-            content,
-            psi_fingerprint: captured.psi_fingerprint,
-            source,
-        })
+        Ok(SourceTeletextTextPreparation::Ready(
+            SourceTeletextTextArtifact {
+                content,
+                psi_fingerprint: captured.psi_fingerprint,
+                source,
+            },
+        ))
     }
 }
 

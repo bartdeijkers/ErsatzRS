@@ -16,6 +16,8 @@ struct Case {
     start_ms: i64,
     end_ms: i64,
     captions: bool,
+    callback_required: bool,
+    caption_track_required: bool,
 }
 
 #[tokio::test]
@@ -26,7 +28,7 @@ async fn real_next_local_teletext_convert_selects_page889_and_preserves_copy_and
     let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
     let clip = fixture::source(&ffmpeg, &root).await;
     fixture::independent_pages(&ffmpeg, &clip, &root).await;
-    run_selected_page(&ffmpeg, &ffprobe, &root, &clip).await;
+    run_selected_page(&ffmpeg, &ffprobe, &root, &clip, &[888, 889]).await;
 }
 
 #[tokio::test]
@@ -38,10 +40,136 @@ async fn real_next_local_teletext_convert_retains_page889_beyond_first_source_wi
     let clip = fixture::source_with_mux_rate(&ffmpeg, &root, 8_000_000).await;
     fixture::independent_pages(&ffmpeg, &clip, &root).await;
     fixture::assert_page_spans_source_window(&ffmpeg, &clip, &root).await;
-    run_selected_page(&ffmpeg, &ffprobe, &root, &clip).await;
+    run_selected_page(&ffmpeg, &ffprobe, &root, &clip, &[888, 889]).await;
 }
 
-async fn run_selected_page(ffmpeg: &Path, ffprobe: &Path, root: &Path, clip: &Path) {
+#[tokio::test]
+#[ignore = "requires pinned Next0.2.2, FFmpeg9, Python3 and fresh ERSATZRS_NEXT_TELETEXT_PROOF_DIR"]
+async fn real_next_local_teletext_convert_selects_page889_first_observed_after_prefix() {
+    let root = fixture::proof_root();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let clip = fixture::source_with_late_caption(&ffmpeg, &root).await;
+    fixture::independent_pages(&ffmpeg, &clip, &root).await;
+    run_selected_page(&ffmpeg, &ffprobe, &root, &clip, &[888]).await;
+}
+
+#[tokio::test]
+#[ignore = "requires pinned Next0.2.2, FFmpeg9, Python3 and fresh ERSATZRS_NEXT_TELETEXT_PROOF_DIR"]
+async fn real_next_ordinary_srt_copy_control_keeps_original_source_outpoint() {
+    let root = fixture::proof_root();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let clip = fixture::source_with_late_caption(&ffmpeg, &root).await;
+    fixture::independent_pages(&ffmpeg, &clip, &root).await;
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::Copy,
+        audio_format: FFmpegProfileAudioFormat::Copy,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..text_profile()
+    };
+    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+    fixture::acquire_and_store_observed(&pool, &ffprobe, &clip, &root, &[888]).await;
+    sqlx::query(r#"DELETE FROM "SourceTeletextMetadata""#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"DELETE FROM "Subtitle""#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "Subtitle" ("MovieMetadataId","SubtitleKind","Title","StreamIndex","Codec","Default","Forced","SDH","Language","IsExtracted","Path","DateAdded","DateUpdated") VALUES (20,1,'Independent Dutch SRT',0,'subrip',1,0,0,'nld',1,?,'2026-10-18','2026-10-18')"#)
+        .bind(root.join("independent-889.srt").to_str().unwrap()).execute(&pool).await.unwrap();
+    sqlx::query(
+        r#"UPDATE "Channel" SET "SubtitleMode"=3,"NextEngineTextSubtitleMode"=1 WHERE "Id"=1"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let host = std::sync::Arc::new(host::NextHost::new(
+        pool.clone(),
+        locker.clone(),
+        root.join("playout"),
+    ));
+    run_case(
+        host,
+        &pool,
+        (&ffmpeg, &ffprobe),
+        &root,
+        &clip,
+        Case {
+            name: "ordinary-spanning",
+            start_ms: 2000,
+            end_ms: 9200,
+            captions: true,
+            callback_required: false,
+            caption_track_required: true,
+        },
+    )
+    .await;
+    assert_eq!(locker.active_teletext_work(), 0);
+}
+
+#[tokio::test]
+#[ignore = "requires pinned Next0.2.2, FFmpeg9, Python3 and fresh ERSATZRS_NEXT_TELETEXT_PROOF_DIR"]
+async fn real_next_untransmitted_descriptor_keeps_programme_without_ready_captions() {
+    let root = fixture::proof_root();
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let clip = fixture::source_with_untransmitted_caption(&ffmpeg, &root).await;
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::Copy,
+        audio_format: FFmpegProfileAudioFormat::Copy,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..text_profile()
+    };
+    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+    fixture::acquire_and_store_observed(&pool, &ffprobe, &clip, &root, &[888]).await;
+    let refused = cache::prepare_complete_text(&pool, &locker, &ffmpeg, &ffprobe, &clip).await;
+    assert_eq!(
+        refused.unwrap_err(),
+        crate::ffprobe::teletext_decode::SourceTeletextPageDecodeError::UnobservedPage
+    );
+    tokio::fs::write(root.join("untransmitted-preconditions.json"), br#"{"observed_pages":[888],"descriptor_pages":[888,889],"complete_source_refused_unobserved_page":889,"joined_work_zero":true,"scope":"No programme callback or AV delivery proven yet"}"#).await.unwrap();
+    sqlx::query(
+        r#"UPDATE "Channel" SET "SubtitleMode"=3,"NextEngineTextSubtitleMode"=1 WHERE "Id"=1"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let host = std::sync::Arc::new(host::NextHost::new(
+        pool.clone(),
+        locker.clone(),
+        root.join("playout"),
+    ));
+    run_case(
+        host,
+        &pool,
+        (&ffmpeg, &ffprobe),
+        &root,
+        &clip,
+        Case {
+            name: "advertised-absent",
+            start_ms: 2000,
+            end_ms: 9200,
+            captions: false,
+            callback_required: true,
+            caption_track_required: false,
+        },
+    )
+    .await;
+    assert_eq!(locker.active_teletext_work(), 0);
+}
+
+async fn run_selected_page(
+    ffmpeg: &Path,
+    ffprobe: &Path,
+    root: &Path,
+    clip: &Path,
+    observed: &[u16],
+) {
     let profile = FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::Copy,
         audio_format: FFmpegProfileAudioFormat::Copy,
@@ -50,7 +178,7 @@ async fn run_selected_page(ffmpeg: &Path, ffprobe: &Path, root: &Path, clip: &Pa
         ..text_profile()
     };
     let (pool, locker) = prepare_schedule(clip, false, &profile).await;
-    fixture::acquire_and_store(&pool, ffprobe, clip, root).await;
+    fixture::acquire_and_store_observed(&pool, ffprobe, clip, root, observed).await;
     cache::assert_complete_text_preparation(&pool, &locker, ffmpeg, ffprobe, clip).await;
     sqlx::query(
         r#"UPDATE "Channel" SET "SubtitleMode"=3,"NextEngineTextSubtitleMode"=1 WHERE "Id"=1"#,
@@ -65,12 +193,16 @@ async fn run_selected_page(ffmpeg: &Path, ffprobe: &Path, root: &Path, clip: &Pa
             start_ms: 2000,
             end_ms: 9200,
             captions: true,
+            callback_required: true,
+            caption_track_required: true,
         },
         Case {
             name: "after-final",
             start_ms: 10000,
             end_ms: 17000,
             captions: false,
+            callback_required: true,
+            caption_track_required: true,
         },
     ] {
         let host = std::sync::Arc::new(host::NextHost::new(
@@ -136,7 +268,6 @@ async fn run_case(
     task.await.unwrap();
     callback.stop().await;
     assert!(!output.exists(), "actual Next output cleanup must complete");
-    let cues = observed.expect("bounded finite Next conversion must complete");
     let callbacks = callbacks.lock().await;
     tokio::fs::write(
         proof.join("callbacks.json"),
@@ -144,14 +275,66 @@ async fn run_case(
     )
     .await
     .unwrap();
-    let first = callbacks
-        .iter()
-        .find(|item| item.id == "1")
-        .expect("actual authenticated item callback");
+    let cues = observed.expect("bounded finite Next conversion must complete");
+    let first = if case.callback_required {
+        callbacks
+            .iter()
+            .find(|item| item.id == "1")
+            .expect("actual authenticated item callback")
+            .clone()
+    } else {
+        assert!(
+            callbacks.is_empty(),
+            "ready ordinary sidecar needs no deferred callback"
+        );
+        static_published_item(root).await
+    };
+    check_programme_output(tools, clip, &proof, &case, &first, &cues).await
+}
+
+async fn check_programme_output(
+    tools: (&Path, &Path),
+    clip: &Path,
+    proof: &Path,
+    case: &Case,
+    first: &crate::next_engine::protocol::PlayoutItem,
+    cues: &[String],
+) -> PathBuf {
     let tracks = first.tracks.as_ref().unwrap();
     let video = tracks.video.as_ref().unwrap();
-    let caption = tracks.subtitle.as_ref().unwrap();
     assert_eq!(tracks.audio.as_ref().unwrap().stream_index, Some(3));
+    let captured = proof.join("captured.ts");
+    let mut decode = Command::new(tools.0);
+    decode
+        .args(["-v", "error", "-nostdin", "-xerror", "-i"])
+        .arg(&captured)
+        .args(["-f", "null", "-"]);
+    tool(decode).await;
+    if !case.caption_track_required {
+        assert!(
+            tracks.subtitle.is_none(),
+            "no ready track for a proven absent caption page"
+        );
+        for document in cues {
+            let mut lines = document.lines();
+            assert_eq!(lines.next(), Some("WEBVTT"));
+            lines
+                .next()
+                .unwrap()
+                .strip_prefix("X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap();
+            assert!(
+                lines.all(|line| line.trim().is_empty()),
+                "absent page permits only empty Convert segments, never manufactured cues"
+            );
+        }
+        clock::copied_video(tools.0, clip, &captured).await;
+        clock::copied_audio(tools.1, clip, &captured).await;
+        return PathBuf::new();
+    }
+    let caption = tracks.subtitle.as_ref().unwrap();
     assert_eq!(caption.stream_index, Some(0));
     let (seek, end) = clock::timing(video);
     assert_eq!(clock::timing(caption), (seek, end));
@@ -165,24 +348,36 @@ async fn run_case(
     assert!(text.contains("NEDERLANDSE PAGINA 889 FINAL"));
     assert!(!text.contains("ENGLISH PAGE 888"));
     assert!(!cues.iter().any(|body| body.contains("ENGLISH PAGE 888")));
-    let captured = proof.join("captured.ts");
-    let mut decode = Command::new(tools.0);
-    decode
-        .args(["-v", "error", "-nostdin", "-xerror", "-i"])
-        .arg(&captured)
-        .args(["-f", "null", "-"]);
-    tool(decode).await;
     clock::check(
         tools,
         clip,
         &captured,
-        &cues,
+        cues,
         &text,
         (seek.unwrap(), end.unwrap(), case.captions),
-        &proof,
+        proof,
     )
     .await;
     PathBuf::from(path)
+}
+
+async fn static_published_item(root: &Path) -> crate::next_engine::protocol::PlayoutItem {
+    let mut directory = tokio::fs::read_dir(root.join("playout/1")).await.unwrap();
+    let file = directory.next_entry().await.unwrap().unwrap();
+    assert!(directory.next_entry().await.unwrap().is_none());
+    let publication: serde_json::Value =
+        serde_json::from_slice(&tokio::fs::read(file.path()).await.unwrap()).unwrap();
+    let items = publication["items"].as_array().unwrap();
+    let selected = items
+        .iter()
+        .filter(|item| item["id"] == "1")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        selected.len(),
+        1,
+        "actual ready publication contains one exact item"
+    );
+    serde_json::from_value(selected[0].clone()).unwrap()
 }
 
 async fn capture(

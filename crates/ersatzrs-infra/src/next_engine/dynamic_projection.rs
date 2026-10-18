@@ -16,6 +16,7 @@ use crate::{db::DbPool, playback, repositories::make_repositories};
 
 use super::{media::MediaRelay, protocol::Source, schedule, selection, source};
 
+#[derive(Clone)]
 pub(crate) struct Identity {
     pub descriptor: String,
     pub cache_key: String,
@@ -43,6 +44,38 @@ pub(crate) async fn project_snapshot(
     finish: DateTime<Utc>,
     replacements: &[PathReplacement],
     published_audio: Option<usize>,
+) -> Result<Snapshot> {
+    project_snapshot_with_source_text(
+        pool,
+        locker,
+        relay,
+        channel_id,
+        item_id,
+        start,
+        finish,
+        replacements,
+        published_audio,
+        true,
+    )
+    .await
+}
+
+/// Apply the existing ordinary selector after complete-source page absence.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "The alternate policy preserves every original publication and timing input."
+)]
+pub(super) async fn project_snapshot_with_source_text(
+    pool: &DbPool,
+    locker: &EntityLocker,
+    relay: &MediaRelay,
+    channel_id: i64,
+    item_id: i64,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+    replacements: &[PathReplacement],
+    published_audio: Option<usize>,
+    include_source_text: bool,
 ) -> Result<Snapshot> {
     let channel = make_repositories(pool.clone())
         .channel
@@ -102,13 +135,14 @@ pub(crate) async fn project_snapshot(
         (Vec::new(), Vec::new())
     };
     let source = source::resolve_published(pool, media, replacements, Some(relay)).await?;
-    let mut projection = selection::project_scheduled_item(
+    let mut projection = selection::project_scheduled_item_with_source_text(
         pool,
         &channel,
         media,
         source,
         &profile.resolution,
         selection::AudioDirective::Published(published_audio),
+        include_source_text,
     )
     .await?;
     super::credits::attach(pool, relay, &channel, &media.item, &mut projection).await?;

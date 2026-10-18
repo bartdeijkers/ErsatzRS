@@ -172,16 +172,22 @@ def generate_caption_lifecycle_fixture():
     return bytes(transport.output)
 
 
-def generate_two_caption_fixture():
+def generate_two_caption_fixture(first_dutch_cycle=0):
     """Two subtitle pages on one PID, without a forced/default descriptor claim."""
     transport = FixtureTransport()
     pages = [(b"eng", 888, b"\x0b\x0bENGLISH PAGE 888\x0a\x0a"),
              (b"nld", 889, b"\x0b\x0bNEDERLANDSE PAGINA 889\x0a\x0a")]
-    for cycle in range(8):
+    cycles = first_dutch_cycle + 3 if first_dutch_cycle else 8
+    for cycle in range(cycles):
         transport.tables([(language, page) for language, page, _ in pages])
         for index, (_, page, text) in enumerate(pages):
             if page == 889:
-                suffix = b" EARLY" if cycle < 4 else (b" LATE" if cycle < 7 else b" FINAL")
+                if first_dutch_cycle is None or cycle < first_dutch_cycle:
+                    continue
+                if first_dutch_cycle:
+                    suffix = (b" EARLY", b" LATE", b" FINAL")[cycle - first_dutch_cycle]
+                else:
+                    suffix = b" EARLY" if cycle < 4 else (b" LATE" if cycle < 7 else b" FINAL")
                 text = b"\x0b\x0bNEDERLANDSE PAGINA 889" + suffix + b"\x0a\x0a"
             pts = 90000 + cycle * 90000 + index * 36000
             transport.pes([data_unit(page, 0, page_header(page, True), True)], pts)
@@ -191,21 +197,34 @@ def generate_two_caption_fixture():
     # Positive wire clear completes the last finite nonempty caption. Silence
     # or an EOF is not a substitute for a transmitted page update.
     transport.tables([(language, page) for language, page, _ in pages])
-    pts = 90000 + 8 * 90000 + 36000
-    transport.pes([data_unit(889, 0, page_header(889, True), True)], pts)
-    transport.pes([data_unit(889, row, page_row(b""), True) for row in range(1, 25)], pts + 3600)
-    transport.pes([data_unit(899, 0, page_header(899))], pts + 36000)
+    if first_dutch_cycle is not None:
+        pts = 90000 + cycles * 90000 + 36000
+        transport.pes([data_unit(889, 0, page_header(889, True), True)], pts)
+        transport.pes([data_unit(889, row, page_row(b""), True) for row in range(1, 25)], pts + 3600)
+        transport.pes([data_unit(899, 0, page_header(899))], pts + 36000)
     return bytes(transport.output)
+
+
+def generate_late_caption_fixture():
+    """Advertise both pages early; transmit Dutch EARLY/LATE/FINAL at cycles 6–8."""
+    return generate_two_caption_fixture(first_dutch_cycle=6)
+
+
+def generate_untransmitted_caption_fixture():
+    """Advertise Dutch 889, without transmitting its header, content or clear."""
+    return generate_two_caption_fixture(first_dutch_cycle=None)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="Destination TS fixture")
-    parser.add_argument("--scenario", choices=("default", "caption-lifecycle", "two-captions"),
+    parser.add_argument("--scenario", choices=("default", "caption-lifecycle", "two-captions", "late-caption", "untransmitted-caption"),
                         default="default", help="Optional source-state qualification scenario")
     args = parser.parse_args()
     scenarios = {"default": generate_fixture,
                  "caption-lifecycle": generate_caption_lifecycle_fixture,
-                 "two-captions": generate_two_caption_fixture}
+                 "two-captions": generate_two_caption_fixture,
+                 "late-caption": generate_late_caption_fixture,
+                 "untransmitted-caption": generate_untransmitted_caption_fixture}
     fixture = scenarios[args.scenario]()
     args.output.write_bytes(fixture)

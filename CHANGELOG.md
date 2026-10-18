@@ -840,6 +840,10 @@ release section when tagging a release.
   source larger than one observation window. Decode a complete owned snapshot
   with bounded memory, unchanged source clocks, selected audio and cleanup;
   reject incomplete or changing transport instead of publishing partial text.
+  Select preferred pages whose first header occurs beyond the scanner prefix.
+  When the complete checked source never transmits an announced page, retain
+  ordinary programme/audio/subtitle selection without inventing a ready caption.
+  Source, publication, deadline and cleanup failures still refuse explicitly.
 - Reject native source-teletext burn-in with video stream-copy during command
   construction, avoiding an incompatible FFmpeg filter/copy command. Verified
   caption carriage for copied video remains open.
