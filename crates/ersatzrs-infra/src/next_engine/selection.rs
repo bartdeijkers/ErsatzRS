@@ -58,6 +58,7 @@ impl DeferredProjection {
 pub(crate) struct PendingBurn {
     pub subtitle: PlaybackSubtitle,
     pub source: wire::Source,
+    pub source_text: Option<Box<super::source_teletext::PendingText>>,
 }
 
 pub(crate) struct TroubleshootingSelection<'a> {
@@ -98,6 +99,7 @@ pub(crate) async fn project_troubleshooting_item_with_audio(
             subtitle_id: request.subtitle_id,
             diagnostics: request.diagnostics,
             source_pending: request.source_pending,
+            source_text: None,
         },
     )
     .await
@@ -204,6 +206,7 @@ pub(crate) async fn project_deferred_item_with_audio(
             subtitle_id: None,
             diagnostics: None,
             source_pending: false,
+            source_text: None,
         },
     )
     .await
@@ -214,6 +217,38 @@ struct SelectionDirectives {
     subtitle_id: Option<i64>,
     diagnostics: Option<super::diagnostics::SelectionLog>,
     source_pending: bool,
+    source_text: Option<super::source_teletext::Selection>,
+}
+
+/// Exact scheduled file identity, retained before any local path replacement.
+pub(super) async fn project_scheduled_item(
+    pool: &DbPool,
+    channel: &Channel,
+    media: &super::schedule::ScheduledMedia,
+    source: wire::Source,
+    resolution: &Resolution,
+    audio: AudioDirective,
+) -> Result<DeferredProjection> {
+    let source_text = Box::pin(super::source_teletext::pending(
+        pool, channel, media, &source,
+    ))
+    .await?;
+    Box::pin(project_deferred_item_selected(
+        pool,
+        channel,
+        &media.item,
+        media.media_version_id,
+        source,
+        resolution,
+        SelectionDirectives {
+            audio,
+            subtitle_id: None,
+            diagnostics: None,
+            source_pending: false,
+            source_text,
+        },
+    ))
+    .await
 }
 
 async fn project_deferred_item_selected(
@@ -284,13 +319,17 @@ async fn project_deferred_item_selected(
         source_pending,
     )
     .await?;
-    let (subtitle, pending_burn) = project_deferred_subtitle(
-        provider,
-        selected_subtitle.as_ref(),
-        &source,
-        channel.next_engine_text_subtitle_mode,
-        item,
-    )?;
+    let (subtitle, pending_burn) = if let Some(text) = selected.source_text {
+        project_source_text_subtitle(text, selected_subtitle.as_ref(), &source)?
+    } else {
+        project_deferred_subtitle(
+            provider,
+            selected_subtitle.as_ref(),
+            &source,
+            channel.next_engine_text_subtitle_mode,
+            item,
+        )?
+    };
     Ok(DeferredProjection {
         original_source: source,
         canvas: None,
@@ -313,11 +352,32 @@ async fn project_deferred_item_selected(
     })
 }
 
+fn project_source_text_subtitle(
+    text: super::source_teletext::PendingText,
+    subtitle: Option<&PlaybackSubtitle>,
+    source: &wire::Source,
+) -> Result<(Option<wire::Track>, Option<PendingBurn>)> {
+    Ok((
+        Some(wire::Track {
+            source: Some(source.clone()),
+            stream_index: Some(0),
+        }),
+        Some(PendingBurn {
+            subtitle: subtitle
+                .cloned()
+                .ok_or_else(|| invalid("source caption changed"))?,
+            source: source.clone(),
+            source_text: Some(Box::new(text)),
+        }),
+    ))
+}
+
 struct SelectedProjectionTracks {
     video: Option<usize>,
     generated_video: bool,
     audio: Option<usize>,
     subtitle: Option<PlaybackSubtitle>,
+    source_text: Option<super::source_teletext::PendingText>,
 }
 
 async fn select_projection_tracks(
@@ -392,7 +452,10 @@ async fn select_projection_tracks(
         )
         .await?
     };
-    let subtitle = if let Some(explicit) = explicit {
+    let source_text = directives.source_text;
+    let subtitle = if let Some(source) = &source_text {
+        Some(source.subtitle.clone())
+    } else if let Some(explicit) = explicit {
         custom.as_ref().map_or_else(
             || explicit.into_iter().next(),
             |selection| selection.subtitle.clone(),
@@ -417,6 +480,7 @@ async fn select_projection_tracks(
         generated_video,
         audio: audio_index,
         subtitle,
+        source_text: source_text.map(|source| source.text),
     })
 }
 
@@ -553,6 +617,7 @@ fn project_deferred_subtitle(
             Some(PendingBurn {
                 subtitle: selected.clone(),
                 source: source.clone(),
+                source_text: None,
             }),
         )
     } else {
@@ -577,6 +642,7 @@ fn project_subtitle(
         .map(|subtitle| PendingBurn {
             subtitle: subtitle.clone(),
             source: source.clone(),
+            source_text: None,
         });
     let mut subtitle = if let Some(pending) = &pending_burn {
         Some(wire::Track {
@@ -641,6 +707,11 @@ fn subtitle_track(
     source: &wire::Source,
     mode: ersatzrs_domain::NextEngineTextSubtitleMode,
 ) -> Result<wire::Track> {
+    if subtitle.codec.as_deref() == Some("dvb_teletext") {
+        return Err(invalid(
+            "source teletext requires finite page-qualified preparation",
+        ));
+    }
     let embedded = subtitle.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED;
     let burn_embedded_text = embedded
         && !subtitle.is_image()

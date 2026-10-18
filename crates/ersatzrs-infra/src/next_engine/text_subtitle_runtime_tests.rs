@@ -4,6 +4,9 @@ use super::*;
 #[path = "on_demand_runtime_tests.rs"]
 mod on_demand_runtime_tests;
 
+#[path = "source_teletext_runtime_tests.rs"]
+mod source_teletext_runtime_tests;
+
 const CUES: &str = "1\n00:00:00,000 --> 00:00:05,000\nBEFORE SEEK\n\n2\n00:00:05,000 --> 00:00:55,000\nNext text conversion proof\n\n3\n00:00:55,000 --> 00:01:00,000\nAFTER SEEK\n";
 
 async fn generate_text_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
@@ -229,6 +232,23 @@ impl Drop for CallbackListener {
 }
 
 pub(super) async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackListener {
+    callback_listener_inner(host, None).await
+}
+
+type ObservedItems =
+    std::sync::Arc<tokio::sync::Mutex<Vec<crate::next_engine::protocol::PlayoutItem>>>;
+
+pub(super) async fn observed_callback_listener(
+    host: std::sync::Arc<host::NextHost>,
+    items: ObservedItems,
+) -> CallbackListener {
+    callback_listener_inner(host, Some(items)).await
+}
+
+async fn callback_listener_inner(
+    host: std::sync::Arc<host::NextHost>,
+    items: Option<ObservedItems>,
+) -> CallbackListener {
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .await
         .unwrap();
@@ -246,8 +266,9 @@ pub(super) async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> C
                 }
             };
             let host = host.clone();
+            let items = items.clone();
             connections.spawn(async move {
-                callback_connection(socket, host).await;
+                callback_connection(socket, host, items).await;
             });
         }
     }))
@@ -283,6 +304,7 @@ async fn callback_media(
 async fn callback_connection(
     mut socket: tokio::net::TcpStream,
     host: std::sync::Arc<host::NextHost>,
+    observed: Option<ObservedItems>,
 ) {
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     timeout(Duration::from_secs(35), async {
@@ -365,7 +387,10 @@ async fn callback_connection(
                         parts[2], if parts[3] == "off" { None } else { Some(parts[3].parse().unwrap()) }, header("x-etv-channel").unwrap(),
                         uuid::Uuid::parse_str(header(crate::next_engine::media::SESSION_HEADER)
                             .expect("official Next must expand the session header")).unwrap(), now, until).await {
-                        Ok(item) => ("200 OK", serde_json::to_vec(&item).unwrap()),
+                        Ok(item) => {
+                            if let Some(items)=&observed {items.lock().await.push(item.clone());}
+                            ("200 OK", serde_json::to_vec(&item).unwrap())
+                        },
                         // Match the production next_media::get_dynamic boundary:
                         // stale/preparation failures are HTTP 503, so the real
                         // engine can apply its bounded retry policy.

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 source teletext delivery matrix; explicit-version resources proven'
+current_focus = 'P9A-04 F5 qualified Local Next captions; source/output acceptance remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -224,7 +224,7 @@ captures/PMT/clock/AV and all12 inspected images. Actual nativefdad6f2b stays
 failed at its late Q-only check; original-only offline7159f6eb verifies the same
 bytes. Automatic Day display stays negative/inactive until explicit reselection;
 Night remains unchanged. No client repair or acceptance waiver.
-F1/F2 explicit r1→r2 resource introduction now passes nativec0f53f5f. Canonical
+F1/F2 local checkpoint0461bd49 passes explicit r1→r2 resources (nativec0f53f5f). Canonical
  tmp/phase9-f2-template-version/work.json/resource_introduction_followup owns
 complete new POP/GPOP identities/selected links/nested P atMain3/6, native export
 receipts, separate fresh publication and cold historical/current recovery. The
@@ -234,10 +234,29 @@ This proves NEW-original producer resource authoring, not same-design Add/import
 or new executed admin/GUI/editor/stream/client behavior. Existing localized admin
 resource_transmissions input remains source-qualified; lifecycle input grants no
 resource-body authority. Remaining F1/F2 and suitable-client gates stay open.
-Next concrete gap F5: pin one remaining selected source-teletext native/Next
-Burn/Convert/copy policy using the existing matrix/fixtures, then qualify only
-its missing integration seam. No repeat of known-negative client trials or new
-infrastructure; further product work must follow an exact open case/defect.
+F5 qualified finite-Local Next Convert now passes actual native9017f668 after
+old-path RED5861fafb (lost889/empty VTT). Canonical
+ tmp/phase9-next-local-teletext/work.json owns source/tool pins and failed probes.
+Private SQL-only page intent becomes text only outside scheduler locks, using
+the existing bounded source/process owner, shared snapshot, frame/SRT endpoint
+qualification, cache and leases. No external Next protocol change or bitmap pass.
+Component64 cases compose valid unchanged evidence with four zero-origin/timing
+controls. Actual Next proves independent889/cache equality, H264 VCL Copy,
+Dutch AAC, source-associated PTS/DTS, pinned millisecond VTT timing/clear, a seek
+after the final cue, the same cache key and joined cleanup/admission0.
+This is actual acquisition/managed projection and native producer/callback proof,
+not a new full scanner, ordinary HTTP, editor/admin/client or full output gate.
+Fixture/tool/oracle negatives remain failed and classified; pinned formatting
+and one-tick map rules use no fitted tolerance. Narrow lint corrections preserve
+selection, authority, owner and deadlines. Final-source native/qualifier/snapshot/
+cancellation7 controls pass34cd8b2c; four publication controls pass48a876f1.
+Strict infra all-target Clippy passes. Canonical receipt resolves checkpoint SHA.
+Next: complete distinct Next cache-hit source/revision proof, then the most
+constraining remaining F5 or authored-engine user gap. Larger finite sources,
+unknown final EOF, providers and remaining policies stay open, not accepted limits.
+Reuse editor/publication/isolation/F6 proof; no general audit, client repair or
+new infrastructure. No relevant check or temporary native worker remains running; source pins are frozen.
+The goal and full F5 remain active. No push or publication.
 Full authored standards, QTM context, Lua/restart and platform gates remain open.
 Unused-object removal stays deferred; no scope waiver, new push or publication.
 

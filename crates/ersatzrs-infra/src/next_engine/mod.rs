@@ -40,6 +40,7 @@ pub mod session_transfers;
 pub mod song_background;
 mod song_host;
 mod source;
+mod source_teletext;
 pub mod troubleshooting;
 pub mod version;
 

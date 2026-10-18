@@ -45,6 +45,9 @@ mod origin;
 mod prepared;
 pub use prepared::PreparedLocalTeletextSource;
 
+#[path = "teletext_decode_text.rs"]
+mod text;
+
 const MAX_STARTUP: Duration = Duration::from_secs(15);
 const MAX_FRAMES: usize = 4096;
 const SOURCE_LABEL: &str = "source teletext page";

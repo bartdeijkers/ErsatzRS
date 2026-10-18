@@ -73,10 +73,16 @@ class FixtureTransport:
     def section(self, pid, table):
         self.packet(pid, b"\x00" + table + crc32_mpeg(table), True)
 
-    def tables(self):
+    def tables(self, caption_pages=None):
         self.section(0, bytes.fromhex("00 b0 0d 00 01 c1 00 00 00 01 f0 00"))
-        descriptor = bytes.fromhex("56 0a") + b"eng" + bytes([0x0A, 0x00])
-        descriptor += b"eng" + bytes([0x10, 0x88])
+        if caption_pages is None:
+            descriptor = bytes.fromhex("56 0a") + b"eng" + bytes([0x0A, 0x00])
+            descriptor += b"eng" + bytes([0x10, 0x88])
+        else:
+            entries = b"".join(language + bytes([(2 << 3) | (page // 100 % 8),
+                                                  ((page % 100 // 10) << 4) | (page % 10)])
+                               for language, page in caption_pages)
+            descriptor = bytes([0x56, len(entries)]) + entries
         body = bytes.fromhex("00 01 c1 00 00 e1 00 f0 00 06 e1 00")
         body += bytes([0xF0, len(descriptor)]) + descriptor
         self.section(0x1000, bytes([2, 0xB0, len(body) + 4]) + body)
@@ -166,12 +172,40 @@ def generate_caption_lifecycle_fixture():
     return bytes(transport.output)
 
 
+def generate_two_caption_fixture():
+    """Two subtitle pages on one PID, without a forced/default descriptor claim."""
+    transport = FixtureTransport()
+    pages = [(b"eng", 888, b"\x0b\x0bENGLISH PAGE 888\x0a\x0a"),
+             (b"nld", 889, b"\x0b\x0bNEDERLANDSE PAGINA 889\x0a\x0a")]
+    for cycle in range(8):
+        transport.tables([(language, page) for language, page, _ in pages])
+        for index, (_, page, text) in enumerate(pages):
+            if page == 889:
+                suffix = b" EARLY" if cycle < 4 else (b" LATE" if cycle < 7 else b" FINAL")
+                text = b"\x0b\x0bNEDERLANDSE PAGINA 889" + suffix + b"\x0a\x0a"
+            pts = 90000 + cycle * 90000 + index * 36000
+            transport.pes([data_unit(page, 0, page_header(page, True), True)], pts)
+            transport.pes([data_unit(page, 1, page_row(text), True)], pts + 3600)
+        transport.pes([data_unit(899, 0, page_header(899))],
+                      90000 + cycle * 90000 + 72000)
+    # Positive wire clear completes the last finite nonempty caption. Silence
+    # or an EOF is not a substitute for a transmitted page update.
+    transport.tables([(language, page) for language, page, _ in pages])
+    pts = 90000 + 8 * 90000 + 36000
+    transport.pes([data_unit(889, 0, page_header(889, True), True)], pts)
+    transport.pes([data_unit(889, row, page_row(b""), True) for row in range(1, 25)], pts + 3600)
+    transport.pes([data_unit(899, 0, page_header(899))], pts + 36000)
+    return bytes(transport.output)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="Destination TS fixture")
-    parser.add_argument("--scenario", choices=("default", "caption-lifecycle"),
+    parser.add_argument("--scenario", choices=("default", "caption-lifecycle", "two-captions"),
                         default="default", help="Optional source-state qualification scenario")
     args = parser.parse_args()
-    fixture = (generate_caption_lifecycle_fixture() if args.scenario == "caption-lifecycle"
-               else generate_fixture())
+    scenarios = {"default": generate_fixture,
+                 "caption-lifecycle": generate_caption_lifecycle_fixture,
+                 "two-captions": generate_two_caption_fixture}
+    fixture = scenarios[args.scenario]()
     args.output.write_bytes(fixture)

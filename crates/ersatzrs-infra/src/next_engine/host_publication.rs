@@ -139,9 +139,14 @@ impl NextHost {
             }
             let mut prepared = Vec::with_capacity(owners.len());
             for (channel_id, replacements) in owners {
-                let Some(file) = self
-                    .prepare_build(pending, channel_id, window.clone(), &replacements, deadline)
-                    .await?
+                let Some(file) = Box::pin(self.prepare_build(
+                    pending,
+                    channel_id,
+                    window.clone(),
+                    &replacements,
+                    deadline,
+                ))
+                .await?
                 else {
                     return Ok(None);
                 };
@@ -252,14 +257,14 @@ impl NextHost {
             } else {
                 (Vec::new(), Vec::new())
             };
-            let mut projection = selection::project_deferred_item(
+            let mut projection = Box::pin(selection::project_scheduled_item(
                 &self.pool,
                 &channel,
-                &media.item,
-                media.media_version_id,
+                &media,
                 source,
                 &profile.resolution,
-            )
+                selection::AudioDirective::Select,
+            ))
             .await?;
             super::super::credits::attach(
                 &self.pool,

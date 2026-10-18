@@ -120,7 +120,8 @@ pub(super) struct ProbeRetention {
     // Field destruction must close/remove the actual input before releasing
     // admission, including the confirmed-cleanup path through ordinary Drop.
     snapshot: Option<tempfile::NamedTempFile>,
-    _source: std::sync::Arc<super::LocalTeletextSourceGuard>,
+    shared_snapshot: Option<std::sync::Arc<tempfile::NamedTempFile>>,
+    source: std::sync::Arc<super::LocalTeletextSourceGuard>,
     hold: ersatzrs_core::locking::TeletextWorkHold,
     confirmed: bool,
 }
@@ -132,8 +133,9 @@ impl ProbeRetention {
     ) -> Self {
         Self {
             hold,
-            _source: source,
+            source,
             snapshot: None,
+            shared_snapshot: None,
             confirmed: true,
         }
     }
@@ -142,12 +144,25 @@ impl ProbeRetention {
         self.snapshot = Some(snapshot);
         self
     }
+
+    pub(super) fn with_shared_snapshot(
+        mut self,
+        snapshot: std::sync::Arc<tempfile::NamedTempFile>,
+    ) -> Self {
+        self.shared_snapshot = Some(snapshot);
+        self
+    }
 }
 
 impl Drop for ProbeRetention {
     fn drop(&mut self) {
         if !self.confirmed {
             self.hold.retain_until_restart();
+            if let Some(snapshot) = self.shared_snapshot.take() {
+                let _ = std::sync::Arc::into_raw(snapshot);
+                let _ = std::sync::Arc::into_raw(self.source.clone());
+                tracing::warn!("unconfirmed shared source teletext input retained");
+            }
             // An unconfirmed process may still be opening/reading this file.
             // Preserve its bounded private input rather than revoke it early.
             if let Some(snapshot) = self.snapshot.take() {

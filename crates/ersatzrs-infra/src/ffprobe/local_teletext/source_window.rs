@@ -175,6 +175,28 @@ pub(crate) async fn capture_source_window_owned(
     .await
 }
 
+/// Retain page headers from the same complete bounded snapshot supplied to text decoding.
+pub(crate) async fn capture_observed_source_window_owned(
+    guard: Arc<LocalTeletextSourceGuard>,
+    original: PathBuf,
+    resolved: PathBuf,
+    pid: u16,
+    program: u16,
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> Result<LocalTeletextSourceWindow> {
+    capture_owned(
+        guard,
+        (original, resolved),
+        pid,
+        program,
+        (None, true),
+        deadline,
+        hold,
+    )
+    .await
+}
+
 /// Inspect only the supplied physical range on the original held file. Earlier
 /// bytes supply no PSI, clock or page authority. A span must contain its own
 /// actual current PAT/PMT and complete selected PES; no tables are manufactured.

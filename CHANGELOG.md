@@ -30,7 +30,11 @@ release section when tagging a release.
   updates, clearing and selected alternate audio when capacity waiting hands
   over to the programme within the same stream. The localized delivery choice
   is isolated per output channel and rejects incompatible outputs; Burn remains
-  the default. Full generic teletext engine acceptance remains open.
+  the default. Qualified finite Local source pages can also reach Next Convert
+  as page-bound text, preserving copied video, selected alternate audio and
+  caption timing/clearing across seeks. Incomplete source windows and uncertain
+  final cues refuse explicitly; broader source/output and full engine acceptance
+  remain open.
 
 - Show saved teletext template, theme, Free/custom-zone/generated regions and
   dynamic-field bindings beside the selected draft preview in every admin

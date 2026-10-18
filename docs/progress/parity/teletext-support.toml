@@ -52,11 +52,11 @@ Header/POP uncertainty and open-client shutdown remain open. F6 default2 Copy/DV
 lint and smoke/TSDuck87/87 proof.
 Captured preview regions/bindings have scoped native and localized headed proof.
 
-P9A-03 owns source descriptors, Local rescans and worker/lease ownership. Missing
-bytes remain NotAcquired; descriptors/PTS grant no readiness. Carousel PSI/PCR,
-ACK/cycle updates and expiry preserve AV/EOF. Local888 legacy/Hybrid both-track/
-VBV, Off/stale/authored200, capacity cleanup and seek0.5s proof retain their scope.
-General source/seek/cue/charset/resource/wrap and Next policies remain open.
+P9A-03 owns source acquisition/leases. Missing stays NotAcquired; descriptors/PTS
+grant no readiness. Local888 Legacy/Hybrid track/seek/VBV and carousel/ACK/expiry
+proof retain scope. F5 qualifies finite-Local Next Convert: exact889, Copy/Dutch
+audio, cue/clear/seeks/cache/cleanup (P9A-04). Larger files, unknown EOF,
+charset and remaining source/output/Next policies stay open.
 
 Linux/Windows-interop/QEMU ARM proof is partial; native six-RID gates remain.
 P9A-02 owns decoder Health/licensing. Burn/Convert/copy, carriage, HLS/browser,

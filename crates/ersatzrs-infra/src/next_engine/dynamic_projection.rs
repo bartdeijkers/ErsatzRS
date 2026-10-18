@@ -102,11 +102,10 @@ pub(crate) async fn project_snapshot(
         (Vec::new(), Vec::new())
     };
     let source = source::resolve_published(pool, media, replacements, Some(relay)).await?;
-    let mut projection = selection::project_deferred_item_with_audio(
+    let mut projection = selection::project_scheduled_item(
         pool,
         &channel,
-        &media.item,
-        media.media_version_id,
+        media,
         source,
         &profile.resolution,
         selection::AudioDirective::Published(published_audio),
@@ -201,13 +200,19 @@ pub(crate) async fn fingerprint(
             "default": subtitle.default, "forced": subtitle.forced, "sdh": subtitle.sdh,
         })
     });
-    let binding = json!({
+    let mut binding = json!({
         "schema": 1, "media": media.item.media_item_id,
         "version": media.media_version_id, "file": media.media_file_id,
         "updated": updated, "duration": duration, "path_hash": path_hash,
         "path": path, "local": local_revision, "subtitle": subtitle,
         "provider": super::dynamic_provider_identity::identity(pool, media, input).await?,
     });
+    if let Some(text) = pending.and_then(|pending| pending.source_text.as_ref()) {
+        binding
+            .as_object_mut()
+            .ok_or_else(unavailable)?
+            .insert("source_teletext".to_owned(), text.identity());
+    }
     let preferences = crate::ffmpeg_config::playback_language_preferences(pool).await?;
     let script = crate::audio_script::script_identity(pool, media.item.media_item_id).await?;
     Ok(Identity {

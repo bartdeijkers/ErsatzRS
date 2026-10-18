@@ -31,6 +31,72 @@ async fn refused_probe_registration_releases_unstarted_retention_without_quarant
 use crate::ffprobe::LocalProbeCleanupScope;
 use ersatzrs_core::locking::{EntityLocker, TeletextWorkGuard};
 
+// Actual Unix process-group cleanup reuses the existing local probe shell
+// fixture; portable source/read ownership coverage remains below.
+#[cfg(unix)]
+#[tokio::test]
+async fn shared_snapshot_and_admission_follow_the_actual_cancelled_decoder() {
+    let (directory, path, revision) = source();
+    let guard = Arc::new(LocalTeletextSourceGuard::open(&path, &revision).unwrap());
+    let snapshot = Arc::new(tempfile::NamedTempFile::new().unwrap());
+    let snapshot_path = snapshot.path().to_owned();
+    let weak = Arc::downgrade(&snapshot);
+    let locker = EntityLocker::new();
+    let admitted = TeletextWorkGuard::try_acquire(&locker, 1).unwrap();
+    let retention =
+        local::ProbeRetention::new(admitted.hold_work(), guard).with_shared_snapshot(snapshot);
+    drop(admitted);
+    let marker = directory.path().join("pid");
+    let scope = LocalProbeCleanupScope::new();
+    let caller_scope = scope.clone();
+    let marker_argument = marker.to_str().unwrap().to_owned();
+    let caller = tokio::spawn(async move {
+        caller_scope
+            .scope(local::capture_retained(
+                FfprobeCommand {
+                    program: "/bin/sh".into(),
+                    args: vec![
+                        "-c".into(),
+                        "printf '%s' \"$$\" >\"$1\"; exec sleep 30".into(),
+                        "probe-fixture".into(),
+                        marker_argument,
+                    ],
+                },
+                "shared snapshot decoder".into(),
+                Some(Instant::now() + Duration::from_secs(10)),
+                Some(retention),
+            ))
+            .await
+    });
+    let pid = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if let Ok(text) = tokio::fs::read_to_string(&marker).await {
+                if let Ok(pid) = text.parse::<i32>() {
+                    break nix::unistd::Pid::from_raw(pid);
+                }
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(weak.upgrade().is_some());
+    assert!(snapshot_path.is_file());
+    assert_eq!(locker.active_teletext_work(), 1);
+    assert_eq!(scope.cleanup_status(), Ok(false));
+    caller.abort();
+    assert!(caller.await.unwrap_err().is_cancelled());
+    scope.close();
+    scope.wait_cleanup().await.unwrap();
+    assert_eq!(
+        nix::sys::signal::kill(pid, None),
+        Err(nix::errno::Errno::ESRCH)
+    );
+    assert!(weak.upgrade().is_none());
+    assert!(!snapshot_path.exists());
+    assert_eq!(locker.active_teletext_work(), 0);
+}
+
 fn source() -> (
     tempfile::TempDir,
     std::path::PathBuf,

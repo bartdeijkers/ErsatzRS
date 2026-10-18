@@ -44,8 +44,8 @@ pub use source_cue_prelude::SourceTeletextPagePrelude;
 pub use source_native_clock::SourceTeletextNativeClockEvidence;
 
 pub(crate) use source_window::{
-    capture_observed_source_packet_span_owned, capture_source_packet_span_owned,
-    capture_source_window_owned, LocalTeletextSourceWindow,
+    capture_observed_source_packet_span_owned, capture_observed_source_window_owned,
+    capture_source_packet_span_owned, capture_source_window_owned, LocalTeletextSourceWindow,
 };
 pub use source_window::{
     SourceTeletextDecodeWindowEvidence, SourceTeletextPacketSpan, SourceTeletextPacketSpanError,

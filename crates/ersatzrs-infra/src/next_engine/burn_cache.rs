@@ -191,7 +191,7 @@ impl BurnCache {
     }
 
     #[allow(clippy::too_many_lines)] // One admission owns cleanup, validation, building and atomic promotion.
-    async fn prepare_artifact<F, Fut, Build, Built>(
+    pub(super) async fn prepare_artifact<F, Fut, Build, Built>(
         &self,
         key: &str,
         format: &str,

@@ -105,6 +105,58 @@ pub struct NativePlaybackSubtitle {
     source: Option<QualifiedSourceCaption>,
 }
 
+/// Readonly discovery for deferred Next preparation; never a decoded or ready track.
+pub(crate) struct PendingSourcePlaybackSubtitle {
+    pub(crate) subtitle: PlaybackSubtitle,
+    pub(crate) candidate: SourceTeletextCaptionCandidate,
+}
+
+/// Reuse page/ordinary ranking without manufacturing a decoded-page receipt.
+/// A result must remain private until source-bound text preparation succeeds.
+pub(crate) async fn select_pending_next_source_subtitle(
+    pool: &DbPool,
+    item: i64,
+    version: i64,
+    languages: &[String],
+    mode: ChannelSubtitleMode,
+    candidates: &[SourceTeletextCaptionCandidate],
+) -> Result<Option<PendingSourcePlaybackSubtitle>> {
+    if mode == ChannelSubtitleMode::None {
+        return Ok(None);
+    }
+    check_qualified_count(candidates.len())?;
+    let rows = load_subtitles_for_media_version(pool, item, version).await?;
+    if !use_embedded_subtitles(pool).await? {
+        return Ok(None);
+    }
+    let media_server = is_media_server_subtitle_item(pool, item).await?;
+    let sources = candidates.iter().collect::<Vec<_>>();
+    let choices = metadata_choices_for_engine(
+        &rows,
+        version,
+        StreamingMode::HttpLiveStreamingSegmenter,
+        media_server,
+        &sources,
+        SubtitleSelectionEngine::Next,
+    );
+    let selected = select_subtitle_preference_index(
+        choices
+            .iter()
+            .enumerate()
+            .map(|(index, choice)| (index, choice.row, choice.language)),
+        languages,
+        mode,
+    );
+    Ok(selected.and_then(|index| {
+        let choice = &choices[index];
+        let candidate = choice.source.map(|index| &candidates[index])?;
+        Some(PendingSourcePlaybackSubtitle {
+            subtitle: selected_metadata(choice.row, Some(candidate)),
+            candidate: candidate.clone(),
+        })
+    }))
+}
+
 impl NativePlaybackSubtitle {
     #[must_use]
     pub fn subtitle(&self) -> &PlaybackSubtitle {
@@ -242,6 +294,24 @@ fn metadata_choices<'a>(
     media_server: bool,
     sources: &[&'a SourceTeletextCaptionCandidate],
 ) -> Vec<MetadataChoice<'a>> {
+    metadata_choices_for_engine(
+        rows,
+        version,
+        mode,
+        media_server,
+        sources,
+        SubtitleSelectionEngine::Native,
+    )
+}
+
+fn metadata_choices_for_engine<'a>(
+    rows: &'a [PlaybackSubtitle],
+    version: i64,
+    mode: StreamingMode,
+    media_server: bool,
+    sources: &[&'a SourceTeletextCaptionCandidate],
+    engine: SubtitleSelectionEngine,
+) -> Vec<MetadataChoice<'a>> {
     let mut choices = Vec::new();
     for row in rows {
         let source_eligible = mode != StreamingMode::HttpLiveStreamingDirect
@@ -275,7 +345,7 @@ fn metadata_choices<'a>(
         }
         if !replaced
             && (mode == StreamingMode::HttpLiveStreamingDirect || !is_source_row(row))
-            && subtitle_is_playable(row, mode, SubtitleSelectionEngine::Native, media_server)
+            && subtitle_is_playable(row, mode, engine, media_server)
         {
             choices.push(MetadataChoice {
                 row,

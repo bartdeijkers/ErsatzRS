@@ -243,8 +243,25 @@ impl NextHost {
                 })
         };
         let preparation_deadline = deadline - std::time::Duration::from_secs(6);
-        let prepared = if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR
-        {
+        let prepared = if let Some(text) = &pending.source_text {
+            Box::pin(super::source_teletext::prepare(
+                &self.pool,
+                &self.locker,
+                &self.burn_cache,
+                super::source_teletext::Preparation {
+                    pending: text,
+                    source: &pending.source,
+                    key: &before.identity.cache_key,
+                    expires: before.projection.item.finish.max(Utc::now()),
+                    ffmpeg: &request.ffmpeg,
+                    ffprobe: &request.ffprobe,
+                    deadline: preparation_deadline,
+                },
+                validate,
+            ))
+            .await
+            .map_err(|_| super::burn_cache::CacheError::Stale)
+        } else if pending.subtitle.subtitle_kind == crate::metadata::subtitle_kind::SIDECAR {
             self.burn_cache
                 .prepare_provider(
                     &self.pool,
