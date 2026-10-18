@@ -64,8 +64,9 @@ release section when tagging a release.
   false validation errors. A forward header position immediately before a
   permitted nested call now encodes inside a local Active or Adaptive definition
   when every use has the same known background, retaining the saved source and
-  caller state. Editable Local child glyphs now import correctly beside an
-  unchanged normalized header wrapper; compiler-owned source correspondence
+  caller state. Forward glyphs after that nested call also preserve their original
+  source, priority and Level 1.5 fallback. Editable Local child glyphs now import
+  correctly beside an unchanged normalized header wrapper; compiler-owned source correspondence
   keeps derived background writes and every protected shared consumer guarded.
   Concept preview and cold reopen retain the original definitions and metadata.
   Existing Local object calls can now be moved or retargeted to another original

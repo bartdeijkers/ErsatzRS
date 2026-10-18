@@ -1,6 +1,6 @@
 //! Context-qualified physical bodies, separate from immutable semantic bodies.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
     TeletextColourReference, TeletextColumnOperation, TeletextEnhancementCommand,
@@ -26,14 +26,17 @@ pub(super) enum DerivationError {
 #[derive(Debug, Clone)]
 pub(super) struct ObjectHeaderSources {
     lengths: BTreeMap<TeletextObjectIdentity, usize>,
-    inserted: BTreeMap<TeletextObjectIdentity, [Option<usize>; 3]>,
+    inserted: BTreeSet<TeletextObjectIdentity>,
 }
 
 impl ObjectHeaderSources {
     /// The only derived body writer materializes its original leading AP.
     pub(super) fn materialized_position(&self, actual: TeletextEnhancementSource) -> Option<usize> {
-        let mapping = self.inserted.get(&actual.object?)?;
-        (mapping.get(actual.command) == Some(&None)).then_some(0)
+        let identity = actual.object?;
+        if actual.command >= *self.lengths.get(&identity)? {
+            return None;
+        }
+        (self.inserted.contains(&identity) && actual.command == 1).then_some(0)
     }
 
     /// Derived setters cannot become original writers or transmission witnesses.
@@ -47,10 +50,17 @@ impl ObjectHeaderSources {
         if actual.command >= *self.lengths.get(&identity)? {
             return None;
         }
-        let command = match self.inserted.get(&identity) {
-            Some(mapping) => *mapping.get(actual.command)?,
-            None => Some(actual.command),
-        }?;
+        let command = if self.inserted.contains(&identity) {
+            match actual.command {
+                0 => 0,
+                1 => return None,
+                // The only insertion is immediately after the leading AP.
+                // All later commands retain their exact original ordinal.
+                command => command - 1,
+            }
+        } else {
+            actual.command
+        };
         Some(TeletextEnhancementSource {
             object: Some(identity),
             command,
@@ -156,7 +166,7 @@ fn derive_inner(
         let [TeletextEnhancementCommand::SetPosition { position }, TeletextEnhancementCommand::InvokeObject {
             object_type: child_type,
             ..
-        }] = definition.program.commands()
+        }, ..] = definition.program.commands()
         else {
             continue;
         };
@@ -191,7 +201,7 @@ fn derive_inner(
     let mut definitions = catalog.definitions().to_vec();
     let mut sources = ObjectHeaderSources {
         lengths: BTreeMap::new(),
-        inserted: BTreeMap::new(),
+        inserted: BTreeSet::new(),
     };
     for definition in &mut definitions {
         if let Some(&(column, colour)) = replacements.get(&definition.identity) {
@@ -204,9 +214,7 @@ fn derive_inner(
                 },
             );
             definition.program = TeletextEnhancementProgram::new(body)?;
-            sources
-                .inserted
-                .insert(definition.identity, [Some(0), None, Some(1)]);
+            sources.inserted.insert(definition.identity);
         }
         sources
             .lengths

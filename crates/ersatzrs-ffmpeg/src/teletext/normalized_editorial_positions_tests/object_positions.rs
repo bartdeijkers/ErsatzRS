@@ -305,6 +305,102 @@ fn nested_header_draft(
     (draft, outer, child)
 }
 
+fn append_header_suffix(draft: &mut TeletextResolvedServiceDraft, outer: TeletextObjectIdentity) {
+    let definition = draft
+        .objects
+        .iter_mut()
+        .find(|d| d.identity == outer)
+        .unwrap();
+    let mut commands = definition.program.commands().to_vec();
+    commands.push(TeletextEnhancementCommand::AtColumn {
+        column: 9,
+        operation: TeletextColumnOperation::G0 {
+            code: TeletextGlyphCode::new(b'B').unwrap(),
+        },
+    });
+    definition.program = TeletextEnhancementProgram::new(commands).unwrap();
+}
+
+#[test]
+fn nested_local_header_with_trailing_glyph_passes_complete_factory() {
+    for (outer_type, child_type) in [
+        (TeletextObjectType::Active, TeletextObjectType::Passive),
+        (TeletextObjectType::Active, TeletextObjectType::Adaptive),
+        (TeletextObjectType::Adaptive, TeletextObjectType::Passive),
+    ] {
+        let (mut draft, outer, child) = nested_header_draft(outer_type, child_type);
+        append_header_suffix(&mut draft, outer);
+        let saved = declared(draft);
+        let owner = saved.semantic().base().pages[0].address;
+        let original = compose_teletext_main_program(
+            saved.semantic(),
+            owner,
+            limits().normalization.composition,
+        )
+        .unwrap();
+        let actual =
+            encode_teletext_authored_service(saved.clone(), &transmissions(&saved), &limits())
+                .unwrap_or_else(|error| {
+                    panic!("legal {outer_type:?}/{child_type:?} forward suffix: {error:?}")
+                });
+        assert_eq!(actual.declared(), &saved);
+        let EncodedTeletextAuthoredPage::CompiledDisplay(display) = &actual.pages()[0] else {
+            panic!("complete authored display required");
+        };
+        let replay = display.normalized().physical().replay();
+        for (resolution, intent, trace) in [
+            (
+                original.display_resolution(),
+                original.glyph_intent(),
+                original.spatial_trace(),
+            ),
+            (
+                replay.display_resolution(),
+                replay.glyph_intent(),
+                replay.spatial_trace(),
+            ),
+        ] {
+            assert_selected_child_a(resolution, intent);
+            let cell = resolution.cell(0, 9).unwrap();
+            let candidate = resolution.origins()[cell.origin().unwrap()].candidate_index();
+            assert!(matches!(intent.records()[candidate].glyph(),
+                Some(TeletextGlyphIdentity::G0 { glyph }) if glyph.code() == b'B'));
+            assert_nested_header_invocations(trace, outer, child, outer_type, child_type);
+        }
+        assert_untouched_header_tail(original.display_resolution(), replay.display_resolution());
+        let suffix: Vec<_> = display
+            .normalized()
+            .encoded()
+            .command_positions()
+            .iter()
+            .filter(|span| span.source().object == Some(outer) && span.source().command == 3)
+            .collect();
+        assert_eq!(suffix.len(), 1);
+        assert_eq!(
+            suffix[0].original_object_source(),
+            Some(TeletextMainCompositionSource::Object {
+                identity: outer,
+                command: 2,
+            })
+        );
+        let fallback = encode_teletext_page(
+            &saved.semantic().base().pages[0],
+            TeletextEncodingRegion::WesternLatin,
+        )
+        .unwrap();
+        let physical = project_encoded_teletext_display(display.page(), 128).unwrap();
+        let baseline = project_encoded_teletext_display(&fallback, 128).unwrap();
+        assert_eq!(physical.header, baseline.header);
+        let rows = |records: Vec<TeletextEncodedDisplayRecord>| {
+            records
+                .into_iter()
+                .filter(|record| !matches!(record, TeletextEncodedDisplayRecord::Triplets { .. }))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(rows(physical.records), rows(baseline.records));
+    }
+}
+
 #[test]
 fn nested_local_adaptive_header_position_preserves_original_parent_ap_in_complete_factory() {
     nested_header_factory(TeletextObjectType::Adaptive, TeletextObjectType::Passive);
@@ -610,9 +706,15 @@ fn diagnostic_nested_adaptive_background_candidate_preserves_full_original_model
 
 #[test]
 fn object_header_derivation_maps_only_retained_original_commands() {
-    for outer_type in [TeletextObjectType::Adaptive, TeletextObjectType::Active] {
+    for (outer_type, suffix) in [TeletextObjectType::Adaptive, TeletextObjectType::Active]
+        .into_iter()
+        .flat_map(|kind| [(kind, false), (kind, true)])
+    {
         let (mut draft, outer, child) =
             nested_header_draft(outer_type, TeletextObjectType::Passive);
+        if suffix {
+            append_header_suffix(&mut draft, outer);
+        }
         let unused = TeletextObjectIdentity::local(
             draft.base.pages[0].address,
             TeletextObjectId::new(65533),
@@ -651,7 +753,13 @@ fn object_header_derivation_maps_only_retained_original_commands() {
             object: Some(target),
             command,
         };
-        for (physical, retained) in [(0, Some(0)), (1, None), (2, Some(1)), (3, None)] {
+        for (physical, retained) in [
+            (0, Some(0)),
+            (1, None),
+            (2, Some(1)),
+            (3, suffix.then_some(2)),
+            (4, None),
+        ] {
             assert_eq!(
                 derived.retained_source(source(outer, physical)),
                 retained.map(|command| source(outer, command))
@@ -660,15 +768,34 @@ fn object_header_derivation_maps_only_retained_original_commands() {
         let (catalog, sources) = derived.into_parts();
         assert_eq!(
             catalog.definition(outer).unwrap().program.commands().len(),
-            3
+            if suffix { 4 } else { 3 }
         );
         for target in [child, unused] {
             assert_eq!(
                 sources.retained_source(source(target, 1)),
                 Some(source(target, 1))
             );
-            assert_eq!(sources.retained_source(source(target, 2)), None);
+            let length = saved_catalog
+                .definition(target)
+                .unwrap()
+                .program
+                .commands()
+                .len();
+            if suffix && target == unused {
+                assert_eq!(
+                    sources.retained_source(source(target, 2)),
+                    Some(source(target, 2))
+                );
+            }
+            assert_eq!(sources.retained_source(source(target, length)), None);
+            assert_eq!(sources.materialized_position(source(target, 1)), None);
         }
+        assert_eq!(sources.materialized_position(source(outer, 1)), Some(0));
+        assert_eq!(sources.materialized_position(source(outer, 3)), None);
+        assert_eq!(
+            sources.materialized_position(source(outer, usize::MAX)),
+            None
+        );
         let unknown = TeletextObjectIdentity::local(original.owner(), TeletextObjectId::new(65532));
         assert_eq!(sources.retained_source(source(unknown, 0)), None);
     }
@@ -677,12 +804,17 @@ fn object_header_derivation_maps_only_retained_original_commands() {
 #[test]
 fn object_header_derivation_preserves_body_when_actual_contexts_conflict() {
     for outer_type in [TeletextObjectType::Adaptive, TeletextObjectType::Active] {
-        conflicting_actual_backgrounds(outer_type);
+        for suffix in [false, true] {
+            conflicting_actual_backgrounds(outer_type, suffix);
+        }
     }
 }
 
-fn conflicting_actual_backgrounds(outer_type: TeletextObjectType) {
+fn conflicting_actual_backgrounds(outer_type: TeletextObjectType, suffix: bool) {
     let (mut draft, outer, _) = nested_header_draft(outer_type, TeletextObjectType::Passive);
+    if suffix {
+        append_header_suffix(&mut draft, outer);
+    }
     let call = TeletextEnhancementCommand::InvokeObject {
         target: outer,
         object_type: outer_type,

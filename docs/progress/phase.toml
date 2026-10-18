@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 Next source-out candidate verified; package compatibility and adoption open'
+current_focus = 'P9A-04 F3 header suffix checkpoint; F5 package environment and X1/X2/X3 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -276,18 +276,22 @@ passes five cases with exact Level1.5/2.5 header/body cells. Prior four inputs
 are unchanged. Production is unchanged;926 prior regressions remain valid.
 Same-source Main backward movement stays invalid under AnnexA.4; no neutral reset
 or order waiver is introduced. Canonical identity.json/body_return_followup owns
-checks and checkpoint SHA. F3 definition_header_followup and
-active_definition_header_followup now qualify exact two-command Local
-Adaptive→Passive and Active→Passive/Adaptive header wrappers. Original source,
-caller AP/origin/offset/parent/A8 and fallback remain intact. A known completed
-Local/Active background across every actual invocation/full row tail supplies
-only a candidate; actual C2, exact provenance/body and full comparison stay
-mandatory. No call-time default is invented. Active factoryRED53478144 precedes
-31 focused controls and all935 teletext regressions. Eight pinned imager
-Level1.5/2.5 cases pass; prior six complete inputs are unchanged, new cases check
-A2 plus untouched neighbours/tail/body. Active all-invocation and later-tail BG
-conflicts refuse. Canonical tmp/phase9-header-c2/identity.json owns sources,
-negative proof, strict finalchecks, checkpoint SHA and terminal process state.
+checks and checkpoint SHA. F3 definition_header_followup/active_definition_header_followup and current
+header_suffix_followup qualify Local Adaptive→Passive and Active→Passive/Adaptive
+header wrappers, including a forward B9 after child A8. Original source, caller
+AP/origin/offset/parent, styles and Level1.5 fallback remain intact. All-call/full
+row-tail known background is only a candidate; actual C2, full model, exact
+provenance/body and bounded work/catalogue checks stay mandatory. Suffix mapping
+preserves original ordinals and rejects inserted/unknown/out-of-body authority.
+Genuine factoryRED0e60df30 precedes ten grouped controls and three new fixed-cell
+independent decoder cases; previous eight complete inputs remain exact.
+Canonical tmp/phase9-header-c2/identity.json/header_suffix_followup owns source
+hashes, negative attempt, final checks, checkpoint SHA and terminal processes.
+No new editor/stream/client or full F3/9A claim. F5 c6111440 package adoption still
+needs the existing baseline build environment; X1 suitable interactive client,
+X2 accepted artifacts/native environments and X3 QTM208-capacity remain open.
+Next: qualify the next specifically named F3 context or independent F1 user
+blocker from the existing matrix; no general audit or unchanged client retry.
 F1/F3 normalized-wrapper editor alignment is now verified. NativeREDc8f5e191
 rejected Packet124/32 X26 designation0 word5 after independent typed-target
 and full edited-TTI equality. Final compiler spans now expose read-only existing
@@ -360,12 +364,17 @@ and caps the original independent caption sourceout.25 focused plus unchanged
 actual ordinarySRT8d16a912 and late8897dac0380 pass on identical source bytes,
 including exact cues, independent copiedAV clocks/DutchAAC, seek/clear/cache and
 cleanup. Existing tooling reproduces the whole source tree and lock exactly.
-Strict candidate all-target Clippy and scoped format pass. Canonical
-work.json/shared_copy_sourceout_followup owns all source/binary/patch/pin proof.
+Verified local c6111440 passes strict candidate all-target Clippy/scoped format.
+Canonical work.json/shared_copy_sourceout_followup owns source/binary/patch/pins.
 This is isolated source/debug-candidate proof: the managedruntime still contains
 the defect. Next prepare local replacement package and compatibility evidence
 through existing tooling; six-RID/native gates remain before adoption. No package
-publication or push authority. Reuse unaffected editor/publication/isolation/F6.
+publication or push authority. Docker now reports WSLintegration unavailable;
+its exact negative is canonical. Host proof ABI requiresGLIBC2.38/2.39 and is not
+older-Linux package proof. Resume packaging only with the existing baseline
+build environment restored, not an ABI shim. Independently qualify the named
+F3 row-zero/foreign-X26/context factory gap with existing fixtures before any
+implementation; no new general scope audit. Reuse editor/publication/F6 proof.
 Broader F5 sources/outputs/charset/unknownEOF and full F/V/X remain open. X1 needs
 suitable HTTP/TS/resource-lifecycle/navigation client capability; X2 needs
 accepted platform artifacts/native environments; X3 needs a lossless editor

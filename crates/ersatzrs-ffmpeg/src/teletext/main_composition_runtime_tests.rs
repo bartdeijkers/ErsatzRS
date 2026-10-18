@@ -1334,6 +1334,38 @@ async fn local_active_header_prefix_decodes_with_pinned_independent_teletextimag
         ));
     }
     assert_contextual_decoding(cases, "ERSATZRS_TELETEXT_TEST_LOCAL_ACTIVE_HEADER_FIXTURE").await;
+    let suffix_cases = nested_header_suffix_cases();
+    assert_eq!(suffix_cases.len(), 3);
+    assert_contextual_decoding(
+        suffix_cases,
+        "ERSATZRS_TELETEXT_TEST_LOCAL_HEADER_SUFFIX_FIXTURE",
+    )
+    .await;
+}
+
+fn nested_header_suffix_cases() -> Vec<serde_json::Value> {
+    [
+        (
+            "nested_active_passive_header_suffix",
+            TeletextObjectType::Active,
+            TeletextObjectType::Passive,
+        ),
+        (
+            "nested_active_adaptive_header_suffix",
+            TeletextObjectType::Active,
+            TeletextObjectType::Adaptive,
+        ),
+        (
+            "nested_adaptive_passive_header_suffix",
+            TeletextObjectType::Adaptive,
+            TeletextObjectType::Passive,
+        ),
+    ]
+    .into_iter()
+    .map(|(name, outer_type, child_type)| {
+        nested_header_case_with_suffix(name, outer_type, child_type, true)
+    })
+    .collect()
 }
 
 fn nested_header_case(
@@ -1341,23 +1373,53 @@ fn nested_header_case(
     outer_type: TeletextObjectType,
     child_type: TeletextObjectType,
 ) -> serde_json::Value {
+    nested_header_case_with_suffix(name, outer_type, child_type, false)
+}
+
+fn nested_header_case_with_suffix(
+    name: &str,
+    outer_type: TeletextObjectType,
+    child_type: TeletextObjectType,
+    with_suffix: bool,
+) -> serde_json::Value {
     assert!(outer_type.may_invoke(child_type));
     let owner = super::transport_tests::draft(200, 0, false).address;
     let outer = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65534));
     let child = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
     let mut rows = vec![text(0, 8, "Z")];
     let mut cells = vec![cell(0, 8, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0])];
-    if outer_type == TeletextObjectType::Active {
+    if outer_type == TeletextObjectType::Active || with_suffix {
         for column in [9, 20, 39] {
             rows[0].runs.push(TeletextRun {
                 column,
                 style: TeletextStyle::default(),
                 content: TeletextRunContent::Text { text: "Z".into() },
             });
-            cells.push(cell(0, column, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, 7, 0]));
+            let enhanced = if with_suffix && column == 9 {
+                [b'B', 0, 0, 7, 0]
+            } else {
+                [b'Z', 15, 0, 7, 0]
+            };
+            cells.push(cell(0, column, [b'Z', 15, 0, 7, 0], enhanced));
         }
         rows.push(text(1, 8, "Z"));
         cells.push(cell(1, 8, [b'Z', 15, 0, 7, 0], [b'Z', 15, 0, 7, 0]));
+    }
+    let mut outer_program = vec![
+        position(0, 8),
+        TeletextEnhancementCommand::InvokeObject {
+            target: child,
+            object_type: child_type,
+            offset: None,
+        },
+    ];
+    if with_suffix {
+        outer_program.push(at(
+            9,
+            TeletextColumnOperation::G0 {
+                code: TeletextGlyphCode::new(b'B').unwrap(),
+            },
+        ));
     }
     encoded_case_with_encoding(
         name,
@@ -1371,15 +1433,7 @@ fn nested_header_case(
             TeletextEnhancementObjectDefinition {
                 identity: outer,
                 object_type: outer_type,
-                program: TeletextEnhancementProgram::new(vec![
-                    position(0, 8),
-                    TeletextEnhancementCommand::InvokeObject {
-                        target: child,
-                        object_type: child_type,
-                        offset: None,
-                    },
-                ])
-                .unwrap(),
+                program: TeletextEnhancementProgram::new(outer_program).unwrap(),
             },
             TeletextEnhancementObjectDefinition {
                 identity: child,
