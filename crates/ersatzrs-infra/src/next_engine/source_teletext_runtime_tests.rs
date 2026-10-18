@@ -4,6 +4,8 @@
 use super::*;
 use ersatzrs_core::repositories::PlayoutRepository as _;
 
+#[path = "source_teletext_runtime_tests/cache.rs"]
+mod cache;
 #[path = "source_teletext_runtime_tests/clock.rs"]
 mod clock;
 #[path = "source_teletext_runtime_tests/fixture.rs"]
