@@ -33,10 +33,18 @@ impl SourceTeletextBitmapArtifactGroup {
         self.all_packets_key
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Packet {
+    pts: i64,
+    duration: i64,
+    rectangles: u32,
+    sha256: [u8; 32],
+}
 /// Bounded observed Matroska coordinates; these do not initialize a seek.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceTeletextBitmapArtifactObservation {
     groups: Vec<SourceTeletextBitmapArtifactGroup>,
+    packets: Vec<Packet>,
     nonempty_frames: usize,
     clear_frames: usize,
     last_packet_end_microseconds: i64,
@@ -89,6 +97,7 @@ enum Record {
         dts: i64,
         duration: i64,
         flags: String,
+        data_hash: String,
     },
     #[serde(rename = "subtitle")]
     Frame {
@@ -127,6 +136,33 @@ pub(super) fn parse(
     source: SourceTeletextBitmapEvents,
     origin: i64,
 ) -> Result<SourceTeletextBitmapArtifactObservation, SourceTeletextPageDecodeError> {
+    let observation = parse_observation(bytes)?;
+    let mut nonempty = observation
+        .packets
+        .iter()
+        .filter(|packet| packet.rectangles != 0);
+    let first_nonempty = nonempty.next().map(|packet| packet.pts);
+    let last_nonempty = nonempty
+        .next_back()
+        .map(|packet| packet.pts)
+        .or(first_nonempty);
+    if source.count == 0
+        || observation.nonempty_frames != source.count
+        || observation.clear_frames == 0
+        || observation
+            .groups
+            .last()
+            .is_none_or(|group| group.clear_frames == 0 || group.nonempty_frames != 0)
+        || first_nonempty != Some(expected_endpoint(source.first_pts_microseconds, origin)?)
+        || last_nonempty != Some(expected_endpoint(source.last_pts_microseconds, origin)?)
+    {
+        return Err(invalid());
+    }
+    Ok(observation)
+}
+pub(super) fn parse_observation(
+    bytes: &[u8],
+) -> Result<SourceTeletextBitmapArtifactObservation, SourceTeletextPageDecodeError> {
     if bytes.len() > crate::ffprobe::MAX_REMOTE_FFPROBE_OUTPUT_BYTES {
         return Err(invalid());
     }
@@ -146,16 +182,18 @@ pub(super) fn parse(
     }
     let mut observation = SourceTeletextBitmapArtifactObservation {
         groups: Vec::new(),
+        packets: Vec::new(),
         nonempty_frames: 0,
         clear_frames: 0,
         last_packet_end_microseconds: 0,
     };
-    let mut first_nonempty = None;
-    let mut last_nonempty = None;
     let mut records = output.packets_and_frames.into_iter();
     while let Some(packet) = records.next() {
         let frame = records.next().ok_or_else(invalid)?;
-        let (pts, end, nonempty) = pair(packet, frame)?;
+        let packet = pair(packet, frame)?;
+        let pts = packet.pts;
+        let end = pts.checked_add(packet.duration).ok_or_else(invalid)?;
+        let nonempty = packet.rectangles != 0;
         if observation
             .groups
             .last()
@@ -182,30 +220,46 @@ pub(super) fn parse(
         if nonempty {
             group.nonempty_frames += 1;
             observation.nonempty_frames += 1;
-            first_nonempty.get_or_insert(pts);
-            last_nonempty = Some(pts);
         } else {
             group.clear_frames += 1;
             observation.clear_frames += 1;
         }
+        observation.packets.push(packet);
         observation.last_packet_end_microseconds =
             observation.last_packet_end_microseconds.max(end);
     }
-    if source.count == 0
-        || observation.nonempty_frames != source.count
-        || observation.clear_frames == 0
-        || observation
-            .groups
-            .last()
-            .is_none_or(|group| group.clear_frames == 0 || group.nonempty_frames != 0)
-        || first_nonempty != Some(expected_endpoint(source.first_pts_microseconds, origin)?)
-        || last_nonempty != Some(expected_endpoint(source.last_pts_microseconds, origin)?)
-    {
-        return Err(invalid());
-    }
     Ok(observation)
 }
-fn pair(packet: Record, frame: Record) -> Result<(i64, i64, bool), SourceTeletextPageDecodeError> {
+
+/// Compare all copied payloads and frame order, not merely aggregate same-PTS counts.
+pub(super) fn qualify_fragment(
+    fragment: &SourceTeletextBitmapArtifactObservation,
+    original: &SourceTeletextBitmapArtifactObservation,
+    start: i64,
+    end: Option<i64>,
+) -> Result<(), SourceTeletextPageDecodeError> {
+    let expected = original
+        .packets
+        .iter()
+        .filter(|packet| packet.pts >= start && end.is_none_or(|end| packet.pts < end));
+    let mut actual = fragment.packets.iter();
+    for expected in expected {
+        let actual = actual.next().ok_or_else(invalid)?;
+        if actual.pts != expected.pts.checked_sub(start).ok_or_else(invalid)?
+            || actual.duration != expected.duration
+            || actual.rectangles != expected.rectangles
+            || actual.sha256 != expected.sha256
+        {
+            return Err(invalid());
+        }
+    }
+    if actual.next().is_some() || fragment.packets.is_empty() || fragment.packets[0].pts != 0 {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn pair(packet: Record, frame: Record) -> Result<Packet, SourceTeletextPageDecodeError> {
     let Record::Packet {
         codec_type,
         stream_index,
@@ -213,6 +267,7 @@ fn pair(packet: Record, frame: Record) -> Result<(i64, i64, bool), SourceTeletex
         dts,
         duration,
         flags,
+        data_hash,
     } = packet
     else {
         return Err(invalid());
@@ -245,6 +300,21 @@ fn pair(packet: Record, frame: Record) -> Result<(i64, i64, bool), SourceTeletex
     if frame_pts != pts {
         return Err(invalid());
     }
-    let end = pts.checked_add(ticks(duration)?).ok_or_else(invalid)?;
-    Ok((pts, end, num_rects != 0))
+    let duration = ticks(duration)?;
+    pts.checked_add(duration).ok_or_else(invalid)?;
+    let hash = data_hash
+        .strip_prefix("SHA256:")
+        .filter(|hash| hash.len() == 64)
+        .ok_or_else(invalid)?;
+    let mut sha256 = [0; 32];
+    for (byte, pair) in sha256.iter_mut().zip(hash.as_bytes().chunks_exact(2)) {
+        let text = std::str::from_utf8(pair).map_err(|_| invalid())?;
+        *byte = u8::from_str_radix(text, 16).map_err(|_| invalid())?;
+    }
+    Ok(Packet {
+        pts,
+        duration,
+        rectangles: num_rects,
+        sha256,
+    })
 }

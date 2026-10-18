@@ -26,6 +26,7 @@ use super::{
 pub use headers::{LocalTeletextHeaderProblem, LocalTeletextHeaders};
 
 mod headers;
+pub(super) use headers::run_source_guard_owned;
 mod source_av_origin;
 mod source_clock;
 mod source_cue;
@@ -170,7 +171,7 @@ pub(crate) async fn check_source_guard_owned(
     .await
 }
 
-fn check_source_guard_paths(
+pub(super) fn check_source_guard_paths(
     guard: &LocalTeletextSourceGuard,
     original: &Path,
     resolved: &Path,

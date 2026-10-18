@@ -30,7 +30,7 @@ pub use super::local_teletext::{
 mod bitmap_carriage;
 pub use bitmap_carriage::{
     SourceTeletextBitmapArtifact, SourceTeletextBitmapArtifactGroup,
-    SourceTeletextBitmapArtifactObservation,
+    SourceTeletextBitmapArtifactObservation, SourceTeletextBitmapFragments,
 };
 
 #[path = "teletext_decode_consumer.rs"]

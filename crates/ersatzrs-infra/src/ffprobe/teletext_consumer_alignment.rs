@@ -5,6 +5,10 @@ use super::{
     teletext_origin::NativeSourceTimeBase,
 };
 
+#[path = "teletext_consumer_bitmap_alignment.rs"]
+mod bitmap;
+pub use bitmap::{project_bitmap_consumer_origin, NativeSourceBitmapAlignment};
+
 /// A constant caption-input offset valid for every correlated format-origin bound.
 ///
 /// The caller owns same-source, native-version, input-flags and enabled-stream

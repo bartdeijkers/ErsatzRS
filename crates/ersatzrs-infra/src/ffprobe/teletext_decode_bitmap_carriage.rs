@@ -11,6 +11,10 @@ use super::{
     SourceTeletextPageDecodeRequest,
 };
 
+#[path = "teletext_decode_bitmap_carriage/isolator.rs"]
+mod isolator;
+pub use isolator::SourceTeletextBitmapFragments;
+
 #[path = "teletext_decode_bitmap_carriage/parser.rs"]
 mod parser;
 use parser::parse;
@@ -23,7 +27,7 @@ pub use parser::{SourceTeletextBitmapArtifactGroup, SourceTeletextBitmapArtifact
 /// bookends retain the documented observed-filesystem association limits.
 pub struct SourceTeletextBitmapArtifact {
     source: Arc<DecodedLocalTeletextPage>,
-    _file: tempfile::NamedTempFile,
+    file: tempfile::NamedTempFile,
     sha256: [u8; 32],
     byte_count: usize,
     caption_origin: crate::ffprobe::teletext_consumer_origin::NativeSourceConsumerOrigin,
@@ -161,7 +165,7 @@ impl FfprobeExtractor {
         source.check_source(deadline, hold).await?;
         Ok(SourceTeletextBitmapArtifact {
             source,
-            _file: file,
+            file,
             sha256,
             byte_count,
             caption_origin: origin,
@@ -250,9 +254,9 @@ fn artifact_probe_command(
         .to_str()
         .ok_or(SourceTeletextPageDecodeError::InvalidOutput)?;
     Ok(FfprobeCommand { program: program.into(), args: vec![
-        "-v".into(), "error".into(), "-show_streams".into(), "-show_format".into(),
+        "-v".into(), "error".into(), "-show_data_hash".into(), "sha256".into(), "-show_streams".into(), "-show_format".into(),
         "-show_packets".into(), "-show_frames".into(), "-show_entries".into(),
-        "stream=index,codec_name,codec_type,time_base:format=format_name,nb_streams:packet=codec_type,stream_index,pts,dts,duration,flags:frame=media_type,pts,format,start_display_time,end_display_time,num_rects".into(),
+        "stream=index,codec_name,codec_type,time_base:format=format_name,nb_streams:packet=codec_type,stream_index,pts,dts,duration,flags,data_hash:frame=media_type,pts,format,start_display_time,end_display_time,num_rects".into(),
         "-of".into(), "json".into(), path.into(),
     ] })
 }

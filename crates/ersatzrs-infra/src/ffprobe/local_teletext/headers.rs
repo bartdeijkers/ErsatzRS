@@ -30,7 +30,7 @@ const SETTLEMENT_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Reuse the existing source-read owner while retaining an admitted operation
 /// inside the actual blocking worker, independently of its awaiting caller.
-pub(super) async fn run_source_guard_owned<T, F>(
+pub(in crate::ffprobe) async fn run_source_guard_owned<T, F>(
     deadline: Instant,
     hold: TeletextWorkHold,
     work: F,
@@ -182,7 +182,7 @@ where
         .map_err(|_| FfprobeError::CleanupUnconfirmed { path: label })?
 }
 
-pub(super) struct ReadStop<'a, T> {
+pub(in crate::ffprobe) struct ReadStop<'a, T> {
     owner: &'a OwnerGuard,
     response: &'a oneshot::Sender<crate::ffprobe::Result<T>>,
     deadline: Instant,
@@ -201,7 +201,7 @@ impl<T> ReadStop<'_, T> {
         }
     }
 
-    pub(super) fn check_source_guard(&self) -> crate::ffprobe::Result<()> {
+    pub(in crate::ffprobe) fn check_source_guard(&self) -> crate::ffprobe::Result<()> {
         if self.cancelled() {
             Err(FfprobeError::Cancelled {
                 path: "local teletext source association".into(),

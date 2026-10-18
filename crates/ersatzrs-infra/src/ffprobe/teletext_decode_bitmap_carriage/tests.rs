@@ -23,12 +23,12 @@ use crate::ffprobe::teletext_decode::SourceTeletextBitmapEvents;
 use serde_json::{json, Value};
 
 fn packet(pts: i64, duration: i64) -> Value {
-    json!({"type":"packet","codec_type":"subtitle","stream_index":0,"pts":pts,"dts":pts,"duration":duration,"flags":"K__"})
+    json!({"type":"packet","codec_type":"subtitle","stream_index":0,"pts":pts,"dts":pts,"duration":duration,"flags":"K__","data_hash":format!("SHA256:{}","ab".repeat(32))})
 }
 fn frame(pts: i64, rectangles: usize) -> Value {
     json!({"type":"subtitle","media_type":"subtitle","pts":pts,"format":0,"start_display_time":0,"end_display_time":30000,"num_rects":rectangles})
 }
-fn output() -> Value {
+pub(super) fn output() -> Value {
     json!({
         "streams":[{"index":0,"codec_name":"dvb_subtitle","codec_type":"subtitle","time_base":"1/1000"}],
         "format":{"nb_streams":1,"format_name":"matroska,webm"},
@@ -175,12 +175,14 @@ pipe:1
 ffprobe
 -v
 error
+-show_data_hash
+sha256
 -show_streams
 -show_format
 -show_packets
 -show_frames
 -show_entries
-stream=index,codec_name,codec_type,time_base:format=format_name,nb_streams:packet=codec_type,stream_index,pts,dts,duration,flags:frame=media_type,pts,format,start_display_time,end_display_time,num_rects
+stream=index,codec_name,codec_type,time_base:format=format_name,nb_streams:packet=codec_type,stream_index,pts,dts,duration,flags,data_hash:frame=media_type,pts,format,start_display_time,end_display_time,num_rects
 -of
 json
 synthetic-caption.mks
