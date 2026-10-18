@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F2: explicit addon-version template workflow; full editor, X3 and V3 remain open'
+current_focus = 'P9A-04 F1/V2: genuine QTM interior row save and original same-input reuse; X3/V3 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -155,24 +155,29 @@ SaveAs, broader row-zero/coordinated state, complete resource/set semantics,
 X3 catalogue208 and V3/X1 client coverage remain open. No scope waiver or new push
 authority follows; F6 is already pushed at c07af3a1. Checkpoint SHA, source hashes,
 terminal checks and excluded changes resolve through canonical work.json.
-Current F2 evidence package: tmp/phase9-f2-template-version/work.json.
-Local2c6cfdd6 owns original rows/root undo. Existing genuine QTM populated
-metadata/zone/dynamic-field proof is reused. One ignored actual-native package
-workflow now passes: real r1/r2 ZIP installation, full identity/settings checks,
-stale profile/save/select/publication refusal, no automatic pending/accepted or
-pages-call change, explicit fresh r2 profile/binding/capture/publication, cold
-immutable r1 Day/Night+r2 source/metadata/raster/native units and r2 recovery.
-Existing fixture helpers omit their unmanaged seed; installer protection stays
-intact. Two existing externally supplied fresh state/data roots isolate package,
-data and cache work. Failed compile paths and unrelated124/32 preview-helper
-mismatch are retained, corrected without weaker oracles or product edits.
-Strict web all-target Clippy, fmt, architecture and progress checks pass. The
-owned-only local proof checkpoint SHA and excluded changes resolve through
-canonical work.json; retain all foreign/widget work outside it. No editor/client/
-transport rerun or new production behavior is claimed. Full F2 geometry/set,
-original/interior QTM, X3/V3 and all remaining9A requirements stay open; no waiver.
-Next F1/V2: qualify the retained bounded interior/original QTM candidate and its
-specific prior GUI failure before any new trial; reuse existing engine proof.
+F2 explicit template-version composition is locally checkpointed4fed142c;
+canonical tmp/phase9-f2-template-version/work.json owns real r1/r2 installation,
+stale refusal, explicit r2 publication and immutable cold historical proof.
+Current F1/V2 editor receipt: tmp/phase9-f1-interior-position/work.json.
+Qualification confirms driver4 WAS used in GUI3 and failed, so no unchanged
+retry. Exact Qt6.10.2 source identifies Home as scroll-only on this ordinary menu;
+new driver5 uses real Down-from-null and bounded Up/Down, never model setters.
+One new headed QTM1.0/cac2167 SaveAs now passes exact10-row insertion, unchanged
+original inventory and existing native concept4/full-unit/preview/unpublished
+reopen/separate publication/cold recovery. Inspected actual row2 R/column6 and
+SetAP menu screenshots retain unchanged editor/image and all prior failures.
+Original19 reuse now passes b1486cad: fresh original export bytes andSHA equal
+actual GUI input e5c5ff7 BEFORE import. Same unmodified save e9d9425, its own
+revision1 receipt/head and private19/noAdd yield exact full units, protected
+unchanged-display preview, unpublished reopen, separate publication and cold
+recovery. No second GUI, invoked-display or new stream/client proof follows.
+Narrow independent CPP/receipt review and strict web all-target lint pass.
+Final fmt/progress/architecture pass for the owned-only local checkpoint. All failed attempts
+remain intact. Full geometry/set/context, X3/V3 and other9A clauses stay open.
+Next F3: select the specifically legal rejected row-zero/foreign-X26 authoring
+case from the existing normative matrix, reproduce its exact context/bounds and
+fallback expectation before changing product code. No general audit or decoder
+maintenance; unused-object removal remains deferred. No push or scope waiver.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

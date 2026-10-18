@@ -6,9 +6,7 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns acceptance, scoped
-receipts and the F1–F6/V1–V6/X1–X3 completion list. No representative
-flow establishes full engine acceptance or accepts a permanent limitation.
+rendering/navigation. Kodi is optional. P9A-04 owns acceptance and the F/V/X completion list. Representative flows do not establish acceptance or waive requirements.
 
 Typed services, provenance, complete resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
@@ -30,11 +28,11 @@ inverse, native preview, publication and cold recovery. P9A-04/F1 owns evidence;
 coordinated-state undo remains open.
 Localized Add/Copy/boundary UI has headed proof; V7 native-call and V8 compound
 structure/call actual saves retain their scoped unchanged-byte lifecycle proof.
-Interior/original QTM saves, unqualified style/initial/deferred/context cases,
-coordinated positions and complete resource/link/set/context remain open.
-QTM metadata and explicit r1/r2 install/profile/publication/cold-history proofs
-are scoped. Actual editor
-controls do not prove native Public-target or suitable-client rendering.
+Genuine interior QTM SaveAs qualifies Added18 and exact-input Original19 reuse
+with separate receipts. Unqualified styles/initial/deferred/coordinated positions
+and complete resource/link/set/context remain open.
+QTM metadata/r1/r2 proofs retain scope. Editor controls do not prove native
+Public-target or suitable-client rendering.
 No truncation or silent editor restriction is accepted.
 
 National/alias/bank/panel QTM, native, TCP, TSDuck and independent receipts retain

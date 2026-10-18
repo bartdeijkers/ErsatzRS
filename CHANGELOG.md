@@ -48,6 +48,9 @@ release section when tagging a release.
   output through concept import, repeat edits, reopen and separate publication.
   Later concept imports can append rows or insert complete rows between existing
   rows while retaining the complete saved body and its position anchors.
+  Pinned QTeletextMaker interior-row saves now round-trip through added objects
+  and byte-identical original companions with separate current receipts, native
+  preview, explicit publication and cold recovery.
   Native preview,
   publication and recovery qualify new allocations and every protected shared
   consumer. A pinned actual QTeletextMaker save of an added definition now passes

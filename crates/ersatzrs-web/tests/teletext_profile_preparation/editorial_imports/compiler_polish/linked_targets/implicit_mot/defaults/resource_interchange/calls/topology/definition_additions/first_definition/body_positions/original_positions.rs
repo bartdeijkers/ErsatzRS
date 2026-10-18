@@ -235,3 +235,6 @@ mod matrix;
 mod protected;
 #[path = "original_positions/support.rs"]
 mod support;
+
+#[path = "original_positions/actual_editor_reuse.rs"]
+mod actual_editor_reuse;
