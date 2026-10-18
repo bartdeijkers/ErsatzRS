@@ -1243,6 +1243,78 @@ fn contextual_header_objects() -> Vec<serde_json::Value> {
 
 #[tokio::test]
 #[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
+async fn local_active_header_prefix_decodes_with_pinned_independent_teletextimager() {
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let active = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65534));
+    let passive = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
+    let foreground = |column, value| {
+        at(
+            column,
+            TeletextColumnOperation::Foreground {
+                colour: TeletextColourReference::new(value).unwrap(),
+            },
+        )
+    };
+    let glyph = |column, code| {
+        at(
+            column,
+            TeletextColumnOperation::G0 {
+                code: TeletextGlyphCode::new(code).unwrap(),
+            },
+        )
+    };
+    let mut cases = Vec::new();
+    for (first, last) in [(3, 4), (4, 3)] {
+        cases.push(encoded_case_with_encoding(
+            &format!("local_active_header_prefix_{first}_{last}"),
+            vec![text(0, 9, "ZZ"), text(1, 8, "B")],
+            vec![
+                TeletextEnhancementCommand::InvokeObject {
+                    target: active,
+                    object_type: TeletextObjectType::Active,
+                    offset: None,
+                },
+                position(0, 9),
+                TeletextEnhancementCommand::InvokeObject {
+                    target: passive,
+                    object_type: TeletextObjectType::Passive,
+                    offset: None,
+                },
+            ],
+            vec![
+                TeletextEnhancementObjectDefinition {
+                    identity: active,
+                    object_type: TeletextObjectType::Active,
+                    program: TeletextEnhancementProgram::new(vec![
+                        foreground(8, first),
+                        foreground(8, last),
+                        glyph(10, b'B'),
+                    ])
+                    .unwrap(),
+                },
+                TeletextEnhancementObjectDefinition {
+                    identity: passive,
+                    object_type: TeletextObjectType::Passive,
+                    program: TeletextEnhancementProgram::new(vec![
+                        foreground(0, 2),
+                        glyph(0, b'A'),
+                    ])
+                    .unwrap(),
+                },
+            ],
+            &[
+                cell(0, 9, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0]),
+                cell(0, 10, [b'Z', 15, 0, 7, 0], [b'B', 0, 0, last, 0]),
+                cell(1, 8, [b'B', 15, 0, 7, 0], [b'B', 15, 0, 7, 0]),
+            ],
+            MainEncoding::Normalized,
+        ));
+    }
+    assert_contextual_decoding(cases, "ERSATZRS_TELETEXT_TEST_LOCAL_ACTIVE_HEADER_FIXTURE").await;
+}
+
+#[tokio::test]
+#[ignore = "Requires Python 3 and the explicitly pinned external teletextimager checkout"]
 async fn contextual_main_program_decodes_with_pinned_independent_teletextimager() {
     let cases = contextual_cases();
     assert_eq!(cases.len(), 8);

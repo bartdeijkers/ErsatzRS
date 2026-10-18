@@ -29,6 +29,30 @@ fn fixture(
         TeletextEnhancementCommand,
     ) -> Vec<TeletextEnhancementCommand>,
 ) -> TeletextSemanticService {
+    fixture_with_active_body(build, vec![fg(0, 3), fg(0, 4)])
+}
+
+fn fixture_with_active_body(
+    build: impl FnOnce(
+        TeletextEnhancementCommand,
+        TeletextEnhancementCommand,
+    ) -> Vec<TeletextEnhancementCommand>,
+    active_body: Vec<TeletextEnhancementCommand>,
+) -> TeletextSemanticService {
+    TeletextSemanticService::new(
+        fixture_draft_with_active_body(build, active_body),
+        semantic_limits(),
+    )
+    .unwrap()
+}
+
+fn fixture_draft_with_active_body(
+    build: impl FnOnce(
+        TeletextEnhancementCommand,
+        TeletextEnhancementCommand,
+    ) -> Vec<TeletextEnhancementCommand>,
+    active_body: Vec<TeletextEnhancementCommand>,
+) -> TeletextResolvedServiceDraft {
     let mut draft = input();
     let owner = draft.base.pages[0].address;
     let mut call = |id, object_type, body| {
@@ -57,10 +81,10 @@ fn fixture(
             },
         ],
     );
-    let active = call(65534, TeletextObjectType::Active, vec![fg(0, 3), fg(0, 4)]);
+    let active = call(65534, TeletextObjectType::Active, active_body);
     draft.pages[0].local_program =
         Some(TeletextEnhancementProgram::new(build(passive, active)).unwrap());
-    TeletextSemanticService::new(draft, semantic_limits()).unwrap()
+    draft
 }
 
 #[test]
@@ -155,6 +179,68 @@ fn prefix_only_witnesses_retained_main_and_checks_final_words() {
         TeletextMainCompositionFailure::SelectionState
     );
 }
+
+#[test]
+fn local_active_prefix_settles_its_own_header_foreground_before_a_later_call() {
+    let service = local_active::service(3, 4);
+    let saved = service.clone();
+    let original = compose_teletext_main_program(
+        &service,
+        service.base().pages[0].address,
+        limits().normalization.composition,
+    )
+    .unwrap();
+    let active = original
+        .display_geometry()
+        .object_regions()
+        .iter()
+        .find(|region| region.instance().object_type() == TeletextObjectType::Active)
+        .unwrap();
+    assert_eq!(
+        active.interval(),
+        TeletextObjectAddressInterval::Known {
+            start: (0, 0),
+            finish: (0, 10),
+        }
+    );
+    let attributes = original.attribute_execution();
+    let foreground = attributes.before_adaptive_cell(0, 9).unwrap().foreground();
+    assert_eq!(foreground.value(), None);
+    let pending = attributes.pending()[foreground.pending().unwrap()];
+    assert_eq!(
+        pending.reason(),
+        TeletextAttributePendingReason::TransmissionOrder
+    );
+    assert!(pending.previous().is_none());
+    assert!(pending.incoming_previous().is_none());
+    for (source, ordinal) in [(pending.first_source(), 0), (pending.second_source(), 1)] {
+        assert!(matches!(source, Some(TeletextAttributeSource::Enhancement {
+            location: TeletextEnhancementSource { object: Some(target), command },
+            invocation: Some(invocation), ..
+        }) if target == active.instance().target() && command == ordinal && invocation == active.instance().id()));
+    }
+    let normalized = compile_teletext_normalized_main_program(
+        &service,
+        service.base().pages[0].address,
+        limits().normalization,
+    )
+    .unwrap();
+    let setters: Vec<_> = normalized
+        .original()
+        .program()
+        .commands()
+        .iter()
+        .zip(normalized.original().provenance())
+        .filter_map(|(command, source)| {
+            matches!(source, TeletextMainCompositionSource::HeaderPosition { .. })
+                .then_some(*command)
+        })
+        .collect();
+    assert_eq!(setters, [fg(9, 4)]);
+    assert_eq!(service, saved);
+}
+
+mod local_active;
 
 #[test]
 fn main_prefix_cannot_settle_a_different_active_instance() {

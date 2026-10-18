@@ -51,6 +51,8 @@ release section when tagging a release.
   Pinned QTeletextMaker interior-row saves now round-trip through added objects
   and byte-identical original companions with separate current receipts, native
   preview, explicit publication and cold recovery.
+  Header object calls preserve foreground from preceding local Active definitions
+  through exact final-body checks, without changing the base fallback.
   Native preview,
   publication and recovery qualify new allocations and every protected shared
   consumer. A pinned actual QTeletextMaker save of an added definition now passes

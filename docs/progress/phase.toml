@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1/V2: genuine QTM interior row save and original same-input reuse; X3/V3 remain open'
+current_focus = 'P9A-04 F3: local Active header context; V5 Continue lifecycle next, X3/V3 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -158,26 +158,31 @@ terminal checks and excluded changes resolve through canonical work.json.
 F2 explicit template-version composition is locally checkpointed4fed142c;
 canonical tmp/phase9-f2-template-version/work.json owns real r1/r2 installation,
 stale refusal, explicit r2 publication and immutable cold historical proof.
-Current F1/V2 editor receipt: tmp/phase9-f1-interior-position/work.json.
-Qualification confirms driver4 WAS used in GUI3 and failed, so no unchanged
-retry. Exact Qt6.10.2 source identifies Home as scroll-only on this ordinary menu;
-new driver5 uses real Down-from-null and bounded Up/Down, never model setters.
-One new headed QTM1.0/cac2167 SaveAs now passes exact10-row insertion, unchanged
-original inventory and existing native concept4/full-unit/preview/unpublished
-reopen/separate publication/cold recovery. Inspected actual row2 R/column6 and
-SetAP menu screenshots retain unchanged editor/image and all prior failures.
-Original19 reuse now passes b1486cad: fresh original export bytes andSHA equal
-actual GUI input e5c5ff7 BEFORE import. Same unmodified save e9d9425, its own
-revision1 receipt/head and private19/noAdd yield exact full units, protected
-unchanged-display preview, unpublished reopen, separate publication and cold
-recovery. No second GUI, invoked-display or new stream/client proof follows.
-Narrow independent CPP/receipt review and strict web all-target lint pass.
-Final fmt/progress/architecture pass for the owned-only local checkpoint. All failed attempts
-remain intact. Full geometry/set/context, X3/V3 and other9A clauses stay open.
-Next F3: select the specifically legal rejected row-zero/foreign-X26 authoring
-case from the existing normative matrix, reproduce its exact context/bounds and
-fallback expectation before changing product code. No general audit or decoder
-maintenance; unused-object removal remains deferred. No push or scope waiver.
+F1/V2 is locally checkpointed de6a032d. Canonical
+ tmp/phase9-f1-interior-position/work.json/editor_checkpoint owns the genuine
+QTM1.0 interior SaveAs, Added18 and exact-input Original19 reuse with separate
+receipts, native concept/preview/publication/cold recovery and terminal checks.
+No second GUI, invoked-display or new stream/client claim follows.
+Current F3 canonical: tmp/phase9-header-c2/identity.json/local_active_followup.
+A specifically legal Main header call after Local Active FG8 contention failed
+at original command2/AP0,9. Initial FG0 trials addressed reserved header cells
+and did not demonstrate a defect; their logs/oracles remain retained.
+The private correction derives same-instance body-relative ordering from an
+already-invoked prefix definition, then requires exact whole final body, source,
+invocation, relative mapping and boundary before final absolute C2/full-model
+comparison. Twenty-five focused tests and pinned-imager two-colour-order
+Level1.5/2.5 cells pass, including complete authored factory/A8/fallback.
+All923 teletext regressions, independent dual-level decoding, strict FFmpeg
+all-target Clippy and final fmt/progress/architecture pass for the owned-only
+local checkpoint. A test-only final semicolon satisfies lint; no oracle or
+production change follows the passing regressions. No whole-engine claim.
+Next V5: genuine Lua Continue after reopening an active profile-On build must
+start from current Base, preserve the prior interval/channel2 and retain package
+configuration. Existing adapter-only Continue and SQL-only seams leave this
+application/SQL boundary unproven. Reuse actual On/reopen and Off/expiry flows;
+no new client search or external decoder maintenance. Full rowzero/foreign-X26,
+X3/V3 and remaining9A acceptance stay open. Unused-object removal stays deferred.
+No push/publication or scope waiver.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

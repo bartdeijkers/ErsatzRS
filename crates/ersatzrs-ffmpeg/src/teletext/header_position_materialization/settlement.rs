@@ -1,9 +1,10 @@
-//! Settle a blocked header candidate using only its real lowerable Main prefix.
+//! Settle a blocked header candidate from its real lowerable Main prefix.
 //!
-//! Definitions packed after that prefix are not final and grant no evidence.
-//! Every retained witness is checked against final packing before full C.2.
+//! Main words retain absolute witnesses. Already-invoked Local definitions use
+//! provisional body-relative order, requiring exact final body/mapping checks
+//! before full final-word C.2 or output can succeed.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ersatzrs_domain::{
     TeletextAttributeTransmissionEvidence, TeletextAttributeTransmissionPosition,
@@ -19,10 +20,14 @@ use super::super::{
     TeletextResourceObjectAllocations,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[path = "settlement/local_definition.rs"]
+mod local_definition;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(in crate::teletext) struct Witness {
     position: TeletextAttributeTransmissionPosition,
     bytes: [u8; 3],
+    local: Option<Arc<local_definition::Body>>,
 }
 
 pub(in crate::teletext) fn prepare(
@@ -57,11 +62,12 @@ pub(in crate::teletext) fn prepare(
         let encoded =
             pack_composition_program(service, &composition, &prefix, allocations, packing)?;
         for witness in prefix_witnesses(&composition, &encoded)? {
-            if witnesses
-                .insert(witness.position.event_ordinal, witness)
-                .is_some_and(|previous| previous != witness)
-            {
-                return Err(state_error(&composition).into());
+            if let Some(previous) = witnesses.get(&witness.position.event_ordinal) {
+                if previous != &witness {
+                    return Err(state_error(&composition).into());
+                }
+            } else {
+                witnesses.insert(witness.position.event_ordinal, witness);
             }
         }
         let positions: Vec<_> = witnesses.values().map(|witness| witness.position).collect();
@@ -125,9 +131,11 @@ fn prefix_witnesses(
                 },
                 bytes: triplet(encoded, position.semantic_word())
                     .ok_or_else(|| state_error(composition))?,
+                local: None,
             });
         }
     }
+    witnesses.extend(local_definition::witnesses(composition, encoded)?);
     Ok(witnesses)
 }
 
