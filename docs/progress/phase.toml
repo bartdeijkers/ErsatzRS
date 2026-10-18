@@ -62,20 +62,22 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F6 core checkpoint2b3ee96d and the scoped epoch/admission integration now have
-canonical receipts in tmp/phase9-f6-handoff/identity.json and integration.json;
-post-commit records retain exact checkpoint SHAs and preserved foreign deltas.
-Typed reserve/caption timing passes7 focused cases. Ordinary Hybrid passes all4
-caption/audio/stale cases at unchanged5s startup. Default2 occupied14s Hybrid52s
-passes21 caption samples,207 selected100ms audio windows and22 strict transport
-controls, peak2 and157ms explicit cleanup. Reuse Legacy36s capture/supplement and
-22 strict controls. All-target FFmpeg/infra/web Clippy, fmt and actual-host HLS/
-wrapper lifecycle smoke pass, including idle cleanup and wrapper restart.
-F6/9A remain open: complete codec initialization, full track/shared-session and
-applicable disconnect/client/platform proof are not inferred. Next qualify
-selected audio-Copy/AC3 Legacy+Hybrid in the existing bounded wait fixture; change
-production policy only for an observed defect. Unknown raw-input fences remain
-intact. Canonical playlists/provenance protect against raw internal PDT shifts.
+F6 integration checkpoint6382fc59 and tmp/phase9-f6-handoff/integration.json
+retain scoped H264/AAC default2 wait, ordinary Hybrid5s, strict transport, typed
+caption-safe reserve, strict lint and actual-host lifecycle evidence. Selected
+AC3 Copy now adds native default2 occupied14s captures for Legacy/Hybrid and a
+passing retained replay of complete media/track/page200 assertions. Canonical
+tmp/phase9-f6-copy-audio/identity.json and post-commit.json own exact source, tool
+pins, negative probes, verification and checkpoint. VLC3.0.20 follows the valid
+AAC-to-AC3 change on whole captured responses; the initial FFmpeg decoder does
+not. No production codec change, repeated HTTP or acceptance reduction follows.
+F6/9A stay open for remaining video-Copy/full-track and native shared-session/
+disconnect matrices plus suitable-client/platform acceptance. Next connect the
+existing capacity fixture's staged disconnect package: cancel with both places
+held, during actual incomplete Hybrid warmup, and with another HLS viewer using
+the same producer. Measure wrapper cleanup before explicitstop; retain the shared
+producer's lease, then observe its configured idle cleanup separately. Existing
+pure/fake/held-DB cancellation proof is reused only in its original scope.
 Continue autonomously; unused-object removal stays deferred. Preserve unrelated
 deltas and all receipts; do not push/publish or weaken any acceptance clause.
 

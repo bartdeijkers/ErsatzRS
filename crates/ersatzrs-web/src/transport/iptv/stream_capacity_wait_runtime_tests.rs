@@ -14,6 +14,53 @@ const CAPTURE_SECONDS: u64 = 36;
 const HYBRID_CAPTURE_SECONDS: u64 = 52;
 const CAPTURE_LIMIT: usize = 32 * 1024 * 1024;
 
+#[derive(Clone, Copy)]
+enum CapacityAudio {
+    Aac,
+    Ac3Copy,
+}
+
+impl CapacityAudio {
+    fn codec(self) -> &'static str {
+        match self {
+            Self::Aac => "aac",
+            Self::Ac3Copy => "ac3",
+        }
+    }
+
+    fn profile(self) -> FFmpegProfileAudioFormat {
+        match self {
+            Self::Aac => FFmpegProfileAudioFormat::Aac,
+            Self::Ac3Copy => FFmpegProfileAudioFormat::Copy,
+        }
+    }
+}
+
+async fn capacity_source_audio(state: &AppState, version: i64, audio: CapacityAudio) -> Value {
+    // Read the managed scan's stored inventory, without reopening the source
+    // while the viewer waits. Both language alternatives must remain present.
+    let streams = ersatzrs_infra::playback::load_source_audio_streams(&state.pool, version)
+        .await
+        .unwrap();
+    assert_eq!(streams.len(), 2);
+    assert_eq!(streams[0].index, 1);
+    assert_eq!(streams[0].language.as_deref(), Some("eng"));
+    assert_eq!(streams[1].index, 3);
+    assert_eq!(streams[1].language.as_deref(), Some("nld"));
+    let expected = ersatzrs_ffmpeg::SourceAudioCodec::from_ffmpeg_name(audio.codec());
+    assert!(streams.iter().all(|stream| stream.codec == expected));
+    let profile = ersatzrs_infra::playback::load_channel_playback_profile(&state.pool, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(profile.profile.audio_format, audio.profile());
+    assert_eq!(profile.profile.video_format, FFmpegProfileVideoFormat::H264);
+    json!({"source_codec":audio.codec(),"profile_audio_format":format!("{:?}",profile.profile.audio_format),
+        "persisted_audio":streams.iter().map(|stream| json!({"index":stream.index,
+            "codec":format!("{:?}",stream.codec),"language":stream.language,
+            "channels":stream.channels})).collect::<Vec<_>>()})
+}
+
 async fn capture_wait(public: &Server, root: &Path, capture_seconds: u64) -> (Vec<u8>, Value) {
     let occupied = ["capacity-fixture-first", "capacity-fixture-second"].map(|channel| {
         try_reserve_active_transcode(
@@ -182,7 +229,7 @@ async fn programme_caption_frame(
     clippy::disallowed_methods,
     reason = "Requires an explicit new proof-owned directory for retained synthetic runtime evidence"
 )]
-async fn run_capacity_wait(mode: StreamingMode) {
+async fn run_capacity_wait(mode: StreamingMode, audio: CapacityAudio) {
     let _ = tracing_subscriber::fmt()
         .with_env_filter("ersatzrs_web=debug,ersatzrs_infra=debug")
         .with_test_writer()
@@ -204,12 +251,13 @@ async fn run_capacity_wait(mode: StreamingMode) {
         .expect("capacity proof directory must not already exist");
     println!("default-two capacity handoff evidence: {}", root.display());
     let library = root.join("library");
-    let source = local_source_duration(&tools[0], &library, "60").await;
+    let source = local_source_duration_with_audio(&tools[0], &library, "60", audio.codec()).await;
     let expected = calibration(&tools, &source, &root).await;
     let unused_provider = Server::start(Router::new()).await;
     let state = application(&root, &unused_provider).await;
-    let (item, _) = scan_source(&state, &library, &tools[1]).await;
-    software_profile(&state).await;
+    let (item, version) = scan_source(&state, &library, &tools[1]).await;
+    software_profile_with_audio(&state, audio.profile()).await;
+    let source_audio = capacity_source_audio(&state, version, audio).await;
     if mode == StreamingMode::TransportStreamHybrid {
         // The parent fixture shortens both idle and startup to five seconds.
         // A fourteen-second occupied-capacity trial needs the real default.
@@ -257,6 +305,7 @@ async fn run_capacity_wait(mode: StreamingMode) {
     let (bytes, mut observation) = capture_wait(&public, &root, capture_seconds).await;
     observation["cleanup"] = cleanup_wait(&state).await;
     observation["mode"] = json!(format!("{mode:?}"));
+    observation["audio"] = source_audio;
     observation["addon_unchanged"] =
         json!(tokio::fs::read(root.join("addon-calls")).await.unwrap() == calls);
     observation["generation_unchanged"] = json!(
@@ -370,6 +419,14 @@ async fn verify_wait(
             .count(),
         1
     );
+    let programme_audio = streams
+        .iter()
+        .find(|stream| stream["codec_type"] == "audio")
+        .unwrap();
+    assert_eq!(
+        programme_audio["codec_name"], observation["audio"]["source_codec"],
+        "the programme must retain the selected source codec when Copy is requested"
+    );
     assert!(streams
         .iter()
         .any(|stream| stream["codec_name"] == "dvb_teletext"));
@@ -474,12 +531,13 @@ async fn verify_programme_media(
         .await
         .unwrap();
     compare_burn(&actual, &expected[0], &expected[1], &expected[2]);
-    let audio = tone_windows(&tools[0], bytes, 660, 8 * 1024 * 1024).await;
+    let (audio, decoder) = capacity_audio_windows(&tools[0], bytes, observation).await;
     let first = audio.iter().position(|matching| *matching);
     tokio::fs::write(
         root.join("capacity-audio-continuity.json"),
         serde_json::to_vec_pretty(&json!({
             "sample_window_ms":100,
+            "decoder":decoder,
             "first_programme_window":first,
             "selected660hz_matches":audio,
         }))
@@ -487,7 +545,14 @@ async fn verify_programme_media(
     )
     .await
     .unwrap();
-    let first = first.expect("selected Dutch audio must replace silent waiting audio");
+    assert_capacity_audio_tail(&audio, minimum_programme_seconds);
+}
+
+fn assert_capacity_audio_tail(audio: &[bool], minimum_programme_seconds: usize) {
+    let first = audio
+        .iter()
+        .position(|matching| *matching)
+        .expect("selected Dutch audio must replace silent waiting audio");
     assert!(
         audio.len() - first >= minimum_programme_seconds * 10,
         "selected audio must persist through the required tail"
@@ -496,6 +561,46 @@ async fn verify_programme_media(
         audio[first..].iter().all(|matching| *matching),
         "selected alternate audio must persist through the programme tail"
     );
+}
+
+async fn capacity_audio_windows(
+    ffmpeg: &str,
+    bytes: &[u8],
+    observation: &Value,
+) -> (Vec<bool>, Value) {
+    if observation["audio"]["profile_audio_format"] != "Copy" {
+        return (
+            tone_windows(ffmpeg, bytes, 660, 8 * 1024 * 1024).await,
+            json!({"client":"FFmpeg","tool":ffmpeg,"input":"whole captured HTTP response"}),
+        );
+    }
+    // FFmpeg's initial AAC decoder does not switch to the valid later AC3 PMT.
+    // The qualified VLC client follows that change on these same whole bytes.
+    let vlc = exact_tool("ERSATZRS_TELETEXT_TEST_VLC");
+    let version = String::from_utf8(probe(&vlc, &["--version"], &[], 4096).await.unwrap()).unwrap();
+    assert!(
+        version.starts_with("VLC version 3.0.20 "),
+        "the retained client receipt pins VLC3.0.20"
+    );
+    let arguments = [
+        "--intf",
+        "dummy",
+        "--play-and-exit",
+        "--no-sout-video",
+        "--sout",
+        "#transcode{acodec=s16l,channels=1,samplerate=48000}:std{access=file,mux=raw,dst=-}",
+        "fd://0",
+    ];
+    let pcm = probe(&vlc, &arguments, bytes, 8 * 1024 * 1024)
+        .await
+        .unwrap();
+    let windows = tone_windows_from_pcm(&pcm, 660);
+    (
+        windows,
+        json!({"client":"VLC","tool":vlc,"version":version.trim(),
+        "arguments":arguments,"input":"whole captured HTTP response",
+        "pcm_format":"signed16le mono48000Hz","pcm_bytes":pcm.len()}),
+    )
 }
 
 async fn capacity_programme_probe(tool: &str, args: &[&str], bytes: &[u8]) -> Vec<u8> {
@@ -514,7 +619,10 @@ fn legacy_capacity_wait_preserves_timeline_captions_and_selected_audio() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(Box::pin(run_capacity_wait(StreamingMode::TransportStream)));
+        .block_on(Box::pin(run_capacity_wait(
+            StreamingMode::TransportStream,
+            CapacityAudio::Aac,
+        )));
 }
 
 #[test]
@@ -529,5 +637,93 @@ fn hybrid_capacity_wait_preserves_timeline_captions_and_selected_audio() {
         .unwrap()
         .block_on(Box::pin(run_capacity_wait(
             StreamingMode::TransportStreamHybrid,
+            CapacityAudio::Aac,
         )));
+}
+
+#[test]
+#[ignore = "requires FFmpeg9/libzvbi/libx264/AC3, ffprobe, TSDuck, VLC3.0.20, loopback and fresh app-data; default2 occupied, repeated AAC slate, one Legacy response with AC3 Copy"]
+fn legacy_capacity_wait_preserves_ac3_copy_captions_and_selected_audio() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(run_capacity_wait(
+            StreamingMode::TransportStream,
+            CapacityAudio::Ac3Copy,
+        )));
+}
+
+#[test]
+#[ignore = "requires FFmpeg9/libzvbi/libx264/AC3, ffprobe, TSDuck, VLC3.0.20, loopback and fresh app-data; default2 occupied, repeated AAC slate, one Hybrid response with AC3 Copy"]
+fn hybrid_capacity_wait_preserves_ac3_copy_captions_and_selected_audio() {
+    let _guard = active_transcode_test_guard_for_tests();
+    reset_active_transcode_state_for_tests();
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(Box::pin(run_capacity_wait(
+            StreamingMode::TransportStreamHybrid,
+            CapacityAudio::Ac3Copy,
+        )));
+}
+
+#[test]
+#[ignore = "requires pinned native tools/VLC3.0.20 and retained Legacy/Hybrid AC3 Copy captures; does not start hosts or recapture HTTP"]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Reads an explicit existing synthetic proof root for bounded decoder replay"
+)]
+fn retained_capacity_ac3_copy_replay_preserves_media_and_transport() {
+    let root = PathBuf::from(
+        std::env::var("ERSATZRS_TELETEXT_CAPACITY_REPLAY_DIR")
+            .expect("runner must supply the existing AC3 Copy proof root"),
+    );
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let tools = [
+                exact_tool("ERSATZRS_TELETEXT_TEST_FFMPEG"),
+                exact_tool("FFPROBE_PATH"),
+                exact_tool("ERSATZRS_TELETEXT_TEST_TSANALYZE"),
+            ];
+            for (case, mode) in [
+                ("legacy1", "TransportStream"),
+                ("hybrid1", "TransportStreamHybrid"),
+            ] {
+                let root = root.join(case);
+                let observation: Value = serde_json::from_slice(
+                    &tokio::fs::read(root.join("capacity-observation.json"))
+                        .await
+                        .unwrap(),
+                )
+                .unwrap();
+                assert_eq!(observation["mode"], mode);
+                assert_eq!(observation["audio"]["profile_audio_format"], "Copy");
+                assert_eq!(observation["audio"]["source_codec"], "ac3");
+                let bytes = tokio::fs::read(root.join("capacity-handoff.ts"))
+                    .await
+                    .unwrap();
+                let expected = [
+                    tokio::fs::read(root.join("page888-media1_6.rgb"))
+                        .await
+                        .unwrap(),
+                    tokio::fs::read(root.join("page200-media1_6.rgb"))
+                        .await
+                        .unwrap(),
+                    tokio::fs::read(root.join("plain-media1_6.rgb"))
+                        .await
+                        .unwrap(),
+                ];
+                verify_wait(&tools, &root, &bytes, &expected, &observation).await;
+            }
+        });
 }

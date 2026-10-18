@@ -19,6 +19,15 @@ async fn local_source(ffmpeg: &str, library: &Path) -> PathBuf {
 }
 
 async fn local_source_duration(ffmpeg: &str, library: &Path, duration: &str) -> PathBuf {
+    local_source_duration_with_audio(ffmpeg, library, duration, "aac").await
+}
+
+async fn local_source_duration_with_audio(
+    ffmpeg: &str,
+    library: &Path,
+    duration: &str,
+    audio_encoder: &str,
+) -> PathBuf {
     tokio::fs::create_dir(library).await.unwrap();
     let bytes = probe(
         ffmpeg,
@@ -58,7 +67,7 @@ async fn local_source_duration(ffmpeg: &str, library: &Path, duration: &str) -> 
             "-b:v",
             "200k",
             "-c:a",
-            "aac",
+            audio_encoder,
             "-b:a",
             "64k",
             "-c:s",
@@ -158,6 +167,10 @@ async fn scan_source(state: &AppState, library: &Path, ffprobe: &str) -> (i64, i
 }
 
 async fn software_profile(state: &AppState) {
+    software_profile_with_audio(state, FFmpegProfileAudioFormat::Aac).await;
+}
+
+async fn software_profile_with_audio(state: &AppState, audio_format: FFmpegProfileAudioFormat) {
     state
         .pool
         .execute(
@@ -177,7 +190,7 @@ async fn software_profile(state: &AppState) {
             transcode_video: true,
             transcode_audio: true,
             video_format: FFmpegProfileVideoFormat::H264,
-            audio_format: FFmpegProfileAudioFormat::Aac,
+            audio_format,
             video_preset: Some("ultrafast".into()),
             video_bitrate: VIDEO_KBPS,
             video_buffer_size: 2000,
@@ -350,6 +363,10 @@ async fn tone_windows(ffmpeg: &str, bytes: &[u8], frequency: usize, limit: usize
     )
     .await
     .unwrap();
+    tone_windows_from_pcm(&pcm, frequency)
+}
+
+fn tone_windows_from_pcm(pcm: &[u8], frequency: usize) -> Vec<bool> {
     let samples: Vec<_> = pcm
         .chunks_exact(2)
         .map(|s| i16::from_le_bytes(s.try_into().unwrap()))

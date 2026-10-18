@@ -10696,7 +10696,7 @@ Missing product functionality:
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4, singleton bitmap warm/client and scoped expiry/native Base proof retained; ordinary POP edit/growth/shrink, per-owner updates, unchanged Night and reopened cold output now pass6d495364 | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
 | F5 — source acquisition and accepted output policies | P9A-03 Local descriptors/header windows and source ownership; ordinary Local888 legacy/Hybrid/seek0.5s/audio/VBV proof retained | Discover/select complete page/charset/provenance across supported providers and use all accepted native/Next Burn/Convert/copy/HLS/browser combinations | Persist distinct source/version/stream/page identities through rescan/replacement; implement remaining exact policies/timing/handoff/cancellation, with visible unsupported results and no caption loss, engine switch or double source consumption |
-| F6 — ordinary playback safety defect | Pure epoch core and scoped route integration verified, including actual-host lifecycle. H264/AAC default2 Legacy/Hybrid wait flows and ordinary5s Hybrid caption/audio cases pass scoped transport/AV controls; work.json owns current proof | Rely on audio/video-Copy and all accepted full-track/shared-session transitions and disconnect cleanup | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
+| F6 — ordinary playback safety defect | Pure epoch core and scoped route integration verified, including actual-host lifecycle. H264/AAC default2 Legacy/Hybrid wait flows and ordinary5s Hybrid cases pass; scoped selected AC3 Copy adds complete retained media/client replay and strict transport evidence. Canonical F6 receipts own proof | Use remaining video-Copy/full-track transitions and safely disconnect waiting/warming/shared viewers | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
 
 Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
@@ -10809,10 +10809,23 @@ playlist/segment delivery, wrapper restart and both idle cleanup paths
 (smoke-lifecycle.log). A raw append PDT
 shift needs no F6 fix: served playlists/provenance regenerate the saved canonical
 clock and ignore raw producer timestamps; existing guards retain their scope.
-F6/9A remain open: audio/video-Copy codec reinitialization, full accepted track/
-shared-session matrices and applicable disconnect/client/platform proof are not
-inferred from H264/AAC or explicit fixture stop. Next qualify audio-Copy/AC3 through the same bounded wait fixture before changing
-production codec policy. No capacity increase, reconnect, extra mux or track loss
+Selected AC3 Copy qualification now uses the same default2 occupied14s fixture:
+tmp/phase9-f6-copy-audio/identity.json owns exact captures, tool pins and failures.
+Legacy/Hybrid retain18/33 consecutive888 samples, selected AC3 inventory and
+strict TSDuck22/22 each. The original complete tests stop at the FFmpeg audio
+probe: its first AAC decoder rejects later AC3 despite correct PMT signalling.
+Pinned VLC3.0.20 decodes the whole unchanged responses, including waiting silence
+then184/330 consecutive selected660Hz100ms programme windows. The existing bounded
+probe and identical media/track/page200/transport assertions pass both retained
+captures in one replay (2d4c9c03). No new host/source/HTTP/publication is repeated;
+no product codec change is justified. WAV-mux and initial test-guard limitations
+remain in the receipt, distinct from product defects. Strict web all-target
+Clippy, formatting and progress validation pass; receipt owns exact scope.
+F6/9A remain open: video-Copy and the complete accepted track/shared-session/
+disconnect/client/platform matrix are not inferred. Next qualify native waiting,
+actual incomplete warmup and shared-viewer disconnect before explicit fixturestop.
+An active shared producer must retain its lease; wrapper cleanup is distinct from
+final idle cleanup. No capacity increase, reconnect, extra mux or track loss
 is accepted; TSDuck/source-caption decoding is not Level2.5 client acceptance.
 Complete oversized context (X3), remaining call/definition/set topology and remaining F2/V2
 packages stay required. The208-word limit is an editor constraint, never a native
