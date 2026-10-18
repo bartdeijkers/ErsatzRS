@@ -71,26 +71,26 @@ export async function publication(page: Page): Promise<{ generation_id: number; 
     digest: await field(form, 'digest'),
   };
 }
-export async function raster(page: Page, number: number): Promise<Raster> {
+export async function raster(page: Page, number: number, expectedWidth = 672): Promise<Raster> {
   const model = page.getByTestId('teletext-preview-model');
   await expect(model).toHaveAttribute('data-page', String(number));
   await expect(model).toHaveAttribute('data-subcode', '0020');
   const image = model.locator('img');
   await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).complete
     && (element as HTMLImageElement).naturalWidth > 0)).toBe(true);
-  return image.evaluate(element => {
+  return image.evaluate((element, expectedWidth) => {
     const image = element as HTMLImageElement;
     const svg = new DOMParser().parseFromString(atob(image.src.split(',')[1]), 'image/svg+xml');
     const geometry = svg.documentElement.getAttribute('viewBox')!.split(' ').map(Number);
     const [width, height] = geometry.slice(2);
-    if (geometry[0] !== 0 || geometry[1] !== 0 || width !== 672 || height !== 250) {
-      throw new Error('Native bank preview geometry changed.');
+    if (geometry[0] !== 0 || geometry[1] !== 0 || width !== expectedWidth || height !== 250) {
+      throw new Error(`Native bank preview geometry changed: expected ${expectedWidth}x250, got ${width}x${height}.`);
     }
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
     const context = canvas.getContext('2d')!; context.imageSmoothingEnabled = false;
     context.drawImage(image, 0, 0, width, height);
     return { width, height, pixels: Array.from(context.getImageData(0, 0, width, height).data) };
-  });
+  }, expectedWidth);
 }
 export function rasterHash(value: Raster): string { return hash(Buffer.from(value.pixels)); }
 export function archiveFiles(path: string): Upload[] {

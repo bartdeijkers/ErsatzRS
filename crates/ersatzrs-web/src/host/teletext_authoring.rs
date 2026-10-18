@@ -190,6 +190,7 @@ pub struct TeletextAuthoringPreview {
     navigation: Vec<TeletextNavigationLink>,
     pages: Vec<TeletextPageAddress>,
     resource_objects: Vec<ersatzrs_domain::TeletextObjectIdentity>,
+    object_resources: Vec<TeletextResourceIdentity>,
     authoring: Vec<TeletextAuthoringPageMetadata>,
     hold: TeletextWorkHold,
     deadline: Instant,
@@ -234,6 +235,12 @@ impl TeletextAuthoringPreview {
     #[must_use]
     pub fn resource_objects(&self) -> &[ersatzrs_domain::TeletextObjectIdentity] {
         &self.resource_objects
+    }
+    /// Existing POP/GPOP resources, including explicitly empty companions.
+    /// Observation establishes neither addition nor publication authority.
+    #[must_use]
+    pub fn object_resources(&self) -> &[TeletextResourceIdentity] {
+        &self.object_resources
     }
     /// Selected-owner declarations from the immutable original producer, never
     /// current package/profile state or imported permission authority.
@@ -940,6 +947,7 @@ fn render_original(
         navigation,
         pages,
         resource_objects: resource_objects(service),
+        object_resources: object_resources(service),
         authoring: metadata::base(restored, owner, deadline)?,
         hold,
         deadline,
@@ -959,6 +967,24 @@ fn resource_objects(
         .iter()
         .filter(|definition| definition.identity.resource().is_some())
         .map(|definition| definition.identity)
+        .collect()
+}
+
+fn object_resources(
+    service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
+) -> Vec<TeletextResourceIdentity> {
+    service
+        .declared()
+        .resource_inventory()
+        .iter()
+        .filter(|resource| {
+            matches!(
+                resource.kind(),
+                ersatzrs_domain::TeletextResourceKind::Pop
+                    | ersatzrs_domain::TeletextResourceKind::Gpop
+            )
+        })
+        .copied()
         .collect()
 }
 

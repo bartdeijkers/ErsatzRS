@@ -13,6 +13,7 @@ use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::admin_result_view;
 
 mod editorial;
+mod resource_add;
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/teletext_drafts.module.css");
 
@@ -25,6 +26,7 @@ pub(super) fn draft_status_text(code: &str) -> &'static str {
         "editorial-limit" => TextKey::TeletextEditorLimit,
         "editorial-mismatch" => TextKey::TeletextEditorMismatch,
         "object-copy-invalid" => TextKey::TeletextObjectCopyInvalid,
+        "object-add-invalid" => TextKey::TeletextObjectAddInvalid,
         "editorial-protected" => TextKey::TeletextEditorProtected,
         "editorial-no-changes" => TextKey::TeletextEditorNoChanges,
         "editorial-no-pages" => TextKey::TeletextPreviewAbsent,
@@ -414,6 +416,7 @@ fn editorial_controls(data: &TeletextDraftPreviewData) -> AnyView {
                     </button>
                 </form>
             </div>
+            {resource_add::form(data, observation)}
             {object_copy_form(data, observation)}
             {editorial_import_form(data.channel_id, observation.current_design_head)}
             <p>{tr(TextKey::TeletextEditorNoPublicationHelp)}</p>
@@ -835,6 +838,7 @@ mod tests {
             }],
             diagnostics: Vec::new(),
             resource_objects: Vec::new(),
+            object_resources: Vec::new(),
             authoring: Vec::new(),
             publication: None,
         }
@@ -1262,5 +1266,78 @@ mod tests {
         data.resource_objects.clear();
         let html = context.with(|| object_copy_form(&data, &observation).to_html());
         assert!(!html.contains("teletext-object-copy-form"));
+    }
+
+    #[test]
+    fn first_object_form_lists_empty_resources_and_never_submits_a_program() {
+        use ersatzrs_domain::{
+            TeletextRawDataPageNumber, TeletextResourceIdentity, TeletextResourceKind,
+            TeletextResourceSubpageIndex,
+        };
+        let context = Owner::new();
+        let mut data = preview();
+        data.object_resources = [TeletextResourceKind::Pop, TeletextResourceKind::Gpop]
+            .into_iter()
+            .map(|kind| {
+                TeletextResourceIdentity::new(
+                    kind,
+                    TeletextRawDataPageNumber::new(2, 0xc0).unwrap(),
+                    TeletextResourceSubpageIndex::new(15).unwrap(),
+                )
+                .unwrap()
+            })
+            .collect();
+        assert!(data.resource_objects.is_empty());
+        let observation = TeletextDraftPublicationObservation {
+            digest: "b".repeat(64),
+            current_design_head: data.revision,
+            current_pending_id: None,
+            current_accepted_id: None,
+            state: TeletextDraftPublicationState::Unrequested,
+            can_request: false,
+            can_publish: false,
+            replaces_pending: false,
+        };
+        let html = context.with(|| resource_add::form(&data, &observation).to_html());
+        for expected in [
+            "/admin-api/teletext/design/add-object",
+            "POP 2C0 S1=15",
+            "GPOP 2C0 S1=15",
+            "name=\"resource\"",
+            "name=\"object_type\"",
+            "name=\"new_object_id\"",
+            "value=\"active\"",
+            "value=\"adaptive\"",
+            "value=\"passive\"",
+        ] {
+            assert!(html.contains(expected), "missing {expected}: {html}");
+        }
+        for forbidden in [
+            "source_object",
+            "name=\"program\"",
+            "name=\"sidecar\"",
+            "<textarea",
+        ] {
+            assert!(
+                !html.contains(forbidden),
+                "unexpected authority: {forbidden}"
+            );
+        }
+        assert!(!html.contains("<fieldset disabled"));
+        assert!(!context
+            .with(|| object_copy_form(&data, &observation).to_html())
+            .contains("<form"));
+        data.revision -= 1;
+        let html = context.with(|| resource_add::form(&data, &observation).to_html());
+        assert!(html.contains("<fieldset disabled"));
+        assert!(html.contains(tr(TextKey::TeletextObjectAddCurrentHelp)));
+        data.object_resources.clear();
+        assert!(!context
+            .with(|| resource_add::form(&data, &observation).to_html())
+            .contains("<form"));
+        assert_eq!(
+            draft_status_text("object-add-invalid"),
+            tr(TextKey::TeletextObjectAddInvalid)
+        );
     }
 }

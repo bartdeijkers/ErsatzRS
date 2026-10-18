@@ -324,6 +324,7 @@ async fn all_off_has_no_owner_raster_or_fake_entry_and_explicit_acceptance_keeps
     assert!(original.is_absent() && original.raster().is_none());
     assert!(original.pages().is_empty() && original.navigation().is_empty());
     assert!(original.authoring().is_empty());
+    assert!(original.object_resources().is_empty());
     assert!(original.publication().unwrap().can_request);
     drop(original);
     select(&fixture, identity, &observed, true).await;

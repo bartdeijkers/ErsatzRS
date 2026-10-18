@@ -14,6 +14,9 @@ mod admin_copy;
 #[path = "definition_additions/copy_controls.rs"]
 mod copy_controls;
 
+#[path = "definition_additions/first_definition.rs"]
+mod first_definition;
+
 #[derive(Clone, Copy)]
 enum State {
     Dormant,
