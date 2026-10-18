@@ -15,6 +15,7 @@ pub mod graph_probe;
 pub mod graphics;
 pub mod input;
 pub mod locator;
+pub mod mpegts_epoch;
 pub mod options;
 mod physical_inputs;
 pub mod pipeline;

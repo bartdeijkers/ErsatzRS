@@ -775,6 +775,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Prepare a bounded generated MPEG-TS epoch join for continuous clocks and stream
+  signalling. Capacity-wait route integration remains under verification.
 - Scale generated capacity-wait and HLS error screens to the configured channel
   resolution using the embedded background image's actual dimensions.
 - Accept structural teletext resource edits that change packet extent without

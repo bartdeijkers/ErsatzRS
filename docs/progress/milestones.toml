@@ -10696,7 +10696,7 @@ Missing product functionality:
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4, singleton bitmap warm/client and scoped expiry/native Base proof retained; ordinary POP edit/growth/shrink, per-owner updates, unchanged Night and reopened cold output now pass6d495364 | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
 | F5 — source acquisition and accepted output policies | P9A-03 Local descriptors/header windows and source ownership; ordinary Local888 legacy/Hybrid/seek0.5s/audio/VBV proof retained | Discover/select complete page/charset/provenance across supported providers and use all accepted native/Next Burn/Convert/copy/HLS/browser combinations | Persist distinct source/version/stream/page identities through rescan/replacement; implement remaining exact policies/timing/handoff/cancellation, with visible unsupported results and no caption loss, engine switch or double source consumption |
-| F6 — ordinary playback safety defect | Actual slate source dimensions corrected; Legacy wait/programme now both492x250. Default2 still fails Legacy clocks/PMT and Hybrid delayed readiness/null-window admission; bounded explicit cleanup drains both | Wait for capacity then enter programme output on one stable clock/topology | Establish a compatible finite-item codec/initialization/complete-track contract without premature source opens, then reuse admitted final mux; prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio and cleanup without bypass |
+| F6 — ordinary playback safety defect | Pure bounded generated-TS epoch join verified; route integration remains an uncommitted candidate. Earlier scoped Legacy36s/Hybrid52s transport/caption/audio success is retained, but final ordinary startup/burst regressions fail. Canonical tmp/phase9-f6-handoff/identity.json | Reliably wait then enter programme on one HTTP response with every accepted codec/full-track layout | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
 
 Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
@@ -10762,61 +10762,46 @@ and coordinated resource/link/set editing remain part of F1; no general alias
 capability is inferred from this executed invalid relationship.
 Suitable-client V3/X1 remains the strongest independent engine gate. No newly
 qualified positive candidate is retained, so no unchanged trial or decoder repair starts.
-F6 current runtime qualification (2026-10-18; no product fix): canonical
- tmp/phase9-f6-capacity/identity.json. Two focused opt-in ordinary-host tests
-reuse the managed four-stream Local source (video, English440Hz, page888,
-Dutch660Hz), accepted authored output and production capacity2. Both slots
-remain occupied14s; each route makes one HTTP request. Legacy delivers repeated
-slates then programme within36s. Caption888 pixel presence and at least1s of
-selected660Hz audio pass, while the unchanged transport oracle fails:8PTS,
-4PCR and1PMT continuity breaks. The existing TSDuck gate reports6/22 failures,
-including strict PCR jitter and51pct PCR-media/wall-time delivery. This is not
-continuous successful AV. Captured prefix is H2641920x1080/AAC; programme tail
-is H264492x250/AAC(nld) plus authored PID512. Whole-response ffprobe initially
-sees only AV; the unchanged native clock assertion stops before the remaining
-inventory/authored-text assertions. Arbitrary Copy codecs remain source-qualified,
-not runtime-proven by this software-profile case.
-Hybrid with the reused fixture's5s timeout returns503; do not generalize that
-setting to the default. The distinct default60s trial returns200 only after
-release (~14.1s), then ends with a body error: teletext needs7null packets in a
-window containing2. It delivers no pre-release waiting bytes. Hybrid handoff
-AV/caption/audio/clock/delivery acceptance is therefore unproven. These are
-failed acceptance probes, not green regressions or suitable-client evidence.
-Both captures retain peak2, unchanged addon calls/accepted generation and drained
-leases/registries/native work after explicit fixture stop; listeners/database
-close before final assertions. This proves bounded explicit cleanup, not new
-spontaneous-disconnect/source-opening coverage. Reuse the9 unchanged ownership/
-held-SQLite cancellation passes in tmp/phase9-wrapper-selection/identity.json
-(run b5d1a36f-3eb2-42a4-988f-eb715a53b198) and previously recorded private-route
-source fences for their exact scope. Unchanged wait/wrapper code and historical
- tmp/phase9-mixed-resource-calls/capacity-qualification.json plus
- tmp/phase9-live-editor-flow/identity.json retain their scoped proof; the narrow
-hls_worker correction follows. Editor/publication/channel-isolation is unchanged.
-F6 slate-resolution correction: tmp/phase9-f6-slate-dimensions/identity.json
-follows evidence checkpoint090f1653. Both builders now supply the actual1920x1080
-PNG source dimensions, preserving the configured output size. Eight focused tests,
-including the PNG-IHDR invariant and two reviewed complete argv snapshots, pass.
-Ordinary default2 Legacy prefix and programme tail independently probe492x250,
-H264 level2.1/AAC; the tail retains Dutch audio and authored teletext. Caption888
-and selected660Hz presence pass again. The unchanged acceptance probe still fails
-8PTS/4PCR/1PMT breaks; strict TSDuck remains6/22 failed with51pct delivery.
-Default60s Hybrid again withholds output until release (~14.1s), then fails:
-7null packets needed,4available in the short window. This disproves resolution
-as a sufficient fix for its burst shortage; average configured CBR is present.
-Both probes retain peak2, unchanged addon/generation and complete bounded explicit
-fixture-stop cleanup. They are negative F6 acceptance evidence, not green runtime
-acceptance. Ownership/source-opening and unaffected editor/publication/isolation
-proof above is reused; no suitable-client or six-RID acceptance is added.
-Next F6 action: keep one response-owned output epoch across wait/programme children,
-with common PCR/PTS/DTS, continuity and complete changed PSI/codec initialization;
-existing read-only timestamp and PCR-only HLS helpers cannot perform that join.
-Preserve current admission/supervision, payloads and full track inventory. Move
-Hybrid's capacity wait ahead of HLS readiness and continue slates during admitted
-warmup using existing readiness mechanisms; isolate the remaining short-window
-null shortage. A timestamp-only patch, extra outer copy mux, track omission,
-capacity increase or reconnect is not accepted. Maintainer
-continuation is authorized; keep F6 first, continue independent accepted work
-when specifically blocked, and do not push or publish. All F/V/X criteria stay open.
+F6 retained negative baselines: checkpoint090f1653 and canonical
+ tmp/phase9-f6-capacity/identity.json establish the production-default2 failures:
+Legacy8PTS/4PCR/1PMT breaks and strict transport6/22 failed (51pct delivery);
+Hybrid default60s withheld waiting bytes until release, then exhausted its
+short-window null reserve. The distinct5s startup503 is not generalized to60s.
+Checkpointa5eb9733 and tmp/phase9-f6-slate-dimensions/identity.json correct the
+actual1920x1080 PNG source dimensions (8 focused passes,2 reviewed argv snapshots)
+and prove492x250 H264/AAC prefix/tail, source888 and selected660Hz presence.
+The same transport failures persist; resolution alone is insufficient. Both
+retain peak2, unchanged addon/generation and bounded explicit fixture-stop
+cleanup, not new spontaneous-disconnect proof. Reuse the9 ownership/held-SQLite
+passes in tmp/phase9-wrapper-selection/identity.json (run
+b5d1a36f-3eb2-42a4-988f-eb715a53b198), private-route source fences and unchanged
+editor/publication/channel-isolation receipts only in their original scope.
+F6 partial module checkpoint: tmp/phase9-f6-handoff/identity.json owns source
+hashes and scoped proof; post-commit.json records its SHA. Only the pure bounded
+generated-TS epoch module is committed. Its16 regressions pass within the
+retained54-pass focused selection; the separate short Hybrid36s case failed.
+Strict all-target FFmpeg Clippy and formatting pass. Split/malformed headers,
+clock wrap/rates/reordering, full PSI inventory/version/CRC, duplicates and
+bounded sticky failures are covered. No production route is accepted here.
+The uncommitted route candidate joins epochs before existing authored output,
+atomically reserves native Hybrid wrapper/producer and fences cached provenance.
+Earlier Legacy36s and Hybrid52s captures each pass22 strict transport controls,
+with continuous888 captions/selected660Hz audio and explicit fixture-stop cleanup.
+Those receipts retain their exact candidate scope, not present-head acceptance.
+Final regression exposes ordinary5s Hybrid503 under forced first realtime pacing.
+A bounded12s startup readburst passes2 argv/bounds tests but fails actual Hybrid
+source delivery at32.787s and fresh immediate Burn-eng888 pixels (Off-nld passes).
+Four cached/fallback controls and retained cancellation pass; the combined
+ordinary trial's reused app directory correctly rejects before routing. All
+negative receipts remain in work.json; no timeout or pixel expectation is relaxed.
+The route/pacing draft remains uncommitted. Next use one bounded read-only
+producer-playlist capture in the existing host probe to distinguish an exhausted
+published window/cursor from codec/initialization faults, then correct the named
+boundary. Strict consumer lint, lifecycle smoke, complete codec/shared-session/
+disconnect proof remain due before route acceptance. Source/lease, unaffected
+editor/publication/isolation and earlier scoped AV/transport evidence are reused.
+No reconnect, capacity increase, extra mux, track omission, suitable-client or
+six-RID acceptance is inferred. Full F6/9A and every other closure clause remain.
 Complete oversized context (X3), remaining call/definition/set topology and remaining F2/V2
 packages stay required. The208-word limit is an editor constraint, never a native
 cap or a waiver; V6/V7 continue preserving full content. Bound each package to a
