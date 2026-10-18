@@ -5,6 +5,9 @@ use ersatzrs_infra::transcode_capacity::{try_reserve_active_transcode, ActiveTra
 
 use super::*;
 
+#[path = "stream_capacity_disconnect_runtime_tests.rs"]
+mod disconnect;
+
 const WAIT_SECONDS: u64 = 14;
 const CAPTURE_SECONDS: u64 = 36;
 // Cold Hybrid includes admitted source-caption startup and three real HLS
