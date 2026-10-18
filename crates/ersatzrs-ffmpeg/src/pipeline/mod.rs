@@ -2292,7 +2292,8 @@ pub struct UnsupportedSource {
 ///
 /// Returns [`UnsupportedSource`] when the selected source carries a Dolby
 /// Vision configuration with no characterized conversion, or AV1 output is
-/// requested in an unsupported MPEG-TS container (ADR 0106).
+/// requested in an unsupported MPEG-TS container (ADR 0106), or source teletext
+/// Burn is combined with video stream copy (ADR 0121).
 pub fn build_pipeline_command(
     acceleration: HardwareAccelerationKind,
     request: PipelineRequest,
@@ -2375,6 +2376,16 @@ fn unsupported_source_reason_for_acceleration(
         if let Some(reason) = av1_output_error(request.state.output_format) {
             return Some(reason.to_owned());
         }
+    }
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy
+        && crate::command::selected_bitmap_burn_input(&request.inputs)
+            .and_then(|subtitle| subtitle.streams.first())
+            .is_some_and(|stream| stream.source_teletext_page.is_some())
+    {
+        return Some(
+            "Source teletext Burn requires video encoding; video Copy requires verified caption carriage or a source-bound sidecar"
+                .to_owned(),
+        );
     }
     if let Some(incomplete) = request
         .source_video_stream

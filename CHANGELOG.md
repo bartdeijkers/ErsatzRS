@@ -775,6 +775,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Reject native source-teletext burn-in with video stream-copy during command
+  construction, avoiding an incompatible FFmpeg filter/copy command. Verified
+  caption carriage for copied video remains open.
 - Preserve generated MPEG-TS clocks, continuity and changed stream signalling
   across repeated capacity-wait screens and programme admission. Native Hybrid
   startup reserves its wrapper and first encoder together while continuing

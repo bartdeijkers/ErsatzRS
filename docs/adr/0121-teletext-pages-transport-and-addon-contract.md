@@ -782,6 +782,15 @@ than assuming the same adapter applies. Insufficient capacity, malformed PSI
 or PID collision is a visible failure, not silent page loss. Refresh swaps the
 complete validated page generation at a carousel boundary.
 
+Native command construction refuses a selected source-teletext bitmap Burn
+when video output is Copy. The same unsupported-source result reaches both
+validated command builders before a playback consumer can start; no implicit encoder
+promotion or dropped caption makes that request succeed. This guards an invalid
+filter/copy command and does not implement or waive the required verified Copy
+caption carriage or source-bound sidecar below. A carriage adapter must retain
+exact source identity, chosen stream/page, command binding and consuming-child
+ownership. The existing Burn/NUT initializer grants no carriage authority.
+
 ### Engine/source/output matrix
 
 Every row is an implementation obligation, not a claim of current support.

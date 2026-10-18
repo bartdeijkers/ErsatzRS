@@ -83,6 +83,107 @@ fn explicit_valid_audio_index_survives_instead_of_selecting_first_metadata() {
     assert_eq!(plan.enabled_caption_input_streams(), [4, 3, 7]);
 }
 
+fn copy_burn_request() -> PipelineRequest {
+    let frame_size = FrameSize::new(492, 250);
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.video_format = ersatzrs_domain::FFmpegProfileVideoFormat::Copy;
+    desired.scaled_size = frame_size;
+    desired.frame_size = frame_size;
+    desired.frame_rate = Some(crate::FrameRate::new(25, 1));
+    desired.normalize_colors = false;
+    desired.deinterlace = false;
+    let mut video = SourceVideoStream::new(SourceVideoCodec::Mpeg2Video).with_index(0);
+    video.frame_size = Some(frame_size);
+    video.frame_rate = Some(crate::FrameRate::new(25, 1));
+    video.pixel_format = Some(PixelFormat::Yuv420P);
+    video.sample_aspect_ratio = Some("1:1".to_owned());
+    let mut request = PipelineRequest::new(InputFile::video("source.ts"), desired)
+        .with_source_video_stream(video)
+        .with_source_audio_streams(vec![
+            SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1),
+            SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3),
+        ]);
+    request.inputs[1] = request.inputs[1].clone().with_stream_index(3);
+    request.inputs.push(InputFile::teletext_subtitle(
+        "source.ts",
+        2,
+        TeletextPageNumber::new(888).unwrap(),
+    ));
+    request.state.duration = Some(Duration::from_secs(2));
+    request.state.report_progress = false;
+    request.state.thread_count = Some(1);
+
+    request
+}
+
+#[test]
+fn video_copy_with_selected_source_teletext_burn_requires_explicit_refusal() {
+    let request = copy_burn_request();
+    // ADR 0121 requires verified carriage or a source-bound sidecar for Copy.
+    // Safe refusal does not fulfill that native caption delivery obligation.
+    let reason = crate::unsupported_source_reason(&request).unwrap();
+    assert!(reason.contains("teletext Burn"));
+    assert!(reason.contains("video Copy"));
+    assert!(reason.contains("carriage") && reason.contains("sidecar"));
+    for acceleration in [
+        HardwareAccelerationKind::None,
+        HardwareAccelerationKind::Vaapi,
+        HardwareAccelerationKind::Qsv,
+        HardwareAccelerationKind::Nvenc,
+    ] {
+        let direct = build_pipeline_command(acceleration, request.clone()).unwrap_err();
+        let planned =
+            build_pipeline_command_with_source_teletext_plan(acceleration, request.clone())
+                .unwrap_err();
+        assert_eq!(direct.reason, reason);
+        assert_eq!(planned, direct);
+    }
+}
+
+#[test]
+fn copy_burn_refusal_preserves_copy_without_captions_and_encoded_caption_selection() {
+    let mut copy = copy_burn_request();
+    copy.inputs.pop();
+    assert!(crate::unsupported_source_reason(&copy).is_none());
+    let (command, plan) =
+        build_pipeline_command_with_source_teletext_plan(HardwareAccelerationKind::None, copy)
+            .unwrap();
+    assert!(plan.is_none());
+    assert!(command
+        .arguments
+        .windows(2)
+        .any(|pair| pair == ["-codec:v", "copy"]));
+
+    let mut encoded = copy_burn_request();
+    encoded.desired.video_format = ersatzrs_domain::FFmpegProfileVideoFormat::H264;
+    assert!(crate::unsupported_source_reason(&encoded).is_none());
+    let (command, plan) = build(HardwareAccelerationKind::None, encoded);
+    assert!(command
+        .arguments
+        .windows(2)
+        .any(|pair| pair == ["-txt_page:2", "888"]));
+    assert_eq!(plan.video_stream(), Some((0, 0)));
+    assert_eq!(plan.audio_stream(), Some((0, 3)));
+    assert_eq!(plan.enabled_caption_input_streams(), [0, 3, 2]);
+}
+
+#[test]
+fn explicit_source_teletext_copy_mapping_does_not_gain_burn_consumer_authority() {
+    let mut request = copy_burn_request();
+    request.inputs[2].subtitle_method = Some(SubtitleMethod::Copy);
+    assert!(crate::unsupported_source_reason(&request).is_none());
+    let (command, plan) =
+        build_pipeline_command_with_source_teletext_plan(HardwareAccelerationKind::None, request)
+            .unwrap();
+    for pair in [["-codec:v", "copy"], ["-codec:s", "copy"], ["-map", "0:2"]] {
+        assert!(command.arguments.windows(2).any(|actual| actual == pair));
+    }
+    assert!(!command.arguments.iter().any(|arg| arg == "-txt_page:2"));
+    // Generic raw stream mapping is possible, but does not certify selected
+    // page delivery or the application owner's exact-source carriage contract.
+    assert!(plan.is_none());
+}
+
 #[test]
 fn intel_reopened_audio_is_not_enabled_on_the_caption_physical_input() {
     for acceleration in [
