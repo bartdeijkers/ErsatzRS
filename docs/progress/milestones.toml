@@ -10696,7 +10696,7 @@ Missing product functionality:
 | F3 — remaining authored context/lowering | Typed palettes/repertoire/attributes/objects/DRCS/panels implemented partially; existing wire and independent receipts retained | Publish every legal row-zero/foreign-X26/context combination with faithful Base/Active priority and uncertain Header/POP secondary semantics | Resolve the specifically named context/lowering and original-secondary debts with exact lineage, bounds and Level1/1.5 fallback; missing conformance proof alone is tracked under V1, not presumed missing code |
 | F4 — complete live lifecycle and recovery | Resource artifact lifecycle3/4, singleton bitmap warm/client and scoped expiry/native Base proof retained; ordinary POP edit/growth/shrink, per-owner updates, unchanged Night and reopened cold output now pass6d495364 | Reliably update/retire all POP/GPOP/MOT/M29/page resources, automatically redisplay Base after expiry, and shut down cleanly with clients open | Complete resource/context retirement and original-response recovery; preserve receiver history, acknowledged transitions and immutable originals. Diagnose/fix only demonstrated native or client defects; forced termination is not clean shutdown |
 | F5 — source acquisition and accepted output policies | P9A-03 Local descriptors/header windows and source ownership; ordinary Local888 legacy/Hybrid/seek0.5s/audio/VBV proof retained | Discover/select complete page/charset/provenance across supported providers and use all accepted native/Next Burn/Convert/copy/HLS/browser combinations | Persist distinct source/version/stream/page identities through rescan/replacement; implement remaining exact policies/timing/handoff/cancellation, with visible unsupported results and no caption loss, engine switch or double source consumption |
-| F6 — ordinary playback safety defect | Pure epoch core and scoped route integration verified, including actual-host lifecycle. H264/AAC default2 Legacy/Hybrid wait flows and ordinary5s Hybrid cases pass; scoped selected AC3 Copy adds complete retained media/client replay and strict transport evidence. Canonical F6 receipts own proof | Receive the active selected caption and subsequent updates when video is copied after waiting; retain full track initialization | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
+| F6 — ordinary playback safety defect | Pure epoch core and scoped route integration verified, including actual-host lifecycle. H264/AAC default2 Legacy/Hybrid wait flows and ordinary5s Hybrid cases pass; scoped selected AC3 Copy adds complete retained media/client replay and strict transport evidence. Finite source-bound bitmap preparation and isolated-fragment recipes now have scoped native/unit and CLI proof; activation remains open. Canonical F6 receipts own proof | Receive the active selected caption and subsequent updates when video is copied after waiting; retain full track initialization | Prove affected ordinary legacy/Hybrid wait/repeat/handoff clocks, AV, captions/audio, initialization, source/lease/cancellation and cleanup without reconnect, extra mux, capacity increase or track omission |
 
 Missing mandatory evidence (reuse existing valid inputs and code):
 | ID / accepted requirement | Valid evidence | User outcome still unproven | Closure condition |
@@ -10857,27 +10857,35 @@ an inherited file descriptor is not a prerequisite. Canonical old-source CLI
 negatives remain at tmp/phase9-f6-copy-caption/carriage-qualification/identity.json.
 Its last transmitted PES9.24s/converted8s do not establish active or expired
 captions at17.5; that is a CLI seek, not a retained successful host-consumer seek.
-New bounded qualification is canonical at
-tmp/phase9-f6-copy-caption/bootstrap-qualification/work.json. The existing
-synthetic generator now optionally emits one888 A, B update and explicit C4/
-24-blank-row clear; default fixture bytes remain exact. Continuous source decode
-shows A17.52/B30/empty45 and a positive empty event, not inferred expiry. First
-remux is retained negative (first packet subtitle); fixture-only offset0.6 yields
-AV-first without weakening runtime admission. Source TSDuck19 checks retain one
-failure: two intentional sparse subtitle PTS leaps onPID258; AV/PCR/DTS/CC pass.
-No threshold is relaxed and no all-green transport/host-admission claim follows.
-One finite DVB bitmap artifact retains A/B/clear byte-exactly when the decoder
-canvas is explicitly492x250; initial720x576 mismatch was a tool setup limitation.
-Artifact origin is caption-only1.480600, not selectedAV1.418667. Ordinary input
-seek loses active A. Exactly two output-seek variants also lose A: Copy preserves
-future B7.560/clear22.560; transcode additionally leaves later times unshifted.
-These are CLI capability negatives, not demonstrated route defects. No further
-simple-seek/conversion variants: next deliberately re-emit complete active state
-at actual programme instep, preserve future update/clear, qualify selected AV
-clock and bind explicit delivery/source/command/child ownership before default2
-same-response Legacy/Hybrid proof. No product carriage API/UI or extra file
-hardening is introduced. Existing H264Burn, audio, source/lease/cancellation,
-editor/publication/isolation evidence retains its original scope.
+Finite source/update/explicit-clear qualification remains canonical at
+tmp/phase9-f6-copy-caption/bootstrap-qualification/work.json (8fd80b3a).
+Default generator bytes remain exact. Source TSDuck19 checks retain one failure:
+two intentional sparse subtitle PTS leaps onPID258; AV/PCR/DTS/CC pass. No
+threshold relaxes and no all-green transport or host-admission claim follows.
+Current component: tmp/phase9-f6-bitmap-carriage/work.json. Generic bounded native
+preparation now retains a private DVB bitmap artifact with its exact decoded
+source, whole-source hashes, caption-only origin, finite grouped update/clear
+observations and last-owner cleanup. Ten focused tests pass, including actual
+native acquisition/decode/preparation, file lifetime, parser negatives, boundaries
+and generated argv/recipe snapshots. Full bounded source bytes, exact millisecond
+endpoint mapping and final clear are current qualification gaps, not permanent
+limits or accepted scope restrictions. There is no Copy input/consumer authority.
+Direct raw-artifact concat failed on negative inpoints and earlier packet preroll;
+that prototype was removed. The small recipe now takes independently isolated
+zero-origin complete fragments only. Bounded CLI isolation of three groups and
+two future fragments proves four packet timelines and13 exact source RGB samples,
+including initial silence and A/B/clear. Last-clear-only independently decodes
+rect0 at0 without stale B; the existing FFmpeg overlay timed out45s without RGB
+and was killed/reaped. That client/tool display boundary remains unproven.
+CLI Matroska rounding (621933→622000us), overlapping original packet durations
+and arbitrary group context do not grant actual selected-AV/consumer authority.
+Next implement the same clipping under the existing retained source/work/file
+owner, qualify actual AV origin/consumed seek and explicit native delivery intent,
+then prove default2 same-response Legacy/Hybrid with full tracks and real client.
+No new serving mux, file-hardening programme or hidden Burn→Carriage switch.
+Existing H264Burn, audio, source/lease/cancellation, editor/publication/isolation
+evidence retains its original scope. Mandatory livehost/platform acceptance stays
+open; these Linux native overrides are not accepted six-RID packages.
 Copy/Off and refusal cannot close caption acceptance; no permanent restriction
 or engine/client/platform waiver is accepted. No capacity increase, reconnect, extra mux or track loss
 is accepted; TSDuck/source-caption decoding is not Level2.5 client acceptance.

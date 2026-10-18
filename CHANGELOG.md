@@ -25,6 +25,10 @@ release section when tagging a release.
 
 ### Added
 
+- Prepare finite bitmap captions from an exact local teletext page with bounded
+  process ownership, validated update/clear timing and private-file cleanup.
+  Caption carriage for copied video remains preparatory and is not activated.
+
 - Show saved teletext template, theme, Free/custom-zone/generated regions and
   dynamic-field bindings beside the selected draft preview in every admin
   language. Boundaries come from the immutable original and remain read-only;

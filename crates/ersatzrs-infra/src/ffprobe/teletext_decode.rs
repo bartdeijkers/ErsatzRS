@@ -26,6 +26,13 @@ pub use super::local_teletext::{
     SourceTeletextPacketSpan, SourceTeletextPacketSpanError, SourceTeletextPagePrelude,
 };
 
+#[path = "teletext_decode_bitmap_carriage.rs"]
+mod bitmap_carriage;
+pub use bitmap_carriage::{
+    SourceTeletextBitmapArtifact, SourceTeletextBitmapArtifactGroup,
+    SourceTeletextBitmapArtifactObservation,
+};
+
 #[path = "teletext_decode_consumer.rs"]
 mod consumer;
 #[path = "teletext_decode_demux.rs"]

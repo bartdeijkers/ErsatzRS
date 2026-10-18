@@ -1,5 +1,8 @@
 use std::path::{Path, PathBuf};
 
+mod source_bitmap;
+pub use source_bitmap::{SourceBitmapConcat, SourceBitmapConcatError};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConcatPlaylist {
     pub scheme: String,

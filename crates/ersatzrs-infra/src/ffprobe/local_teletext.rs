@@ -451,3 +451,38 @@ mod tests;
 #[cfg(test)]
 #[path = "local_teletext_source_guard_tests.rs"]
 mod source_guard_tests;
+
+/// Complete bounded private bitmap bytes, retained by the actual file worker.
+pub(super) async fn write_bitmap_snapshot_owned(
+    bytes: Vec<u8>,
+    guard: Arc<LocalTeletextSourceGuard>,
+    paths: (PathBuf, PathBuf),
+    deadline: Instant,
+    hold: TeletextWorkHold,
+) -> crate::ffprobe::Result<tempfile::NamedTempFile> {
+    headers::run_source_guard_owned(deadline, hold, move |stop| {
+        use std::io::Write as _;
+        let invalid = || FfprobeError::InvalidOutput {
+            path: "source teletext bitmap artifact".into(),
+        };
+        stop.check_source_guard()?;
+        if bytes.is_empty() || bytes.len() > super::MAX_REMOTE_FFPROBE_OUTPUT_BYTES {
+            return Err(invalid());
+        }
+        check_source_guard_paths(&guard, &paths.0, &paths.1)?;
+        let mut file = tempfile::Builder::new()
+            .prefix("ersatzrs-teletext-bitmap-")
+            .suffix(".mks")
+            .tempfile()
+            .map_err(|_| invalid())?;
+        for chunk in bytes.chunks(8192) {
+            stop.check_source_guard()?;
+            file.write_all(chunk).map_err(|_| invalid())?;
+        }
+        file.flush().map_err(|_| invalid())?;
+        stop.check_source_guard()?;
+        check_source_guard_paths(&guard, &paths.0, &paths.1)?;
+        Ok(file)
+    })
+    .await
+}

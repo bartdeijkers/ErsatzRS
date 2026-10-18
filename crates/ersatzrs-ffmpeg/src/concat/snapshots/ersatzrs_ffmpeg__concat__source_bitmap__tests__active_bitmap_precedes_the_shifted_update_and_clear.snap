@@ -1,0 +1,8 @@
+---
+source: crates/ersatzrs-ffmpeg/src/concat/source_bitmap.rs
+expression: plan.render()
+---
+ffconcat version 1.0
+file 'synthetic-active.mks'
+duration 7.560000
+file 'synthetic-future.mks'

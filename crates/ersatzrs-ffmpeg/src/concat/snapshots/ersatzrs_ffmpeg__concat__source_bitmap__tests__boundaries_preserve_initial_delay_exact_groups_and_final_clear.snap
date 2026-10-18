@@ -1,0 +1,19 @@
+---
+source: crates/ersatzrs-ffmpeg/src/concat/source_bitmap.rs
+expression: "format!(\"before first\\n{}\\nexact update\\n{}\\nafter clear\\n{}\",\nbefore.render(), exact.render(), after.render())"
+---
+before first
+ffconcat version 1.0
+file 'synthetic-empty.mks'
+duration 0.621933
+file 'synthetic-first.mks'
+
+exact update
+ffconcat version 1.0
+file 'synthetic-update.mks'
+duration 15.000000
+file 'synthetic-empty.mks'
+
+after clear
+ffconcat version 1.0
+file 'synthetic-empty.mks'
