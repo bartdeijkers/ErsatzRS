@@ -28,6 +28,27 @@ use tokio::time::{timeout_at, Instant};
 const DIRECTORY_ENV: &str = "ERSATZRS_TELETEXT_EXPIRY_CLIENT_DIR";
 const MAX_SOURCE: usize = 48 * 1024 * 1024;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScopeMode {
+    On,
+    Off,
+}
+
+impl ScopeMode {
+    fn version(self) -> u8 {
+        match self {
+            Self::On => 1,
+            Self::Off => 2,
+        }
+    }
+    fn suffix(self) -> &'static str {
+        match self {
+            Self::On => "natural-expiry-live-ordinary",
+            Self::Off => "natural-off-expiry-live-ordinary",
+        }
+    }
+}
+
 fn current(generation: &TeletextAcceptedGeneration, version: u16, q: bool) -> Value {
     // Document role and compiled resource-lifecycle framing are distinct.
     assert!(matches!(
@@ -84,7 +105,29 @@ fn ready(base: &Base, origin: &shared::Origin, source: &[u8]) -> Value {
         "limitations":"Stage captures certify no visual match; immediate UTC clearing, resource retirement, complete Level 2.5 and platform acceptance remain separate."})
 }
 
+fn ready_for(base: &Base, origin: &shared::Origin, source: &[u8], mode: ScopeMode) -> Value {
+    let mut value = ready(base, origin, source);
+    if mode == ScopeMode::Off {
+        value["probe_version"] = json!(mode.version());
+        value["protocol"] = json!("natural-off-expiry-live-ordinary-v1");
+        value["stages"] = json!(["base", "scoped_off", "expired_base"]);
+        value["final_completion"]["probe_version"] = json!(mode.version());
+        value["final_completion"]["proof_suffix"] = json!(mode.suffix());
+    }
+    value
+}
+
+fn absent(generation: &TeletextAcceptedGeneration) -> Value {
+    let mut value = current(generation, 2, false);
+    value["teletext_visible"] = json!(false);
+    value["theme_rgb4"] = Value::Null;
+    value["owner"] = Value::Null;
+    value["producer_count"] = json!(0);
+    value
+}
+
 struct Protocol<'a> {
+    mode: ScopeMode,
     directory: &'a Path,
     deadline: Instant,
     clients: Option<[u32; 2]>,
@@ -103,11 +146,12 @@ impl Protocol<'_> {
     ) -> io::Result<()> {
         let state = match index {
             1 => "base",
+            2 if self.mode == ScopeMode::Off => "scoped_off",
             2 => "scoped_q",
             3 => "expired_base",
             _ => return Err(io::Error::other("unknown expiry stage")),
         };
-        let ready = json!({"probe_version":1,"stage":index,"state":state,"scope":"Wire-observed readiness; capture markers certify no rendered match",
+        let ready = json!({"probe_version":self.mode.version(),"stage":index,"state":state,"scope":"Wire-observed readiness; capture markers certify no rendered match",
             "snapshot_utc":Utc::now().to_rfc3339(),"day":day,"night":night,"scoped":scoped,
             "expected_pages":[200,201],"subcode":0,"wire_offsets":views.each_ref().map(Capture::position)});
         let bytes = serde_json::to_vec_pretty(&ready).unwrap();
@@ -124,7 +168,7 @@ impl Protocol<'_> {
         .await?;
         let marker: shared::StageCaptured = serde_json::from_slice(&raw)
             .map_err(|_| io::Error::other("invalid closed expiry stage marker"))?;
-        if marker.probe_version != 1
+        if marker.probe_version != self.mode.version()
             || marker.stage != index
             || marker.ready_sha256 != digest
             || marker.clients.len() != 2
@@ -149,15 +193,28 @@ impl Protocol<'_> {
             return Err(io::Error::other("expiry stage replaced a client"));
         }
         let initial = [Some(200)];
+        let inactive = [None];
         let restored = [None, Some(200), Some(201), Some(200)];
         let expected = if index == 3 {
             &restored[..]
         } else {
             &initial[..]
         };
-        shared::validate_images_for(&marker, [expected, expected])?;
+        let day = if index == 2 && self.mode == ScopeMode::Off {
+            &inactive[..]
+        } else {
+            expected
+        };
+        shared::validate_images_for(&marker, [day, expected])?;
         self.clients = Some(pids);
-        self.receipts.push(json!({"stage":index,"ready_sha256":digest,"capture":marker,"visual_match_certified":false}));
+        let mut receipt = json!({"stage":index,"ready_sha256":digest,"capture":marker,"visual_match_certified":false});
+        if self.mode == ScopeMode::Off && index == 2 {
+            receipt["off_window"] = json!({
+                "start_offsets":ready["wire_offsets"],"start_utc":ready["snapshot_utc"],
+                "end_offsets":views.each_ref().map(Capture::position),"end_utc":Utc::now().to_rfc3339(),
+                "scope":"Original-response window after wire absence and before scoped capture completion; replay must independently check no authored PES/descriptor on day and observer"});
+        }
+        self.receipts.push(receipt);
         Ok(())
     }
 }
@@ -181,11 +238,11 @@ async fn completion(protocol: &Protocol<'_>) -> io::Result<Complete> {
     .await?;
     let value: Complete = serde_json::from_slice(&raw)
         .map_err(|_| io::Error::other("invalid closed expiry completion"))?;
-    if value.probe_version != 1
+    if value.probe_version != protocol.mode.version()
         || value.client_name != "VLC"
         || value.client_version != "3.0.20"
         || value.decoder_version != "0.2.42"
-        || value.proof_suffix != "natural-expiry-live-ordinary"
+        || value.proof_suffix != protocol.mode.suffix()
     {
         return Err(io::Error::other("unexpected expiry client completion"));
     }
@@ -198,6 +255,7 @@ struct Observation {
     utc_observed: String,
     restored_offsets: [usize; 3],
     restored_utc: String,
+    off_window: Option<Value>,
 }
 
 async fn transitions(
@@ -220,30 +278,50 @@ async fn transitions(
         )
         .await?;
     let positions = views.each_ref().map(Capture::position);
-    let scoped = on_for(base, 35).await;
+    let scoped = match protocol.mode {
+        ScopeMode::On => on_for(base, 35).await,
+        ScopeMode::Off => super::off::prepare(base).await,
+    };
     for (index, view) in views[..2].iter().enumerate() {
-        view.service_encoded(positions[index], scoped.accepted.service().unwrap())
-            .await;
+        match scoped.accepted.service() {
+            Some(service) => view.service_encoded(positions[index], service).await,
+            None => view.off(positions[index]).await,
+        }
     }
     views[2]
         .service_encoded(positions[2], base.accepted[1].service())
         .await;
-    let scope_record = scoped_record(&scoped);
+    let (scope_record, day) = match protocol.mode {
+        ScopeMode::On => (
+            scoped_record(&scoped),
+            current(scoped.accepted.generation(), 2, true),
+        ),
+        ScopeMode::Off => (
+            super::off::record(&scoped),
+            absent(scoped.accepted.generation()),
+        ),
+    };
     let before = retained(&base.fixture.fixture).await;
     let calls = base.fixture.calls();
     let until = (scoped.finish - Utc::now())
         .to_std()
-        .map_err(|_| io::Error::other("scope expired before headed Q capture"))?;
+        .map_err(|_| io::Error::other("scope expired before headed scoped capture"))?;
     protocol
         .stage(
             2,
-            current(scoped.accepted.generation(), 2, true),
+            day,
             night(),
             scope_record.clone(),
             views,
             Instant::now() + until,
         )
         .await?;
+    let off_window = if protocol.mode == ScopeMode::Off {
+        assert!(Utc::now() < scoped.finish);
+        Some(protocol.receipts.last().unwrap()["off_window"].clone())
+    } else {
+        None
+    };
     tokio::time::sleep((scoped.finish - Utc::now()).to_std().unwrap_or_default()).await;
     assert!(Utc::now() >= scoped.finish);
     let utc_observed = Utc::now().to_rfc3339();
@@ -272,6 +350,7 @@ async fn transitions(
         utc_observed,
         restored_offsets,
         restored_utc,
+        off_window,
     })
 }
 
@@ -348,6 +427,16 @@ async fn native_checks(base: &Base, observation: &Observation) {
 #[tokio::test]
 #[ignore = "Requires pinned FFmpeg9/TSDuck, owned headed clients, three capture barriers and root-only completion; source remains genuine60s"]
 async fn original_headed_clients_observe_natural_expiry_and_navigate_restored_base() {
+    run(ScopeMode::On).await;
+}
+
+#[tokio::test]
+#[ignore = "Requires pinned FFmpeg9/TSDuck and owned headed Off-expiry clients; captures/native state only, automatic display requires root visual qualification"]
+async fn original_headed_clients_capture_natural_off_expiry_and_navigate_restored_base() {
+    run(ScopeMode::Off).await;
+}
+
+async fn run(mode: ScopeMode) {
     let directory = PathBuf::from(client_capture::selected(DIRECTORY_ENV));
     std::fs::create_dir(&directory).unwrap();
     shared::terminal_trace(&directory).unwrap();
@@ -367,6 +456,7 @@ async fn original_headed_clients_observe_natural_expiry_and_navigate_restored_ba
         .unwrap();
     let mut observer = shared::Observer::start(&origin);
     let mut protocol = Protocol {
+        mode,
         directory: &directory,
         deadline,
         clients: None,
@@ -375,7 +465,7 @@ async fn original_headed_clients_observe_natural_expiry_and_navigate_restored_ba
     let outcome = AssertUnwindSafe(async {
         shared::write_new(
             &directory.join("ready.json"),
-            &serde_json::to_vec_pretty(&ready(&base, &origin, &source)).unwrap(),
+            &serde_json::to_vec_pretty(&ready_for(&base, &origin, &source, mode)).unwrap(),
         )?;
         let observation = timeout_at(
             deadline,
@@ -418,21 +508,79 @@ async fn original_headed_clients_observe_natural_expiry_and_navigate_restored_ba
     origin_closed.unwrap();
     cleanup.unwrap();
     captures.unwrap();
+    if mode == ScopeMode::Off {
+        write_off_observation(&directory, &protocol, &observation, &complete, &source);
+    }
     verify_restored(&directory, &ffmpeg, origin.captures(), &observation).await;
-    shared::verify_native_pages(
+    verify_capture(
+        mode,
         &directory,
         (&ffmpeg, &ffprobe, &tsanalyze),
         &source,
         origin.captures(),
-        &["200", "201"],
-        false,
     )
     .await;
-    shared::write_new(&directory.join("success.json"),&serde_json::to_vec_pretty(&json!({"probe_version":1,"scope":"Headed same-response natural expiry barriers; root image/navigation inspection remains separate",
+    let success = json!({"probe_version":1,"scope":"Headed same-response natural expiry barriers; root image/navigation inspection remains separate",
         "source_sha256":shared::hash(&source),"stages":protocol.receipts,"completion":complete,
         "original_valid_until":observation.scoped.finish.to_rfc3339(),"raw_utc_offsets":observation.utc_offsets,"observed_utc":observation.utc_observed,
         "observed_base_offsets":observation.restored_offsets,"observed_base_utc":observation.restored_utc,
         "observed_base_suffix_is_owner_ack_proof":false,"same_urls_and_client_pids":true,"source_requests_per_viewer":1,"owned_actors_closed":true,
         "original_scope_generations_profiles_settings_packages_and_calls_unchanged_across_expiry":true,
-        "limitations":"No immediate UTC clearing or new owner-ACK qualification is claimed; prior qualified native engine evidence remains separate; full authored Level 2.5 and platform acceptance remain open."})).unwrap()).unwrap();
+        "limitations":"No immediate UTC clearing or new owner-ACK qualification is claimed; prior qualified native engine evidence remains separate; full authored Level 2.5 and platform acceptance remain open."});
+    write_success(&directory, mode, success, observation.off_window);
+}
+
+async fn verify_capture(
+    mode: ScopeMode,
+    directory: &Path,
+    tools: (&str, &str, &str),
+    source: &[u8],
+    views: &[Capture; 3],
+) {
+    match mode {
+        ScopeMode::On => {
+            shared::verify_native_pages(directory, tools, source, views, &["200", "201"], false)
+                .await;
+        }
+        ScopeMode::Off => {
+            shared::verify_original_native_pages(directory, tools, source, views, &["200", "201"])
+                .await;
+        }
+    }
+}
+
+fn write_off_observation(
+    directory: &Path,
+    protocol: &Protocol<'_>,
+    observation: &Observation,
+    complete: &Complete,
+    source: &[u8],
+) {
+    let value = json!({"probe_version":2,
+        "scope":"Off-expiry state/ownership/capture checkpoint before independent external replay; not trial or visual success",
+        "source_sha256":shared::hash(source),"stages":protocol.receipts,"completion":complete,
+        "original_valid_until":observation.scoped.finish.to_rfc3339(),"raw_utc_offsets":observation.utc_offsets,"observed_utc":observation.utc_observed,
+        "observed_base_offsets":observation.restored_offsets,"observed_base_utc":observation.restored_utc,"off_window":observation.off_window,
+        "same_urls_and_client_pids":true,"source_requests_per_viewer":1,"owned_actors_closed":true,
+        "original_scope_generations_profiles_settings_packages_and_calls_unchanged_across_expiry":true,
+        "independent_external_verification_complete":false,"automatic_display_accepted":false});
+    shared::write_new(
+        &directory.join("off-observation.json"),
+        &serde_json::to_vec_pretty(&value).unwrap(),
+    )
+    .unwrap();
+}
+
+fn write_success(directory: &Path, mode: ScopeMode, mut success: Value, off_window: Option<Value>) {
+    if mode == ScopeMode::Off {
+        success["probe_version"] = json!(mode.version());
+        success["scope"] = json!("Off-expiry capture/native transport/state completion only; automatic display remains unqualified");
+        success["automatic_display_accepted"] = json!(false);
+        success["off_window"] = off_window.unwrap();
+    }
+    shared::write_new(
+        &directory.join("success.json"),
+        &serde_json::to_vec_pretty(&success).unwrap(),
+    )
+    .unwrap();
 }

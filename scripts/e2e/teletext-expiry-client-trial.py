@@ -27,6 +27,7 @@ utc_ns = runpy.run_path(str(PROVENANCE))["utc_ns"]
 # expiry readiness independently restricts the shared loader to this protocol.
 PINNED_WARM = "807ca2360265964eb56c569e96b31a322c400d87361c19d116903243fec57b37"
 STATES = ["base", "scoped_q", "expired_base"]
+OFF_STATES = ["base", "scoped_off", "expired_base"]
 CHANNEL_KEYS = {"channel_id", "theme", "url", "addon_id", "profile_id", "profile_revision",
                 "base_generation_id", "base_request_id", "base_design_id", "base_design_revision",
                 "base_digest", "theme_rgb4"}
@@ -34,21 +35,26 @@ FACT_KEYS = {"channel_id", "generation_id", "request_id", "design_id", "design_r
              "design_digest", "document_version", "teletext_visible", "edited_q_present", "theme_rgb4"}
 SCOPE_KEYS = {"design_id", "revision", "digest", "generation_id", "request_id", "original_design_id",
               "original_revision", "original_digest", "root_receipt_id", "root_receipt_digest", "start", "finish"}
+OFF_SCOPE_KEYS = {"design_id", "revision", "digest", "generation_id", "request_id", "playout_id",
+                  "addon_id", "start", "finish", "state", "producer_count", "owner", "has_editorial_overlay"}
 
 
 def ready(value, directory):
     W["closed"](value, {"probe_version", "protocol", "completion_timeout_seconds", "source", "channels",
                        "expected_pages", "subcode", "stages", "stage_files", "final_completion", "limitations"},
                 "natural-expiry readiness")
-    if (value["probe_version"] != 1 or value["protocol"] != "natural-expiry-live-ordinary-v1"
+    off = value["probe_version"] == 2
+    if (type(value["probe_version"]) is not int or value["probe_version"] != (2 if off else 1)
+            or value["protocol"] != ("natural-off-expiry-live-ordinary-v1" if off else "natural-expiry-live-ordinary-v1")
             or type(value["completion_timeout_seconds"]) is not int or value["completion_timeout_seconds"] != 180
-            or value["stages"] != STATES or not H["exact_integer_list"](value["expected_pages"], [200, 201])
+            or value["stages"] != (OFF_STATES if off else STATES)
+            or not H["exact_integer_list"](value["expected_pages"], [200, 201])
             or type(value["subcode"]) is not int or value["subcode"] != 0
             or value["stage_files"] != "stage-N-ready.json and stage-N-captured.json, N from 1 through 3"
             or not W["text_value"](value["limitations"])):
         raise RuntimeError("Unsupported natural-expiry observation protocol")
-    if value["final_completion"] != {"probe_version": 1, "client_name": "VLC", "client_version": "3.0.20",
-                                     "decoder_version": "0.2.42", "proof_suffix": "natural-expiry-live-ordinary"}:
+    if value["final_completion"] != {"probe_version": 2 if off else 1, "client_name": "VLC", "client_version": "3.0.20",
+                                     "decoder_version": "0.2.42", "proof_suffix": "natural-off-expiry-live-ordinary" if off else "natural-expiry-live-ordinary"}:
         raise RuntimeError("Unexpected root-only completion identity")
     W["source_provenance"](value["source"], directory)
     if not isinstance(value["channels"], list) or len(value["channels"]) != 2:
@@ -78,11 +84,28 @@ def ready(value, directory):
     return channels
 
 
-def stage(value, number, channels, previous):
+def off_scope(scope, number, previous, observed, channels):
+    W["closed"](scope, OFF_SCOPE_KEYS, "immutable scoped absence")
+    for key in ["design_id", "revision", "generation_id", "request_id", "playout_id"]:
+        if not H["positive_identity"](scope[key]):
+            raise RuntimeError("Invalid actual absent generation identity")
+    if (scope["revision"] != 1 or not W["hash_value"](scope["digest"])
+            or scope["addon_id"] != channels["day"]["addon_id"] or scope["state"] != "off"
+            or type(scope["producer_count"]) is not int or scope["producer_count"] != 0
+            or scope["owner"] is not None or scope["has_editorial_overlay"] is not False
+            or utc_ns(scope["finish"]) - utc_ns(scope["start"]) != 35_000_000_000):
+        raise RuntimeError("Expected a genuine absent thirty-five-second original")
+    if number == 2 and not utc_ns(scope["start"]) <= observed < utc_ns(scope["finish"]):
+        raise RuntimeError("Off readiness lies outside its original scope")
+    if number == 3 and (scope != previous["scoped"] or observed < utc_ns(scope["finish"])):
+        raise RuntimeError("Off expiry changed immutable scope or was observed early")
+
+
+def stage(value, number, channels, previous, off=False):
     W["closed"](value, {"probe_version", "stage", "state", "scope", "snapshot_utc", "day", "night", "scoped",
                        "expected_pages", "subcode", "wire_offsets"}, "natural-expiry stage")
-    if (value["probe_version"] != 1 or type(value["stage"]) is not int or value["stage"] != number
-            or value["state"] != STATES[number - 1] or not W["text_value"](value["scope"])
+    if (value["probe_version"] != (2 if off else 1) or type(value["stage"]) is not int or value["stage"] != number
+            or value["state"] != (OFF_STATES if off else STATES)[number - 1] or not W["text_value"](value["scope"])
             or not H["exact_integer_list"](value["expected_pages"], [200, 201])
             or type(value["subcode"]) is not int or value["subcode"] != 0
             or not isinstance(value["wire_offsets"], list) or len(value["wire_offsets"]) != 3
@@ -96,38 +119,43 @@ def stage(value, number, channels, previous):
     else:
         if previous is None or previous["stage"] != number - 1:
             raise RuntimeError("Skipped natural-expiry stage")
-        W["closed"](scope, SCOPE_KEYS, "immutable scoped original")
-        for key in SCOPE_KEYS - {"digest", "original_digest", "root_receipt_digest", "start", "finish"}:
-            if not H["positive_identity"](scope[key]):
-                raise RuntimeError("Invalid new Scoped identity")
-        if (scope["revision"] != 2 or scope["original_revision"] != 1
-                or scope["design_id"] != scope["original_design_id"]
-                or any(not W["hash_value"](scope[key]) for key in ["digest", "original_digest", "root_receipt_digest"])
-                or utc_ns(scope["finish"]) - utc_ns(scope["start"]) != 35_000_000_000):
-            raise RuntimeError("Expected a genuine new thirty-five-second scope")
-        if number == 2 and not utc_ns(scope["start"]) <= observed < utc_ns(scope["finish"]):
-            raise RuntimeError("Q readiness lies outside its original scope")
-        if number == 3 and (scope != previous["scoped"] or observed < utc_ns(scope["finish"])):
-            raise RuntimeError("Expiry changed immutable scope or was observed early")
+        if off:
+            off_scope(scope, number, previous, observed, channels)
+        else:
+            W["closed"](scope, SCOPE_KEYS, "immutable scoped original")
+            for key in SCOPE_KEYS - {"digest", "original_digest", "root_receipt_digest", "start", "finish"}:
+                if not H["positive_identity"](scope[key]):
+                    raise RuntimeError("Invalid new Scoped identity")
+            if (scope["revision"] != 2 or scope["original_revision"] != 1
+                    or scope["design_id"] != scope["original_design_id"]
+                    or any(not W["hash_value"](scope[key]) for key in ["digest", "original_digest", "root_receipt_digest"])
+                    or utc_ns(scope["finish"]) - utc_ns(scope["start"]) != 35_000_000_000):
+                raise RuntimeError("Expected a genuine new thirty-five-second scope")
+            if number == 2 and not utc_ns(scope["start"]) <= observed < utc_ns(scope["finish"]):
+                raise RuntimeError("Q readiness lies outside its original scope")
+            if number == 3 and (scope != previous["scoped"] or observed < utc_ns(scope["finish"])):
+                raise RuntimeError("Expiry changed immutable scope or was observed early")
     for theme in ["day", "night"]:
         item, initial = value[theme], channels[theme]
-        W["closed"](item, FACT_KEYS, "actual stage generation")
+        scoped = number == 2 and theme == "day"
+        absent = scoped and off
+        W["closed"](item, FACT_KEYS | {"owner", "producer_count"} if absent else FACT_KEYS, "actual stage generation")
         for key in ["channel_id", "generation_id", "request_id", "design_id", "design_revision", "document_version"]:
             if not H["positive_identity"](item[key]):
                 raise RuntimeError("Invalid actual stage identity")
         if (item["channel_id"] != initial["channel_id"] or not W["hash_value"](item["design_digest"])
-                or type(item["teletext_visible"]) is not bool or not item["teletext_visible"]
+                or type(item["teletext_visible"]) is not bool or item["teletext_visible"] == absent
                 or type(item["edited_q_present"]) is not bool
-                or not H["exact_integer_list"](item["theme_rgb4"], initial["theme_rgb4"])):
+                or (item["theme_rgb4"] is not None if absent else not H["exact_integer_list"](item["theme_rgb4"], initial["theme_rgb4"]))
+                or (absent and (item["owner"] is not None or type(item["producer_count"]) is not int or item["producer_count"] != 0))):
             raise RuntimeError("Actual stage presentation lost isolation")
-        scoped = number == 2 and theme == "day"
         expected = ({"generation_id": scope["generation_id"], "request_id": scope["request_id"],
                      "design_id": scope["design_id"], "design_revision": scope["revision"], "design_digest": scope["digest"]}
                     if scoped else {key: initial["base_" + key] for key in
                                     ["generation_id", "request_id", "design_id", "design_revision"]}
                     | {"design_digest": initial["base_digest"]})
         if (any(item[key] != expected[key] for key in expected) or item["document_version"] != (2 if scoped else 1)
-                or item["edited_q_present"] != scoped):
+                or item["edited_q_present"] != (scoped and not off)):
             raise RuntimeError("Scoped publication or exact accepted Base restoration mismatch")
     return value
 
@@ -152,6 +180,7 @@ def main():
     raw, value = W["load"](path)
     directory = path.parent
     channels = ready(value, directory)
+    off = value["probe_version"] == 2
     deadline = time.monotonic() + value["completion_timeout_seconds"]
     clients, previous = [], None
     with (directory / "headed-expiry-trial.ndjson").open("x", encoding="utf-8") as record:
@@ -172,7 +201,7 @@ def main():
                       "window": client["window"], "url": client["url"]})
             for number in [1, 2, 3]:
                 raw_stage, actual = W["wait_stage"](directory, number, deadline)
-                stage(actual, number, channels, previous)
+                stage(actual, number, channels, previous, off)
                 emit({"event": "native_stage", "stage": number, "ready": actual})
                 images = []
                 if number == 3:
@@ -184,7 +213,8 @@ def main():
                         images.append(image)
                         emit({"event": "automatic_post_expiry", "stage": number, **image,
                               "decoder_active": W["decoder_active"](client), "controls_used": False})
-                for client in clients if number == 1 else clients[:1]:
+                selection = clients if number == 1 else ([] if off and number == 2 else clients[:1])
+                for client in selection:
                     was_active = W["decoder_active"](client)
                     W["activate"](client, deadline)
                     emit({"event": "teletext_selection", "stage": number, "viewer": client["viewer"],
@@ -198,13 +228,14 @@ def main():
                                      position["x"] + 121, position["y"] + y)
                     H["settle"](deadline, 3)
                     if number == 2 and time.time_ns() >= utc_ns(actual["scoped"]["finish"]):
-                        raise RuntimeError("Q frame observation missed its genuine original scope")
+                        raise RuntimeError("Scoped frame observation missed its genuine original scope")
                     for client in clients:
-                        image = W["capture"](client, directory, number, page, visit + (1 if number == 3 else 0), deadline)
+                        observed_page = None if off and number == 2 and client["viewer"] == "day" else page
+                        image = W["capture"](client, directory, number, observed_page, visit + (1 if number == 3 else 0), deadline)
                         images.append(image)
                         emit({"event": "captured", "stage": number, **image, "rendered_page_verified": False})
                 W["closed_new"](directory / f"stage-{number}-captured.json",
-                                {"probe_version": 1, "stage": number, "ready_sha256": H["digest"](raw_stage),
+                                {"probe_version": 2 if off else 1, "stage": number, "ready_sha256": H["digest"](raw_stage),
                                  "clients": [{"viewer": c["viewer"], "pid": c["process"].pid} for c in clients],
                                  "screenshots": images})
                 previous = actual

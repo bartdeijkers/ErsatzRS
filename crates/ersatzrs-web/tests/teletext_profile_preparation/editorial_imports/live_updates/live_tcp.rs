@@ -843,6 +843,61 @@ pub(in super::super::super) async fn verify_native_pages(
     pages: &[&str],
     zone_edit: bool,
 ) {
+    verify_native_pages_with_content(
+        directory,
+        tools,
+        source,
+        views,
+        pages,
+        PageContent::edited(zone_edit),
+    )
+    .await;
+}
+
+#[derive(Clone, Copy)]
+enum PageContent {
+    FreeEdit,
+    FreeAndZoneEdit,
+    Original,
+}
+
+impl PageContent {
+    fn edited(zone_edit: bool) -> Self {
+        if zone_edit {
+            Self::FreeAndZoneEdit
+        } else {
+            Self::FreeEdit
+        }
+    }
+}
+
+/// Original Base text has no editorial Q or R on any viewer or page.
+pub(in super::super::super) async fn verify_original_native_pages(
+    directory: &Path,
+    tools: (&str, &str, &str),
+    source: &[u8],
+    views: &[Capture; 3],
+    pages: &[&str],
+) {
+    verify_native_pages_with_content(
+        directory,
+        tools,
+        source,
+        views,
+        pages,
+        PageContent::Original,
+    )
+    .await;
+}
+
+async fn verify_native_pages_with_content(
+    directory: &Path,
+    tools: (&str, &str, &str),
+    source: &[u8],
+    views: &[Capture; 3],
+    pages: &[&str],
+    content: PageContent,
+) {
     let (ffmpeg, ffprobe, tsanalyze) = tools;
     for (index, capture) in views.iter().enumerate() {
         let name = ["day", "observer", "night"][index];
@@ -889,13 +944,13 @@ pub(in super::super::super) async fn verify_native_pages(
             );
             assert_eq!(
                 text.contains('Q'),
-                index != 2 && ordinal == 0,
+                !matches!(content, PageContent::Original) && index != 2 && ordinal == 0,
                 "actual decoder mixed channel-specific concept edits"
             );
-            if zone_edit {
+            if !matches!(content, PageContent::FreeEdit) {
                 assert_eq!(
                     text.contains('R'),
-                    index != 2 && ordinal == 0,
+                    matches!(content, PageContent::FreeAndZoneEdit) && index != 2 && ordinal == 0,
                     "actual decoder mixed cumulative zone edits"
                 );
             }
@@ -937,6 +992,34 @@ pub(in super::super::super) async fn verify_saved_native_pages(
     pages: &[&str],
     zone_edit: bool,
 ) {
+    verify_saved_native_pages_with_content(
+        directory,
+        output,
+        tools,
+        pages,
+        PageContent::edited(zone_edit),
+    )
+    .await;
+}
+
+/// Offline original-only replay never substitutes for live actors or rendering.
+pub(in super::super::super) async fn verify_saved_original_native_pages(
+    directory: &Path,
+    output: &Path,
+    tools: (&str, &str, &str),
+    pages: &[&str],
+) {
+    verify_saved_native_pages_with_content(directory, output, tools, pages, PageContent::Original)
+        .await;
+}
+
+async fn verify_saved_native_pages_with_content(
+    directory: &Path,
+    output: &Path,
+    tools: (&str, &str, &str),
+    pages: &[&str],
+    content: PageContent,
+) {
     let source = read_bounded(&directory.join("source.ts"), MAX_CAPTURE).unwrap();
     assert!(!source.is_empty() && source.len().is_multiple_of(188));
     let names = ["day", "observer", "night"];
@@ -955,7 +1038,7 @@ pub(in super::super::super) async fn verify_saved_native_pages(
         capture
     });
     std::fs::create_dir(output).expect("offline proof destination must not already exist");
-    verify_native_pages(output, tools, &source, &views, pages, zone_edit).await;
+    verify_native_pages_with_content(output, tools, &source, &views, pages, content).await;
     assert_eq!(
         read_bounded(&directory.join("source.ts"), MAX_CAPTURE).unwrap(),
         source
@@ -966,16 +1049,25 @@ pub(in super::super::super) async fn verify_saved_native_pages(
             raw[index]
         );
     }
-    write_new(&output.join("offline-verification.json"), &serde_json::to_vec_pretty(&json!({
+    let mut report = json!({
         "probe_version":1,"scope":"offline independent clock, exact TSDuck counts, source AV and decoded page text for retained raw synthetic captures",
-        "pages":pages,"zone_edit_checked":zone_edit,
+        "pages":pages,"zone_edit_checked":matches!(content, PageContent::FreeAndZoneEdit),
         "source_sha256":hash(&source),"inputs":names.iter().enumerate().map(|(index,name)|json!({
             "file":format!("{name}-ordinary.ts"),"bytes":raw[index].len(),"sha256":hash(&raw[index])
         })).collect::<Vec<_>>(),"original_inputs_unchanged":true,
         "original_trial_success_claimed":false,"original_http_body_cleanup_proven":false,
         "headed_client_acceptance_claimed":false,"full_engine_acceptance_claimed":false,
         "limitations":"Offline success does not repair or certify an earlier failed native/HTTP trial, client rendering/navigation or producer cleanup."
-    })).unwrap()).unwrap();
+    });
+    if matches!(content, PageContent::Original) {
+        report["editorial_content"] = json!("original_only");
+        report["forbidden_editorial_glyphs"] = json!(["Q", "R"]);
+    }
+    write_new(
+        &output.join("offline-verification.json"),
+        &serde_json::to_vec_pretty(&report).unwrap(),
+    )
+    .unwrap();
 }
 
 #[tokio::test]

@@ -290,8 +290,11 @@ release section when tagging a release.
   on both original clients. An unchanged valid Base now returns automatically
   after a temporary On profile ends, retaining the original MAIN-page clients,
   decoder, themes and navigation. Rejected expiry successors withdraw at the
-  same safe output boundary. Automatic return after Off, slow recovery and
-  broader resource/client coverage remain open, alongside full engine acceptance.
+  same safe output boundary. A real temporary Off now has qualified transport
+  recovery on the original responses, with complete teletext absence in between;
+  pinned VLC still needs explicit reselection after Off. Automatic Off display,
+  slow recovery and broader resource/client coverage remain open, alongside
+  full engine acceptance.
 - Let generic teletext transport epochs begin without authored content, preserving
   original audio/video and PSI until later activation on the same clock. Require
   acknowledged PMT announcement before page data. An explicit version-2 policy

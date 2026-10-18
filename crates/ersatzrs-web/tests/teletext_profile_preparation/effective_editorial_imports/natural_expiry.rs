@@ -42,6 +42,9 @@ const MAX_SOURCE: usize = 48 * 1024 * 1024;
 #[path = "natural_expiry/client_trial.rs"]
 mod client_trial;
 
+#[path = "natural_expiry/off.rs"]
+mod off;
+
 #[tokio::test]
 #[ignore = "requires explicit retained natural-expiry captures, create-new offline output and pinned FFmpeg9/TSDuck; proves no live cleanup or headed acceptance"]
 async fn offline_natural_expiry_raw_captures_verify_clock_transport_av_and_pages200201() {
@@ -61,6 +64,29 @@ async fn offline_natural_expiry_raw_captures_verify_clock_transport_av_and_pages
         (&ffmpeg, &ffprobe, &tsanalyze),
         &["200", "201"],
         false,
+    )
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires retained original Off-expiry source/day/observer/night captures and pinned FFmpeg9/TSDuck; offline only, no live/state/cleanup or automatic display claim"]
+async fn offline_natural_off_expiry_raw_captures_verify_clock_transport_av_and_original_pages200201(
+) {
+    let input = PathBuf::from(client_capture::selected(
+        "ERSATZRS_TELETEXT_NATURAL_OFF_EXPIRY_OFFLINE_INPUT_DIR",
+    ));
+    let output = PathBuf::from(client_capture::selected(
+        "ERSATZRS_TELETEXT_NATURAL_OFF_EXPIRY_OFFLINE_OUTPUT_DIR",
+    ));
+    let ffmpeg = client_capture::selected("ERSATZRS_TELETEXT_TEST_FFMPEG");
+    let ffprobe = client_capture::selected("FFPROBE_PATH");
+    let tsanalyze = client_capture::selected("ERSATZRS_TELETEXT_TEST_TSANALYZE");
+    client_capture::check_tools(&ffmpeg, &ffprobe).await;
+    shared::verify_saved_original_native_pages(
+        &input,
+        &output,
+        (&ffmpeg, &ffprobe, &tsanalyze),
+        &["200", "201"],
     )
     .await;
 }

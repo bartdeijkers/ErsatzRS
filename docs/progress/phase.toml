@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F4 automatic Off-to-Base recovery; mixed root undo verified locally'
+current_focus = 'P9A-04 F1 complete resource/set authoring; Off-to-Base client negative retained'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -207,7 +207,7 @@ only unrelated wrappers/colour aliases/locks changed. Canonical
 source/diff/line evidence. No new runtime/build/repair or lowered oracle; suitable
 client coverage stays blocked independently. Remote main is still verified
 c07af3a1 (F6); no later push.
-F1 mixed retained foreground/positive-row root undo now passes. Native e23f036a
+F1 local checkpoint59c66923 restores mixed foreground/positive-row root edits. Native e23f036a
 first reproduced Structure only after valid FG2→3/save2 and AP2/R6/save3 plus
 cold reopen. Existing scalar-family validation and checked prior inverse now
 target the authenticated immutable root; no stored inverse/new format or receipt
@@ -217,10 +217,22 @@ reopen, existing undo and executed Generated125 atomic refusal. Canonical
  tmp/phase9-f1-interior-position/work.json/mixed_root_undo_followup owns evidence.
 Actual pinned QTM AP2/R6/interior proof retains scope; no new GUI/stream/client
 claim. Strict domain/web all-target lint, fmt and architecture pass. Broader
-coordinated-state/position, resource/set and context work remain. Next concrete
-package F4: qualify automatic Off→Base on one original ordinary response using
-the existing expiry fixture/client tools; distinguish emitted recovery from
-client track discovery and preserve immutable expiry, withdrawal and cleanup.
+coordinated-state/position, resource/set and context work remain.
+F4 now has composed same-response Off→Base evidence, not full acceptance.
+Canonical tmp/phase9-headed-expiry/identity.json/off_base_followup retains one
+actual35s Off/60s source runfdad6f2b: runtime/state/cleanup/post-Base decoding
+completed, then the old Q-only external verifier failed. Explicit original-only
+replay7159f6eb passes all three unchanged captures: clock/TSDuck/sourceAV and
+pages200/201/noQ/noR. Earlier run stays failed, never upgraded to green.
+Independent PMT replay proves Day/Observer1present→2absent→3present and zero
+PID512 packets throughout their real absent windows; Night remains1present.
+All12 actual images inspected: OffDayAV/NightblueAZ; automatic expiredDayAV with
+inactive decoder, Night200 blueAZ. Explicit Day reselection then200→201→200
+works on both original URLs/PIDs. Automatic Off→Base display stays OPEN; no
+client repair, fake Off descriptor or weakened oracle. On-schema replay and15
+negative Off-schema mutations pass. No production source changed. Next independent
+product gap: complete resource/set authoring (F1), first pin the missing resource
+creation action and existing authority boundary before choosing a correction.
 Full authored standards, QTM context, Lua/restart and platform gates remain open.
 Unused-object removal stays deferred; no scope waiver, new push or publication.
 

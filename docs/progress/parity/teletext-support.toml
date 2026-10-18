@@ -6,7 +6,7 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
-rendering/navigation. Kodi is optional. P9A-04 owns acceptance and the F/V/X completion list. Representative flows do not establish acceptance or waive requirements.
+rendering/navigation. Kodi is optional. P9A-04 owns acceptance and the F/V/X completion list. Representative flows do not establish full acceptance.
 
 Typed services, provenance, complete resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
@@ -40,13 +40,13 @@ National/bank/panel editor, transport and independent receipts retain scope. Den
 publication, fallback and two-theme navigation. Independent trials may supply
 explicit banks/defaults. Stock failures and pinned sparse/G1 test candidates
 remain distinct; enlarged clients, hydration, Hebrew and general acquisition
-stay open. No expanded external decoder-repair program.
+stay open. No decoder-repair expansion.
 
 Producer contracts retain selection/model/deadline fences, aggregate quotas,
 persistence and cancellation ownership. Two-channel themes, Lua Continue,
 finite Off/base restoration/restart and acknowledged resource updates have
-scoped proof. MAIN expiry passes on original clients. Broader
-Off/error/restart/client, work bounds, resource retirement,
+scoped proof. MAIN On→Base passes; Off→Base emission passes but VLC needs reselection.
+Broader error/restart/client, work bounds, resource retirement,
 Header/POP uncertainty and open-client shutdown remain open. F6 default2 Copy/DVB handoff passes;
  tmp/phase9-f6-native-carriage/work.json owns runtime/admin/ownership,
 lint and smoke/TSDuck87/87 proof.
