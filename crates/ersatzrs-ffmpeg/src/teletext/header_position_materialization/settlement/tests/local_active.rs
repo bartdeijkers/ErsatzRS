@@ -27,6 +27,91 @@ pub(super) fn service(first: u8, last: u8) -> TeletextSemanticService {
 }
 
 #[test]
+fn complete_factory_restores_main_header_after_local_active_body_row() {
+    let mut draft = fixture_draft_with_active_body(
+        |passive, active| vec![active, position(8), passive],
+        vec![
+            TeletextEnhancementCommand::SetPosition {
+                position: TeletextEnhancementPosition::new(1, 8).unwrap(),
+            },
+            fg(8, 3),
+            TeletextEnhancementCommand::AtColumn {
+                column: 8,
+                operation: TeletextColumnOperation::G0 {
+                    code: TeletextGlyphCode::new(b'B').unwrap(),
+                },
+            },
+        ],
+    );
+    draft.base.pages[0].rows = [0, 1]
+        .map(|row| TeletextRow {
+            row,
+            runs: vec![TeletextRun {
+                column: 8,
+                style: TeletextStyle::default(),
+                content: TeletextRunContent::Text { text: "Z".into() },
+            }],
+        })
+        .to_vec();
+    let saved = declared(draft);
+    let actual = encode_teletext_authored_service(saved.clone(), &transmissions(&saved), &limits())
+        .expect("an Active body row must not replace its caller's restored Main AP");
+    assert_eq!(actual.declared(), &saved);
+    let EncodedTeletextAuthoredPage::CompiledDisplay(display) = &actual.pages()[0] else {
+        panic!("complete authored output required");
+    };
+    assert!(!actual.pages()[0].data_units().is_empty());
+    let normalized = display.normalized();
+    let setters: Vec<_> = normalized
+        .original()
+        .program()
+        .commands()
+        .iter()
+        .zip(normalized.original().provenance())
+        .filter_map(|(command, source)| {
+            matches!(source, TeletextMainCompositionSource::HeaderPosition { .. })
+                .then_some(*command)
+        })
+        .collect();
+    assert_eq!(setters, [fg(8, 7)]);
+    for geometry in [
+        normalized.original().display_geometry(),
+        normalized.physical().replay().display_geometry(),
+    ] {
+        for (object_type, start, finish) in [
+            (TeletextObjectType::Active, (0, 0), (1, 8)),
+            (TeletextObjectType::Passive, (0, 8), (0, 8)),
+        ] {
+            let region = geometry
+                .object_regions()
+                .iter()
+                .find(|region| region.instance().object_type() == object_type)
+                .unwrap();
+            assert_eq!(
+                region.interval(),
+                TeletextObjectAddressInterval::Known { start, finish }
+            );
+        }
+        assert_eq!(geometry.object_open_count().maximum_known_open(), 2);
+    }
+    let fallback = encode_teletext_page(
+        &saved.semantic().base().pages[0],
+        TeletextEncodingRegion::WesternLatin,
+    )
+    .unwrap();
+    let actual = project_encoded_teletext_display(display.page(), 128).unwrap();
+    let baseline = project_encoded_teletext_display(&fallback, 128).unwrap();
+    assert_eq!(actual.header, baseline.header);
+    let rows = |records: Vec<TeletextEncodedDisplayRecord>| {
+        records
+            .into_iter()
+            .filter(|record| !matches!(record, TeletextEncodedDisplayRecord::Triplets { .. }))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(rows(actual.records), rows(baseline.records));
+}
+
+#[test]
 fn complete_authored_factory_keeps_header_call_geometry_and_base_fallback() {
     for (first, last) in [(3, 4), (4, 3)] {
         let mut draft = fixture_draft_with_active_body(

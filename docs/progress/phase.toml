@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F3 initial-header Active call; exact same-invocation lowering'
+current_focus = 'P9A-04 F3 remaining object-definition/header contexts'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -268,9 +268,18 @@ four old/new cases pass55ebcaca at Levels1.5/2.5, old two input unit bytes uncha
 The final lint-only local rename changes no behavior; strict FFmpeg lint,
 formatting and architecture pass. The canonical receipt owns final progress
 validation and the local checkpoint SHA.
-Next: finish local checkpoint, then the existing F3 later-header-after-body
-restoration criterion through the original factory and unchanged normative
-expectation. No generic audit or decoder repair. Broader row-zero/foreign context,
+Local checkpoint49168080 owns this fix. F3 body_return_followup adds evidence
+for existing legal object return: Active writes body1, Main resumes0,0, then
+Passive paints header8. Native7be01203 passes factory/source/geometry/fallback
+plus three existing invalid-backward/compatibility controls; imager0c09702b
+passes five cases with exact Level1.5/2.5 header/body cells. Prior four inputs
+are unchanged. Production is unchanged;926 prior regressions remain valid.
+Same-source Main backward movement stays invalid under AnnexA.4; no neutral reset
+or order waiver is introduced. Canonical identity.json/body_return_followup owns
+checks and checkpoint SHA. Next: qualify the existing standalone nonidentity
+object-definition header-position gap against the original factory and normative
+source before a correction. Broader context/editor/client/platform gates remain.
+No generic audit, new infrastructure or decoder repair. Broader row-zero/foreign context,
 larger finite sources, unknown EOF/provider/output breadth and full F5 stay open.
 Reuse editor/publication/isolation/F6 proof; no general audit, client repair or
 new infrastructure. No relevant check or temporary native worker remains running; source pins are frozen.
