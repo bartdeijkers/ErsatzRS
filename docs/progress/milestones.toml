@@ -10850,19 +10850,34 @@ Copy/teletext/DolbyVision/AV1 snapshots pass unchanged; strict FFmpeg/infra/web
 all-target Clippy and formatting pass. Valid Copy without captions, H264Burn888,
 selected audio and low-level rawCopy mapping retain behavior. No new ordinary
 Copy-caption/carriage delivery or endpoint/client proof follows from refusal.
-The remaining Copy-caption blocker is active-cue initialization at programme
-instep, not a required new file-input API. ADR0121 accepts the existing observed
-source association/rechecks and actual child/reservation retention; an inherited
-file descriptor is not a prerequisite. Canonical bounded CLI qualification is
-at tmp/phase9-f6-copy-caption/carriage-qualification/identity.json: the unchanged
-60s synthetic source stops transmitting teletext at9.24s. Shared seek17.5s yields
-no caption packets; independent rawCopy retains old packets but reports invalid
-DTS/PCR, while simple DVB conversion/duration/heartbeat variants do not preserve
-both active cue and programme timeline. No candidate or ordinary Copy-caption
-route is accepted. Next implement delivery-specific active-cue initialization
-and subsequent updates with typed stream/page/command binding and existing
-source/child cleanup, then prove default2 same-response delivery. Do not repeat
-these simple conversions or add file hardening without a demonstrated gap.
+Copy-caption delivery still lacks explicit native carriage intent, source-bound
+active-cue initialization and a qualified ordinary consumer. ADR0121 accepts
+existing source association/rechecks and actual child/reservation retention;
+an inherited file descriptor is not a prerequisite. Canonical old-source CLI
+negatives remain at tmp/phase9-f6-copy-caption/carriage-qualification/identity.json.
+Its last transmitted PES9.24s/converted8s do not establish active or expired
+captions at17.5; that is a CLI seek, not a retained successful host-consumer seek.
+New bounded qualification is canonical at
+tmp/phase9-f6-copy-caption/bootstrap-qualification/work.json. The existing
+synthetic generator now optionally emits one888 A, B update and explicit C4/
+24-blank-row clear; default fixture bytes remain exact. Continuous source decode
+shows A17.52/B30/empty45 and a positive empty event, not inferred expiry. First
+remux is retained negative (first packet subtitle); fixture-only offset0.6 yields
+AV-first without weakening runtime admission. Source TSDuck19 checks retain one
+failure: two intentional sparse subtitle PTS leaps onPID258; AV/PCR/DTS/CC pass.
+No threshold is relaxed and no all-green transport/host-admission claim follows.
+One finite DVB bitmap artifact retains A/B/clear byte-exactly when the decoder
+canvas is explicitly492x250; initial720x576 mismatch was a tool setup limitation.
+Artifact origin is caption-only1.480600, not selectedAV1.418667. Ordinary input
+seek loses active A. Exactly two output-seek variants also lose A: Copy preserves
+future B7.560/clear22.560; transcode additionally leaves later times unshifted.
+These are CLI capability negatives, not demonstrated route defects. No further
+simple-seek/conversion variants: next deliberately re-emit complete active state
+at actual programme instep, preserve future update/clear, qualify selected AV
+clock and bind explicit delivery/source/command/child ownership before default2
+same-response Legacy/Hybrid proof. No product carriage API/UI or extra file
+hardening is introduced. Existing H264Burn, audio, source/lease/cancellation,
+editor/publication/isolation evidence retains its original scope.
 Copy/Off and refusal cannot close caption acceptance; no permanent restriction
 or engine/client/platform waiver is accepted. No capacity increase, reconnect, extra mux or track loss
 is accepted; TSDuck/source-caption decoding is not Level2.5 client acceptance.

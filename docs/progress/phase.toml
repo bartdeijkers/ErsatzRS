@@ -92,15 +92,23 @@ acceptance. Unused-object removal stays deferred. No push/publication.
 F6 remains open for selected active-caption initialization when copying video.
 Checkpoint cd61a7fa safely refuses invalid filter+Copy; prior H264/AAC, AC3,
 default2 same-response transport and actual disconnect/idle receipts retain scope.
-Bounded unchanged-source Copy/DVB qualification is canonical at
-tmp/phase9-f6-copy-caption/carriage-qualification/identity.json. Shared seek17.5s
-misses all caption packets; independent rawCopy and simple conversion variants
-do not preserve the cue plus correct programme timeline. Existing source
-association/rechecks and child/lease retention are reusable; a new held-file API
-is not required by ADR0121 and would not solve active-cue initialization.
-Next dependent F6 action: bounded delivery-specific active-cue initializer and
-typed carriage binding, followed by ordinary default2 Copy-caption handoff proof.
-Do not repeat failed simple conversions without a new hypothesis. This block
+Canonical bounded F6 qualification:
+tmp/phase9-f6-copy-caption/bootstrap-qualification/work.json. An optional existing-
+generator source now has positive888 A/update/explicit-clear evidence (17.52/30/45)
+and unchanged default bytes. Source TSDuck retains two intentional sparse-caption
+PTS leaps onPID258 (one of19 checks fails); AV/PCR/DTS/CC pass, no thresholds relax.
+A finite DVB bitmap artifact preserves all three images with explicit decoder
+canvas492x250; default-canvas mismatch was a tool limit. Source/Matroska origin
+and actual consumer seek remain distinct. Input seek and two bounded output-seek
+variants lose the proven active A; Copy preserves later B/clear in the CLI trial.
+No native carriage intent/artifact owner, host admission or F6 closure follows.
+Old static fixture/converted times never established activity at17.5; that was a
+CLI seek, not retained actual host consumption. H264Burn route evidence remains
+valid. Next deliberate active-state re-emission/qualified AV clock and explicit
+source/command/child-bound delivery, then default2 same-response Legacy/Hybrid
+proof. Reuse existing owners/hooks; no hidden Burn→Carriage switch or new file API.
+No further simple conversion/seek variants without a distinct concrete hypothesis.
+This block
 does not prevent independent necessary F1/F2 work. Copy/Off/refusal is no waiver.
 Keep all full Level2.5/editor/metadata/zones/profiles/Lua/restart/localized-admin/
 independent/client/platform criteria and engine-first delivery. Unused-object

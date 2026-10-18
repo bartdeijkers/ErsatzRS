@@ -122,8 +122,56 @@ def generate_fixture():
     return bytes(transport.output)
 
 
+def generate_caption_lifecycle_fixture():
+    """Emit one A, one B and an explicit blank page, without caption repeats.
+
+    Offsets below are authored PES times relative to the first PES, not a
+    promise about the remuxed media origin or a decoder's display times. The
+    independent decoder must establish A/B/empty events after the real remux.
+    A seek into the quiet interval deliberately cannot recover A from a recent
+    repeated page. PCR/PSI continue independently through the 60-second source.
+    """
+    transport = FixtureTransport()
+    events = {}
+
+    def page(offset, number, rows, subtitle=False):
+        header = data_unit(number, 0, page_header(number, subtitle), subtitle)
+        body = [data_unit(number, row, page_row(text), subtitle)
+                for row, text in rows]
+        # A separate same-magazine header completes the transmitted page. It is
+        # not a substitute for the explicit C4/blank page 888 at the clear time.
+        closing = data_unit(899, 0, page_header(899))
+        events[offset] = [header]
+        events[offset + 3600] = body
+        events[offset + 7200] = [closing]
+
+    page(0, 200, [(1, b"\x03WRONG PAGE 200 LIFECYCLE CONTROL")])
+    page(45000, 888, [(1, b"\x0b\x0bSynthetic lifecycle caption A\x0a\x0a")], True)
+    page(25 * 90000, 888, [(1, b"\x0b\x0bSynthetic lifecycle caption B\x0a\x0a")], True)
+    # page_header already sets C4. Transmit every display row as spaces as well,
+    # so the clear has positive wire evidence instead of relying on silence.
+    page(40 * 90000, 888, [(row, b"") for row in range(1, 25)], True)
+
+    clock_times = set(range(0, 60 * 90000 + 1, 1800))
+    for offset in sorted(clock_times | events.keys()):
+        pts = 90000 + offset
+        if offset in clock_times:
+            transport.tables()
+        if offset in events:
+            # pes() supplies the PCR for this time. Do not duplicate it when a
+            # periodic clock tick and a page transmission have the same time.
+            transport.pes(events[offset], pts)
+        else:
+            transport.clock(pts)
+    return bytes(transport.output)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="Destination TS fixture")
+    parser.add_argument("--scenario", choices=("default", "caption-lifecycle"),
+                        default="default", help="Optional source-state qualification scenario")
     args = parser.parse_args()
-    args.output.write_bytes(generate_fixture())
+    fixture = (generate_caption_lifecycle_fixture() if args.scenario == "caption-lifecycle"
+               else generate_fixture())
+    args.output.write_bytes(fixture)
