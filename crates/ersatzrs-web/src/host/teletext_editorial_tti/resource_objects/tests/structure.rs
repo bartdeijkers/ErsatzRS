@@ -6,6 +6,9 @@ use ersatzrs_app::teletext_export_project::TeletextExportFile;
 #[path = "structure/extent.rs"]
 mod extent;
 
+#[path = "structure/positions.rs"]
+mod positions;
+
 fn bounds() -> (TeletextTtiBudget, usize, TeletextServiceBudget) {
     (
         limits().0,

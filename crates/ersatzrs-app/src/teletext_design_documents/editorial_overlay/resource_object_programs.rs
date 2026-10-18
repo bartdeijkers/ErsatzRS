@@ -1,4 +1,4 @@
-//! Closed V15/V16/V17 resource programs, bound to exact immutable originals.
+//! Closed versioned resource programs, bound to exact immutable originals.
 use super::{
     failure, invalid, limit, map_only, resource_object_operands, TeletextDesignDocumentBudget,
     TeletextDesignDocumentError, TeletextDesignDocumentFailure, TeletextProfileDocument,
@@ -85,6 +85,7 @@ pub(super) fn check_version(
         super::RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
             | super::RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
             | super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+            | super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION
     ) || value
         .resource_object_program_overlays
         .0
@@ -188,9 +189,32 @@ pub(super) fn distinct_targets(
     programs: &[TeletextResourceObjectProgramOverlay],
     operands: &[TeletextResourceObjectOperandOverlay],
 ) -> Result<(), TeletextDesignDocumentError> {
+    distinct_targets_for_role(programs, operands, false)
+}
+
+pub(super) fn distinct_original_positions(
+    programs: &[TeletextResourceObjectProgramOverlay],
+    operands: &[TeletextResourceObjectOperandOverlay],
+) -> Result<(), TeletextDesignDocumentError> {
+    if !programs
+        .iter()
+        .any(TeletextResourceObjectProgramOverlay::is_original_position_intent)
+    {
+        return Err(invalid());
+    }
+    distinct_targets_for_role(programs, operands, true)
+}
+
+fn distinct_targets_for_role(
+    programs: &[TeletextResourceObjectProgramOverlay],
+    operands: &[TeletextResourceObjectOperandOverlay],
+    original_positions: bool,
+) -> Result<(), TeletextDesignDocumentError> {
     let mut identities = BTreeSet::new();
     for program in programs {
-        if program.has_inserted_positions()
+        if program.is_position_restoration()
+            || (program.has_inserted_positions()
+                && !(original_positions && program.is_original_position_intent()))
             || !identities.insert(program.identity())
             || operands.iter().any(|operand| {
                 operand.identity() == program.identity()
@@ -226,6 +250,9 @@ pub(super) fn restore_overlay(
     let resources = resource_object_operands::restore(resources)?;
     let programs = restore_programs(programs, budget, version)?;
     let constructor = match version {
+        super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION => {
+            TeletextSavedEditorialOverlay::new_with_resource_object_position_overlays
+        }
         super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION => {
             TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays
         }
@@ -253,8 +280,11 @@ pub(super) fn restore_programs(
     programs
         .into_iter()
         .map(|program| {
-            let constructor = if version
-                >= super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+            let constructor = if version == super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION
+                && inserted_position(&program)
+            {
+                TeletextResourceObjectProgramOverlay::new_with_original_positions
+            } else if version >= super::RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
                 && invocation_structure(&program)
             {
                 TeletextResourceObjectProgramOverlay::new_with_invocation_structure
@@ -275,6 +305,17 @@ pub(super) fn restore_programs(
             .map_err(|_| invalid())
         })
         .collect::<Result<Vec<_>, _>>()
+}
+
+fn inserted_position(program: &StoredResourceProgram) -> bool {
+    program
+        .replacement
+        .commands()
+        .iter()
+        .zip(&program.retained_commands)
+        .any(|(command, original)| {
+            original.is_none() && matches!(command, TeletextEnhancementCommand::SetPosition { .. })
+        })
 }
 
 fn invocation_structure(program: &StoredResourceProgram) -> bool {

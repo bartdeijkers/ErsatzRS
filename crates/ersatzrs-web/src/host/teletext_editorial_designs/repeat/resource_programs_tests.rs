@@ -7,6 +7,9 @@ use ersatzrs_domain::{
     TeletextResourceSubpageIndex,
 };
 use std::time::Duration;
+
+#[path = "resource_programs_tests/original_positions.rs"]
+mod original_positions;
 fn identity(global: bool) -> TeletextObjectIdentity {
     let resource = TeletextResourceIdentity::new(
         if global {

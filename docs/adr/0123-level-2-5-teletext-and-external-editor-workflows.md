@@ -26,6 +26,18 @@ editor boundary, and publication stays explicit. P9A-04 owns actual pinned-edito
 proof for an added definition, changed-admin evidence and the remaining complete
 resource/set/context, suitable-client and full engine requirements.
 
+Private concept version19 separately records positive-row insertion in original
+POP/GPOP definitions. Explicit typed original-position intent retains every old
+context/position anchor and full source identity; temporary added-body intent and
+versions1–18 do not gain this storage role. Existing definition additions may
+compose while preserving version19. Checked native reconstruction and every
+shared consumer remain mandatory. Exact-root restoration derives a temporary
+inverse only from authenticated prior intent, current state and complete root
+native bytes; no saved role accepts that inverse. Cumulative composition removes
+the empty intent. Qualification remains partial; P9A-04 owns lifecycle and
+actual-editor proof. Broader
+row-zero, coordinated position and complete resource/set requirements remain open.
+
 The localized channel admin now connects static selected profiles to validation,
 new immutable original drafts and exact historical native previews. Explicit
 trusted authoring bounds are separate from per-channel entry/region/resource

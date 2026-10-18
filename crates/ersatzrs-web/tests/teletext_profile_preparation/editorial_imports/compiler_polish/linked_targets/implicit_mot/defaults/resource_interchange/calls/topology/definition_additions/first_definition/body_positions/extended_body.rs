@@ -121,7 +121,7 @@ async fn reject_retained_anchor_mutations(
         Box::pin(assert_no_extension(fixture, flow, before, first, expected)).await;
     }
 }
-async fn reject_original_definition_extension() {
+async fn reject_original_definition_anchor_change() {
     let fixture = Fixture::new_persistent().await;
     http_routes::configure_authoring_policy(&fixture).await;
     let (fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
@@ -132,10 +132,16 @@ async fn reject_original_definition_extension() {
     ))
     .await;
     let before = retained(&fixture).await;
+    // Row2/P followed by row3/Q is legal geometry, but changes producer AP1.
+    // Original-position insertion intent must preserve that original anchor.
     let request = edited_request(
         &flow.exported[0],
         &flow.receipts[0],
-        &[(5, SECOND_POSITION), (6, SECOND_GLYPH)],
+        &[
+            (3, SECOND_POSITION),
+            (5, 0x2b | (4 << 6)),
+            (6, SECOND_GLYPH),
+        ],
     );
     let result = import_teletext_editorial_design(
         &fixture.state.application,
@@ -146,7 +152,7 @@ async fn reject_original_definition_extension() {
     .await;
     assert!(
         result.is_err(),
-        "original producer definitions cannot borrow saved Add authority"
+        "new rows cannot change original producer position anchors"
     );
     stored(&fixture, &flow, 0).await;
     unchanged(&fixture, &flow, &before).await;
@@ -155,7 +161,7 @@ async fn reject_original_definition_extension() {
 
 #[tokio::test]
 async fn populated_added_definition_appends_row_without_changing_retained_anchors_or_publication() {
-    Box::pin(reject_original_definition_extension()).await;
+    Box::pin(reject_original_definition_anchor_change()).await;
     let empty = Box::pin(qualify_empty(1)).await;
     let p = Box::pin(qualify_body(b'P')).await;
     let two = Box::pin(qualify_two_rows()).await;

@@ -46,7 +46,10 @@ pub(super) fn merge(
         )?;
         let old = one(&previous.resource_programs, identity)?;
         if let Some(old) = old {
-            if old.expected() != &current {
+            if old.is_position_restoration()
+                || old.expected() != &current
+                || (old.has_inserted_positions() && !old.is_original_position_intent())
+            {
                 return Err(fail());
             }
             current = old.replacement().clone();
@@ -62,8 +65,18 @@ pub(super) fn merge(
             deadline,
         )?;
         if let Some(program) = one(&incoming.resource_programs, identity)? {
-            if program.expected() != &current {
+            if program.expected() != &current
+                || (program.has_inserted_positions() && !program.is_original_position_intent())
+            {
                 return Err(fail());
+            }
+            if program.is_position_restoration() {
+                let previous = old.ok_or_else(fail)?;
+                let expected =
+                    Program::restore_original_positions(previous, budget).map_err(|_| fail())?;
+                if program != &expected {
+                    return Err(fail());
+                }
             }
             retained = program
                 .retained_commands()
@@ -174,7 +187,15 @@ fn collect(
         }
     }
     let expected = TeletextEnhancementProgram::new(expected).map_err(|_| fail())?;
-    let constructor = if call_topology(original, replacement, retained) {
+    let constructor = if replacement
+        .commands()
+        .iter()
+        .zip(retained)
+        .any(|(command, source)| {
+            source.is_none() && matches!(command, TeletextEnhancementCommand::SetPosition { .. })
+        }) {
+        Program::new_with_original_positions
+    } else if call_topology(original, replacement, retained) {
         Program::new_with_invocation_structure
     } else if replacement
         .commands()

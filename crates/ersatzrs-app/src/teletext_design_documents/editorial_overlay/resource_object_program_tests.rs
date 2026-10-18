@@ -66,7 +66,7 @@ fn change(global: bool, s1: u8, variant: usize) -> TeletextResourceObjectProgram
 fn original_for(change: &TeletextResourceObjectProgramOverlay, mixed: bool) -> Vec<u8> {
     original_with_program(change.identity(), change.expected(), mixed)
 }
-fn original_with_program(
+pub(super) fn original_with_program(
     id: ersatzrs_domain::TeletextObjectIdentity,
     program: &TeletextEnhancementProgram,
     mixed: bool,

@@ -561,10 +561,12 @@ pub(in crate::host) fn validate_applied(
     compare(&expected, &edited, mapping.location, false, deadline)
 }
 
+mod position_history;
+pub(in crate::host) use position_history::PositionScope;
 mod project;
 pub(in crate::host) use project::{
-    authorize_programs, reconcile_project, reconcile_project_with_added_positions,
-    validate_applied_project, validate_applied_project_with_added_positions, ResourceEdits,
+    authorize_programs, reconcile_project, reconcile_project_with_position_scope,
+    validate_applied_project, validate_applied_project_with_position_scope, ResourceEdits,
 };
 
 #[cfg(test)]

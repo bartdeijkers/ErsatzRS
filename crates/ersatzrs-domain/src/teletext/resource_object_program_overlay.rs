@@ -21,6 +21,8 @@ pub enum TeletextResourceObjectProgramOverlayError {
     MissingInvocationStructure,
     #[error("teletext resource position insertion requires a new position command")]
     MissingInsertedPosition,
+    #[error("teletext position restoration requires checked original-position intent")]
+    OriginalPositionIntent,
     #[error("teletext resource program exceeds the trusted command or structure budget")]
     Budget,
     #[error(transparent)]
@@ -41,6 +43,14 @@ pub struct TeletextResourceObjectProgramOverlay {
     expected: TeletextEnhancementProgram,
     replacement: TeletextEnhancementProgram,
     retained_commands: Vec<Option<usize>>,
+    position_intent: PositionIntent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PositionIntent {
+    Ordinary,
+    Original,
+    Restoration,
 }
 
 #[derive(Clone, Copy)]
@@ -49,6 +59,7 @@ enum InvocationPolicy {
     Retained,
     Structure,
     InsertedPositions,
+    OriginalPositions,
 }
 
 impl TeletextResourceObjectProgramOverlay {
@@ -156,6 +167,81 @@ impl TeletextResourceObjectProgramOverlay {
         )
     }
 
+    /// Preserve explicit positive-row insertions in an original resource body.
+    ///
+    /// Existing context and position anchors remain mandatory and exact. This
+    /// distinct intent requires the versioned original-position storage role;
+    /// it grants no receipt, shared-consumer or publication authority. Row-zero
+    /// insertion and broader position editing remain separate authored coverage.
+    /// # Errors
+    /// Rejects absent new positions, inserted row zero, invalid correspondence,
+    /// changed protected anchors, Local identities and exhausted budgets.
+    pub fn new_with_original_positions(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            budget,
+            InvocationPolicy::OriginalPositions,
+        )
+    }
+
+    /// Reverse one checked original-position edit as ephemeral root restoration.
+    ///
+    /// The inverse correspondence comes solely from the prior checked map;
+    /// producer position/context anchors remain retained. No uploaded map or
+    /// replacement is accepted. Hosts must authenticate the current/root bodies
+    /// and fold this intent into cumulative root state before saving. No saved
+    /// overlay format supports this restoration role.
+    /// # Errors
+    /// Rejects transient, ordinary or restoration priors and exhausted fresh
+    /// aggregate command/structure budgets before allocating the inverse map.
+    pub fn restore_original_positions(
+        previous: &Self,
+        budget: TeletextServiceBudget,
+    ) -> Result<Self, TeletextResourceObjectProgramOverlayError> {
+        use TeletextResourceObjectProgramOverlayError as Error;
+        if !previous.is_original_position_intent() {
+            return Err(Error::OriginalPositionIntent);
+        }
+        if budget.max_objects == 0
+            || previous
+                .expected
+                .commands()
+                .len()
+                .checked_add(previous.replacement.commands().len())
+                .is_none_or(|count| count > budget.max_commands)
+            || previous.expected.commands().len() > budget.max_structure_items
+        {
+            return Err(Error::Budget);
+        }
+        let mut inverse = vec![None; previous.expected.commands().len()];
+        for (ordinal, original) in previous.retained_commands.iter().enumerate() {
+            if let Some(original) = original {
+                let target = inverse
+                    .get_mut(*original)
+                    .ok_or(Error::OriginalPositionIntent)?;
+                if target.replace(ordinal).is_some() {
+                    return Err(Error::OriginalPositionIntent);
+                }
+            }
+        }
+        Ok(Self {
+            identity: previous.identity,
+            expected: previous.replacement.clone(),
+            replacement: previous.expected.clone(),
+            retained_commands: inverse,
+            position_intent: PositionIntent::Restoration,
+        })
+    }
+
     fn new_for_policy(
         identity: TeletextObjectIdentity,
         expected: TeletextEnhancementProgram,
@@ -182,7 +268,7 @@ impl TeletextResourceObjectProgramOverlay {
             return Err(Error::Unchanged);
         }
         match invocations {
-            InvocationPolicy::InsertedPositions => {
+            InvocationPolicy::InsertedPositions | InvocationPolicy::OriginalPositions => {
                 validate_inserted_position_correspondence(
                     &expected,
                     &replacement,
@@ -206,6 +292,11 @@ impl TeletextResourceObjectProgramOverlay {
             expected,
             replacement,
             retained_commands,
+            position_intent: if matches!(invocations, InvocationPolicy::OriginalPositions) {
+                PositionIntent::Original
+            } else {
+                PositionIntent::Ordinary
+            },
         };
         if matches!(invocations, InvocationPolicy::Retained) && !overlay.has_invocation_changes() {
             return Err(Error::MissingInvocationChange);
@@ -215,12 +306,37 @@ impl TeletextResourceObjectProgramOverlay {
         {
             return Err(Error::MissingInvocationStructure);
         }
-        if matches!(invocations, InvocationPolicy::InsertedPositions)
-            && !overlay.has_inserted_positions()
+        if matches!(
+            invocations,
+            InvocationPolicy::InsertedPositions | InvocationPolicy::OriginalPositions
+        ) && !overlay.has_inserted_positions()
         {
             return Err(Error::MissingInsertedPosition);
         }
+        if overlay.is_original_position_intent() && overlay.has_inserted_zero_row() {
+            return Err(Error::Correspondence(
+                TeletextLocalObjectGlyphProgramOverlayError::ProtectedCommand,
+            ));
+        }
         Ok(overlay)
+    }
+
+    /// Explicit original-position storage policy, distinct from transient Add intent.
+    #[must_use]
+    pub const fn is_original_position_intent(&self) -> bool {
+        matches!(self.position_intent, PositionIntent::Original)
+    }
+
+    /// Ephemeral inverse intent which must never be serialized as a saved overlay.
+    #[must_use]
+    pub const fn is_position_restoration(&self) -> bool {
+        matches!(self.position_intent, PositionIntent::Restoration)
+    }
+
+    fn has_inserted_zero_row(&self) -> bool {
+        self.replacement.commands().iter().zip(&self.retained_commands)
+            .any(|(command, original)| original.is_none()
+                && matches!(command, TeletextEnhancementCommand::SetPosition { position } if position.row() == 0))
     }
 
     /// Whether correspondence inserts a position, independently of storage policy.

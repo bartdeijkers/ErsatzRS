@@ -19,7 +19,7 @@ fn glyph(code: u8) -> TeletextEnhancementCommand {
     )
     .unwrap()
 }
-fn addition(global: bool, subpage: u8) -> TeletextResourceObjectDefinitionAddition {
+pub(super) fn addition(global: bool, subpage: u8) -> TeletextResourceObjectDefinitionAddition {
     TeletextResourceObjectDefinitionAddition::new(
         TeletextEnhancementObjectDefinition {
             identity: new_identity(global, subpage),

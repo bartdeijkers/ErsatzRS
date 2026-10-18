@@ -53,6 +53,12 @@ release section when tagging a release.
   consumer. A pinned actual QTeletextMaker save of an added definition now passes
   unchanged-byte import, preview, separate publication and cold reopen. Complete
   resource/set editing and full engine acceptance remain open.
+- Import complete positive rows into original POP/GPOP teletext objects, including
+  first, appended and interior rows. Private version19 concepts preserve original
+  anchors and complete object identities separately from added-definition edits.
+  Fresh-receipt restoration of an exact original body uses checked prior edit
+  history; imports remain unpublished until explicit acceptance. Complete editor
+  and Level 2.5 engine acceptance remain open.
 - Edit original POP/GPOP teletext objects through receipt-bound QTeletextMaker
   companions, including full-capacity command fragments. Private version14 concepts
   retain scalar changes; version15 adds bounded glyph/style insertion, deletion and

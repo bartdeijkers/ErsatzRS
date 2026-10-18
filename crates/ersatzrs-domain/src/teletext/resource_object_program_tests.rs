@@ -524,3 +524,182 @@ fn transient_resource_positions_keep_legacy_policies_and_retained_anchors_exact(
         Err(TeletextResourceObjectProgramOverlayError::Budget)
     );
 }
+
+#[test]
+fn original_resource_positions_have_distinct_intent_and_exact_anchor_correspondence() {
+    let position = |row, column| TeletextEnhancementCommand::SetPosition {
+        position: TeletextEnhancementPosition::new(row, column).unwrap(),
+    };
+    let expected = program(vec![position(1, 0), at(8, glyph(b'P')), position(3, 0)]);
+    let replacement = program(vec![
+        position(1, 0),
+        at(8, glyph(b'P')),
+        position(2, 0),
+        at(6, glyph(b'R')),
+        position(3, 0),
+    ]);
+    let map = vec![Some(0), Some(1), None, None, Some(2)];
+    let original = TeletextResourceObjectProgramOverlay::new_with_original_positions(
+        target(false, 15),
+        expected.clone(),
+        replacement.clone(),
+        map.clone(),
+        budget(),
+    )
+    .unwrap();
+    let transient = TeletextResourceObjectProgramOverlay::new_with_inserted_positions(
+        target(false, 15),
+        expected.clone(),
+        replacement.clone(),
+        map.clone(),
+        budget(),
+    )
+    .unwrap();
+    assert!(original.has_inserted_positions());
+    assert!(original.is_original_position_intent());
+    assert!(!transient.is_original_position_intent());
+    assert_ne!(original, transient);
+    assert_eq!(original.retained_commands(), map);
+    for (ordinal, row) in [(0, 1), (4, 3)] {
+        let mut invalid = replacement.commands().to_vec();
+        invalid[ordinal] = position(row, 1);
+        assert!(
+            TeletextResourceObjectProgramOverlay::new_with_original_positions(
+                target(false, 15),
+                expected.clone(),
+                program(invalid),
+                map.clone(),
+                budget(),
+            )
+            .is_err()
+        );
+    }
+    let mut row_zero = replacement.commands().to_vec();
+    row_zero[2] = position(0, 0);
+    assert!(
+        TeletextResourceObjectProgramOverlay::new_with_original_positions(
+            target(false, 15),
+            expected.clone(),
+            program(row_zero),
+            map.clone(),
+            budget(),
+        )
+        .is_err()
+    );
+    let mut bounded = budget();
+    bounded.max_commands = 7;
+    assert_eq!(
+        TeletextResourceObjectProgramOverlay::new_with_original_positions(
+            target(false, 15),
+            expected,
+            replacement,
+            map,
+            bounded,
+        ),
+        Err(TeletextResourceObjectProgramOverlayError::Budget)
+    );
+}
+
+fn original_position_restoration_prior() -> TeletextResourceObjectProgramOverlay {
+    let position = |row, column| TeletextEnhancementCommand::SetPosition {
+        position: TeletextEnhancementPosition::new(row, column).unwrap(),
+    };
+    TeletextResourceObjectProgramOverlay::new_with_original_positions(
+        target(true, 15),
+        program(vec![
+            position(0, 8),
+            position(1, 0),
+            at(8, glyph(b'P')),
+            at(9, glyph(b'Q')),
+            position(3, 0),
+        ]),
+        program(vec![
+            position(0, 8),
+            position(1, 0),
+            at(8, glyph(b'P')),
+            position(2, 0),
+            at(6, glyph(b'R')),
+            position(3, 0),
+        ]),
+        vec![Some(0), Some(1), Some(2), None, None, Some(4)],
+        budget(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn original_position_restoration_derives_exact_inverse_and_retains_producer_anchors() {
+    let prior = original_position_restoration_prior();
+    let restored =
+        TeletextResourceObjectProgramOverlay::restore_original_positions(&prior, budget()).unwrap();
+    assert!(restored.is_position_restoration());
+    assert!(!restored.is_original_position_intent());
+    assert!(!restored.has_inserted_positions());
+    assert_eq!(restored.identity(), prior.identity());
+    assert_eq!(restored.expected(), prior.replacement());
+    assert_eq!(restored.replacement(), prior.expected());
+    assert_eq!(
+        restored.retained_commands(),
+        [Some(0), Some(1), Some(2), None, Some(5)]
+    );
+    for (ordinal, command) in restored.replacement().commands().iter().enumerate() {
+        if matches!(command, TeletextEnhancementCommand::SetPosition { .. }) {
+            let source = restored.retained_commands()[ordinal].unwrap();
+            assert_eq!(restored.expected().commands()[source], *command);
+        }
+    }
+}
+
+#[test]
+fn original_position_restoration_refuses_unqualified_priors_and_rechecks_fresh_bounds() {
+    let prior = original_position_restoration_prior();
+    let transient = TeletextResourceObjectProgramOverlay::new_with_inserted_positions(
+        prior.identity(),
+        prior.expected().clone(),
+        prior.replacement().clone(),
+        prior.retained_commands().to_vec(),
+        budget(),
+    )
+    .unwrap();
+    let ordinary = TeletextResourceObjectProgramOverlay::new(
+        prior.identity(),
+        program(vec![at(8, glyph(b'P'))]),
+        program(vec![at(8, glyph(b'P')), at(9, glyph(b'Q'))]),
+        vec![Some(0), None],
+        budget(),
+    )
+    .unwrap();
+    let restored =
+        TeletextResourceObjectProgramOverlay::restore_original_positions(&prior, budget()).unwrap();
+    for unqualified in [&transient, &ordinary, &restored] {
+        assert_eq!(
+            TeletextResourceObjectProgramOverlay::restore_original_positions(unqualified, budget()),
+            Err(TeletextResourceObjectProgramOverlayError::OriginalPositionIntent)
+        );
+    }
+    let mut exact = budget();
+    exact.max_commands = 11;
+    exact.max_structure_items = 5;
+    assert!(
+        TeletextResourceObjectProgramOverlay::restore_original_positions(&prior, exact).is_ok()
+    );
+    for bounded in [
+        TeletextServiceBudget {
+            max_commands: 10,
+            ..exact
+        },
+        TeletextServiceBudget {
+            max_structure_items: 4,
+            ..exact
+        },
+        TeletextServiceBudget {
+            max_objects: 0,
+            ..exact
+        },
+    ] {
+        assert_eq!(
+            TeletextResourceObjectProgramOverlay::restore_original_positions(&prior, bounded),
+            Err(TeletextResourceObjectProgramOverlayError::Budget)
+        );
+    }
+}

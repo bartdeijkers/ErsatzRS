@@ -43,6 +43,7 @@ const RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION: u16 = 15;
 const RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 16;
 const RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 17;
 const RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION: u16 = 18;
+const RESOURCE_OBJECT_POSITION_OVERLAY_VERSION: u16 = 19;
 
 #[path = "editorial_overlay/object_operands.rs"]
 pub(super) mod object_operands;
@@ -686,6 +687,46 @@ impl TeletextSavedEditorialOverlay {
             .with_resource_object_definition_additions(additions)
     }
 
+    /// Capture version19 positive-row insertions in original resource bodies.
+    ///
+    /// Transient added-body positions cannot enter this role. Exact original
+    /// association, native encoding, shared permissions and publication remain
+    /// host obligations. Prior intents and separate definition additions compose
+    /// without changing their original identity or captured source bytes.
+    /// # Errors
+    /// Rejects absent original-position intent, transient positions, duplicate
+    /// identities, scalar overlap and invalid provenance.
+    pub fn new_with_resource_object_position_overlays(
+        provenance: TeletextSavedEditorialProvenance,
+        pages: Vec<TeletextPhysicalBaseOverlay>,
+        local_program_operands: Vec<TeletextLocalProgramOperandOverlay>,
+        local_object_operands: Vec<TeletextLocalObjectOperandOverlay>,
+        drcs_bitmap_overlays: Vec<TeletextDrcsBitmapOverlay>,
+        programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+        resource_changes: (
+            Vec<TeletextResourceObjectOperandOverlay>,
+            Vec<TeletextResourceObjectProgramOverlay>,
+        ),
+    ) -> Result<Self, TeletextDesignDocumentError> {
+        let (resource_operands, resource_programs) = resource_changes;
+        resource_object_programs::distinct_original_positions(
+            &resource_programs,
+            &resource_operands,
+        )?;
+        let mut value = Self::new_resource_parts(
+            provenance,
+            pages,
+            local_program_operands,
+            local_object_operands,
+            drcs_bitmap_overlays,
+            programs,
+            resource_operands,
+        )?;
+        value.resource_object_program_overlays = resource_programs;
+        value.schema_version = RESOURCE_OBJECT_POSITION_OVERLAY_VERSION;
+        Ok(value)
+    }
+
     /// Compose additions with existing intents without rewriting original bytes.
     /// Body changes to a new identity must be folded into its definition first.
     /// # Errors
@@ -699,7 +740,9 @@ impl TeletextSavedEditorialOverlay {
         }
         self.resource_object_definition_additions = additions;
         resource_object_additions::distinct(&self)?;
-        self.schema_version = RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
+        if self.schema_version != RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
+            self.schema_version = RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
+        }
         Ok(self)
     }
 
@@ -1326,6 +1369,17 @@ fn restore_bitmap(
 
 impl StoredOverlay {
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
+        if self.schema_version == RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
+            if self
+                .resource_object_definition_additions
+                .0
+                .as_ref()
+                .is_some_and(Vec::is_empty)
+            {
+                return Err(invalid());
+            }
+            return resource_object_programs::check_version(self);
+        }
         if self.schema_version == RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION
             || self.resource_object_definition_additions.0.is_some()
         {
@@ -1425,7 +1479,10 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
-        if self.schema_version == RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION {
+        if self.schema_version == RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION
+            || (self.schema_version == RESOURCE_OBJECT_POSITION_OVERLAY_VERSION
+                && self.resource_object_definition_additions.0.is_some())
+        {
             resource_object_additions::restore_stored(self, documents, budget)
         } else {
             self.restore_original_overlays(documents, budget)
@@ -1478,7 +1535,8 @@ impl StoredOverlay {
             )?,
             RESOURCE_OBJECT_PROGRAM_OVERLAY_VERSION
             | RESOURCE_OBJECT_INVOCATION_OVERLAY_VERSION
-            | RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION => restore_resource_programs(
+            | RESOURCE_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+            | RESOURCE_OBJECT_POSITION_OVERLAY_VERSION => restore_resource_programs(
                 provenance,
                 pages,
                 operands,
@@ -1987,3 +2045,7 @@ mod resource_object_invocation_tests;
 #[cfg(test)]
 #[path = "editorial_overlay/resource_object_addition_tests.rs"]
 mod resource_object_addition_tests;
+
+#[cfg(test)]
+#[path = "editorial_overlay/resource_object_position_tests.rs"]
+mod resource_object_position_tests;

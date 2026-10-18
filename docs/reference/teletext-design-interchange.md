@@ -5785,6 +5785,41 @@ Existing packages and profiles remain untouched. P9A-04 owns scoped actual-edito
 and changed-admin evidence. Copy is partial definition creation, not complete
 resource/set/context editing or full workflow/engine acceptance.
 
+### Private original-resource row positions
+
+Private concept version19 uses the existing closed resource-program/map fields
+for a separate original-position role. At least one original-resource program
+must contain explicit typed positive-row insertion intent. Every original context
+and position command remains retained and exact. The domain constructor
+`TeletextResourceObjectProgramOverlay::new_with_original_positions` distinguishes
+this role from transient added-definition body reconstruction; neither supplies
+receipt, consumer, package or publication authority. Versions1–18 cannot store
+this intent, and selecting version19 without an actual original-position change
+does not relabel an ordinary program.
+
+The host reconstructs first, appended or interior complete rows from checked
+companions of immutable original definitions. Receipt/source identity, complete
+original spans, command correspondence and trusted native/semantic bounds remain
+mandatory. Definition additions retain their separate complete bodies; a mixed
+concept preserves version19 rather than downgrading its original-position role.
+Original addon responses and metadata remain byte-exact. Generic replay and
+uploaded metadata do not grant this authority.
+
+Restoring an exact original body uses the fresh current receipt and the checked
+prior original-position program. The host compares the complete uploaded native
+body against the immutable root, checks the exact current/prior/root programs
+and full resource identity, and derives an ephemeral inverse solely from the
+prior correspondence. No uploaded map grants deletion authority. Cumulative
+root composition removes the empty edit and recovers exact original document
+bytes; every saved overlay role rejects the ephemeral inverse. This path does
+not grant arbitrary original-position deletion or coordinated-state undo.
+
+This is partial original-position implementation. P9A-04 owns native lifecycle,
+exact-root undo and protected-consumer evidence; actual-editor qualification
+remains distinct. Broader row-zero/coordinated position editing and
+complete resource/set semantics remain required for engine acceptance. No permanent
+authoring restriction, publication shortcut or suitable-client waiver follows.
+
 ### Original resource context companions
 
 V8 uses the closed `object_context_tti_v1` asset scope. Its fields are

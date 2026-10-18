@@ -21,6 +21,9 @@ mod extended_body;
 #[path = "body_positions/interior_rows.rs"]
 mod interior_rows;
 
+#[path = "body_positions/original_positions.rs"]
+mod original_positions;
+
 fn glyph(code: u8) -> u32 {
     8 | (9 << 6) | (u32::from(code) << 11)
 }

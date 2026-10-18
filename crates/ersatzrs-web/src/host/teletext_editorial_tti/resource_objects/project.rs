@@ -1,5 +1,6 @@
 //! Complete original resource groups, joined before semantic reconstruction.
 use super::super::structural::resource as structural;
+use super::PositionScope;
 use super::{
     authorize, compare, frame, invalid, mapping, mapping_resource, plan_fragments, reconcile,
     EncodedTeletextAuthoredPage, EncodedTeletextAuthoredService, Failure, Instant, Location,
@@ -8,8 +9,7 @@ use super::{
 };
 use ersatzrs_app::teletext_export_project::TeletextExportFile;
 use ersatzrs_domain::{
-    TeletextEnhancementCommand, TeletextResourceObjectDefinitionAddition,
-    TeletextResourceObjectProgramOverlay, TeletextServiceBudget,
+    TeletextEnhancementCommand, TeletextResourceObjectProgramOverlay, TeletextServiceBudget,
 };
 use ersatzrs_ffmpeg::teletext::project_encoded_teletext_object;
 use std::collections::{BTreeMap, BTreeSet};
@@ -258,21 +258,22 @@ fn program(
         .or_else(|_| super::topology::program(mapped, body, limits, deadline))
 }
 
-fn program_with_added_positions(
+fn program_with_positions(
     mapped: &Mapping<'_>,
     body: &Body,
     original: &EncodedTeletextAuthoredService,
-    additions: &[TeletextResourceObjectDefinitionAddition],
+    scope: PositionScope<'_>,
     limits: Limits,
     deadline: Instant,
 ) -> Result<TeletextResourceObjectProgramOverlay> {
-    let Some(added) = additions
+    if let Some(restoration) = scope.restore(mapped, body, limits, deadline)? {
+        return Ok(restoration);
+    }
+    let added = scope
+        .additions
         .iter()
-        .find(|added| added.identity() == mapped.identity)
-    else {
-        return program(mapped, body, original, limits, deadline);
-    };
-    if added.definition() != mapped.definition {
+        .find(|added| added.identity() == mapped.identity);
+    if added.is_some_and(|added| added.definition() != mapped.definition) {
         return Err(invalid());
     }
     let rebuilt = if mapped.definition.program.commands().is_empty() {
@@ -313,7 +314,11 @@ fn program_with_added_positions(
         .any(|(command, original)| {
             original.is_none() && matches!(command, TeletextEnhancementCommand::SetPosition { .. })
         }) {
-        TeletextResourceObjectProgramOverlay::new_with_inserted_positions
+        if added.is_some() {
+            TeletextResourceObjectProgramOverlay::new_with_inserted_positions
+        } else {
+            TeletextResourceObjectProgramOverlay::new_with_original_positions
+        }
     } else {
         TeletextResourceObjectProgramOverlay::new
     };
@@ -371,24 +376,24 @@ pub(in crate::host) fn reconcile_project(
     limits: Limits,
     deadline: Instant,
 ) -> Result<ResourceEdits> {
-    reconcile_project_with_added_positions(
+    reconcile_project_with_position_scope(
         project,
         original,
         before_files,
         after_files,
-        &[],
+        PositionScope::default(),
         limits,
         deadline,
     )
 }
 
 /// Added identities come from the authenticated saved overlay, never the upload.
-pub(in crate::host) fn reconcile_project_with_added_positions(
+pub(in crate::host) fn reconcile_project_with_position_scope(
     project: &TeletextExportProject,
     original: &EncodedTeletextAuthoredService,
     before_files: Files<'_>,
     after_files: Files<'_>,
-    additions: &[TeletextResourceObjectDefinitionAddition],
+    scope: PositionScope<'_>,
     limits: Limits,
     deadline: Instant,
 ) -> Result<ResourceEdits> {
@@ -398,9 +403,7 @@ pub(in crate::host) fn reconcile_project_with_added_positions(
         resource: None,
     }
     .check_deadline(deadline)?;
-    if additions.len() > limits.2.max_objects {
-        return Err(invalid());
-    }
+    scope.check(limits)?;
     let groups = groups(project, original, limits)?;
     inventory(project, before_files)?;
     inventory(project, after_files)?;
@@ -432,8 +435,8 @@ pub(in crate::host) fn reconcile_project_with_added_positions(
             result.operands.extend(scalar);
         } else {
             let mapped = mapping(group[0], project, original)?;
-            result.programs.push(program_with_added_positions(
-                &mapped, &body, original, additions, limits, deadline,
+            result.programs.push(program_with_positions(
+                &mapped, &body, original, scope, limits, deadline,
             )?);
         }
     }
@@ -480,7 +483,8 @@ pub(in crate::host) fn authorize_programs(
                 operation: operand.replacement(),
             };
         }
-        if program.has_inserted_positions()
+        if program.is_position_restoration()
+            || (program.has_inserted_positions() && !program.is_original_position_intent())
             || !seen.insert(program.identity())
             || program.expected().commands() != expected
             || program.replacement().commands().len() > limits.2.max_commands
@@ -526,23 +530,23 @@ pub(in crate::host) fn validate_applied_project(
     limits: Limits,
     deadline: Instant,
 ) -> Result<()> {
-    validate_applied_project_with_added_positions(
+    validate_applied_project_with_position_scope(
         project,
         original,
         candidate,
         edited_files,
-        &[],
+        PositionScope::default(),
         limits,
         deadline,
     )
 }
 
-pub(in crate::host) fn validate_applied_project_with_added_positions(
+pub(in crate::host) fn validate_applied_project_with_position_scope(
     project: &TeletextExportProject,
     original: &EncodedTeletextAuthoredService,
     candidate: &EncodedTeletextAuthoredService,
     edited_files: Files<'_>,
-    additions: &[TeletextResourceObjectDefinitionAddition],
+    scope: PositionScope<'_>,
     limits: Limits,
     deadline: Instant,
 ) -> Result<()> {
@@ -552,9 +556,7 @@ pub(in crate::host) fn validate_applied_project_with_added_positions(
         resource: None,
     }
     .check_deadline(deadline)?;
-    if additions.len() > limits.2.max_objects {
-        return Err(invalid());
-    }
+    scope.check(limits)?;
     let groups = groups(project, original, limits)?;
     inventory(project, edited_files)?;
     for group in groups {
@@ -578,9 +580,7 @@ pub(in crate::host) fn validate_applied_project_with_added_positions(
             )
             .is_err()
         {
-            let _ = program_with_added_positions(
-                &before, &body, original, additions, limits, deadline,
-            )?;
+            let _ = program_with_positions(&before, &body, original, scope, limits, deadline)?;
         }
         let after = mapping_resource(
             group[0],

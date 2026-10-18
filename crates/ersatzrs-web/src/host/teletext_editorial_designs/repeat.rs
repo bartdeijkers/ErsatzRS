@@ -37,6 +37,7 @@ struct PreparedImport {
     latest: Option<QualifiedBaseline>,
     incoming: TeletextEditorialChanges,
     first_body_additions: Vec<ersatzrs_domain::TeletextResourceObjectDefinitionAddition>,
+    original_position_history: Vec<ersatzrs_domain::TeletextResourceObjectProgramOverlay>,
     cumulative: TeletextEditorialChanges,
     provenance: TeletextSavedEditorialProvenance,
     root_export: Option<TeletextExportReceiptBody>,
@@ -686,7 +687,11 @@ fn prepare(
         tti,
         (
             policy.encoding.composition.service,
-            &previous.resource_additions,
+            super::super::teletext_editorial_tti::resource_objects::PositionScope {
+                additions: &previous.resource_additions,
+                programs: &previous.resource_programs,
+                root: root.original.view().encoded(),
+            },
         ),
         deadline,
     )?;
@@ -707,6 +712,7 @@ fn prepare(
         latest,
         incoming,
         first_body_additions: previous.resource_additions,
+        original_position_history: previous.resource_programs,
         cumulative,
         provenance,
         root_export,
@@ -836,7 +842,13 @@ fn resource_program_overlay(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
 ) -> Result<TeletextSavedEditorialOverlay> {
-    let constructor = if changes.resource_programs.iter().any(
+    let constructor = if changes
+        .resource_programs
+        .iter()
+        .any(ersatzrs_domain::TeletextResourceObjectProgramOverlay::is_original_position_intent)
+    {
+        TeletextSavedEditorialOverlay::new_with_resource_object_position_overlays
+    } else if changes.resource_programs.iter().any(
         ersatzrs_domain::TeletextResourceObjectProgramOverlay::has_invocation_structure_changes,
     ) {
         TeletextSavedEditorialOverlay::new_with_resource_object_invocation_structure_overlays
@@ -1118,7 +1130,11 @@ fn make_document(
         &prepared.incoming,
         (
             prepared.policy.encoding.composition.service,
-            &prepared.first_body_additions,
+            super::super::teletext_editorial_tti::resource_objects::PositionScope {
+                additions: &prepared.first_body_additions,
+                programs: &prepared.original_position_history,
+                root: prepared.root.original.view().encoded(),
+            },
         ),
     )?;
     check_deadline(deadline)?;

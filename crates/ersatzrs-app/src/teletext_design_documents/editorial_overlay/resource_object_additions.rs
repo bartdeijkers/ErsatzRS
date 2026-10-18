@@ -91,10 +91,17 @@ pub(super) fn distinct(
             return Err(invalid());
         }
     }
-    resource_object_programs::distinct_targets(
-        &overlay.resource_object_program_overlays,
-        &overlay.resource_object_operands,
-    )
+    if overlay.schema_version == super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
+        resource_object_programs::distinct_original_positions(
+            &overlay.resource_object_program_overlays,
+            &overlay.resource_object_operands,
+        )
+    } else {
+        resource_object_programs::distinct_targets(
+            &overlay.resource_object_program_overlays,
+            &overlay.resource_object_operands,
+        )
+    }
 }
 pub(super) fn check_version(
     value: &super::StoredOverlay,
@@ -165,7 +172,9 @@ pub(super) fn restore(
         })
         .collect::<Result<Vec<_>, _>>()?;
     overlay.resource_object_definition_additions = additions;
-    overlay.schema_version = super::RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
+    if overlay.schema_version != super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
+        overlay.schema_version = super::RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
+    }
     distinct(&overlay)?;
     Ok(overlay)
 }
@@ -229,6 +238,9 @@ pub(super) fn restore_stored(
         budget,
         stored.schema_version,
     )?;
+    if stored.schema_version == super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION {
+        value.schema_version = super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION;
+    }
     let value = restore(
         value,
         stored
