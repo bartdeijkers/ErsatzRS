@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F1: original-resource row positions; interior-editor, X3 and V3 proof remain open'
+current_focus = 'P9A-04 F2: explicit addon-version template workflow; full editor, X3 and V3 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -147,7 +147,7 @@ negative runs and source/fixture corrections without weakening original oracles.
 Strict affected domain/app/web all-target Clippy passes. Only an equivalent
 borrowed-slice test spelling changed after behavioral proof; production/native
 sources are unchanged. Final fmt, architecture and progress checks pass.
-Create the explicit owned-only local checkpoint; canonical evidence preserves
+Local checkpoint2c6cfdd6 contains this verified slice; canonical evidence preserves
 foreign7 and the unverified widget changes outside it. Reuse unchanged editor,
 localized admin, source stream and channel-isolation proof. No editor/container
 is active. Unused-object removal remains deferred. Original/interior actual QTM
@@ -155,10 +155,24 @@ SaveAs, broader row-zero/coordinated state, complete resource/set semantics,
 X3 catalogue208 and V3/X1 client coverage remain open. No scope waiver or new push
 authority follows; F6 is already pushed at c07af3a1. Checkpoint SHA, source hashes,
 terminal checks and excluded changes resolve through canonical work.json.
-Next F2 clause: explicit addon-version template workflow. Reuse the genuine
-phase9-qtm-native-flow populated metadata/zone/dynamic-field proof; no duplicate
-combined editor trial or invented metadata loss. Confirm the precise remaining
-version/geometry/set gap against existing receipts before changing code.
+Current F2 evidence package: tmp/phase9-f2-template-version/work.json.
+Local2c6cfdd6 owns original rows/root undo. Existing genuine QTM populated
+metadata/zone/dynamic-field proof is reused. One ignored actual-native package
+workflow now passes: real r1/r2 ZIP installation, full identity/settings checks,
+stale profile/save/select/publication refusal, no automatic pending/accepted or
+pages-call change, explicit fresh r2 profile/binding/capture/publication, cold
+immutable r1 Day/Night+r2 source/metadata/raster/native units and r2 recovery.
+Existing fixture helpers omit their unmanaged seed; installer protection stays
+intact. Two existing externally supplied fresh state/data roots isolate package,
+data and cache work. Failed compile paths and unrelated124/32 preview-helper
+mismatch are retained, corrected without weaker oracles or product edits.
+Strict web all-target Clippy, fmt, architecture and progress checks pass. The
+owned-only local proof checkpoint SHA and excluded changes resolve through
+canonical work.json; retain all foreign/widget work outside it. No editor/client/
+transport rerun or new production behavior is claimed. Full F2 geometry/set,
+original/interior QTM, X3/V3 and all remaining9A requirements stay open; no waiver.
+Next F1/V2: qualify the retained bounded interior/original QTM candidate and its
+specific prior GUI failure before any new trial; reuse existing engine proof.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

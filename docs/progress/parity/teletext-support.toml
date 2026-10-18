@@ -31,8 +31,9 @@ coordinated-state undo remains open.
 Localized Add/Copy/boundary UI has headed proof; V7 native-call and V8 compound
 structure/call actual saves retain their scoped unchanged-byte lifecycle proof.
 Interior/original QTM saves, unqualified style/initial/deferred/context cases,
-coordinated positions, complete resource/link/set and full-capacity composed
-context, metadata/template/dynamic-field packages remain open. Actual editor
+coordinated positions and complete resource/link/set/context remain open.
+QTM metadata and explicit r1/r2 install/profile/publication/cold-history proofs
+are scoped. Actual editor
 controls do not prove native Public-target or suitable-client rendering.
 No truncation or silent editor restriction is accepted.
 

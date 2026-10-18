@@ -24,6 +24,9 @@ use ersatzrs_web::host::{
 };
 use serde_json::{json, Value};
 
+#[path = "authoring_metadata/template_revisions.rs"]
+mod template_revisions;
+
 const AUTHORING_SCRIPT: &str = r#"case "$1" in
 check) printf '%s' '{"status":"ready","code":"ready","message":"ok"}'; exit 0;;
 pages) ;;
