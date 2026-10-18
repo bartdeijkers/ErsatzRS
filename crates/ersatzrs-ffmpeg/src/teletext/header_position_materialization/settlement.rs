@@ -13,7 +13,11 @@ use ersatzrs_domain::{
 };
 
 use super::super::compile_context::TeletextCompileContext;
-use super::super::composed_main::{pack_composition_program, TeletextComposedMainEncodingError};
+#[cfg(test)]
+use super::super::composed_main::pack_composition_program;
+use super::super::composed_main::{
+    pack_normalized_composition_program, TeletextComposedMainEncodingError,
+};
 use super::super::{
     EncodedTeletextLocalObjectProgram, TeletextMainComposition, TeletextMainCompositionBudget,
     TeletextMainCompositionError, TeletextMainCompositionFailure, TeletextMainCompositionSource,
@@ -35,7 +39,7 @@ pub(in crate::teletext) fn prepare(
     service: &TeletextSemanticService,
     allocations: &TeletextResourceObjectAllocations,
     budget: TeletextMainCompositionBudget,
-    packing: TeletextObjectCatalogBudget,
+    packing: (TeletextObjectCatalogBudget, usize),
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<(TeletextMainComposition, Vec<Witness>), TeletextComposedMainEncodingError> {
     let mut witnesses = BTreeMap::<usize, Witness>::new();
@@ -59,8 +63,14 @@ pub(in crate::teletext) fn prepare(
             location: None,
             reason: reason.into(),
         })?;
-        let encoded =
-            pack_composition_program(service, &composition, &prefix, allocations, packing)?;
+        let encoded = pack_normalized_composition_program(
+            service,
+            &composition,
+            &prefix,
+            allocations,
+            packing,
+            context,
+        )?;
         // Preserve existing Main-only successes: an unrelated nested Local
         // pointer can move when the later setter moves its definition.
         // Only unresolved foreground needs provisional Local body constraints.

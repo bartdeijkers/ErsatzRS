@@ -1312,7 +1312,59 @@ async fn local_active_header_prefix_decodes_with_pinned_independent_teletextimag
     }
     cases.extend(initial_header_active_cases());
     cases.push(body_return_header_case());
+    cases.push(nested_adaptive_header_case());
     assert_contextual_decoding(cases, "ERSATZRS_TELETEXT_TEST_LOCAL_ACTIVE_HEADER_FIXTURE").await;
+}
+
+fn nested_adaptive_header_case() -> serde_json::Value {
+    let owner = super::transport_tests::draft(200, 0, false).address;
+    let outer = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65534));
+    let child = TeletextObjectIdentity::local(owner, TeletextObjectId::new(65535));
+    encoded_case_with_encoding(
+        "nested_adaptive_header_position",
+        vec![text(0, 8, "Z")],
+        vec![TeletextEnhancementCommand::InvokeObject {
+            target: outer,
+            object_type: TeletextObjectType::Adaptive,
+            offset: None,
+        }],
+        vec![
+            TeletextEnhancementObjectDefinition {
+                identity: outer,
+                object_type: TeletextObjectType::Adaptive,
+                program: TeletextEnhancementProgram::new(vec![
+                    position(0, 8),
+                    TeletextEnhancementCommand::InvokeObject {
+                        target: child,
+                        object_type: TeletextObjectType::Passive,
+                        offset: None,
+                    },
+                ])
+                .unwrap(),
+            },
+            TeletextEnhancementObjectDefinition {
+                identity: child,
+                object_type: TeletextObjectType::Passive,
+                program: TeletextEnhancementProgram::new(vec![
+                    at(
+                        0,
+                        TeletextColumnOperation::Foreground {
+                            colour: TeletextColourReference::new(2).unwrap(),
+                        },
+                    ),
+                    at(
+                        0,
+                        TeletextColumnOperation::G0 {
+                            code: TeletextGlyphCode::new(b'A').unwrap(),
+                        },
+                    ),
+                ])
+                .unwrap(),
+            },
+        ],
+        &[cell(0, 8, [b'Z', 15, 0, 7, 0], [b'A', 0, 0, 2, 0])],
+        MainEncoding::Normalized,
+    )
 }
 
 fn body_return_header_case() -> serde_json::Value {

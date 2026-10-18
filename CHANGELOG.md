@@ -61,7 +61,9 @@ release section when tagging a release.
   Header object calls preserve foreground and base fallback when local Active
   or nested objects share a page, including an initial header position before
   a same-instance Active call. Unrelated pointer relocation no longer causes
-  false validation errors.
+  false validation errors. A forward header position immediately before a nested
+  Passive call now encodes inside a local Adaptive definition when every use has
+  the same known background, retaining the saved source and caller state.
   Native preview,
   publication and recovery qualify new allocations and every protected shared
   consumer. A pinned actual QTeletextMaker save of an added definition now passes

@@ -143,7 +143,7 @@ fn prefix_only_witnesses_retained_main_and_checks_final_words() {
         &service,
         &allocations,
         budget.composition,
-        budget.packing,
+        (budget.packing, budget.assembly.max_work),
         &mut TeletextCompileContext::new(None, None, None),
     )
     .unwrap();
@@ -298,7 +298,7 @@ fn prefix_settlement_consumes_existing_display_quota() {
         &service,
         &allocations,
         budget.composition,
-        budget.packing,
+        (budget.packing, budget.assembly.max_work),
         &mut TeletextCompileContext::new(None, None, Some(0)),
     )
     .unwrap_err();

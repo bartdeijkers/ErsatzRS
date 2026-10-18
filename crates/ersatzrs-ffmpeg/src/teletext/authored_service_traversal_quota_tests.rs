@@ -314,7 +314,9 @@ fn exhausted_original_spatial_credit_rejects_placement_before_physical_compilati
             );
             assert_eq!(admitted.spatial_event_visits, Some(original_events));
         }
-        assert_eq!(admitted.assembly_work, Some(0));
+        // Only the original two-definition header scan has run; physical
+        // assembly and ancestry remain unreached.
+        assert_eq!(admitted.assembly_work, Some(12));
         assert_eq!(admitted.ancestry_work, Some(0));
         assert_eq!(admitted.glyph_comparison_work, Some(0));
         assert_eq!(admitted.display_comparison_updates, Some(0));

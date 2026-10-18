@@ -53,10 +53,24 @@ impl Bucket {
                 error.reason,
                 TeletextNormalizedMainProgramFailure::Placement(_)
             )),
-            Self::Assembly => assert!(matches!(
-                error.reason,
-                TeletextNormalizedMainProgramFailure::Assembly(_)
-            )),
+            Self::Assembly => match &error.reason {
+                TeletextNormalizedMainProgramFailure::Original(error) => assert!(matches!(
+                    error.as_ref(),
+                    TeletextComposedMainEncodingError::Composition(TeletextMainCompositionError {
+                        reason: TeletextMainCompositionFailure::ObjectHeaderWorkBudget { .. },
+                        ..
+                    })
+                )),
+                TeletextNormalizedMainProgramFailure::ObjectHeader(error) => assert!(matches!(
+                    error.reason,
+                    TeletextMainCompositionFailure::ObjectHeaderWorkBudget { .. }
+                )),
+                TeletextNormalizedMainProgramFailure::Assembly(error) => assert!(matches!(
+                    error.reason,
+                    TeletextAugmentedOriginProgramFailure::WorkBudget { .. }
+                )),
+                other => panic!("expected exact assembly/header work-budget rejection: {other:?}"),
+            },
             Self::Ancestry => {
                 let TeletextNormalizedMainProgramFailure::Compilation(error) = &error.reason else {
                     panic!("expected ancestry quota rejection: {error:?}");
@@ -191,22 +205,29 @@ fn one_less_planning_credit_denies_final_display_without_charging_denied_work() 
 
 #[test]
 fn failure_debits_are_independent_and_later_planning_stages_remain_unreached() {
+    // This fixture's checked two-definition catalogue consumes twelve visits
+    // during original header normalization, before realization or placement.
+    const BOOTSTRAP: usize = 12;
     let (first, first_usage) = encode(calling_displays(1), &metered_limits());
     first.unwrap();
-    for (stage, bucket) in BUCKETS.into_iter().enumerate() {
+    for bucket in BUCKETS {
         let mut budget = metered_limits();
         bucket.set(&mut budget, Some(0));
         let (result, admitted) = encode(calling_displays(2), &budget);
         let error = result.unwrap_err();
         assert_eq!(error.display, Some(owner(0)));
         bucket.assert_failure(&error);
-        for (index, other) in BUCKETS.into_iter().enumerate() {
-            if index < stage {
-                assert_eq!(other.usage(admitted), other.usage(first_usage));
-            } else {
-                assert_eq!(other.usage(admitted), Some(0));
-            }
-        }
+        let first = BUCKETS.map(|other| other.usage(first_usage).unwrap());
+        let expected = match bucket {
+            Bucket::Realization => [0, 0, BOOTSTRAP, 0],
+            Bucket::Placement => [first[0], 0, BOOTSTRAP, 0],
+            Bucket::Assembly => [0, 0, 0, 0],
+            Bucket::Ancestry => [first[0], first[1], first[2], 0],
+        };
+        assert_eq!(
+            BUCKETS.map(|other| other.usage(admitted)),
+            expected.map(Some)
+        );
     }
 }
 

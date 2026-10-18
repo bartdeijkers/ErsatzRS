@@ -35,6 +35,7 @@ mod national_drcs_carrier;
 mod native_default_page;
 mod normalized_main_program;
 mod object_allocation;
+mod object_header_positions;
 mod object_pages;
 mod origin_carrier;
 mod origin_carrier_placement;

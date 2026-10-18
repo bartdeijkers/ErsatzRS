@@ -49,10 +49,12 @@ pub(super) fn witnesses(
             identity: target,
             command: event.source().command,
         };
-        let mut positions = encoded
-            .command_positions()
-            .iter()
-            .filter(|position| composition.source_location(position.source()) == Some(source));
+        let mut positions = encoded.command_positions().iter().filter(|position| {
+            position
+                .retained_source()
+                .and_then(|source| composition.source_location(source))
+                == Some(source)
+        });
         let Some(position) = positions.next() else {
             continue;
         };

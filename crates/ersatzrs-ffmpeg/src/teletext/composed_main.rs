@@ -119,7 +119,7 @@ pub(super) fn compile_composed_with_context(
         composition_budget,
         packing_budget,
         context,
-        false,
+        None,
     )
 }
 
@@ -130,7 +130,7 @@ pub(super) fn compile_composed_with_header_positions(
     owner: TeletextPageAddress,
     allocations: &TeletextResourceObjectAllocations,
     composition_budget: TeletextMainCompositionBudget,
-    packing_budget: TeletextObjectCatalogBudget,
+    packing: (TeletextObjectCatalogBudget, usize),
     context: &mut TeletextCompileContext<'_, '_>,
 ) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
     compile_composed_with_policy(
@@ -138,9 +138,9 @@ pub(super) fn compile_composed_with_header_positions(
         owner,
         allocations,
         composition_budget,
-        packing_budget,
+        packing.0,
         context,
-        true,
+        Some(packing.1),
     )
 }
 
@@ -151,32 +151,43 @@ fn compile_composed_with_policy(
     composition_budget: TeletextMainCompositionBudget,
     packing_budget: TeletextObjectCatalogBudget,
     context: &mut TeletextCompileContext<'_, '_>,
-    header_positions: bool,
+    header_positions: Option<usize>,
 ) -> Result<EncodedTeletextComposedMainProgram, TeletextComposedMainEncodingError> {
     if let Some(resources) = context.resources {
         resources.validate_catalog(service.objects(), allocations)?;
     }
     let composition =
         compose_teletext_main_program_with_context(service, owner, composition_budget, context)?;
-    let (composition, prefix) = if header_positions {
+    let (composition, prefix) = if let Some(work) = header_positions {
         super::header_position_materialization::settlement::prepare(
             composition,
             service,
             allocations,
             composition_budget,
-            packing_budget,
+            (packing_budget, work),
             context,
         )?
     } else {
         (composition, Vec::new())
     };
-    let encoded = pack_composition_program(
-        service,
-        &composition,
-        composition.program(),
-        allocations,
-        packing_budget,
-    )?;
+    let encoded = if let Some(work) = header_positions {
+        pack_normalized_composition_program(
+            service,
+            &composition,
+            composition.program(),
+            allocations,
+            (packing_budget, work),
+            context,
+        )?
+    } else {
+        pack_composition_program(
+            service,
+            &composition,
+            composition.program(),
+            allocations,
+            packing_budget,
+        )?
+    };
     super::header_position_materialization::settlement::verify(&composition, &encoded, &prefix)?;
     let transmission = transmission_evidence(
         &composition,
@@ -205,6 +216,50 @@ pub(super) fn pack_composition_program(
     allocations: &TeletextResourceObjectAllocations,
     packing_budget: TeletextObjectCatalogBudget,
 ) -> Result<EncodedTeletextLocalObjectProgram, TeletextComposedMainPackingError> {
+    pack_composition_catalog(
+        service,
+        composition,
+        program,
+        allocations,
+        packing_budget,
+        service.objects(),
+        Some,
+    )
+}
+
+/// Original-only normalization bootstrap. Keep all actual word ranges, but give
+/// inserted writers no original transmission or provisional settlement authority.
+pub(super) fn pack_normalized_composition_program(
+    service: &TeletextSemanticService,
+    composition: &TeletextMainComposition,
+    program: &TeletextEnhancementProgram,
+    allocations: &TeletextResourceObjectAllocations,
+    packing: (TeletextObjectCatalogBudget, usize),
+    context: &mut TeletextCompileContext<'_, '_>,
+) -> Result<EncodedTeletextLocalObjectProgram, TeletextComposedMainEncodingError> {
+    let derived = context.object_headers(composition, service.objects(), packing.0, packing.1)?;
+    let mut encoded = pack_composition_catalog(
+        service,
+        composition,
+        program,
+        allocations,
+        packing.0,
+        derived.catalog(),
+        |source| derived.retained_source(source),
+    )?;
+    encoded.bind_retained_object_sources(|source| derived.retained_source(source));
+    Ok(encoded)
+}
+
+fn pack_composition_catalog(
+    service: &TeletextSemanticService,
+    composition: &TeletextMainComposition,
+    program: &TeletextEnhancementProgram,
+    allocations: &TeletextResourceObjectAllocations,
+    packing_budget: TeletextObjectCatalogBudget,
+    catalog: &TeletextEnhancementObjectCatalog,
+    retained: impl Fn(TeletextEnhancementSource) -> Option<TeletextEnhancementSource>,
+) -> Result<EncodedTeletextLocalObjectProgram, TeletextComposedMainPackingError> {
     let owner = composition.owner();
     let links = service.page_enhancements().get(&owner).map_or(
         TeletextResolvedObjectPageLinks {
@@ -216,7 +271,7 @@ pub(super) fn pack_composition_program(
     compile_with_context(
         owner,
         program,
-        service.objects(),
+        catalog,
         allocations,
         links,
         packing_budget,
@@ -226,6 +281,7 @@ pub(super) fn pack_composition_program(
         owner: error.owner,
         location: error
             .location
+            .and_then(retained)
             .and_then(|location| composition.source_location(location)),
         reason: error.reason,
     })
@@ -319,10 +375,12 @@ fn transmission_evidence(
         };
         // Only the original command's final emitted semantic word is evidence.
         // Synthetic BaseCell commands and unmapped resource bodies stay absent.
-        let mut matches = encoded
-            .command_positions()
-            .iter()
-            .filter(|position| composition.source_location(position.source()) == Some(expected));
+        let mut matches = encoded.command_positions().iter().filter(|position| {
+            position
+                .retained_source()
+                .and_then(|source| composition.source_location(source))
+                == Some(expected)
+        });
         if let Some(position) = matches.next() {
             if matches.next().is_some() {
                 return Err(fail(TeletextMainCompositionFailure::SelectionState));

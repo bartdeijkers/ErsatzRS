@@ -465,7 +465,7 @@ fn provisional_local_words_require_exact_final_body_source_and_relative_mapping(
         &service,
         &allocations,
         budget.composition,
-        budget.packing,
+        (budget.packing, budget.assembly.max_work),
         &mut TeletextCompileContext::new(None, None, None),
     )
     .unwrap();
@@ -559,7 +559,7 @@ fn repeated_local_instances_keep_distinct_relative_order_evidence() {
         &service,
         &allocations,
         budget.composition,
-        budget.packing,
+        (budget.packing, budget.assembly.max_work),
         &mut TeletextCompileContext::new(None, None, None),
     )
     .unwrap();

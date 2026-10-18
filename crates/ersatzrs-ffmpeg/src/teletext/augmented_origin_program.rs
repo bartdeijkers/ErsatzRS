@@ -13,8 +13,9 @@ use ersatzrs_domain::{
     TeletextEnhancementCommand, TeletextEnhancementObjectCatalog,
     TeletextEnhancementObjectDefinition, TeletextEnhancementProgram,
     TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextGlyphCandidate,
-    TeletextObjectCatalogError, TeletextObjectIdentity, TeletextObjectType, TeletextPageAddress,
-    TeletextSemanticService, TeletextSpatialInvocationId, TeletextSpatialRootSource,
+    TeletextObjectCatalogBudget, TeletextObjectCatalogError, TeletextObjectIdentity,
+    TeletextObjectType, TeletextPageAddress, TeletextSemanticService, TeletextSpatialInvocationId,
+    TeletextSpatialRootSource,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +117,7 @@ pub struct TeletextAugmentedOriginProgram<'a> {
     placement: &'a TeletextOriginCarrierPlacement<'a>,
     program: TeletextEnhancementProgram,
     catalog: TeletextEnhancementObjectCatalog,
+    object_sources: Option<super::object_header_positions::ObjectHeaderSources>,
     main_sources: Vec<TeletextAugmentedOriginSource>,
     carriers: Vec<TeletextAugmentedOriginCarrier>,
 }
@@ -140,6 +142,25 @@ impl TeletextAugmentedOriginProgram<'_> {
     pub fn carriers(&self) -> &[TeletextAugmentedOriginCarrier] {
         &self.carriers
     }
+    /// Only the normalized factory may derive retained definition bodies. Raw
+    /// assembly keeps its existing original-only behaviour and source mapping.
+    pub(super) fn materialize_object_headers(
+        &mut self,
+        budget: TeletextObjectCatalogBudget,
+        maximum_work: usize,
+        context: &mut super::compile_context::TeletextCompileContext<'_, '_>,
+    ) -> Result<(), super::TeletextMainCompositionError> {
+        let derived = context.object_headers(
+            self.placement.plan().composition(),
+            &self.catalog,
+            budget,
+            maximum_work,
+        )?;
+        let (catalog, sources) = derived.into_parts();
+        self.catalog = catalog;
+        self.object_sources = Some(sources);
+        Ok(())
+    }
     /// Validates main/body ordinal ranges against the exact retained or generated
     /// definition. A repeated body emitter does not identify its physical instance.
     #[must_use]
@@ -162,6 +183,10 @@ impl TeletextAugmentedOriginProgram<'_> {
                 .copied()
                 .map(|role| TeletextAugmentedOriginSource::CarrierBody { carrier, role });
         }
+        let source = match &self.object_sources {
+            Some(sources) => sources.retained_source(source)?,
+            None => source,
+        };
         self.placement
             .catalog()
             .definition(identity)?
@@ -312,6 +337,7 @@ fn build_with_optional_service_and_work_usage<'a>(
             placement,
             program,
             catalog,
+            object_sources: None,
             main_sources: sources,
             carriers,
         })

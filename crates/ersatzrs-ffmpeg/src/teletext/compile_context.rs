@@ -440,6 +440,46 @@ impl<'a, 'service> TeletextCompileContext<'a, 'service> {
         })
     }
 
+    /// Definition header derivation shares existing assembly credit across the
+    /// original bootstrap, prefix settlements and final physical catalogue.
+    pub(super) fn object_headers(
+        &mut self,
+        original: &TeletextMainComposition,
+        catalog: &TeletextEnhancementObjectCatalog,
+        budget: TeletextObjectCatalogBudget,
+        maximum: usize,
+    ) -> Result<
+        super::object_header_positions::DerivedObjectHeaderPositions,
+        super::TeletextMainCompositionError,
+    > {
+        use super::object_header_positions::DerivationError;
+        use super::TeletextMainCompositionFailure as Failure;
+        let (result, admitted) = super::object_header_positions::derive(
+            original,
+            catalog,
+            budget,
+            self.assembly.cap(maximum),
+        );
+        let fail = |reason| super::TeletextMainCompositionError {
+            owner: original.owner(),
+            location: None,
+            reason,
+        };
+        if !self.assembly.debit(admitted) {
+            return Err(fail(Failure::ObjectHeaderStorage));
+        }
+        result.map_err(|error| {
+            fail(match error {
+                DerivationError::WorkBudget { maximum } => {
+                    Failure::ObjectHeaderWorkBudget { maximum }
+                }
+                DerivationError::Catalog(error) => Failure::ObjectCatalog(error),
+                DerivationError::Program(error) => Failure::Program(error),
+                DerivationError::AllocationSize => Failure::ObjectHeaderStorage,
+            })
+        })
+    }
+
     pub(super) fn assembly<'b>(
         &mut self,
         placement: &'b TeletextOriginCarrierPlacement<'b>,

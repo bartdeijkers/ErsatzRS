@@ -80,11 +80,16 @@ impl TeletextLocalObjectDefinitionPosition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeletextCompiledCommandPosition {
     source: TeletextEnhancementSource,
+    retained_source: Option<TeletextEnhancementSource>,
     first_word: usize,
     semantic_word: usize,
     original_local_command: Option<usize>,
 }
 impl TeletextCompiledCommandPosition {
+    /// Original-only packing evidence; actual word coverage always uses `source`.
+    pub(super) const fn retained_source(&self) -> Option<TeletextEnhancementSource> {
+        self.retained_source
+    }
     #[must_use]
     pub const fn source(&self) -> TeletextEnhancementSource {
         self.source
@@ -118,6 +123,16 @@ pub struct EncodedTeletextLocalObjectProgram {
 }
 
 impl EncodedTeletextLocalObjectProgram {
+    pub(super) fn bind_retained_object_sources(
+        &mut self,
+        mut original: impl FnMut(TeletextEnhancementSource) -> Option<TeletextEnhancementSource>,
+    ) {
+        for position in &mut self.commands {
+            if position.source.object.is_some() {
+                position.retained_source = original(position.source);
+            }
+        }
+    }
     pub(super) fn bind_original_local_commands(
         &mut self,
         mut original: impl FnMut(TeletextEnhancementSource) -> Option<usize>,
@@ -508,6 +523,7 @@ impl Input<'_> {
             }
             emission.commands.push(TeletextCompiledCommandPosition {
                 source: location,
+                retained_source: Some(location),
                 first_word,
                 semantic_word: emission.index - 1,
                 original_local_command: None,

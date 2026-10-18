@@ -87,6 +87,12 @@ pub enum TeletextMainCompositionSource {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TeletextMainCompositionFailure {
+    #[error("object header-position work exceeds trusted maximum {maximum}")]
+    ObjectHeaderWorkBudget { maximum: usize },
+    #[error("object header-position storage arithmetic exceeds supported range")]
+    ObjectHeaderStorage,
+    #[error(transparent)]
+    ObjectCatalog(#[from] ersatzrs_domain::TeletextObjectCatalogError),
     #[error("main and base input work exceeds trusted budget {maximum}")]
     InputBudget { maximum: usize },
     #[error("composed main commands exceed trusted budget {maximum}")]

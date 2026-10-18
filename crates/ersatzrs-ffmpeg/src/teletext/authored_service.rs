@@ -72,8 +72,9 @@ pub struct TeletextAuthoredServiceEncodingBudget {
     pub max_realization_updates: Option<usize>,
     /// Optional cumulative admitted carrier-placement visits.
     pub max_placement_work: Option<usize>,
-    /// Optional cumulative assembly visits and conservative clone reservations;
-    /// carrier identity search is independently bounded below.
+    /// Optional cumulative assembly visits and conservative clone reservations,
+    /// including original/prefix/physical object-header normalization. These
+    /// scans may precede realization; carrier identity search is bounded below.
     pub max_assembly_work: Option<usize>,
     /// Optional cumulative admitted invocation-correspondence visits/reservations.
     pub max_ancestry_work: Option<usize>,

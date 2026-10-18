@@ -78,6 +78,8 @@ pub enum TeletextNormalizedMainProgramFailure {
     Allocation(Box<TeletextObjectAllocationError>),
     #[error("original composition/packing failed: {0}")]
     Original(Box<TeletextComposedMainEncodingError>),
+    #[error("definition header-position derivation failed: {0}")]
+    ObjectHeader(Box<super::TeletextMainCompositionError>),
     #[error("compatibility planning failed: {0}")]
     Realization(Box<TeletextBaseCompatibilityRealizationError>),
     #[error("carrier placement failed: {0}")]
@@ -200,7 +202,7 @@ pub(super) fn compose_normalization_original(
         owner,
         &original_allocations,
         budget.composition,
-        budget.packing,
+        (budget.packing, budget.assembly.max_work),
         context,
     )
     .map_err(|error| {
@@ -254,12 +256,20 @@ fn compile_physical_with_context(
             )))
         })?;
     check_deadline(owner, context.deadline)?;
-    let augmented = context
+    let mut augmented = context
         .assembly(&placement, service, budget.assembly)
         .map_err(|error| {
             fail(TeletextNormalizedMainProgramFailure::Assembly(Box::new(
                 error,
             )))
+        })?;
+    check_deadline(owner, context.deadline)?;
+    augmented
+        .materialize_object_headers(budget.packing, budget.assembly.max_work, context)
+        .map_err(|error| {
+            fail(TeletextNormalizedMainProgramFailure::ObjectHeader(
+                Box::new(error),
+            ))
         })?;
     check_deadline(owner, context.deadline)?;
     let allocations = allocate_teletext_resource_objects(
