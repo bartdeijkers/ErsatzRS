@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: grouped base wire/pixel/independent proof; suitable client and remaining shared gates open'
+current_focus = 'P9A-04 standalone Level 1/1.5: suitable-client gate open after bounded Kaffeine qualification; national-context proof next'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,119 +62,63 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Current maintainer priority (2026-10-19): standalone Level1/1.5 acceptance first,
-then complete authored Level2.5 with protected base/fallback. This supersedes
-older next-action prose; all original final9A criteria remain mandatory and the
-production guide waits for full independent9A. ADR0123/P9A-04 own the exact
-boundary and L15-A through E closure table, linked to the existing F/V/X list.
-Neither standalone base nor full9A is accepted. No new plan or general audit.
+Current maintainer priority (2026-10-19): standalone Level1/1.5 first, then full
+Level2.5 with protected base. ADR0123 and P9A-04 L15-A..E/F/V/X own acceptance;
+neither base nor full9A is accepted. Production guide waits for independent9A.
+This current handoff supersedes older next-action prose below. No scope waiver,
+new general audit, external decoder/editor maintenance or push/publication.
 
-L15-A/B direct-Main checkpoint is verified: native89ab0ba0 and actual pinned
-headedQTM bbf7a6d4 pass full208words, G2/diacritics/Level15G3, directV4 with zero
-optional banks/assets, genuine1.5 popup/SaveAs atword206, conceptpreview, separate
-explicit publication and real SQLite/application reopen. Originals, metadata,
-config and Night stay exact. Root inspected three actual editor images. This is
-new scoped evidence/test-driver work, no engine feature, new independent decode,
-ordinary stream/client, whole-process restart or complete base acceptance.
-Canonical tmp/phase9-next-local-teletext/work.json/standalone_level15_followup/
-native_main_capacity owns source/test/tool hashes, initial negatives and checks.
-The pretty-JSON fixture exceeded unchanged32KiB before encoding; existing compact
-writer fixes only representation. No quota/oracle is weakened. Old widget driver
-was tied to56-column/DRCS; one fixed MainG2/zero-bank/1.5 mode reuses real widgets
-and SaveAs. Three control refusals preserve saved files/old Local guard. Existing
-56-column helper defaults remain exact; all unrelated proofs retain their scope.
+Verified local base checkpoints:3bd0a2f2 Main208/no-bank realQTM1.5 edit/concept/
+preview/explicit publication/SQLite reopen;ef447f99 native OS-process Lua recovery
+(18 supplied-clock observations, fresh Continue Day/Off);ac4edf82 exact complete
+invalid-enrichment refusal/retained accepted base;01dd87ca grouped whole-factory
+wire/pixels/independent16-cell1/1.5/2.5 proof with seven wrong goldens, legacy2 and
+pure6 controls. Supplied flash phases are not receiver timing; native AppState
+process recovery is not whole-web-host/active-stream restart. Canonical
+ tmp/phase9-next-local-teletext/work.json/standalone_level15_followup owns exact
+sources, inputs, tests, negative history, scopes and checkpoint receipts.
 
-L15-A atomic enrichment refusal654ce6f7 is verified against the actual Main208
-base: invalid RGB4, missing normalDRCS and required POPbody reject complete V3
-preparation for exact semantic reasons, no partial candidate. Originals/heads/
-receipts/pending/accepted units and shared native preview/config/other channel
-stay exact; restoring valid source works with zero banks. No product change, new
-TTI/client/transport or AV claim. Canonical standalone_level15_followup/
-atomic_enrichments retains scoped receipt and valid controls.
+Next independent L15-A action: a context-qualified literal national-repertoire
+matrix using existing mechanisms. One bounded stocklibzvbi0.2.42 observation of
+unchanged earlier Polish published captures records12 combinations acrosslevels
+0/1/2/defaults0/8: Day originalG0/Base5B maps internallyU01B5 (no Unicode alias),
+NightA remains, e-acute appears at1.5+. No producer defect or new normative golden
+is inferred; this is not all13 repertoires/font correctness or strictLevel1
+context acceptance. national_context_probe owns ABI/source/library/input pins.
+Validate normative identity before fixing goldens; do not repair the decoder.
 
-L15-A base_conformance now proves one complete factory-produced standalone page
-without optional banks (object/MOT/resource admission0; no X28/M29). Pinned
-imager0.2.0/2b0125b7 passes16 literal cells at1/1.5/2.5 in2af5ac33: spacing,
-height halves, mosaics, raw flash/conceal/box, G2/diacritic/Level15G3 and Level1 Z.
-Seven wrong-golden refusals, literal wire/native four-phase pixels4767f40e,
-legacy helper controls77ae4ef4 and pure input6 retain exact scope. Existing helper
-needed only explicit Level1/raw-attribute expectations; decoder sources unchanged.
-No visible receiver timer/font-wide/national repertoire/navigation or new editor/
-ordinary-stream/transport/platform acceptance follows. Canonical same followup/
-base_conformance owns source/tool/request hashes and all terminal/negative logs.
-Next integration gate: qualify at most one new promising base client against
-ordinary HTTP/TS, conceal/reveal, timed flash and page/subpage controls before
-build/runtime. Retain all unchanged negative candidates and full2.5 deferral.
-Continue independent national-context/lifecycle/platform gaps where possible;
-reuse realQTM/explicit publication/F6 proof and repeat only affected boundaries.
+L15-D still needs an available exact client with positively qualified ordinary
+HTTP/TS, conceal/reveal, timed flash, relevantX26 and page/subpage/update controls.
+ExactVLC3.0.20 source/plugin forces bitmap reveal/flash-on1. Newly examined
+Kaffeine2.1.0/5a233e06 exposes libVLC playback/SPU and TV-channel numeric keys,
+without a qualifying independent renderer or teletext control route; stop before
+build/runtime. GE manual documents reveal/navigation but cannot pin Pro/runtime
+or prove timedflash/fullX26. base_client_qualification owns sources/limits.
+Retain prior scoped MAIN positives and unchanged negatives; a future runtime
+trial needs a new/changed capability-positive exact available receiver.
 
-Next L15-D action: qualify one genuinely new/changed, capability-positive pinned
-base client for ordinary stream input, conceal/reveal, timed flash and page/
-subpage navigation. Exact VLC3.0.20 source/binary qualification fails those base
-render controls; retain its prior MAIN/navigation proof, do not rerun its full-base
-trial or start decoder maintenance. Current receipt names exact versions/functions.
-L15-C native process-restart proof6ef50fc7 passes18 exact two-channel observations
-across On/Off/expiry in a distinct OS process, plus stored programme checkpoint and
-fresh Continue Day/Off. No prior Lua globals, automatic publication or addon calls;
-base/config/other channel remain exact. Canonical standalone_level15_followup/
-process_restart owns the receipt. Supplied application clocks/native AppState are
-not real-time whole-web-host/active-stream restart or new output/client proof.
-Reuse unchanged a4102313 seven-case lifecycle/error evidence; scoped accepted-output
-host restart and complete shared-profile/invalid-profile matrices remain open.
-Remaining base repertoire/spacing/height/conceal/flash/subpage/set and rejection
-coverage must be bundled by functional closure, not small object variants.
-No full editor/publication/isolation/F6 replay unless its boundary actually changes.
+Independent shared gaps stay executable: full sharedprofile/mirror/multibinding/
+invalid-profile and scoped accepted-output whole-host restart matrices; complete
+base editor/repertoire/subpage/update evidence; native/output/platform safety.
+Reuse actualQTM, localized headed/admin, publication/isolation and transport proof
+within scope; do not repeat the entire chain for unchanged boundaries. F6 stays
+closed atc07af3a1 unless a concrete relevant regression appears. F4 On->Base and
+Off-expiry emission proof do not erase the retained VLC Off->Base display negative.
 
-F3 complete-factory correction is locally checkpointedad28cd81. Original Base
-SPACE+authored£ and physicalG2£ have separate correct oracles, complete effect/
-provenance/budget guards and unchanged imager independent A/£/Z decoding.
- tmp/phase9-header-c2/identity.json/f3_foreign_default_qualification owns the
-original RED, fixture corrections, final9 and strict lint. Original-secondary
-assessment finds EN300706AnnexD.2.1(2) decoder-dependent absence, not a new glyph
-bug; both preservation regressions f91ab796 pass. Its original_secondary_followup
-records the exact branch/clause. No further generic F3/editor-variant audit.
+F3 ad28cd81 complete-factory foreign defaults and f91ab796 original-secondary
+absence remain scoped verified; tmp/phase9-header-c2/identity.json owns oracles,
+provenance and negative history. F5 85f5b9b1 finite Local889 EOF follows approved
+selected-video-end/earlier-cut policy;19 unique native controls retain exact
+clocks/AV/audio/cache/cleanup. eof_unclosed_followup owns it; earlier20MB/late889,
+source absence/replacement and27Windows results retain their own scopes. Broader
+provider/output/native/adoption remains; four candidate.3 packages are not
+managed adoption and accepted managed.1 is unchanged.
 
-F5 checkpoint85f5b9b1 closes qualified finite Local889 EOF support. Approved
-selected-video-end/earlier-programme-cut policy uses complete retained snapshots,
-exact events/native text/prefix, video identity and versioned cache policy.
-48d8d4f9 and8f9a5891 compose19 unique passes, including actual Next EOF and genuine
-clear controls with exact H264/DutchAAC/cues/cache/cleanup. Strict infra all-target
-Clippy/fmt/architecture/progress pass. Preserve original timeout, normalizer RED
-and corrected test-only20.560→20.559 tick arithmetic; no widened tolerances.
-Canonical tmp/phase9-next-local-teletext/work.json/eof_unclosed_followup owns it.
-Reused20MB/late889/source absence/replacement and27Windows compatibility proof
-retain their own scope; broader output/provider/charset/platform/adoption is open.
-Four candidate.3 packages are not managed adoption; accepted managed.1 unchanged.
-
-Full enhanced-client X1 work remains maintainer-deferred; base-specific candidate
-qualification under the new priority is authorized. Do not retry unchanged2.5
-negatives or start external decoder maintenance. X3 waits for changed upstream
-QTM POP/GPOP/over208-bank capability; no local editor maintenance or scope waiver.
-Shared base editor/client deficits still block the base. Exact VLC3.0.20 bitmap
-source and installed plugin fix reveal/flash-on=1; MAIN/navigation evidence cannot
-prove conceal/reveal or timed flash. Canonical standalone_level15_followup/
-base_client_qualification records this bounded capability negative; no repeat
-VLC full-base trial or decoder maintenance. X2 missing macOS
-artifacts/native environments, nativeARM/full-platform/output and accepted runtime
-adoption remain explicit. Existing macOS workflow needs suitable native execution
-or separately authorized remote-source/CI action; no push/publication is authorized.
-
-F4 MAIN On→Base is partial live proof; Off→Base emission passes but pinned VLC's
-automatic display still fails. V5 Lua Continue/Refresh/Reset/error durable SQL
-proof is not whole-process restart or the full multi-binding/shared-profile/
-invalid-profile matrix. Existing F/V/X rows own exact remaining actions and proof.
-F6 c07af3a1 targeted handoff remains closed absent a concrete relevant regression;
- tmp/phase9-f6-native-carriage/work.json owns default2/runtime/localized admin and
-ordinary smoke/TSDuck87/87. Keep unused-object removal deferred. Every2.5 addition
-must prove its own correct behavior and intended1/1.5 fallback, preferably on the
-same broadcast pages, plus standalone base regressions.
-
-Main208 native/editor jobs and all owned GUI/negative containers are terminal.
-Focused web integration-target Clippy passes; final formatting/progress/policy
-checks are owned by the canonical receipt. No ordinary stream/client replay or
-full platform claim is added. Foreign7 parallel changes remain exact; checkpoint
-receipt owns hashes and index state. Work autonomously within this priority;
-commit only verified slices, no push/publication or automatic package activation.
+Full enhanced-client X1 is deferred, X3 waits upstream QTM nativePOP/GPOP/over208
+capacity, and X2 needs missing exactmacOS artifacts/nativeARM/macOS/full-platform
+execution plus remaining output/adoption proof. Enhanced-only limits do not waive
+shared base gaps or full9A. All relevant owned checks are terminal; foreign7
+parallel changes remain exact. Canonical receipts own hashes/index/checkpoint IDs.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.
