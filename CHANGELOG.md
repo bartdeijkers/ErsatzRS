@@ -559,6 +559,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Allow the existing macOS Next candidate workflow to select the reviewed
+  caption source-out correction without changing accepted runtime downloads.
+  Candidate building and verified runtime adoption remain separate gates.
 - Allow local Linux Next candidate builds to select a reviewed source manifest
   while preserving the accepted runtime defaults. Keep exact patch and package
   provenance; candidate builds do not activate or publish a runtime.

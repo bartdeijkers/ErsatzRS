@@ -865,6 +865,10 @@ to the Docker invocation and pass the same manifest under
 `scripts/release/next-patches/` to the packager's `--manifest` option. The default
 still selects the accepted distribution. Candidate packaging does not change
 managed runtime selection or authorize publication.
+The existing macOS candidate workflow also exposes this reviewed manifest as
+a manual input. An authorized run using it builds both macOS candidate
+artifacts; workflow dispatch, remote source transfer and publication still need
+explicit maintainer authorization. Adding the choice does not run a job.
 
 For every Next revision update, first prepare the comparison with
 `--unpatched` and run the existing

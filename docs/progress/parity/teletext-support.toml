@@ -57,8 +57,9 @@ F5 finite-Local Next889 keeps Copy/Dutch audio, exact cues/seeks and cache/clean
 across20MB sources and late headers. ad51b056 adds source/PSI-qualified absence
 with original/ordinary selection fences. Sourceout25 focused and seven packaged
 cases pass; three Linux archives retain provenance/GLIBC2.34 and x64 starts on
-Bookworm. Windows/macOS artifacts and full compatibility/native/adoption gates
-remain; managed Next is unchanged. Broader sources/EOF/charset/F5 remain open.
+Bookworm. Native Windows package/startup and18 further existing Linux
+compatibility cases pass. macOS artifacts/environments and outstanding native
+platform/adoption gates remain; managed Next is unchanged. Broader sources/EOF/charset/F5 remain open.
 P9A-04 owns canonical proof, negative controls, scope and closure conditions.
 
 Linux/Windows-interop/QEMU ARM proof is partial; native six-RID gates remain.

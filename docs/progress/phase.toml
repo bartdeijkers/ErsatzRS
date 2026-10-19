@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F3 foreign-default qualification; F1 checkpoint 02d60cc5, F5 Linux 7bea7119, X1/X2/X3 open'
+current_focus = 'P9A-04 F5 candidate compatibility/platform adoption; F3 ad28cd81 verified, X1/X3 capability decisions open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -84,10 +84,10 @@ Bookworm; retained SRT/late889 and five caption/copy cases pass. Nine source/
 package guards pass and prior25 pure/playlist results remain valid. Canonical
  tmp/phase9-next-local-teletext/work.json/shared_copy_sourceout_followup/
 linux_package_followup owns artifacts, scope, foreign7/index and checkpointSHA.
-Windows/macOS replacement artifacts, full compatibility/native/platform gates
-and managed adoption remain; the production runtime pin is unchanged.
+The adoption followup below adds Windows and further compatibility evidence;
+remaining macOS/native gates and managed adoption stay separate.
 
-Current F3 foreign-default checkpoint corrects a complete-factory refusal:
+Local F3 checkpointad28cd81 corrects a complete-factory refusal:
 RED55b09203 rejects implicit MOT POP2A0 against explicit X27 POP2A1 before
 physical realization. Only fully declared services now settle the original
 resource context and derive distinct whole-body physical Local wrappers;
@@ -104,16 +104,34 @@ valid broad passes plus the two corrected helper passes. Final focused9 passes;
 canonical receipt records final lint/progress outcomes. No new client,
 editor/stream or full-F3/9A acceptance follows.
 
-After this checkpoint, X1/X3 determine the completion route: retain unchanged
-negative clients and editor limits; qualify only a changed or unexamined
-source-positive pinned option. Record missing capability, bounded direction,
-maintainer decision and exact closure in the existing F/V/X rows. No implicit
-scope restriction or external maintenance programme. Independently prioritize
-F5 compatibility/native-platform gates and accepted runtime adoption over more
-small editor variants. Linux crossbuild, native execution and managed adoption
-are separate claims. X2 native environments/artifacts remain open; F6 stays
-closed absent a concrete regression. Unused-object removal stays deferred.
-Engine-first; no production guide, push or publication.
+X1/X3 now determine the completion route. Canonical end_blocker_followup in
+ tmp/phase9-header-c2/identity.json records bounded primary-source qualification:
+DVBViewer Pro7.3.2.0 has HTTP/TS/page/subpage input/navigation, but required
+Local/POP/GPOP/MOT/X27/DRCS enlargement/panels remain unknown; its Level2.5 claim
+covers charset detection only. Obtain positive capability evidence and an
+explicitly authorized pinned binary/trial before runtime acceptance. No download,
+installation/purchase or vendor contact occurred. Existing negative clients stay
+negative and are not retried. QTM1.0/cac2167 remains latest; its only other branch
+is78behind/0ahead. Native POP/GPOP loading/rendering and over208-word complete
+bank context need upstream support or a separately bounded dependency-enhancement
+decision. No scope restriction is proposed/applied; all original clauses remain.
+
+Independently F5 passes18 missing existing compatibility gates on the actual
+unpacked Linux candidate: bitmap/HTTP/provider text, live RTSP/source clock and
+image lifetime/seek/handoff. Existing25 timing/playlist and seven packaged native
+cases (two source-out and five caption/copy) are reused. Native Windows Rust1.97.1
+is verified;
+native offline build and fourth candidate archive pass exact threepatch/lock/
+DLL/license provenance. Actual unpacked Windows --version passes; native Windows
+application/playback remains missing. Both macOS artifacts/native environments
+and remaining platform/adoption gates stay open.
+The existing macOS workflow now exposes the explicit candidate manifest, but no
+remote source transfer, CI dispatch or publication occurs. Managed adoption
+requires accepted exact six-RID artifacts/provenance, required compatibility and
+native gates first; no mixed-pin or guessed hashes. Linux crossbuild, native
+execution and production adoption remain separate. F6 stays closed absent a
+concrete regression; unused-object removal stays deferred. No small editor-variant
+loop, production guide, push or publication.
 
 Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
 (docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).

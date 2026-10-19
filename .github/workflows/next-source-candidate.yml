@@ -24,6 +24,7 @@ on:
           - scripts/release/next-patches/manifest.json
           - scripts/release/next-patches/v0.2.1/manifest.json
           - scripts/release/next-patches/v0.2.2/manifest.json
+          - scripts/release/next-patches/v0.2.2/manifest-sourceout-candidate.json
 
 permissions:
   contents: read
