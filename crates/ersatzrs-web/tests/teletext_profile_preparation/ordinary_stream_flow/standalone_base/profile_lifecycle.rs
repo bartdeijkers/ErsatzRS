@@ -2,6 +2,8 @@
 //! Reuses the existing installed producers, persistent DB, transport and AV gate.
 use super::*;
 
+#[path = "profile_lifecycle/active_shared.rs"]
+mod active_shared;
 #[path = "profile_lifecycle/mirror.rs"]
 mod mirror;
 use ersatzrs_core::repositories::{

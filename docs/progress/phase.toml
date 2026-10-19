@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: lossless native-spelling editor flow verified; suitable stream-client access and finite A1/A2/B2/C/D/E1/E2 remainder stay open'
+current_focus = 'P9A-04 standalone Level 1/1.5: active shared-profile withdrawal and independent republication verified; suitable stream-client access and finite A1/A2/B2/C/D/E1/E2 remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -328,6 +328,19 @@ capacity, and X2 needs missing exactmacOS artifacts/nativeARM/macOS/full-platfor
 execution plus remaining output/adoption proof. Enhanced-only limits do not waive
 shared base gaps or full9A. All relevant owned checks are terminal; foreign7
 parallel changes remain exact. Canonical receipts own hashes/index/checkpoint IDs.
+
+L15-C active_shared_profile_followup closes the active shared-edit/pending/
+independent-publication subgap: two original TCP responses/default2 retain
+source AV, exact multi-producer/subpage cycles, explicit isolation, cold accepted
+recovery and bounded cleanup. Full raw clocks/TSDuck pass with one independently
+PMT-Off-qualified authored PTS gap per viewer; AV/PCR/CC remain clean. Four plain
+windows and six clock-oracle regressions pass. Fixture marker/window-epoch setup
+errors stay canonical; no production change, suitable-client/fullC/base/9A claim.
+Canonical level15-active-shared/identity.json owns pins, negatives and checkpoint.
+Next: qualify the remaining existing Lua interval/precedence/live Base-recovery
+cell with existing fixtures; clientD access/control and E1/E2 adoption/native
+platforms remain independent acceptance blockers. No new client retry, editor
+variant, decoder maintenance or push follows from this evidence-only checkpoint.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

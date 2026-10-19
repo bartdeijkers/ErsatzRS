@@ -10727,7 +10727,7 @@ Missing mandatory evidence (existing implementation is partial; a failing fixed 
 | --- | --- | --- |
 | L15-A2 / F3,V1 | Read correct national characters, mosaics, spacing/height, conceal, flash and applicable X26 at the intended level | Reuse base_conformance, national_base_context, regional_unicode_context, non_latin_coded_context, greek_native_unicode, native_cyrillic_hebrew and native_g2_text. Complete fixed expected glyph/font/attribute/position coverage at1/1.5 and intended fallback; independent decoding must distinguish the retained Greek/Cyrillic/Hebrew namespace/alias failures from product defects. Stock near-matches do not close the failed matrix. Interactive timing/reveal belongs toL15-D |
 | L15-B2 / F1,F2,V2,V4 | Complete the supported base page/subpage/set and attribute/repertoire edit workflow while retaining template/theme/zone/dynamic information | Reuse native_main_capacity, repertoire_editor_interop, native_editor_interop, native_spelling_followup/integration and existing populated-sidecar/template-version/geometry receipts. Bundle remaining supported base editor cases; exact pinnedQTM edits and full retained identity/navigation/attributes/sidecar/Free-Zone-Generated checks, concept preview/reopen and separate explicit publication must cover each outstanding functional boundary. Reuse unchanged publication/stream and localized headed UI proof; test only newly changed admin paths. No general visual theme/template editor or production guide requirement |
-| L15-C / F4,V5 | Reliably control all agreed channel bindings/profile/theme/Lua/error/restart cases without disturbing another channel or ordinary playback | Reuse shared_profile_lifecycle_followup for fresh ordinary-HTTP shared-profile change/deletion across two channels, one-channel extra binding, missing/wrong/deleted/invalid/unavailable rejections, explicit republish and application/SQLite reopen; mirror output3 independently proves unbound/ownNight/ownOff against source1. Thirteen exact-model/TSDuck/sourceAV captures pass; no automatic producer invocation. Existing publication_update_followup, scoped/future host restart, Lua Continue/Refresh/Reset, atomic_enrichments and headed admin remain valid in scope. Close the remaining live/shared/mirror/Lua interval/precedence/error and inside/after-scope whole-host restart matrix, matching browser/stream generations, package inactivity, automatic Base recovery and isolation. Fresh-request/application reopen is not active-reader or complete host/client/platform acceptance |
+| L15-C / F4,V5 | Reliably control all agreed channel bindings/profile/theme/Lua/error/restart cases without disturbing another channel or ordinary playback | Reuse shared_profile_lifecycle_followup for fresh ordinary-HTTP shared-profile change/deletion across two channels, one-channel extra binding, missing/wrong/deleted/invalid/unavailable rejections, explicit republish and application/SQLite reopen; mirror output3 independently proves unbound/ownNight/ownOff against source1. Thirteen exact-model/TSDuck/sourceAV captures pass; no automatic producer invocation. Existing publication_update_followup, scoped/future host restart, Lua Continue/Refresh/Reset, atomic_enrichments and headed admin remain valid in scope. Close the remaining live/shared/mirror/Lua interval/precedence/error and inside/after-scope whole-host restart matrix, matching browser/stream generations, package inactivity, automatic Base recovery and isolation. active_shared_profile_followup adds two retained ordinary HTTP responses at default2: shared change withdraws both, pending requests keep both Off and explicit publication independently restores exact Day-to-Night services, with full raw clock/sourceAV/TSDuck and cleanup. Remaining live/mirror/Lua/whole-host/client/platform cases stay open |
 
 
 External capability/environment blockers (block only dependent acceptance):
@@ -10800,6 +10800,27 @@ canonical, corrected only in the test. Existing shared source proof is reused
 through exact source equivalence after appending the independent mirror test.
 Fresh requests and SQLite/application reopen do not close live-reader/Lua or
 whole-host restart, receiver or native-platform requirements.
+
+Current active shared-profile proof (partialC/F4,V5): canonical
+standalone_level15_followup/active_shared_profile_followup owns
+level15-active-shared/identity.json, run-5 and all earlier failed trials. The same
+two ordinary TCP responses at default capacity2 retain full source video/selected
+English audio while a shared-profile edit invalidates both services. Pending
+requests restore neither; explicit publication restores each channel separately
+with complete multi-producer/page/subpage cycles and no cross-activation. Both
+accepted generations recover after SQLite/application reopen; configuration,
+packages and producer call counts stay exact. Owners cancel within existing
+bounds and all capacity is released. No production correction was required.
+Full unfiltered raw clock and TSDuck pass: no CC/PCR/AV-PTS errors; each authored
+PID has one independently PMT-Off-qualified PTS gap, not zero total PTS leaps.
+All four unfiltered invalidated/pending windows pass absent-PID/transport/AV.
+Six existing clock-oracle positive/negative regressions and strict integration
+Clippy pass. Wrong secondary fixture marker and treating a mid-response window
+as a fresh PSI epoch were test errors, retained with unchanged full-response
+clock expectations. Reuse captions/alternate audio/F6, editor/admin, prior Lua
+and scoped host-restart evidence only within scope. This closes active shared
+edit/pending/per-channel publication evidence, not the remaining live mirror/Lua,
+whole-host restart, suitable client, native platforms, fullC/base/9A conditions.
 
 The finite base remainder is exactlyA1,A2,B2,C,D,E1,E2 above, plus any actual
 regression against their existing F/V conditions. No character/editor variant is

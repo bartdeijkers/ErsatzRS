@@ -831,7 +831,13 @@ pub(in super::super::super) fn save_captures(directory: &Path, origin: &Origin) 
 /// Reuse the complete original synthetic PCR/PES/PMT clock oracle for an
 /// uninterrupted On-to-On resource replacement, where no gap is expected.
 pub(in super::super::super) fn assert_uninterrupted_source_clock(bytes: &[u8]) {
-    assert!(super::live_tcp_clock::verify_clock_gaps(bytes).is_empty());
+    assert_eq!(qualified_source_clock_gap_count(bytes), 0);
+}
+
+/// Reuse the unchanged PMT-Off/source-clock oracle for a retained response.
+/// A nonzero result is a qualified analyzer gap, never a zero-gap transport claim.
+pub(in super::super::super) fn qualified_source_clock_gap_count(bytes: &[u8]) -> usize {
+    super::live_tcp_clock::verify_clock_gaps(bytes).len()
 }
 
 pub(in super::super::super) fn assert_plain_source_clock(bytes: &[u8]) {

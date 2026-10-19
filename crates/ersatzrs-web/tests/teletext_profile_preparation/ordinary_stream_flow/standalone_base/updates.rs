@@ -16,7 +16,7 @@ fn changed_day() -> Value {
     value
 }
 
-fn pattern(candidate: &AcceptedTeletextOutputCandidate) -> Vec<Vec<[u8; 46]>> {
+pub(super) fn pattern(candidate: &AcceptedTeletextOutputCandidate) -> Vec<Vec<[u8; 46]>> {
     let mut carousel =
         TeletextCarousel::new_authored_shared(Arc::clone(candidate.service())).unwrap();
     let first = observed_cycle_units(&mut carousel);
@@ -29,7 +29,7 @@ fn pattern(candidate: &AcceptedTeletextOutputCandidate) -> Vec<Vec<[u8; 46]>> {
         .collect()
 }
 
-async fn wait_pair(
+pub(super) async fn wait_pair(
     origin: &live_tcp::Origin,
     after: [usize; 2],
     day: &AcceptedTeletextOutputCandidate,
@@ -50,14 +50,14 @@ async fn wait_pair(
     [a, b]
 }
 
-fn positions(origin: &live_tcp::Origin) -> [usize; 2] {
+pub(super) fn positions(origin: &live_tcp::Origin) -> [usize; 2] {
     [
         origin.captures()[0].position(),
         origin.captures()[2].position(),
     ]
 }
 
-fn write_stage(directory: &Path, name: &str, cycles: &[ObservedCycle; 2]) -> [usize; 2] {
+pub(super) fn write_stage(directory: &Path, name: &str, cycles: &[ObservedCycle; 2]) -> [usize; 2] {
     for (i, cycle) in cycles.iter().enumerate() {
         live_tcp::write_new(
             &directory.join(format!("{name}-{i}-units.json")),
@@ -137,7 +137,7 @@ async fn transition(
     edited
 }
 
-async fn close(origin: &mut live_tcp::Origin, observers: &mut [live_tcp::Observer; 2]) {
+pub(super) async fn close(origin: &mut live_tcp::Origin, observers: &mut [live_tcp::Observer; 2]) {
     let mut failures = Vec::new();
     for observer in observers {
         if let Err(error) = observer.close().await {
