@@ -74,6 +74,8 @@ release section when tagging a release.
   and existing page Main programs also accept same-page Local call insertion and
   removal, retaining complete original catalogues and position anchors while
   keeping generated header attributes out of authored edits.
+  Main imports can combine these call edits with existing single-word scalar
+  changes, preserving source lineage, protected content and explicit publication.
   Repeat edits, undo and cold recovery preserve unrelated edits; publication stays
   explicit and protected shared consumers remain guarded even when pixels match.
   Native preview,

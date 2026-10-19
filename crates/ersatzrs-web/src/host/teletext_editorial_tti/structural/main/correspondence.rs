@@ -1,9 +1,14 @@
-//! Bounded exact-first alignment keeps noncalls and generated units mandatory.
+//! Bounded alignment keeps noncalls mandatory; only sealed scalar values may change.
 use super::{fail, stream, Command, Location, Result, TeletextEnhancementProgram, Unit};
 use std::time::Instant;
 
+pub(super) struct Scalars {
+    pub expected: TeletextEnhancementProgram,
+    pub words: Vec<(usize, u32)>,
+}
+
 pub(super) enum Step {
-    Retained(usize),
+    Retained { old: usize, new: usize },
     Omitted(usize),
     Inserted(usize),
 }
@@ -21,6 +26,13 @@ fn matches(
     let b = &images.1.words[new.first..=new.last];
     if a.len() != b.len() {
         return Ok(false);
+    }
+    if let Some((column, operation)) = old.scalar {
+        if a.len() == 1
+            && super::super::super::operands::operand(column, operation, a[0], b[0]).is_some()
+        {
+            return Ok(true);
+        }
     }
     for (a, b) in a.iter().zip(b) {
         if stream::relocate(*a, images.0, images.1, location)? != *b {
@@ -88,7 +100,10 @@ pub(super) fn align(
             && scores[(i - 1) * width + j - 1].and_then(|value| value.checked_add(weight))
                 == Some(score)
         {
-            result.push(Step::Retained(i - 1));
+            result.push(Step::Retained {
+                old: i - 1,
+                new: j - 1,
+            });
             i -= 1;
             j -= 1;
         } else if j != 0 && new[j - 1].call.is_some() && scores[i * width + j - 1] == Some(score) {
@@ -130,10 +145,10 @@ pub(super) fn assemble(
                     .push(new[index].call.ok_or_else(|| fail(location))?);
                 output.1.push(None);
             }
-            Step::Retained(index) | Step::Omitted(index) => {
+            Step::Retained { old: index, .. } | Step::Omitted(index) => {
                 if let Some(ordinal) = old[index].original.filter(|ordinal| *ordinal >= next) {
                     flush(original, &mut next, ordinal, &mut output, location)?;
-                    if matches!(step, Step::Retained(_)) {
+                    if matches!(step, Step::Retained { .. }) {
                         output.0.push(original.commands()[ordinal]);
                         output.1.push(Some(ordinal));
                     }
@@ -154,6 +169,60 @@ pub(super) fn assemble(
         location,
     )?;
     Ok(output)
+}
+
+pub(super) fn scalars(
+    original: &TeletextEnhancementProgram,
+    units: (&[Unit], &[Unit]),
+    steps: &[Step],
+    images: (&stream::Image, &stream::Image),
+    owner: ersatzrs_domain::TeletextPageAddress,
+    location: Location,
+    deadline: Instant,
+) -> Result<Scalars> {
+    let mut commands = original.commands().to_vec();
+    let mut words = Vec::new();
+    for step in steps {
+        location.check_deadline(deadline)?;
+        let Step::Retained { old, new } = *step else {
+            continue;
+        };
+        let (old, new) = (&units.0[old], &units.1[new]);
+        let Some((column, operation)) = old.scalar else {
+            continue;
+        };
+        if old.first != old.last || new.first != new.last {
+            return Err(fail(location));
+        }
+        let before = images.0.words[old.first];
+        let after = images.1.words[new.first];
+        if before == after {
+            continue;
+        }
+        let ordinal = old.original.ok_or_else(|| fail(location))?;
+        if original.commands().get(ordinal) != Some(&Command::AtColumn { column, operation }) {
+            return Err(fail(location));
+        }
+        let replacement = super::super::super::operands::operand(column, operation, before, after)
+            .ok_or_else(|| fail(location))?;
+        ersatzrs_domain::TeletextLocalProgramOperandOverlay::new(
+            owner,
+            ordinal,
+            column,
+            operation,
+            replacement,
+        )
+        .map_err(|_| fail(location))?;
+        commands[ordinal] = Command::AtColumn {
+            column,
+            operation: replacement,
+        };
+        words.push((old.first, after));
+    }
+    Ok(Scalars {
+        expected: TeletextEnhancementProgram::new(commands).map_err(|_| fail(location))?,
+        words,
+    })
 }
 
 fn flush(

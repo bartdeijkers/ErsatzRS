@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 source-out Linux candidate packages; F1 coordinated Main edits next, X1/X2/X3 open'
+current_focus = 'P9A-04 F1 coordinated Main scalar/call edits; F5 Linux checkpoint 7bea7119, X1/X2/X3 open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,32 +62,40 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-F5 Docker WSLintegration is restored (Desktop4.95.0/engine29.8.2); prior
-unavailable-integration negatives are retained as superseded evidence. Existing
-Bookworm source packaging now accepts an explicit reviewed manifest without
-changing the production default. Local Linux-x64/ARM64/ARMv7 sourceout candidates
-build with Rust1.97.1, exact threepatch provenance/lock and GLIBC2.34 ceilings.
-Unpacked x64 passes unchanged ordinarySRT and late889 controls, both on identical
-retained sourcebytes, with copiedH264/DutchAAC, exact cue/sourceout and cleanup.
- tmp/phase9-next-local-teletext/work.json/shared_copy_sourceout_followup/
-linux_package_followup owns artifact/source hashes, logs, scope and nextstep.
-Remaining Windows/macOS artifacts, required compatibility/native/platform gates
-and managed adoption remain mandatory; no runtime pin change or publication.
-Five focused packaged caption/copy compatibility checks now pass unchanged.
-Prior25 pure/playlist/source-debug proof remains valid; no repeat editor,
-publication, channel-isolation, transport or F6 suite is justified by packaging.
+F1 qualified Main single-word scalar/call coordination now passes native import.
+After exact independent targetTTI equality, RED1e11b725 refused Packet124/32d0c3.
+The bounded parser reuses authenticated original spans and existing operand/
+geometry checks, then scalar-before-Main V22; no new format or app/domain change.
+Seven focused parser and234 host regressions pass. Seven native cases (three new,
+four existing) prove deletion, insertion/fresh repeat/true combined rootundo,
+shared-model preview, cold reopen and atomic malformed/Generated refusal.
+ tmp/phase9-header-c2/identity.json/main_scalar_structure_followup owns exact
+source/test hashes, unchanged RED, negatives, runs and final-check state.
+Strict web all-target Clippy, formatting, progress and architecture checks pass.
+Reuse prior actualQTM, nine-culture headed admin, publication, isolation, decoder,
+transport and verified F6 evidence only within unchanged tested seams; no new
+GUI/client/ordinaryHTTP or full engine claim. Unqualified Main/Local context,
+position/style, resource/set/dependency and oversized editor cases remain open.
 
-Next independent F1 product gap is qualified read-only: a single editor save
-combining an existing Main scalar value change and call insertion/deletion is
-rejected by exact noncall correspondence. Reuse existing operand decoding and
-bounded alignment, then scalar-before-Main V22 application. Preserve noncall
-order/columns/generated words, protected sources and complete native target
-identity. No new format or general audit. Local ca88d819 Main-call structure,
-10b04709 Local calls and a4102313 Lua rebuild proof retain their exact scope.
-X1 needs a changed source-positive suitable client; X2 accepted native artifacts/
-environments; X3 complete editor bank/native-call/capacity capability. All9A
-clauses remain open; unused-object removal stays deferred. Engine-first, no
-production guide, push or publication.
+F5 local checkpoint7bea7119 restores the existing Docker build path (Desktop
+4.95.0/engine29.8.2). Three unpublished Linux candidate archives have exact
+threepatch/lock/license provenance and GLIBC2.34. Unpacked x64 starts on offline
+Bookworm; retained SRT/late889 and five caption/copy cases pass. Nine source/
+package guards pass and prior25 pure/playlist results remain valid. Canonical
+ tmp/phase9-next-local-teletext/work.json/shared_copy_sourceout_followup/
+linux_package_followup owns artifacts, scope, foreign7/index and checkpointSHA.
+Windows/macOS replacement artifacts, full compatibility/native/platform gates
+and managed adoption remain; the production runtime pin is unchanged.
+
+Next independent F3 action: qualify the retained row-zero/foreign-X26/context
+case using existing normative fixtures and factory; name one exact blocked
+legal authoring action before changing model/compiler/validation. Require full
+native target/fallback identity and existing protected consumers; no general
+audit, new infrastructure or unchanged client retry. X1 needs a changed suitable
+source-positive runtime; X2 accepted native artifacts/environments; X3 complete
+editor bank/native-call/capacity capability. All9A clauses remain required;
+unused-object removal stays deferred. Engine-first; no production guide, push
+or publication.
 
 Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
 (docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).

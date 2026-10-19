@@ -116,6 +116,12 @@ impl Fixture {
         }
     }
     fn physical(&self, prefix: &[u32]) -> super::Result<TeletextMainLocalInvocationProgramOverlay> {
+        self.physical_with_scalars(prefix).map(|(intent, _)| intent)
+    }
+    fn physical_with_scalars(
+        &self,
+        prefix: &[u32],
+    ) -> super::Result<(TeletextMainLocalInvocationProgramOverlay, Vec<(usize, u32)>)> {
         let location = Location {
             page: 124,
             subcode: 32,
@@ -142,24 +148,39 @@ impl Fixture {
                 self.original.commands()[ordinal],
                 Command::InvokeObject { .. }
             );
+            if position.first_word() == position.semantic_word() {
+                if let Command::AtColumn { column, operation } = self.original.commands()[ordinal] {
+                    unit.scalar = Some((column, operation));
+                }
+            }
         }
         let new_units = units(&self.catalog, &self.native, &new, location, deadline)?;
         let steps =
             correspondence::align((&old, &new_units), (&self.old, &new), location, deadline)?;
-        let (replacement, retained) = correspondence::assemble(
+        let scalars = correspondence::scalars(
             &self.original,
+            (&old, &new_units),
+            &steps,
+            (&self.old, &new),
+            owner(),
+            location,
+            deadline,
+        )?;
+        let (replacement, retained) = correspondence::assemble(
+            &scalars.expected,
             (&old, &new_units),
             &steps,
             location,
             deadline,
         )?;
-        TeletextMainLocalInvocationProgramOverlay::new(
+        let intent = TeletextMainLocalInvocationProgramOverlay::new(
             owner(),
-            self.original.clone(),
+            scalars.expected,
             Program::new(replacement).unwrap(),
             retained,
         )
-        .map_err(|_| super::fail(location))
+        .map_err(|_| super::fail(location))?;
+        Ok((intent, scalars.words))
     }
 }
 
@@ -215,6 +236,120 @@ fn main_call_insertion_and_balanced_replacement_never_retarget_retained_calls() 
 }
 
 #[test]
+fn main_existing_glyph_change_and_call_deletion_patch_original_word_before_structure() {
+    let [ap, glyph] = base();
+    let fixture = Fixture::new(
+        vec![ap, call(0), glyph, call(1)],
+        &[
+            AP,
+            ORIGIN,
+            pointer(7),
+            B,
+            ORIGIN | (1 << 11),
+            pointer(7),
+            END,
+        ],
+    );
+    let c = 8 | (9 << 6) | (0x43 << 11);
+    let (intent, words) = fixture
+        .physical_with_scalars(&[AP, c, ORIGIN | (1 << 11), pointer(5), END])
+        .unwrap();
+    let replacement = Command::AtColumn {
+        column: 8,
+        operation: TeletextColumnOperation::G0 {
+            code: TeletextGlyphCode::new(b'C').unwrap(),
+        },
+    };
+    assert_eq!(
+        words,
+        [(3, c)],
+        "the shifted upload index1 must patch original packed index3"
+    );
+    assert_eq!(
+        intent.expected().commands(),
+        &[ap, call(0), replacement, call(1)]
+    );
+    assert_eq!(intent.replacement().commands(), &[ap, replacement, call(1)]);
+    assert_eq!(intent.retained_commands(), &[Some(0), Some(2), Some(3)]);
+}
+
+fn foreground(value: u8) -> Command {
+    Command::AtColumn {
+        column: 8,
+        operation: TeletextColumnOperation::Foreground {
+            colour: ersatzrs_domain::TeletextColourReference::new(value).unwrap(),
+        },
+    }
+}
+
+#[test]
+fn main_existing_foreground_change_and_call_insertion_keep_scalar_family_and_column() {
+    let [ap, _] = base();
+    let fg1 = 8 | (1 << 11);
+    let fg2 = 8 | (2 << 11);
+    let fixture = Fixture::new(
+        vec![ap, foreground(1), call(0)],
+        &[AP, fg1, ORIGIN, pointer(5), END],
+    );
+    let (intent, words) = fixture
+        .physical_with_scalars(&[
+            AP,
+            ORIGIN | (1 << 11),
+            pointer(7),
+            fg2,
+            ORIGIN,
+            pointer(7),
+            END,
+        ])
+        .unwrap();
+    assert_eq!(
+        words,
+        [(1, fg2)],
+        "upload index3 remains original scalar index1"
+    );
+    assert_eq!(intent.expected().commands(), &[ap, foreground(2), call(0)]);
+    assert_eq!(
+        intent.replacement().commands(),
+        &[ap, call(1), foreground(2), call(0)]
+    );
+    assert_eq!(
+        intent.retained_commands(),
+        &[Some(0), None, Some(1), Some(2)]
+    );
+    // Scalar-only remains the established fastpath, not a structural intent.
+    assert!(fixture
+        .physical(&[AP, fg2, ORIGIN, pointer(5), END])
+        .is_err());
+}
+
+#[test]
+fn main_combined_scalar_call_edits_refuse_new_styles_columns_families_and_malformed_atoms() {
+    let [ap, _] = base();
+    let fg1 = 8 | (1 << 11);
+    let fg2 = 8 | (2 << 11);
+    let fixture = Fixture::new(
+        vec![ap, foreground(1), call(0)],
+        &[AP, fg1, ORIGIN, pointer(5), END],
+    );
+    for prefix in [
+        vec![AP, 9 | (2 << 11), END],
+        vec![AP, 8 | (3 << 6) | (2 << 11), END],
+        vec![AP, 8 | (0x20 << 11), END],
+        vec![AP, fg1, fg2, END],
+        vec![AP, END],
+        vec![AP ^ 1, fg2, END],
+        vec![AP, fg2, ORIGIN, ORIGIN, pointer(6), END],
+        vec![AP, fg2, ORIGIN | (0x48 << 11), pointer(5), END],
+        vec![AP, fg2, ORIGIN, pointer(4), END],
+    ] {
+        assert!(
+            fixture.physical(&prefix).is_err(),
+            "invalid scalar/call literal {prefix:x?}"
+        );
+    }
+}
+
+#[test]
 fn main_call_parser_refuses_malformed_unknown_wrong_type_and_changed_noncalls() {
     let [ap, glyph] = base();
     let fixture = Fixture::new(vec![ap, glyph, call(0)], &[AP, B, ORIGIN, pointer(5), END]);
@@ -224,7 +359,7 @@ fn main_call_parser_refuses_malformed_unknown_wrong_type_and_changed_noncalls() 
         vec![AP, B, ORIGIN | (0x48 << 11), pointer(5), END],
         vec![AP, B, ORIGIN, pointer(4), END],
         vec![AP, B, ORIGIN, pointer(5) ^ (1 << 6), END],
-        vec![AP, B ^ (1 << 11), END],
+        vec![AP, B ^ (1 << 6), END],
     ] {
         assert!(fixture.physical(&prefix).is_err());
     }
@@ -264,6 +399,7 @@ fn main_generated_and_resource_units_stay_mandatory() {
             original: None,
             call: None,
             editable: false,
+            scalar: None,
         },
         Unit {
             first: 1,
@@ -271,6 +407,7 @@ fn main_generated_and_resource_units_stay_mandatory() {
             original: Some(0),
             call: None,
             editable: false,
+            scalar: None,
         },
         Unit {
             first: 3,
@@ -278,6 +415,7 @@ fn main_generated_and_resource_units_stay_mandatory() {
             original: None,
             call: None,
             editable: false,
+            scalar: None,
         },
     ];
     let same = image(&[7 << 11, ORIGIN, resource, END]);

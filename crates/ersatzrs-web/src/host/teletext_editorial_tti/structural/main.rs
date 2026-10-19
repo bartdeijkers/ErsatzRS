@@ -1,9 +1,9 @@
-//! Main call structure retains every other authored and compiler-owned command.
+//! Main call structure retains anchors and reuses existing authored scalar checks.
 use super::{fail, program, stream, Location, Result};
 use ersatzrs_domain::{
-    TeletextEnhancementCommand as Command, TeletextEnhancementObjectCatalog,
-    TeletextEnhancementProgram, TeletextMainLocalInvocationProgramOverlay, TeletextObjectScope,
-    TeletextPageAddress,
+    TeletextColumnOperation, TeletextEnhancementCommand as Command,
+    TeletextEnhancementObjectCatalog, TeletextEnhancementProgram,
+    TeletextMainLocalInvocationProgramOverlay, TeletextObjectScope, TeletextPageAddress,
 };
 use ersatzrs_ffmpeg::teletext::{
     EncodedTeletextAuthoredService, EncodedTeletextLocalObjectProgram,
@@ -20,6 +20,7 @@ struct Unit {
     original: Option<usize>,
     call: Option<Command>,
     editable: bool,
+    scalar: Option<(u8, TeletextColumnOperation)>,
 }
 
 pub(super) fn reconcile(
@@ -63,6 +64,7 @@ pub(super) fn reconcile(
         semantic.objects(),
         native,
         images,
+        aligned,
         location,
         deadline,
     )
@@ -74,6 +76,7 @@ fn parse(
     catalog: &TeletextEnhancementObjectCatalog,
     native: &EncodedTeletextLocalObjectProgram,
     images: (&stream::Image, &stream::Image),
+    aligned: &mut [u32],
     location: Location,
     deadline: Instant,
 ) -> Result<TeletextMainLocalInvocationProgramOverlay> {
@@ -85,15 +88,37 @@ fn parse(
     let new = units(catalog, native, images.1, location, deadline)?;
     sources(original, native, &mut old, location, deadline)?;
     let steps = correspondence::align((&old, &new), images, location, deadline)?;
-    let (replacement, retained) =
-        correspondence::assemble(original, (&old, &new), &steps, location, deadline)?;
-    TeletextMainLocalInvocationProgramOverlay::new(
+    let scalars = correspondence::scalars(
+        original,
+        (&old, &new),
+        &steps,
+        images,
         native.owner(),
-        original.clone(),
+        location,
+        deadline,
+    )?;
+    let (replacement, retained) =
+        correspondence::assemble(&scalars.expected, (&old, &new), &steps, location, deadline)?;
+    let intent = TeletextMainLocalInvocationProgramOverlay::new(
+        native.owner(),
+        scalars.expected,
         TeletextEnhancementProgram::new(replacement).map_err(|_| fail(location))?,
         retained,
     )
-    .map_err(|_| fail(location))
+    .map_err(|_| fail(location))?;
+    // Commit only validated scalar words at their original packed positions.
+    // The existing scalar reconciler derives intents from this old-size image.
+    if scalars
+        .words
+        .iter()
+        .any(|(index, _)| *index >= aligned.len())
+    {
+        return Err(fail(location));
+    }
+    for (index, word) in scalars.words {
+        aligned[index] = word;
+    }
+    Ok(intent)
 }
 
 fn units(
@@ -132,6 +157,7 @@ fn units(
             original: None,
             call,
             editable: false,
+            scalar: None,
         });
         cursor = last + 1;
     }
@@ -173,6 +199,28 @@ fn sources(
             || (count != 1 && matches!(command, Command::InvokeObject { .. }))
         {
             return Err(fail(location));
+        }
+        if count == 1 {
+            if let Command::AtColumn { column, operation } = *command {
+                let position = native
+                    .command_positions()
+                    .iter()
+                    .find(|position| {
+                        position.source().object.is_none()
+                            && position.original_local_command() == Some(ordinal)
+                    })
+                    .ok_or_else(|| fail(location))?;
+                if position.first_word() == position.semantic_word() {
+                    let unit = units
+                        .iter_mut()
+                        .find(|unit| {
+                            unit.first == position.first_word()
+                                && unit.last == position.semantic_word()
+                        })
+                        .ok_or_else(|| fail(location))?;
+                    unit.scalar = Some((column, operation));
+                }
+            }
         }
     }
     if units
