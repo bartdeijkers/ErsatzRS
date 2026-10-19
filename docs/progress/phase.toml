@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: close generated-G2 refusal checkpoint; bounded suitable-stream-client qualification determines route, then independent runtime/lifecycle'
+current_focus = 'P9A-04 standalone Level 1/1.5: generated Next wrapper carriage and scoped cleanup verified; pre-existing audio-language loss is next runtime gap; base client needs usable native control'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -79,14 +79,32 @@ reproduces exact Packet refusal124/0020/X26/0/1 rather than a QTM limitation.
 Its grouped regression protects original receipts/metadata, both channels,
 concept heads, pending selection and cold reopen. L15-B1 stays open; no generic
 intent/storage expansion is started merely to extend this checkpoint.
-Next qualify one available promising ordinary-stream Level1.5 receiver against
-X26/page-subpage/update/manual reveal/timedflash oracles, using existing inputs.
-No unchanged negative candidate or external decoder/editor repair. If unavailable,
-record exact missing access/capability/maintainer decision and continueL15-E1:
-active Next caller/reopen/host cleanup with existing source/worker/lease controls,
-then named F5 compatibility/output/platform cells. Two macOS artifacts/native
-ARM/macOS and managed adoption remain open; managed.1 is accepted, candidate.3
-is not. Do not reopen F6 without a concrete relevant regression. No scope waiver.
+Bounded L15-D ProgDVB Standard7.73.2 qualification now obtains the official
+installer7260f799, pins executable7.73.2.0 and starts a private native Windows
+process/source dialog. It does not prove capture/ordinaryHTTP input or any
+teletext capability: current native UIAutomation patterns are unavailable and
+bounded message/final keyboard attempts leave Open unchanged. This is a
+test-control/session limitation, not an absent-feature or decoder failure.
+Canonical base_client_qualification/progdvb_runtime owns exact hashes and cleanup;
+only our private process/copy was stopped/removed. No installer/registration or
+security-policy change. Need usable native interactive/automation control or a
+documented input route before this exact candidate can receive fixed-oracle
+HTTP/X26/navigation/update/reveal/timedflash qualification. Do not repeat unchanged
+attempts or repair clients. Full2.5 X1/X3 remain separate mandatory blockers.
+L15-E1 Next generated final-wrapper carriage and scoped Local/Scripted active
+caller/reopen/host cleanup are verified, not complete F5/base acceptance. P9A-04
+and canonical active_next_shutdown own unit, matched-build/headed, retained
+TSDuck/model/sourceAV/independent proof and all negative/setup scopes. The longer
+combined transport/lifetime run remains failed; its reader was replaced before
+reopen. Separate early active cancellation retains the original liveness oracle.
+Actual source eng language is absent in ordinary Next before and after repair.
+Keep its unchanged mandatory field gate. Next isolate that loss in the existing
+Next projection/producer/wrapper and preserve actual selected-track metadata,
+never guess channel preference. Generated-G2 editing, complete inventory/editor/
+binding/lifecycle, suitable base receiver and platform/adoption remain as the
+finite L15 list specifies. Two macOS artifacts/native ARM/macOS block X2;
+managed.1 is accepted and used as exact trial bytes, candidate.3 is not adopted.
+Full2.5 X1/X3 remain distinct. F6 stays closed; no push/publication.
 
 Verified local base checkpoints:3bd0a2f2 Main208/no-bank realQTM1.5 edit/concept/
 preview/explicit publication/SQLite reopen;ef447f99 native OS-process Lua recovery

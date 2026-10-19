@@ -3,7 +3,7 @@
 
 use super::*;
 
-async fn export_units(prefix: &str, suffix: &str, bytes: &[u8]) {
+pub(super) async fn export_units(prefix: &str, suffix: &str, bytes: &[u8]) {
     let mut assembler = SuppliedTeletextAssembler::new(512).unwrap();
     let mut units = Vec::new();
     for packet in bytes.chunks_exact(188) {

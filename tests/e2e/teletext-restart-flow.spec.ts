@@ -1,7 +1,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { copyFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from './isolated-web-host';
@@ -561,7 +561,7 @@ test('standalone Level 1.5 future On survives host replacement and expires to ba
 
 // Intentional Linux process-identity qualification; native six-RID acceptance
 // remains separate. Only owned descendants' command lines are inspected.
-function ownedViewerProcesses(parent: number, source: string): { pid: number; start: string; command: string; readsSource: boolean; preparationWorker: boolean }[] {
+function ownedViewerProcesses(parent: number, source: string): { pid: number; start: string; command: string; readsSource: boolean; preparationWorker: boolean; nextController: boolean }[] {
   const rows = execFileSync('ps', ['-eo', 'pid=,ppid=,comm='], { encoding: 'utf8', timeout: 3000, maxBuffer: 1024 * 1024 })
     .trim().split('\n').map(line => {
       const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
@@ -578,7 +578,7 @@ function ownedViewerProcesses(parent: number, source: string): { pid: number; st
       const stat = readFileSync(`/proc/${row.pid}/stat`, 'utf8');
       const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
       const command = readFileSync(`/proc/${row.pid}/cmdline`, 'utf8');
-      return [{ pid: row.pid, start: fields[19], command: row.command, readsSource: command.includes(source), preparationWorker: command.split('\0').includes('--internal-addon-preparation-worker') }];
+      return [{ pid: row.pid, start: fields[19], command: row.command, readsSource: command.includes(source), preparationWorker: command.split('\0').includes('--internal-addon-preparation-worker'), nextController: basename(command.split('\0')[0]) === 'ersatztv-channel' }];
     } catch (error) { if (!existsSync(`/proc/${row.pid}`)) return []; throw error; }
   });
 }
@@ -589,19 +589,29 @@ function sameProcessAlive(process: { pid: number; start: string }): boolean {
   } catch (error) { if (!existsSync(`/proc/${process.pid}`)) return false; throw error; }
 }
 
-for (const mode of ['Legacy', 'Hybrid'] as const) {
+for (const mode of ['Legacy', 'Hybrid', 'Next'] as const) {
 test(`standalone Level 1.5 active ${mode} viewers release source processes and leases on shutdown`, async ({ browser, isolatedWebHost }, testInfo) => {
   test.skip(process.platform !== 'linux', 'Intentional Linux /proc identity proof; native platform acceptance remains mandatory.');
   test.skip(testInfo.project.name !== 'chromium', 'Reuse existing localized/browser proof for unchanged UI.');
   test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
+  test.skip(mode === 'Next' && !process.env.ETV_NEXT_FOLDER, 'Requires an explicitly pinned Next runtime; no download/adoption claim.');
   test.setTimeout(150_000);
   const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
   fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
-  // The built-in choice must now be made through the ordinary settings form;
-  // bundled/operator scripts retain their separate opaque output contract.
+  if (mode === 'Next') {
+    fixture.configureScripted();
+    fixture.database.prepare('UPDATE "MediaVersion" SET "Duration"=\'00:01:00\' WHERE "Id"=?').run(fixture.channels[0] + 10);
+    // Test-owned initial channel/wrapper setup; localized settings authority is
+    // already qualified separately. Do not infer opaque-script equivalence.
+    fixture.database.prepare('UPDATE "Channel" SET "StreamingEngine"=1 WHERE "Id"=?').run(fixture.channels[0]);
+    fixture.database.prepare('INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,?) ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value"')
+      .run('ffmpeg.default_mpegts_script', '');
+  }
+  // Hybrid uses the qualified ordinary settings form. Next uses explicit
+  // initial fixture configuration; opaque scripts retain their own contract.
   const configuredScript = fixture.setting('ffmpeg.default_mpegts_script');
-  // The selected source must outlive the entire30s observer budget: a12s EOF
-  // near the10s shutdown grace cannot establish cancellation independently.
+  // Source duration exceeds the30s observer budget, but finite duration alone
+  // cannot prove a live worker: process identity/liveness is asserted below.
   const original = join(fixture.root, 'synthetic-client-source.ts');
   const extended = join(fixture.root, 'synthetic-client-source-long.ts');
   execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin',
@@ -613,6 +623,7 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
     'format=duration', '-of', 'json', original], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 }));
   expect(Number(source.format.duration)).toBeGreaterThan(59);
   const sourceBytes = statSync(original).size;
+  if (mode === 'Next') copyFileSync(original, testInfo.outputPath('next-source.ts'));
   const context = await browser.newContext({ baseURL: isolatedWebHost.baseURL, javaScriptEnabled: true, viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
   let stopping = false;
@@ -639,8 +650,17 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
       await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), true);
       await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), true);
     }
+    if (mode === 'Next') {
+      // External JSON adaptation is intentionally native-only. Reuse the
+      // existing Local/Scripted fixture and real Reset for Next; no generated
+      // playout/snapshot authority is seeded or rewritten.
+      await queueScripted(page, fixture, fixture.channels[0], 'reset', undefined, 1);
+      const programme = fixture.database.prepare('SELECT "Finish" FROM "PlayoutItem" WHERE "PlayoutId"=?')
+        .get(fixture.channels[0]) as { Finish: string };
+      expect(scopeUtc(programme.Finish) - Date.now()).toBeGreaterThan(30_000);
+    }
     const retained = scopeAuthority(fixture) as { safety: ReturnType<typeof restartSafety> };
-    fixture.resetSourceStart();
+    if (mode !== 'Next') fixture.resetSourceStart();
     const host = isolatedWebHost.processIdentity();
     const resident = ownedViewerProcesses(host.pid, join(fixture.root, 'synthetic-client-source.ts'));
     expect(resident.length).toBeGreaterThan(0);
@@ -666,7 +686,7 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
       for (const pid of [0, 256, 257, 512]) {
         expect(pids.has(pid), `Missing PID${pid}; observed ${[...pids].sort((a, b) => a - b)}`).toBe(true);
       }
-      if (mode === 'Hybrid') {
+      if (mode !== 'Legacy') {
         // Same bounded decode as the existing finite capture helper. Full source
         // clock/caption/selected-audio gates remain reused in their exact scope.
         execFileSync(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', prefixPath,
@@ -683,14 +703,17 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
     const retainedSource = [...owned.values()].filter(process => !isResident(process)).filter(sameProcessAlive);
     if (mode === 'Legacy') expect(retainedSource).toEqual([]);
     else {
-      expect(retainedSource).toHaveLength(1);
-      expect(retainedSource[0].readsSource).toBe(true);
+      expect(retainedSource.filter(process => process.readsSource)).toHaveLength(1);
+      expect(retainedSource.filter(process => process.nextController)).toHaveLength(mode === 'Next' ? 1 : 0);
+      expect(retainedSource).toHaveLength(mode === 'Next' ? 2 : 1);
     }
     expect(resident.every(sameProcessAlive)).toBe(true);
-    // Hybrid reuses a running source: never move its programme clock in SQLite.
+    // Keep this active-reader cancellation proof separate from longer
+    // transport captures, which may legitimately outlive a finite reader.
+    // Shared engines reuse the source: never move its programme clock in SQLite.
     if (mode === 'Legacy') fixture.resetSourceStart();
     const active = await openViewer();
-    if (mode === 'Hybrid') expect(retainedSource.every(sameProcessAlive)).toBe(true);
+    if (mode !== 'Legacy') expect(retainedSource.every(sameProcessAlive)).toBe(true);
     stopping = true;
     const result = await isolatedWebHost.restart();
     const day = await active.closed;
@@ -708,8 +731,8 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
       await expect(page.locator('select[name="default_mpeg_ts_script"]')).toHaveValue('');
     }
     writeFileSync(testInfo.outputPath('active-viewer-success.json'), JSON.stringify({ result, viewers: [firstClosed, day], processes: [...owned.values()], resident, source: { duration: source.format.duration, bytes: sourceBytes },
-      mode, retainedSource, configuredScript, effectiveScript: fixture.setting('ffmpeg.default_mpegts_script'),
-      scope: `Linux ordinary ${mode} at default2: live2, caller disconnect${mode === 'Legacy' ? 0 : 1}, reopened2, host restart0; known source/process identities disappear. Hybrid retains and reuses its shared HLS encoder until host shutdown; idle expiry is separate. No complete AV/transport/decoder/native-platform/9A acceptance; unchanged normal-stream evidence is reused.` }, null, 2));
+      mode, nextRuntimeFolderExplicit: mode === 'Next', retainedSource, configuredScript, effectiveScript: fixture.setting('ffmpeg.default_mpegts_script'),
+      scope: `Linux ordinary ${mode} at default2: live2, caller disconnect${mode === 'Legacy' ? 0 : 1}, reopened2, host restart0; known source/process identities disappear. Hybrid/Next retain and reuse their shared HLS encoder; Next also retains its distinct controller until host shutdown. Idle expiry is separate. No complete AV/transport/decoder/native-platform/9A acceptance; unchanged normal-stream evidence is reused.` }, null, 2));
   } finally {
     stopping = true;
     await Promise.allSettled(viewers.map(viewer => viewer.close()));

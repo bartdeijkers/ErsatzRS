@@ -515,3 +515,93 @@ async fn assert_bitmap_wrapper_pacing_variants(state: &AppState, enabled: &Chann
         );
     }
 }
+
+#[tokio::test]
+async fn generated_next_wrapper_recovers_live_teletext_with_the_native_guards() {
+    let pool = held_capacity_pool().await;
+    let mut policy: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/teletext-output-policy-v1.json"
+    ))
+    .unwrap();
+    policy["version"] = serde_json::json!(2);
+    policy["live_updates"] =
+        serde_json::json!({"poll_interval_ms":1000,"recovery_timeout_ms":2000});
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,?)"#)
+        .bind("teletext.output.policy")
+        .bind(policy.to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let state = state_for_pool(pool.clone());
+    let command = build_mpegts_segmenter_wrapper_command(
+        "http://127.0.0.1:1/synthetic.m3u8".to_owned(),
+        &OutputMetadata::default(),
+        false,
+        Some(5_000_000),
+    );
+    for engine in [
+        ersatzrs_domain::StreamingEngine::Legacy,
+        ersatzrs_domain::StreamingEngine::Next,
+    ] {
+        let channel = Channel {
+            id: 1,
+            streaming_engine: engine,
+            ..Channel::default()
+        };
+        let output = recover_wrapper_teletext(
+            &state,
+            &channel,
+            &command,
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalWrapperMpegTs),
+            tokio::time::Instant::now() + Duration::from_secs(2),
+        )
+        .await;
+        assert!(output.live().is_some(), "generated {engine:?} wrapper");
+        assert_eq!(output.role(), TeletextOutputRole::FinalWrapperMpegTs);
+    }
+    // A held sole connection proves these refusals do not even attempt storage.
+    let held = pool.acquire().await.unwrap();
+    let channel = Channel {
+        id: 1,
+        streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+        ..Channel::default()
+    };
+    for role in [
+        TeletextOutputRole::InternalItem,
+        TeletextOutputRole::HlsWorker,
+        TeletextOutputRole::OtherContainer,
+        TeletextOutputRole::CapacitySlate,
+        TeletextOutputRole::FinalDirectMpegTs,
+    ] {
+        let output = tokio::time::timeout(
+            Duration::from_millis(50),
+            recover_wrapper_teletext(
+                &state,
+                &channel,
+                &command,
+                TeletextOutputAdmission::plain(role),
+                tokio::time::Instant::now() + Duration::from_secs(2),
+            ),
+        )
+        .await
+        .expect("non-wrapper role must not open configuration");
+        assert!(output.live().is_none());
+        assert_eq!(pool.num_idle(), 0);
+    }
+    let output = tokio::time::timeout(
+        Duration::from_millis(50),
+        recover_wrapper_teletext(
+            &state,
+            &channel,
+            &unstarted_command(),
+            TeletextOutputAdmission::plain(TeletextOutputRole::FinalWrapperMpegTs),
+            tokio::time::Instant::now() + Duration::from_secs(2),
+        ),
+    )
+    .await
+    .expect("opaque output must not open configuration");
+    assert!(output.live().is_none());
+    assert_eq!(pool.num_idle(), 0);
+    drop(held);
+    pool.close().await;
+}

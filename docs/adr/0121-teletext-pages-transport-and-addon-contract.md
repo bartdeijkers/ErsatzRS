@@ -289,9 +289,13 @@ invokes packages or accepts pending drafts. Configuration access and recovery
 together receive at most half of the remaining original twenty-second startup
 deadline, additionally capped by the configured positive recovery timeout.
 Missing/invalid policy, unavailable/stale selection, exhausted credit or busy work
-preserves ordinary playback. Internal workers, slates, Next, other containers and
-opaque configured-script commands skip automatic recovery. Generated legacy/hybrid
-wrappers recover only after actual capacity and command admission; an explicit
+preserves ordinary playback. Internal workers, slates, other containers and
+opaque configured-script commands skip automatic recovery. The generated final
+MPEG-TS wrapper uses the same bounded optional recovery for native and Next
+upstream engines: its typed host-owned mux contract, not the producer engine,
+authorizes post-wrapper carriage. Next HLS workers and direct/other-container
+routes do not gain authored DVB output. Generated wrappers recover only after
+actual capacity and command admission; an explicit
 empty ffmpeg.default_mpegts_script selects the generated hybrid path. Default/custom
 script support remains an integration gap, not an accepted permanent restriction.
 The existing Health view reads this policy afresh and

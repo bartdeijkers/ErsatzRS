@@ -3131,9 +3131,10 @@ async fn recover_wrapper_teletext(
     output: TeletextOutputAdmission,
     deadline: tokio::time::Instant,
 ) -> TeletextOutputAdmission {
+    // The final host-generated mux owns this contract for either upstream
+    // engine. Internal HLS workers and opaque scripts cannot acquire it.
     if output.has_authored_output()
         || output.role() != TeletextOutputRole::FinalWrapperMpegTs
-        || channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next
         || command.mpegts_output_policy().is_none()
     {
         return output;

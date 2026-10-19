@@ -240,3 +240,47 @@ async fn served_level15_restart_retains_exact_subpages_navigation_and_source_av(
     }
     fixture.state.pool.close().await;
 }
+
+#[tokio::test]
+#[ignore = "requires actual ordinary Next capture, source and pinned FFmpeg9/TSDuck"]
+async fn served_next_level15_wrapper_retains_model_and_source_av() {
+    let tools = Tools::load().await;
+    let root = client_capture::selected("ERSATZRS_TELETEXT_NEXT_CAPTURE");
+    let (fixture, _) = installed_profiles_with(&tools, response, 12).await;
+    let source = tokio::fs::read(format!("{root}/next-source.ts"))
+        .await
+        .unwrap();
+    let bytes = tokio::fs::read(format!("{root}/next-ordinary.ts"))
+        .await
+        .unwrap();
+    let accepted = accept_base(&fixture, 1).await;
+    assert_base(accepted.service());
+    super::super::editorial_imports::live_updates::live_tcp::assert_uninterrupted_source_clock(
+        &bytes,
+    );
+    client_capture::verify_av(&tools.ffmpeg, &source, &bytes).await;
+    assert_emitted_model(&bytes, accepted.service());
+    scoped_restart::export_units(&format!("{root}/capture"), "next", &bytes).await;
+    fixture.state.pool.close().await;
+}
+
+// Keep the existing complete transport/audio-language oracle independent from
+// the authored-model/source-AV gate. A failure here remains a mandatory F5 gap.
+#[tokio::test]
+#[ignore = "requires actual ordinary Next capture and pinned ffprobe9/TSDuck"]
+async fn served_next_level15_wrapper_retains_audio_metadata() {
+    let tools = Tools::load().await;
+    let root = client_capture::selected("ERSATZRS_TELETEXT_NEXT_CAPTURE");
+    let bytes = tokio::fs::read(format!("{root}/next-ordinary.ts"))
+        .await
+        .unwrap();
+    client_capture::verify_transport_with_qualified_authored_pts_gaps(
+        &tools.tsanalyze,
+        &tools.ffprobe,
+        &bytes,
+        0,
+        None,
+        false,
+    )
+    .await;
+}

@@ -872,6 +872,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Deliver already-published teletext in built-in Next MPEG-TS output through
+  bounded final-wrapper recovery.
+
 - Bound HTTP shutdown when a client stops reading a response, including large
   admin assets, using the existing drain grace before closing stuck connections.
   Preserve normal response bytes and trusted peer addresses.

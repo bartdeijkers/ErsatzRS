@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-web/src/transport/iptv/stream.rs
-assertion_line: 5379
+assertion_line: 8873
 expression: "command.arguments.join(\"\\n\")"
 ---
 -nostdin
@@ -22,6 +22,8 @@ http://127.0.0.1:8409/iptv/session/7/hls.m3u8?access_token=synthetic-token
 0
 -c
 copy
+-max_interleave_delta
+100000
 -f
 mpegts
 pipe:1
