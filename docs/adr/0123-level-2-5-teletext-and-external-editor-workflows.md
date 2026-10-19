@@ -7,6 +7,9 @@ EN 300 706 Level 2.5 and QTeletextMaker interchange. The subsequent amendment
 requires a demonstrably suitable client; Kodi is a candidate, not a dependency.
 This supersedes ADR 0121's Level 1/1.5-only authored target. All other source,
 playback, output, profile/Lua and engine-first obligations remain in force.
+Maintainer amendment (2026-10-19): first accept an independently usable Level
+1/1.5 delivery, then complete Level 2.5 while protecting that base. This changes
+delivery and acceptance order, not the full Phase 9A scope or Phase 9B entry gate.
 
 ## Implementation
 
@@ -1171,6 +1174,50 @@ The pinned source audit and standards matrix live in the
 
 ## Decision
 
+### Standalone Level 1/1.5 acceptance before Level 2.5
+
+P9A-04 records two explicit acceptance boundaries in its existing F/V/X overview:
+standalone Level 1/1.5 first, full authored Level 2.5 and complete Phase 9A next.
+Neither is accepted by a representative successful flow. The first requires the
+complete applicable base workflow and safety evidence, including actual pinned
+QTeletextMaker editing, independent decoding, transport and suitable-client
+display/page/subpage navigation. Keep exact client/editor versions and feature
+coverage. A capability missing only for Level 2.5 does not block the first
+boundary; a shared repertoire, capacity, lifecycle or platform gap still does.
+
+Level 1.5 includes applicable X/26 enhancement data, not just header/body rows.
+Use EN 300 706 clauses 9.4.1, 12.2, 12.3 and 15 to distinguish primary/national
+characters, spacing attributes and Level 1.5 character replacement, including
+G2, diacritics and the Level 1.5 G3 mode, from enhanced-only attributes/resources.
+Prove mosaics, height, conceal/reveal, flash, identities, subpages, navigation and
+updates. Keep the standard's level-specific and decoder-dependent distinctions;
+do not substitute an enhanced glyph oracle for an intended base representation.
+
+A valid standalone base page must be designable, validated, previewed, exported,
+edited, imported, explicitly published and broadcast without optional Level 2.5
+object banks or an enhanced client. Reuse the same typed model, application
+validation, immutable originals/metadata, concepts and atomic publication. Do not
+strip invalid enhanced declarations to make an otherwise valid base publish:
+validate the submitted complete document, diagnose the invalid part and preserve
+the prior publication. Independent base use needs no second engine, alternate
+package activation, new generic theme editor or production guide content.
+
+Keep all applicable profiles/themes/isolation, templates/zones, Lua timing/error/
+restart, localized headed administration, source-caption/alternate-audio, playback
+and platform gates. Qualification must state missing implementation, mandatory
+evidence and external dependencies separately. Existing proof is reused only for
+unchanged code, inputs and assumptions. P9A-04 owns the checklist and its status;
+this ADR changes no gate to Complete.
+
+After standalone acceptance, every enhancement must prove both its own semantics
+and preservation of the intended Level 1/1.5 display, preferably using the same
+actually broadcast pages. Essential information and navigation remain accessible
+in the base representation of dual-level designs; enriched appearance may differ.
+Retain standalone base regressions as well as paired fallback checks. Full
+authored Level 2.5, complete QTeletextMaker interchange and all existing final
+criteria remain mandatory. Production TV-guide work still waits for independent
+full Phase 9A acceptance, not the standalone base boundary.
+
 ### One model through Level 2.5
 
 The generic engine must support designing, validating, encoding, publishing and
@@ -1555,6 +1602,9 @@ publisher/recovery ownership and complete restart/Lua timing remain open. Durabl
 selection alone never proves per-output delivery or receiver cache reconciliation.
 
 ### Evidence and delivery order
+
+The standalone Level 1/1.5 boundary above is the first delivery priority.
+Its acceptance never satisfies or bypasses the following complete-engine gate.
 
 P9A-01 is reopened for the expanded standards/interchange contract. P9A-04 accepts
 the complete independent engine with synthetic pages before P9B-01 starts the

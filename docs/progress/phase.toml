@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 finite EOF checkpoint closeout, then standalone Level 1/1.5 acceptance before complete Level 2.5'
+current_focus = 'P9A-04 standalone Level 1/1.5: qualify base X26 editor/client flow before full Level 2.5'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,489 +62,68 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-Local F1 checkpoint02d60cc5 qualifies Main single-word scalar/call coordination.
-After exact independent targetTTI equality, RED1e11b725 refused Packet124/32d0c3.
-The bounded parser reuses authenticated original spans and existing operand/
-geometry checks, then scalar-before-Main V22; no new format or app/domain change.
-Seven focused parser and234 host regressions pass. Seven native cases (three new,
-four existing) prove deletion, insertion/fresh repeat/true combined rootundo,
-shared-model preview, cold reopen and atomic malformed/Generated refusal.
- tmp/phase9-header-c2/identity.json/main_scalar_structure_followup owns exact
-source/test hashes, unchanged RED, negatives, runs and final-check state.
-Strict web all-target Clippy, formatting, progress and architecture checks pass.
-Reuse prior actualQTM, nine-culture headed admin, publication, isolation, decoder,
-transport and verified F6 evidence only within unchanged tested seams; no new
-GUI/client/ordinaryHTTP or full engine claim. Unqualified Main/Local context,
-position/style, resource/set/dependency and oversized editor cases remain open.
+Current maintainer priority (2026-10-19): standalone Level1/1.5 acceptance first,
+then complete authored Level2.5 with protected base/fallback. This supersedes
+older next-action prose; all original final9A criteria remain mandatory and the
+production guide waits for full independent9A. ADR0123/P9A-04 own the exact
+boundary and L15-A through E closure table, linked to the existing F/V/X list.
+Neither standalone base nor full9A is accepted. No new plan or general audit.
 
-F5 local checkpoint7bea7119 restores the existing Docker build path (Desktop
-4.95.0/engine29.8.2). Three unpublished Linux candidate archives have exact
-threepatch/lock/license provenance and GLIBC2.34. Unpacked x64 starts on offline
-Bookworm; retained SRT/late889 and five caption/copy cases pass. Nine source/
-package guards pass and prior25 pure/playlist results remain valid. Canonical
- tmp/phase9-next-local-teletext/work.json/shared_copy_sourceout_followup/
-linux_package_followup owns artifacts, scope, foreign7/index and checkpointSHA.
-The adoption followup below adds Windows and further compatibility evidence;
-remaining macOS/native gates and managed adoption stay separate.
+Next concrete package: L15-A/B/D. A user must be able to author a legal base-only
+page with applicable X26, edit it in pinned QTM, import/preview/publish explicitly
+and view/navigate it on an ordinary suitable client without2.5 object banks.
+First inspect only the existing Main carrier/QTM capacity and retained positive
+base fixtures. Determine whether shared208-word/context/NOS capability limits
+also affect standalone1.5; do not assume X3 is enhanced-only. Then bundle the
+required base repertoire/mosaic/spacing/height/conceal/flash/identity/subpage/update
+proof, fixing only demonstrated defects. Existing actual editor/publication,
+localized nine-culture headed/two-theme/isolation/transport/F6 proof retains
+scope; repeat only affected boundaries, never every small variant.
 
-Local F3 checkpointad28cd81 corrects a complete-factory refusal:
-RED55b09203 rejects implicit MOT POP2A0 against explicit X27 POP2A1 before
-physical realization. Only fully declared services now settle the original
-resource context and derive distinct whole-body physical Local wrappers;
-original semantic owners, sparse DefaultSlot/root instances and resource bytes
-remain immutable. Actual physical C2, ancestry, all glyph/effect/plane comparisons,
-shared work/identity/catalogue limits and strict standalone link refusal remain.
-Canonical tmp/phase9-header-c2/identity.json/f3_foreign_default_qualification
-owns original RED, candidate/test negatives, source hashes and final check state.
-The original Base representation is SPACE plus authored £; physical G2£ and
-original-authored projection must agree. The independent unchanged pinned imager
-passes actual emitted Level1.5/2.5 A/£/Z cells and four wrong-golden
-refusals. Seven grouped cases and strict standalone rejection pass; retain941
-valid broad passes plus the two corrected helper passes. Final focused9 passes;
-canonical receipt records final lint/progress outcomes. No new client,
-editor/stream or full-F3/9A acceptance follows.
+F3 complete-factory correction is locally checkpointedad28cd81. Original Base
+SPACE+authored£ and physicalG2£ have separate correct oracles, complete effect/
+provenance/budget guards and unchanged imager independent A/£/Z decoding.
+ tmp/phase9-header-c2/identity.json/f3_foreign_default_qualification owns the
+original RED, fixture corrections, final9 and strict lint. Original-secondary
+assessment finds EN300706AnnexD.2.1(2) decoder-dependent absence, not a new glyph
+bug; both preservation regressions f91ab796 pass. Its original_secondary_followup
+records the exact branch/clause. No further generic F3/editor-variant audit.
 
-X1/X3 remain mandatory end gates; the later maintainer decisions below govern
-next work. Canonical end_blocker_followup in
- tmp/phase9-header-c2/identity.json records bounded primary-source qualification:
-DVBViewer Pro7.3.2.0 has HTTP/TS/page/subpage input/navigation, but required
-Local/POP/GPOP/MOT/X27/DRCS enlargement/panels remain unknown; its Level2.5 claim
-covers charset detection only. Obtain positive capability evidence and an
-explicitly authorized pinned binary/trial before runtime acceptance. No download,
-installation/purchase or vendor contact occurred. Existing negative clients stay
-negative and are not retried. QTM1.0/cac2167 remains latest; its only other branch
-is78behind/0ahead. Native POP/GPOP loading/rendering and over208-word complete
-bank context need upstream support or a separately bounded dependency-enhancement
-decision. No scope restriction is proposed/applied; all original clauses remain.
+F5 checkpoint85f5b9b1 closes qualified finite Local889 EOF support. Approved
+selected-video-end/earlier-programme-cut policy uses complete retained snapshots,
+exact events/native text/prefix, video identity and versioned cache policy.
+48d8d4f9 and8f9a5891 compose19 unique passes, including actual Next EOF and genuine
+clear controls with exact H264/DutchAAC/cues/cache/cleanup. Strict infra all-target
+Clippy/fmt/architecture/progress pass. Preserve original timeout, normalizer RED
+and corrected test-only20.560→20.559 tick arithmetic; no widened tolerances.
+Canonical tmp/phase9-next-local-teletext/work.json/eof_unclosed_followup owns it.
+Reused20MB/late889/source absence/replacement and27Windows compatibility proof
+retain their own scope; broader output/provider/charset/platform/adoption is open.
+Four candidate.3 packages are not managed adoption; accepted managed.1 unchanged.
 
-Independently F5 passes18 missing existing compatibility gates on the actual
-unpacked Linux candidate: bitmap/HTTP/provider text, live RTSP/source clock and
-image lifetime/seek/handoff. Existing25 timing/playlist and seven packaged native
-cases (two source-out and five caption/copy) are reused. Native Windows Rust1.97.1
-is verified;
-native offline build and fourth candidate archive pass exact threepatch/lock/
-DLL/license provenance. Actual unpacked Windows --version passes; native Windows
-application/playback remains missing. Both macOS artifacts/native environments
-and remaining platform/adoption gates stay open.
-The existing macOS workflow now exposes the explicit candidate manifest, but no
-remote source transfer, CI dispatch or publication occurs. Managed adoption
-requires accepted exact six-RID artifacts/provenance, required compatibility and
-native gates first; no mixed-pin or guessed hashes. Linux crossbuild, native
-execution and production adoption remain separate. F6 stays closed absent a
-concrete regression; unused-object removal stays deferred. No small editor-variant
-loop, production guide, push or publication.
+Full enhanced-client X1 work remains maintainer-deferred; base-specific candidate
+qualification under the new priority is authorized. Do not retry unchanged2.5
+negatives or start external decoder maintenance. X3 waits for changed upstream
+QTM POP/GPOP/over208-bank capability; no local editor maintenance or scope waiver.
+Shared base editor/client deficits still block the base. X2 missing macOS
+artifacts/native environments, nativeARM/full-platform/output and accepted runtime
+adoption remain explicit. Existing macOS workflow needs suitable native execution
+or separately authorized remote-source/CI action; no push/publication is authorized.
 
-F5 local checkpoint4801d008 fixes a demonstrated candidate.2 defect: native Windows
-ordinarySRT finalcue ends56ms early on the identicalb0c58 source after AV/audio
-and earlier-cue checks pass. The original negative and package are retained.
-The helper incorrectly shifts an immutable full-source outpoint backward for a
-negative copylanding. Candidate.3 shifts only partial-pass ends, keeping the
-mapping cursor and complete source trim fixed. Separate negative full/partial/
-independent-origin controls produce6pass/2fail before correction;26 focused
-source/playlist cases and strict Next all-target Clippy pass afterward.
+F4 MAIN On→Base is partial live proof; Off→Base emission passes but pinned VLC's
+automatic display still fails. V5 Lua Continue/Refresh/Reset/error durable SQL
+proof is not whole-process restart or the full multi-binding/shared-profile/
+invalid-profile matrix. Existing F/V/X rows own exact remaining actions and proof.
+F6 c07af3a1 targeted handoff remains closed absent a concrete relevant regression;
+ tmp/phase9-f6-native-carriage/work.json owns default2/runtime/localized admin and
+ordinary smoke/TSDuck87/87. Keep unused-object removal deferred. Every2.5 addition
+must prove its own correct behavior and intended1/1.5 fallback, preferably on the
+same broadcast pages, plus standalone base regressions.
 
-Canonical shared_copy_sourceout_followup/native_windows_playback_followup in
- tmp/phase9-next-local-teletext/work.json owns exact source/patch/lock/tool hashes,
-original native/pure RED,26 green, reproduction and package/native proof.
-Four refreshed candidate.3 archives pass provenance; Linux GLIBCmax2.34 and
-actual offline/read-only Bookworm x64 startup pass. Both unchanged ordinarySRT
-and late889 oracles pass on actual unpacked native Windows AND Linux candidates,
-with exact cues/source clocks, selected copiedAV/audio, cache and joined cleanup.
-ARM builds remain crossbuilds. Prior18 broad compatibility receipts retain their
-predecessor/unchanged-path scope; no full.3 six-RID/adoption acceptance follows.
-The native source checkout is exact7603285d; temporary Nextest0.9.140 matches Linux
-and is digest-verified/process-PATH only. No global install/target override or
-permanent policy change; its checks are terminal. Native Windows compatibility
-is now qualified by native_windows_output_followup in the same canonical receipt:
-7 valid initial runtime passes, corrected prepared parent plus2DBguards and17
-provider/HTTP/RTSP/image passes compose27 distinct checks. Original7/8 and retained
-fallback/silentPCM diagnostic stay negative. The fixture stored backslashes,
-violating unchanged production confinement; portable components joined with /
-and an actual prepublication confinement check fix the fixture only. Original
-AV/audio/caption oracles pass on Windows and Linux; affected strict lint/fmt pass.
-Linux sandbox TCPbind denial is retained; only its affected parent was rerun.
-No new production audio fix or full Windows/sixRID/adoption claim follows.
-
-F5 checkpoint4e1923e6 owns the native Windows compatibility/fixture correction.
-The existing final_http_replacement_followup now closes a named Linux Local889
-proof gap: actual Next callback/decoder preparation is gated while the same
-source path is replaced and SAME SQL pool really reacquired under its managed
-scan claim. Actual source hashes/revisions differ; the old decoder succeeds on
-its held snapshot, then written HTTP503 returns no stale DTO/cache. Old session,
-callbacks, output and source admission join before a fresh host delivers literal
-FINAL FRESH with original compressed H264/DutchAAC, exact cue clocks and cleanup.
-Final39af4715 passes on the definitive source, with affected strict all-target
-Clippy, formatting and architecture checks. This is new evidence, no production
-fence fix or sameHTTP recovery/F6/native-other-platform/fullF5 acceptance.
-
-Canonical tmp/phase9-next-local-teletext/work.json/final_http_replacement_followup
-owns gates, actual source/SQL identities, statuses, captures and final checks.
-Old lower-cache, editor/publication/isolation, native compatibility and F6 proof
-retain scope. No new full-chain/client/GUI run is implied. Warm native Windows
-checkout remains base7603285d with original source restored; the verified
-prepared-fixture fix was a recorded overlay, so sync reviewed source explicitly
-before any future native prepared-caption replay.
-
-Local checkpointa2c0f9d6 owns the verified callback replacement/rescan package.
-The already named EOF case is now concretely qualified by eof_unclosed_followup
-in the same canonical work.json. A private copy of the existing generator omits
-only final889 clear, reusing original AV and exact existing mux/probe/SRT flags.
-Closed control has9events/8SRTcues includingFINAL; unclosed source has8nonempty
-events but7SRTcues, silently omittingFINAL from rawFFmpeg output. Last event ends
-at UINT32MAX. Complete500H264 and bothAAC packet payloads remain identical; AV
-decode succeeds. Existing product qualification refuses unknownend. This is a
-native decoder precondition, no actualNext delivery or EOF acceptance claim.
-
-Maintainer2026-10-19 explicitly chooses selected-video presentation end clipped
-by earlier programme/outpoint. The scoped EOF implementation keeps the original
-fixed-duration decode and recovers only its missing final text after exact native
-event/text/prefix and selected-video frame qualification. Policy/video identity
-fences the cache; complete-source text still ignores occurrence seeks/cuts.
-Final48d8d4f9 passes11 pure/snapshot/cache cases plus one actual Linux Next case
-with earlier9.2s and20.559s video-end subcases, exact H264/DutchAAC/cues/cleanup.
-Preserve timeout and normalizer RED; the second native run's20.560s expected end
-was a fixture arithmetic error: exact video ticks yield20.5594s, nearest SRTms
-20.559. No tolerance or production timing change followed that correction.
-Canonical eof_unclosed_followup/implementation_followup owns final controls/lint.
-Broader provider/live/browser/charset/output/platform/adoption remain open.
-
-The bounded F3 original-secondary assessment is complete: EN300706 AnnexD.2.1(2)
-leaves absent X28/M29 second-language defaults decoder-dependent. Existing code
-preserves Header/POP absence without guessing a sentinel/glyph; both regressions
-pass (f91ab796). Canonical tmp/phase9-header-c2/identity.json/
-original_secondary_followup records this classification, not a new product fix
-or fullF3 acceptance. ad28cd81 original/Base/physical oracles stay unchanged.
-The newer maintainer instruction now prioritizes a separately testable standalone
-Level1/1.5 delivery boundary before full2.5, preserving every final criterion.
-Next update existing ADR0123/P9A-04 acceptance from current F/V/X/evidence only;
-no general audit or new plan. F6 stays closed absent regression; managed.1 unchanged.
-
-Maintainer2026-10-19 defers further X1 suitable-client work and chooses to wait
-for upstream QTM support under X3. No vendor contact/trial/purchase, external
-editor maintenance or scope waiver follows. V3/full interchange and every9A
-criterion remain mandatory; no production guide, push or publication.
-
-Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
-(docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).
-All generic engine acceptance remains required; current F6 work is unchanged.
-F1/F3 first authored-body row positions now pass through authenticated empty
-V18 Add definitions, exact native output, repeat/cold reopen and explicit
-publication. Canonical tmp/phase9-f1-first-position/work.json/source-context.json
-retain the native RED,31 unit/native passes and an actual pinned QTM1.0 menu edit,
-SaveAs, unchanged-byte import, preview and separate publication/recovery pass.
-Checkpoint e2a01b0e is local; post-commit.json owns the full SHA. Interior/coordinated positions in added or
-original objects remain open; no permanent limitation is accepted.
-F1/F3 later row appends now pass after actual RED ActivePositionOrder(1,8→1,4).
-Canonical tmp/phase9-f1-trailing-position/work.json/source-context.json records
-12 passes (nine unit/three native): exact unchanged body and semantic anchors,
-shared checked suffix, fresh receipt, V18 folding, complete native units,
-export/cold reopen and unchanged publication/other channel. Invalid positions,
-changed/dropped anchors and non-added originals reject. First-body actual QTM,
-admin/publication and ordinary transport proof are reused at unchanged seams.
-Interior/coordinated prefix edits and original-resource positions remain open.
-Next F6 product action: qualify bounded selected-cue bootstrap through existing
-source-preparation/wrapper/carriage paths, then prove actual Copy-caption handoff.
-No repeat of unchanged rawCopy/conversion negatives, held-file API prerequisite,
-new infrastructure or external-decoder maintenance.
-F1 localized Add/Copy and F2 boundary UI proofs remain valid at
-tmp/phase9-f1-first-definition/work.json and
-tmp/phase9-f2-boundary-preview/work.json. Full resource/set, metadata/template and
-client acceptance remain open. X1/V3 bounded Tuxtxt source qualification rejects
-its pinned Local/DRCS and panel implementation; canonical
-tmp/phase9-tuxtxt-client-qualification/identity.json. No build/runtime/adapter or
-repair; require a distinct source-positive suitable runtime before dependent
-acceptance. Unused-object removal stays deferred. No push/publication.
-F6 source-bound artifacts retain their original scope at
- tmp/phase9-f6-bitmap-isolation/work.json (68f70bb0). Current connection:
- tmp/phase9-f6-native-carriage/work.json (working base d8809a27). Explicit
-UUID-bound delivery, exact consumer/seek/files and actual-child ownership reuse
-configuration and the same Hybrid worker. Legacy7 and Hybrid4 pass default2,
-both occupied/release14s/repeated waits/one46s or52s HTTP response, four tracks,
-exact source/cue clocks and active/update/clear pixels, selected audio and cleanup.
-Qualified retained TSDuck PCR/continuity/delivery pass; raw sparse-PTS and nominal
-window negatives stay visible. Production headed Chromium151/Firefox153 pass all
-nine cultures/light-dark/JS-no-JS and stable320/1920 with fully localized errors.
-Reuse earlier source/lease/cancel, native ownership, editor/publication/isolation
-proof. Strict affected lint, formatting and architecture checks pass. Existing
-ordinary lifecycle smoke and manual TSDuck regression gate now pass (87 checks,
-zero failures). The F6 targeted handoff repair is verified. Canonical work.json
-owns receipts, the checkpoint SHA/push result and stopped process state.
-V3/X1 client coverage, V6/X2 platforms and all other engine criteria remain open;
-unused-object removal stays deferred. Engine-first delivery and no publication
-continue. The latest user authorizes this completed F6 checkpoint and its
-predecessors to origin/main [skip ci]; no general publication authority follows.
-Next product package: F1/X3 complete-capacity editor context, using the existing
-completion list and pinned QTM path; first identify the exact blocked user edit
-and smallest bounded correction. V3/X1 remains required but has no changed
-source-positive runtime candidate; do not repeat unchanged decoder trials.
-
-Current F1 native slice is verified: complete interior rows in an authenticated
-saved V18 Add retain exact original commands/hidden anchors, identities and
-permissions. Canonical tmp/phase9-f1-interior-position/work.json records actual
-RED ActivePositionOrder(1,8->1,6),13 parser passes and three native flows including
-first/trailing controls, exact units/shared preview/export/unpublished reopen,
-separate publication and accepted cold recovery. Strict web all-target Clippy,
-final fmt, architecture and progress checks pass; only an equivalent clone_from
-spelling in the ignored editor helper changed after native verification. The
-checkpoint SHA/excluded files resolve through canonical work.json/checkpoint.
-Actual interior QTM SaveAs remains open: three bounded headed attempts stop
-before editing/save on driver default/hover/menu-selection assumptions; the final
-native wait is cancelled. No saved file, import or publication success is claimed.
-Preserve all attempts; unverified widget-driver changes remain outside the local
-product checkpoint. No further GUI input repair in this package. The ignored
-native editor seam is compiled but not accepted. Reuse unchanged admin, first-body
-QTM and stream/client boundaries, without relabeling them as interior-editor proof.
-Current original-position package: tmp/phase9-f1-original-position/work.json.
-Explicit original intent/private19 connects original POP/GPOP first, append and
-interior positive rows without borrowing Add authority. Native complete-unit,
-shared-preview, publication and cold-reopen flows pass. Generated shared-page125
-protection refuses the exact changed cell atomically. The located fresh-receipt
-root-undo failure is corrected: exact checked prior/current/root programs and
-complete native-body equality derive an ephemeral inverse. Every saved role
-refuses it; root composition recovers exact original document bytes without an
-empty overlay. Domain22, app29 and host19 controls pass. Two affected native
-cases pass repeat, fresh-receipt undo, preview, separate publication, accepted
-cold recovery and protected-consumer atomicity. Canonical evidence retains all
-negative runs and source/fixture corrections without weakening original oracles.
-Strict affected domain/app/web all-target Clippy passes. Only an equivalent
-borrowed-slice test spelling changed after behavioral proof; production/native
-sources are unchanged. Final fmt, architecture and progress checks pass.
-Local checkpoint2c6cfdd6 contains this verified slice; canonical evidence preserves
-foreign7 and the unverified widget changes outside it. Reuse unchanged editor,
-localized admin, source stream and channel-isolation proof. No editor/container
-is active. Unused-object removal remains deferred. Original/interior actual QTM
-SaveAs, broader row-zero/coordinated state, complete resource/set semantics,
-X3 catalogue208 and V3/X1 client coverage remain open. No scope waiver or new push
-authority follows; F6 is already pushed at c07af3a1. Checkpoint SHA, source hashes,
-terminal checks and excluded changes resolve through canonical work.json.
-F2 explicit template-version composition is locally checkpointed4fed142c;
-canonical tmp/phase9-f2-template-version/work.json owns real r1/r2 installation,
-stale refusal, explicit r2 publication and immutable cold historical proof.
-F1/V2 is locally checkpointed de6a032d. Canonical
- tmp/phase9-f1-interior-position/work.json/editor_checkpoint owns the genuine
-QTM1.0 interior SaveAs, Added18 and exact-input Original19 reuse with separate
-receipts, native concept/preview/publication/cold recovery and terminal checks.
-No second GUI, invoked-display or new stream/client claim follows.
-F3 local Active/header context and Main-prefix preservation are checkpointed
-at afe3d84e/56ad77c4. Canonical tmp/phase9-header-c2/identity.json owns scoped
-original REDs, complete authored factory/A8/fallback and924 regression passes,
-ten byte-identical prior pinned independent cases and strict final checks.
-Unneeded nested Local pointers may relocate; required Local evidence still
-requires exact final body/source/instance/mapping under unchanged quotas.
-Current V5 canonical: tmp/phase9-lua-intervals/identity.json/
-continue_reopen_followup. Native eb70080d passes genuine same-script Continue
-after database/application reopen using stored items/history/checkpoints/anchor.
-Night prefix becomes fresh BaseDay at its exact accepted finish; old intervals,
-programme state, channel2 and configuration/install snapshots remain exact.
-No producer or base/effective generation activates. The initial module-path
-compile failure is retained and explicitly corrected; no runtime fix or new
-accepted-generation/stream/client/whole-process restart claim follows.
-Strict web all-target lint and final fmt/progress/architecture pass for the
-explicit owned-only local evidence checkpoint. Reuse valid actual On/reopen and Off/expiry
-flows; Refresh/Reset/error/full restart and remaining V5 matrix stay open.
-F4 local checkpoint ba47de30 passes the unchanged original-response MAIN expiry oracle.
-Canonical tmp/phase9-headed-expiry/identity.json/prepared_base_followup owns
-private bounded native Base preparation, fresh transactional role/identity
-confirmation and same-ACK rejection withdrawal. Original expiry and withdrawal
-before blocked reads remain intact; no new timer, grace or producer invocation.
-Native47443fb7 passes genuine35s scope on60s source, both original URLs/PIDs,
-automatic red/blue Base200 before controls, active decoders and200→201→200.
-All12 actual images are root-inspected. TSDuck PMTs preserve teletext through
-expiry in both Day owners; Night stays unchanged. Native clock/AV/independent
-page decoding, immutable state, source bytes and cleanup pass. Earlier GUI-pin
-and document/artifact-role fixture failures remain negative, not product defects.
-The original retained automatic-Base negative stays at the same canonical path.
-Focused38 control/monitor tests and the actual Base-active-scope SQL negative
-pass. Strict lint/fmt/progress/architecture pass. Ordinary disabled-teletext
-smoke and the single-successor client trial remain valid after the final ACK
-latch correction; the38 tests cover superseding unacknowledged proposals.
-This closes the representative automatic MAIN Base/display gap; slow/failing
-recovery safely withdraws. Automatic Off→Base, wider resource retirement and
-client acceptance remain open. Reuse owner-qualified ACK, unchanged editor/publication/isolation,
-localized admin and F6 track/lease evidence only in their established scope.
-V3/X1 bounded follow-up qualifies official Kodi22.0rc1 source28ea2eac. Local
-triplet-type selection, APx0<40 panel exclusion and normal DRCS scaling remain;
-only unrelated wrappers/colour aliases/locks changed. Canonical
- tmp/phase9-polish-editor/client-qualification/kodi22rc1/identity.json owns exact
-source/diff/line evidence. No new runtime/build/repair or lowered oracle; suitable
-client coverage stays blocked independently. Remote main is still verified
-c07af3a1 (F6); no later push.
-F1 local checkpoint59c66923 restores mixed foreground/positive-row root edits. Native e23f036a
-first reproduced Structure only after valid FG2→3/save2 and AP2/R6/save3 plus
-cold reopen. Existing scalar-family validation and checked prior inverse now
-target the authenticated immutable root; no stored inverse/new format or receipt
-permission. Four domain controls4cb99add and three native casesf0e34851 pass:
-combined exact document/unit/preview/export restore, explicit publication/cold
-reopen, existing undo and executed Generated125 atomic refusal. Canonical
- tmp/phase9-f1-interior-position/work.json/mixed_root_undo_followup owns evidence.
-Actual pinned QTM AP2/R6/interior proof retains scope; no new GUI/stream/client
-claim. Strict domain/web all-target lint, fmt and architecture pass. Broader
-coordinated-state/position, resource/set and context work remain.
-F4 local checkpoint1154c009 adds same-response Off→Base emission evidence;
-canonical tmp/phase9-headed-expiry/identity.json/off_base_followup owns exact
-captures/PMT/clock/AV and all12 inspected images. Actual nativefdad6f2b stays
-failed at its late Q-only check; original-only offline7159f6eb verifies the same
-bytes. Automatic Day display stays negative/inactive until explicit reselection;
-Night remains unchanged. No client repair or acceptance waiver.
-F1/F2 local checkpoint0461bd49 passes explicit r1→r2 resources (nativec0f53f5f). Canonical
- tmp/phase9-f2-template-version/work.json/resource_introduction_followup owns
-complete new POP/GPOP identities/selected links/nested P atMain3/6, native export
-receipts, separate fresh publication and cold historical/current recovery. The
-first wrong-owner helper negative stays retained; literal mask/theme oracles are
-unchanged. Existing profile/install/CAS/stale-authority/metadata guards pass.
-This proves NEW-original producer resource authoring, not same-design Add/import
-or new executed admin/GUI/editor/stream/client behavior. Existing localized admin
-resource_transmissions input remains source-qualified; lifecycle input grants no
-resource-body authority. Remaining F1/F2 and suitable-client gates stay open.
-F5 qualified finite-Local Next Convert now passes actual native9017f668 after
-old-path RED5861fafb (lost889/empty VTT). Canonical
- tmp/phase9-next-local-teletext/work.json owns source/tool pins and failed probes.
-Private SQL-only page intent becomes text only outside scheduler locks, using
-the existing bounded source/process owner, shared snapshot, frame/SRT endpoint
-qualification, cache and leases. No external Next protocol change or bitmap pass.
-Component64 cases compose valid unchanged evidence with four zero-origin/timing
-controls. Actual Next proves independent889/cache equality, H264 VCL Copy,
-Dutch AAC, source-associated PTS/DTS, pinned millisecond VTT timing/clear, a seek
-after the final cue, the same cache key and joined cleanup/admission0.
-This is actual acquisition/managed projection and native producer/callback proof,
-not a new full scanner, ordinary HTTP, editor/admin/client or full output gate.
-Fixture/tool/oracle negatives remain failed and classified; pinned formatting
-and one-tick map rules use no fitted tolerance. Narrow lint corrections preserve
-selection, authority, owner and deadlines. Final-source native/qualifier/snapshot/
-cancellation7 controls pass34cd8b2c; four publication controls pass48a876f1.
-Strict infra all-target Clippy passes. Canonical receipt resolves checkpoint SHA.
-Local checkpoint4629504b owns this implementation. F5 cache followup now passes
-5bcb2ec1: real warm hit without FFmpeg rebuild, SQL revision changed inside hit
-callback refused by fresh actual projection, and observed source mutation refused
-before hit validation; complete cache bytes/entries and admission0 preserved.
-This adds scoped evidence, no production change or in-flight handler-fence claim.
-Canonical work.json/cache_hit_followup resolves the local evidence checkpoint.
-F3 initialAP8 before the same Active body now passes the complete authored
-factory: exact current original LocalActive/same-instance FG pending permits a
-known Base-background candidate, avoiding an extra MainFG contender. Existing
-prefix/body settlement and full final model comparison stay unchanged. Canonical
- tmp/phase9-header-c2/identity.json/initial_header_followup owns actual factoryRED,
-failed fixture/discarded candidate, source pins and exact geometry/fallback.
-Focused21 pass8422b625, all926 teletext regressions pass17a72a85; pinned imager
-four old/new cases pass55ebcaca at Levels1.5/2.5, old two input unit bytes unchanged.
-The final lint-only local rename changes no behavior; strict FFmpeg lint,
-formatting and architecture pass. The canonical receipt owns final progress
-validation and the local checkpoint SHA.
-Local checkpoint49168080 owns this fix. F3 body_return_followup adds evidence
-for existing legal object return: Active writes body1, Main resumes0,0, then
-Passive paints header8. Native7be01203 passes factory/source/geometry/fallback
-plus three existing invalid-backward/compatibility controls; imager0c09702b
-passes five cases with exact Level1.5/2.5 header/body cells. Prior four inputs
-are unchanged. Production is unchanged;926 prior regressions remain valid.
-Same-source Main backward movement stays invalid under AnnexA.4; no neutral reset
-or order waiver is introduced. Canonical identity.json/body_return_followup owns
-checks and checkpoint SHA. F3 definition_header_followup/active_definition_header_followup and current
-header_suffix_followup qualify Local Adaptive→Passive and Active→Passive/Adaptive
-header wrappers, including a forward B9 after child A8. Original source, caller
-AP/origin/offset/parent, styles and Level1.5 fallback remain intact. All-call/full
-row-tail known background is only a candidate; actual C2, full model, exact
-provenance/body and bounded work/catalogue checks stay mandatory. Suffix mapping
-preserves original ordinals and rejects inserted/unknown/out-of-body authority.
-Genuine factoryRED0e60df30 precedes ten grouped controls and three new fixed-cell
-independent decoder cases; previous eight complete inputs remain exact.
-Canonical tmp/phase9-header-c2/identity.json/header_suffix_followup owns source
-hashes, negative attempt, final checks, checkpoint SHA and terminal processes.
-No new editor/stream/client or full F3/9A claim. F5 c6111440 package adoption still
-needs the existing baseline build environment; X1 suitable interactive client,
-X2 accepted artifacts/native environments and X3 QTM208-capacity remain open.
-Next: qualify the next specifically named F3 context or independent F1 user
-blocker from the existing matrix; no general audit or unchanged client retry.
-F1/F3 normalized-wrapper editor alignment is now verified. NativeREDc8f5e191
-rejected Packet124/32 X26 designation0 word5 after independent typed-target
-and full edited-TTI equality. Final compiler spans now expose read-only existing
-Object/HeaderPosition source roles; final producer rebinding clears unknown
-sources and preserves actual physical ranges/C2. The structural parser consumes
-the authentic derived AP background as a protected anchor, retaining original
-call/DRCS ordinals without granting generated-writer editing rights.
-Current native1e7b3f45 passes all five forward-anchor cases: child structural
-concept2, full units/shared preview/cold reopen with immutable original wrapper,
-metadata/protected definition and other channel; BG mutation/deletion refuses
-without mutation and the narrow second consumer yields exact ProtectedDisplay
-124/32 row1 columns48–51. Existing repeat/shrink/root undo also passes.
-All935 current teletext regressions, strict FFmpeg/web all-target Clippy, format
-and architecture pass. Prior pinned imager eight-case wire/render evidence and
-unaffected localized/publication/stream/F6 receipts are reused; this is not a new
-QTM GUI, publication, client or full-engine acceptance claim. Canonical
- tmp/phase9-header-c2/identity.json/wrapper_editor_followup owns frozen sources,
-RED/green logs, terminal processes and local checkpoint SHA. No checks remain
-running for this package; only the verified owned slice is committed.
-Verified local checkpoint2d09b33c owns normalized-wrapper editor alignment.
-F1 retained Local-call editing is verified after genuine nativeRED5b97aca3.
-Private20 uses the existing bounded invocation policy, original full Local
-markers, complete native reconstruction and changed-subtree lineage. Versions
-1–19 stay closed; mixed prior style/resource-position/addition roles preserve
-identity, association, quotas and sibling edits. Current315 focused tests and
-nine native forward-anchor flows pass (01bf4ad9/4a0a6e92). Independent complete
-typed target/TTI equality precedes concept20 import, exact shared preview/cold
-reopen; fresh receipts qualify repeat, exact-root undo and explicit publication.
-Absent/row/column/original-target variants pass. Moved and equal-pixel protected
-second consumers, unknown/type/reserved/duplicate origin atoms refuse atomically.
-All19 Rust sources are frozen; strict domain/app/web all-target Clippy, format
-and architecture pass. No checks remain running. Canonical
- tmp/phase9-header-c2/identity.json/local_invocation_followup owns sources,
-RED/green logs, exact scope, reused evidence, terminal processes and checkpoint
-SHA. Prior genuine QTM, localized headed admin, stream/isolation/F6 and pinned
-independent receipts retain scope; no new GUI/HTTP/suitable-client claim.
-Verified local checkpoint2375ed6f owns retained Local-call editing; no push.
-V3/X1 bounded pinned-imager assessment finds native POP/GPOP0..506, enlarged
-and panels/DRCS offline capability, not an existing suitable client mode. It
-requires explicit received resources and lacks HTTP/TS input, automatic
-MOT/X27/M29 cache/acquisition/lifecycle and interactive page/subpage navigation.
-The QTM208-frame bound does not apply to this native decoder. Canonical
-identity.json/client_qualification_after_local_calls links unchanged actual
-native-target/panel/enlarged receipts and exact source pointers; no runtime,
-client build, decoder repair, new adapter or acceptance waiver.
-F5 verified local ee9b2e38 fixes the identical20MB source refusal with a complete
-owned text snapshot; reuse its40 focused/3 pinned native receipts and strict gates.
-Canonical tmp/phase9-next-local-teletext/work.json/large_finite_followup owns proof.
-Verified local ad51b056/first_header_followup closes the private selection gap for889 whose
-first header lies beyond the stored888-only prefix; descriptor intent is never
-scanner-observed readiness. Exact independent text/cache proof is retained.
-A complete validated source with no889 header now yields opaque, PSI-matched
-absence retaining the original source/admission. Fresh original AND ordinary
-selection identities fence the existing ordinary fallback; generic source,
-publication, deadline, cancellation and cleanup errors still refuse. Actual
-Next1063a69d delivers programme/CopyH264/selectedDutchAAC without a ready caption,
-with joined cleanup. Empty Convert VTT headers contain no manufactured cues.
-The30s callback/15s source-budget mismatch was isolated by retained e9d74e12;
-rechecks now use the existing15s maximum without extending caller deadlines.
-Forty-three focused controls and the ownedabsence/source/SQL negative test pass.
-Final grouped30s/lateheader/cache/native tests all pass, including authenticated
-Next d38aa682 programme delivery. Strict affected all-target Clippy, format,
-architecture and progress pass. This is a verified partial local checkpoint;
-full F5 and9A are not accepted. Canonical first_header_followup owns commit,
-source hashes, preserved negatives, exact tool pins and all four final run IDs.
-Shared Next Copy sourceout is now confirmed against official unpatched0.2.2/
-tag4a0b59a f7b8af64, with upstream assetdigest verified. Currentupstream2ed7266d
-retains that defect. An opt-in thirdpatch preserves shifted mapping/pass edges
-and caps the original independent caption sourceout.25 focused plus unchanged
-actual ordinarySRT8d16a912 and late8897dac0380 pass on identical source bytes,
-including exact cues, independent copiedAV clocks/DutchAAC, seek/clear/cache and
-cleanup. Existing tooling reproduces the whole source tree and lock exactly.
-Verified local c6111440 passes strict candidate all-target Clippy/scoped format.
-Canonical work.json/shared_copy_sourceout_followup owns source/binary/patch/pins.
-This is isolated source/debug-candidate proof: the managedruntime still contains
-the defect. Next prepare local replacement package and compatibility evidence
-through existing tooling; six-RID/native gates remain before adoption. No package
-publication or push authority. Docker now reports WSLintegration unavailable;
-its exact negative is canonical. Host proof ABI requiresGLIBC2.38/2.39 and is not
-older-Linux package proof. Resume packaging only with the existing baseline
-build environment restored, not an ABI shim. Independently qualify the named
-F3 row-zero/foreign-X26/context factory gap with existing fixtures before any
-implementation; no new general scope audit. Reuse editor/publication/F6 proof.
-Broader F5 sources/outputs/charset/unknownEOF and full F/V/X remain open. X1 needs
-suitable HTTP/TS/resource-lifecycle/navigation client capability; X2 needs
-accepted platform artifacts/native environments; X3 needs a lossless editor
-capability for oversized complete context. Unchanged negative clients are not
-retried and no external decoder maintenance starts. Production guide design
-remains9B after full independent9A underADR0123; no general visual template/theme
-editor. Unused-object removal deferred. Preserve foreign7 and negative proof.
-Goal active; no push, publication or scope waiver.
+All relevant checks/processes from85f5b9b1 are terminal; no relevant host/client/
+worker retained. Foreign7 parallel changes remain byte/diff-exact; checkpoint
+receipt owns hashes and index state. Work autonomously within this priority;
+commit only verified slices, no push/publication or automatic package activation.
 
 Dense and padded sparse QTM bank saves now connect localized headed SSR import,
 shared validated preview, separate Request/Publish and the SAME ordinary host.

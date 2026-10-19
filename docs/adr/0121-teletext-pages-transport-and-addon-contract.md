@@ -728,6 +728,9 @@ Reserved non-display addresses cannot be supplied as ordinary authored pages.
 The accepted target now includes Level 2.5 enhancements and separately typed
 non-display resources under [ADR 0123](0123-level-2-5-teletext-and-external-editor-workflows.md).
 Preserve this base as fallback; current encoding does not establish that target.
+ADR 0123's 2026-10-19 amendment accepts a standalone Level 1/1.5 delivery first,
+including applicable X/26 data without optional enhanced resource dependencies.
+Complete Level 2.5 and the full generic-engine gate still precede Phase 9B.
 
 The public page model contains typed text/mosaic runs, foreground/background
 colour, boxing, height, flash and conceal attributes, language, national option,

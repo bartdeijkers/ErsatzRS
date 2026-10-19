@@ -559,6 +559,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Define separate acceptance for standalone Level 1/1.5 teletext before completing
+  Level 2.5, including applicable X/26 data and the full editor-to-viewer flow.
+  Preserve shared safety gates and full Phase 9A requirements; production guide
+  content still waits for complete independent engine acceptance.
 - Allow the existing macOS Next candidate workflow to select the reviewed
   caption source-out correction without changing accepted runtime downloads.
   Candidate building and verified runtime adoption remain separate gates.

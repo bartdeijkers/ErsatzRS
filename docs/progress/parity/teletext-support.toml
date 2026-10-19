@@ -4,8 +4,10 @@ rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs
 status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
-ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
-QTM TTI/metadata interchange, TSDuck, independent decoding and client display/navigation. Kodi is optional. P9A-04 owns F/V/X; flows are partial proof.
+ADR0123: standalone1/1.5 first, then full2.5/protected fallback. P9A-04 L15/F/V/X
+own proof; neither gate is accepted. Actual QTM/metadata, decoding/transport,
+suitable clients and all9A criteria remain. Shared base gaps stay blocking;
+Kodi optional.
 
 Typed services, provenance, resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
@@ -58,11 +60,10 @@ not claimed. Local EOF now retains the final cue to proven video end/earlier cut
 X1 work is maintainer-deferred; X3 waits for
 upstream editor support. No waiver; F5/charset remains open.
 
-Linux/Windows-interop/QEMU ARM proof is partial; native six-RID gates remain.
+Interop/crossbuild proof is partial; native six-RID gates remain.
 P9A-02 owns decoder Health/licensing. Burn/Convert/copy, carriage, HLS/browser,
 playback, publication/refresh/restart and localized management gates remain.
-No gate is waived; production guide waits for independent P9A-04, Phase10 for
-P9B-02.
+Production guide waits for full P9A-04; Phase10 for P9B-02.
 '''
 
 [[debt]]
