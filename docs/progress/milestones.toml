@@ -10734,7 +10734,7 @@ External capability/environment blockers (block only dependent acceptance):
 | Base ID / existing owner | Blocked user action and exact missing prerequisite | Next action and closure condition |
 | --- | --- | --- |
 | L15-D / V3; base-specific X1 | View/navigate/update the ordinary HTTP stream with applicable X26, page/subpage controls, manual conceal/reveal and real timed flash | Bounded ProgDVB Standard7.73.2 trial now obtains the official installer7260f799 and pins native executable7.73.2.0; private Windows start/source-dialog succeeds. Ordinary/capture input is NOT verified: available UIAutomation lacks required patterns, and bounded message/keyboard attempts leave the Open dialog. Test-control/session limitation, not a demonstrated teletext incapability or product defect. base_client_qualification/progdvb_runtime owns exact hashes, Windows identity, retained inputs and stopped/removed private copy; no installer/codec/service/security-policy change. Need an interactive/operator-assisted or automation-capable native session/documented input route for this exact candidate (or a different capability-positive binary). Then require ordinary HTTP/X26/page-subpage/update/manual reveal/timedflash proof. No unchanged negative retry, maintenance or static-image waiver. ContinueL15-E1 while blocked |
-| L15-E2 / F5,V6,X2 | Install and use the accepted runtime natively on all six supported RIDs | Missing exact two macOS artifacts/native macOS and ARM environments, remaining native applicable output proof and accepted candidate adoption. managed.1 remains accepted; candidate.3 is not adopted. Use existing build/package workflow and obtain native environments or separately authorized remote workflow; no push permission is inferred. Close exact source/license/dependency/build/runtime/Health and applicable playback gates before adoption; crossbuild/startup/interop are separate claims |
+| L15-E2 / F5,V6,X2 | Install and use the accepted runtime natively on all six supported RIDs | Unpublished candidate.4 now has four exact Linux/Windows archives, 9 native Windows and 2 Linux selected playback gates, six actual selected-language captures and scoped startup/ABI proof in audio_language_followup/package_followup. ARM results are crossbuilds only. Missing both candidate.4 macOS artifacts, native ARM/macOS environments, remaining applicable compatibility/platform/Health proof and accepted adoption. managed.1 remains accepted; no candidate is adopted. Use existing build/package workflow and obtain native environments or separately authorized remote workflow; no push permission is inferred. Close exact source/license/dependency/build/runtime/Health and applicable playback gates before adoption; crossbuild/startup/interop are separate claims |
 | Enhanced-only X1,X3 / full9A | Edit complete POP/GPOP banks/contexts over208 and view full2.5 objects/enlargement/panels | Full2.5 client qualification remains maintainer-deferred; QTM1.0 native bank/large-context support waits upstream. Neither blocks a genuinely base-only design. Both remain mandatory for full9A, with exact capability-positive pinned editor/client end proof and all enhanced F/V/X conditions; no truncation, silent content removal, package mutation or waiver |
 
 Current additional-character/editor checkpoint (new negative evidence, not a
@@ -10774,6 +10774,28 @@ Source reproduction and local Linux qualification are separate from optimized pa
 compatibility and accepted runtime adoption. Preserve all earlier negative
 captures; unchanged editor/isolation/transport/F6 proof retains its original
 scope. The finite L15 list and all full9A closure conditions remain open.
+
+L15-E2 candidate package/native checkpoint (new mandatory evidence, not new
+product functionality): audio_language_followup/package_followup owns four
+unpublished exact candidate.4 archives, source/lock/four-patch/license/payload
+hashes and unchanged production pin. Native Windows Rust1.97.1/MSVC release
+and pinned Bookworm release builds pass; Linux ELF/GLIBC ceiling and offline
+read-only Bookworm startup pass. ARM64/ARM are crossbuild/ELF/ABI/package proof
+only. Exact unpacked packages pass existing unchanged Windows2 source-out plus7
+selected output-policy cases and Linux2 source-out cases, including copied AV,
+selected alternate audio, original captions/source clock and joined cleanup.
+Native Windows ffprobe and Linux ffprobe confirm nld in three actual captures each.
+Windows uses the immutable7603285d app test checkout, not a current packaged
+admin/launcher claim. The old prepared-artifact fixture is not retried; its
+corrected candidate.3 evidence retains that scope. Parent debug/headed/model/
+transport and unchanged editor/isolation/F6 proofs are reused only in scope.
+Both macOS replacement artifacts/native environments and native ARM, remaining
+applicable compatibility/platform/Health and managed adoption still blockE2.
+Current no-push instruction prevents remote macOS source transfer/dispatch;
+no workflow was run and no absent download was invented. Continue independent
+finiteL15-B1 intent/import product work while external client/platform gates
+remain. Neither base nor full9A is accepted; full authored2.5/editor requirements
+remain unchanged.
 
 Scoped L15-E1 Next final-wrapper checkpoint (partial F5/V6): canonical
 standalone_level15_followup/active_next_shutdown owns sources and all outcomes.
