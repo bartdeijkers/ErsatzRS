@@ -3,7 +3,7 @@
   "upstream_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
   "source_archive_sha256": "2b3108b5b5d4d40ae243c6e98ce018f939ac17953dec0383fe664c8e49212742",
   "source_lock_sha256": "3ef515507bbaf4e75043f59ecee515abad16fb4a4be5c2c53f0e7b097dc37fbb",
-  "distribution_version": "0.2.2-4a0b59a-ersatzrs.3",
+  "distribution_version": "0.2.2-4a0b59a-ersatzrs.4",
   "adr": "0117",
   "patches": [
     {
@@ -29,9 +29,17 @@
       "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
       "unpatched_regression": "Official checksum-verified Next0.2.2/tag4a0b59a reproduces exact FINAL source-out extension (f7b8af64); candidate passes unchanged ordinary-SRT8d16a912 and late-source-teletext7dac0380 controls, plus25 focused timing/playlist tests. Reviewed upstream2ed7266d retains the same shifted-out block; no equivalent correction located. Native Windows candidate .2 also exposes a negative keyframe landing that shortens a complete immutable source end by56ms on byte-identical source; negative full/partial/independent-origin controls reproduce it. Candidate .3 preserves complete source ends and shifts only partial-pass edges; native/platform acceptance remains required.",
       "evidence": "docs/progress/milestones.toml (P9A-04/F5); canonical tmp/phase9-next-local-teletext/work.json/shared_copy_sourceout_followup"
+    },
+    {
+      "file": "0004-preserve-selected-audio-metadata.patch",
+      "sha256": "0374d2bd4da4ea112f5b56b2dd3afc1ebe851f6b238160bb6fb040e4636faee4",
+      "retire_when": "Unpatched upstream preserves actual selected audio-stream metadata through copy and complex filtering, shared/separate/same-path reopened inputs and ordinary Next output, including unknown metadata without invented language, plus compatibility/platform acceptance. Remove this patch, not the tests.",
+      "upstream_review_revision": "4a0b59a66bef93b908e5eb2086847418492e2555",
+      "unpatched_regression": "Accepted managed.1 ordinary Next output loses eng language present in source, before and after authored-wrapper recovery (73918db5); unchanged strict metadata gate fails. Pinned FFmpeg9 controls isolate -map_metadata -1 and complex-filter metadata loss. Pipeline regression fails before this patch; all264 pipeline-library tests pass after it. Reviewed upstream2ed7266d retains the same suppression with no explicit selected-source mapping. Actual candidate runtime/platform/adoption acceptance remains required.",
+      "evidence": "docs/progress/milestones.toml (P9A-04/L15-E1,F5); canonical tmp/phase9-next-local-teletext/work.json/standalone_level15_followup/audio_language_followup"
     }
   ],
-  "publication": "Unpublished Phase9A F5 source-out candidate only. Managed runtime adoption, compatibility/platform acceptance and package publication are separate gates; no publication authorized.",
+  "publication": "Unpublished Phase9A F5 source-out and selected-audio-metadata candidate only. Managed runtime adoption, compatibility/platform acceptance and package publication are separate gates; no publication authorized.",
   "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/4a0b59a66bef93b908e5eb2086847418492e2555",
   "windows_companions_sha256": {
     "libvpl.dll": "3c439318d55285631aaea66b1d3701d4dba19e6c679561bebb71ace9ed521a08",

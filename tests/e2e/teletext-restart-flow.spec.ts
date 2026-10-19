@@ -683,6 +683,15 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
       }
       const prefixPath = testInfo.outputPath(`active-${viewers.length}.prefix.ts`);
       writeFileSync(prefixPath, prefix);
+      if (mode === 'Next') {
+        // Inspect the actual selected output track, including filtered Next
+        // audio. A correct waveform alone cannot prove its language identity.
+        const probe = JSON.parse(execFileSync(process.env.FFPROBE_PATH!, ['-v', 'error', '-select_streams', 'a:0',
+          '-show_entries', 'stream_tags=language', '-of', 'json', prefixPath], { encoding: 'utf8', timeout: 10_000, maxBuffer: 65_536 }));
+        expect(probe.streams).toHaveLength(1);
+        expect(probe.streams[0].tags?.language).toBe('eng');
+        writeFileSync(testInfo.outputPath(`active-${viewers.length}.audio-metadata.json`), JSON.stringify(probe, null, 2));
+      }
       for (const pid of [0, 256, 257, 512]) {
         expect(pids.has(pid), `Missing PID${pid}; observed ${[...pids].sort((a, b) => a - b)}`).toBe(true);
       }

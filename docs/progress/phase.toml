@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: generated Next wrapper carriage and scoped cleanup verified; pre-existing audio-language loss is next runtime gap; base client needs usable native control'
+current_focus = 'P9A-04 standalone Level 1/1.5: selected-audio metadata candidate qualified locally; compatibility/native/adoption and usable base-client control remain mandatory'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -97,13 +97,18 @@ and canonical active_next_shutdown own unit, matched-build/headed, retained
 TSDuck/model/sourceAV/independent proof and all negative/setup scopes. The longer
 combined transport/lifetime run remains failed; its reader was replaced before
 reopen. Separate early active cancellation retains the original liveness oracle.
-Actual source eng language is absent in ordinary Next before and after repair.
-Keep its unchanged mandatory field gate. Next isolate that loss in the existing
-Next projection/producer/wrapper and preserve actual selected-track metadata,
-never guess channel preference. Generated-G2 editing, complete inventory/editor/
+The original missing-eng oracle remains unchanged. audio_language_followup
+isolates suppression/complex-filter metadata loss and qualifies unpublished
+candidate.4 from the actual selected input/stream indices, with264 pipeline
+units,8 retained source-out units, strict affected lint and headed ordinary Next
+metadata/cleanup proof. Two unchanged native model/AV/strict TSDuck/metadata verifiers and required
+Next smoke pass; all four selectedDutch outputs retainnld. No new DTO, probe or
+guessed preference; exact source/lock/four-patch reproduction passes. Accepted managed.1 remains unchanged.
+Next qualify the candidate at the remaining existing compatibility/native/package
+and adoption boundaries; local Linux debug is not accepted managed repair. Generated-G2 editing, complete inventory/editor/
 binding/lifecycle, suitable base receiver and platform/adoption remain as the
 finite L15 list specifies. Two macOS artifacts/native ARM/macOS block X2;
-managed.1 is accepted and used as exact trial bytes, candidate.3 is not adopted.
+managed.1 remains accepted; source-out/metadata candidate.4 is not adopted.
 Full2.5 X1/X3 remain distinct. F6 stays closed; no push/publication.
 
 Verified local base checkpoints:3bd0a2f2 Main208/no-bank realQTM1.5 edit/concept/

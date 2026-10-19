@@ -872,6 +872,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve selected audio-language metadata through copy and filtering in the
+  locally qualified Next compatibility candidate; managed adoption remains pending.
+
 - Deliver already-published teletext in built-in Next MPEG-TS output through
   bounded final-wrapper recovery.
 

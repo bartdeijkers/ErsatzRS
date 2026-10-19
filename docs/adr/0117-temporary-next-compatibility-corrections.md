@@ -17,6 +17,22 @@ CI and verified publication. It does not claim completed runtime acceptance.
 Partial — accepted corrections are implemented; approved platform/hardware
 obligations and independent upstream patch retirement remain open.
 
+Phase9A L15-E1/F5 candidate (2026-10-19): the accepted Next runtime drops
+selected audio-language metadata under `-map_metadata -1`; complex filtering
+also prevents ordinary automatic stream metadata copying. The additional
+unpublished correction maps metadata from the already resolved selected input
+and absolute stream index to the output audio stream, after suppression and
+before the format's output filename. It preserves suppression of global metadata,
+copy/filter behavior and unknown language; it neither guesses a channel language
+nor adds probing, schema or preference fields. Candidate `.4` retains the three
+prior corrections. Its exact pinned source/lock/patch reproduction, grouped
+pipeline regression and scoped Linux ordinary-stream qualification are recorded
+under P9A-04 `standalone_level15_followup/audio_language_followup`. Reviewed
+upstream `2ed7266d` retains the same metadata boundary; no equivalent correction
+was located. This is a local compatibility candidate, not accepted managed
+adoption, optimized package/native platform acceptance or publication. The
+production manifest remains `.1`; every patch retains its retirement condition.
+
 UCU-11 update (2026-10-14): the maintainer approves local catch-up through
 v26.11.3. Reviewed released Next0.2.2 corrects HLS cue intervals, timestamp maps
 and WebVTT settings; its unchanged two unpatched runtime regressions still fail.
