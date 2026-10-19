@@ -98,6 +98,7 @@ struct DriverContext {
     int fragmentCallSelector = 0;
     bool addFirstDefinitionPosition = false;
     bool addInteriorDefinitionRow = false;
+    bool editMainG2 = false;
     QString captureName(const char *stage) const {
         if (!singlePage) return QString("qtm-driver-") + stage + ".png";
         return QString::fromLatin1(outputName.chopped(4)) + "-qtm-" + stage + ".png";
@@ -160,7 +161,8 @@ static DriverContext driverContext() {
     if (fragmentCall && ((fragmentSelector & 0x38) != 0x30 || ((fragmentSelector >> 6) & 31) != 19))
         qFatal("Native fragment call selector must retain authenticated Public Passive scope/type");
     const bool resourceTrial = resourceStructure || resourceCallOrigin || callTopology || fragmentCall || firstDefinitionPosition || interiorDefinitionRow;
-    const bool extendedGlyph = mode == "single-page-local-extended-glyph";
+    const bool mainG2 = mode == "single-page-main-g2";
+    const bool extendedGlyph = mode == "single-page-local-extended-glyph" || mainG2;
     const bool remainingGlyph = mode == "single-page-local-remaining-glyph";
     const bool drcsSlot = mode == "single-page-local-drcs-slot";
     const bool flash = mode == "single-page-local-flash";
@@ -287,14 +289,18 @@ static DriverContext driverContext() {
         qFatal("Edited DRCS verification requires the synthetic S1=0 companion");
     if (panelProof && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed panel proof requires left4/right12 and actual Normal S1=0 companion");
-    if ((localGlyph || glyphStructure || mixedGlyphStructure || styleStructure) && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
+    if ((localGlyph || glyphStructure || mixedGlyphStructure || styleStructure) && !mainG2 && (left != 4 || right != 12 || drcs.isEmpty() || drcsSubpage != 0))
         qFatal("Fixed local glyph trial requires original left4/right12 and Normal S0 companion");
+    if (mainG2 && (left != 0 || right != 0 || !drcs.isEmpty() || !globalDrcs.isEmpty()
+        || triplet != 206 || column != 0 || glyphMode != 15 || toGlyphMode != 15
+        || fromGlyph != 35 || toGlyph != 66))
+        qFatal("Fixed standalone Level 1.5 Main requires word206 G2 35-to66, zero panels and no banks");
     if (resourceTrial && (left != 0 || right != 0
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_BASENAME")
         || qEnvironmentVariableIsSet("ERSATZRS_QTM_NORMAL_DRCS_SUBPAGE")))
         qFatal("Fixed resource structure requires zero panels and no DRCS companion context");
     return {true, mode == "single-page-zone-q" || panelDay, foreground, drcsEdit, drcsVerify, resourceSet, triplet, column, from, to, drcsSubpage, input, output, QString("/work/") + QString::fromLatin1(input),
-        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow};
+        QString("/work/") + QString::fromLatin1(output), drcs, left, right, panelProof, panelNight, localGlyph, glyphMode, fromGlyph, toGlyph, toGlyphMode, drcsSlot, flash, charset, drcsSubtable, drcsScope, glyph0, glyph1, globalDrcs, glyphStructure, mixedGlyphStructure, styleStructure, resourceInsert, resourceDelete, resourceCallOrigin, resourceCallContext, insertResourceCall, deleteResourceCall, mixedResourceCallGlyph, mixedResourceCallStructure, insertFragmentCall, deleteFragmentCall, fragmentSelector, firstDefinitionPosition, interiorDefinitionRow, mainG2};
 }
 // Actual Qt widget paint only; no document, decoder or model field is assigned.
 static void capturePanelPaint(const DriverContext &context, const char *stage) {
@@ -468,10 +474,12 @@ static void captureLocalGlyphWidget(const DriverContext &context, const char *st
     auto view = editor();
     if (!context.editLocalGlyph || !main || !view || !main->isVisible()
         || !main->windowHandle() || !main->windowHandle()->isExposed()
-        || !view->isVisible() || view->size() != QSize(672, 250))
-        qFatal("Actual local glyph widget must be exposed at672x250");
+        || !view->isVisible()
+        || (context.editMainG2 ? (view->width() < 480 || view->height() < 250)
+                               : view->size() != QSize(672, 250)))
+        qFatal("Actual glyph widget must be exposed at its fixed native geometry");
     const QImage painted = view->grab().toImage();
-    if (painted.size() != QSize(672, 250)
+    if ((!context.editMainG2 && painted.size() != QSize(672, 250))
         || !painted.save(QString("/work/") + context.captureName(
             (QByteArray("local-glyph-") + stage + "-widget").constData())))
         qFatal("Actual local glyph widget capture failed");
@@ -2570,10 +2578,11 @@ extern "C" int _ZN16QCoreApplication4execEv() {
         if (destination.exists() || destination.isSymLink())
             qFatal("Audit destination must not exist or be a symlink");
         bool selected = false;
+        const QString level = context.editMainG2 ? "1.5" : "2.5";
         for (QRadioButton *radio : main->findChildren<QRadioButton *>())
-            if (radio->text() == "2.5") { radio->click(); selected = radio->isChecked(); }
-        if (!selected) qFatal("Level 2.5 radio absent");
-        capture(context.captureName("level25").toUtf8().constData());
+            if (radio->text() == level) { radio->click(); selected = radio->isChecked(); }
+        if (!selected) qFatal("Required fixed presentation-level radio absent");
+        capture(context.captureName(context.editMainG2 ? "level15" : "level25").toUtf8().constData());
         loadNormalDrcs(main, context);
         loadGlobalDrcs(main, context);
         if (context.singlePage) {

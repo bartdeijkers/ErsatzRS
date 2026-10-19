@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: qualify base X26 editor/client flow before full Level 2.5'
+current_focus = 'P9A-04 standalone Level 1/1.5: Main208 editor proof closeout; suitable base client and process restart remain'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -69,16 +69,31 @@ production guide waits for full independent9A. ADR0123/P9A-04 own the exact
 boundary and L15-A through E closure table, linked to the existing F/V/X list.
 Neither standalone base nor full9A is accepted. No new plan or general audit.
 
-Next concrete package: L15-A/B/D. A user must be able to author a legal base-only
-page with applicable X26, edit it in pinned QTM, import/preview/publish explicitly
-and view/navigate it on an ordinary suitable client without2.5 object banks.
-First inspect only the existing Main carrier/QTM capacity and retained positive
-base fixtures. Determine whether shared208-word/context/NOS capability limits
-also affect standalone1.5; do not assume X3 is enhanced-only. Then bundle the
-required base repertoire/mosaic/spacing/height/conceal/flash/identity/subpage/update
-proof, fixing only demonstrated defects. Existing actual editor/publication,
-localized nine-culture headed/two-theme/isolation/transport/F6 proof retains
-scope; repeat only affected boundaries, never every small variant.
+L15-A/B direct-Main checkpoint is verified: native89ab0ba0 and actual pinned
+headedQTM bbf7a6d4 pass full208words, G2/diacritics/Level15G3, directV4 with zero
+optional banks/assets, genuine1.5 popup/SaveAs atword206, conceptpreview, separate
+explicit publication and real SQLite/application reopen. Originals, metadata,
+config and Night stay exact. Root inspected three actual editor images. This is
+new scoped evidence/test-driver work, no engine feature, new independent decode,
+ordinary stream/client, whole-process restart or complete base acceptance.
+Canonical tmp/phase9-next-local-teletext/work.json/standalone_level15_followup/
+native_main_capacity owns source/test/tool hashes, initial negatives and checks.
+The pretty-JSON fixture exceeded unchanged32KiB before encoding; existing compact
+writer fixes only representation. No quota/oracle is weakened. Old widget driver
+was tied to56-column/DRCS; one fixed MainG2/zero-bank/1.5 mode reuses real widgets
+and SaveAs. Three control refusals preserve saved files/old Local guard. Existing
+56-column helper defaults remain exact; all unrelated proofs retain their scope.
+
+Next L15-D action: qualify one genuinely new/changed, capability-positive pinned
+base client for ordinary stream input, conceal/reveal, timed flash and page/
+subpage navigation. Exact VLC3.0.20 source/binary qualification fails those base
+render controls; retain its prior MAIN/navigation proof, do not rerun its full-base
+trial or start decoder maintenance. Current receipt names exact versions/functions.
+Independent L15-C action: actual OS-process restart inside/after Lua intervals,
+with profile/error isolation, using existing fixtures and unchanged durable proof.
+Remaining base repertoire/spacing/height/conceal/flash/subpage/set and rejection
+coverage must be bundled by functional closure, not small object variants.
+No full editor/publication/isolation/F6 replay unless its boundary actually changes.
 
 F3 complete-factory correction is locally checkpointedad28cd81. Original Base
 SPACE+authored£ and physicalG2£ have separate correct oracles, complete effect/
@@ -105,7 +120,11 @@ Full enhanced-client X1 work remains maintainer-deferred; base-specific candidat
 qualification under the new priority is authorized. Do not retry unchanged2.5
 negatives or start external decoder maintenance. X3 waits for changed upstream
 QTM POP/GPOP/over208-bank capability; no local editor maintenance or scope waiver.
-Shared base editor/client deficits still block the base. X2 missing macOS
+Shared base editor/client deficits still block the base. Exact VLC3.0.20 bitmap
+source and installed plugin fix reveal/flash-on=1; MAIN/navigation evidence cannot
+prove conceal/reveal or timed flash. Canonical standalone_level15_followup/
+base_client_qualification records this bounded capability negative; no repeat
+VLC full-base trial or decoder maintenance. X2 missing macOS
 artifacts/native environments, nativeARM/full-platform/output and accepted runtime
 adoption remain explicit. Existing macOS workflow needs suitable native execution
 or separately authorized remote-source/CI action; no push/publication is authorized.
@@ -120,8 +139,10 @@ ordinary smoke/TSDuck87/87. Keep unused-object removal deferred. Every2.5 additi
 must prove its own correct behavior and intended1/1.5 fallback, preferably on the
 same broadcast pages, plus standalone base regressions.
 
-All relevant checks/processes from85f5b9b1 are terminal; no relevant host/client/
-worker retained. Foreign7 parallel changes remain byte/diff-exact; checkpoint
+Main208 native/editor jobs and all owned GUI/negative containers are terminal.
+Focused web integration-target Clippy passes; final formatting/progress/policy
+checks are owned by the canonical receipt. No ordinary stream/client replay or
+full platform claim is added. Foreign7 parallel changes remain exact; checkpoint
 receipt owns hashes and index state. Work autonomously within this priority;
 commit only verified slices, no push/publication or automatic package activation.
 

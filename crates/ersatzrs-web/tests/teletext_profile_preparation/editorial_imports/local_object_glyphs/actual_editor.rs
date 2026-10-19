@@ -209,6 +209,21 @@ pub(in super::super) fn inputs_for_edit(
     flow: &Flow,
     edit: impl FnOnce() -> Value,
 ) -> Value {
+    inputs_for_layout(directory, name, flow, [4, 12, 44], edit)
+}
+
+pub(in super::super) fn inputs_for_layout(
+    directory: &Path,
+    name: &str,
+    flow: &Flow,
+    layout: [u8; 3],
+    edit: impl FnOnce() -> Value,
+) -> Value {
+    let [left, right, target] = layout;
+    let total_columns = 40 + usize::from(left) + usize::from(right);
+    assert!(
+        left <= 16 && right <= 16 && total_columns <= 56 && usize::from(target) < total_columns
+    );
     std::fs::create_dir(directory).expect("each editor case directory must be create-new");
     let original = directory.join("original");
     std::fs::create_dir(&original).unwrap();
@@ -237,8 +252,9 @@ pub(in super::super) fn inputs_for_edit(
             for value in values {
                 let column = value.as_u64().expect("native consumer column is unsigned");
                 assert!(
-                    column < 56 && previous.is_none_or(|previous| previous < column),
-                    "native columns are unique, sorted and inside original56columns"
+                    column < u64::try_from(total_columns).unwrap()
+                        && previous.is_none_or(|previous| previous < column),
+                    "native columns are unique, sorted and inside the original geometry"
                 );
                 previous = Some(column);
             }
@@ -251,8 +267,8 @@ pub(in super::super) fn inputs_for_edit(
         "input":format!("original/{}",mapping.name),"input_sha256":mapping.tti_sha256,
         "sidecar":"original/project.ersatzrs.json","sidecar_sha256":drcs_bitmap::hash(&sidecar),"page":mapping.page,
         "files":exported.files().iter().map(|file|json!({"name":file.name,"path":format!("original/{}",file.name),"bytes":file.bytes.len(),"sha256":drcs_bitmap::hash(&file.bytes)})).collect::<Vec<_>>(),
-        "editor_geometry":{"left_columns":4,"right_columns":12,"total_columns":56,"main_origin_column":4,
-            "target_visual_column":44,"target_visual_columns":consumer_visual_columns},"edit":edit,
+        "editor_geometry":{"left_columns":left,"right_columns":right,"total_columns":total_columns,"main_origin_column":left,
+            "target_visual_column":target,"target_visual_columns":consumer_visual_columns},"edit":edit,
         "save_as":"edited.tti","completion":"editor-saved.json","timeout_seconds":600,
         "editor":{"name":"QTeletextMaker","version":"1.0","source_commit":EDITOR_COMMIT,"binary_sha256":EDITOR_BINARY},
         "publication":"concept only; accepted generation remains unchanged"});

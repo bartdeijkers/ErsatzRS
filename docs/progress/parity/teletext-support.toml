@@ -5,9 +5,9 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: standalone1/1.5 first, then full2.5/protected fallback. P9A-04 L15/F/V/X
-own proof; neither gate is accepted. Actual QTM/metadata, decoding/transport,
-suitable clients and all9A criteria remain. Shared base gaps stay blocking;
-Kodi optional.
+own proof; neither gate accepted. Main208 without banks passes real QTM1.5/native
+flow; VLC bitmap reveal/flash is source/binary-negative. Full QTM/metadata,
+decoder/transport/client, shared safety and all9A criteria remain mandatory.
 
 Typed services, provenance, resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
@@ -50,13 +50,12 @@ P9A-03 owns source acquisition/leases; missing stays NotAcquired and descriptors
 PTS grant no readiness. Local888 native/Hybrid caption proof keeps its scope.
 F5 finite-Local Next889 keeps Copy/Dutch audio, exact cues/seeks and cache/cleanup
 across20MB sources and late headers. ad51b056 adds source/PSI-qualified absence
-with original/ordinary selection fences. Sourceout4801d008 candidate.3 has26 pure,
+with original/ordinary selection fences. 4801d008 candidate.3 has26 pure,
 four packages and exact Windows/Linux SRT/late889 proof; predecessor negatives
 remain. Composed27 native Windows caption/provider/RTSP/image and refusal checks
 pass after a fixture-only portable-path correction; Linux affected case/guards,
-strict lint/fmt pass. Actual Linux callback replacement/rescan now proves503/no
-stale artifact and fresh FINAL FRESH AV/audio/cue delivery; sameHTTP recovery is
-not claimed. Local EOF now retains the final cue to proven video end/earlier cuts; platform/adoption remain.
+strict lint/fmt pass. Actual callback replacement/rescan proves503/no stale artifact;
+a new host delivers FINAL FRESH AV/audio/cues. Local EOF now retains the final cue to proven video end/earlier cuts; platform/adoption remain.
 X1 work is maintainer-deferred; X3 waits for
 upstream editor support. No waiver; F5/charset remains open.
 

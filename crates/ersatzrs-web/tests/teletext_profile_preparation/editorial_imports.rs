@@ -95,6 +95,9 @@ mod qtm_carrier;
 #[path = "editorial_imports/resource_bank_admin.rs"]
 mod resource_bank_admin;
 
+#[path = "editorial_imports/standalone_base.rs"]
+mod standalone_base;
+
 pub(super) fn policy() -> NativeTeletextExportPolicy {
     NativeTeletextExportPolicy {
         document: designs::budget(),
