@@ -6,7 +6,7 @@ adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
 P9A-04 scopes base flow/Lua recovery, unreadHTTP drain repair and Linux active
-Legacy cleanup at default2 on60s source. Other engines/providers/platforms remain.
+Legacy/typedHybrid cleanup at default2. Admin built-in wrapper choice stays open.
 Pending originals require explicit publication. Actual QTM1.0 Romanian1F/Greek37
 header7 Main208 saves preserve context/content through concept, preview, explicit
 publication/reexport and SQLite recovery without banks. Other Unicode/font

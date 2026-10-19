@@ -575,13 +575,22 @@ function sameProcessAlive(process: { pid: number; start: string }): boolean {
   } catch (error) { if (!existsSync(`/proc/${process.pid}`)) return false; throw error; }
 }
 
-test('standalone Level 1.5 active Legacy viewers release source processes and leases on shutdown', async ({ browser, isolatedWebHost }, testInfo) => {
+for (const mode of ['Legacy', 'Hybrid'] as const) {
+test(`standalone Level 1.5 active ${mode} viewers release source processes and leases on shutdown`, async ({ browser, isolatedWebHost }, testInfo) => {
   test.skip(process.platform !== 'linux', 'Intentional Linux /proc identity proof; native platform acceptance remains mandatory.');
   test.skip(testInfo.project.name !== 'chromium', 'Reuse existing localized/browser proof for unchanged UI.');
   test.skip(!process.env.FFMPEG_PATH, 'Requires pinned FFmpeg9.');
   test.setTimeout(150_000);
   const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true, standaloneLevel15: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
   fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
+  // The bundled/operator shell wrapper is intentionally opaque to authored
+  // output policy. Qualify the existing typed built-in wrapper explicitly;
+  // no script is edited or granted guessed mux/transport authority.
+  const configuredScript = fixture.setting('ffmpeg.default_mpegts_script');
+  if (mode === 'Hybrid') {
+    fixture.database.prepare('REPLACE INTO "ConfigElement" ("Key","Value") VALUES (?,?)')
+      .run('ffmpeg.default_mpegts_script', '');
+  }
   // The selected source must outlive the entire30s observer budget: a12s EOF
   // near the10s shutdown grace cannot establish cancellation independently.
   const original = join(fixture.root, 'synthetic-client-source.ts');
@@ -627,7 +636,8 @@ test('standalone Level 1.5 active Legacy viewers release source processes and le
     writeFileSync(testInfo.outputPath('host-resident-processes.json'), JSON.stringify(resident, null, 2));
     const isResident = (process: { pid: number; start: string }): boolean => resident.some(original => original.pid === process.pid && original.start === process.start);
     const openViewer = async (): Promise<ReturnType<typeof observeTeletextUntilStop>> => {
-      const viewer = observeTeletextUntilStop(`${isolatedWebHost.baseURL}/iptv/channel/${fixture.channels[0]}.ts?mode=ts-legacy`, () => stopping);
+      const route = mode === 'Legacy' ? 'ts-legacy' : 'ts';
+      const viewer = observeTeletextUntilStop(`${isolatedWebHost.baseURL}/iptv/channel/${fixture.channels[0]}.ts?mode=${route}`, () => stopping);
       viewers.push(viewer); await viewer.ready; await capacity(2);
       const processes = ownedViewerProcesses(host.pid, join(fixture.root, 'synthetic-client-source.ts'));
       writeFileSync(testInfo.outputPath(`active-${viewers.length}.processes.json`), JSON.stringify(processes, null, 2));
@@ -638,19 +648,29 @@ test('standalone Level 1.5 active Legacy viewers release source processes and le
         expect(prefix[offset]).toBe(0x47);
         pids.add(((prefix[offset + 1] & 0x1f) << 8) | prefix[offset + 2]);
       }
-      for (const pid of [0, 256, 257, 512]) expect(pids.has(pid)).toBe(true);
       writeFileSync(testInfo.outputPath(`active-${viewers.length}.prefix.ts`), prefix);
+      for (const pid of [0, 256, 257, 512]) {
+        expect(pids.has(pid), `Missing PID${pid}; observed ${[...pids].sort((a, b) => a - b)}`).toBe(true);
+      }
       return viewer;
     };
-    // Existing Legacy admission is a pair: wrapper + itemencoder, not one slot
-    // per viewer. No capacity increase or source-ownership exemption is used.
+    // Default2 owns a wrapper+encoder pair. Hybrid shares the HLS encoder;
+    // viewer disconnect must release its wrapper, not cancel another owner.
+    // The existing StopOnDisconnect idle deadline remains unchanged.
     const first = await openViewer();
     const firstClosed = await first.close(); expect(firstClosed.ended).toBe('client-close');
-    await capacity(0);
-    expect([...owned.values()].filter(process => !isResident(process)).filter(sameProcessAlive)).toEqual([]);
+    await capacity(mode === 'Legacy' ? 0 : 1);
+    const retainedSource = [...owned.values()].filter(process => !isResident(process)).filter(sameProcessAlive);
+    if (mode === 'Legacy') expect(retainedSource).toEqual([]);
+    else {
+      expect(retainedSource).toHaveLength(1);
+      expect(retainedSource[0].readsSource).toBe(true);
+    }
     expect(resident.every(sameProcessAlive)).toBe(true);
-    fixture.resetSourceStart();
+    // Hybrid reuses a running source: never move its programme clock in SQLite.
+    if (mode === 'Legacy') fixture.resetSourceStart();
     const active = await openViewer();
+    if (mode === 'Hybrid') expect(retainedSource.every(sameProcessAlive)).toBe(true);
     stopping = true;
     const result = await isolatedWebHost.restart();
     const day = await active.closed;
@@ -664,10 +684,12 @@ test('standalone Level 1.5 active Legacy viewers release source processes and le
     expect({ ...recovered, safety: recovered.safety.snapshot }).toEqual({ ...retained, safety: retained.safety.snapshot });
     expect(fixture.calls()).toEqual(['day', 'night']); expect(fixture.unchangedPackage()).toBe(true);
     writeFileSync(testInfo.outputPath('active-viewer-success.json'), JSON.stringify({ result, viewers: [firstClosed, day], processes: [...owned.values()], resident, source: { duration: source.format.duration, bytes: sourceBytes },
-      scope: 'Linux ordinary Legacy wrapper+encoder at default2: live2, caller disconnect0, reopened2, host restart0; known source/process identities disappear. No complete AV/transport/decoder/native-platform/9A acceptance; unchanged normal-stream evidence is reused.' }, null, 2));
+      mode, retainedSource, configuredScript, effectiveScript: fixture.setting('ffmpeg.default_mpegts_script'),
+      scope: `Linux ordinary ${mode} at default2: live2, caller disconnect${mode === 'Legacy' ? 0 : 1}, reopened2, host restart0; known source/process identities disappear. Hybrid retains and reuses its shared HLS encoder until host shutdown; idle expiry is separate. No complete AV/transport/decoder/native-platform/9A acceptance; unchanged normal-stream evidence is reused.` }, null, 2));
   } finally {
     stopping = true;
     await Promise.allSettled(viewers.map(viewer => viewer.close()));
     await context.close(); fixture.close();
   }
 });
+}
