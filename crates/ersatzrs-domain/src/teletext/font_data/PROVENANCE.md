@@ -52,7 +52,9 @@ and applies the validated C.3 fragment transforms. `with_underline()` chooses
 the full bottom mask row as this font's underline policy, before enlargement.
 
 Base authored Unicode must retain Base priority when associated with its exact
-legacy Latin replacement mask; generated compatibility words must not become
-a higher-priority Local candidate. Stream and browser readiness still require
+charset-bound replacement mask; generated compatibility words must not become
+a higher-priority Local candidate. Native supplementary replacements retain
+their actual G2 repertoire; they do not borrow a Latin mask or namespace.
+Stream and browser readiness still require
 the same admitted immutable service, complete semantic validation and wire/
 independent-client evidence.

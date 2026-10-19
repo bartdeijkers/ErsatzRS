@@ -1,6 +1,9 @@
 //! Genuine native G0 editing is distinct from retaining context during a G2 edit.
 use super::*;
 
+#[path = "native_editor/supplementary.rs"]
+mod supplementary;
+
 #[derive(Clone, Copy)]
 struct Context {
     name: &'static str,

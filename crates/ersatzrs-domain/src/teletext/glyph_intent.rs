@@ -400,7 +400,9 @@ fn prohibit(record: &mut TeletextExecutedGlyphIntent) {
     record.reason = Some(TeletextGlyphIntentReason::ProhibitedTablePosition);
 }
 
-const fn repertoires(pair: TeletextCharsetPair) -> (TeletextG0Repertoire, TeletextG2Repertoire) {
+pub(super) const fn repertoires(
+    pair: TeletextCharsetPair,
+) -> (TeletextG0Repertoire, TeletextG2Repertoire) {
     match pair {
         TeletextCharsetPair::LatinLatin => {
             (TeletextG0Repertoire::Latin, TeletextG2Repertoire::Latin)

@@ -533,7 +533,11 @@ fn glyph_recipe(
         {
             return Ok((
                 operation,
-                Some(TeletextEnhancementCharsetDesignation::new(0).map_err(|_| Failure::Charset)?),
+                Some(
+                    composition
+                        .base_replacement_charset(base.position().row(), base.position().column())
+                        .ok_or(Failure::Charset)?,
+                ),
             ));
         }
     }

@@ -5,9 +5,9 @@
 //! Callers retain original intent/disposition and the authoritative service.
 
 use super::{
-    TeletextColumnOperation, TeletextDrcsBitmap, TeletextExecutedDrcsGlyph, TeletextG0Glyph,
-    TeletextG0Repertoire, TeletextG2Glyph, TeletextG2Repertoire, TeletextGlyphIdentity,
-    TeletextNationalSubset,
+    TeletextCharsetPair, TeletextColumnOperation, TeletextDrcsBitmap, TeletextExecutedDrcsGlyph,
+    TeletextG0Glyph, TeletextG0Repertoire, TeletextG2Glyph, TeletextG2Repertoire,
+    TeletextGlyphIdentity, TeletextNationalSubset,
 };
 
 const TABLE_BYTES: usize = 96 * 10 * 2;
@@ -141,16 +141,29 @@ pub fn resolve_teletext_latin_replacement_mask(
 pub fn resolve_teletext_latin_replacement_identity(
     operation: TeletextColumnOperation,
 ) -> Result<TeletextGlyphIdentity, TeletextGlyphMaskError> {
+    resolve_teletext_replacement_identity(operation, TeletextCharsetPair::LatinLatin)
+}
+
+/// Exact coded identity of a generated replacement in its retained charset.
+/// This performs no national substitution, normalization or assignment/font
+/// qualification. The caller must retain the operation's authoritative context.
+/// # Errors
+/// Rejects operations outside the existing G2/diacritic replacement vocabulary.
+pub fn resolve_teletext_replacement_identity(
+    operation: TeletextColumnOperation,
+    charset: TeletextCharsetPair,
+) -> Result<TeletextGlyphIdentity, TeletextGlyphMaskError> {
+    let (g0, g2) = super::glyph_intent::repertoires(charset);
     let identity = match operation {
         TeletextColumnOperation::G2 { code } => TeletextGlyphIdentity::G2 {
             glyph: TeletextG2Glyph {
-                repertoire: TeletextG2Repertoire::Latin,
+                repertoire: g2,
                 code: code.get(),
             },
         },
         TeletextColumnOperation::G0Diacritic { code, diacritic } => {
             let base = TeletextG0Glyph {
-                repertoire: TeletextG0Repertoire::Latin,
+                repertoire: g0,
                 code: code.get(),
                 national_subset: None,
             };
@@ -164,7 +177,7 @@ pub fn resolve_teletext_latin_replacement_identity(
                 TeletextGlyphIdentity::Composite {
                     base,
                     mark: TeletextG2Glyph {
-                        repertoire: TeletextG2Repertoire::Latin,
+                        repertoire: g2,
                         code: 0x40 | diacritic.get(),
                     },
                 }

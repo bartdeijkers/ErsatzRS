@@ -208,6 +208,42 @@ pub(super) fn encode_cyrillic_hebrew_g0(
     })
 }
 
+/// Qualified standalone Table41/43 symbols and letters, not column4 combining
+/// marks, prohibited positions, rectangle aliases or a borrowed Latin table.
+pub(super) fn encode_native_g2(character: char, pair: TeletextCharsetPair) -> Option<Character> {
+    let groups = match pair {
+        TeletextCharsetPair::Cyrillic1Cyrillic
+        | TeletextCharsetPair::Cyrillic2Cyrillic
+        | TeletextCharsetPair::Cyrillic3Cyrillic => [
+            (0x20, "\0¡¢£$¥\0§\0‘“«←↑→↓"),
+            (0x30, "°±²³×µ¶·÷’”»¼½¾¿"),
+            (0x50, "—¹®©™♪₠‰\0Łłß⅛⅜⅝⅞"),
+            (0x60, "DEFGIJKLNQRSUVWZ"),
+            (0x70, "defgijklnqrsuvwz"),
+        ],
+        TeletextCharsetPair::GreekGreek => [
+            (0x20, "\0ab£ehi§:‘“k←↑→↓"),
+            (0x30, "°±²³×mnp÷’”t¼½¾x"),
+            (0x50, "?¹®©™♪₠‰\0ΊΎΏ⅛⅜⅝⅞"),
+            (0x60, "CDFGJLQRSUVWYZΆΉ"),
+            (0x70, "cdfgjlqrsuvwyzΈ\0"),
+        ],
+        _ => return None,
+    };
+    for (start, symbols) in groups {
+        if let Some(index) = symbols
+            .chars()
+            .position(|value| value != '\0' && value == character)
+        {
+            return Some(Character {
+                fallback: b' ',
+                enhancement: Some((0x0f, start + u8::try_from(index).ok()?)),
+            });
+        }
+    }
+    None
+}
+
 fn encode_hebrew_g0(character: char) -> Option<Character> {
     let code = match character {
         '£' => 0x23,

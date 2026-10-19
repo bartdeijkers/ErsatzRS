@@ -813,6 +813,40 @@ fn legacy_latin_replacement_seam_preserves_exact_acute_pound_and_at_masks() {
 }
 
 #[test]
+fn generated_replacements_retain_exact_non_latin_charset_identity() {
+    let operation = TeletextColumnOperation::G2 {
+        code: TeletextGlyphCode::new(0x60).unwrap(),
+    };
+    for (pair, repertoire) in [
+        (
+            TeletextCharsetPair::Cyrillic1Cyrillic,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            TeletextCharsetPair::Cyrillic2Cyrillic,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (
+            TeletextCharsetPair::Cyrillic3Cyrillic,
+            TeletextG2Repertoire::Cyrillic,
+        ),
+        (TeletextCharsetPair::GreekGreek, TeletextG2Repertoire::Greek),
+    ] {
+        let identity = resolve_teletext_replacement_identity(operation, pair).unwrap();
+        assert_eq!(identity, g2(repertoire, 0x60));
+        // Cyrillic D/Greek C at60 must never become the Latin Ohm symbol.
+        assert_ne!(rows(identity), rows(g2(TeletextG2Repertoire::Latin, 0x60)));
+        let unsupported = TeletextColumnOperation::G0 {
+            code: TeletextGlyphCode::new(0x41).unwrap(),
+        };
+        assert_eq!(
+            resolve_teletext_replacement_identity(unsupported, pair),
+            Err(TeletextGlyphMaskError::UnsupportedReplacement)
+        );
+    }
+}
+
+#[test]
 fn exact_resolved_drcs_scope_subtable_and_slot_are_required_before_using_pixels() {
     let service = drcs_service();
     let base = super::attribute_execution_tests::base();

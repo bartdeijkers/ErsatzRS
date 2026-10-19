@@ -438,10 +438,10 @@ impl Builder<'_> {
         let (ai, found) = second;
         let mut identity = expected.glyph();
         if let Some(base) = expected.context().candidate().base() {
-            if let Some(operation) =
-                original.base_replacement(base.position().row(), base.position().column())
+            if let Some(replacement) =
+                original.base_replacement_identity(base.position().row(), base.position().column())
             {
-                identity = resolve_teletext_latin_replacement_identity(operation).ok();
+                identity = replacement.ok();
             }
         }
         identity = self.carrier_national_identity(expected, found, position, identity)?;

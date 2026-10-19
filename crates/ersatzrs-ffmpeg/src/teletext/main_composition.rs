@@ -1,6 +1,6 @@
 //! Ordered, unpublished main-program composition from exact base-cell intent.
 //!
-//! Original commands retain their values and order. Western Latin replacements
+//! Original commands retain their values and order. Charset-bound replacements
 //! carry distinct provenance: this intermediate does not settle object overlap,
 //! glyph footprints, side panels, non-Latin fallback reinterpretation or packet
 //! capacity. Row-zero commands and original MOT default ownership remain intact
@@ -26,10 +26,10 @@ use ersatzrs_domain::{
     TeletextEnhancementCollectionFailure, TeletextEnhancementCommand,
     TeletextEnhancementObjectCatalog, TeletextEnhancementPosition, TeletextEnhancementProgram,
     TeletextEnhancementProgramError, TeletextEnhancementSource, TeletextG3Compatibility,
-    TeletextGlyphIntent, TeletextGlyphIntentError, TeletextGlyphLayers, TeletextGlyphLayersError,
-    TeletextObjectIdentity, TeletextPageAddress, TeletextSemanticService, TeletextServiceError,
-    TeletextSpatialTrace, TeletextSpatialTraceBudget, TeletextSpatialTraceError, TELETEXT_COLUMNS,
-    TELETEXT_ROWS,
+    TeletextGlyphIdentity, TeletextGlyphIntent, TeletextGlyphIntentError, TeletextGlyphLayers,
+    TeletextGlyphLayersError, TeletextObjectIdentity, TeletextPageAddress, TeletextSemanticService,
+    TeletextServiceError, TeletextSpatialTrace, TeletextSpatialTraceBudget,
+    TeletextSpatialTraceError, TELETEXT_COLUMNS, TELETEXT_ROWS,
 };
 
 use super::base_display::{trace_teletext_base_display, TeletextBaseDisplayError};
@@ -56,6 +56,7 @@ pub struct TeletextMainCompositionBudget {
 pub enum TeletextBaseCellCommandKind {
     Position,
     LatinCharset,
+    GlyphCharset,
     Glyph,
     CharsetRestore,
 }
@@ -202,6 +203,30 @@ impl TeletextMainComposition {
             })
             .ok()
             .map(|index| TeletextColumnOperation::from(&self.base_replacements[index]))
+    }
+    pub(super) fn base_replacement_charset(
+        &self,
+        row: u8,
+        column: u8,
+    ) -> Option<TeletextEnhancementCharsetDesignation> {
+        self.base_replacements
+            .binary_search_by_key(&(row, column), |glyph| {
+                (glyph.position().row(), glyph.position().column())
+            })
+            .ok()
+            .map(|index| self.base_replacements[index].charset())
+    }
+    pub(super) fn base_replacement_identity(
+        &self,
+        row: u8,
+        column: u8,
+    ) -> Option<Result<TeletextGlyphIdentity, ersatzrs_domain::TeletextGlyphMaskError>> {
+        let operation = self.base_replacement(row, column)?;
+        let charset = self.base_replacement_charset(row, column)?;
+        Some(ersatzrs_domain::resolve_teletext_replacement_identity(
+            operation,
+            charset.pair(),
+        ))
     }
     #[must_use]
     pub const fn owner(&self) -> TeletextPageAddress {
@@ -421,7 +446,7 @@ impl TeletextMainComposition {
 /// compatible G2/G0-diacritic/Level-1.5-G3 replacements at that same base cell.
 /// Original glyphs, attributes, invocation origins/offsets and aliases survive.
 ///
-/// Temporary Latin designations restore the original same-row designation;
+/// Temporary glyph designations restore the original same-row designation;
 /// actual row changes reset to the chosen primary. An invocation never flushes
 /// later base cells ahead of itself. A colour-only header selector is not
 /// invented: original row-zero positions remain semantic commands and the
@@ -1603,22 +1628,21 @@ fn emit_glyph(
             location(TeletextBaseCellCommandKind::Position),
         )?;
     }
-    let latin_needed = output.charset.pair() != TeletextCharsetPair::LatinLatin;
-    if latin_needed {
-        let designation = TeletextEnhancementCharsetDesignation::new(0).map_err(|reason| {
-            error(
-                input.owner,
-                Some(location(TeletextBaseCellCommandKind::LatinCharset)),
-                reason.into(),
-            )
-        })?;
+    if output.charset.pair() != glyph.charset().pair() {
+        let kind = if glyph.charset().pair() == TeletextCharsetPair::LatinLatin {
+            TeletextBaseCellCommandKind::LatinCharset
+        } else {
+            TeletextBaseCellCommandKind::GlyphCharset
+        };
         output.emit(
             input,
             TeletextEnhancementCommand::AtColumn {
                 column: position.column(),
-                operation: TeletextColumnOperation::DesignateCharset { designation },
+                operation: TeletextColumnOperation::DesignateCharset {
+                    designation: glyph.charset(),
+                },
             },
-            location(TeletextBaseCellCommandKind::LatinCharset),
+            location(kind),
         )?;
     }
     output.emit(

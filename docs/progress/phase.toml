@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: native G0 editor proof delivered; next context-aware supplementary text; decoder/client/platform gates remain open'
+current_focus = 'P9A-04 standalone Level 1/1.5: native G2 Unicode delivered; next generated-G2 editor interchange; decoder/client/platform gates remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -68,7 +68,7 @@ neither base nor full9A is accepted. Production guide waits for independent9A.
 This current handoff supersedes older next-action prose below. No scope waiver,
 new general audit, external decoder/editor maintenance or push/publication.
 
-Latest L15-A/F3 native_cyrillic_hebrew corrects four demonstrated native headline
+Delivered L15-A/F3 native_cyrillic_hebrew corrects four demonstrated native headline
 rejections in the shared private text converter.380 G0 positions in20/24/25/55
 preserve original text/context, exact coded wire/pixels, no optional banks, row
 bounds and Base/localX26 provenance.1012 teletext regressions/18 final national
@@ -85,10 +85,20 @@ concept/reexport/SQLite reopen and unchanged accepted channels. Five regular
 standalone controls plus one bundled actual-editor test and strict affected-test
 Clippy/fmt pass. New proof only; publication/stream/F6 retain earlier scope.
 Original invalid-DZE/borrow setup failures remain; no normative weakening.
-Next reproduce context-aware supplementary Unicode symbol rejection in Cyrillic/
-Greek Text and make the smallest supported converter/composition correction
-under L15-A/F3, retaining nativeG0 and explicit Level1 fallback. Reuse existing
-factory/decoder tools; no general standards audit or new editor-variant loop.
+Native_g2_text now corrects four reproduced mixed native/supplementary Text
+rejections.300 qualified Table41/43 positions retain G2 context in shared layout,
+merge/raster/physical realization/full-origin comparison, Level1 blank fallback,
+Base priority and original Local context/values/provenance without banks.
+1644 domain/FFmpeg teletext regressions,25 national cases and four-context native
+application export/concept/preview/reexport/reopen pass. Stock0.2.42 proves1916/
+1920 observations; four Greek×34->x aliases remain failed, not weakened. Two
+wrong namespace/fallback goldens add exactly4/2 failures; canonical same followup/
+native_g2_text retains inputs, pins and code/fixture correction history.
+Next qualify actual pinnedQTM edits of generated native-G2 positions using the
+existing projection/intent tools. Current app proof edits G0 while preserving G2;
+it is not genuine generated-G2 editing. Reuse unmodified publication/stream/F6
+and old byteidentical native inputs. Complete font/alias, suitable base receiver,
+lifecycle/platform and full2.5 editor/client obligations stay open.
 Complete supplementary Unicode/font, base receiver, lifecycle/platform and
 full2.5 editor/client gates stay distinct and open. No automatic editor repair.
 

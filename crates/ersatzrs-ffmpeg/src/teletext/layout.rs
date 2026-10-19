@@ -1,14 +1,15 @@
-//! Native text rows and exact positioned Latin replacement glyphs.
+//! Native text rows and exact charset-bound positioned replacement glyphs.
 //!
-//! Derived G0/G2 intent uses the existing Latin region-zero tables. A later
+//! Derived G0/G2 intent retains its qualified repertoire. A later
 //! composer must establish/restore repertoire and header-row colour context;
 //! the legacy selector stream is not a context-free program to prepend.
 
 use ersatzrs_domain::{
     TeletextCharsetPair, TeletextColour, TeletextColumnOperation, TeletextDiacriticIndex,
-    TeletextEnhancementPosition, TeletextGlyphCode, TeletextHeight, TeletextPageDraft,
-    TeletextPageKind, TeletextRunContent, TeletextSemanticService, TeletextStructureError,
-    TeletextStyle, TELETEXT_COLUMNS, TELETEXT_ROWS,
+    TeletextEnhancementCharsetDesignation, TeletextEnhancementPosition, TeletextGlyphCode,
+    TeletextHeight, TeletextPageDraft, TeletextPageKind, TeletextRunContent,
+    TeletextSemanticService, TeletextStructureError, TeletextStyle, TELETEXT_COLUMNS,
+    TELETEXT_ROWS,
 };
 
 use super::{charset, TeletextEncodingError};
@@ -32,20 +33,23 @@ impl Layout {
         match self.text_charset {
             TextCharset::Latin(Some(national)) => charset::encode(character, national),
             TextCharset::Latin(None) => charset::encode_without_national_subset(character),
-            TextCharset::Greek => charset::encode_greek_g0(character),
+            TextCharset::Greek => charset::encode_greek_g0(character)
+                .or_else(|| charset::encode_native_g2(character, TeletextCharsetPair::GreekGreek)),
             TextCharset::CyrillicHebrew(pair) => {
                 charset::encode_cyrillic_hebrew_g0(character, pair)
+                    .or_else(|| charset::encode_native_g2(character, pair))
             }
         }
     }
 }
 
-/// One exact Western Latin replacement for a fallback cell, before composition.
+/// One exact charset-bound replacement for a fallback cell, before composition.
 /// These are derived glyphs, not an authored enhancement program or readiness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct PositionedBaseGlyph {
     position: TeletextEnhancementPosition,
     glyph: BaseGlyph,
+    charset: TeletextEnhancementCharsetDesignation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,11 +62,14 @@ enum BaseGlyph {
 }
 
 impl PositionedBaseGlyph {
+    pub(super) const fn charset(self) -> TeletextEnhancementCharsetDesignation {
+        self.charset
+    }
     pub(super) const fn position(self) -> TeletextEnhancementPosition {
         self.position
     }
 
-    fn new(row: u8, column: u8, mode: u8, data: u8) -> Option<Self> {
+    fn new(row: u8, column: u8, mode: u8, data: u8, charset: TextCharset) -> Option<Self> {
         let position = TeletextEnhancementPosition::new(row, column).ok()?;
         let code = TeletextGlyphCode::new(data).ok()?;
         let glyph = match mode {
@@ -73,7 +80,19 @@ impl PositionedBaseGlyph {
             },
             _ => return None,
         };
-        Some(Self { position, glyph })
+        let designation = match charset {
+            TextCharset::Latin(_) => 0,
+            TextCharset::Greek => 0x37,
+            TextCharset::CyrillicHebrew(TeletextCharsetPair::Cyrillic1Cyrillic) => 0x20,
+            TextCharset::CyrillicHebrew(TeletextCharsetPair::Cyrillic2Cyrillic) => 0x24,
+            TextCharset::CyrillicHebrew(TeletextCharsetPair::Cyrillic3Cyrillic) => 0x25,
+            TextCharset::CyrillicHebrew(_) => return None,
+        };
+        Some(Self {
+            position,
+            glyph,
+            charset: TeletextEnhancementCharsetDesignation::new(designation).ok()?,
+        })
     }
 
     fn legacy_triplet(self) -> u32 {
@@ -243,7 +262,14 @@ fn compile_with_text_charset(
                         layout.rows[usize::from(row.row)][usize::from(column)] = encoded.fallback;
                         if let Some((mode, data)) = encoded.enhancement {
                             layout.base_glyphs.push(
-                                PositionedBaseGlyph::new(row.row, column, mode, data).ok_or(
+                                PositionedBaseGlyph::new(
+                                    row.row,
+                                    column,
+                                    mode,
+                                    data,
+                                    layout.text_charset,
+                                )
+                                .ok_or(
                                     TeletextEncodingError::Character {
                                         address: page.address,
                                         row: row.row,

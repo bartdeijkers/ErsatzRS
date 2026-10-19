@@ -247,7 +247,8 @@ fn native_greek_scalar_matrix_and_local_x26_preserve_preview_originals_and_fallb
 
 #[test]
 fn greek_namespace_rejects_cross_script_unknown_aliases_and_decomposed_input_at_exact_cell() {
-    for character in ['A', 'Ά', '\u{374}', '\u{384}', '■', '\u{301}', 'א', '😀'] {
+    // Ά is a qualified Greek G2 character, separately covered by native_g2.
+    for character in ['A', 'Æ', '\u{374}', '\u{384}', '■', '\u{301}', 'א', '😀'] {
         let mut input = draft(0x37);
         input.base.pages[0].rows = rows(&format!("Α{character}"));
         let original = declare(input);

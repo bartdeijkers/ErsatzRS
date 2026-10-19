@@ -5,13 +5,13 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
-P9A-04 owns scoped editor/Lua/publication, native output choice and LinuxLegacy/
-typedHybrid cleanup. Native Cyrillic/Hebrew G0 text and four actual QTM1.0
-keyboard/SaveAs/concept/preview/reexport/reopen contexts pass without banks;
-accepted channels stay unchanged. Stock0.2.42 has six differing alias slots,
-not waived. Romanian/Greek Main208 and prior publication/stream proofs retain
-scope. Supplementary text/font, base receiver, lifecycle/platform and full2.5
-client/editor capabilities stay open; next context-aware supplementary Text.
+P9A-04 owns scoped G0 editor/Lua/publication/output/cleanup proof. Native Greek/
+Cyrillic supplementary Text now retains actual G2 context, Base priority and
+Level1 fallback without banks;300 qualified positions and four Local-restore
+controls pass native/pixel/application checks. Stock decoder has distinct old
+G0 and GreekG2 alias gaps, not waived. Next actual generated-G2 editor intent.
+Existing native editor/publication/stream scope remains. Full font/alias,
+receiver, lifecycle/platform and full2.5 editor/client gates remain open.
 
 
 

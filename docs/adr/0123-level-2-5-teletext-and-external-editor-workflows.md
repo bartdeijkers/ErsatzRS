@@ -1193,6 +1193,15 @@ Prove mosaics, height, conceal/reveal, flash, identities, subpages, navigation a
 updates. Keep the standard's level-specific and decoder-dependent distinctions;
 do not substitute an enhanced glyph oracle for an intended base representation.
 
+Generated Unicode replacements retain their required charset through layout,
+semantic composition, rasterization, physical realization and full-origin
+comparison. Native supplementary text uses its actual G2 repertoire, with an
+explicit Level 1 fallback. Temporary designations must restore the exact
+original Local context without changing its commands, priority or provenance.
+A Latin replacement helper must not reinterpret a non-Latin coded position.
+Unqualified Unicode aliases remain explicit errors rather than guessed glyphs;
+this does not remove their separately validated raw-coded authoring path.
+
 A valid standalone base page must be designable, validated, previewed, exported,
 edited, imported, explicitly published and broadcast without optional Level 2.5
 object banks or an enhanced client. Reuse the same typed model, application

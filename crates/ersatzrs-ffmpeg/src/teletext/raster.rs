@@ -7,13 +7,12 @@
 use std::mem::size_of;
 
 use ersatzrs_domain::{
-    resolve_teletext_glyph_mask, resolve_teletext_latin_replacement_mask,
-    TeletextColourComposition, TeletextColourCompositionError, TeletextColourPixel,
-    TeletextColourPixelOptions, TeletextDisplayFragment, TeletextDisplayPending,
-    TeletextDisplayResolution, TeletextDrcsExecution, TeletextEnhancementSource,
-    TeletextGlyphDisposition, TeletextGlyphIdentity, TeletextGlyphIntent,
-    TeletextGlyphIntentReason, TeletextGlyphMask, TeletextGlyphMaskError, TeletextPageAddress,
-    TeletextSpatialInvocationId, TeletextSpatialRootSource,
+    resolve_teletext_glyph_mask, TeletextColourComposition, TeletextColourCompositionError,
+    TeletextColourPixel, TeletextColourPixelOptions, TeletextDisplayFragment,
+    TeletextDisplayPending, TeletextDisplayResolution, TeletextDrcsExecution,
+    TeletextEnhancementSource, TeletextGlyphDisposition, TeletextGlyphIdentity,
+    TeletextGlyphIntent, TeletextGlyphIntentReason, TeletextGlyphMask, TeletextGlyphMaskError,
+    TeletextPageAddress, TeletextSpatialInvocationId, TeletextSpatialRootSource,
 };
 
 use super::{TeletextMainComposition, TeletextPhysicalDisplayReplay};
@@ -330,13 +329,13 @@ fn selected_mask(
         .ok_or(TeletextRasterCellFailure::GlyphAttribute {
             pending: d5.pending().copied().map(Box::new),
         })?;
-    // A generated Latin replacement retains the selected Base's priority and
+    // A generated charset-bound replacement retains the selected Base's priority and
     // exact authored position. It never becomes a competing Local glyph.
     if let Some((composition, base)) = inputs.authored.zip(intent.context().candidate().base()) {
-        if let Some(operation) =
-            composition.base_replacement(base.position().row(), base.position().column())
+        if let Some(identity) =
+            composition.base_replacement_identity(base.position().row(), base.position().column())
         {
-            let mask = resolve_teletext_latin_replacement_mask(operation)?;
+            let mask = resolve_teletext_glyph_mask(identity?, None, false)?;
             return Ok(if d5_value {
                 mask.with_underline()
             } else {

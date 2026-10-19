@@ -25,6 +25,10 @@ release section when tagging a release.
 
 ### Added
 
+- Encode qualified supplementary Unicode symbols and letters in authored
+  Cyrillic and Greek teletext without optional object banks. Use their actual
+  G2 repertoires while preserving Level 1 fallback and Local charset changes.
+
 - Allow native Cyrillic and Hebrew Unicode text in matching authored teletext
   pages without optional object banks. Preserve the supplied cell order,
   character context and Level 1 fallback, with explicit errors for unsupported
