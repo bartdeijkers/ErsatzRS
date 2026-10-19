@@ -95,6 +95,15 @@ function editorPages(theme: 'day' | 'night', operand = false): unknown {
   };
 }
 
+function standalonePages(theme: 'day' | 'night'): unknown {
+  const path = fileURLToPath(new URL('../../../crates/ersatzrs-web/tests/fixtures/teletext-level15-restart-v2.json', pathToFileURL(__filename)));
+  const service = JSON.parse(readFileSync(path, 'utf8'));
+  for (const page of service.pages) for (const row of page.rows) for (const run of row.runs) {
+    if (run.style.foreground === 'red' && theme === 'night') run.style.foreground = 'blue';
+  }
+  return service;
+}
+
 function contentHash(files: Map<string, Buffer>): string {
   const length = (value: number) => {
     const bytes = Buffer.alloc(8);
@@ -125,10 +134,11 @@ export class TeletextChannelFixture {
   private readonly playback: boolean;
   private scripted = false;
 
-  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; playback?: { ffmpeg: string } } = {}) {
+  constructor(databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; playback?: { ffmpeg: string } } = {}) {
     this.authoredPages = options.authoredPages === true;
     if (options.editorPages && !this.authoredPages) throw new Error('Synthetic editor requires the authored producer.');
     if (options.editorOperand && !options.editorPages) throw new Error('Synthetic operand editor requires editor pages.');
+    if (options.standaloneLevel15 && (!this.authoredPages || options.editorPages)) throw new Error('Standalone base fixture requires the original V2 producer.');
     this.playback = options.playback !== undefined;
     if (this.playback && !this.authoredPages) throw new Error('Synthetic playback requires the authored producer.');
     // Retained immutable histories/files belong to the wrapper DB's temporary
@@ -182,7 +192,8 @@ export class TeletextChannelFixture {
     this.packageFiles.set('fixture.sh', Buffer.from(this.authoredPages ? producerScript : scriptBody));
     if (this.authoredPages) {
       for (const theme of ['day', 'night'] as const) {
-        this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(options.editorPages ? editorPages(theme, options.editorOperand) : themedPages(theme))));
+        const response = options.standaloneLevel15 ? standalonePages(theme) : options.editorPages ? editorPages(theme, options.editorOperand) : themedPages(theme);
+        this.packageFiles.set(`response-${theme}.json`, Buffer.from(JSON.stringify(response)));
       }
     }
     for (const [name, body] of this.packageFiles) writeFileSync(join(this.packagePath, name), body, { mode: 0o644 });

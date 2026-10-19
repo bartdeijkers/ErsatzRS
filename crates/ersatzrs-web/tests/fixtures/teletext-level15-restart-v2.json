@@ -1,0 +1,461 @@
+{
+  "schema_version": 2,
+  "generation": "native-profile-generation",
+  "language": "nld",
+  "initial_page": 200,
+  "pages": [
+    {
+      "address": {
+        "page": 200,
+        "subcode": 0
+      },
+      "kind": "full_page",
+      "language": "nld",
+      "national_option": 1,
+      "rows": [
+        {
+          "row": 1,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "red",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "BASE 200/0000"
+              }
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "white",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "ZZZ"
+              }
+            }
+          ]
+        },
+        {
+          "row": 3,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "red",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "Äé"
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": [
+        {
+          "role": "index",
+          "target": {
+            "page": 200,
+            "subcode": 32
+          }
+        }
+      ]
+    },
+    {
+      "address": {
+        "page": 200,
+        "subcode": 32
+      },
+      "kind": "full_page",
+      "language": "nld",
+      "national_option": 1,
+      "rows": [
+        {
+          "row": 1,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "red",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "BASE 200/0020"
+              }
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "white",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "ZZZ"
+              }
+            }
+          ]
+        },
+        {
+          "row": 3,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "red",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "Äé"
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": [
+        {
+          "role": "index",
+          "target": {
+            "page": 201,
+            "subcode": 0
+          }
+        }
+      ]
+    },
+    {
+      "address": {
+        "page": 201,
+        "subcode": 0
+      },
+      "kind": "full_page",
+      "language": "nld",
+      "national_option": 1,
+      "rows": [
+        {
+          "row": 1,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "red",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "BASE 201/0000"
+              }
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "white",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "ZZZ"
+              }
+            }
+          ]
+        },
+        {
+          "row": 3,
+          "runs": [
+            {
+              "column": 8,
+              "style": {
+                "foreground": "red",
+                "background": "black",
+                "height": "normal",
+                "boxed": false,
+                "flash": false,
+                "conceal": false
+              },
+              "content": {
+                "kind": "text",
+                "text": "Äé"
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": [
+        {
+          "role": "index",
+          "target": {
+            "page": 200,
+            "subcode": 0
+          }
+        }
+      ]
+    }
+  ],
+  "page_enhancements": [
+    {
+      "address": {
+        "page": 200,
+        "subcode": 0
+      },
+      "presentation": null,
+      "compositional_links": null,
+      "local_program": {
+        "commands": [
+          {
+            "kind": "set_position",
+            "position": {
+              "row": 2,
+              "column": 8
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 8,
+            "operation": {
+              "kind": "g2",
+              "code": 35
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 9,
+            "operation": {
+              "kind": "g0_diacritic",
+              "code": 65,
+              "diacritic": 2
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 10,
+            "operation": {
+              "kind": "g3",
+              "code": 47,
+              "compatibility": "level15"
+            }
+          }
+        ]
+      },
+      "resources": {
+        "objects": {
+          "public": null,
+          "global": null
+        },
+        "drcs": {
+          "normal": null,
+          "global": null
+        },
+        "defaults": [
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "address": {
+        "page": 200,
+        "subcode": 32
+      },
+      "presentation": null,
+      "compositional_links": null,
+      "local_program": {
+        "commands": [
+          {
+            "kind": "set_position",
+            "position": {
+              "row": 2,
+              "column": 8
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 8,
+            "operation": {
+              "kind": "g2",
+              "code": 35
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 9,
+            "operation": {
+              "kind": "g0_diacritic",
+              "code": 65,
+              "diacritic": 2
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 10,
+            "operation": {
+              "kind": "g3",
+              "code": 47,
+              "compatibility": "level15"
+            }
+          }
+        ]
+      },
+      "resources": {
+        "objects": {
+          "public": null,
+          "global": null
+        },
+        "drcs": {
+          "normal": null,
+          "global": null
+        },
+        "defaults": [
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "address": {
+        "page": 201,
+        "subcode": 0
+      },
+      "presentation": null,
+      "compositional_links": null,
+      "local_program": {
+        "commands": [
+          {
+            "kind": "set_position",
+            "position": {
+              "row": 2,
+              "column": 8
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 8,
+            "operation": {
+              "kind": "g2",
+              "code": 35
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 9,
+            "operation": {
+              "kind": "g0_diacritic",
+              "code": 65,
+              "diacritic": 2
+            }
+          },
+          {
+            "kind": "at_column",
+            "column": 10,
+            "operation": {
+              "kind": "g3",
+              "code": 47,
+              "compatibility": "level15"
+            }
+          }
+        ]
+      },
+      "resources": {
+        "objects": {
+          "public": null,
+          "global": null
+        },
+        "drcs": {
+          "normal": null,
+          "global": null
+        },
+        "defaults": [
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    }
+  ],
+  "magazines": [],
+  "objects": [],
+  "drcs": [],
+  "mots": [],
+  "empty_object_pages": [],
+  "mot_selections": [
+    {
+      "display": {
+        "page": 200,
+        "subcode": 0
+      },
+      "mot": null
+    },
+    {
+      "display": {
+        "page": 200,
+        "subcode": 32
+      },
+      "mot": null
+    },
+    {
+      "display": {
+        "page": 201,
+        "subcode": 0
+      },
+      "mot": null
+    }
+  ]
+}

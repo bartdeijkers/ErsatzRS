@@ -28,6 +28,9 @@ use tower::ServiceExt as _;
 
 const POLICY_KEY: &str = "teletext.output.policy";
 const POLICY: &str = include_str!("../fixtures/teletext-output-policy-v1.json");
+
+#[path = "ordinary_stream_flow/standalone_base.rs"]
+mod standalone_base;
 const PROFILE_SCRIPT: &str = r#"test "$1" = pages || exit 9
  test "$ERSATZRS_ADDON_CAPABILITY" = teletext.pages.v2 || exit 10
  theme="$ERSATZRS_ADDON_SETTING_THEME"
@@ -97,6 +100,10 @@ fn themed_pages(theme: &str) -> Value {
 }
 
 pub(super) async fn installed_profiles(tools: &Tools) -> (Fixture, Vec<u8>) {
+    installed_profiles_with(tools, themed_pages).await
+}
+
+async fn installed_profiles_with(tools: &Tools, response: fn(&str) -> Value) -> (Fixture, Vec<u8>) {
     let fixture = Fixture::new_persistent().await;
     channel_documents::install_contract(&fixture, ADDON, "first", 2).await;
     tokio::fs::write(
@@ -118,7 +125,7 @@ pub(super) async fn installed_profiles(tools: &Tools) -> (Fixture, Vec<u8>) {
     .await
     .unwrap();
     for (channel, theme) in [(1, "day"), (2, "night")] {
-        let document = themed_pages(theme);
+        let document = response(theme);
         serde_json::from_value::<ersatzrs_addon_contract::TeletextPagesV2Response>(
             document.clone(),
         )

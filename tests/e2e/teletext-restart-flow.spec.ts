@@ -59,10 +59,10 @@ async function prepare(page: Page, fixture: TeletextChannelFixture, name: string
   await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'draft');
   return page.url();
 }
-async function raster(page: Page, theme: 'day' | 'night', address: string): Promise<void> {
+async function raster(page: Page, theme: 'day' | 'night', address: string, subcode = '0000'): Promise<void> {
   const model = page.getByTestId('teletext-preview-model');
   await expect(model).toHaveAttribute('data-page', address);
-  await expect(model).toHaveAttribute('data-subcode', '0000');
+  await expect(model).toHaveAttribute('data-subcode', subcode);
   const image = model.locator('img');
   await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).complete && (element as HTMLImageElement).naturalWidth > 0)).toBe(true);
   const colours = await image.evaluate(element => {
@@ -114,13 +114,13 @@ async function capture(baseURL: string, channel: number, output: string): Promis
 }
 
 test.describe.configure({ mode: 'serial' });
-for (const [language, module, js, dark] of [['en-us', 'en_us', true, false], ['nl', 'nl', false, true]] as const) {
-  test(`teletext real restart flow (${language}, JavaScript ${js}, dark ${dark})`, async ({ browser, isolatedWebHost }, testInfo) => {
+for (const standalone of [false, true]) for (const [language, module, js, dark] of [['en-us', 'en_us', true, false], ['nl', 'nl', false, true]] as const) {
+  test(`teletext ${standalone ? 'standalone Level 1.5 ' : ''}real restart flow (${language}, JavaScript ${js}, dark ${dark})`, async ({ browser, isolatedWebHost }, testInfo) => {
     test.skip(process.platform === 'win32', 'Intentional POSIX synthetic teletext package; Windows runtime acceptance remains separate.');
     test.skip(!process.env.FFMPEG_PATH, 'Requires the selected FFmpeg 9 executable.');
     test.setTimeout(300_000);
     testInfo.annotations.push({ type: 'browser-version', description: browser.version() });
-    const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
+    const fixture = new TeletextChannelFixture(isolatedWebHost.databasePath, { authoredPages: true, standaloneLevel15: standalone, playback: { ffmpeg: process.env.FFMPEG_PATH! } });
     fixture.setAuthoringPolicy(); fixture.setOutputPolicy();
     const contextOptions = { baseURL: isolatedWebHost.baseURL, javaScriptEnabled: js, viewport: { width: 1280, height: 900 } };
     let context = await browser.newContext(contextOptions);
@@ -150,6 +150,13 @@ for (const [language, module, js, dark] of [['en-us', 'en_us', true, false], ['n
         await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'publication-requested');
         await submit(page, page.getByTestId('teletext-publication-publish-form'), text('en_us')('TeletextPublicationPublish'), js);
         await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'publication-selected');
+        if (standalone) {
+          await raster(page, theme, '200');
+          await page.getByTestId('teletext-preview-model').locator('ul a').click(); await ready(page, js);
+          await raster(page, theme, '200', '0020');
+          await page.getByTestId('teletext-preview-model').locator('ul a').click(); await ready(page, js);
+          await raster(page, theme, '201');
+        }
       }
       await pages[0].goto(selectedUrls[0]); await ready(pages[0], js);
       const pendingUrl = await prepare(pages[0], fixture, 'Restart pending day only', js);
@@ -211,6 +218,12 @@ for (const [language, module, js, dark] of [['en-us', 'en_us', true, false], ['n
         await page.getByTestId('teletext-publication').scrollIntoViewIfNeeded();
         await page.screenshot({ path: testInfo.outputPath(`${language}-selected-${theme}.png`), fullPage: false });
         await page.getByTestId('teletext-preview-model').locator('ul a').click(); await ready(page, js);
+        if (standalone) {
+          await raster(page, theme, '200', '0020');
+          await page.getByTestId('teletext-preview-model').scrollIntoViewIfNeeded();
+          await page.screenshot({ path: testInfo.outputPath(`${language}-subpage-${theme}.png`), fullPage: false });
+          await page.getByTestId('teletext-preview-model').locator('ul a').click(); await ready(page, js);
+        }
         await raster(page, theme, '201');
       }
       await pages[0].goto(pendingUrl); await ready(pages[0], js);
