@@ -511,7 +511,8 @@ fn pending_placement_and_unknown_recipe_fail_with_original_origin_source_and_no_
         fixture.objects[0].program = if uncertain_glyph {
             program(vec![
                 charset(0, 0x47),
-                at(0, TeletextColumnOperation::G0 { code: code(0x7e) }),
+                // Table45 Arabic G2/7F remains unmarked; Table44 G0/7E is assigned.
+                at(0, TeletextColumnOperation::G2 { code: code(0x7f) }),
             ])
         } else {
             program(vec![
@@ -767,7 +768,8 @@ fn later_uncertain_component_member_blames_its_own_source_and_instance() {
             TeletextObjectType::Passive,
             vec![
                 charset(0, 0x47),
-                at(0, TeletextColumnOperation::G0 { code: code(0x7e) }),
+                // Table45 Arabic G2/7F remains unmarked; Table44 G0/7E is assigned.
+                at(0, TeletextColumnOperation::G2 { code: code(0x7f) }),
             ],
         ),
     ];

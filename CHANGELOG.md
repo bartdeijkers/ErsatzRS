@@ -872,6 +872,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Render the assigned Arabic teletext G0 character at position 7/E in the
+  validated preview instead of reporting it as undefined. Preserve its original
+  charset and coded identity without substituting a Latin glyph.
+
 - Preserve supported native teletext glyph spellings when a QTeletextMaker G2
   edit would otherwise become canonical G0 text. Keep exact fallback and source
   context through concept import, preview, re-export, repeat/undo and explicit

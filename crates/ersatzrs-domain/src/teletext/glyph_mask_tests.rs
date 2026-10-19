@@ -675,18 +675,17 @@ fn all_table_positions_preserve_assignment_errors_and_masks_fit_twelve_bits() {
     ] {
         for code in 0x20..=0x7f {
             let result = resolve_teletext_glyph_mask(g0(repertoire, code), None, false);
-            if repertoire == TeletextG0Repertoire::Arabic && code == 0x7e {
-                assert!(matches!(
-                    result,
-                    Err(TeletextGlyphMaskError::UnmarkedTableCell { .. })
-                ));
-            } else {
-                assert!(result.unwrap().rows().iter().all(|row| *row <= 0xfff));
-                g0_count += 1;
-            }
+            assert!(result.unwrap().rows().iter().all(|row| *row <= 0xfff));
+            g0_count += 1;
         }
     }
-    assert_eq!(g0_count, 671);
+    assert_eq!(g0_count, 672);
+    // Table44 prints a glyph at7/E. Pin the existing font policy without
+    // substituting Latin '~', a decoder placeholder or an inferred Unicode alias.
+    assert_eq!(
+        rows(g0(TeletextG0Repertoire::Arabic, 0x7e)),
+        [0, 390, 198, 102, 54, 28, 102, 254, 0, 0]
+    );
     let mut g2_count = 0;
     for repertoire in [
         TeletextG2Repertoire::Latin,

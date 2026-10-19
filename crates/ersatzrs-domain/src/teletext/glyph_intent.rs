@@ -193,7 +193,6 @@ fn resolve_record(
                             None
                         },
                     };
-                    assign_g0(&mut record, glyph);
                     TeletextGlyphIdentity::G0 { glyph }
                 }
             }
@@ -253,7 +252,6 @@ fn resolve_selected(
                 national_subset: None,
             };
             record.glyph = Some(TeletextGlyphIdentity::G0 { glyph });
-            assign_g0(record, glyph);
         }
         TeletextColumnOperation::G1Alpha { code } => {
             let glyph = TeletextG0Glyph {
@@ -262,7 +260,6 @@ fn resolve_selected(
                 national_subset: None,
             };
             record.glyph = Some(TeletextGlyphIdentity::G0 { glyph });
-            assign_g0(record, glyph);
         }
         TeletextColumnOperation::G2 { code } => {
             let glyph = TeletextG2Glyph {
@@ -280,7 +277,6 @@ fn resolve_selected(
             };
             if diacritic.get() == 0 {
                 record.glyph = Some(TeletextGlyphIdentity::G0 { glyph: base });
-                assign_g0(record, base);
             } else {
                 let mark = TeletextG2Glyph {
                     repertoire: g2,
@@ -323,14 +319,6 @@ fn resolve_pair(
         Ok(pair)
     } else {
         Ok(Some(selection.value().ok_or_else(inconsistent)?.pair()))
-    }
-}
-
-fn assign_g0(record: &mut TeletextExecutedGlyphIntent, glyph: TeletextG0Glyph) {
-    // Table 44 has no printed glyph or explicit prohibition at 7/E. A blank
-    // font cell or decoder replacement is not assignment/SPACE evidence.
-    if glyph.repertoire == TeletextG0Repertoire::Arabic && glyph.code == 0x7e {
-        pending(record, TeletextGlyphIntentReason::UnmarkedTableCell);
     }
 }
 

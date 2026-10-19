@@ -211,11 +211,6 @@ fn g0_mask(glyph: TeletextG0Glyph) -> Result<TeletextGlyphMask, TeletextGlyphMas
         TeletextG0Repertoire::Arabic => 5,
         TeletextG0Repertoire::Hebrew => 6,
     };
-    if glyph.repertoire() == TeletextG0Repertoire::Arabic && glyph.code() == 0x7e {
-        return Err(TeletextGlyphMaskError::UnmarkedTableCell {
-            identity: TeletextGlyphIdentity::G0 { glyph },
-        });
-    }
     let table = if let Some(subset) = glyph.national_subset() {
         if glyph.repertoire() != TeletextG0Repertoire::Latin
             || !matches!(glyph.code(), 0x23 | 0x24 | 0x40 | 0x5b..=0x60 | 0x7b..=0x7e)

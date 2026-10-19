@@ -8,7 +8,7 @@ use ersatzrs_domain::teletext::{
 };
 use ersatzrs_ffmpeg::teletext::{
     encode_teletext_authored_service, render_teletext_composition, EncodedTeletextAuthoredPage,
-    EncodedTeletextAuthoredService, TeletextRasterBudget, TeletextRasterError, TeletextRasterPixel,
+    EncodedTeletextAuthoredService, TeletextRasterBudget, TeletextRasterPixel,
 };
 use ersatzrs_web::host::teletext_preview::{
     project_teletext_preview, TeletextPreviewBudget, TeletextPreviewFailure,
@@ -124,36 +124,19 @@ fn legal_native_subtitle_window_retains_video_plane_instead_of_fabricating_rgb()
 }
 
 #[test]
-fn native_unmarked_arabic_cell_retains_unresolved_pixels_and_exact_location() {
+fn native_assigned_arabic_cell_renders_without_diagnostics_or_latin_substitution() {
     let mut value = documents::document(DocumentFixture::Authored, "day");
     value["page_enhancements"][0]["local_program"] = Value::Null;
     value["magazines"][0]["presentation"]["primary"] = json!(0x47);
-    // The checked German fallback encodes this original scalar directly as 7E.
-    // The actual declared Arabic primary leaves G0/7E unmarked, not a guessed
-    // tilde glyph or a generated Local Unicode replacement.
+    // The existing German fallback spells7E; the declared Arabic primary owns
+    // its actual glyph. Table44 prints7/E, so pending/tilde substitution is wrong.
     value["pages"][0]["rows"][0]["runs"][0]["content"]["text"] = json!("ß");
     let service = encode(&value);
     assert!(matches!(
         &service.pages()[0],
         EncodedTeletextAuthoredPage::NativeDisplay(_)
     ));
-    let view = project_teletext_preview(&service, address(123, 16), options(), budget()).unwrap();
-    let Some(TeletextRasterPixel::Unresolved(index)) = view.raster().pixel(144, 10) else {
-        panic!("unmarked Arabic G0/7E must retain its pending assignment");
-    };
-    let diagnostic = &view.raster().diagnostics()[index];
-    assert_eq!(diagnostic.owner, address(123, 16));
-    assert_eq!(diagnostic.visual_position, (1, 12));
-    assert_eq!(diagnostic.original_position, Some((1, 8)));
-    assert!(diagnostic.candidate.is_some());
-    assert_eq!(diagnostic.location, None);
-    assert_eq!(diagnostic.root_source, None);
-    assert_eq!(diagnostic.invocation, None);
-    assert_eq!(
-        view.raster().pixel(155, 19),
-        Some(TeletextRasterPixel::Unresolved(index))
-    );
-    let error = project_teletext_preview(
+    let view = project_teletext_preview(
         &service,
         address(123, 16),
         options(),
@@ -162,14 +145,28 @@ fn native_unmarked_arabic_cell_retains_unresolved_pixels_and_exact_location() {
             ..budget()
         },
     )
-    .unwrap_err();
-    assert!(matches!(
-        error.reason,
-        TeletextPreviewFailure::Raster(TeletextRasterError::DiagnosticBudget {
-            count: 1,
-            maximum: 0
-        })
-    ));
+    .unwrap();
+    assert!(view.raster().diagnostics().is_empty());
+    // Existing font policy, with the retained panel offset (8 ->12). This is
+    // physical coded interpretation, not proof of logical Arabic Text support.
+    let mask = [0_u16, 390, 198, 102, 54, 28, 102, 254, 0, 0];
+    for (y, bits) in mask.iter().enumerate() {
+        for x in 0..12 {
+            let Some(TeletextRasterPixel::Colour(TeletextColourPixel::Rgb(rgb))) =
+                view.raster().pixel(144 + x, 10 + y)
+            else {
+                panic!("assigned Arabic7/E must have resolved pixels")
+            };
+            assert_eq!(
+                rgb.get(),
+                if bits & (1 << (11 - x)) == 0 {
+                    [0; 3]
+                } else {
+                    [15; 3]
+                }
+            );
+        }
+    }
 }
 
 #[test]

@@ -232,9 +232,9 @@ fn g0_identity(record: &TeletextExecutedGlyphIntent) -> TeletextG0Glyph {
 }
 
 #[test]
-fn all_g0_table_positions_retain_exact_family_and_unmarked_arabic_cell() {
-    // EN tables35,38,39,40,42,44,46: 96 positions each. Arabic7E is
-    // unmarked without a prohibition note; a decoder placeholder is no glyph.
+fn all_g0_table_positions_retain_exact_family_and_assignment() {
+    // EN tables35,38,39,40,42,44,46 assign all 96 positions, including
+    // the printed Arabic7E glyph in Table44; no Unicode alias is assumed.
     for (designation, family) in [
         (0, TeletextG0Repertoire::Latin),
         (0x20, TeletextG0Repertoire::Cyrillic1),
@@ -256,26 +256,11 @@ fn all_g0_table_positions_retain_exact_family_and_unmarked_arabic_cell() {
                 (glyph.repertoire(), glyph.code(), glyph.national_subset()),
                 (family, code, None)
             );
-            if family == TeletextG0Repertoire::Arabic && code == 0x7e {
-                assert_eq!(record.disposition(), TeletextGlyphDisposition::Pending);
-                assert_eq!(
-                    record.reason(),
-                    Some(TeletextGlyphIntentReason::UnmarkedTableCell)
-                );
-            } else {
-                assigned += 1;
-                assert_eq!(record.disposition(), TeletextGlyphDisposition::Assigned);
-                assert_eq!(record.reason(), None);
-            }
+            assigned += 1;
+            assert_eq!(record.disposition(), TeletextGlyphDisposition::Assigned);
+            assert_eq!(record.reason(), None);
         }
-        assert_eq!(
-            assigned,
-            if family == TeletextG0Repertoire::Arabic {
-                95
-            } else {
-                96
-            }
-        );
+        assert_eq!(assigned, 96);
     }
 }
 

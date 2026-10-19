@@ -135,3 +135,124 @@ fn assigned_non_latin_header_seven_coded_pages_need_no_optional_banks() {
         std::fs::write(path, serde_json::to_vec(&json!({"cases":cases})).unwrap()).unwrap();
     }
 }
+
+#[test]
+fn complete_arabic_g0_coded_tables_keep_assignment_pixels_and_wire() {
+    let mut cases = Vec::new();
+    for primary in [0x47, 0x57] {
+        let codes: Vec<u8> = (0x20..=0x7f).collect();
+        let mut input = draft(primary);
+        input.base.pages[0].rows.clear();
+        let declared = declare(input)
+            .with_physical_base_overlays(
+                vec![TeletextPhysicalBaseOverlay::new(
+                    owner(0),
+                    codes
+                        .chunks(32)
+                        .enumerate()
+                        .map(|(index, chunk)| {
+                            let mut cells = [b' '; 40];
+                            cells[1..33].copy_from_slice(chunk);
+                            TeletextPhysicalBaseRow::new(u8::try_from(index + 1).unwrap(), cells)
+                                .unwrap()
+                        })
+                        .collect(),
+                )
+                .unwrap()],
+                semantic_limits(),
+            )
+            .unwrap();
+        // No logical Unicode alias, optional bank or higher-level resource is
+        // involved: Table44 assigns every coded G0 slot, including7/E.
+        let composition = greek_unicode::preview(&declared);
+        let raster = render_teletext_composition(
+            &composition,
+            TeletextColourPixelOptions {
+                reveal_concealed: false,
+                flash_phase: TeletextFlashPhase::Original,
+            },
+            TeletextRasterBudget {
+                max_pixels: 120_000,
+                max_diagnostics: 1400,
+            },
+        )
+        .unwrap();
+        assert!(raster.diagnostics().is_empty());
+        for (index, code) in codes.iter().enumerate() {
+            let row = u8::try_from(index / 32 + 1).unwrap();
+            let column = u8::try_from(index % 32 + 1).unwrap();
+            assert_eq!(
+                composition.base_display().cells()[usize::from(row)][usize::from(column)].code(),
+                *code
+            );
+            if *code == 0x20 {
+                continue; // SPACE is classified as blank rather than a glyph.
+            }
+            let candidate = composition
+                .glyph_layers()
+                .candidates()
+                .iter()
+                .position(|candidate| {
+                    candidate.base().is_some_and(|cell| {
+                        cell.position() == TeletextEnhancementPosition::new(row, column).unwrap()
+                    })
+                })
+                .unwrap();
+            let intent = composition.glyph_intent().records()[candidate];
+            assert_eq!(intent.disposition(), TeletextGlyphDisposition::Assigned);
+            assert_eq!(intent.reason(), None);
+            assert!(
+                matches!(intent.glyph(), Some(TeletextGlyphIdentity::G0 { glyph })
+                if glyph.repertoire() == TeletextG0Repertoire::Arabic
+                && glyph.code() == *code && glyph.national_subset().is_none())
+            );
+        }
+        assert_arabic_7e_pixels(&raster);
+        let encoded = encode_teletext_authored_service(declared.clone(), &[], &limits()).unwrap();
+        assert_eq!(encoded.declared(), &declared);
+        assert!(declared.resource_inventory().is_empty());
+        assert!(encoded.compiler_drcs_resources().is_empty());
+        assert!(encoded.magazine_units().is_empty());
+        assert!(matches!(
+            encoded.pages()[0],
+            EncodedTeletextAuthoredPage::NativeDisplay(_)
+        ));
+        let mut units = encoded.pages()[0].data_units().to_vec();
+        for (index, chunk) in codes.chunks(32).enumerate() {
+            let row = units
+                .iter()
+                .find(|unit| usize::from(packet(unit)) == index + 1)
+                .unwrap();
+            assert_eq!(&body(row).map(|code| code & 0x7f)[1..33], chunk);
+        }
+        units.push(super::super::super::packets::terminator(2));
+        cases.push(json!({"primary":primary,"page":0x200,"subcode":0,
+            "units":units.iter().map(|unit|unit.to_vec()).collect::<Vec<_>>()}));
+    }
+    if let Some(path) =
+        crate::locator::first_non_empty_env(&["ERSATZRS_TELETEXT_TEST_ARABIC_G0_FIXTURE"])
+    {
+        std::fs::write(path, serde_json::to_vec(&json!({"cases":cases})).unwrap()).unwrap();
+    }
+}
+
+fn assert_arabic_7e_pixels(raster: &TeletextRaster) {
+    let expected_rows = [0_u16, 390, 198, 102, 54, 28, 102, 254, 0, 0];
+    for (y, mask) in expected_rows.iter().enumerate() {
+        for x in 0..12 {
+            let Some(TeletextRasterPixel::Colour(TeletextColourPixel::Rgb(rgb))) =
+                raster.pixel(31 * 12 + x, 3 * 10 + y)
+            else {
+                panic!("Arabic7/E must resolve to colour pixels")
+            };
+            assert_eq!(
+                rgb.get(),
+                if mask & (1 << (11 - x)) == 0 {
+                    [0; 3]
+                } else {
+                    [15; 3]
+                }
+            );
+        }
+    }
+}
