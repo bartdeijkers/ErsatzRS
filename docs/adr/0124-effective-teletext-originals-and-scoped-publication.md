@@ -94,9 +94,26 @@ remove it on true original-equal undo under a fresh receipt. Versions1–22 reje
 the new field; version23 is closed and nonempty, with aggregate streaming
 preflight bounds. This private version does not change public TTI/sidecar formats,
 edit-region authority or explicit publication, and grants no broader repertoire,
-editor-capacity or suitable-client acceptance. Required conversions that are
-not yet lossless, including a G2 spelling canonically encoded as G0 Text, remain
-explicitly rejected and recorded as open interchange debt in P9A-04.
+editor-capacity or suitable-client acceptance.
+
+Private overlay version24 permits an optional checked native spelling on an
+exact Base Text replacement. Retain the fallback, charset, G2/G0-diacritic
+operation and original Base role when canonical Unicode encoding would choose
+another physical form. The complete compiler independently checks meaning and
+charset; no Local ordinal is fabricated. The canonical-only resolver retains its
+existing refusal, while the lossless resolver returns explicit native intent.
+Older private versions1–23 reject this field; version24 requires at least one
+native spelling. Scalar-only edits retain version23. Raw structure, content,
+command and storage bounds include the added fields. The host checks both the
+complete logical Text delta and complete native-spelling delta, exact uploaded
+words/rows and protected effects. Fresh-receipt repeats retain root intent and
+native form; a later canonical edit clears that spelling, and true original-equal
+undo restores the original output. Original producer bytes, metadata, templates,
+zones, public TTI/sidecar formats and explicit publication authority are
+unchanged. Qualified actual pinned-editor concept/preview/re-export/reopen and
+separate publication now have P9A-04 evidence. Unqualified aliases, remaining
+interchange families and suitable stream-client acceptance stay open; none is
+silently normalized or waived.
 
 
 A later export subset may edit an owner outside the first subset. When needed,

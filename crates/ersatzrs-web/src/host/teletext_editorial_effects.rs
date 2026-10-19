@@ -410,6 +410,7 @@ fn check_service(
         incoming.base_text_edits,
         deadline,
     )?;
+    base_text::check_spellings(before, after, incoming.base_text_edits, deadline)?;
     definition_additions::check_declarations(old, new, incoming.resource_additions, deadline)?;
     object_operands::check(
         before.objects(),

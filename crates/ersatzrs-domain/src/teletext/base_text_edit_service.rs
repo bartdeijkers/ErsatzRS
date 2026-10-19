@@ -107,6 +107,7 @@ impl TeletextSemanticService {
                         spelling.position().column(),
                     ))
                 })
+                .chain(edits.iter().filter_map(|edit| edit.native_spelling()))
                 .collect(),
             budget,
         )

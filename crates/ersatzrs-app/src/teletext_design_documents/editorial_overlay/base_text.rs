@@ -1,4 +1,6 @@
-//! Closed V23 Base Text intent, retaining all previously supported sibling roles.
+//! Closed V23 scalar/V24 native spelling intent, retaining supported siblings.
+#[path = "base_text/native.rs"]
+mod native;
 use super::{
     invalid, limit, map_only, StoredOverlay, TeletextDesignDocumentBudget,
     TeletextDesignDocumentError, TeletextProfileDocument, TeletextSavedEditorialOverlay,
@@ -7,6 +9,7 @@ use super::{
 use ersatzrs_domain::{
     TeletextBaseTextEdit, TeletextEnhancementPosition, TeletextPageAddress, TeletextRunContent,
 };
+use native::{OptionalNativeSpelling, StoredNativeSpelling};
 use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeSet;
 
@@ -17,6 +20,8 @@ pub(in super::super) struct StoredBaseTextEdit {
     column: u8,
     expected: char,
     replacement: char,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    native: Option<StoredNativeSpelling>,
 }
 impl<'de> Deserialize<'de> for StoredBaseTextEdit {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -28,6 +33,8 @@ impl<'de> Deserialize<'de> for StoredBaseTextEdit {
             column: u8,
             expected: char,
             replacement: char,
+            #[serde(default)]
+            native: OptionalNativeSpelling,
         }
         let value: Fields = map_only(deserializer)?;
         Ok(Self {
@@ -36,6 +43,7 @@ impl<'de> Deserialize<'de> for StoredBaseTextEdit {
             column: value.column,
             expected: value.expected,
             replacement: value.replacement,
+            native: value.native.0,
         })
     }
 }
@@ -65,6 +73,11 @@ impl Serialize for BorrowedBaseTextEdits<'_> {
                 column: edit.position().column(),
                 expected: edit.expected(),
                 replacement: edit.replacement(),
+                native: edit
+                    .native_spelling()
+                    .map(StoredNativeSpelling::capture)
+                    .transpose()
+                    .map_err(serde::ser::Error::custom)?,
             })?;
         }
         sequence.end()
@@ -101,7 +114,7 @@ impl TeletextSavedEditorialOverlay {
             }
         }
         self.base_text_edits.extend(edits);
-        self.schema_version = super::BASE_TEXT_EDIT_VERSION;
+        self.schema_version = version(&self);
         Ok(self)
     }
     /// Private-original intent; not raw X26 words or upload edit permission.
@@ -111,13 +124,36 @@ impl TeletextSavedEditorialOverlay {
     }
 }
 
+pub(super) fn version(overlay: &TeletextSavedEditorialOverlay) -> u16 {
+    if overlay
+        .base_text_edits
+        .iter()
+        .any(|edit| edit.native_spelling().is_some())
+    {
+        super::BASE_TEXT_NATIVE_SPELLING_VERSION
+    } else {
+        super::BASE_TEXT_EDIT_VERSION
+    }
+}
+
 pub(super) fn check_version(value: &StoredOverlay) -> Result<(), TeletextDesignDocumentError> {
-    if value.schema_version != super::BASE_TEXT_EDIT_VERSION {
+    if !matches!(
+        value.schema_version,
+        super::BASE_TEXT_EDIT_VERSION | super::BASE_TEXT_NATIVE_SPELLING_VERSION
+    ) {
         return if value.base_text_edits.is_absent() {
             Ok(())
         } else {
             Err(invalid())
         };
+    }
+    let has_native = value
+        .base_text_edits
+        .0
+        .as_ref()
+        .is_some_and(|edits| edits.iter().any(|edit| edit.native.is_some()));
+    if has_native != (value.schema_version == super::BASE_TEXT_NATIVE_SPELLING_VERSION) {
+        return Err(invalid());
     }
     if value.base_text_edits.0.as_ref().is_none_or(Vec::is_empty)
         || [
@@ -181,7 +217,7 @@ pub(super) fn restore(
         .ok_or_else(invalid)?
         .into_iter()
         .map(|edit| {
-            TeletextBaseTextEdit::new(
+            let value = TeletextBaseTextEdit::new(
                 TeletextPageAddress {
                     page: edit.owner.page,
                     subcode: edit.owner.subcode,
@@ -190,7 +226,18 @@ pub(super) fn restore(
                 edit.expected,
                 edit.replacement,
             )
-            .map_err(|_| invalid())
+            .map_err(|_| invalid())?;
+            if let Some(native) = edit.native {
+                value
+                    .with_native_spelling(native.restore(
+                        value.owner(),
+                        value.position(),
+                        value.replacement(),
+                    )?)
+                    .map_err(|_| invalid())
+            } else {
+                Ok(value)
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
     let siblings = if stored.main_local_invocation_program_overlays.is_absent() {
@@ -259,6 +306,13 @@ pub(super) fn content_bytes(
         .try_fold(0_usize, |sum, edit| {
             sum.checked_add(edit.expected().len_utf8())
                 .and_then(|sum| sum.checked_add(edit.replacement().len_utf8()))
+                .and_then(|sum| {
+                    sum.checked_add(if edit.native_spelling().is_some() {
+                        4
+                    } else {
+                        0
+                    })
+                })
         })
         .ok_or_else(invalid)?;
     limit(

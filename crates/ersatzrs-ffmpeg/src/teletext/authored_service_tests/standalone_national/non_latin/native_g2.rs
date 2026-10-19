@@ -108,17 +108,7 @@ fn generated_base_text_edits_bind_exact_original_cells_and_recompile_supported_c
             }
         );
         if matches!(primary, 0x20 | 0x24 | 0x25) {
-            // '$' is a canonical native G0 byte. Import must not silently
-            // normalize an uploaded G2 spelling and change its physical rows.
-            let noncanonical = (before & 0x7ff) | (0x24 << 11);
-            assert!(resolve_teletext_base_text_edit(
-                &encoded,
-                owner,
-                position,
-                before,
-                noncanonical
-            )
-            .is_none());
+            check_lossless_generated_text(&original, &encoded, position, (before, after), primary);
         }
         for (old_word, new_word) in [
             (before ^ 1, after),
@@ -132,6 +122,60 @@ fn generated_base_text_edits_bind_exact_original_cells_and_recompile_supported_c
             );
         }
     }
+}
+
+fn check_lossless_generated_text(
+    original: &TeletextDeclaredService,
+    encoded: &EncodedTeletextAuthoredService,
+    position: &TeletextCompiledCommandPosition,
+    words: (u32, u32),
+    primary: u8,
+) {
+    let (before, after) = words;
+    let owner = original.semantic().base().pages[0].address;
+    // '$' is a canonical native G0 byte. Import must not silently
+    // normalize an uploaded G2 spelling and change its physical rows.
+    let noncanonical = (before & 0x7ff) | (0x24 << 11);
+    assert!(
+        resolve_teletext_base_text_edit(encoded, owner, position, before, noncanonical).is_none()
+    );
+    let lossless =
+        resolve_teletext_lossless_base_text_edit(encoded, owner, position, before, noncanonical)
+            .unwrap();
+    assert_eq!((lossless.expected(), lossless.replacement()), ('£', '$'));
+    let native = lossless.native_spelling().unwrap();
+    assert_eq!(native.charset().get(), primary);
+    assert_eq!(native.fallback().get(), b' ');
+    assert_eq!(
+        native.operation(),
+        TeletextColumnOperation::G2 {
+            code: TeletextGlyphCode::new(0x24).unwrap()
+        }
+    );
+    let derived = original
+        .clone()
+        .with_base_text_edits(&[lossless], semantic_limits())
+        .unwrap();
+    let result = encode_teletext_authored_service(derived, &[], &limits()).unwrap();
+    let EncodedTeletextAuthoredPage::CompiledDisplay(next) = &result.pages()[0] else {
+        panic!("retainedG2 remains compiled")
+    };
+    assert_eq!(
+        next.normalized().original().base_replacement(1, 8),
+        Some(native.operation())
+    );
+    assert_eq!(
+        next.normalized().original().base_display().cells()[1][8]
+            .authored()
+            .unwrap()
+            .content(),
+        TeletextBaseAuthoredContent::Text { character: '$' }
+    );
+    let following =
+        resolve_teletext_lossless_base_text_edit(&result, owner, position, noncanonical, after)
+            .unwrap();
+    assert_eq!((following.expected(), following.replacement()), ('$', '¥'));
+    assert!(following.native_spelling().is_none());
 }
 
 fn preview(original: &TeletextDeclaredService) -> TeletextMainComposition {

@@ -5,7 +5,8 @@ use super::{
     TeletextCompiledCommandPosition,
 };
 use ersatzrs_domain::{
-    TeletextBaseAuthoredContent, TeletextBaseTextEdit, TeletextColumnOperation, TeletextPageAddress,
+    TeletextBaseAuthoredContent, TeletextBaseTextEdit, TeletextBaseTextSpelling,
+    TeletextColumnOperation, TeletextDiacriticIndex, TeletextGlyphCode, TeletextPageAddress,
 };
 
 /// Recognize an exact generated Text glyph's same-family scalar edit.
@@ -23,6 +24,31 @@ pub fn resolve_teletext_base_text_edit(
     position: &TeletextCompiledCommandPosition,
     before: u32,
     after: u32,
+) -> Option<TeletextBaseTextEdit> {
+    resolve(service, owner, position, before, after, false)
+}
+
+/// Recognize the same checked Base edit while retaining a noncanonical native
+/// spelling explicitly. This does not relax the canonical-only API or grant
+/// receipt, protected-effect, concept or publication authority.
+#[must_use]
+pub fn resolve_teletext_lossless_base_text_edit(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    position: &TeletextCompiledCommandPosition,
+    before: u32,
+    after: u32,
+) -> Option<TeletextBaseTextEdit> {
+    resolve(service, owner, position, before, after, true)
+}
+
+fn resolve(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    position: &TeletextCompiledCommandPosition,
+    before: u32,
+    after: u32,
+    allow_native: bool,
 ) -> Option<TeletextBaseTextEdit> {
     let page = service.pages().iter().find_map(|page| match page {
         EncodedTeletextAuthoredPage::CompiledDisplay(page) if page.page().address() == owner => {
@@ -58,11 +84,20 @@ pub fn resolve_teletext_base_text_edit(
         return None;
     }
     let replacement_character_code = u8::try_from(after >> 11).ok()?;
-    let pair = original
-        .base_replacement_charset(cell.row(), cell.column())?
-        .pair();
-    let character =
-        charset::decode_generated_replacement(new_mode, replacement_character_code, pair)?;
+    let designation = original.base_replacement_charset(cell.row(), cell.column())?;
+    let character = if allow_native {
+        charset::decode_base_text_spelling(
+            new_mode,
+            replacement_character_code,
+            designation.pair(),
+        )?
+    } else {
+        charset::decode_generated_replacement(
+            new_mode,
+            replacement_character_code,
+            designation.pair(),
+        )?
+    };
     let draft = service
         .declared()
         .semantic()
@@ -72,9 +107,10 @@ pub fn resolve_teletext_base_text_edit(
         .find(|page| page.address == owner)?;
     let layout =
         layout::compile_for_service_composition(service.declared().semantic(), draft).ok()?;
-    if layout.encode_character(character)?.enhancement
-        != Some((new_mode, replacement_character_code))
-    {
+    let canonical = layout.encode_character(character);
+    let exact_word = canonical
+        .is_some_and(|value| value.enhancement == Some((new_mode, replacement_character_code)));
+    if !exact_word && !allow_native {
         return None;
     }
     let TeletextBaseAuthoredContent::Text {
@@ -85,5 +121,31 @@ pub fn resolve_teletext_base_text_edit(
     else {
         return None;
     };
-    TeletextBaseTextEdit::new(owner, cell, expected, character).ok()
+    let edit = TeletextBaseTextEdit::new(owner, cell, expected, character).ok()?;
+    let fallback =
+        original.base_display().cells()[usize::from(cell.row())][usize::from(cell.column())].code();
+    if !allow_native || exact_word && canonical.is_some_and(|value| value.fallback == fallback) {
+        return Some(edit);
+    }
+    let code = TeletextGlyphCode::new(replacement_character_code).ok()?;
+    let operation = if new_mode == 0x0f {
+        TeletextColumnOperation::G2 { code }
+    } else {
+        TeletextColumnOperation::G0Diacritic {
+            code,
+            diacritic: TeletextDiacriticIndex::new(new_mode & 15).ok()?,
+        }
+    };
+    edit.with_native_spelling(
+        TeletextBaseTextSpelling::new(
+            owner,
+            cell,
+            character,
+            TeletextGlyphCode::new(fallback).ok()?,
+            designation,
+            operation,
+        )
+        .ok()?,
+    )
+    .ok()
 }

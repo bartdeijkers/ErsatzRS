@@ -1,6 +1,6 @@
 //! Exact authored Unicode Base-cell changes, never invented Local commands.
 
-use super::{TeletextEnhancementPosition, TeletextPageAddress};
+use super::{TeletextBaseTextSpelling, TeletextEnhancementPosition, TeletextPageAddress};
 use std::fmt;
 
 /// Content-free rejection of a Base text edit or its original association.
@@ -18,6 +18,8 @@ pub enum TeletextBaseTextEditError {
     Target,
     #[error("Base text edit differs from its exact original scalar")]
     Expected,
+    #[error("Base text edit native spelling differs from its exact replacement cell")]
+    Spelling,
 }
 
 /// One cell of an existing Unicode Text run, separate from coded row/Local edits.
@@ -29,6 +31,7 @@ pub struct TeletextBaseTextEdit {
     position: TeletextEnhancementPosition,
     expected: char,
     replacement: char,
+    native_spelling: Option<TeletextBaseTextSpelling>,
 }
 
 impl TeletextBaseTextEdit {
@@ -57,7 +60,30 @@ impl TeletextBaseTextEdit {
             position,
             expected,
             replacement,
+            native_spelling: None,
         })
+    }
+
+    /// Retain a native spelling bound to this exact replacement, without Local
+    /// identity or edit/publication authority. The compiler checks its meaning.
+    /// # Errors
+    /// Rejects a different owner, cell or logical replacement character.
+    pub fn with_native_spelling(
+        mut self,
+        spelling: TeletextBaseTextSpelling,
+    ) -> Result<Self, TeletextBaseTextEditError> {
+        if (spelling.owner(), spelling.position(), spelling.character())
+            != (self.owner, self.position, self.replacement)
+        {
+            return Err(TeletextBaseTextEditError::Spelling);
+        }
+        self.native_spelling = Some(spelling);
+        Ok(self)
+    }
+
+    #[must_use]
+    pub const fn native_spelling(self) -> Option<TeletextBaseTextSpelling> {
+        self.native_spelling
     }
 
     #[must_use]

@@ -5,6 +5,14 @@ use ersatzrs_web::host::teletext_editorial_designs::{
 };
 
 fn request(flow: &Flow, context: Context) -> NativeTeletextEditorialImportRequest {
+    request_for(flow, context, false)
+}
+
+fn request_for(
+    flow: &Flow,
+    context: Context,
+    native: bool,
+) -> NativeTeletextEditorialImportRequest {
     let mut request = drcs_bitmap::from_receipt(&flow.receipts[0], 1);
     let file = request
         .files
@@ -26,8 +34,12 @@ fn request(flow: &Flow, context: Context) -> NativeTeletextEditorialImportReques
             for (slot, word) in words.iter_mut().enumerate() {
                 if (*word >> 6) & 31 == 15 && *word >> 11 == 0x23 {
                     targets.push((usize::from(*designation) * 13 + slot, *word));
-                    *word =
-                        (*word & 0x7ff) | (if context.primary == 0x37 { 0x24 } else { 0x25 } << 11);
+                    *word = (*word & 0x7ff)
+                        | (if native || context.primary == 0x37 {
+                            0x24
+                        } else {
+                            0x25
+                        } << 11);
                 }
             }
         }
@@ -140,6 +152,7 @@ async fn editor_request(
     flow: &Flow,
     context: Context,
     editor: Option<&Path>,
+    native: bool,
 ) -> NativeTeletextEditorialImportRequest {
     if let Some(directory) = editor {
         qtm::inputs_for_layout(
@@ -150,7 +163,7 @@ async fn editor_request(
             || {
                 json!({
                     "kind":"base_text_g2","primary":context.primary,"row":3,"column":8,
-                    "mode":15,"from":35,"to":if context.primary == 0x37 {36} else {37},
+                    "mode":15,"from":35,"to":if native || context.primary == 0x37 {36} else {37},
                     "semantic_word":1,"designation":0,"triplet_slot":1,
                     "consumer_visual_columns":[8],"no_optional_resource_banks":true
                 })
@@ -162,7 +175,7 @@ async fn editor_request(
                 .unwrap();
         qtm::actual_request(directory, flow, &bytes)
     } else {
-        request(flow, context)
+        request_for(flow, context, native)
     }
 }
 
@@ -170,6 +183,7 @@ fn assert_base_provenance(
     flow: &Flow,
     restored: &ersatzrs_web::host::teletext_designs::RestoredOriginalTeletextDesign,
     context: Context,
+    native: bool,
 ) {
     let original = flow.saved[0].candidate();
     assert_eq!(restored.selection(), original.selection());
@@ -201,11 +215,17 @@ fn assert_base_provenance(
     };
     assert_eq!(
         text.chars().next(),
-        Some(if context.primary == 0x37 { 'e' } else { '¥' })
+        Some(if native {
+            '$'
+        } else if context.primary == 0x37 {
+            'e'
+        } else {
+            '¥'
+        })
     );
 }
 
-async fn run(context: Context, editor: Option<&Path>) {
+async fn run(context: Context, editor: Option<&Path>, native: bool) {
     let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
         context.response,
         Fixture::new_persistent().await,
@@ -213,13 +233,13 @@ async fn run(context: Context, editor: Option<&Path>) {
         authoring_metadata::write_compact,
     ))
     .await;
-    let expected = request(&flow, context);
-    let actual = editor_request(&flow, context, editor).await;
+    let expected = request_for(&flow, context, native);
+    let actual = editor_request(&flow, context, editor, native).await;
     national_editor::assert_files(&actual.files, &expected.files);
     let concept = import(&fixture, actual).await;
     assert_eq!(concept.head().revision, 2);
     let restored = drcs_bitmap::restored(&fixture, &concept).await;
-    assert_base_provenance(&flow, &restored, context);
+    assert_base_provenance(&flow, &restored, context, native);
     let encoded = restored.encoded().unwrap();
     let before = external_editor_probe::preview_page(flow.accepted[0].service(), 124);
     let preview = external_editor_probe::preview_page(encoded, 124);
@@ -276,8 +296,8 @@ async fn run(context: Context, editor: Option<&Path>) {
             "success.json",
             &json!({
                 "scope":"Actual pinned headed QTM save, explicit Base-text concept/shared preview/reexport/reopen, separate publication and accepted recovery/isolation; no ordinary stream/client/fullL15 acceptance",
-                "primary":context.primary,"row":3,"column":8,"word":1,"schema":23,
-                "expected":'£',"replacement":if context.primary==0x37 {'e'} else {'¥'},
+                "primary":context.primary,"row":3,"column":8,"word":1,"schema":if native {24} else {23},
+                "expected":'£',"replacement":if native {'$'} else if context.primary==0x37 {'e'} else {'¥'},
                 "no_optional_resource_banks":true,"original_sources_metadata_receipts_other_page_and_night_unchanged":true,
                 "concept_revision":concept.head().revision,"published_generation":accepted.generation().id
             }),
@@ -289,7 +309,7 @@ async fn run(context: Context, editor: Option<&Path>) {
 #[tokio::test]
 async fn generated_native_g2_text_edit_import_preview_reexport_reopen_keeps_base_provenance() {
     for context in CONTEXTS_G2 {
-        Box::pin(run(context, None)).await;
+        Box::pin(run(context, None, false)).await;
     }
 }
 
@@ -302,6 +322,27 @@ async fn actual_qtm_generated_native_g2_edit_import_preview_publish_reopen() {
         ));
     std::fs::create_dir(&root).expect("editor destination must be new");
     for context in CONTEXTS_G2 {
-        Box::pin(run(context, Some(&root.join(context.name)))).await;
+        Box::pin(run(context, Some(&root.join(context.name)), false)).await;
     }
+}
+
+#[tokio::test]
+async fn lossless_generated_g2_native_spelling_import_preview_publish_and_reopen() {
+    Box::pin(run(CONTEXTS_G2[0], None, true)).await;
+}
+
+#[tokio::test]
+#[ignore = "requires one pinned headed QTM1.0 save and fresh ERSATZRS_TELETEXT_LOSSLESS_G2_EDITOR_DIR"]
+async fn actual_qtm_lossless_g2_spelling_import_preview_publish_reopen() {
+    let root =
+        std::path::PathBuf::from(super::super::super::super::super::client_capture::selected(
+            "ERSATZRS_TELETEXT_LOSSLESS_G2_EDITOR_DIR",
+        ));
+    std::fs::create_dir(&root).expect("editor destination must be new");
+    Box::pin(run(
+        CONTEXTS_G2[0],
+        Some(&root.join(CONTEXTS_G2[0].name)),
+        true,
+    ))
+    .await;
 }

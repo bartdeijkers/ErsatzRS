@@ -82,39 +82,6 @@ async fn generated_base_g2_fresh_receipt_repeat_root_undo_and_stale_refusal() {
         rejected(&fixture, edit(&flow.receipts[0], 1, 35, 36)).await;
         let exported = drcs_bitmap::reexport(&fixture, &first).await;
         let current = receipt(&fixture, &exported).await;
-        if context.primary == 0x20 {
-            // Existing canonical Text encoding writes '$' as G0, not G2/0x24.
-            // This unresolved interchange family remains a located refusal.
-            let error = import_teletext_editorial_design(
-                &fixture.state.application,
-                edit(&current, 2, 37, 36),
-                policy(),
-                designs::deadline(),
-            )
-            .await
-            .unwrap_err();
-            let ersatzrs_web::host::teletext_editorial_designs::NativeTeletextEditorialImportError::Tti(error) = error else { panic!("expected exact noncanonical packet refusal") };
-            assert_eq!(error.failure, ersatzrs_web::host::teletext_editorial_designs::NativeTeletextEditorialTtiFailure::Packet);
-            assert_eq!(
-                (
-                    error.page,
-                    error.subcode,
-                    error.row,
-                    error.designation,
-                    error.column
-                ),
-                (124, 32, Some(26), Some(0), Some(1))
-            );
-            assert_eq!(
-                fixture
-                    .state
-                    .application
-                    .teletext_design_head(first.head().id)
-                    .await
-                    .unwrap(),
-                Some(first.head().clone())
-            );
-        }
         let mut forged = edit(&current, 2, 37, 39);
         forged.receipt_digest = "f".repeat(64);
         rejected(&fixture, forged).await;
@@ -136,4 +103,58 @@ async fn generated_base_g2_fresh_receipt_repeat_root_undo_and_stale_refusal() {
         assert_retained_storage(&fixture, &flow).await;
         fixture.state.pool.close().await;
     }
+}
+
+#[tokio::test]
+async fn lossless_generated_g2_repeat_reopen_canonicalization_and_exact_root_undo() {
+    let context = CONTEXTS_G2[0];
+    let (mut fixture, flow) = Box::pin(setup_with_fixture_policy_and_writer(
+        context.response,
+        Fixture::new_persistent().await,
+        channel_documents::policy,
+        authoring_metadata::write_compact,
+    ))
+    .await;
+    let first = import(&fixture, edit(&flow.receipts[0], 1, 35, 36)).await;
+    assert_eq!(first.head().revision, 2);
+    rejected(&fixture, edit(&flow.receipts[0], 1, 35, 37)).await;
+    fixture = fixture.reopen().await;
+    let restored = drcs_bitmap::restored(&fixture, &first).await;
+    let semantic = restored.encoded().unwrap().declared().semantic();
+    assert_eq!(semantic.base_text_spellings().len(), 1);
+    assert_eq!(
+        semantic
+            .base_text_spellings()
+            .values()
+            .next()
+            .unwrap()
+            .character(),
+        '$'
+    );
+    let exported = drcs_bitmap::reexport(&fixture, &first).await;
+    let current = receipt(&fixture, &exported).await;
+    let mut forged = edit(&current, 2, 36, 37);
+    forged.receipt_digest = "f".repeat(64);
+    rejected(&fixture, forged).await;
+    let second = import(&fixture, edit(&current, 2, 36, 37)).await;
+    assert_eq!(second.head().revision, 3);
+    let restored = drcs_bitmap::restored(&fixture, &second).await;
+    assert!(restored
+        .encoded()
+        .unwrap()
+        .declared()
+        .semantic()
+        .base_text_spellings()
+        .is_empty());
+    fixture = fixture.reopen().await;
+    let exported = drcs_bitmap::reexport(&fixture, &second).await;
+    let current = receipt(&fixture, &exported).await;
+    let undo = import(&fixture, edit(&current, 3, 37, 35)).await;
+    assert_eq!(undo.head().revision, 4);
+    assert_root_undo(&fixture, &flow, &undo).await;
+    fixture = fixture.reopen().await;
+    assert_root_undo(&fixture, &flow, &undo).await;
+    assert_original_pointers_with_width(&fixture, &flow, 480).await;
+    assert_retained_storage(&fixture, &flow).await;
+    fixture.state.pool.close().await;
 }

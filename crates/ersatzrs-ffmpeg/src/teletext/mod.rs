@@ -26,7 +26,9 @@ mod compositional;
 mod drcs;
 mod editorial_base_text;
 mod enhancement_program;
-pub use editorial_base_text::resolve_teletext_base_text_edit;
+pub use editorial_base_text::{
+    resolve_teletext_base_text_edit, resolve_teletext_lossless_base_text_edit,
+};
 mod header_position_materialization;
 mod layout;
 mod lift;

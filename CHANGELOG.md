@@ -25,10 +25,6 @@ release section when tagging a release.
 
 ### Added
 
-- Support checked native spellings of authored teletext Text cells, preserving
-  their exact fallback, charset and enhancement word alongside logical text.
-  Noncanonical editor imports remain gated pending concept/receipt integration.
-
 - Encode qualified supplementary Unicode symbols and letters in authored
   Cyrillic and Greek teletext without optional object banks. Use their actual
   G2 repertoires while preserving Level 1 fallback and Local charset changes.
@@ -875,6 +871,11 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Preserve supported native teletext glyph spellings when a QTeletextMaker G2
+  edit would otherwise become canonical G0 text. Keep exact fallback and source
+  context through concept import, preview, re-export, repeat/undo and explicit
+  publication, without changing original packages or protected content.
 
 - Import qualified generated supplementary teletext Text edits as concepts while
   retaining their Base role, original producer data, region permissions and

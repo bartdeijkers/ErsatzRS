@@ -27,7 +27,7 @@ pub(super) fn install(
         ProgramPolicy::InvocationChanges,
     )?;
     value.schema_version = if !value.base_text_edits.is_empty() {
-        super::BASE_TEXT_EDIT_VERSION
+        super::base_text::version(&value)
     } else if value.main_local_invocation_program_overlays.is_empty() {
         LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
     } else {
@@ -54,7 +54,7 @@ pub(super) fn install_structure(
         ProgramPolicy::InvocationStructure,
     )?;
     value.schema_version = if !value.base_text_edits.is_empty() {
-        super::BASE_TEXT_EDIT_VERSION
+        super::base_text::version(&value)
     } else if value.main_local_invocation_program_overlays.is_empty() {
         LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
     } else {

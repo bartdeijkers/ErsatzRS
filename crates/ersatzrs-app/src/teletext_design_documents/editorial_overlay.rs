@@ -48,6 +48,7 @@ const LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION: u16 = 20;
 const LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION: u16 = 21;
 const MAIN_LOCAL_INVOCATION_OVERLAY_VERSION: u16 = 22;
 const BASE_TEXT_EDIT_VERSION: u16 = 23;
+const BASE_TEXT_NATIVE_SPELLING_VERSION: u16 = 24;
 
 #[path = "editorial_overlay/base_text.rs"]
 pub(super) mod base_text;
@@ -889,6 +890,7 @@ impl TeletextSavedEditorialOverlay {
                 | LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
                 | MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
                 | BASE_TEXT_EDIT_VERSION
+                | BASE_TEXT_NATIVE_SPELLING_VERSION
         ) {
             self.schema_version = RESOURCE_OBJECT_DEFINITION_ADDITION_VERSION;
         }
@@ -1533,7 +1535,10 @@ impl StoredOverlay {
 
     fn check_version(&self) -> Result<(), TeletextDesignDocumentError> {
         base_text::check_version(self)?;
-        if self.schema_version == BASE_TEXT_EDIT_VERSION {
+        if matches!(
+            self.schema_version,
+            BASE_TEXT_EDIT_VERSION | BASE_TEXT_NATIVE_SPELLING_VERSION
+        ) {
             return Ok(());
         }
         main_local_invocation_programs::check_version(self)?;
@@ -1657,7 +1662,10 @@ impl StoredOverlay {
         budget: TeletextDesignDocumentBudget,
     ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
         self.check_version()?;
-        if self.schema_version == BASE_TEXT_EDIT_VERSION {
+        if matches!(
+            self.schema_version,
+            BASE_TEXT_EDIT_VERSION | BASE_TEXT_NATIVE_SPELLING_VERSION
+        ) {
             return base_text::restore(self, documents, budget);
         }
         if self.schema_version == MAIN_LOCAL_INVOCATION_OVERLAY_VERSION {

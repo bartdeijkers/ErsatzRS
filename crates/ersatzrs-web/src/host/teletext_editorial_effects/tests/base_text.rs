@@ -69,3 +69,56 @@ fn generated_base_text_respects_free_zone_generated_and_undeclared_boundaries() 
         TeletextEditorialEffectsFailure::Association
     );
 }
+
+#[test]
+fn generated_base_native_spelling_delta_refuses_unclaimed_or_unrelated_changes() {
+    let original = encode(draft("£"), vec![]);
+    let before = service(&original).declared().semantic();
+    let plain = TeletextBaseTextEdit::new(
+        address(123),
+        TeletextEnhancementPosition::new(1, 8).unwrap(),
+        '£',
+        '$',
+    )
+    .unwrap();
+    let hint = TeletextBaseTextSpelling::new(
+        plain.owner(),
+        plain.position(),
+        '$',
+        TeletextGlyphCode::new(b' ').unwrap(),
+        TeletextEnhancementCharsetDesignation::new(0).unwrap(),
+        TeletextColumnOperation::G2 {
+            code: TeletextGlyphCode::new(0x24).unwrap(),
+        },
+    )
+    .unwrap();
+    let incoming = plain.with_native_spelling(hint).unwrap();
+    let after = before
+        .clone()
+        .with_base_text_edits(&[incoming], policy().validation.service)
+        .unwrap();
+    super::super::base_text::check_spellings(before, &after, &[incoming], deadline()).unwrap();
+    for missing in [vec![], vec![plain]] {
+        assert_eq!(
+            super::super::base_text::check_spellings(before, &after, &missing, deadline())
+                .unwrap_err()
+                .reason,
+            TeletextEditorialEffectsFailure::ProtectedStructure
+        );
+    }
+    let canonical = before
+        .clone()
+        .with_base_text_edits(&[plain], policy().validation.service)
+        .unwrap();
+    assert!(
+        super::super::base_text::check_spellings(before, &canonical, &[incoming], deadline())
+            .is_err()
+    );
+    assert!(super::super::base_text::check_spellings(&after, &canonical, &[], deadline()).is_err());
+    let next = TeletextBaseTextEdit::new(plain.owner(), plain.position(), '$', '¥').unwrap();
+    let cleared = after
+        .clone()
+        .with_base_text_edits(&[next], policy().validation.service)
+        .unwrap();
+    super::super::base_text::check_spellings(&after, &cleared, &[next], deadline()).unwrap();
+}

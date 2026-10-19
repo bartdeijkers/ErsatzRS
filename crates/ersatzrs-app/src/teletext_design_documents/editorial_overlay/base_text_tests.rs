@@ -130,3 +130,77 @@ fn v23_base_text_storage_refuses_forged_originals_targets_shapes_and_oversized_v
         }
     ));
 }
+
+fn native_edit() -> TeletextBaseTextEdit {
+    use ersatzrs_domain::{
+        TeletextBaseTextSpelling, TeletextColumnOperation, TeletextEnhancementCharsetDesignation,
+        TeletextGlyphCode,
+    };
+    TeletextBaseTextEdit::new(
+        address(16),
+        TeletextEnhancementPosition::new(1, 4).unwrap(),
+        '£',
+        '$',
+    )
+    .unwrap()
+    .with_native_spelling(
+        TeletextBaseTextSpelling::new(
+            address(16),
+            TeletextEnhancementPosition::new(1, 4).unwrap(),
+            '$',
+            TeletextGlyphCode::new(b' ').unwrap(),
+            TeletextEnhancementCharsetDesignation::new(0).unwrap(),
+            TeletextColumnOperation::G2 {
+                code: TeletextGlyphCode::new(0x24).unwrap(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap()
+}
+#[test]
+fn v24_native_base_text_roundtrip_keeps_originals_and_requires_exact_private_version() {
+    for v3 in [false, true] {
+        let source = original(v3);
+        let before = decode_teletext_design_documents(&source, budget()).unwrap();
+        let overlay = TeletextSavedEditorialOverlay::new_with_base_text_edits(
+            provenance(),
+            vec![native_edit()],
+        )
+        .unwrap();
+        assert_eq!(overlay.schema_version(), 24);
+        let saved = append_teletext_design_editorial_overlay(&source, &overlay, budget()).unwrap();
+        let after = decode_teletext_design_documents(saved.bytes(), budget()).unwrap();
+        assert_eq!(after.editorial_overlay(), Some(&overlay));
+        assert_eq!(after.sources()[0].bytes(), before.sources()[0].bytes());
+        assert_eq!(after.selection(), before.selection());
+        assert_eq!(after.edit_policy(), before.edit_policy());
+        let root: Value = serde_json::from_slice(saved.bytes()).unwrap();
+        assert_eq!(
+            root["editorial_overlay"]["base_text_edits"][0]["native"],
+            json!({"fallback":32,"charset":0,"mode":15,"code":36})
+        );
+        for version in (1..=23).chain([25]) {
+            let mut changed = root.clone();
+            changed["editorial_overlay"]["schema_version"] = json!(version);
+            assert!(
+                decode_teletext_design_documents(&bytes(&changed), budget()).is_err(),
+                "version{version}"
+            );
+        }
+        for invalid in [
+            Value::Null,
+            json!([]),
+            json!({}),
+            json!({"fallback":31,"charset":0,"mode":15,"code":36}),
+            json!({"fallback":32,"charset":128,"mode":15,"code":36}),
+            json!({"fallback":32,"charset":0,"mode":1,"code":36}),
+            json!({"fallback":32,"charset":0,"mode":15,"code":128}),
+            json!({"fallback":32,"charset":0,"mode":15,"code":36,"local_command":0}),
+        ] {
+            let mut changed = root.clone();
+            changed["editorial_overlay"]["base_text_edits"][0]["native"] = invalid;
+            assert!(decode_teletext_design_documents(&bytes(&changed), budget()).is_err());
+        }
+    }
+}

@@ -158,3 +158,50 @@ fn base_spelling_bounds_include_original_physical_rows_and_reduced_service_budge
     budget.max_base_content_bytes = 58;
     assert!(typed.with_physical_base_overlays(rows, budget).is_ok());
 }
+
+#[test]
+fn base_edit_native_spelling_binds_and_rebuilds_exact_replacement_only() {
+    let hint = TeletextBaseTextSpelling::new(
+        owner(0),
+        TeletextEnhancementPosition::new(1, 4).unwrap(),
+        '$',
+        TeletextGlyphCode::new(b' ').unwrap(),
+        TeletextEnhancementCharsetDesignation::new(0).unwrap(),
+        TeletextColumnOperation::G2 {
+            code: TeletextGlyphCode::new(0x24).unwrap(),
+        },
+    )
+    .unwrap();
+    let edit = change(0, 4, '£', '$').with_native_spelling(hint).unwrap();
+    for wrong in [
+        change(32, 4, '£', '$'),
+        change(0, 5, 'Ł', '$'),
+        change(0, 4, '£', '¥'),
+    ] {
+        assert!(wrong.with_native_spelling(hint).is_err());
+    }
+    let original = input();
+    let before = original.clone();
+    let changed = original.with_base_text_edits(&[edit], limits()).unwrap();
+    assert_eq!(
+        changed
+            .base_text_spellings_for(owner(0))
+            .copied()
+            .collect::<Vec<_>>(),
+        [hint]
+    );
+    assert_eq!(
+        changed.base().pages[0].rows[0].runs[0].content,
+        TeletextRunContent::Text {
+            text: "$ŁD".into()
+        }
+    );
+    assert_eq!(
+        before.base().pages[0].rows[0].runs[0].content,
+        TeletextRunContent::Text {
+            text: "£ŁD".into()
+        }
+    );
+    assert!(before.base_text_spellings().is_empty());
+    assert_eq!(changed.base().pages[1], before.base().pages[1]);
+}

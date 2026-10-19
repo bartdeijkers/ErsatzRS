@@ -23,12 +23,12 @@ replay/raster and glyph/charset normalization are partial. Original bytes, fallb
 X26, repertoire/aliases, resource/object/panel and independent client coverage
 remain required.
 
-ConceptsV1–23 retain metadata, DRCS/Flash/charset, Base/Local/resource glyph,
+ConceptsV1–24 retain metadata, DRCS/Flash/charset, Base/Local/resource glyph,
 style/position/call/topology and Add/Copy edits with original identity, lineage,
 protected consumers and fresh-receipt root undo. V23 has separate factory-bound
 Base Text intent and exact forward words, never fabricated Local provenance.
-Bounded native Text spelling now retains exact words/fallback in the engine;
-L15-B2 host/concept integration stays open. Old formats/authority remain closed.
+V24 retains checked native spelling through concept/edit/repeat/undo and
+publication; old formats/authority stay closed. Broader L15-B2 stays open.
 r1→r2 creates resources in new originals; same-design creation stays open.
 Complete style/position/context/link/set and oversized QTM interchange, font/
 repertoire/client coverage remain mandatory. P9A-04 owns detailed format pins

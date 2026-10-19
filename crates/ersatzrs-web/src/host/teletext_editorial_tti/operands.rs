@@ -70,7 +70,7 @@ pub(super) fn reconcile(
             let position = position_at_word(encoded, word, location, deadline)?;
             if position.original_base_glyph().is_some() {
                 result.base_text_edits.push(
-                    ersatzrs_ffmpeg::teletext::resolve_teletext_base_text_edit(
+                    ersatzrs_ffmpeg::teletext::resolve_teletext_lossless_base_text_edit(
                         service,
                         owner,
                         position,
@@ -446,7 +446,7 @@ fn qualify_base_text_edits(
         let edited = uploaded.packets[0][old / 13]
             .map(|words| words[old % 13])
             .ok_or_else(|| located_word(location, old))?;
-        if ersatzrs_ffmpeg::teletext::resolve_teletext_base_text_edit(
+        if ersatzrs_ffmpeg::teletext::resolve_teletext_lossless_base_text_edit(
             baseline,
             owner,
             old_position,

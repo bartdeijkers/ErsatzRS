@@ -38,16 +38,19 @@ pub(super) fn merge(
                 return Err(NativeTeletextEditorialImportError::Association);
             }
             if before.expected() != edit.replacement() {
-                result.insert(
-                    key,
-                    TeletextBaseTextEdit::new(
-                        edit.owner(),
-                        edit.position(),
-                        before.expected(),
-                        edit.replacement(),
-                    )
-                    .map_err(|_| NativeTeletextEditorialImportError::Association)?,
-                );
+                let mut rebased = TeletextBaseTextEdit::new(
+                    edit.owner(),
+                    edit.position(),
+                    before.expected(),
+                    edit.replacement(),
+                )
+                .map_err(|_| NativeTeletextEditorialImportError::Association)?;
+                if let Some(spelling) = edit.native_spelling() {
+                    rebased = rebased
+                        .with_native_spelling(spelling)
+                        .map_err(|_| NativeTeletextEditorialImportError::Association)?;
+                }
+                result.insert(key, rebased);
             }
         } else {
             if result.len() == maximum {
@@ -66,7 +69,7 @@ mod tests {
         TeletextEnhancementPosition, TeletextPageAddress, TeletextPageNumber, TeletextSubcode,
     };
     use std::time::Duration;
-    fn edit(expected: char, replacement: char) -> TeletextBaseTextEdit {
+    pub(super) fn edit(expected: char, replacement: char) -> TeletextBaseTextEdit {
         TeletextBaseTextEdit::new(
             TeletextPageAddress {
                 page: TeletextPageNumber::new(124).unwrap(),
@@ -78,7 +81,7 @@ mod tests {
         )
         .unwrap()
     }
-    fn budget() -> TeletextServiceBudget {
+    pub(super) fn budget() -> TeletextServiceBudget {
         TeletextServiceBudget {
             max_records: 32,
             max_objects: 16,
@@ -125,5 +128,60 @@ mod tests {
             merge(&[edit('£', '¥'), edit('£', '¥')], &[], budget(), end()),
             Err(NativeTeletextEditorialImportError::Association)
         ));
+    }
+}
+
+#[cfg(test)]
+mod native_spelling_tests {
+    use super::*;
+    use ersatzrs_domain::{
+        TeletextBaseTextSpelling, TeletextColumnOperation, TeletextEnhancementCharsetDesignation,
+        TeletextGlyphCode,
+    };
+    #[test]
+    fn base_text_repeat_retains_native_spelling_and_root_identity_then_clears_on_canonical_edit() {
+        let plain = super::tests::edit('¥', '$');
+        let hint = TeletextBaseTextSpelling::new(
+            plain.owner(),
+            plain.position(),
+            '$',
+            TeletextGlyphCode::new(b' ').unwrap(),
+            TeletextEnhancementCharsetDesignation::new(0x20).unwrap(),
+            TeletextColumnOperation::G2 {
+                code: TeletextGlyphCode::new(0x24).unwrap(),
+            },
+        )
+        .unwrap();
+        let native = plain.with_native_spelling(hint).unwrap();
+        let end = Instant::now() + std::time::Duration::from_secs(30);
+        let merged = merge(
+            &[super::tests::edit('£', '¥')],
+            &[native],
+            super::tests::budget(),
+            end,
+        )
+        .unwrap();
+        assert_eq!(
+            merged,
+            [super::tests::edit('£', '$')
+                .with_native_spelling(hint)
+                .unwrap()]
+        );
+        let canonical = merge(
+            &merged,
+            &[super::tests::edit('$', '§')],
+            super::tests::budget(),
+            end,
+        )
+        .unwrap();
+        assert_eq!(canonical, [super::tests::edit('£', '§')]);
+        assert!(merge(
+            &merged,
+            &[super::tests::edit('$', '£')],
+            super::tests::budget(),
+            end
+        )
+        .unwrap()
+        .is_empty());
     }
 }

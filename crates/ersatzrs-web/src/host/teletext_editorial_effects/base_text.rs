@@ -1,6 +1,8 @@
 //! Exact scalar delta, followed by the existing full protected-effect checks.
 use super::{check_deadline, error, Result, TeletextEditorialEffectsFailure as Failure};
-use ersatzrs_domain::{TeletextBaseTextEdit, TeletextPageSetDraft, TeletextRunContent};
+use ersatzrs_domain::{
+    TeletextBaseTextEdit, TeletextPageSetDraft, TeletextRunContent, TeletextSemanticService,
+};
 use std::{collections::BTreeMap, time::Instant};
 
 pub(super) fn check(
@@ -90,6 +92,47 @@ pub(super) fn check(
     }
     if !targets.is_empty() {
         return Err(error(None, None, Failure::Association));
+    }
+    Ok(())
+}
+
+/// Match the complete spelling delta without cloning immutable native records.
+pub(super) fn check_spellings(
+    before: &TeletextSemanticService,
+    after: &TeletextSemanticService,
+    edits: &[TeletextBaseTextEdit],
+    deadline: Instant,
+) -> Result<()> {
+    let failure = || error(None, None, Failure::ProtectedStructure);
+    let mut targets = BTreeMap::new();
+    for edit in edits {
+        check_deadline(deadline)?;
+        if targets
+            .insert((edit.owner(), edit.position()), edit)
+            .is_some()
+        {
+            return Err(failure());
+        }
+    }
+    let mut expected = 0_usize;
+    for (key, spelling) in before.base_text_spellings() {
+        check_deadline(deadline)?;
+        if !targets.contains_key(key) {
+            if after.base_text_spellings().get(key) != Some(spelling) {
+                return Err(failure());
+            }
+            expected += 1;
+        }
+    }
+    for (key, edit) in targets {
+        check_deadline(deadline)?;
+        if after.base_text_spellings().get(&key).copied() != edit.native_spelling() {
+            return Err(failure());
+        }
+        expected += usize::from(edit.native_spelling().is_some());
+    }
+    if after.base_text_spellings().len() != expected {
+        return Err(failure());
     }
     Ok(())
 }

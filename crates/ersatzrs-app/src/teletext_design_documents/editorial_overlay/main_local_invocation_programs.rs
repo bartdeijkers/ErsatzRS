@@ -98,7 +98,7 @@ pub(super) fn install(
     value.schema_version = if value.base_text_edits.is_empty() {
         super::MAIN_LOCAL_INVOCATION_OVERLAY_VERSION
     } else {
-        super::BASE_TEXT_EDIT_VERSION
+        super::base_text::version(&value)
     };
     Ok(value)
 }
