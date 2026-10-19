@@ -232,22 +232,34 @@ impl Drop for CallbackListener {
 }
 
 pub(super) async fn callback_listener(host: std::sync::Arc<host::NextHost>) -> CallbackListener {
-    callback_listener_inner(host, None).await
+    callback_listener_inner(host, None, None).await
 }
 
 type ObservedItems =
     std::sync::Arc<tokio::sync::Mutex<Vec<crate::next_engine::protocol::PlayoutItem>>>;
+type ObservedStatuses = std::sync::Arc<tokio::sync::Mutex<Vec<u16>>>;
 
 pub(super) async fn observed_callback_listener(
     host: std::sync::Arc<host::NextHost>,
     items: ObservedItems,
 ) -> CallbackListener {
-    callback_listener_inner(host, Some(items)).await
+    callback_listener_inner(host, Some(items), None).await
+}
+
+// The deterministic decoder gate is intentionally a Unix-only native fixture.
+#[cfg(unix)]
+pub(super) async fn observed_callback_status_listener(
+    host: std::sync::Arc<host::NextHost>,
+    items: ObservedItems,
+    statuses: ObservedStatuses,
+) -> CallbackListener {
+    callback_listener_inner(host, Some(items), Some(statuses)).await
 }
 
 async fn callback_listener_inner(
     host: std::sync::Arc<host::NextHost>,
     items: Option<ObservedItems>,
+    statuses: Option<ObservedStatuses>,
 ) -> CallbackListener {
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .await
@@ -267,8 +279,9 @@ async fn callback_listener_inner(
             };
             let host = host.clone();
             let items = items.clone();
+            let statuses = statuses.clone();
             connections.spawn(async move {
-                callback_connection(socket, host, items).await;
+                callback_connection(socket, host, items, statuses).await;
             });
         }
     }))
@@ -305,6 +318,7 @@ async fn callback_connection(
     mut socket: tokio::net::TcpStream,
     host: std::sync::Arc<host::NextHost>,
     observed: Option<ObservedItems>,
+    statuses: Option<ObservedStatuses>,
 ) {
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     timeout(Duration::from_secs(35), async {
@@ -400,7 +414,8 @@ async fn callback_connection(
                     ("401 Unauthorized", Vec::new())
                 };
                 let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
-                write_callback_response(&mut socket, response.as_bytes(), &body).await;
+                let sent = write_callback_response(&mut socket, response.as_bytes(), &body).await;
+                record_callback_status(statuses, status, sent).await;
             }).await.unwrap();
 }
 
@@ -647,14 +662,18 @@ async fn configure_competing_text_tracks(
         .execute(pool).await.unwrap();
 }
 
-async fn write_callback_response(socket: &mut tokio::net::TcpStream, header: &[u8], body: &[u8]) {
+async fn write_callback_response(
+    socket: &mut tokio::net::TcpStream,
+    header: &[u8],
+    body: &[u8],
+) -> bool {
     let result: std::io::Result<()> = async {
         socket.write_all(header).await?;
         socket.write_all(body).await?;
         socket.shutdown().await
     }
     .await;
-    if let Err(error) = result {
+    if let Err(error) = &result {
         // Next may stop reading once its chunk/session is cancelled.
         assert!(
             matches!(
@@ -663,5 +682,14 @@ async fn write_callback_response(socket: &mut tokio::net::TcpStream, header: &[u
             ),
             "callback response transport: {error}"
         );
+    }
+    result.is_ok()
+}
+
+async fn record_callback_status(statuses: Option<ObservedStatuses>, status: &str, sent: bool) {
+    if let Some(statuses) = statuses.filter(|_| sent) {
+        let mut statuses = statuses.lock().await;
+        assert!(statuses.len() < 64, "bounded callback status observation");
+        statuses.push(status.split_whitespace().next().unwrap().parse().unwrap());
     }
 }

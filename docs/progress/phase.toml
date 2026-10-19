@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F5 final HTTP source/revision fence; native Windows caption/provider slice verified, X1 deferred/X3 awaits upstream'
+current_focus = 'P9A-04 F5 EOF policy/native qualification; source-replacement proof verified, X1 deferred/X3 awaits upstream'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -165,14 +165,36 @@ AV/audio/caption oracles pass on Windows and Linux; affected strict lint/fmt pas
 Linux sandbox TCPbind denial is retained; only its affected parent was rerun.
 No new production audio fix or full Windows/sixRID/adoption claim follows.
 
-Next F5 proof: replace/rescan a source during in-flight caption preparation and
-finalHTTP resolution; stale captions must refuse, workers/admission join, and
-fresh acquisition must deliver the actual changed programme/audio/captions.
-Existing cache-validator positives do not prove that composed final boundary;
-no product defect is established. Reuse existing callback/worker/snapshot seams.
-All relevant processes are terminal; preserve warm native checkout and canonical
-receipts. F6 remains closed absent regression. Both macOS artifacts/environments
-and broader platform/output/adoption gates remain open; managed.1 unchanged.
+F5 checkpoint4e1923e6 owns the native Windows compatibility/fixture correction.
+The existing final_http_replacement_followup now closes a named Linux Local889
+proof gap: actual Next callback/decoder preparation is gated while the same
+source path is replaced and SAME SQL pool really reacquired under its managed
+scan claim. Actual source hashes/revisions differ; the old decoder succeeds on
+its held snapshot, then written HTTP503 returns no stale DTO/cache. Old session,
+callbacks, output and source admission join before a fresh host delivers literal
+FINAL FRESH with original compressed H264/DutchAAC, exact cue clocks and cleanup.
+Final39af4715 passes on the definitive source, with affected strict all-target
+Clippy, formatting and architecture checks. This is new evidence, no production
+fence fix or sameHTTP recovery/F6/native-other-platform/fullF5 acceptance.
+
+Canonical tmp/phase9-next-local-teletext/work.json/final_http_replacement_followup
+owns gates, actual source/SQL identities, statuses, captures and final checks.
+Old lower-cache, editor/publication/isolation, native compatibility and F6 proof
+retain scope. No new full-chain/client/GUI run is implied. Warm native Windows
+checkout remains base7603285d with original source restored; the verified
+prepared-fixture fix was a recorded overlay, so sync reviewed source explicitly
+before any future native prepared-caption replay.
+
+Next concrete F5 case is the already named final nonempty caption without a
+following replacement/clear before physical EOF. Existing positives deliberately
+clear; qualification rejects an unknown final end. Current records do not choose
+sourceEOF, last AV presentation, programme outpoint or explicit unsupported
+selection as its accepted end policy. First qualify actual decoder/SRT behavior
+with existing tools; present the required policy decision before inventing any
+duration/oracle. No native EOF success or permanent restriction is accepted.
+All relevant current checks/processes are terminal. F6 stays closed absent a
+regression. Both macOS artifacts/environments and broader native/platform/output/
+adoption gates remain open; managed.1 unchanged.
 
 Maintainer2026-10-19 defers further X1 suitable-client work and chooses to wait
 for upstream QTM support under X3. No vendor contact/trial/purchase, external

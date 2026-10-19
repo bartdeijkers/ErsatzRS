@@ -11,6 +11,11 @@ mod clock;
 #[path = "source_teletext_runtime_tests/fixture.rs"]
 mod fixture;
 
+// The bounded executable decoder gate intentionally requires Unix permissions.
+#[cfg(unix)]
+#[path = "source_teletext_runtime_tests/replacement.rs"]
+mod replacement;
+
 struct Case {
     name: &'static str,
     start_ms: i64,

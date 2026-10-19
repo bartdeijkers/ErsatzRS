@@ -314,7 +314,7 @@ pub(super) async fn acquire_and_store_observed(
                 .execute(pool).await.unwrap();
         }
     }
-    sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+    sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1) ON CONFLICT("Id") DO NOTHING"#)
         .execute(pool)
         .await
         .unwrap();
