@@ -187,10 +187,6 @@ async fn assert_origin_concept(
     expected: &EncodedTeletextAuthoredService,
     edit: Edit,
 ) -> TeletextRaster {
-    let stored = drcs_bitmap::stored(fixture, concept).await;
-    let documents = decode_teletext_design_documents(&stored.document, designs::budget()).unwrap();
-    let overlay = documents.editorial_overlay().unwrap();
-    assert_eq!(overlay.schema_version(), 20);
     let intent = TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes(
         identity(65522),
         Edit::Zero.program(),
@@ -199,7 +195,28 @@ async fn assert_origin_concept(
     )
     .unwrap();
     assert!(intent.has_invocation_changes());
-    assert_eq!(overlay.local_object_glyph_program_overlays(), &[intent]);
+    Box::pin(assert_call_concept(
+        fixture, flow, concept, expected, &intent, 20,
+    ))
+    .await
+}
+
+async fn assert_call_concept(
+    fixture: &Fixture,
+    flow: &Flow,
+    concept: &SavedEditorialTeletextDesign,
+    expected: &EncodedTeletextAuthoredService,
+    intent: &TeletextLocalObjectGlyphProgramOverlay,
+    schema_version: u16,
+) -> TeletextRaster {
+    let stored = drcs_bitmap::stored(fixture, concept).await;
+    let documents = decode_teletext_design_documents(&stored.document, designs::budget()).unwrap();
+    let overlay = documents.editorial_overlay().unwrap();
+    assert_eq!(overlay.schema_version(), schema_version);
+    assert_eq!(
+        overlay.local_object_glyph_program_overlays(),
+        std::slice::from_ref(intent)
+    );
     assert!(overlay.pages().is_empty());
     assert!(overlay.local_program_operands().is_empty());
     assert!(overlay.local_object_operands().is_empty());
@@ -581,3 +598,6 @@ async fn local_wrapper_retained_call_origin_native_import_preview_reopen_preserv
     assert!(fixture.playout.try_recv().is_err());
     fixture.state.pool.close().await;
 }
+
+#[path = "retained_calls/structure.rs"]
+mod structure;

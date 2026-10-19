@@ -92,10 +92,13 @@ pub(super) fn distinct(
         }
     }
     if overlay.schema_version == super::RESOURCE_OBJECT_POSITION_OVERLAY_VERSION
-        || (overlay.schema_version == super::LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
-            && overlay.resource_object_program_overlays.iter().any(
-                ersatzrs_domain::TeletextResourceObjectProgramOverlay::is_original_position_intent,
-            ))
+        || (matches!(
+            overlay.schema_version,
+            super::LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION
+                | super::LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION
+        ) && overlay.resource_object_program_overlays.iter().any(
+            ersatzrs_domain::TeletextResourceObjectProgramOverlay::is_original_position_intent,
+        ))
     {
         resource_object_programs::distinct_original_positions(
             &overlay.resource_object_program_overlays,

@@ -20,6 +20,7 @@ pub(super) enum ProgramPolicy {
     AllGlyphs,
     StyleCommands,
     InvocationChanges,
+    InvocationStructure,
 }
 
 #[derive(Serialize)]
@@ -74,10 +75,17 @@ pub(super) fn restore(
                 ProgramPolicy::AllGlyphs => {
                     TeletextLocalObjectGlyphProgramOverlay::new_with_all_glyphs
                 }
-                ProgramPolicy::InvocationChanges if changed_invocation(&program) => {
+                ProgramPolicy::InvocationStructure if changed_invocation_structure(&program) => {
+                    TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_structure
+                }
+                ProgramPolicy::InvocationChanges | ProgramPolicy::InvocationStructure
+                    if changed_invocation(&program) =>
+                {
                     TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes
                 }
-                ProgramPolicy::StyleCommands | ProgramPolicy::InvocationChanges => {
+                ProgramPolicy::StyleCommands
+                | ProgramPolicy::InvocationChanges
+                | ProgramPolicy::InvocationStructure => {
                     TeletextLocalObjectGlyphProgramOverlay::new_with_style_commands
                 }
             };
@@ -103,6 +111,9 @@ pub(super) fn restore_overlay(
     policy: ProgramPolicy,
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
     let constructor = match policy {
+        ProgramPolicy::InvocationStructure => {
+            TeletextSavedEditorialOverlay::new_with_local_object_invocation_structure_programs
+        }
         ProgramPolicy::InvocationChanges => {
             TeletextSavedEditorialOverlay::new_with_local_object_invocation_programs
         }
@@ -172,13 +183,26 @@ pub(super) fn distinct(
         }
         ProgramPolicy::InvocationChanges => {
             programs.iter().all(|program| {
-                program.has_invocation_changes() || program.is_style_commands_compatible()
+                !program.has_invocation_structure_changes()
+                    && (program.has_invocation_changes() || program.is_style_commands_compatible())
             }) && programs
                 .iter()
                 .any(TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes)
         }
+        ProgramPolicy::InvocationStructure => {
+            programs.iter().all(|program| {
+                program.has_invocation_structure_changes()
+                    || program.has_invocation_changes()
+                    || program.is_style_commands_compatible()
+            }) && programs
+                .iter()
+                .any(TeletextLocalObjectGlyphProgramOverlay::has_invocation_structure_changes)
+        }
     };
-    if (!matches!(policy, ProgramPolicy::InvocationChanges) && !programs.iter().any(structural))
+    if (!matches!(
+        policy,
+        ProgramPolicy::InvocationChanges | ProgramPolicy::InvocationStructure
+    ) && !programs.iter().any(structural))
         || !compatible
     {
         return Err(invalid());
@@ -192,7 +216,8 @@ pub(super) fn distinct(
                         ProgramPolicy::Legacy => object_operands::glyph(operand.expected()),
                         ProgramPolicy::AllGlyphs
                         | ProgramPolicy::StyleCommands
-                        | ProgramPolicy::InvocationChanges => {
+                        | ProgramPolicy::InvocationChanges
+                        | ProgramPolicy::InvocationStructure => {
                             operand.expected().glyph_family().is_some()
                         }
                     }
@@ -228,6 +253,30 @@ fn changed_invocation(program: &StoredGlyphProgram) -> bool {
                     })
             })
         })
+}
+
+fn changed_invocation_structure(program: &StoredGlyphProgram) -> bool {
+    let mut originals = program.expected.commands().iter().enumerate();
+    for (after, original) in program
+        .replacement
+        .commands()
+        .iter()
+        .zip(&program.retained_commands)
+    {
+        if let Some(ordinal) = original {
+            for (index, command) in originals.by_ref() {
+                if index == *ordinal {
+                    break;
+                }
+                if matches!(command, TeletextEnhancementCommand::InvokeObject { .. }) {
+                    return true;
+                }
+            }
+        } else if matches!(after, TeletextEnhancementCommand::InvokeObject { .. }) {
+            return true;
+        }
+    }
+    originals.any(|(_, command)| matches!(command, TeletextEnhancementCommand::InvokeObject { .. }))
 }
 
 pub(super) fn validate_budgets(

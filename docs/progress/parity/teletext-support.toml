@@ -8,23 +8,24 @@ ADR0123 requires full authored Level2.5 with Level1/1.5 fallback, pinned actual
 QTM TTI/metadata interchange, TSDuck, independent decoding and suitable-client
 rendering/navigation. Kodi is optional. P9A-04 owns acceptance/F/V/X. Flows are not full acceptance.
 
-Typed services, provenance, complete resource identities/defaults, physical
+Typed services, provenance, resource identities/defaults, physical
 ownership, X26/X27/X28/M29 encoding, replay/raster and glyph/charset normalization
 are partial. Original bytes, fallback, ancestry, absent/default distinctions and
 pending charset uncertainty stay protected. Remaining A7/A8/C3, row-zero/foreign-
 X26, repertoire/aliases, resource/object/panel and independent client coverage
 remain required.
 
-Private conceptsV1–20 retain metadata, operands, DRCS/Flash/charset and bounded
+Private conceptsV1–21 retain metadata, operands, DRCS/Flash/charset and bounded
 page/Local/resource edits. V6/V7 retain native capacity; V14–17 retain scalar,
 glyph/style and call/topology identities, survivor lineage and protected consumers.
 V18 Add/Copy/empty-body QTM saves and V19 original positive-row/interior saves
 have scoped concept/preview/publication/cold-reopen proof. Exact-root undo uses
 fresh receipts and a trusted ephemeral inverse, without a saved inverse.
-V20 retains Local call changes with closed old formats, mixed sibling roles,
-root undo and changed-subtree protection. P9A-04 owns315 focused/9 native proofs.
-Localized Add/Copy/boundary UI and genuine V7/V8 compound saves keep their scopes.
-r1→r2 creates resources in new originals; same-design creation remains open.
+V20 retains Local call changes; V21 adds call structure with source-qualified
+header carriers. Old formats, siblings, root undo and protected consumers stay
+closed; P9A-04 owns237 focused/13 composed native outcomes and remaining gaps.
+Localized UI and genuine compound saves retain scope.
+r1→r2 creates resources in new originals; same-design creation stays open.
 Unqualified style/position/context, complete resource/link/set and oversized
 QTM context remain open. No truncation, silent editor restriction, suitable-
 client waiver or full engine acceptance follows.
@@ -44,7 +45,7 @@ Broader error/restart/client, work bounds, resource retirement,
 Header/POP uncertainty and open-client shutdown remain open. F6 default2 Copy/DVB handoff passes;
  tmp/phase9-f6-native-carriage/work.json owns runtime/admin/ownership,
 lint and smoke/TSDuck87/87 proof.
-Captured preview regions/bindings have scoped native and localized headed proof.
+Captured regions/bindings have native/localized headed proof.
 
 P9A-03 owns source acquisition/leases; missing stays NotAcquired and descriptors/
 PTS grant no readiness. Local888 native/Hybrid caption proof keeps its scope.

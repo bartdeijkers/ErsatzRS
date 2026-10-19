@@ -895,12 +895,16 @@ pub(super) fn cumulative_overlay(
         )
         .map_err(Into::into);
     }
-    let overlay = if changes
-        .object_programs
-        .iter()
-        .any(ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes)
+    let structure = changes.object_programs.iter().any(
+        ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::has_invocation_structure_changes,
+    );
+    let overlay = if structure
+        || changes
+            .object_programs
+            .iter()
+            .any(ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes)
     {
-        local_invocation_overlay(provenance, changes)?
+        local_invocation_overlay(provenance, changes, structure)?
     } else {
         body_overlay(provenance, changes)?
     };
@@ -1017,11 +1021,16 @@ fn body_overlay(
 fn local_invocation_overlay(
     provenance: &TeletextSavedEditorialProvenance,
     changes: &TeletextEditorialChanges,
+    structure: bool,
 ) -> Result<TeletextSavedEditorialOverlay> {
     let (calls, ordinary): (Vec<_>, Vec<_>) =
-        changes.object_programs.iter().cloned().partition(
-            ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes,
-        );
+        changes
+            .object_programs
+            .iter()
+            .cloned()
+            .partition(|program| {
+                program.has_invocation_changes() || program.has_invocation_structure_changes()
+            });
     if ordinary.is_empty()
         && changes.rows.is_empty()
         && changes.operands.is_empty()
@@ -1030,7 +1039,12 @@ fn local_invocation_overlay(
         && changes.resource_operands.is_empty()
         && changes.resource_programs.is_empty()
     {
-        return TeletextSavedEditorialOverlay::new_with_local_object_invocation_programs(
+        let constructor = if structure {
+            TeletextSavedEditorialOverlay::new_with_local_object_invocation_structure_programs
+        } else {
+            TeletextSavedEditorialOverlay::new_with_local_object_invocation_programs
+        };
+        return constructor(
             provenance.clone(),
             Vec::new(),
             Vec::new(),
@@ -1053,9 +1067,13 @@ fn local_invocation_overlay(
         resource_programs: changes.resource_programs.clone(),
         resource_additions: Vec::new(),
     };
-    body_overlay(provenance, &siblings)?
-        .with_local_object_invocation_programs(calls)
-        .map_err(Into::into)
+    let overlay = body_overlay(provenance, &siblings)?;
+    if structure {
+        overlay.with_local_object_invocation_structure_programs(calls)
+    } else {
+        overlay.with_local_object_invocation_programs(calls)
+    }
+    .map_err(Into::into)
 }
 
 fn encode_cumulative_concept(prepared: &PreparedImport) -> Result<EncodedStoredDesign> {

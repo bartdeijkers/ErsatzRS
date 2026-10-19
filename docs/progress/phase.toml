@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 F3 header suffix checkpoint; F5 package environment and X1/X2/X3 remain open'
+current_focus = 'P9A-04 F1 Local call structure checkpoint; V5 Lua modes next, X1/X2/X3 open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,6 +62,28 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+Current F1 Local-body call structure is verified after genuine nativeRED9d00ed65.
+Private21 reuses bounded correspondence; old formats/catalogues stay intact.
+Typed prospective carriers require exact completed HeaderPosition/source/word
+before save; no compiler BG becomes an authored command. Final237 focused and
+13 composed native outcomes prove exact intent/units/preview, deletion and direct
+insertion publication, fresh forged-carrier refusal/reinsert/root undo, cold
+recovery and consumer/isolation safety. Only a test helper's old publication
+pointer was corrected after actual publication; its affected304ad594 passes and
+the other12 unchanged outcomes remain valid. Failed runs stay failed. Canonical
+ tmp/phase9-header-c2/identity.json/local_call_structure_followup owns hashes,
+final checks, local checkpoint SHA and remaining scope. Reuse genuine QTM,
+localized admin, transport/decoder/F6 proof only in its established scope.
+Next concrete package is V5: real Lua Refresh/Reset and error rollback through
+the existing durable application fixture, following the accepted interval/mode
+contract. Prove scoped timing, old/current state, no package activation and cold
+reopen; correct only an actual defect. Complete V5/whole-process restart and all
+other9A criteria remain required. X1 has no source-positive suitable client;
+DVB Inspector1.21 is already negative and must not be retried unchanged. X2 needs
+accepted artifacts/native environments; X3 needs editor bank/native-call/capacity
+capability. F5 candidate adoption needs baseline Docker WSLintegration restored.
+No criterion is waived, no production guide starts, no push/publication.
+
 Scope reminder: P9A-04 F2 follows ADR 0123's "Phase 9A/9B ownership boundary"
 (docs/adr/0123-level-2-5-teletext-and-external-editor-workflows.md#phase-9a9b-ownership-boundary).
 All generic engine acceptance remains required; current F6 work is unchanged.

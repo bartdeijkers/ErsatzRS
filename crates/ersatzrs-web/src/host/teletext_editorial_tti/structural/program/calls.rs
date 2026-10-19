@@ -59,7 +59,7 @@ pub(super) fn retained(
     Ok((count, decode(&words, definitions, program, new, location)?))
 }
 
-fn decode(
+pub(super) fn decode(
     words: &[u32],
     (definition, catalog): Definitions<'_>,
     program: &EncodedTeletextLocalObjectProgram,

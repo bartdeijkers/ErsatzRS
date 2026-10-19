@@ -1,11 +1,11 @@
-//! Closed V20 Local retained-call intent with unchanged sibling storage roles.
+//! Closed V20 retained-call and V21 call-structure intent with existing siblings.
 
 use super::{
     invalid, local_object_glyph_programs, resource_object_additions, resource_object_operands,
     resource_object_programs, ProgramPolicy, StoredOverlay, TeletextDesignDocumentBudget,
     TeletextDesignDocumentError, TeletextProfileDocument, TeletextSavedEditorialOverlay,
     TeletextSavedEditorialProvenance, LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION,
-    RESOURCE_OBJECT_POSITION_OVERLAY_VERSION,
+    LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION, RESOURCE_OBJECT_POSITION_OVERLAY_VERSION,
 };
 use ersatzrs_domain::TeletextLocalObjectGlyphProgramOverlay;
 
@@ -14,9 +14,9 @@ pub(super) fn install(
     programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
     if programs.is_empty()
-        || programs
-            .iter()
-            .any(|program| !program.has_invocation_changes())
+        || programs.iter().any(|program| {
+            !program.has_invocation_changes() || program.has_invocation_structure_changes()
+        })
     {
         return Err(invalid());
     }
@@ -27,6 +27,27 @@ pub(super) fn install(
         ProgramPolicy::InvocationChanges,
     )?;
     value.schema_version = LOCAL_OBJECT_INVOCATION_OVERLAY_VERSION;
+    Ok(value)
+}
+
+pub(super) fn install_structure(
+    mut value: TeletextSavedEditorialOverlay,
+    programs: Vec<TeletextLocalObjectGlyphProgramOverlay>,
+) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+    if programs.is_empty()
+        || programs.iter().any(|program| {
+            !program.has_invocation_structure_changes() && !program.has_invocation_changes()
+        })
+    {
+        return Err(invalid());
+    }
+    value.local_object_glyph_program_overlays.extend(programs);
+    local_object_glyph_programs::distinct(
+        &value.local_object_glyph_program_overlays,
+        &value.local_object_operands,
+        ProgramPolicy::InvocationStructure,
+    )?;
+    value.schema_version = LOCAL_OBJECT_INVOCATION_STRUCTURE_OVERLAY_VERSION;
     Ok(value)
 }
 
@@ -77,16 +98,38 @@ pub(super) fn restore(
     documents: &[TeletextProfileDocument],
     budget: TeletextDesignDocumentBudget,
 ) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+    restore_for_policy(stored, documents, budget, ProgramPolicy::InvocationChanges)
+}
+
+pub(super) fn restore_structure(
+    stored: StoredOverlay,
+    documents: &[TeletextProfileDocument],
+    budget: TeletextDesignDocumentBudget,
+) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
+    restore_for_policy(
+        stored,
+        documents,
+        budget,
+        ProgramPolicy::InvocationStructure,
+    )
+}
+
+fn restore_for_policy(
+    stored: StoredOverlay,
+    documents: &[TeletextProfileDocument],
+    budget: TeletextDesignDocumentBudget,
+    policy: ProgramPolicy,
+) -> Result<TeletextSavedEditorialOverlay, TeletextDesignDocumentError> {
     let programs = local_object_glyph_programs::restore(
         stored
             .local_object_glyph_program_overlays
             .0
             .unwrap_or_default(),
-        ProgramPolicy::InvocationChanges,
+        policy,
     )?;
-    let (calls, siblings) = programs
-        .into_iter()
-        .partition(TeletextLocalObjectGlyphProgramOverlay::has_invocation_changes);
+    let (calls, siblings) = programs.into_iter().partition(|program| {
+        program.has_invocation_structure_changes() || program.has_invocation_changes()
+    });
     let provenance = TeletextSavedEditorialProvenance {
         export_receipt_id: stored.export_receipt_id,
         export_receipt_digest: stored.export_receipt_digest,
@@ -95,7 +138,7 @@ pub(super) fn restore(
         original_digest: stored.original_digest,
     };
     // The existing parent streaming preflight bounds every vector before DTO
-    // allocation; V20 reuses its fields rather than opening an unbounded payload.
+    // allocation; both roles reuse existing fields and aggregate budgets.
     let pages = stored
         .pages
         .into_iter()
@@ -156,7 +199,11 @@ pub(super) fn restore(
     if let Some(additions) = stored.resource_object_definition_additions.0 {
         value = resource_object_additions::restore(value, additions, budget)?;
     }
-    let value = install(value, calls)?;
+    let value = if matches!(policy, ProgramPolicy::InvocationStructure) {
+        install_structure(value, calls)?
+    } else {
+        install(value, calls)?
+    };
     super::validate_association(&value, documents, budget)?;
     Ok(value)
 }

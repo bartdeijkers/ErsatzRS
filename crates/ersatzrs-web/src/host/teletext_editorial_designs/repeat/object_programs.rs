@@ -23,6 +23,7 @@ enum ProgramPolicy {
     AllGlyphs,
     StyleCommands,
     InvocationChanges,
+    InvocationStructure,
 }
 
 pub(super) fn merge(
@@ -219,6 +220,15 @@ fn collect(
             retained,
             ProgramPolicy::InvocationChanges,
         )
+    })
+    .or_else(|_| {
+        make_program(
+            identity,
+            original,
+            replacement,
+            retained,
+            ProgramPolicy::InvocationStructure,
+        )
     })?;
     operands.extend(scalar_operands);
     programs.push(program);
@@ -239,8 +249,10 @@ fn make_program(
     for (command, source) in replacement.commands().iter().zip(retained) {
         let Some(source) = *source else { continue };
         let before = original.commands().get(source).ok_or_else(fail)?;
-        if matches!(policy, ProgramPolicy::InvocationChanges)
-            && matches!(before, TeletextEnhancementCommand::InvokeObject { .. })
+        if matches!(
+            policy,
+            ProgramPolicy::InvocationChanges | ProgramPolicy::InvocationStructure
+        ) && matches!(before, TeletextEnhancementCommand::InvokeObject { .. })
         {
             continue;
         }
@@ -258,6 +270,9 @@ fn make_program(
         }
         ProgramPolicy::InvocationChanges => {
             TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_changes
+        }
+        ProgramPolicy::InvocationStructure => {
+            TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_structure
         }
     };
     let program = constructor(identity, expected, replacement.clone(), retained.to_vec())

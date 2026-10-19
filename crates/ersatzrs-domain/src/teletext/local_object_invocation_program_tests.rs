@@ -368,3 +368,172 @@ fn local_retained_call_policy_preserves_exact_208_capacity_and_local_scope() {
         Err(Error::Scope)
     );
 }
+
+#[test]
+fn local_call_structure_inserts_and_omits_calls_without_opening_retained_only_policies() {
+    let before = commands();
+    let mut inserted = before.clone();
+    inserted.push(call(3, TeletextObjectType::Passive, None));
+    let mut inserted_map = retained(5);
+    inserted_map.push(None);
+    let mut omitted = before.clone();
+    omitted.remove(2);
+    let mut changed_and_inserted = inserted.clone();
+    changed_and_inserted[2] = call(2, TeletextObjectType::Adaptive, None);
+    for (after, map, retained_change) in [
+        (inserted, inserted_map.clone(), false),
+        (omitted, vec![Some(0), Some(1), Some(3), Some(4)], false),
+        (before[..4].to_vec(), retained(4), false),
+        (changed_and_inserted, inserted_map, true),
+    ] {
+        let overlay = Overlay::new_with_invocation_structure(
+            identity(65520),
+            program(before.clone()),
+            program(after.clone()),
+            map.clone(),
+        )
+        .unwrap();
+        assert!(overlay.has_invocation_structure_changes());
+        assert_eq!(overlay.has_invocation_changes(), retained_change);
+        assert_eq!(overlay.owner(), owner());
+        assert_eq!(overlay.retained_commands(), map);
+        for constructor in [
+            Overlay::new,
+            Overlay::new_with_all_glyphs,
+            Overlay::new_with_style_commands,
+            Overlay::new_with_invocation_changes,
+        ] {
+            assert_eq!(
+                constructor(
+                    identity(65520),
+                    program(before.clone()),
+                    program(after.clone()),
+                    map.clone()
+                ),
+                Err(Error::ProtectedCommand)
+            );
+        }
+    }
+}
+
+#[test]
+fn local_call_structure_requires_actual_insertion_or_omission_and_exact_correspondence() {
+    assert_eq!(
+        Overlay::new_with_invocation_structure(
+            identity(65520),
+            program(commands()),
+            program(changed()),
+            retained(5)
+        ),
+        Err(Error::MissingInvocationStructure)
+    );
+    let mut glyph_only = commands();
+    glyph_only[1] = glyph(0, b'C');
+    assert_eq!(
+        Overlay::new_with_invocation_structure(
+            identity(65520),
+            program(commands()),
+            program(glyph_only),
+            retained(5)
+        ),
+        Err(Error::MissingInvocationStructure)
+    );
+    let mut after = commands();
+    after.push(call(3, TeletextObjectType::Passive, None));
+    for map in [
+        retained(5),
+        vec![Some(0), Some(1), Some(2), Some(3), Some(4), Some(5)],
+        vec![Some(0), Some(1), Some(2), Some(2), Some(4), None],
+    ] {
+        assert_eq!(
+            Overlay::new_with_invocation_structure(
+                identity(65520),
+                program(commands()),
+                program(after.clone()),
+                map
+            ),
+            Err(Error::Correspondence)
+        );
+    }
+    let retained = Overlay::new_with_invocation_changes(
+        identity(65520),
+        program(commands()),
+        program(changed()),
+        retained(5),
+    )
+    .unwrap();
+    assert!(!retained.has_invocation_structure_changes());
+}
+
+#[test]
+fn local_call_structure_keeps_positions_and_retained_glyph_families_protected() {
+    let mut after = commands();
+    after.push(call(3, TeletextObjectType::Passive, None));
+    let mut changed_position = after.clone();
+    changed_position[0] = TeletextEnhancementCommand::SetPosition {
+        position: TeletextEnhancementPosition::new(2, 0).unwrap(),
+    };
+    let mut changed_family = after;
+    changed_family[1] = TeletextEnhancementCommand::AtColumn {
+        column: 0,
+        operation: TeletextColumnOperation::G1 {
+            mosaic: TeletextMosaic::new(1).unwrap(),
+        },
+    };
+    for after in [changed_position, changed_family] {
+        assert_eq!(
+            Overlay::new_with_invocation_structure(
+                identity(65520),
+                program(commands()),
+                program(after),
+                vec![Some(0), Some(1), Some(2), Some(3), Some(4), None]
+            ),
+            Err(Error::ProtectedCommand)
+        );
+    }
+}
+
+#[test]
+fn local_call_structure_preserves_208_capacity_and_does_not_accept_resource_owners() {
+    let before = vec![glyph(0, b'A'); 207];
+    let mut after = before.clone();
+    after.push(call(1, TeletextObjectType::Passive, None));
+    let mut map = retained(207);
+    map.push(None);
+    let overlay = Overlay::new_with_invocation_structure(
+        identity(65520),
+        program(before.clone()),
+        program(after.clone()),
+        map.clone(),
+    )
+    .unwrap();
+    assert_eq!(overlay.replacement().commands().len(), 208);
+    assert_eq!(overlay.original_command(207), None);
+    after.push(call(2, TeletextObjectType::Passive, None));
+    map.push(None);
+    assert_eq!(
+        Overlay::new_with_invocation_structure(
+            identity(65520),
+            program(before),
+            program(after),
+            map
+        ),
+        Err(Error::Capacity)
+    );
+    let resource = TeletextResourceIdentity::new(
+        TeletextResourceKind::Pop,
+        TeletextRawDataPageNumber::new(1, 0xa0).unwrap(),
+        TeletextResourceSubpageIndex::new(1).unwrap(),
+    )
+    .unwrap();
+    let public = TeletextObjectIdentity::public(resource, TeletextObjectId::new(65520)).unwrap();
+    assert_eq!(
+        Overlay::new_with_invocation_structure(
+            public,
+            overlay.expected().clone(),
+            overlay.replacement().clone(),
+            overlay.retained_commands().to_vec()
+        ),
+        Err(Error::Scope)
+    );
+}

@@ -48,7 +48,11 @@ fn inserted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'
                     && resource.original_command(source.command).is_none()
                     && resource.replacement().commands().get(source.command) == Some(&command(call))
             }
-            super::Program::Local(_) => false,
+            super::Program::Local(local) => {
+                local.has_invocation_structure_changes()
+                    && local.original_command(source.command).is_none()
+                    && local.replacement().commands().get(source.command) == Some(&command(call))
+            }
         })
 }
 
@@ -63,7 +67,11 @@ fn omitted_source(call: TeletextSpatialInvocation, lineage: &ProtectedLineage<'_
                     && resource.replacement_command(source.command).is_none()
                     && resource.expected().commands().get(source.command) == Some(&command(call))
             }
-            super::Program::Local(_) => false,
+            super::Program::Local(local) => {
+                local.has_invocation_structure_changes()
+                    && local.replacement_command(source.command).is_none()
+                    && local.expected().commands().get(source.command) == Some(&command(call))
+            }
         })
 }
 

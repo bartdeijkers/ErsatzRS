@@ -98,7 +98,17 @@ pub(super) fn calls(
     kernel::solve_calls(old, new, maximum, location, deadline)
 }
 
-/// Only the resource parser supplies indivisible, authenticated invocation atoms.
+/// Local calls use the same correspondence only after original-catalog decoding.
+pub(super) fn local_calls(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    call_atoms(old, new, (208, true), location, deadline)
+}
+
+/// Call parsers supply indivisible, authenticated invocation atoms.
 pub(super) fn resource_calls(
     old: &[(usize, TeletextEnhancementCommand)],
     new: &[TeletextEnhancementCommand],
@@ -106,6 +116,17 @@ pub(super) fn resource_calls(
     location: Location,
     deadline: Instant,
 ) -> Result<Aligned> {
+    call_atoms(old, new, (maximum, false), location, deadline)
+}
+
+fn call_atoms(
+    old: &[(usize, TeletextEnhancementCommand)],
+    new: &[TeletextEnhancementCommand],
+    policy: (usize, bool),
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    let (maximum, local) = policy;
     location.check_deadline(deadline)?;
     if old.len() > maximum || new.len() > maximum || new.len() > 507 {
         return Err(fail(location));
@@ -142,7 +163,13 @@ pub(super) fn resource_calls(
         .collect::<Vec<_>>();
     let aligned =
         kernel::solve_resource_calls(&physical, new, maximum, &bounds, location, deadline)?;
-    merge_anchors(&aligned, &anchors, (maximum, true), location, deadline)
+    merge_anchors_with_local(
+        &aligned,
+        &anchors,
+        (maximum, true, local),
+        location,
+        deadline,
+    )
 }
 
 fn merge_anchors(
@@ -153,6 +180,23 @@ fn merge_anchors(
     deadline: Instant,
 ) -> Result<Aligned> {
     let (maximum, calls) = policy;
+    merge_anchors_with_local(
+        aligned,
+        anchors,
+        (maximum, calls, false),
+        location,
+        deadline,
+    )
+}
+
+fn merge_anchors_with_local(
+    aligned: &Aligned,
+    anchors: &[(usize, TeletextEnhancementCommand, u8)],
+    policy: (usize, bool, bool),
+    location: Location,
+    deadline: Instant,
+) -> Result<Aligned> {
+    let (maximum, calls, local) = policy;
     if aligned
         .commands
         .len()
@@ -178,7 +222,12 @@ fn merge_anchors(
             .unwrap_or(aligned.commands.len());
         let boundary = (lower..=upper)
             .find(|boundary| {
-                if calls {
+                // The sealed Local leading AP is retained before its first
+                // call. Its required physical carrier is independently checked
+                // by the complete normalized candidate and source comparison.
+                if local && *ordinal == 0 && *boundary == 0 {
+                    true
+                } else if calls {
                     kernel::at_resource_anchor(command, &aligned.commands, *boundary)
                 } else {
                     kernel::at_anchor(command, &aligned.commands, *boundary)

@@ -37,6 +37,18 @@ pub(super) fn reconcile(
     location: Location,
     deadline: Instant,
 ) -> Result<TeletextEditorialChanges> {
+    reconcile_with_carriers(service, owner, baseline, edited, location, deadline)
+        .map(|(changes, _)| changes)
+}
+
+fn reconcile_with_carriers(
+    service: &EncodedTeletextAuthoredService,
+    owner: TeletextPageAddress,
+    baseline: &Page<'_>,
+    edited: &Page<'_>,
+    location: Location,
+    deadline: Instant,
+) -> Result<(TeletextEditorialChanges, Vec<program::ProspectiveCarrier>)> {
     location.check_deadline(deadline)?;
     super::operands::check_packets(service, owner, baseline, location, deadline)?;
     let native = super::operands::compiled_program(service, owner).ok_or_else(|| fail(location))?;
@@ -107,14 +119,18 @@ pub(super) fn reconcile(
     aligned_page.packets[0] = packets.each_ref().map(Option::as_ref);
     let mut result =
         super::operands::reconcile(service, owner, baseline, &aligned_page, location, deadline)?;
+    let mut carriers = Vec::new();
     for mut candidate in candidates {
         patch_anchors(&mut candidate, &result, location)?;
+        if let Some(carrier) = candidate.carrier.take() {
+            carriers.push(carrier);
+        }
         intents::append(candidate, &mut result, location)?;
     }
     if result.object_programs.is_empty() {
         return Err(fail(location));
     }
-    Ok(result)
+    Ok((result, carriers))
 }
 fn main_words(
     service: &EncodedTeletextAuthoredService,

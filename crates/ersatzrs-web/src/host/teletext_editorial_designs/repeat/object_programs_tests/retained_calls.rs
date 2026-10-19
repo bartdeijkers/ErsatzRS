@@ -91,3 +91,82 @@ fn changed_call_intent_does_not_bypass_stale_expected_or_aggregate_budget() {
     )
     .is_err());
 }
+
+fn structure_body(offsets: &[u8]) -> TeletextEnhancementProgram {
+    let mut commands = vec![TeletextEnhancementCommand::SetPosition {
+        position: ersatzrs_domain::TeletextEnhancementPosition::new(1, 0).unwrap(),
+    }];
+    commands.extend(offsets.iter().map(|column| call(*column).commands()[0]));
+    TeletextEnhancementProgram::new(commands).unwrap()
+}
+
+#[test]
+fn local_call_structure_repeat_preserves_inserted_lineage_and_exact_root_undo() {
+    let mut definitions = originals().definitions().to_vec();
+    definitions
+        .iter_mut()
+        .find(|d| d.identity == wrapper())
+        .unwrap()
+        .program = structure_body(&[0]);
+    let root = TeletextEnhancementObjectCatalog::new(
+        definitions,
+        TeletextObjectCatalogBudget {
+            max_objects: 2,
+            max_commands: 32,
+        },
+    )
+    .unwrap();
+    let intent = |before: &[u8], after: &[u8], map| {
+        TeletextLocalObjectGlyphProgramOverlay::new_with_invocation_structure(
+            wrapper(),
+            structure_body(before),
+            structure_body(after),
+            map,
+        )
+        .unwrap()
+    };
+    let scalar = scalar(0, 0, g(b'A'), g(b'C'));
+    let initial = intent(&[0], &[0, 1], vec![Some(0), Some(1), None]);
+    let previous = TeletextEditorialChanges {
+        object_programs: vec![initial],
+        object_operands: vec![scalar],
+        ..TeletextEditorialChanges::default()
+    };
+    let incoming = TeletextEditorialChanges {
+        object_programs: vec![intent(&[0, 1], &[0, 2], vec![Some(0), Some(1), None])],
+        ..TeletextEditorialChanges::default()
+    };
+    let (operands, programs) = merge(&root, &previous, &incoming, budget(), end()).unwrap();
+    assert_eq!(operands, [scalar]);
+    assert_eq!(
+        programs,
+        [intent(&[0], &[0, 2], vec![Some(0), Some(1), None])]
+    );
+    let prior = TeletextEditorialChanges {
+        object_programs: programs,
+        object_operands: operands,
+        ..TeletextEditorialChanges::default()
+    };
+    let deleted = TeletextEditorialChanges {
+        object_programs: vec![intent(&[0, 2], &[2], vec![Some(0), Some(2)])],
+        ..TeletextEditorialChanges::default()
+    };
+    let (operands, programs) = merge(&root, &prior, &deleted, budget(), end()).unwrap();
+    assert_eq!(operands, [scalar]);
+    assert_eq!(programs, [intent(&[0], &[2], vec![Some(0), None])]);
+    let prior = TeletextEditorialChanges {
+        object_programs: programs,
+        object_operands: operands,
+        ..TeletextEditorialChanges::default()
+    };
+    let undo = TeletextEditorialChanges {
+        object_programs: vec![intent(&[2], &[0], vec![Some(0), None])],
+        ..TeletextEditorialChanges::default()
+    };
+    let (operands, programs) = merge(&root, &prior, &undo, budget(), end()).unwrap();
+    assert_eq!(operands, [scalar]);
+    assert!(
+        programs.is_empty(),
+        "exact root undo stores no structural authority"
+    );
+}

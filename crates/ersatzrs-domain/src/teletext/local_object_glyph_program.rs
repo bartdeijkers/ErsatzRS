@@ -32,6 +32,8 @@ pub enum TeletextLocalObjectGlyphProgramOverlayError {
     ProtectedCommand,
     #[error("teletext glyph program must change a retained original invocation")]
     MissingInvocationChange,
+    #[error("teletext glyph program must insert or omit an invocation")]
+    MissingInvocationStructure,
 }
 
 /// One checked replacement of an existing Local definition's ordered program.
@@ -155,6 +157,35 @@ impl TeletextLocalObjectGlyphProgramOverlay {
         Ok(overlay)
     }
 
+    /// Insert or omit calls inside an exact existing Local object's program.
+    ///
+    /// At least one invocation must be inserted or omitted. Retained calls may
+    /// also change target, type or offset; checked glyph/style edits may accompany
+    /// them. Other protected anchors remain exact. The original catalogue, call
+    /// graph, native packing and every affected consumer still require complete
+    /// service reconstruction and host permission checks.
+    /// # Errors
+    /// Rejects nonlocal/no-op intents, over208 inputs, invalid correspondence,
+    /// missing call structure, changed anchors and crossed glyph families.
+    pub fn new_with_invocation_structure(
+        identity: TeletextObjectIdentity,
+        expected: TeletextEnhancementProgram,
+        replacement: TeletextEnhancementProgram,
+        retained_commands: Vec<Option<usize>>,
+    ) -> Result<Self, TeletextLocalObjectGlyphProgramOverlayError> {
+        let overlay = Self::new_for_policy(
+            identity,
+            expected,
+            replacement,
+            retained_commands,
+            GlyphPolicy::InvocationStructure,
+        )?;
+        if !overlay.has_invocation_structure_changes() {
+            return Err(TeletextLocalObjectGlyphProgramOverlayError::MissingInvocationStructure);
+        }
+        Ok(overlay)
+    }
+
     fn new_for_policy(
         identity: TeletextObjectIdentity,
         expected: TeletextEnhancementProgram,
@@ -249,6 +280,33 @@ impl TeletextLocalObjectGlyphProgramOverlay {
                     })
                 })
             })
+    }
+
+    /// Whether a call is inserted or omitted, without granting target authority.
+    #[must_use]
+    pub fn has_invocation_structure_changes(&self) -> bool {
+        let mut originals = self.expected.commands().iter().enumerate();
+        for (after, original) in self
+            .replacement
+            .commands()
+            .iter()
+            .zip(&self.retained_commands)
+        {
+            if let Some(ordinal) = original {
+                for (index, command) in originals.by_ref() {
+                    if index == *ordinal {
+                        break;
+                    }
+                    if matches!(command, TeletextEnhancementCommand::InvokeObject { .. }) {
+                        return true;
+                    }
+                }
+            } else if matches!(after, TeletextEnhancementCommand::InvokeObject { .. }) {
+                return true;
+            }
+        }
+        originals
+            .any(|(_, command)| matches!(command, TeletextEnhancementCommand::InvokeObject { .. }))
     }
 
     #[must_use]

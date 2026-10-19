@@ -18,7 +18,8 @@ pub(in super::super) fn check(
     let before = super::super::operands::packet_words(baseline, owner, location, deadline)?;
     let mut original = Page::default();
     original.packets[0] = before.each_ref().map(Option::as_ref);
-    let derived = super::reconcile(baseline, owner, &original, uploaded, location, deadline)?;
+    let (derived, carriers) =
+        super::reconcile_with_carriers(baseline, owner, &original, uploaded, location, deadline)?;
     exact(&derived, changes, owner, location)?;
     let old =
         super::super::operands::compiled_program(baseline, owner).ok_or_else(|| fail(location))?;
@@ -32,6 +33,10 @@ pub(in super::super) fn check(
     let b = stream::Image::read(&final_page, location, deadline)?;
     if b.markers.len() != new.definition_positions().len() {
         return Err(fail(location));
+    }
+    for carrier in carriers {
+        location.check_deadline(deadline)?;
+        carrier.qualify(final_service, new, (&a, &b), changes, location)?;
     }
     for definition in baseline
         .declared()

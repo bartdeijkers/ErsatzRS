@@ -9,13 +9,16 @@ use ersatzrs_ffmpeg::teletext::{
     TeletextMainCompositionSource,
 };
 use std::time::Instant;
+mod call_structure;
 mod calls;
+pub(super) use call_structure::ProspectiveCarrier;
 pub(super) struct Candidate {
     pub identity: TeletextObjectIdentity,
     pub expected: TeletextEnhancementProgram,
     pub replacement: Vec<TeletextEnhancementCommand>,
     pub retained: Vec<Option<usize>>,
     pub structural: bool,
+    pub carrier: Option<ProspectiveCarrier>,
 }
 pub(super) fn parse(
     definitions: (
@@ -29,6 +32,50 @@ pub(super) fn parse(
     location: Location,
     deadline: Instant,
 ) -> Result<Candidate> {
+    location.check_deadline(deadline)?;
+    if aligned.len() > 208 {
+        return Err(fail(location));
+    }
+    // Keep the established retained-call/scalar path first, including exact
+    // compiler-derived targets. A failed attempt must not change scalar input.
+    let mut retained = aligned.to_vec();
+    if let Ok(candidate) = parse_mode(
+        definitions,
+        program,
+        images,
+        (index, false),
+        &mut retained,
+        location,
+        deadline,
+    ) {
+        aligned.copy_from_slice(&retained);
+        return Ok(candidate);
+    }
+    location.check_deadline(deadline)?;
+    parse_mode(
+        definitions,
+        program,
+        images,
+        (index, true),
+        aligned,
+        location,
+        deadline,
+    )
+}
+
+fn parse_mode(
+    definitions: (
+        &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+        &ersatzrs_domain::TeletextEnhancementObjectCatalog,
+    ),
+    program: &EncodedTeletextLocalObjectProgram,
+    images: (&stream::Image, &stream::Image),
+    policy: (usize, bool),
+    aligned: &mut [u32],
+    location: Location,
+    deadline: Instant,
+) -> Result<Candidate> {
+    let (index, structure) = policy;
     let (definition, catalog) = definitions;
     let (old, new) = images;
     let actual = new.body(index);
@@ -36,10 +83,19 @@ pub(super) fn parse(
     if definition.program.commands().len() > 208 || actual.len() > 208 {
         return Err(fail(location));
     }
-    let before = raw::Body::read(old.body(index), location, deadline)?;
-    let uploaded = raw::Body::read(actual, location, deadline)?;
-    let styles = raw::style_topology_changed(&before, &uploaded);
-    if styles {
+    let (before, uploaded, carrier) = if structure {
+        call_structure::read(definitions, program, images, index, location, deadline)?
+    } else {
+        (
+            raw::Body::read(old.body(index), location, deadline)?,
+            raw::Body::read(actual, location, deadline)?,
+            None,
+        )
+    };
+    let styles = structure || raw::style_topology_changed(&before, &uploaded);
+    if structure {
+        neutralize_calls(definition, program, old, aligned);
+    } else if styles {
         check_style_count(definition.program.commands(), &uploaded, location)?;
     } else {
         check_rebuilt_count(definition.program.commands(), actual, location)?;
@@ -53,6 +109,7 @@ pub(super) fn parse(
         replacement: Vec::new(),
         retained: Vec::new(),
         structural: false,
+        carrier,
     };
     let mut ordinal = 0;
     while ordinal < definition.program.commands().len() {
@@ -61,31 +118,20 @@ pub(super) fn parse(
             .command_positions()
             .iter()
             .any(|position| header_ordinal(position, definition) == Some(ordinal));
-        if !derived
-            && (cluster_command(definition, program, ordinal, styles, location)?
+        if (!derived || structure)
+            && (cluster_policy(definition, program, ordinal, (styles, structure), location)?
                 || actual
                     .get(cursor)
                     .is_some_and(|entry| entry.editable(styles).is_some()))
         {
-            let start = ordinal;
-            while ordinal < definition.program.commands().len()
-                && cluster_command(definition, program, ordinal, styles, location)?
-            {
-                ordinal += 1;
-            }
-            let original = (start..ordinal)
-                .map(|i| (i, definition.program.commands()[i]))
-                .collect::<Vec<_>>();
-            let mut inserted = Vec::new();
-            while let Some(command) = actual.get(cursor).and_then(|entry| entry.editable(styles)) {
-                inserted.push(command);
-                cursor += 1;
-            }
-            let cluster = if styles {
-                alignment::with_styles(&original, &inserted, location, deadline)?
-            } else {
-                alignment::with_anchors(&original, &inserted, location, deadline)?
-            };
+            let (next, cluster) = align_cluster(
+                (definition, program),
+                (ordinal, styles, structure),
+                (actual, &mut cursor),
+                location,
+                deadline,
+            )?;
+            ordinal = next;
             output.retained.extend(cluster.retained);
             output.replacement.extend(cluster.commands);
         } else {
@@ -118,8 +164,72 @@ pub(super) fn parse(
         location,
         deadline,
     )?;
+    if output.replacement.len() > 208 || (structure && !call_structure::changed(&output)) {
+        return Err(fail(location));
+    }
+    if let Some(carrier) = &output.carrier {
+        carrier.check_candidate(&output, location)?;
+    }
     Ok(finish(output, definition))
 }
+fn align_cluster(
+    source: (
+        &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+        &EncodedTeletextLocalObjectProgram,
+    ),
+    policy: (usize, bool, bool),
+    input: (&[raw::Entry], &mut usize),
+    location: Location,
+    deadline: Instant,
+) -> Result<(usize, alignment::Aligned)> {
+    let (definition, program) = source;
+    let (mut ordinal, styles, structure) = policy;
+    let (actual, cursor) = input;
+    let start = ordinal;
+    while ordinal < definition.program.commands().len()
+        && cluster_policy(definition, program, ordinal, (styles, structure), location)?
+    {
+        ordinal += 1;
+    }
+    let original = (start..ordinal)
+        .map(|i| (i, definition.program.commands()[i]))
+        .collect::<Vec<_>>();
+    let mut inserted = Vec::new();
+    while let Some(command) = actual.get(*cursor).and_then(|entry| entry.editable(styles)) {
+        inserted.push(command);
+        *cursor += 1;
+    }
+    let cluster = if structure {
+        alignment::local_calls(&original, &inserted, location, deadline)?
+    } else if styles {
+        alignment::with_styles(&original, &inserted, location, deadline)?
+    } else {
+        alignment::with_anchors(&original, &inserted, location, deadline)?
+    };
+    Ok((ordinal, cluster))
+}
+
+fn neutralize_calls(
+    definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+    program: &EncodedTeletextLocalObjectProgram,
+    old: &stream::Image,
+    aligned: &mut [u32],
+) {
+    // Only original owned call spans are neutralized for scalar parsing;
+    // their complete uploaded form remains subject to native recompilation.
+    for position in program.command_positions() {
+        if original_ordinal(position, definition).is_some_and(|ordinal| {
+            matches!(
+                definition.program.commands()[ordinal],
+                TeletextEnhancementCommand::InvokeObject { .. }
+            )
+        }) {
+            aligned[position.first_word()..=position.semantic_word()]
+                .copy_from_slice(&old.words[position.first_word()..=position.semantic_word()]);
+        }
+    }
+}
+
 fn consume_anchor(
     source: (
         &ersatzrs_domain::TeletextEnhancementObjectDefinition,
@@ -213,6 +323,7 @@ fn check_rebuilt_count(
     }
     Ok(())
 }
+#[cfg(test)]
 fn cluster_command(
     definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
     program: &EncodedTeletextLocalObjectProgram,
@@ -220,6 +331,17 @@ fn cluster_command(
     styles: bool,
     location: Location,
 ) -> Result<bool> {
+    cluster_policy(definition, program, ordinal, (styles, false), location)
+}
+
+fn cluster_policy(
+    definition: &ersatzrs_domain::TeletextEnhancementObjectDefinition,
+    program: &EncodedTeletextLocalObjectProgram,
+    ordinal: usize,
+    policy: (bool, bool),
+    location: Location,
+) -> Result<bool> {
+    let (styles, structure) = policy;
     let command = definition
         .program
         .commands()
@@ -238,7 +360,7 @@ fn cluster_command(
     let hidden = alignment::hidden_position(command).is_some();
     if derived != 0 {
         return if hidden && count == 0 && derived == 1 {
-            Ok(false)
+            Ok(structure)
         } else {
             Err(fail(location))
         };
@@ -249,7 +371,12 @@ fn cluster_command(
     // Only a sealed absent span authenticates an invisible original position.
     // Other context commands retain exact physical anchor/span handling;
     // editable styles still require a unique authenticated original span.
-    Ok(glyph_family(command).is_some() || (styles && style::kind(command).is_some()) || hidden)
+    Ok(glyph_family(command).is_some()
+        || (styles && style::kind(command).is_some())
+        || hidden
+        || (structure
+            && matches!(command, TeletextEnhancementCommand::InvokeObject { target, .. }
+            if target.scope() == ersatzrs_domain::TeletextObjectScope::Local)))
 }
 
 fn check_style_count(
