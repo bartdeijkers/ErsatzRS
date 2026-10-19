@@ -1,4 +1,4 @@
-//! Western Latin fallback rows and exact positioned replacement glyphs.
+//! Native text rows and exact positioned Latin replacement glyphs.
 //!
 //! Derived G0/G2 intent uses the existing Latin region-zero tables. A later
 //! composer must establish/restore repertoire and header-row colour context;
@@ -17,14 +17,21 @@ pub(super) struct Layout {
     pub rows: [[u8; TELETEXT_COLUMNS]; TELETEXT_ROWS],
     base_glyphs: Vec<PositionedBaseGlyph>,
     physical_rows: [bool; TELETEXT_ROWS],
-    national_subset: Option<u8>,
+    text_charset: TextCharset,
+}
+
+#[derive(Clone, Copy)]
+enum TextCharset {
+    Latin(Option<u8>),
+    Greek,
 }
 
 impl Layout {
     pub(super) fn encode_character(&self, character: char) -> Option<charset::Character> {
-        match self.national_subset {
-            Some(national) => charset::encode(character, national),
-            None => charset::encode_without_national_subset(character),
+        match self.text_charset {
+            TextCharset::Latin(Some(national)) => charset::encode(character, national),
+            TextCharset::Latin(None) => charset::encode_without_national_subset(character),
+            TextCharset::Greek => charset::encode_greek_g0(character),
         }
     }
 }
@@ -161,12 +168,19 @@ fn compile_with_national_subset(
     page: &TeletextPageDraft,
     national: Option<u8>,
 ) -> Result<Layout, TeletextEncodingError> {
+    compile_with_text_charset(page, TextCharset::Latin(national))
+}
+
+fn compile_with_text_charset(
+    page: &TeletextPageDraft,
+    text_charset: TextCharset,
+) -> Result<Layout, TeletextEncodingError> {
     page.validate_structure()?;
     let mut layout = Layout {
         rows: [[b' '; TELETEXT_COLUMNS]; TELETEXT_ROWS],
         base_glyphs: Vec::new(),
         physical_rows: [false; TELETEXT_ROWS],
-        national_subset: national,
+        text_charset,
     };
     let mut rows: Vec<_> = page.rows.iter().collect();
     rows.sort_by_key(|row| row.row);
@@ -274,6 +288,12 @@ pub(super) fn compile_for_service_composition(
     {
         compile_with_national_subset(page, charset::unicode_national_subset(primary))?
     } else if page.national_option.get() == 7
+        && primary.is_some_and(|primary| primary.get() == 0x37)
+    {
+        // Matching Greek context admits its actual native Unicode scalars.
+        // Unsupported/cross-script input stays a located character error.
+        compile_with_text_charset(page, TextCharset::Greek)?
+    } else if page.national_option.get() == 7
         && primary.is_some_and(|primary| primary.get() & 7 == 7)
         && page.rows.iter().all(|row| {
             row.runs
@@ -282,7 +302,7 @@ pub(super) fn compile_for_service_composition(
         })
     {
         // Exact coded rows and G1 mosaics require no Latin Unicode conversion.
-        // Assigned Greek/Arabic header7 is not reserved region-zero7. Keep
+        // Assigned Arabic header7 is not reserved region-zero7. Keep
         // unqualified logical text on the original explicit rejection path.
         compile_with_national_subset(page, None)?
     } else {

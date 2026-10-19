@@ -3,6 +3,9 @@
 
 use super::*;
 
+#[path = "standalone_base/greek_unicode.rs"]
+mod greek_unicode;
+
 #[path = "standalone_base/scoped_restart.rs"]
 mod scoped_restart;
 

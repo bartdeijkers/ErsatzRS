@@ -99,7 +99,7 @@ fn original(primary: u8) -> TeletextDeclaredService {
 }
 
 #[test]
-fn reserved_header_without_matching_latin_context_stays_rejected() {
+fn reserved_header_or_unqualified_unicode_stays_rejected() {
     for primary in [None, Some(0), Some(0x37), Some(0x47), Some(0x57)] {
         let mut draft = draft(primary.unwrap_or(0));
         draft.base.pages[0].national_option = TeletextNationalOption::new(7).unwrap();
@@ -116,10 +116,20 @@ fn reserved_header_without_matching_latin_context_stays_rejected() {
         }
         let service = declare(draft);
         let page = &service.semantic().base().pages[0];
-        assert!(matches!(
-            layout::compile_for_service_composition(service.semantic(), page),
-            Err(TeletextEncodingError::NationalOption { address }) if address == owner(0)
-        ));
+        let error = layout::compile_for_service_composition(service.semantic(), page)
+            .err()
+            .unwrap();
+        if primary == Some(0x37) {
+            // Greek37/header7 is assigned; Latin B is not that G0 glyph.
+            assert!(
+                matches!(error,TeletextEncodingError::Character {address,row:3,column:1,codepoint}
+                if address==owner(0) && codepoint==u32::from('B'))
+            );
+        } else {
+            assert!(
+                matches!(error,TeletextEncodingError::NationalOption {address} if address==owner(0))
+            );
+        }
         assert!(encode_teletext_authored_service(service.clone(), &[], &limits()).is_err());
         assert_eq!(service.semantic().base().pages[0], *page);
     }

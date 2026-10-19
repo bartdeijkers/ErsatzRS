@@ -1,4 +1,8 @@
 //! Assigned Table32 non-Latin header7 is distinct from reserved region-zero7.
+
+#[path = "non_latin/greek_unicode.rs"]
+mod greek_unicode;
+
 use super::*;
 
 fn coded(primary: u8) -> TeletextDeclaredService {

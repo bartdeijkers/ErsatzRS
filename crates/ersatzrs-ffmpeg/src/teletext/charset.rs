@@ -144,3 +144,28 @@ pub(super) fn encode_without_national_subset(character: char) -> Option<Characte
     }
     None
 }
+
+/// Assigned Greek G0 Unicode positions from EN300706 Table42. This preserves
+/// literal scalars; it neither composes strings nor borrows a Latin namespace.
+/// The numeral-sign alias and rectangle remain raw-coded, not guessed Unicode.
+pub(super) fn encode_greek_g0(character: char) -> Option<Character> {
+    let scalar = u32::from(character);
+    let code = match character {
+        ' '..=';' | '=' | '?' => scalar,
+        '«' => 0x3c,
+        '»' => 0x3e,
+        'ΐ' => 0x40,
+        'Α'..='Ρ' => 0x41 + scalar - u32::from('Α'),
+        'Σ'..='Ω' => 0x53 + scalar - u32::from('Σ'),
+        'Ϊ'..='Ϋ' => 0x5a + scalar - u32::from('Ϊ'),
+        'ά'..='ί' => 0x5c + scalar - u32::from('ά'),
+        'ΰ' => 0x60,
+        'α'..='ω' => 0x61 + scalar - u32::from('α'),
+        'ϊ'..='ώ' => 0x7a + scalar - u32::from('ϊ'),
+        _ => return None,
+    };
+    Some(Character {
+        fallback: u8::try_from(code).ok()?,
+        enhancement: None,
+    })
+}

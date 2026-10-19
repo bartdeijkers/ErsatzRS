@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: scoped On/Off/post-Off-expiry host proof green; bounded new base-client qualification next'
+current_focus = 'P9A-04 standalone Level 1/1.5: native Greek G0 Unicode verified; base receiver remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -154,13 +154,32 @@ new editor/suitable receiver/platform or fullbase/full9A claim. Future-scope and
 On-expiry host edges, activeclients, shared-profile/mirror/multibinding/error/
 RefreshReset matrices and full repertoire/editor/platform obligations stay open.
 
-Next concrete acceptance gap: bounded primary-source qualification of the
-previously unexamined VDR/osdteletext base-client route, with its HTTP/TS input
-path. Require pinned applicableX26, reveal, timedflash and page/subpage capability
-before any build/runtime attempt; stop source-negative candidates. Do not repeat
-unchanged VLC/Kaffeine/GE/enhanced negatives or modify external decoders. This is
-base-specific; full2.5 X1 remains deferred and X3 waits for upstream QTM native
-banks/over208 context. Keep independent product/host/platform work executable.
+L15-A greek_native_unicode corrects literal Greek G0 text rejection in an
+explicit37/header7 context.94 qualified native scalar positions, exact coded
+wire equivalence, immutable originals, located cross-script/unknown-alias errors
+and localX26/fallback separation are verified without optional banks.955 teletext
+regressions and the final10 national cases pass. Stock0.2.42 passes564 native
+scalar assertions; pinnedimager0.2.0 independently confirms four native/local
+GreekG0/G2 font/position cases at1.5/2.5. Stock localX26 incorrectly yields LatinC
+instead of normative GreekGamma; its six diagnostic observations are not accepted
+as conformant. No decoder patch or relaxed expectation. Canonical same followup/
+greek_native_unicode owns evidence, negative history and final application/lint
+outcomes. Actual application c9498224 passes two themed Greek profiles, no-bank
+shared preview, concept-only preparation, explicit publication and exact SQLite
+reopen with immutable config/package and no playout event. Original13Latin/
+threecoded requests remain byteidentical, reusing84/18
+decode cases. Unchanged editor/browser/transport/F6 proof stays scoped.
+
+Bounded VDR/osdteletext2.3.1/0454171c plus IPTVf7369c95 source qualification is
+negative: X26mode0F/G2 is unsupported in the pinned renderer. The existing rawZ +
+G2£ fixture would retainZ; this is source inference, not a failed runtime trial.
+Stop before build; no external repair. Canonical base_client_qualification/
+vdr_osdteletext owns hashes and closure conditions. No unchanged candidate retry.
+Next independent L15-C gap: qualify future-On and On-expiry recovery using the
+existing scoped host test, retaining selected publication and original interval.
+Actual base receiver, complete repertoire/editor/shared lifecycle and native
+platform evidence remain required. Full2.5 X1 stays deferred; X3 waits upstream
+QTM native banks/over208 context. Neither base nor full9A is accepted.
 
 L15-D still needs an available exact client with positively qualified ordinary
 HTTP/TS, conceal/reveal, timed flash, relevantX26 and page/subpage/update controls.

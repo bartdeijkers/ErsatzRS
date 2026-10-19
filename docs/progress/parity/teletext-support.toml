@@ -5,11 +5,11 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
-P9A-04 owns scoped proof: base host/subpage/publication and insideOn/Off plus
-postOffexpiry real-host recovery have actual ordinary-stream evidence. Same two
-responses/default2 preserve pending originals before explicit subpage adoption.
-SourceAV/TSDuck and45 stock glyph/cache/Index checks pass.
-Greek/Arabic coded header7 passes; logical non-Latin Unicode/font remains open.
+P9A-04 scopes base host/subpage/publication and insideOn/Off/postOffexpiry
+recovery. Same responses/default2 retain pending originals before publication;
+sourceAV/TSDuck and45 stock glyph/cache/Index checks pass.
+Greek nativeG0 Unicode/coded Arabic header7 pass without banks; other Unicode/font
+coverage stays open. VDR base receiver source-negative for requiredG2; no build.
 Complete glyph/client/QTM/metadata/shared lifecycle/safety/platform remain mandatory.
 
 Typed services/provenance/resources, physical ownership, X26/X27/X28/M29,
