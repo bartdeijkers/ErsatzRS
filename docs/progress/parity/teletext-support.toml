@@ -5,9 +5,9 @@ status     = 'In progress'
 adr        = ['0120', '0121', '0122', '0123', '0124', '0126']
 summary    = '''
 ADR0123: base first, then full2.5/protected fallback; neither accepted.
-P9A-04 scopes base host/subpage/publication, insideOn/Off and futureOn/postexpiry
-recovery. SourceAV/TSDuck plus54 new stock glyph/cache/Index checks pass; open
-admin-client shutdown remains. Pending originals require explicit publication.
+P9A-04 scopes base host/subpage/publication and Lua scope/restart evidence.
+Unread-response drain repair passes8native/2headed/8ordinary/TSDuck and four-route
+smoke. Active viewers remain; pending originals require explicit publication.
 Greek nativeG0 Unicode/coded Arabic header7 pass without banks; other Unicode/font
 coverage stays open. VDR source-negative for requiredG2; no build.
 Glyph/client/QTM/metadata/lifecycle/safety/platform remain mandatory.
@@ -253,9 +253,9 @@ resolved    = false
 [[debt]]
 id          = 'teletext-open-client-host-shutdown-is-unproven'
 adr         = '0123'
-description = 'Retain real host restart and playback safety acceptance. A finite-client restart trial cannot establish graceful shutdown while admin clients remain open; diagnose the observed listener drain stall without accepting forced termination as clean shutdown.'
+description = 'Scoped base open-admin shutdown now has a verified unread-response repair; complete warm/active-viewer shutdown and source/worker/lease cleanup remain required. Preserve the historical forced incident and do not infer complete lifecycle/platform acceptance from finite captures or unforced parent exit.'
 discovered  = '2026-10-13'
-evidence    = 'P9A-04 owns the actual headed restart receipts. Initial NL/no-JS shutdown receives SIGTERM and stops scanner/scheduler, but lacks shutdown-complete within30s and needs SIGKILL. Available Playwright network trace identifies no unanswered admin request at the signal; Node stream captures are outside that trace. Closing the owned UI context before stop and reopening persisted views is a distinct finite-client trial, not a correction or waiver of open-client shutdown behavior.'
+evidence    = 'Canonical standalone_level15_followup/open_admin_host_shutdown owns old forced/causal/quietTCP/control/setup negatives, source/runtime pins and repaired existing10s portable TCP drain. Eight native controls, rebuilt matched headedChromium EN/JS/light plusNL/noJS/dark with original pages open, four unforced host exits, eight model/AV/page/TSDuck captures, ordinary four-route smoke and strict lint pass. Complete active-viewer/source/worker/lease/platform proof remains separate. Historical2026-10-13 and finite-client receipts retain scope;200 response headers are not completed bodies.'
 resolved    = false
 
 [[debt]]

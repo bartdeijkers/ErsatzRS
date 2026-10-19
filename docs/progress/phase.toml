@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Generic teletext engine'
-current_focus = 'P9A-04 standalone Level 1/1.5: future-On/On-expiry host evidence verified; open-client shutdown remains'
+current_focus = 'P9A-04 standalone Level 1/1.5: unread-response shutdown repaired; active-viewer cleanup and base receiver remain open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -187,9 +187,19 @@ unchanged lifecycle/Latin fixtures; current native verifier checks exact emitted
 models. Intervening Greek correction has byteidentical Latin requests. No new
 Greek stream/current package/platform or complete base/full9A claim. Targeted
 native verifier Clippy passes; original all-target product lint remains valid.
-Next L15-C safety gap: isolate the retained open-admin-client graceful-shutdown
-stall using the existing host/browser fixture and route evidence before choosing
-a bounded correction. Finite-client graceful closure does not close this gap.
+L15-C open_admin_host_shutdown fixes unread-response shutdown with the existing
+10s grace/token, joined portable TCP I/O and preserved real peers/normal bytes.
+Eight native controls, rebuilt matchedfec67e5b headedChromium EN/JS/light plus
+NL/noJS/dark with original pages open, four unforced host exits and eight finite
+model/AV/page/TSDuck captures pass. Four-route ordinary playback smoke and strict
+web all-target Clippy pass. Canonical same followup/open_admin_host_shutdown
+owns source/runtime pins, the old forced failure, rejected quietTCP hypothesis,
+causal WASM body proof and wrapper/setup negatives; unchanged editor/glyph/F6
+receipts retain scope. No full lifecycle/receiver/platform/base/full9A claim.
+Next qualify an ordinary continuous viewer open through shutdown using existing
+stream/host tools, including owned source/worker/lease cleanup. Finite captures
+and pending unit producers do not establish actual active-viewer acceptance.
+
 Actual base receiver, complete repertoire/editor/shared lifecycle and native
 platform evidence remain required. Full2.5 X1 stays deferred; X3 waits upstream
 QTM native banks/over208 context. Neither base nor full9A is accepted.

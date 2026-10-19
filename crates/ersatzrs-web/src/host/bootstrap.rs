@@ -20,7 +20,7 @@ use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
 
 /// Upper bound on how long shutdown waits for background tasks to drain before
 /// forcing exit, so a stuck task cannot hang the tray "Exit" / `docker stop`.
-const SHUTDOWN_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+pub(super) const SHUTDOWN_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const CONFIG_KEY_HDHR_UUID: &str = "hdhr.uuid";
 const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "hdhr.tuner_count";
 const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";

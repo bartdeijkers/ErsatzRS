@@ -139,3 +139,170 @@ fn self_request_origins_preserve_ports_and_concrete_interfaces() {
         );
     }
 }
+
+#[tokio::test]
+async fn idle_tcp_preconnection_does_not_block_graceful_shutdown() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let shutdown = CancellationToken::new();
+    let _guard = shutdown.clone().drop_guard();
+    let app = Router::new().route("/healthz", axum::routing::get(|| async { "ok" }));
+    let mut server = tokio::spawn(serve_one(listener, app, shutdown.clone()));
+    // A second actual response fences acceptance of the earlier established
+    // connection without inventing an HTTP request on that quiet socket.
+    let quiet = tokio::net::TcpStream::connect(address).await.unwrap();
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(format!("http://{address}/healthz"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.text().await.unwrap(), "ok");
+    shutdown.cancel();
+    let stopped = tokio::time::timeout(std::time::Duration::from_secs(5), &mut server).await;
+    // Even the negative path closes our socket and joins its server before
+    // reporting failure; no detached test owner or lingering listener remains.
+    drop(quiet);
+    if let Ok(result) = stopped {
+        result.unwrap().unwrap();
+    } else {
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .expect("server must settle after its owned quiet client closes")
+            .unwrap()
+            .unwrap();
+        panic!("quiet TCP preconnection blocked graceful shutdown");
+    }
+}
+
+#[tokio::test]
+async fn unread_response_does_not_hold_host_shutdown_indefinitely() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let shutdown = CancellationToken::new();
+    let _guard = shutdown.clone().drop_guard();
+    let app = Router::new().route(
+        "/asset",
+        axum::routing::get(|| async { vec![b'x'; 32 * 1024 * 1024] }),
+    );
+    let mut server = tokio::spawn(serve_one(listener, app, shutdown.clone()));
+    let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+    client
+        .write_all(b"GET /asset HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .await
+        .unwrap();
+    let mut first = [0; 128];
+    let count = client.read(&mut first).await.unwrap();
+    assert!(first[..count].starts_with(b"HTTP/1.1 200"));
+    shutdown.cancel();
+    let stopped = tokio::time::timeout(std::time::Duration::from_secs(15), &mut server).await;
+    drop(client);
+    if let Ok(result) = stopped {
+        result.unwrap().unwrap();
+    } else {
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .expect("server must settle after its owned unread client closes")
+            .unwrap()
+            .unwrap();
+        panic!("unread response blocked bounded host shutdown");
+    }
+}
+
+#[tokio::test]
+async fn complete_response_preserves_bytes_and_real_peer_before_shutdown() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    for address in ["127.0.0.1:0", "[::1]:0"] {
+        let listener = TcpListener::bind(address).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let shutdown = CancellationToken::new();
+        let _guard = shutdown.clone().drop_guard();
+        let app = Router::new().route(
+            "/asset",
+            axum::routing::get(|ConnectInfo(peer): ConnectInfo<SocketAddr>| async move {
+                ([("x-peer", peer.to_string())], vec![0xab; 512 * 1024])
+            }),
+        );
+        let server = tokio::spawn(serve_one(listener, app, shutdown.clone()));
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        let peer = client.local_addr().unwrap();
+        client
+            .write_all(b"GET /asset HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nX-Forwarded-For: 192.0.2.7\r\n\r\n")
+            .await
+            .unwrap();
+        let mut response = Vec::new();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.read_to_end(&mut response),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let split = response.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+        let headers = std::str::from_utf8(&response[..split]).unwrap();
+        assert!(headers.starts_with("HTTP/1.1 200"));
+        assert!(headers
+            .lines()
+            .any(|line| line == format!("x-peer: {peer}")));
+        assert_eq!(&response[split + 4..], vec![0xab; 512 * 1024]);
+        shutdown.cancel();
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn pending_response_producer_does_not_hold_host_shutdown_indefinitely() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let shutdown = CancellationToken::new();
+    let _guard = shutdown.clone().drop_guard();
+    let release = CancellationToken::new();
+    let producer_release = release.clone();
+    let app = Router::new().route(
+        "/pending",
+        axum::routing::get(move || {
+            let release = producer_release.clone();
+            async move {
+                axum::body::Body::from_stream(futures_util::stream::once(async move {
+                    release.cancelled().await;
+                    Ok::<_, std::convert::Infallible>(axum::body::Bytes::from_static(b"released"))
+                }))
+            }
+        }),
+    );
+    let mut server = tokio::spawn(serve_one(listener, app, shutdown.clone()));
+    let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+    client
+        .write_all(b"GET /pending HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .await
+        .unwrap();
+    let mut first = [0; 13];
+    client.read_exact(&mut first).await.unwrap();
+    assert_eq!(&first, b"HTTP/1.1 200 ");
+    shutdown.cancel();
+    let stopped = tokio::time::timeout(std::time::Duration::from_secs(15), &mut server).await;
+    let timed_out = stopped.is_err();
+    if timed_out {
+        release.cancel();
+    }
+    drop(client);
+    if let Ok(result) = stopped {
+        result.unwrap().unwrap();
+    } else {
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        panic!("pending response producer blocked bounded host shutdown");
+    }
+    assert!(!release.is_cancelled());
+}

@@ -1,6 +1,9 @@
 //! UCU-07 row 110 / ADR 0102: bind route surfaces before starting host work.
 //! Upstream: `ErsatzTV/Startup.cs` and `Program.cs` listener isolation.
 
+#[path = "listener_shutdown_io.rs"]
+mod shutdown_io;
+
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -11,6 +14,7 @@ use axum::{
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
+    serve::ListenerExt,
     Router,
 };
 use tokio::net::TcpListener;
@@ -99,12 +103,33 @@ async fn serve_one(
     app: Router,
     shutdown: CancellationToken,
 ) -> io::Result<()> {
-    let result = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown.clone().cancelled_owned())
-    .await;
+    let force = CancellationToken::new();
+    // TapIo supplies Axum's generic Connected implementation, preserving the
+    // real SocketAddr for existing loopback/authentication checks with our I/O.
+    let listener = shutdown_io::ShutdownListener::new(listener, force.clone()).tap_io(|_| {});
+    let serving = async {
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown.clone().cancelled_owned())
+        .await
+    };
+    tokio::pin!(serving);
+    let grace = async {
+        shutdown.cancelled().await;
+        tokio::time::sleep(super::bootstrap::SHUTDOWN_DRAIN_TIMEOUT).await;
+    };
+    let result = tokio::select! {
+        result = &mut serving => result,
+        () = grace => {
+            // Graceful HTTP drain alone can wait forever for an unread response.
+            // Wake blocked transport I/O, drop its HTTP work through existing
+            // ownership paths, and still join the server rather than detach it.
+            force.cancel();
+            serving.await
+        }
+    };
     // A server error must also stop its sibling listeners and background work.
     shutdown.cancel();
     result

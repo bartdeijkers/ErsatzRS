@@ -540,7 +540,7 @@ release section when tagging a release.
   when the original profile selection becomes unavailable, with publication
   controls disabled. Synthetic restart checks retain both accepted themes and a
   newer pending-only design across real process replacement and reloaded admin
-  views. Open-client graceful shutdown remains unproven. Guide/editor interchange,
+  views. Complete open-client shutdown remains unproven. Guide/editor interchange,
   Effective Lua originals now save their complete base/interval origins, Off
   membership, producer associations and exact source/theme metadata as distinct
   immutable drafts. Historical native preview restores them after expiry or
@@ -857,6 +857,10 @@ release section when tagging a release.
   maintainer-locked Sources design v0.1; runtime behavior is unchanged.
 
 ### Fixed
+
+- Bound HTTP shutdown when a client stops reading a response, including large
+  admin assets, using the existing drain grace before closing stuck connections.
+  Preserve normal response bytes and trusted peer addresses.
 
 - Accept declared Greek teletext G0 Unicode text and exact coded Greek/Arabic
   header-code seven pages without optional object banks. Preserve original

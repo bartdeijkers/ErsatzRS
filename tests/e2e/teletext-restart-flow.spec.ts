@@ -116,8 +116,8 @@ async function capture(baseURL: string, channel: number, output: string, authore
 }
 
 test.describe.configure({ mode: 'serial' });
-for (const standalone of [false, true]) for (const [language, module, js, dark] of [['en-us', 'en_us', true, false], ['nl', 'nl', false, true]] as const) {
-  test(`teletext ${standalone ? 'standalone Level 1.5 ' : ''}real restart flow (${language}, JavaScript ${js}, dark ${dark})`, async ({ browser, isolatedWebHost }, testInfo) => {
+for (const standalone of [false, true]) for (const [language, module, js, dark] of [['en-us', 'en_us', true, false], ['nl', 'nl', false, true]] as const) for (const openClients of standalone ? [false, true] : [false]) {
+  test(`teletext ${standalone ? 'standalone Level 1.5 ' : ''}real restart flow (${language}, JavaScript ${js}, dark ${dark}${openClients ? ', open admin clients' : ''})`, async ({ browser, isolatedWebHost }, testInfo) => {
     test.skip(process.platform === 'win32', 'Intentional POSIX synthetic teletext package; Windows runtime acceptance remains separate.');
     test.skip(!process.env.FFMPEG_PATH, 'Requires the selected FFmpeg 9 executable.');
     test.setTimeout(300_000);
@@ -181,10 +181,11 @@ for (const standalone of [false, true]) for (const [language, module, js, dark] 
       const identity = isolatedWebHost.processIdentity();
       expect(identity.pid).toBeGreaterThan(0);
       fixture.resetSourceStart();
-      // Finite-client durability proof: close this test's UI connections before
-      // stop, then reload persisted views in a fresh context after host health.
-      // This does not prove shutdown with still-open admin clients.
-      await context.close();
+      // Qualify the retained open-client stall separately from finite-client
+      // durability. Captures have reached genuine EOF in both cases; active
+      // viewer shutdown remains a separate acceptance requirement.
+      testInfo.annotations.push({ type: 'restart-admin-clients', description: openClients ? 'remain open' : 'closed before signal' });
+      if (!openClients) await context.close();
       const restarted = await isolatedWebHost.restart();
       expect(restarted.before).toEqual(identity);
       expect(restarted.stop.closed).toBe(true);
@@ -195,9 +196,14 @@ for (const standalone of [false, true]) for (const [language, module, js, dark] 
       expect(restarted.after.pid).not.toBe(identity.pid);
       expect(restarted.after.generation).toBeGreaterThan(identity.generation);
       expect(isolatedWebHost.processIdentity()).toEqual(restarted.after);
-      context = await browser.newContext(contextOptions);
-      pages = [await context.newPage(), await context.newPage()];
-      watchErrors();
+      if (openClients) {
+        expect(context.pages()).toEqual(pages);
+        for (const page of pages) expect(page.isClosed()).toBe(false);
+      } else {
+        context = await browser.newContext(contextOptions);
+        pages = [await context.newPage(), await context.newPage()];
+        watchErrors();
+      }
       expect((await pages[0].request.get('/healthz')).ok()).toBe(true);
       testInfo.annotations.push({ type: 'host-restart', description: JSON.stringify(restarted) });
       expect(publicationRows(fixture)).toEqual(retained);
